@@ -1,12 +1,8 @@
-import { CausalMemory, createCausalRuntimeClient } from "../../../apps/web/src/server/causal-memory/module";
-import { causalMemoryRuntimeUrl, tenantTokenForWorkspace } from "../../../apps/web/src/server/causal-memory/config.server";
-import { PrismaCausalMemoryRepository } from "../../../apps/web/src/server/db/repositories/causal-memory.repositories.server";
 import { PrismaWorkspaceMemoryAdmissionStore } from "../../../apps/web/src/server/db/repositories/workspace-memory-admission.repositories.server";
 import { PrismaWorkspaceMemoryProfileStore } from "../../../apps/web/src/server/db/repositories/workspace-memory-profile.repositories.server";
 import { createOpenVikingTypedSessionExtract } from "../../../apps/web/src/server/openviking/typed-session-extract.server";
 import {
   createAdmissionDispatcher,
-  createCausalOpenVikingSink,
   type AdmissionDispatcher,
 } from "../../../apps/web/src/server/workspace-memory/dispatch";
 import {
@@ -27,7 +23,6 @@ export function createEvalDispatcher(input: {
   users: OvUsers;
 }): AdmissionDispatcher {
   const admission = new PrismaWorkspaceMemoryAdmissionStore(input.workspace.db);
-  const causalRepository = new PrismaCausalMemoryRepository(input.workspace.db);
   const sessions = createOpenVikingTypedSessionExtract({
     runtime: input.runtime,
     authorizedOwner: "pcm-sink",
@@ -39,32 +34,6 @@ export function createEvalDispatcher(input: {
       openviking: createOpenVikingAdmittedDeliverySink({
         sessions,
         owner: "pcm-sink",
-      }),
-      causal_openviking: createCausalOpenVikingSink({
-        async ingest(delivery) {
-          const tenant = await causalRepository.ensureTenant(delivery.segment.workspace.workspaceId);
-          const memory = new CausalMemory(
-            causalRepository,
-            createCausalRuntimeClient(causalMemoryRuntimeUrl()),
-            async () => tenantTokenForWorkspace(delivery.segment.workspace.workspaceId, tenant.tenantId),
-            delivery.segment.workspace.workspaceId,
-          );
-          return memory.ingestAdmittedSegment({
-            workspaceId: delivery.segment.workspace.workspaceId,
-            admittedSegmentId: delivery.segment.segmentId,
-            operationId: delivery.operationId,
-            kind: delivery.segment.kind,
-            sourceMessageIds: [...delivery.segment.sourceMessageIds],
-            sourcePayloadHash: delivery.segment.sourcePayloadHash,
-            state: "pending",
-            attemptCount: 0,
-            session: {
-              workspaceId: delivery.segment.workspace.workspaceId,
-              channelId: delivery.segment.workspace.channelId,
-            },
-            turns: [...delivery.turns],
-          });
-        },
       }),
     },
   });
