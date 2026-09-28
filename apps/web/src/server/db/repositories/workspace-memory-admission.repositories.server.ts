@@ -94,7 +94,7 @@ export class PrismaWorkspaceMemoryAdmissionStore implements WorkspaceMemoryAdmis
           segmentId: decoded.segmentId,
         },
       },
-      include: { sourceMessages: { orderBy: { createdAt: "asc" } } },
+      include: { sourceMessages: { orderBy: [{ createdAt: "asc" }, { messageId: "asc" }] } },
     });
     if (existing) {
       if (!sameLineage(existing, decoded)) {
@@ -120,7 +120,7 @@ export class PrismaWorkspaceMemoryAdmissionStore implements WorkspaceMemoryAdmis
             })),
           },
         },
-        include: { sourceMessages: { orderBy: { createdAt: "asc" } } },
+        include: { sourceMessages: { orderBy: [{ createdAt: "asc" }, { messageId: "asc" }] } },
       });
       return { outcome: "saved", segment: toSegment(row) };
     } catch (error) {
@@ -140,7 +140,7 @@ export class PrismaWorkspaceMemoryAdmissionStore implements WorkspaceMemoryAdmis
   ): Promise<AdmittedPublicChannelSegment | null> {
     const row = await this.db.admittedPublicChannelSegment.findUnique({
       where: { workspaceId_segmentId: { workspaceId, segmentId } },
-      include: { sourceMessages: { orderBy: { createdAt: "asc" } } },
+      include: { sourceMessages: { orderBy: [{ createdAt: "asc" }, { messageId: "asc" }] } },
     });
     return row ? toSegment(row) : null;
   }
@@ -249,6 +249,11 @@ function sameDecodedLineage(
   stored: AdmittedPublicChannelSegment,
   incoming: AdmittedPublicChannelSegment,
 ): boolean {
+  // Source-message lineage is a set: rows created in one statement share a
+  // createdAt, so read-back order is not deterministic and an order-sensitive
+  // comparison would flag the identical segment as drifted on replay.
+  const storedIds = [...stored.sourceMessageIds].sort();
+  const incomingIds = [...incoming.sourceMessageIds].sort();
   return (
     stored.kind === incoming.kind &&
     stored.conversationKind === incoming.conversationKind &&
@@ -256,8 +261,8 @@ function sameDecodedLineage(
     stored.profileGeneration === incoming.profileGeneration &&
     stored.closedAt === incoming.closedAt &&
     stored.workspace.channelId === incoming.workspace.channelId &&
-    stored.sourceMessageIds.length === incoming.sourceMessageIds.length &&
-    stored.sourceMessageIds.every((id, index) => id === incoming.sourceMessageIds[index])
+    storedIds.length === incomingIds.length &&
+    storedIds.every((id, index) => id === incomingIds[index])
   );
 }
 

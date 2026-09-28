@@ -312,3 +312,52 @@ test("an offer without channel ids fails when no @memory target is bound", async
   if (offered.ok) throw new Error("expected unresolved target");
   expect(offered.message).toContain("unresolved");
 });
+
+test("an offer replay with the same operationId skips the per-trigger budget", async () => {
+  const { handler } = commands();
+  await handler.handle({
+    workspaceId: "ws-a",
+    agentId: "mem-1",
+    triggerMessageId: "msg-1",
+    command: { protocol: OPENVIKING_AGENT_PROTOCOL, op: "find", operationId: "find-r", query: "deploy" },
+  });
+  const offerCommand = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "offer",
+    operationId: "offer-replay-1",
+    conversationId: "ch-1",
+    targetAgentId: "helper-1",
+    recipientRationale: "owns the task",
+    citationRefs: ["ov:viking://resources/docs/deploy.md"],
+    body: "cited evidence",
+  };
+  const first = await handler.handle({
+    workspaceId: "ws-a",
+    agentId: "mem-1",
+    triggerMessageId: "msg-1",
+    command: offerCommand,
+  });
+  expect(first.ok).toBe(true);
+
+  // Same operationId on a LATER trigger message: idempotent replay must not
+  // consume that trigger's budget — the model re-answers answered questions
+  // with topic-derived operationIds and a budget rejection stalls the turn.
+  const second = await handler.handle({
+    workspaceId: "ws-a",
+    agentId: "mem-1",
+    triggerMessageId: "msg-2",
+    command: { ...offerCommand, body: "refined but same operationId" },
+  });
+  expect(second.ok).toBe(true);
+  if (!second.ok) throw new Error("expected replay");
+  expect(second.response.duplicate).toBe(true);
+
+  // The replay consumed nothing: a fresh offer on msg-2 still passes budget.
+  const third = await handler.handle({
+    workspaceId: "ws-a",
+    agentId: "mem-1",
+    triggerMessageId: "msg-2",
+    command: { ...offerCommand, operationId: "offer-fresh-1" },
+  });
+  expect(third.ok).toBe(true);
+});
