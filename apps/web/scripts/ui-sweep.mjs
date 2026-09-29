@@ -1,9 +1,10 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Scripted browser walkthrough: visits every route/state/theme/viewport this
 // repo's dev seed (`bun run seed:dev`) populates, runs automatic layout
 // checks, and writes screenshots plus a findings report.
 //
-// Run with `bun run ui:sweep` (or `node scripts/ui-sweep.mjs`).
+// Run from the repository root with `bun run --cwd apps/web ui:sweep`; the script is this
+// package's, so a bare `bun run ui:sweep` from the root finds no such script.
 //
 // Browser automation: this drives a locally launched Chromium instance over
 // the raw Chrome DevTools Protocol (`--remote-debugging-port`), not the
@@ -21,7 +22,6 @@
 //   UI_SWEEP_THEMES       comma-separated theme names (light,dark)
 //   UI_SWEEP_VIEWPORTS    comma-separated viewport names (1440,1024,390)
 
-import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, writeFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -119,9 +119,9 @@ async function findUnder(root, matchName, depth = 6) {
 
 async function launchChrome(chromePath, port) {
   const profileDir = await mkdtemp(path.join(os.tmpdir(), "ui-sweep-chrome-"));
-  const child = spawn(
-    chromePath,
+  const child = Bun.spawn(
     [
+      chromePath,
       "--headless=new",
       "--disable-gpu",
       "--no-first-run",
@@ -133,7 +133,7 @@ async function launchChrome(chromePath, port) {
       `--user-data-dir=${profileDir}`,
       "about:blank",
     ],
-    { stdio: "ignore" },
+    { stdin: "ignore", stdout: "ignore", stderr: "ignore" },
   );
   child.unref();
   const deadline = Date.now() + 15_000;
@@ -612,7 +612,13 @@ async function runChecks(page) {
 // hardcoding them, so the sweep works against any seeded workspace.
 // ---------------------------------------------------------------------------
 async function discoverIds(page) {
-  const ids = { agentId: null, computerId: null, channelId: null, dmAgentId: null };
+  const ids = {
+    workspaceSlug: null,
+    agentId: null,
+    computerId: null,
+    channelId: null,
+    dmId: null,
+  };
 
   const extract = (linkPattern) => `(() => {
     const re = new RegExp(${JSON.stringify(linkPattern)});
@@ -624,21 +630,29 @@ async function discoverIds(page) {
     return null;
   })()`;
 
-  await page.navigate(`${BASE_URL}/${LOCALE}/agents`);
+  // The app root opens the signed-in user's Workspace; every page lives under `/w/<slug>`.
+  await page.navigate(`${BASE_URL}/${LOCALE}`);
+  ids.workspaceSlug = await page.evalJs(
+    `location.pathname.match(new RegExp(${JSON.stringify(`^/${LOCALE}/w/([^/?#]+)`)}))?.[1] ?? null`,
+  );
+  if (!ids.workspaceSlug)
+    throw new Error(
+      "Could not discover the Workspace slug: the app root did not open a Workspace (is the dev user signed in with a seeded Workspace?)",
+    );
+  const workspace = `/${LOCALE}/w/${ids.workspaceSlug}`;
+
+  await page.navigate(`${BASE_URL}${workspace}/members`);
   ids.agentId =
-    (await page.evalJs(extract(`/${LOCALE}/agents/([0-9a-fA-F-]{36})(?:[/?]|$)`))) ||
+    (await page.evalJs(extract(`${workspace}/agent/([0-9a-fA-F-]{36})(?:[/?]|$)`))) ||
     (await page.evalJs(extract(`profile=agent:([0-9a-fA-F-]{36})`)));
 
-  await page.navigate(`${BASE_URL}/${LOCALE}/computers`);
-  ids.computerId = await page.evalJs(extract(`/${LOCALE}/computers/([0-9a-fA-F-]{36})(?:[/?]|$)`));
+  await page.navigate(`${BASE_URL}${workspace}/computers`);
+  ids.computerId = await page.evalJs(extract(`${workspace}/computer/([0-9a-fA-F-]{36})(?:[/?]|$)`));
 
-  await page.navigate(`${BASE_URL}/${LOCALE}/messages`);
-  ids.channelId = await page.evalJs(
-    extract(`/${LOCALE}/messages/channels/([0-9a-fA-F-]{36})(?:[/?]|$)`),
-  );
-  ids.dmAgentId = await page.evalJs(
-    extract(`/${LOCALE}/messages/(?!channels)([0-9a-fA-F-]{36})(?:[/?]|$)`),
-  );
+  await page.navigate(`${BASE_URL}${workspace}`);
+  ids.channelId = await page.evalJs(extract(`${workspace}/channel/([0-9a-fA-F-]{36})(?:[/?]|$)`));
+  // The sidebar lists only the direct conversations the user already has, each at `dm/<id>`.
+  ids.dmId = await page.evalJs(extract(`${workspace}/dm/([0-9a-fA-F-]{36})(?:[/?]|$)`));
 
   return ids;
 }
@@ -653,21 +667,21 @@ function buildSurfaces(ids) {
   if (!ids.agentId) missing.push("agentId");
   if (!ids.computerId) missing.push("computerId");
   if (!ids.channelId) missing.push("channelId");
-  if (!ids.dmAgentId) missing.push("dmAgentId");
+  if (!ids.dmId) missing.push("dmId");
 
-  const url = (p) => `${BASE_URL}/${LOCALE}${p}`;
+  const url = (p) => `${BASE_URL}/${LOCALE}/w/${ids.workspaceSlug}${p}`;
 
   const surfaces = [
-    { key: "agents-list", url: url("/agents") },
+    { key: "agents-list", url: url("/members") },
     ids.agentId && {
       key: "agent-detail",
-      url: url(`/agents?profile=agent:${ids.agentId}`),
+      url: url(`/members?profile=agent:${ids.agentId}`),
     },
-    { key: "messages-index", url: url("/messages") },
-    ids.channelId && { key: "channel-chat", url: url(`/messages/channels/${ids.channelId}`) },
+    { key: "messages-index", url: url("") },
+    ids.channelId && { key: "channel-chat", url: url(`/channel/${ids.channelId}`) },
     ids.channelId && {
       key: "channel-tasks-tab",
-      url: url(`/messages/channels/${ids.channelId}`),
+      url: url(`/channel/${ids.channelId}`),
       prepare: async (page) => {
         // Scoped to the in-channel Chat/Tasks tab nav — an unscoped "Tasks"
         // text match hits the sidebar's global Tasks nav link first (it comes
@@ -678,7 +692,7 @@ function buildSurfaces(ids) {
     },
     ids.channelId && {
       key: "channel-thread-open",
-      url: url(`/messages/channels/${ids.channelId}`),
+      url: url(`/channel/${ids.channelId}`),
       prepare: async (page) => {
         const ok = await page.clickText("repl"); // "N replies" / "1 reply"
         if (!ok) return "could not find a message with replies to open the thread panel";
@@ -687,7 +701,7 @@ function buildSurfaces(ids) {
     },
     ids.channelId && {
       key: "channel-message-hover",
-      url: url(`/messages/channels/${ids.channelId}`),
+      url: url(`/channel/${ids.channelId}`),
       prepare: async (page) => {
         const rect = await page.findRectBySelector("main li, main article, main [data-message-id]");
         if (!rect) return "could not find a message row to hover";
@@ -695,13 +709,13 @@ function buildSurfaces(ids) {
         await sleepScript(300);
       },
     },
-    ids.dmAgentId && { key: "dm-conversation", url: url(`/messages/${ids.dmAgentId}`) },
+    ids.dmId && { key: "dm-conversation", url: url(`/dm/${ids.dmId}`) },
     { key: "tasks-board", url: url("/tasks?layout=board") },
     { key: "tasks-list", url: url("/tasks?layout=list") },
     { key: "computers-list", url: url("/computers") },
     ids.computerId && {
       key: "computer-detail-runtime-popover",
-      url: url(`/computers/${ids.computerId}`),
+      url: url(`/computer/${ids.computerId}`),
       prepare: async (page) => {
         const ok =
           (await page.hoverText("Claude Code")) ||
@@ -724,7 +738,7 @@ function buildSurfaces(ids) {
     },
     {
       key: "dialog-create-channel",
-      url: url("/messages"),
+      url: url(""),
       prepare: async (page) => {
         const ok = await page.clickText("Create channel");
         if (!ok) return "could not find the Create channel trigger";
@@ -733,7 +747,7 @@ function buildSurfaces(ids) {
     },
     {
       key: "dialog-new-agent",
-      url: url("/agents"),
+      url: url("/members"),
       prepare: async (page) => {
         const ok = await page.clickText("New agent");
         if (!ok) return "could not find the New agent trigger";
@@ -765,7 +779,7 @@ function buildSurfaces(ids) {
     // a channel's embedded task board (its Tasks tab), so open it from there.
     ids.channelId && {
       key: "dialog-create-task",
-      url: url(`/messages/channels/${ids.channelId}`),
+      url: url(`/channel/${ids.channelId}`),
       prepare: async (page) => {
         if (!(await page.clickText("^Tasks", { within: '[aria-label="Chat / Tasks"]' })))
           return "could not find the channel Tasks tab";
@@ -777,7 +791,7 @@ function buildSurfaces(ids) {
     },
     {
       key: "menu-workspace-switcher",
-      url: url("/agents"),
+      url: url("/members"),
       prepare: async (page) => {
         const opened = await page.clickText("Current workspace");
         if (!opened) return "could not find the workspace switcher trigger";
@@ -786,7 +800,7 @@ function buildSurfaces(ids) {
     },
     {
       key: "menu-user-menu",
-      url: url("/agents"),
+      url: url("/members"),
       prepare: async (page) => {
         const ok = await page.clickText("Current user");
         if (!ok) return "could not find the user menu trigger";
@@ -795,7 +809,7 @@ function buildSurfaces(ids) {
     },
     {
       key: "sidebar-collapsed-tooltip",
-      url: url("/agents"),
+      url: url("/members"),
       prepare: async (page) => {
         const collapsed = await page.clickText("Hide sidebar");
         if (!collapsed) return "could not find the sidebar collapse control";
@@ -805,7 +819,7 @@ function buildSurfaces(ids) {
     },
     {
       key: "sidebar-mid-resize",
-      url: url("/agents"),
+      url: url("/members"),
       prepare: async (page) => {
         const rect = await page.findRectBySelector('[aria-label="Resize sidebar"]');
         if (!rect) return "could not find the sidebar resize handle";
@@ -984,7 +998,7 @@ async function main() {
       results.push(record);
 
       function url_messages() {
-        return `${BASE_URL}/${LOCALE}/messages`;
+        return `${BASE_URL}/${LOCALE}/w/${ids.workspaceSlug}`;
       }
     }
 

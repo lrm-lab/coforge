@@ -3,8 +3,8 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ClaudeCodeProvider } from "../src/code-agent/claude-code/provider";
-import { AGENT_RUNTIME_EVENT_TYPE, type AgentRuntimeEvent } from "../src/code-agent/contract";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+import { AGENT_RUNTIME_EVENT_TYPE, type AgentRuntimeEvent } from "#src/code-agent/contract";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
 
@@ -684,7 +684,10 @@ test("Claude Code startup fails when its CLI does not complete initialization", 
         agentWorkspaceDirectory: tmpdir(),
         instructions: TEST_AGENT_INSTRUCTIONS,
       }),
-      Bun.sleep(200).then(() => {
+      // Process startup can exceed 200ms on a cold Bun worker even though the fixture
+      // immediately emits malformed JSONL; keep the assertion about the protocol error while
+      // avoiding a startup-scheduling race.
+      Bun.sleep(1_000).then(() => {
         throw new Error("startup timed out");
       }),
     ]),

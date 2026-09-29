@@ -4,10 +4,11 @@ import {
   type AgentRuntimeEvent,
   type CodeAgentProvider,
   type ProviderDiscoveryOptions,
-} from "../contract";
-import { agentEnvironment } from "../environment";
-import { asRecord, eventTime } from "../json-record";
-import { discoverExternalCodeAgents } from "../runtime-inventory";
+} from "#src/code-agent/contract";
+import { agentEnvironment } from "#src/code-agent/environment";
+import { exitFailureMessage } from "#src/code-agent/exit-failure-message";
+import { asRecord, eventTime } from "#src/code-agent/json-record";
+import { discoverExternalCodeAgents } from "#src/code-agent/runtime-inventory";
 import { discoverCursorCatalog } from "./catalog";
 import { CursorTurnProcess, type CursorTurnResult } from "./turn-process";
 
@@ -250,6 +251,18 @@ class CursorAgentSession implements AgentSession {
       this.#emit({ type: "compaction-finished", occurredAt: eventTime(record) });
       return;
     }
+    // Current Cursor CLI versions emit reasoning as top-level `thinking` delta frames (rather
+    // than assistant content blocks). Forward those deltas so the daemon's activity trajectory
+    // can show Thinking/Thinking finished while a turn is running.
+    if (
+      record.type === "thinking" &&
+      record.subtype === "delta" &&
+      typeof record.text === "string" &&
+      record.text
+    ) {
+      this.#emit({ type: "thinking-delta", text: record.text });
+      return;
+    }
     if (record.type === "assistant") {
       this.#handleAssistant(record);
       return;
@@ -413,15 +426,4 @@ class CursorAgentSession implements AgentSession {
     for (const listener of this.#exitListeners) listener();
     this.#exitListeners.clear();
   }
-}
-
-function exitFailureMessage(result: CursorTurnResult): string {
-  const summary =
-    result.exitCode === null ? "terminated by signal" : `exit code ${result.exitCode}`;
-  const stderrLines = result.stderrTail
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  // Raw facts only: the daemon core redacts and caps runtime error text before it becomes Activity.
-  return stderrLines.length ? `${summary} | stderr: ${stderrLines.join(" | ")}` : summary;
 }

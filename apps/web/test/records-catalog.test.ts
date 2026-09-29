@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
-import type { PrismaClient } from "../generated/client";
-import { RecordCatalog } from "../src/server/records/record-catalog.server";
+import type { PrismaClient } from "#src/generated/prisma/client";
+import { currentIsoWeek } from "#src/features/records/records-content";
+import { RecordCatalog } from "#src/server/records/record-catalog.server";
 
 test("sendWeeklyAssignments creates a new parent and unread assignments for recipients", async () => {
   const created: Array<Record<string, unknown>> = [];
+  let createManyCalls = 0;
   const db = {
     workspaceMembership: {
       findUnique: async () => ({ role: "owner" }),
@@ -22,6 +24,11 @@ test("sendWeeklyAssignments creates a new parent and unread assignments for reci
           id: `created-${created.length}`,
           title: query.data.title,
         };
+      },
+      createMany: async (query: { data: Array<Record<string, unknown>> }) => {
+        createManyCalls += 1;
+        created.push(...query.data);
+        return { count: query.data.length };
       },
     },
     weeklyReportCycle: {
@@ -67,6 +74,7 @@ test("sendWeeklyAssignments creates a new parent and unread assignments for reci
     assignmentCount: 2,
   });
   expect(created).toHaveLength(3);
+  expect(createManyCalls).toBe(1);
   expect(created[0]).toMatchObject({
     kind: "template",
     authorId: "leader",
@@ -92,31 +100,47 @@ test("sendWeeklyAssignments creates a new parent and unread assignments for reci
   });
 });
 
-test("sendWeeklyAssignments notifies the channel delivery after assignments exist", async () => {
-  const notified: Array<Record<string, unknown>> = [];
+test("sendFormatTemplateFromSideChat resends after this week was cancelled", async () => {
+  const now = new Date("2026-09-28T12:00:00+08:00");
+  const { year, week } = currentIsoWeek(now);
+  const comments: Array<Record<string, unknown>> = [];
+  let sourceContent: Record<string, unknown> = {
+    tabs: { Summary: { markdown: "# Outline" } },
+    schedule: { cancelledYear: year, cancelledWeek: week, dismissSend: true },
+  };
+  const created: Array<Record<string, unknown>> = [];
   const db = {
     workspaceMembership: {
       findUnique: async () => ({ role: "owner" }),
       findMany: async () => [{ userId: "leader" }, { userId: "member-a" }],
     },
     weeklyReport: {
-      findFirst: async () => ({
-        id: "source-1",
-        settingsId: "settings-1",
-        content: { tabs: { Summary: { markdown: "# Outline" } } },
-      }),
-      update: async () => ({}),
-      create: async (query: { data: Record<string, unknown> }) => ({
-        id: query.data.kind === "template" ? "parent-1" : "child-1",
-        title: query.data.title,
-      }),
+      findFirst: async (query: { where?: { id?: string; submissions?: unknown } }) => {
+        if (query.where?.submissions) return null;
+        if (query.where?.id === "format-1") {
+          return { id: "format-1", settingsId: "settings-1", content: sourceContent };
+        }
+        return null;
+      },
+      update: async (query: { data: { content: Record<string, unknown> } }) => {
+        sourceContent = query.data.content;
+        return {};
+      },
+      create: async (query: { data: Record<string, unknown> }) => {
+        created.push(query.data);
+        return { id: "created-1", title: query.data.title };
+      },
+      createMany: async (query: { data: Array<Record<string, unknown>> }) => {
+        created.push(...query.data);
+        return { count: query.data.length };
+      },
     },
     weeklyReportCycle: {
       findUnique: async () => ({
         id: "cycle-1",
-        year: 2026,
-        week: 38,
-        title: "2026 W38 工作周报",
+        year,
+        week,
+        title: `${year} W${week} 工作周报`,
       }),
     },
     weeklyReportTemplate: {
@@ -128,33 +152,48 @@ test("sendWeeklyAssignments notifies the channel delivery after assignments exis
     },
     user: {
       findMany: async () => [{ id: "member-a", displayName: "Alice", username: "alice" }],
-      findUnique: async () => ({ displayName: "Boss", username: "boss" }),
+    },
+    recordComment: {
+      create: async (query: { data: Record<string, unknown> }) => {
+        const row = {
+          id: `comment-${comments.length + 1}`,
+          createdAt: now,
+          authorUser: null,
+          payload: null,
+          ...query.data,
+        };
+        comments.push(row);
+        return row;
+      },
+      findMany: async () => comments,
     },
   } as unknown as PrismaClient;
 
-  await new RecordCatalog(db, {
-    notifyChannel: async (input) => {
-      notified.push(input);
-    },
-  }).sendWeeklyAssignments({
+  const rows = await new RecordCatalog(db).sendFormatTemplateFromSideChat({
     workspaceId: "workspace-1",
     userId: "leader",
-    sourceReportId: "source-1",
-    now: new Date("2026-09-14T12:00:00+08:00"),
+    subjectType: "report",
+    subjectId: "format-1",
+    body: "我刚才取消了本周的周报发送，我需要重新发送",
+    assistantSessionId: "session-1",
+    now,
   });
 
-  expect(notified).toEqual([
-    {
-      workspaceId: "workspace-1",
-      senderUserId: "leader",
-      parentReportId: "parent-1",
-      week: 38,
-      senderDisplayName: "Boss",
-    },
+  expect(rows?.map((row) => row.body)).toEqual([
+    "我刚才取消了本周的周报发送，我需要重新发送",
+    `已重新发送 ${year} W${week} 工作周报，共 1 位成员。`,
   ]);
+  expect(sourceContent.schedule).toBeUndefined();
+  const parent = created[0];
+  if (!parent) throw new Error("expected a parent template");
+  expect(parent).toMatchObject({
+    kind: "template",
+    content: { tabs: { Summary: { markdown: "# Outline" } } },
+  });
+  expect((parent.content as { schedule?: unknown }).schedule).toBeUndefined();
 });
 
-test("sendWeeklyAssignments still succeeds when channel delivery fails", async () => {
+test("sendWeeklyAssignments does not post a #general notice", async () => {
   const db = {
     workspaceMembership: {
       findUnique: async () => ({ role: "owner" }),
@@ -170,6 +209,9 @@ test("sendWeeklyAssignments still succeeds when channel delivery fails", async (
       create: async (query: { data: Record<string, unknown> }) => ({
         id: query.data.kind === "template" ? "parent-1" : "child-1",
         title: query.data.title,
+      }),
+      createMany: async (query: { data: Array<Record<string, unknown>> }) => ({
+        count: query.data.length,
       }),
     },
     weeklyReportCycle: {
@@ -189,23 +231,22 @@ test("sendWeeklyAssignments still succeeds when channel delivery fails", async (
     },
     user: {
       findMany: async () => [{ id: "member-a", displayName: "Alice", username: "alice" }],
-      findUnique: async () => ({ displayName: "Boss", username: "boss" }),
+    },
+    conversation: {
+      findFirst: async () => {
+        throw new Error("weekly send must not look up a public channel");
+      },
     },
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db, {
-    notifyChannel: async () => {
-      throw new Error("channel down");
-    },
-  }).sendWeeklyAssignments({
+  const result = await new RecordCatalog(db).sendWeeklyAssignments({
     workspaceId: "workspace-1",
     userId: "leader",
     sourceReportId: "source-1",
     now: new Date("2026-09-14T12:00:00+08:00"),
   });
 
-  expect(result.parentId).toBe("parent-1");
-  expect(result.assignmentCount).toBe(1);
+  expect(result).toMatchObject({ parentId: "parent-1", assignmentCount: 1, week: 38 });
 });
 
 test("sendWeeklyAssignments rejects when no send settings are applied", async () => {
@@ -661,6 +702,11 @@ test("runDueScheduledWeeklyAssignments sends when due and not yet sent", async (
           title: query.data.title,
         };
       },
+      createMany: async (query: { data: Array<Record<string, unknown>> }) => {
+        sendCalls += 1;
+        created.push(...query.data);
+        return { count: query.data.length };
+      },
     },
     weeklyReportCycle: {
       findUnique: async () => ({
@@ -729,6 +775,102 @@ test("runDueScheduledWeeklyAssignments skips when Leader edited the format this 
 
   expect(result.sent).toBe(0);
   expect(result.results[0]).toMatchObject({
+    status: "skipped",
+    reason: "auto-send-cancelled",
+  });
+});
+
+test("dismissWeeklyFormatSend stamps the current ISO week so a stale cycle cannot leak auto-send", async () => {
+  const contentUpdates: Array<Record<string, unknown>> = [];
+  let liveContent: Record<string, unknown> = {
+    tabs: { Summary: { markdown: "outline" } },
+  };
+  const formatRow = {
+    id: "format-1",
+    authorId: "leader",
+    kind: "template",
+    settingsId: "settings-1",
+    content: liveContent,
+    // Document still bound to last week while calendar is W39.
+    cycle: { year: 2026, week: 38 },
+    submissions: [] as Array<{ id: string }>,
+  };
+  const db = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "member" }),
+      findMany: async () => [],
+    },
+    weeklyReport: {
+      findFirst: async (query: {
+        where?: {
+          id?: string;
+          settingsId?: string;
+          submissions?: { some?: unknown; none?: unknown };
+          cycle?: { year?: number; week?: number };
+        };
+      }) => {
+        if (query.where?.submissions?.some) return null;
+        if (query.where?.submissions?.none) return { id: "format-1", content: liveContent };
+        if (query.where?.id === "format-1" || query.where?.settingsId) return formatRow;
+        return null;
+      },
+      update: async (query: { data: Record<string, unknown> }) => {
+        contentUpdates.push(query.data);
+        if (query.data.content && typeof query.data.content === "object") {
+          liveContent = query.data.content as Record<string, unknown>;
+          formatRow.content = liveContent;
+        }
+        return { id: "format-1" };
+      },
+    },
+    weeklyReportTemplate: {
+      findFirst: async () => ({
+        id: "settings-1",
+        sendWeekday: 4,
+        sendTime: "15:00",
+        scheduleEnabled: true,
+        applied: true,
+      }),
+      findMany: async () => [
+        {
+          id: "settings-1",
+          name: "算法汇报",
+          workspaceId: "workspace-1",
+          ownerId: "leader",
+          sendTime: "15:00",
+          sendWeekday: 4,
+        },
+      ],
+    },
+    recordComment: {
+      create: async () => ({ id: "c1" }),
+      findMany: async () => [],
+    },
+  } as unknown as PrismaClient;
+
+  const catalog = new RecordCatalog(db);
+  // Thursday 14:40 Shanghai = inside the 14:00–15:00 preview hour for Thursday 15:00 (W39).
+  const now = new Date("2026-09-24T06:40:00.000Z");
+  await catalog.dismissWeeklyFormatSend({
+    workspaceId: "workspace-1",
+    userId: "leader",
+    reportId: "format-1",
+    now,
+  });
+
+  expect(contentUpdates[0]?.content).toMatchObject({
+    schedule: {
+      cancelledYear: 2026,
+      cancelledWeek: 39,
+      dismissSend: true,
+    },
+  });
+
+  const tick = await catalog.runDueScheduledWeeklyAssignments({
+    now: new Date("2026-09-24T07:00:00.000Z"),
+  });
+  expect(tick.sent).toBe(0);
+  expect(tick.results[0]).toMatchObject({
     status: "skipped",
     reason: "auto-send-cancelled",
   });
@@ -859,6 +1001,91 @@ test("listTemplates only returns settings owned by the viewer", async () => {
   });
 
   expect(queried).toEqual([{ workspaceId: "workspace-1", ownerId: "leader-b" }]);
+});
+
+test("loadTemplateForReport returns the settings linked to the viewer's format", async () => {
+  const queried: { report?: unknown; template?: unknown } = {};
+  const db = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "member" }),
+    },
+    weeklyReport: {
+      findFirst: async (query: { where: unknown }) => {
+        queried.report = query.where;
+        return { settingsId: "settings-1" };
+      },
+    },
+    weeklyReportTemplate: {
+      findFirst: async (query: { where: unknown }) => {
+        queried.template = query.where;
+        return {
+          id: "settings-1",
+          name: "LRM周报",
+          frequency: "weekly",
+          sendTime: "19:00",
+          sendWeekday: 1,
+          dimensions: [{ title: "Summary", children: ["Work Summary:", "Next Steps:"] }],
+          mainTitles: [],
+          allMembers: true,
+          applied: true,
+          scheduleEnabled: true,
+          updatedAt: new Date("2026-09-28T10:02:00.000Z"),
+          recipients: [],
+        };
+      },
+    },
+  } as unknown as PrismaClient;
+
+  const template = await new RecordCatalog(db).loadTemplateForReport({
+    workspaceId: "workspace-1",
+    userId: "leader",
+    reportId: "report-1",
+  });
+
+  expect(queried.report).toEqual({
+    id: "report-1",
+    workspaceId: "workspace-1",
+    authorId: "leader",
+    kind: "template",
+  });
+  expect(queried.template).toEqual({
+    id: "settings-1",
+    workspaceId: "workspace-1",
+    ownerId: "leader",
+  });
+  expect(template).toMatchObject({
+    id: "settings-1",
+    name: "LRM周报",
+    sendTime: "19:00",
+    allMembers: true,
+    active: true,
+    sections: [{ title: "Summary", children: ["Work Summary:", "Next Steps:"] }],
+    recipients: [],
+  });
+});
+
+test("loadTemplateForReport rejects a format the viewer does not own", async () => {
+  const db = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "member" }),
+    },
+    weeklyReport: {
+      findFirst: async () => null,
+    },
+    weeklyReportTemplate: {
+      findFirst: async () => {
+        throw new Error("must not read another viewer's settings");
+      },
+    },
+  } as unknown as PrismaClient;
+
+  await expect(
+    new RecordCatalog(db).loadTemplateForReport({
+      workspaceId: "workspace-1",
+      userId: "leader",
+      reportId: "report-1",
+    }),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
 
 test("createTemplate rejects a send time that is not an on-the-hour slot", async () => {
@@ -1297,6 +1524,9 @@ test("getSubject rejects unrelated members opening another member's assignment",
         cycle: { id: "cycle-1", year: 2026, week: 38, title: "2026 W38 工作周报" },
       }),
     },
+    weeklyReportFavorite: {
+      findUnique: async () => null,
+    },
   } as unknown as PrismaClient;
 
   await expect(
@@ -1571,6 +1801,44 @@ test("sendWeeklyAssignments rejects sending another leader's format", async () =
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
 
+test("getSubject still opens a favorited member report after its overview parent is gone", async () => {
+  const db = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "member" }),
+    },
+    weeklyReport: {
+      findFirst: async () => ({
+        id: "assignment-1",
+        kind: "member",
+        title: "Alice 2026 W38 工作周报",
+        status: "submitted",
+        content: { tabs: { Summary: { markdown: "Done" } } },
+        submittedAt: new Date("2026-09-18T08:00:00.000Z"),
+        updatedAt: new Date("2026-09-18T08:00:00.000Z"),
+        sourceTemplateId: null,
+        sourceTemplate: null,
+        author: { id: "member-a", username: "alice", displayName: "Alice" },
+        cycle: { id: "cycle-1", year: 2026, week: 38, title: "2026 W38 工作周报" },
+      }),
+      count: async () => 0,
+    },
+    weeklyReportFavorite: {
+      findUnique: async () => ({ userId: "leader", reportId: "assignment-1" }),
+    },
+  } as unknown as PrismaClient;
+
+  const subject = await new RecordCatalog(db).getSubject({
+    workspaceId: "workspace-1",
+    userId: "leader",
+    id: "assignment-1",
+  });
+
+  expect(subject).toMatchObject({
+    type: "report",
+    report: { id: "assignment-1", kind: "member", favorited: true },
+  });
+});
+
 test("getSubject reports whether the viewer favorited a member report", async () => {
   const db = {
     workspaceMembership: {
@@ -1680,6 +1948,7 @@ test("setReportFavorite rejects reports the viewer cannot open", async () => {
       }),
     },
     weeklyReportFavorite: {
+      findUnique: async () => null,
       upsert: async () => {
         throw new Error("should not upsert");
       },
@@ -1696,12 +1965,24 @@ test("setReportFavorite rejects reports the viewer cannot open", async () => {
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
 
-test("saveReportContent with askToSend posts an offer-send assistant card when eligible", async () => {
+test("saveReportContent with askToSend cancels auto-send and leaves offer-send to the open session", async () => {
   const comments: Array<Record<string, unknown>> = [];
   const contentUpdates: Array<Record<string, unknown>> = [];
+  const formatRow = {
+    id: "format-1",
+    authorId: "leader",
+    kind: "template",
+    settingsId: "settings-1",
+    content: { tabs: { Summary: { markdown: "old" } } },
+    cycle: { year: 2026, week: 38 },
+    submissions: [],
+    updatedAt: new Date("2026-09-18T06:00:00.000Z"),
+    author: { displayName: "Mark", username: "mark" },
+  };
   const db = {
     workspaceMembership: {
       findUnique: async () => ({ role: "member" }),
+      findMany: async () => [],
     },
     weeklyReport: {
       findFirst: async (query: {
@@ -1710,19 +1991,12 @@ test("saveReportContent with askToSend posts an offer-send assistant card when e
           settingsId?: string;
           submissions?: { some?: unknown; none?: unknown };
         };
+        select?: Record<string, unknown>;
       }) => {
         if (query.where?.submissions?.some) return null;
         if (query.where?.submissions?.none) return { id: "format-1" };
         if (query.where?.id === "format-1" || query.where?.settingsId) {
-          return {
-            id: "format-1",
-            authorId: "leader",
-            kind: "template",
-            settingsId: "settings-1",
-            content: { tabs: { Summary: { markdown: "old" } } },
-            cycle: { year: 2026, week: 38 },
-            submissions: [],
-          };
+          return formatRow;
         }
         return null;
       },
@@ -1742,6 +2016,17 @@ test("saveReportContent with askToSend posts an offer-send assistant card when e
         sendTime: "15:00",
         scheduleEnabled: true,
         applied: true,
+        allMembers: false,
+        recipients: [
+          {
+            user: {
+              id: "m1",
+              displayName: "Ada",
+              username: "ada",
+              avatarObjectKey: null,
+            },
+          },
+        ],
       }),
       update: async () => ({}),
     },
@@ -1765,18 +2050,273 @@ test("saveReportContent with askToSend posts an offer-send assistant card when e
 
   expect(result.assistantPosted).toBe(true);
   expect(result.autoSendJustCancelled).toBe(true);
+  expect(comments).toHaveLength(1);
   expect(comments[0]).toMatchObject({
     authorType: "assistant",
     body: "已取消本周自动发送。保存后请手动发送周报模板。",
-  });
-  expect(comments[1]).toMatchObject({
-    authorType: "assistant",
-    payload: { kind: "offer-send" },
   });
   expect(
     (contentUpdates[0]?.content as { schedule?: { cancelledWeek?: number } })?.schedule
       ?.cancelledWeek,
   ).toBe(38);
+});
+
+test("ensureAssistantIntro posts the offer-send for the current ISO week when the live format cycle is stale", async () => {
+  const comments: Array<Record<string, unknown>> = [];
+  const reportUpdates: Array<Record<string, unknown>> = [];
+  const formatRow = {
+    id: "format-1",
+    authorId: "leader",
+    kind: "template",
+    settingsId: "settings-1",
+    content: { tabs: { Summary: { markdown: "old" } } },
+    // Created last week; the calendar has advanced to W39 by now.
+    cycle: { id: "cycle-38", year: 2026, week: 38 },
+    submissions: [],
+    updatedAt: new Date("2026-09-18T06:00:00.000Z"),
+    author: { displayName: "李健", username: "lijian" },
+  };
+  const db = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "member" }),
+      findMany: async () => [],
+    },
+    weeklyReportCycle: {
+      findUnique: async () => ({
+        id: "cycle-39",
+        year: 2026,
+        week: 39,
+        title: "2026 W39",
+      }),
+      create: async () => {
+        throw new Error("current week cycle must already exist");
+      },
+    },
+    weeklyReport: {
+      findFirst: async (query: {
+        where?: {
+          id?: string;
+          settingsId?: string;
+          submissions?: { some?: unknown; none?: unknown };
+          cycle?: { year?: number; week?: number };
+        };
+        select?: Record<string, unknown>;
+      }) => {
+        if (query.where?.submissions?.some) return null;
+        if (query.where?.submissions?.none) return { id: "format-1" };
+        if (query.where?.id === "format-1" || query.where?.settingsId) {
+          return formatRow;
+        }
+        return null;
+      },
+      update: async (query: { data: Record<string, unknown> }) => {
+        reportUpdates.push(query.data);
+        if (typeof query.data.cycleId === "string") {
+          formatRow.cycle = { id: query.data.cycleId, year: 2026, week: 39 };
+        }
+        return {
+          id: "format-1",
+          updatedAt: new Date("2026-09-24T06:40:00.000Z"),
+        };
+      },
+    },
+    weeklyReportTemplate: {
+      findFirst: async () => ({
+        id: "settings-1",
+        sendWeekday: 4,
+        sendTime: "15:00",
+        scheduleEnabled: true,
+        applied: true,
+        allMembers: false,
+        recipients: [
+          {
+            user: {
+              id: "m1",
+              displayName: "Ada",
+              username: "ada",
+              avatarObjectKey: null,
+            },
+          },
+        ],
+      }),
+    },
+    recordComment: {
+      findMany: async () => [],
+      create: async (query: { data: Record<string, unknown> }) => {
+        comments.push(query.data);
+        return { id: `c-${comments.length}` };
+      },
+    },
+  } as unknown as PrismaClient;
+
+  await new RecordCatalog(db).ensureAssistantIntro({
+    workspaceId: "workspace-1",
+    userId: "leader",
+    subjectType: "report",
+    subjectId: "format-1",
+    assistantSessionId: "session-1",
+    surface: "format",
+    // Thursday 14:40 Shanghai = inside the 14:00–15:00 preview hour for Thursday 15:00
+    now: new Date("2026-09-24T06:40:00.000Z"),
+  });
+
+  expect(comments.at(-1)).toMatchObject({
+    authorType: "assistant",
+    body: "hi，李健，2026 W39的工作周报模板已生成，请确认是否发送。",
+    payload: {
+      kind: "offer-send",
+      year: 2026,
+      week: 39,
+      weekTitle: "2026 W39 (09.21-09.25)",
+    },
+  });
+  // The stale live format was rebound onto the current week's cycle.
+  expect(reportUpdates.some((row) => row.cycleId === "cycle-39")).toBe(true);
+});
+
+test("ensureAssistantIntro appends this week's offer-send and leaves an older card in the thread", async () => {
+  const stored: Array<Record<string, unknown>> = [
+    {
+      id: "c-w38",
+      authorType: "assistant",
+      body: "hi，李健，2026 W38的工作周报模板已生成，请确认是否发送。",
+      payload: {
+        kind: "offer-send",
+        year: 2026,
+        week: 38,
+        weekTitle: "2026 W38 (09.14-09.18)",
+      },
+      createdAt: new Date("2026-09-18T01:33:13.000Z"),
+      assistantSessionId: "session-1",
+      authorUser: null,
+    },
+  ];
+  const formatRow = {
+    id: "format-1",
+    authorId: "leader",
+    kind: "template",
+    settingsId: "settings-1",
+    content: { tabs: { Summary: { markdown: "old" } } },
+    cycle: { id: "cycle-38", year: 2026, week: 38 },
+    submissions: [],
+    updatedAt: new Date("2026-09-18T06:00:00.000Z"),
+    author: { displayName: "李健", username: "lijian" },
+  };
+  const db = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "member" }),
+      findMany: async () => [],
+    },
+    weeklyReportCycle: {
+      findUnique: async () => ({
+        id: "cycle-39",
+        year: 2026,
+        week: 39,
+        title: "2026 W39",
+      }),
+      create: async () => {
+        throw new Error("current week cycle must already exist");
+      },
+    },
+    weeklyReport: {
+      findFirst: async (query: {
+        where?: {
+          id?: string;
+          settingsId?: string;
+          submissions?: { some?: unknown; none?: unknown };
+        };
+      }) => {
+        if (query.where?.submissions?.some) return null;
+        if (query.where?.submissions?.none) return { id: "format-1" };
+        if (query.where?.id === "format-1" || query.where?.settingsId) return formatRow;
+        return null;
+      },
+      update: async (query: { data: { cycleId?: string } }) => {
+        if (typeof query.data.cycleId === "string") {
+          formatRow.cycle = { id: query.data.cycleId, year: 2026, week: 39 };
+        }
+        return { id: "format-1", updatedAt: new Date("2026-09-24T06:40:00.000Z") };
+      },
+    },
+    weeklyReportTemplate: {
+      findFirst: async () => ({
+        id: "settings-1",
+        sendWeekday: 4,
+        sendTime: "15:00",
+        scheduleEnabled: true,
+        applied: true,
+        allMembers: false,
+        recipients: [
+          {
+            user: {
+              id: "m1",
+              displayName: "Ada",
+              username: "ada",
+              avatarObjectKey: null,
+            },
+          },
+        ],
+      }),
+    },
+    recordComment: {
+      findMany: async (query: {
+        select?: { payload?: boolean };
+        where?: { assistantSessionId?: string };
+      }) => {
+        const sessionId = query.where?.assistantSessionId;
+        const rows = stored.filter((row) => !sessionId || row.assistantSessionId === sessionId);
+        if (query.select?.payload) return rows.map((row) => ({ payload: row.payload }));
+        return rows;
+      },
+      create: async (query: { data: Record<string, unknown> }) => {
+        const row = {
+          id: `c-${stored.length}`,
+          authorType: query.data.authorType,
+          body: query.data.body,
+          payload: query.data.payload ?? null,
+          createdAt: new Date("2026-09-24T06:40:01.000Z"),
+          assistantSessionId: query.data.assistantSessionId,
+          authorUser: null,
+        };
+        stored.push(row);
+        return row;
+      },
+      update: async () => {
+        throw new Error("historical offer-send must not be rewritten");
+      },
+    },
+  } as unknown as PrismaClient;
+
+  const catalog = new RecordCatalog(db);
+  const intro = {
+    workspaceId: "workspace-1",
+    userId: "leader",
+    subjectType: "report" as const,
+    subjectId: "format-1",
+    assistantSessionId: "session-1",
+    surface: "format" as const,
+    now: new Date("2026-09-24T06:40:00.000Z"),
+  };
+  const first = await catalog.ensureAssistantIntro(intro);
+  expect(first.map((row) => row.body)).toEqual([
+    "hi，李健，2026 W38的工作周报模板已生成，请确认是否发送。",
+    "hi，李健，2026 W39的工作周报模板已生成，请确认是否发送。",
+  ]);
+  expect(first[0]?.payload).toMatchObject({
+    kind: "offer-send",
+    year: 2026,
+    week: 38,
+    weekTitle: "2026 W38 (09.14-09.18)",
+  });
+  expect(first[1]?.payload).toMatchObject({
+    kind: "offer-send",
+    year: 2026,
+    week: 39,
+    weekTitle: "2026 W39 (09.21-09.25)",
+  });
+
+  const second = await catalog.ensureAssistantIntro(intro);
+  expect(second).toHaveLength(2);
 });
 
 test("saveReportContent autosave does not ask to send", async () => {
@@ -1850,6 +2390,7 @@ test("loadNavAttention reads every applied stream with two batched queries", asy
           ? [{ settingsId: "settings-sent" }]
           : [{ settingsId: "settings-soon", content: null }];
       },
+      findFirst: async () => null,
     },
   } as unknown as PrismaClient;
 
@@ -1873,6 +2414,7 @@ test("loadNavAttention stays quiet when the only armed stream was already sent",
     weeklyReport: {
       findMany: async (args: { where: { submissions: { some?: unknown } } }) =>
         args.where.submissions.some ? [{ settingsId: "settings-sent" }] : [],
+      findFirst: async () => null,
     },
   } as unknown as PrismaClient;
 
@@ -1880,6 +2422,55 @@ test("loadNavAttention stays quiet when the only armed stream was already sent",
     workspaceId: "workspace-1",
     userId: "leader",
     now,
+  });
+
+  expect(result).toEqual({ preview: false });
+});
+
+test("loadNavAttention lights the Records rail when the viewer has an unread assignment", async () => {
+  const db = {
+    workspaceMembership: { findUnique: async () => ({ role: "member" }) },
+    weeklyReportTemplate: { findMany: async () => [] },
+    weeklyReport: {
+      findFirst: async (args: {
+        where: {
+          kind?: string;
+          authorId?: string;
+          sourceTemplateId?: { not: null };
+          hiddenFromAuthor?: boolean;
+          content?: { path: string[]; equals: boolean };
+        };
+      }) => {
+        expect(args.where.kind).toBe("member");
+        expect(args.where.authorId).toBe("member-1");
+        expect(args.where.sourceTemplateId).toEqual({ not: null });
+        expect(args.where.hiddenFromAuthor).toBe(false);
+        expect(args.where.content).toEqual({ path: ["assignment", "unread"], equals: true });
+        return { id: "assignment-1" };
+      },
+    },
+  } as unknown as PrismaClient;
+
+  const result = await new RecordCatalog(db).loadNavAttention({
+    workspaceId: "workspace-1",
+    userId: "member-1",
+  });
+
+  expect(result).toEqual({ preview: true });
+});
+
+test("loadNavAttention stays quiet when the member has no unread assignment", async () => {
+  const db = {
+    workspaceMembership: { findUnique: async () => ({ role: "member" }) },
+    weeklyReportTemplate: { findMany: async () => [] },
+    weeklyReport: {
+      findFirst: async () => null,
+    },
+  } as unknown as PrismaClient;
+
+  const result = await new RecordCatalog(db).loadNavAttention({
+    workspaceId: "workspace-1",
+    userId: "member-1",
   });
 
   expect(result).toEqual({ preview: false });
@@ -2192,4 +2783,108 @@ test("saveReportContent does not re-trigger key-point extraction when already su
   });
 
   expect(extractionLookups).toBe(0);
+});
+
+test("updateFormatReportMeta renames the live format without rebinding its ISO week", async () => {
+  const reportUpdates: Array<Record<string, unknown>> = [];
+  const settingsUpdates: Array<Record<string, unknown>> = [];
+  const db = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "owner" }),
+    },
+    weeklyReport: {
+      findFirst: async () => ({
+        id: "format-1",
+        authorId: "leader",
+        kind: "template",
+        title: "LRM周报",
+        settingsId: "settings-1",
+        cycleId: "cycle-38",
+        cycle: { id: "cycle-38", year: 2026, week: 38 },
+        submissions: [],
+      }),
+      update: async (query: { data: Record<string, unknown> }) => {
+        reportUpdates.push(query.data);
+        return { id: "format-1" };
+      },
+    },
+    weeklyReportTemplate: {
+      update: async (query: { data: Record<string, unknown> }) => {
+        settingsUpdates.push(query.data);
+        return { id: "settings-1" };
+      },
+    },
+  } as unknown as PrismaClient;
+
+  const result = await new RecordCatalog(db).updateFormatReportMeta({
+    workspaceId: "workspace-1",
+    userId: "leader",
+    reportId: "format-1",
+    title: "产品周报",
+  });
+
+  expect(result).toEqual({
+    id: "format-1",
+    title: "产品周报",
+    year: 2026,
+    week: 38,
+  });
+  expect(reportUpdates[0]).toEqual({ title: "产品周报" });
+  expect(settingsUpdates[0]).toMatchObject({ name: "产品周报" });
+});
+
+test("updateFormatReportMeta rejects overview templates and blank titles", async () => {
+  const overviewDb = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "owner" }),
+    },
+    weeklyReport: {
+      findFirst: async () => ({
+        id: "overview-1",
+        authorId: "leader",
+        kind: "template",
+        title: "2026 W38 工作周报",
+        settingsId: "settings-1",
+        cycleId: "cycle-38",
+        cycle: { id: "cycle-38", year: 2026, week: 38 },
+        submissions: [{ id: "member-1" }],
+      }),
+    },
+  } as unknown as PrismaClient;
+
+  await expect(
+    new RecordCatalog(overviewDb).updateFormatReportMeta({
+      workspaceId: "workspace-1",
+      userId: "leader",
+      reportId: "overview-1",
+      title: "新产品",
+    }),
+  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+
+  const formatDb = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "owner" }),
+    },
+    weeklyReport: {
+      findFirst: async () => ({
+        id: "format-1",
+        authorId: "leader",
+        kind: "template",
+        title: "LRM周报",
+        settingsId: "settings-1",
+        cycleId: "cycle-38",
+        cycle: { id: "cycle-38", year: 2026, week: 38 },
+        submissions: [],
+      }),
+    },
+  } as unknown as PrismaClient;
+
+  await expect(
+    new RecordCatalog(formatDb).updateFormatReportMeta({
+      workspaceId: "workspace-1",
+      userId: "leader",
+      reportId: "format-1",
+      title: "   ",
+    }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
 });

@@ -1,8 +1,8 @@
 import type { FC, ReactNode } from "react";
-import type { NavItemType } from "@/components/application/app-navigation/config";
-import { cx } from "@/utils/cx";
+import type { NavItemType } from "#src/components/application/app-navigation/config";
+import { cx } from "#src/utils/cx";
 
-// Adapted from Untitled's sidebar-slim.tsx (MIT; docs/ui-guidelines.md §2) —
+// Adapted from Untitled's sidebar-slim.tsx (MIT; docs/design/official-components.md §7) —
 // the demo hardcodes Untitled's own logo/account card with no override
 // props. Desktop keeps the rail visible; mobile uses a separate wide drawer.
 
@@ -11,13 +11,15 @@ export const SIDEBAR_RAIL_WIDTH = "4.375rem";
 
 type RailItemType = NavItemType & { icon: FC<{ className?: string }>; current?: boolean };
 
+/** Without its caption (Settings → Show labels in the sidebar off) an item is just its icon box,
+ * so the icons sit close together instead of keeping the captioned spacing. */
 function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
   return (
     <a
       href={href}
       aria-label={label}
       aria-current={current ? "page" : undefined}
-      className="group flex h-14 flex-col items-center justify-center gap-1 rounded-lg px-0.5 outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="group flex h-14 flex-col items-center justify-center gap-1 rounded-lg px-0.5 [.rail-labels-hidden_&]:h-11 outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       <span
         className={cx(

@@ -1,6 +1,6 @@
 import { Cloud01 as Cloud, Monitor01 as Monitor } from "@untitledui/icons";
 
-import { m } from "@/paraglide/messages";
+import { m } from "#src/paraglide/messages";
 import { compareReleaseVersions, parseReleaseVersion } from "@lrm/coforge-sdk/internal";
 
 /**
@@ -55,6 +55,13 @@ export function operatingSystemLabel(computer: ComputerPlatformInfo): string {
   return name
     ? `${name} ${computer.osVersion || m.computer_metadata_unknown()}`
     : m.computer_metadata_unknown();
+}
+
+/** What a Computer's CoForge version reads as. The list row and the detail panel both show it, so it
+ * is stated here rather than twice; a Computer that has never reported one reads as an em dash in the
+ * panel, while the list row omits the version entirely rather than repeat that in every row. */
+export function computerVersionLabel(computer: { computerVersion?: string | null }): string {
+  return computer.computerVersion || "—";
 }
 
 /** Compare the numeric portions of release versions without treating an unknown format as newer. */

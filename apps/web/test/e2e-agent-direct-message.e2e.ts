@@ -6,52 +6,53 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { encodeAgentActivity } from "@lrm/coforge-sdk/internal";
 import { parseAgentDisplaySnapshot, type AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { Centrifuge } from "centrifuge";
-import { PrismaClient } from "../generated/client";
-import { DEV_BROWSER_USER } from "../src/server/auth/dev-skip-auth.server";
+import { PrismaClient } from "#src/generated/prisma/client";
+import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import {
   issueBrowserRealtimeToken,
   issueAgentStatusSubscriptionToken,
-} from "../src/server/auth/browser-realtime-token.server";
+} from "#src/server/auth/browser-realtime-token.server";
 import {
   agentStatusChannel,
   decodeAgentStatusEvent,
   type AgentStatusEvent,
-} from "../src/features/agents/agent-status-realtime";
-import { RedisAgentStatusCache } from "../src/server/agents/agent-status.server";
-import { verifyDaemonApiKey } from "../src/server/auth/daemon-api-key.server";
-import { PrismaDaemonApiKeyRepository } from "../src/server/db/repositories/daemon-api-key.repositories.server";
-import { ComputerRegistrar } from "../src/server/computers/registration.server";
+} from "#src/features/agents/agent-status-realtime";
+import { RedisAgentStatusCache } from "#src/server/agents/agent-status.server";
+import { verifyDaemonApiKey } from "#src/server/auth/daemon-api-key.server";
+import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";
+import { ComputerRegistrar } from "#src/server/computers/registration.server";
 import {
   PrismaComputerRegistrationRepository,
   PrismaWorkspaceAccess,
-} from "../src/server/db/repositories/setup.repositories.server";
+} from "#src/server/db/repositories/setup.repositories.server";
 import {
   PrismaAgentRepository,
   RepositoryAgentAuthorization,
-} from "../src/server/db/repositories/agent.repositories.server";
-import { createAgentSessions } from "../src/server/db/repositories/agent-session.repositories.server";
-import { ManageAgents } from "../src/server/agents/manage-agents.server";
-import { PublishAgentRuntimeControl } from "../src/server/agents/agent-runtime-control.server";
-import { AgentControl } from "../src/server/agents/agent-control.server";
-import { getAgentRuntimeLock } from "../src/server/agents/agent-runtime-lock.server";
-import { PrismaAgentControlStore } from "../src/server/db/repositories/agent-control.repositories.server";
-import { PrismaDirectConversationRepository } from "../src/server/db/repositories/direct-conversation.repositories.server";
-import { SendDirectMessage } from "../src/server/conversations/direct-message.server";
-import { RedisMessageRequestIdempotency } from "../src/server/conversations/redis-message-request-idempotency.server";
-import { createCentrifugoServerApi } from "../src/server/centrifugo/server-api.server";
+} from "#src/server/db/repositories/agent.repositories.server";
+import { createAgentSessions } from "#src/server/db/repositories/agent-session.repositories.server";
+import { ManageAgents } from "#src/server/agents/manage-agents.server";
+import { PublishAgentRuntimeControl } from "#src/server/agents/agent-runtime-control.server";
+import { AgentControl } from "#src/server/agents/agent-control.server";
+import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
+import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
+import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import {
   DaemonConnection,
   DaemonRuntime,
   InMemoryDaemonCredentialStore,
   defaultCentrifugeWorkspaceClientFactory,
   startAgentProxy,
-} from "../../../packages/daemon";
-import { PiJsonlFixtureProvider } from "../../../packages/daemon/test/fixtures/pi-jsonl-fixture-provider";
+} from "@lrm/coforge-daemon";
+import { PiJsonlFixtureProvider } from "@lrm/coforge-daemon/test/fixtures/pi-jsonl-fixture-provider";
 
 const databaseUrl = requireEnvironment("DATABASE_URL");
 if (requireEnvironment("COFORGE_E2E_ALLOW_RESET") !== "1")
   throw new Error("COFORGE_E2E_ALLOW_RESET=1 is required for destructive E2E cleanup");
 const workspaceId = "10000000-0000-4000-8000-000000000001";
+const workspaceSlug = "e2e-workspace";
 const workspaceRoot = join(import.meta.dir, "../../../.amp/e2e/workspace-root");
 const daemonStateDirectory = join(import.meta.dir, "../../../.amp/e2e/daemon-state");
 const attachmentDirectory = join(
@@ -79,7 +80,7 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
   await db.workspace.create({
     data: {
       id: workspaceId,
-      slug: "e2e-workspace",
+      slug: workspaceSlug,
       name: "E2E Workspace",
       members: {
         create: {
@@ -102,7 +103,7 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
     {
       protocolMajor: 1,
       requestId: crypto.randomUUID(),
-      workspaceSlug: "e2e-workspace",
+      workspaceSlug,
       name: "e2e-computer",
       displayName: "E2E Computer",
       machineId: "e2e-machine",
@@ -597,14 +598,16 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
         })) === 1,
     );
 
-    const page = await fetch(`http://127.0.0.1:8789/messages/${created.agent.id}`);
+    const page = await fetch(
+      `http://127.0.0.1:8789/w/${workspaceSlug}/dm/${opened.conversationId}`,
+    );
     expect(page.status).toBe(200);
     const html = await page.text();
     expect(html).toContain("E2E User message");
     expect(html).toContain("E2E Agent reply");
 
     const profile = await fetch(
-      `http://127.0.0.1:8789/agents?profile=agent:${created.agent.id}&agentTab=profile`,
+      `http://127.0.0.1:8789/w/${workspaceSlug}/members?profile=agent:${created.agent.id}&agentTab=profile`,
     );
     expect(profile.status).toBe(200);
     const profileHtml = await profile.text();
@@ -617,7 +620,7 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
     let activityHtml = "";
     await waitFor(async () => {
       const activityPage = await fetch(
-        `http://127.0.0.1:8789/agents?profile=agent:${created.agent.id}&agentTab=activity`,
+        `http://127.0.0.1:8789/w/${workspaceSlug}/members?profile=agent:${created.agent.id}&agentTab=activity`,
       );
       if (activityPage.status !== 200) return false;
       activityHtml = await activityPage.text();
@@ -645,7 +648,7 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
 }, 40_000);
 
 async function agentsPage() {
-  const response = await fetch("http://127.0.0.1:8789/");
+  const response = await fetch(`http://127.0.0.1:8789/w/${workspaceSlug}`);
   expect(response.status).toBe(200);
   return response.text();
 }

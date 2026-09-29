@@ -3,16 +3,16 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../generated/client";
-import { prepareDaemonApiKey } from "../src/server/auth/daemon-api-key.server";
-import { DEV_BROWSER_USER } from "../src/server/auth/dev-skip-auth.server";
-import { PrismaAgentControlStore } from "../src/server/db/repositories/agent-control.repositories.server";
+import { PrismaClient } from "#src/generated/prisma/client";
+import { prepareDaemonApiKey } from "#src/server/auth/daemon-api-key.server";
+import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
 import {
   DaemonConnection,
   DaemonRuntime,
   InMemoryDaemonCredentialStore,
-} from "../../../packages/daemon";
-import { PiJsonlFixtureProvider } from "../../../packages/daemon/test/fixtures/pi-jsonl-fixture-provider";
+} from "@lrm/coforge-daemon";
+import { PiJsonlFixtureProvider } from "@lrm/coforge-daemon/test/fixtures/pi-jsonl-fixture-provider";
 
 // Explicit opt-in: real local Web/PostgreSQL/Redis/Centrifugo and browser, but a
 // deterministic Pi-protocol child instead of paid model inference. No TRUNCATE/FLUSHDB.
@@ -43,7 +43,10 @@ test("Profile controls and Skills cross Web, WSS, native child and Session persi
   const root = await mkdtemp(join(tmpdir(), "coforge-control-e2e-"));
   const originalHome = Bun.env.HOME;
   const ownerId = DEV_BROWSER_USER.id;
-  const membership = await db.workspaceMembership.findFirstOrThrow({ where: { userId: ownerId } });
+  const membership = await db.workspaceMembership.findFirstOrThrow({
+    where: { userId: ownerId },
+    include: { workspace: { select: { slug: true } } },
+  });
   const workspaceId = membership.workspaceId;
   const computer = await db.computer.create({
     data: { ownerId, machineId: `control-e2e-${crypto.randomUUID()}` },
@@ -126,7 +129,7 @@ test("Profile controls and Skills cross Web, WSS, native child and Session persi
     );
     await Bun.write(sibling, "other Agent untouched");
 
-    await browser("open", `http://127.0.0.1:8790/agents/${agent.id}`);
+    await browser("open", `http://127.0.0.1:8790/w/${membership.workspace.slug}/agent/${agent.id}`);
     await browser("set", "viewport", "1280", "900", "2");
     await browser(
       "wait",

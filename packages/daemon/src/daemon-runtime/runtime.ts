@@ -8,12 +8,12 @@ import {
   type AgentRuntimeEvent,
   type CodeAgentProvider,
   type UsageSnapshot,
-} from "../code-agent/contract";
+} from "#src/code-agent/contract";
 import { mkdirSync } from "node:fs";
-import { readOperatingSystem } from "../platform/operating-system";
-import { ActivityTrajectory } from "../agent-runtime/activity-trajectory";
-import { CompactionTracker } from "../agent-runtime/compaction-tracker";
-import { RuntimeProgressTracker } from "../agent-runtime/runtime-progress";
+import { readOperatingSystem } from "#src/platform/operating-system";
+import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
+import { CompactionTracker } from "#src/agent-runtime/compaction-tracker";
+import { RuntimeProgressTracker } from "#src/agent-runtime/runtime-progress";
 import {
   buildRuntimeErrorActivity,
   buildRuntimeCrashedActivity,
@@ -21,27 +21,29 @@ import {
   scrubRuntimeErrorText,
   fingerprintRuntimeError,
   type RuntimeErrorEvent,
-} from "../agent-runtime/runtime-error-activity";
+} from "#src/agent-runtime/runtime-error-activity";
 import {
   classifyRuntimeErrorText,
   RUNTIME_ERROR_RETRY_DECISION,
   type RuntimeErrorClassification,
-} from "../agent-runtime/runtime-error-classification";
+} from "#src/agent-runtime/runtime-error-classification";
 import {
   RuntimeErrorDeliveryBackoff,
   RuntimeErrorFingerprintFence,
   runtimeErrorFingerprintFenceDetail,
   type RuntimeErrorFingerprintFenceState,
-} from "../agent-runtime/runtime-error-recovery";
+} from "#src/agent-runtime/runtime-error-recovery";
 import {
   AgentProcessManager,
   type CodeAgentProviderFactory,
+  type AgentRestartConfig,
   type AgentRuntime,
-} from "../agent-runtime/agent-process-manager";
-import { parseAssignedSkillPacks } from "../code-agent/assigned-skills";
-import { launchCategoryText, launchFailureTrace } from "../agent-runtime/launch-failure";
-import { agentRuntimeContextEnvironment } from "../code-agent/environment";
-import { toolActivity } from "../code-agent/tool-activity";
+} from "#src/agent-runtime/agent-process-manager";
+import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
+import { launchCategoryText, launchFailureTrace } from "#src/agent-runtime/launch-failure";
+import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
+import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
+import { toolActivity } from "#src/code-agent/tool-activity";
 export type DaemonConfig = {
   workspaceId: string;
   computerId: string;
@@ -50,14 +52,13 @@ export type DaemonConfig = {
 };
 /** @deprecated wire-facing callers should use DaemonConfig internally. */
 export type WorkspaceConfig = DaemonConfig;
-import type { DaemonCredentialStore } from "../credentials/credential-store";
+import type { DaemonCredentialStore } from "#src/credentials/credential-store";
 import type {
   DaemonConnectionClient,
   DaemonConnectionClientFactory,
-} from "../connection/daemon-connection";
+} from "#src/connection/daemon-connection";
 import {
   WORKSPACE_PROTOCOL_MAJOR,
-  TASK_PROTOCOL_MAJOR,
   AGENT_ACTIVITY_DETAIL_KIND,
   truncateCodePoints,
   type AgentActivity,
@@ -72,6 +73,7 @@ import {
   type AgentStopIntent,
   type SessionIdentity,
   type AgentActivityProbe,
+  type AgentInboxPurge,
   type AgentWorkspaceResetRequest,
   type AgentMessageDelivery,
   type InboxResponse,
@@ -93,7 +95,6 @@ import {
   type ChannelCommand,
   type WeeklyReportCommand,
   type WeeklyReportResponse,
-  WEEKLY_REPORT_PROTOCOL_MAJOR,
   threadParentTarget,
   mentionsInContent,
   parseUpgradeErrorCode,
@@ -104,42 +105,54 @@ import {
   type AgentContextScanRequest,
   type AgentContextScanResponse,
   AGENT_CONTEXT_SCAN_STATUS,
-  AGENT_MESSAGE_ACK_METHOD,
   freshnessDecisionFactId,
+  HELD_CONTEXT_LIMIT,
+  UUID_LIKE_SOURCE,
+  utf8Encoder,
 } from "@lrm/coforge-sdk/internal";
-import { agentWorkspaceDirectory } from "../agent-runtime/agent-workspace-path";
-import { AgentControl } from "../agent-runtime/agent-control";
-import { AgentSessions } from "../agent-runtime/agent-session";
-import { AgentRuntimeState } from "../agent-runtime/agent-runtime-state";
-import { MemoryAgentRuntimeStateStore } from "../persistence/memory-agent-runtime-state-store";
-import { listAgentSkills } from "../code-agent/agent-skills";
+import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
+import { memoryIndexReminder } from "#src/agent-runtime/agent-memory-seed";
+import { AgentControl } from "#src/agent-runtime/agent-control";
+import { AgentSessions } from "#src/agent-runtime/agent-session";
+import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
+import {
+  ContextHandoffCoordinator,
+  contextHandoffActivity,
+} from "#src/agent-runtime/context-handoff";
+import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
+import { listAgentSkills } from "#src/code-agent/agent-skills";
 import {
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
-} from "../agent-runtime/agent-workspace-files";
+} from "#src/agent-runtime/agent-workspace-files";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
 import { AgentInboxStateMachine } from "./agent-inbox-state-machine";
-import {
-  HELD_CONTEXT_LIMIT,
-  locallyHeldSend,
-  planAgentInboxFreshness,
-} from "./agent-inbox-freshness";
+import { locallyHeldSend, planAgentInboxFreshness } from "./agent-inbox-freshness";
 import { heldFreshnessActivity, heldFreshnessMessageCount } from "./agent-inbox-freshness-activity";
-import { AgentMessageDraftStore } from "../persistence/agent-message-draft-store";
-import { AgentAppInbox, type MintAppItem } from "../agent-app-inbox/agent-app-inbox";
-import { isAgentApiKey } from "../credentials/agent-api-key";
+import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import {
+  AGENT_MESSAGE_DRAFT_TTL_MS,
+  AgentMessageDraftStore,
+} from "#src/persistence/agent-message-draft-store";
+import { AgentAppInbox, type MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
+import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
+import { settleAgentSend } from "./agent-send-settlement";
 import {
   discoverCodeAgentRuntimes,
   discoverCodeAgentCatalogs,
   loadCachedCodeAgentCatalogs,
-} from "../code-agent/runtime-inventory";
+} from "#src/code-agent/runtime-inventory";
 import { getLogger } from "@logtape/logtape";
-import { COFORGE_DAEMON_VERSION } from "../version";
-import { ReminderScheduler, reminderAppInboxPreview } from "../agent-reminder/reminder-scheduler";
-import { FileReminderReceiptStore } from "../persistence/reminder-receipt-store";
-import { diagnosticErrorCode } from "../platform/diagnostic-error-code";
+import { COFORGE_DAEMON_VERSION } from "#src/version";
+import {
+  ReminderScheduler,
+  reminderAppInboxPreview,
+  reminderAppInboxSummary,
+} from "#src/agent-reminder/reminder-scheduler";
+import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
+import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
 import type {
   AgentActionPrepareRequest,
   AgentActionPrepareResponse,
@@ -158,6 +171,9 @@ import type {
   AgentProfileShowResponse,
   AgentProfileUpdateRequest,
   AgentProfileUpdateResponse,
+  AgentMentionExecuteRequest,
+  AgentMentionExecuteResponse,
+  AgentMentionPendingResponse,
 } from "@lrm/coforge-sdk/agent";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -194,8 +210,9 @@ export type RecoveredUpgradeResult = {
   /** See `UPGRADE_ERROR_CODE`. */
   errorCode?: string;
 };
-const FULL_THREAD_TARGET =
-  /^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const FULL_THREAD_TARGET = new RegExp(
+  `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):(${UUID_LIKE_SOURCE})$`,
+);
 const SHORT_THREAD_TARGET = /^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):([0-9a-f]{8})$/;
 const NOT_RUNNING = "daemon runtime is not running";
 const CLEANUP_UNCONFIRMED =
@@ -215,7 +232,7 @@ const CONTROL_ERROR_CODES = new Set([
   "control_epoch_required",
   "agent_already_running",
   "confirmed_stop_required",
-  // ADR 0041: the server mints and supplies launchId for every managed start; a managed
+  // The server mints and supplies launchId for every managed start; a managed
   // intent that somehow arrives without one is a protocol bug, not a normal race.
   "agent_launch_id_required",
 ]);
@@ -268,8 +285,7 @@ type AgentRecoveryContext = Pick<
 /** Whether a recovery context has anything concrete to deliver. `recoveryOf(intent)` always
  * returns an object, even for a launch with no wake message, resume messages, or unread summary,
  * so callers cannot tell "nothing to recover" from "recovery was requested" by presence alone —
- * this is the same check `#recoverAttention` uses to skip an empty context, reused by the
- * startup turn below so the two never both fire for one launch. */
+ * this is the same check `#recoverAttention` uses to skip an empty context. */
 function recoveryHasContent(context: AgentRecoveryContext | undefined): boolean {
   return Boolean(
     context &&
@@ -279,14 +295,10 @@ function recoveryHasContent(context: AgentRecoveryContext | undefined): boolean 
   );
 }
 
-/** The fixed input of a startup turn: a launch that creates a new native session with nothing to
- * recover opens its first turn with it, so the standing "Startup sequence" instructions run. */
-export const AGENT_STARTUP_TURN_TEXT = "Start.";
-
 type AgentInput =
   | { kind: "recovery"; context: AgentRecoveryContext; completion: AgentInputCompletion }
   | { kind: "delivery"; message: AgentMessageDelivery; completion: AgentInputCompletion }
-  | { kind: "startup"; completion: AgentInputCompletion };
+  | { kind: "prompt"; text: string; completion: AgentInputCompletion };
 
 type AgentInputQueue = {
   items: AgentInput[];
@@ -324,12 +336,12 @@ const BUSY_ACTIVITY_DETAIL_KINDS = new Set<string>([
   AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED,
   AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND,
   AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS,
-  // Liveness-only fillers (ADR 0021): busy, but content-free.
+  // Liveness-only fillers: busy, but content-free.
   AGENT_ACTIVITY_DETAIL_KIND.TOOL_END,
   AGENT_ACTIVITY_DETAIL_KIND.THINKING_END,
   AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED,
   AGENT_ACTIVITY_DETAIL_KIND.REVIEW_FINISHED,
-  // Visible, stored busy detail kinds (ADR 0021).
+  // Visible, stored busy detail kinds.
   AGENT_ACTIVITY_DETAIL_KIND.COMPACTING_CONTEXT,
   AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY,
   AGENT_ACTIVITY_DETAIL_KIND.MESSAGE_RECEIVED,
@@ -340,19 +352,25 @@ const BUSY_ACTIVITY_DETAIL_KINDS = new Set<string>([
   AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
 ]);
 
-/** How many recently handled send request ids per Agent+target the draft bookkeeping remembers.
- * A transport retry re-runs the same request id, so remembering the last few is what lets the
- * daemon tell a replay of an older send from a fresh one (task #70). */
-const DRAFT_REPLAY_MEMORY = 8;
-
-/** Per Agent+target draft bookkeeping, kept in memory only: the draft file itself stays exactly
- * Raft's `continue-state.json` shape, so no bookkeeping field leaks onto disk. */
-type AgentDraftBookkeeping = {
-  /** The request whose content the target's current draft holds; only it may clear that draft. */
-  ownerRequestId?: string;
-  /** Recently handled send request ids for this target, oldest first. */
-  seenRequestIds: string[];
-};
+/** Raft 1.0.38's `SEND_DRAFT_EXPIRED`: nothing is sent. The entry is gone, so the discarded body
+ * travels once, in `details.discarded_draft`, which the CLI prints as its last copy. */
+function expiredDraftError(target: string, content: string, savedAt: number): AgentPreflightError {
+  const savedAtIso = new Date(savedAt).toISOString();
+  return new AgentPreflightError(
+    `The saved draft for this target expired and was discarded: drafts are kept for ${AGENT_MESSAGE_DRAFT_TTL_MS / 60_000} minutes, and this one was saved at ${savedAtIso}. This command did not send anything.`,
+    "SEND_DRAFT_EXPIRED",
+    {
+      draftSaved: false,
+      retryable: false,
+      suggestedNextAction:
+        "If this draft came from a failed send whose outcome was never confirmed, the original " +
+        "may already have been delivered under its idempotency key: read the target and confirm " +
+        "before resending, or you may post it twice. To send the discarded body, send it normally: " +
+        `\`coforge message send --target ${JSON.stringify(target)}\` with the body on stdin.`,
+    },
+    { discarded_draft: { content, saved_at: savedAtIso } },
+  );
+}
 
 /** Detail kinds that end a busy turn; the heartbeat stops as soon as one is observed. */
 const TERMINAL_ACTIVITY_DETAIL_KINDS = new Set<string>([
@@ -373,6 +391,8 @@ type SessionMode = "create" | "resume";
 /** Cloud-supplied identity for one launch; every field falls back to the previous reference. */
 type LaunchRequest = {
   sessionId?: string;
+  /** The launch's first turn, in place of message recovery (see `AgentStartIntent`). */
+  resumePrompt?: string;
   requestId?: string;
   previousLaunchId?: string;
   sessionMode?: SessionMode;
@@ -422,6 +442,7 @@ const RUNTIME_DISPLAY_NAME: Record<RuntimeProvider, string> = {
   [RUNTIME_PROVIDER.KIRO]: "Kiro",
   [RUNTIME_PROVIDER.CURSOR]: "Cursor CLI",
   [RUNTIME_PROVIDER.OPENCODE]: "OpenCode",
+  [RUNTIME_PROVIDER.GROK]: "Grok Build",
   [RUNTIME_PROVIDER.PI]: "Pi",
   [RUNTIME_PROVIDER.COFORGE]: "CoForge",
 };
@@ -473,9 +494,14 @@ export class DaemonRuntime {
    * Raft's `refreshChain`. */
   #modelRefreshChain: Promise<void> = Promise.resolve();
   readonly #messageAttention: AgentMessageAttentionIndex;
-  /** Busy-gated delivery holding for providers with no safe busy path (ADR 0048). */
+  /** Busy-gated delivery holding for providers with no safe busy path. */
   readonly #deliveryQueue = new AgentDeliveryQueue();
-  /** Per-Agent retryable-runtime-error bookkeeping (ADR 0055): consecutive-failure delivery
+  /** Launch failures of message-triggered wakes, per Agent: while one owes a cooldown, a delivery
+   * does not launch the Agent again. No attempt cap; the cooldown stops growing at its ceiling. */
+  readonly #wakeLaunchFailures = new LaunchFailureBackoff();
+  /** Agents whose in-flight launch is a message wake, which presents what waits as one notice. */
+  readonly #wakeLaunches = new Set<string>();
+  /** Per-Agent retryable-runtime-error bookkeeping: consecutive-failure delivery
    * backoff and the same-fingerprint repeat fence — see agent-runtime/runtime-error-recovery.ts. */
   readonly #runtimeErrorDeliveryBackoff = new RuntimeErrorDeliveryBackoff();
   readonly #runtimeErrorFingerprintFence = new RuntimeErrorFingerprintFence();
@@ -483,7 +509,6 @@ export class DaemonRuntime {
   readonly #runtimeErrorBackoffTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #reminders: ReminderScheduler;
   readonly #agentInboxes = new Map<string, AgentInboxStateMachine>();
-  readonly #draftBookkeeping = new Map<string, Map<string, AgentDraftBookkeeping>>();
   readonly #appInboxes = new Map<string, Promise<AgentAppInbox>>();
   readonly #notifiedAppItems = new Map<string, Map<string, Promise<boolean>>>();
   readonly #runtimeInstanceId = generateRuntimeInstanceId();
@@ -491,6 +516,8 @@ export class DaemonRuntime {
   readonly #agentContexts = new Map<string, string>();
   readonly #agentProxyTokens = new Map<string, string>();
   readonly #agentApiKeys = new Map<string, string>();
+  /** Agents launched with the weekly-report-collect skill pack (ADR 0032). */
+  readonly #collectSkillAgents = new Set<string>();
   readonly #agentLaunches = new Map<string, Promise<AgentRuntime>>();
   readonly #sessionReferences = new Map<
     string,
@@ -500,8 +527,8 @@ export class DaemonRuntime {
       sessionId?: string;
       sessionMode?: SessionMode;
       launchId?: string;
-      /** The control epoch of the request this reference was last launched/rebound under
-       * (docs/adr/0041); read live by `#launchAgent`'s `reportAgentSession` closure (via this
+      /** The control epoch of the request this reference was last launched/rebound under;
+       * read live by `#launchAgent`'s `reportAgentSession` closure (via this
        * same object, mutated in place by `#rebindAgent`, never replaced) so a session report
        * sent after a rebind carries the new epoch instead of the one captured at launch time. */
       controlEpoch?: number;
@@ -513,9 +540,11 @@ export class DaemonRuntime {
   readonly #currentActivityLaunches = new Map<string, ActivityLaunch>();
   readonly #agentStatusSequences = new Map<string, number>();
   readonly #observedUsage = new Map<RuntimeProvider, UsageSnapshot>();
-  /** The last (usedTokens, windowTokens) reading sent per Agent (ADR 0050), so an unchanged
+  /** The last (usedTokens, windowTokens) reading sent per Agent, so an unchanged
    * reading is not re-sent. Forgotten on launch end/dispose, alongside `#compactionTracker`. */
   readonly #lastContextUsage = new Map<string, { usedTokens: number; windowTokens: number }>();
+  /** One early handoff request per native session; reset when a new launch starts. */
+  readonly #contextHandoffs = new Map<string, ContextHandoffCoordinator>();
   readonly #agentProxy?: AgentProxy;
   readonly #activityHeartbeatTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #lastBusyActivity = new Map<
@@ -523,19 +552,24 @@ export class DaemonRuntime {
     { launch: ActivityLaunch; activity: ActivityDraft; at: number }
   >();
   /** Runner-hold reason while this runtime is refusing new turns; undefined when not held.
-   * Deliberately in-memory only, so a restarted daemon is never born held (ADR 0020). */
+   * Deliberately in-memory only, so a restarted daemon is never born held. */
   #runnerHold: string | undefined;
   /** Whether a compaction is in flight per Agent, and its 5-minute stale watchdog - see
    * agent-runtime/compaction-tracker.ts. Providers only report the raw start/finish/interrupted
    * signal; this decides what, if anything, that becomes on the wire. */
   readonly #compactionTracker = new CompactionTracker((agentId) => {
-    // TODO(compaction_stale): the SDK's AgentActivityDetailKind does not yet carry a
-    // `compaction_stale` value (landing in a separate change). Once it does, broadcast it here:
-    //   const launch = this.#currentActivityLaunches.get(agentId);
-    //   if (launch) this.#emitAgentActivity(agentId, launch, this.#activity(agentId,
-    //     AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_STALE, "info",
-    //     "Compaction is still running; no finish signal was observed."));
-    void agentId;
+    const launch = this.#currentActivityLaunches.get(agentId);
+    if (launch)
+      this.#emitAgentActivity(
+        agentId,
+        launch,
+        this.#activity(
+          agentId,
+          AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_STALE,
+          "info",
+          "Compaction is still running; no finish signal was observed.",
+        ),
+      );
   });
   /** Liveness bookkeeping for the content-free "progress" signal - see
    * agent-runtime/runtime-progress.ts. */
@@ -561,7 +595,7 @@ export class DaemonRuntime {
       /**
        * Re-reads terminal operations from durable local config on reconnect. The normal upgrade
        * path commits and injects terminal state before this process starts; this hook is only the
-       * crash-recovery fallback when a Coordinator settles an older operation later (ADR 0037).
+       * crash-recovery fallback when a Coordinator settles an older operation later.
        */
       refreshUpgradeResults?(): Promise<RecoveredUpgradeResult[]>;
       /** Called once the server has accepted a reported result. */
@@ -604,6 +638,11 @@ export class DaemonRuntime {
         queued: (agentId) => this.#deliveryQueue.pending(agentId),
         enqueue: (agentId, message) => this.#deliveryQueue.enqueue(agentId, message),
         busy: (agentId) => this.#deliveryQueue.busy(agentId),
+        // The consumed cursor outlives the process, in Raft's `consumed-seqs.json` shape: what an
+        // Agent has already reviewed decides the next hold, the `seenUpToSeq` a fresh send inherits,
+        // and whether a top-level send under a thread-read parent needs confirming. It lives beside
+        // the draft store in the temporary state root, not in this daemon's state directory.
+        consumedSeqs: new AgentConsumedSeqStore(),
       },
     );
     this.#reminders = new ReminderScheduler(
@@ -613,10 +652,10 @@ export class DaemonRuntime {
         if (!this.#transport.fireReminder) throw new Error("reminder fire is unavailable");
         return this.#transport.fireReminder(request);
       },
-      (job) => this.#acceptReminderDue(job),
+      (job, occurrence) => this.#acceptReminderDue(job, occurrence.late),
     );
     const state = new AgentRuntimeState(
-      // Control state lives only in this process (ADR 0056 task #54 step ②): the server
+      // Control state lives only in this process: the server
       // re-dispatches what should still be running after a restart, so a persisted record could
       // only outlive the writer it was waiting on.
       new MemoryAgentRuntimeStateStore(connection.workspaceRoot, connection.workspaceId),
@@ -656,6 +695,7 @@ export class DaemonRuntime {
             requestId: intent.requestId,
             previousLaunchId: intent.previousLaunchId,
             sessionMode: intent.sessionMode,
+            resumePrompt: intent.resumePrompt,
             control: { controlEpoch: intent.controlEpoch, launchId },
             replacedSessionId,
             invalidateReason,
@@ -668,7 +708,7 @@ export class DaemonRuntime {
           intent.agentId,
           runtimeConfigOf(intent),
           { wakeMessage: intent.wakeMessage },
-          { requestId: intent.requestId },
+          { requestId: intent.requestId, resumePrompt: intent.resumePrompt },
         );
       },
       rebind: (intent, launchId) => this.#rebindAgent(intent, launchId),
@@ -727,7 +767,7 @@ export class DaemonRuntime {
       requestId: "",
       accepted: Boolean(snapshot),
       status,
-      ...(snapshot ? { snapshotJson: new TextEncoder().encode(JSON.stringify(snapshot)) } : {}),
+      ...(snapshot ? { snapshotJson: utf8Encoder.encode(JSON.stringify(snapshot)) } : {}),
       ...(message ? { message } : {}),
     });
     // The one place a scan result gets its `collectedAt`: a fresh reading is stamped "now"; an
@@ -763,7 +803,7 @@ export class DaemonRuntime {
 
   /**
    * Answers a server-requested breakdown of one Agent's current Claude Code context-window
-   * composition (ADR 0051). Unlike `scanUsage` (provider-wide), this is per-Agent: it resolves the
+   * composition. Unlike `scanUsage` (provider-wide), this is per-Agent: it resolves the
    * Agent's own current launch and native session id from what this runtime already tracks
    * (`#currentActivityLaunches`, `#sessionReferences` — the same references `#sendContextUsage`
    * reads), never trusting `request.launchId`/`request.sessionId` to run anything; those fields are
@@ -833,7 +873,7 @@ export class DaemonRuntime {
             launch.launchId,
             sessionId,
             AGENT_CONTEXT_SCAN_STATUS.AVAILABLE,
-            new TextEncoder().encode(JSON.stringify(report)),
+            utf8Encoder.encode(JSON.stringify(report)),
           )
         : result(launch.launchId, sessionId, AGENT_CONTEXT_SCAN_STATUS.UNPARSED);
     } catch (error) {
@@ -1031,6 +1071,21 @@ export class DaemonRuntime {
         ),
       );
       this.#subscribe(
+        this.#transport.onAgentInboxPurge?.(
+          receive(pendingControl, async (purge: AgentInboxPurge) => {
+            try {
+              this.handleAgentInboxPurge(purge);
+            } catch (error) {
+              logger.warn("Agent inbox purge was not applied", {
+                event: "agent.inbox.purge_rejected",
+                agent_id: purge.agentId,
+                error_code: error instanceof Error ? error.name : "UnknownError",
+              });
+            }
+          }),
+        ),
+      );
+      this.#subscribe(
         this.#transport.onAgentWorkspaceReset?.(
           receive(
             pendingControl,
@@ -1115,7 +1170,7 @@ export class DaemonRuntime {
    * still owes the server an immediate, reasoned failure report. Without this, the caller
    * (`DaemonConnection#acceptLifecycleRequest`) just swallows the rejection and the server is
    * left waiting until it times out with a generic "did not report in time", even though this
-   * machine knew exactly why (ADR 0041). Reported through the same wire
+   * machine knew exactly why. Reported through the same wire
    * message and dedupe `#reportUpgradeResults` uses (`#transport.sendUpgradeResult`), so a retry
    * of the same request cannot double-report. Rethrown so the caller's existing
    * dedupe-clearing behaviour on a rejection is unaffected.
@@ -1253,8 +1308,20 @@ export class DaemonRuntime {
   async #readWorkspaceFile(
     connection: DaemonConfig,
     request: Pick<AgentWorkspaceFileReadRequest, "agentId" | "path">,
-  ): Promise<Pick<AgentWorkspaceFileReadResult, "status" | "sizeBytes" | "modifiedAtMs" | "text">> {
-    const unavailable = { status: "error" as const, sizeBytes: 0, modifiedAtMs: 0, text: "" };
+  ): Promise<
+    Pick<
+      AgentWorkspaceFileReadResult,
+      "status" | "sizeBytes" | "modifiedAtMs" | "text" | "contentType" | "contentBase64"
+    >
+  > {
+    const unavailable = {
+      status: "error" as const,
+      sizeBytes: 0,
+      modifiedAtMs: 0,
+      text: "",
+      contentType: "",
+      contentBase64: "",
+    };
     if (this.#workspaceFilesScanning) return unavailable;
     this.#workspaceFilesScanning = true;
     try {
@@ -1460,7 +1527,7 @@ export class DaemonRuntime {
   }
 
   /** Logs a revoke failure without ever logging the key itself. The failure is recorded and
-   * nothing else happens (docs/adr/0043): the server invalidates the key at the Agent's next
+   * nothing else happens: the server invalidates the key at the Agent's next
    * launch, and the daemon never retries a revoke. */
   #logAgentApiKeyRevokeFailed(agentId: string, error: unknown): void {
     logger.warning("Agent API key revoke failed", {
@@ -1536,11 +1603,19 @@ export class DaemonRuntime {
     }
     const enqueueRecovery = (context: AgentRecoveryContext) =>
       this.#enqueueAgentInput(agentId, (completion) => ({ kind: "recovery", context, completion }));
+    const enqueueTurn = (text: string) =>
+      this.#enqueueAgentInput(agentId, (completion) => ({ kind: "prompt", text, completion }));
+    const { resumePrompt } = request;
     const existingLaunch = this.#agentLaunches.get(agentId);
     if (existingLaunch) {
-      if (!recovery) return existingLaunch;
-      const extendedLaunch = Promise.all([existingLaunch, enqueueRecovery(recovery)])
-        .then(([runtime]) => runtime)
+      // A launch in progress presents this start's recovery and resume prompt too.
+      const inputs = [
+        ...(recovery ? [enqueueRecovery(recovery)] : []),
+        ...(resumePrompt !== undefined ? [enqueueTurn(resumePrompt)] : []),
+      ];
+      if (!inputs.length) return existingLaunch;
+      const extendedLaunch = Promise.all([existingLaunch, ...inputs])
+        .then(([runtime]) => runtime as AgentRuntime)
         .finally(() => {
           if (this.#agentLaunches.get(agentId) === extendedLaunch)
             this.#agentLaunches.delete(agentId);
@@ -1550,12 +1625,17 @@ export class DaemonRuntime {
     }
     const activeRuntime = this.#agentProcessManager.runtime(agentId);
     if (activeRuntime) {
-      if (!recovery)
+      if (!recovery && resumePrompt === undefined)
         return Promise.reject(new Error(`Agent runtime is already active: ${agentId}`));
-      if (!recovery.wakeMessage) return Promise.resolve(activeRuntime);
-      const recoveryCompletion = enqueueRecovery({ wakeMessage: recovery.wakeMessage });
+      // A running Agent keeps its process and session: it is handed only this start's wake
+      // message and resume prompt, never its resume messages or unread summary.
+      const inputs = [
+        ...(recovery?.wakeMessage ? [enqueueRecovery({ wakeMessage: recovery.wakeMessage })] : []),
+        ...(resumePrompt !== undefined ? [enqueueTurn(resumePrompt)] : []),
+      ];
+      if (!inputs.length) return Promise.resolve(activeRuntime);
       this.#ensureAgentInputDrain(agentId);
-      return recoveryCompletion.then(() => activeRuntime);
+      return Promise.all(inputs).then(() => activeRuntime);
     }
 
     // A brand-new process started inside the hold window would be killed seconds later by the
@@ -1570,26 +1650,23 @@ export class DaemonRuntime {
     // Register the launch before its first await so concurrent starts cannot mint twice.
     // Launch failure is surfaced by `launch`; the item completion is also rejected when cleared.
     void recoveryCompletion?.catch(() => {});
-    // Only a launch the server explicitly asked to create a new native session for gets a
-    // startup turn: a daemon-initiated wake carries no `sessionMode`, and an unknown mode is
-    // never treated as a cold start. Queued before the
-    // launch so any message that arrives while the process is still starting queues behind it.
-    const startupCompletion =
-      request.sessionMode === "create" && !recoveryHasContent(recovery)
-        ? this.#enqueueAgentInput(agentId, (completion) => ({ kind: "startup", completion }))
-        : undefined;
-    void startupCompletion?.catch(() => {});
+    // A resume prompt (a user's guidance when resuming a stopped Agent, sent with no recovery) is
+    // the launch's first turn, queued before the launch so any message that arrives while the
+    // process is still starting queues behind it.
+    const promptCompletion = resumePrompt === undefined ? undefined : enqueueTurn(resumePrompt);
+    void promptCompletion?.catch(() => {});
     const launching = this.#launchAgent(agentId, config, request);
     const launch = launching
       .then(
         async (runtime) => {
+          // Any successful launch, a managed Start included, ends a wake cooldown.
+          this.#wakeLaunchFailures.reset(agentId);
           this.#ensureAgentInputDrain(agentId);
           if (recoveryCompletion) await recoveryCompletion;
-          // The startup turn is not awaited: the launch (and the Start result reported from
-          // it) completes when the process is up, never after a whole model turn.
-          // ADR 0048: no recovery item was enqueued for this launch at all (so
+          // No recovery item was enqueued for this launch at all (so
           // `#recoverAttention` never ran), yet the session is ready — flush anything
-          // AgentDeliveryQueue held across an unexpected exit now.
+          // AgentDeliveryQueue held across an unexpected exit now. Do not open a
+          // synthetic first turn: standing instructions are already on the session.
           else {
             this.#flushSurvivingDeliveryQueue(agentId);
             this.#releaseHeldAppItems(agentId);
@@ -1598,6 +1675,7 @@ export class DaemonRuntime {
           return runtime;
         },
         (error: unknown) => {
+          this.#keepDeliveriesForNextLaunch(agentId, error);
           this.#closeAgentInputQueue(agentId, error);
           throw error;
         },
@@ -1661,8 +1739,8 @@ export class DaemonRuntime {
             target: item.message.target,
             sequence: item.message.sequence,
           });
-        } else if (item.kind === "startup") {
-          await this.#runStartupTurn(agentId);
+        } else if (item.kind === "prompt") {
+          await this.#runPromptTurn(agentId, item.text);
         } else await this.#recoverAttention(agentId, item.context);
       } catch (error) {
         if (item.kind === "recovery" && this.#agentLaunches.has(agentId)) {
@@ -1673,12 +1751,10 @@ export class DaemonRuntime {
           item.completion.reject(error);
           continue;
         }
-        if (item.kind === "startup") {
-          // The launch is not rolled back here: a provider that refuses input handles it the way
-          // it handles any refused input (Kiro, for one, disposes its session), and the process
-          // exit that follows is reported through the ordinary exit path.
-          logger.warn("Agent startup turn was not accepted", {
-            event: "agent.startup_turn.rejected",
+        if (item.kind === "prompt") {
+          // The launch stands: a provider that refuses input handles it as any refused input.
+          logger.warn("Agent prompt turn was not accepted", {
+            event: "agent.prompt_turn.rejected",
             agent_id: agentId,
             error_code: diagnosticErrorCode(error),
           });
@@ -1707,11 +1783,12 @@ export class DaemonRuntime {
       });
       throw error;
     }
-    // ADR 0048: reconcile whatever AgentDeliveryQueue held across an unexpected exit now that
+    // Reconcile whatever AgentDeliveryQueue held across an unexpected exit now that
     // this launch's recovery pass has run. `recover()` above already told the Agent about the
     // same canonical unread state (the server's own unread ledger, not this in-memory queue, is
     // what a crashed-and-relaunched Agent's `resumeMessages`/`unreadSummary` are built from) —
-    // drop and ACK the surviving held deliveries instead of a second, redundant notice for them.
+    // drop the surviving held deliveries (acknowledged when they were held) instead of a second,
+    // redundant notice for them.
     // When there was no recovery content, nothing else has told the Agent, so flush them now,
     // treating the freshly launched session as idle.
     if (hasRecoveryContent) this.#dropSurvivingDeliveryQueue(agentId);
@@ -1727,53 +1804,53 @@ export class DaemonRuntime {
     this.#releaseFallbackNotices(agentId);
   }
 
-  /** ADR 0048: drops whatever `AgentDeliveryQueue` held for `agentId` across an unexpected exit,
-   * ACKing each one — used when this launch's `recover()` pass already covered the same unread
-   * state, so notifying about them again would be redundant. */
-  #dropSurvivingDeliveryQueue(agentId: string): void {
-    for (const message of this.#deliveryQueue.discardPending(agentId))
-      void this.#ackHeldDelivery(message).catch(() => {});
+  /**
+   * The daemon has taken this delivery into its own keeping (for a later launch, a batch, or to
+   * drop it), so it acknowledges it now, as the server needs no further copy. A failed ACK only
+   * means the server replays it on the next `ready`; nothing is lost, since a daemon restart
+   * recovers unread messages from the cloud read boundary, not from ACK state.
+   */
+  #acknowledgeCustody(message: AgentMessageDelivery): void {
+    this.#messageAttention.acknowledgeCustody(message);
   }
 
-  /** ADR 0048: flushes whatever `AgentDeliveryQueue` held for `agentId` across an unexpected
+  /** Drops whatever `AgentDeliveryQueue` held for `agentId` across an unexpected exit — used when
+   * this launch's `recover()` pass already covered the same unread state, so notifying about them
+   * again would be redundant. Each was acknowledged when the daemon took it. */
+  #dropSurvivingDeliveryQueue(agentId: string): void {
+    this.#deliveryQueue.discardPending(agentId);
+  }
+
+  /** Flushes whatever `AgentDeliveryQueue` held for `agentId` across an unexpected
    * exit, treating the (fresh or just-recovered) session as idle — used when nothing else has
    * told the Agent about it. */
   #flushSurvivingDeliveryQueue(agentId: string): void {
     const held = this.#deliveryQueue.idle(agentId);
     if (!held.length) return;
     void this.#messageAttention.flush(agentId, held).catch((error: unknown) => {
+      // Already acknowledged when held: they come back as unread on the next Start or daemon
+      // restart, not from a `ready` replay.
       logger.warn("Held Agent deliveries were not accepted at launch", {
         event: "agent.delivery_queue.flush_rejected",
         agent_id: agentId,
         held_count: held.length,
+        already_acknowledged: true,
         error_code: error instanceof Error ? error.name : "UnknownError",
       });
     });
   }
 
-  #ackHeldDelivery(message: AgentMessageDelivery): Promise<void> {
-    return (
-      this.#transport.sendAgentDeliveryAck?.({
-        ...message,
-        method: AGENT_MESSAGE_ACK_METHOD,
-        requestId: message.requestId,
-      }) ?? Promise.resolve()
-    );
-  }
-
-  /** Opens a freshly created session's first turn with a fixed prompt so its standing "Startup
-   * sequence" instructions run immediately, rather than leaving the Agent idle until its first
-   * real message. */
-  async #runStartupTurn(agentId: string): Promise<void> {
+  /** Opens a turn with `text`: the resume prompt a user's Start sent. */
+  async #runPromptTurn(agentId: string, text: string): Promise<void> {
     const session = this.#agentProcessManager.session(agentId);
     if (!session?.notify) {
-      logger.debug("Agent startup turn skipped: the session accepts no input", {
-        event: "agent.startup_turn.skipped",
+      logger.debug("Agent prompt turn skipped: the session accepts no input", {
+        event: "agent.prompt_turn.skipped",
         agent_id: agentId,
       });
       return;
     }
-    await session.notify(AGENT_STARTUP_TURN_TEXT);
+    await session.notify(text);
   }
 
   /** Tears down a launch whose recovery notice was rejected; returns the error to surface. */
@@ -1787,6 +1864,7 @@ export class DaemonRuntime {
     this.#compactionTracker.dispose(agentId);
     this.#runtimeProgress.dispose(agentId);
     this.#lastContextUsage.delete(agentId);
+    this.#contextHandoffs.delete(agentId);
     this.#revokeLocalLaunch(agentId);
     try {
       await this.#releaseAgentRuntime(agentId);
@@ -1795,6 +1873,27 @@ export class DaemonRuntime {
     } catch (cleanupError) {
       return cleanupError;
     }
+  }
+
+  /** A failed launch hands the deliveries still waiting in its input queue to `AgentDeliveryQueue`,
+   * acknowledging each as the daemon keeps it, so the next launch presents them. */
+  #keepDeliveriesForNextLaunch(agentId: string, error: unknown): void {
+    const queue = this.#agentInputQueues.get(agentId);
+    if (!queue) return;
+    queue.items = queue.items.filter((item) => {
+      if (item.kind !== "delivery") return true;
+      this.#deliveryQueue.enqueue(agentId, item.message);
+      this.#acknowledgeCustody(item.message);
+      // Kept, not failed: the delivery is not lost, so it is not reported as a failed delivery.
+      item.completion.resolve();
+      logger.info("Agent delivery kept for the next launch after a failed launch", {
+        event: "agent.message.delivery_kept",
+        agent_id: agentId,
+        delivery_id: item.message.deliveryId,
+        error_code: error instanceof Error ? error.name : "UnknownError",
+      });
+      return false;
+    });
   }
 
   #closeAgentInputQueue(agentId: string, error: unknown): void {
@@ -1829,7 +1928,7 @@ export class DaemonRuntime {
     request: LaunchRequest,
   ): Promise<AgentRuntime> {
     const { control } = request;
-    // ADR 0042: a daemon-initiated launch (no `control` — a wake, never a server Start) reuses
+    // A daemon-initiated launch (no `control` — a wake, never a server Start) reuses
     // the last server-supplied launch identity remembered alongside this Agent's restart config,
     // instead of minting a fresh one. An Agent with no remembered identity (never brought under
     // AgentControl, or already forgotten by an explicit Stop) keeps minting, unchanged.
@@ -1861,7 +1960,7 @@ export class DaemonRuntime {
       stopping: false,
     };
     // A managed launch's own scope; a reused wake resends the same scope it was remembered
-    // under (ADR 0042) so `authorizeLaunch` can accept it; an unmanaged/legacy launch sends none.
+    // under so `authorizeLaunch` can accept it; an unmanaged/legacy launch sends none.
     const managedScope = control
       ? { controlEpoch: control.controlEpoch, requestId, launchId: launch.launchId }
       : serverLaunch
@@ -1884,10 +1983,11 @@ export class DaemonRuntime {
     this.#clearActivityHeartbeat(agentId);
     this.#compactionTracker.dispose(agentId);
     this.#runtimeProgress.dispose(agentId);
-    // ADR 0048: this launch's delivery mode, read by AgentMessageAttentionIndex.receive via
+    // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
     // #deliveryQueue.shouldHold on every delivery for this Agent from now on.
     this.#deliveryQueue.setProvider(agentId, config.provider);
     this.#lastContextUsage.delete(agentId);
+    this.#contextHandoffs.delete(agentId);
     // AgentControl's fresh retry after a kiro/pi AgentSessionRecoveryError: the invalidate was
     // already reported before this launch (see `invalidateSession` above); narrate the cold
     // start here, where the real launch's ActivityLaunch now exists. `invalidateReason` is
@@ -1939,7 +2039,7 @@ export class DaemonRuntime {
           COFORGE_AGENT_CONTEXT: localContext,
           COFORGE_AGENT_PROXY_URL: this.#agentProxy?.url ?? "",
           // Same server-authored identity the standing prompt's "Current Runtime Context"
-          // section renders (ADR 0036); exported so the Agent process and every tool it spawns
+          // section renders; exported so the Agent process and every tool it spawns
           // can read these facts directly instead of parsing them out of prose.
           ...agentRuntimeContextEnvironment({
             agentId,
@@ -1990,8 +2090,8 @@ export class DaemonRuntime {
                 ...(replaced ? { replacedSessionId: replaced } : {}),
                 daemonInstanceId: this.#runtimeInstanceId,
                 launchId: launch.launchId,
-                // Read live off `reference` (the same object `#rebindAgent` mutates in place,
-                // docs/adr/0041), not the `requestId`/`control` consts this closure captured at
+                // Read live off `reference` (the same object `#rebindAgent` mutates in place),
+                // not the `requestId`/`control` consts this closure captured at
                 // launch time: a driver-side session replacement reported after a rebind must
                 // carry the NEW request/epoch, not the one this launch started under.
                 startRequestId: reference.requestId,
@@ -2028,6 +2128,13 @@ export class DaemonRuntime {
         parseAssignedSkillPacks(launchConfig.assignedSkillPacks),
         launchConfig.identity,
       );
+      if (
+        parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect")
+      )
+        this.#collectSkillAgents.add(agentId);
+      void memoryIndexReminder(workspaceDirectory).then((reminder) => {
+        if (reminder) this.#messageAttention.setMemoryReminder(agentId, reminder);
+      });
       if (this.#stoppingAgents.has(agentId)) {
         await this.#agentProcessManager.stop(agentId);
         throw new Error(`Agent runtime is stopping: ${agentId}`);
@@ -2042,9 +2149,11 @@ export class DaemonRuntime {
         this.#compactionTracker.dispose(agentId);
         this.#runtimeProgress.dispose(agentId);
         this.#lastContextUsage.delete(agentId);
+        this.#contextHandoffs.delete(agentId);
+        this.#collectSkillAgents.delete(agentId);
         if (this.#currentActivityLaunches.get(agentId) !== launch) return;
         this.#messageAttention.clearAgent(agentId);
-        // ADR 0048: an unexpected exit only clears busy — whatever a queue_until_idle provider
+        // An unexpected exit only clears busy — whatever a queue_until_idle provider
         // was still holding stays queued for the next launch; only explicit Stop discards it
         // (see #releaseAgentRuntime).
         this.#deliveryQueue.onProcessExit(agentId);
@@ -2055,7 +2164,7 @@ export class DaemonRuntime {
         });
         unsubscribe();
         if (launch.stopping) return;
-        // ADR 0042: a reused launch is tracked by AgentControl exactly like a managed one is —
+        // A reused launch is tracked by AgentControl exactly like a managed one is —
         // its exit must flip the on-disk record back to "stopped" (via `wake()`'s mirror image,
         // `stopped()`) so a later wake or server Start sees a truthful record.
         if (control || reused)
@@ -2081,7 +2190,7 @@ export class DaemonRuntime {
         if (this.#currentActivityLaunches.get(agentId) === launch)
           this.#currentActivityLaunches.delete(agentId);
       });
-      // ADR 0042: `AgentProcessManager.start()` just replaced this Agent's whole restart config
+      // `AgentProcessManager.start()` just replaced this Agent's whole restart config
       // entry, which would otherwise erase any previously remembered server launch identity —
       // re-apply it (managed: the scope this launch was authorized under; reused: the same
       // identity, unchanged) so a later wake or rebind can still find it. A reused launch also
@@ -2139,7 +2248,7 @@ export class DaemonRuntime {
   }
 
   /**
-   * Rebinds the agent's already-running process to a newer control scope (docs/adr/0041):
+   * Rebinds the agent's already-running process to a newer control scope:
    * `AgentControl.start()`'s single seam for "a Start met a process that is already running
    * under an older, terminal operation." Never spawns or stops anything, never requests a new
    * launch config/credential (the running process's Agent API key and local proxy token are
@@ -2169,12 +2278,12 @@ export class DaemonRuntime {
     if (activityLaunch) {
       activityLaunch.launchId = launchId;
       // The server's Activity idempotency key is (agentId, launchId, clientSeq)
-      // (docs/observability.md); restarting it at the daemon's normal initial value under a NEW
+      // (docs/observability/activity-delivery-and-errors.md); restarting it at the daemon's normal initial value under a NEW
       // launchId is exactly what a fresh launch already does and stays disjoint from every
       // clientSeq already sent under the previous launchId.
       activityLaunch.clientSeq = 0;
     }
-    // ADR 0042: rebind moves this Agent to a genuinely new server launch identity — remember it
+    // Rebind moves this Agent to a genuinely new server launch identity — remember it
     // (a later wake must reuse THIS one, not the one being replaced) and reset the survived
     // clientSeq counter in lockstep with `activityLaunch.clientSeq` above.
     this.#agentProcessManager.rememberServerLaunch(agentId, {
@@ -2232,7 +2341,7 @@ export class DaemonRuntime {
     controlled: boolean,
     event: AgentRuntimeEvent,
   ): void {
-    // ADR 0048: every event but "session"/"usage"/"completed" means the runtime is mid-turn
+    // Every event but "session"/"usage"/"completed" means the runtime is mid-turn
     // (activity, a tool call, compaction, a content-free liveness ping, a reconnect, or an
     // error the runtime keeps running past). "completed" is the only idle transition, handled
     // below with the rest of the turn-end Activity.
@@ -2255,6 +2364,32 @@ export class DaemonRuntime {
         event.usedTokens,
         event.windowTokens,
       );
+      let handoff = this.#contextHandoffs.get(agentId);
+      if (!handoff) {
+        handoff = new ContextHandoffCoordinator(({ prompt, percent }) => {
+          this.#emitAgentActivity(
+            agentId,
+            launch,
+            this.#activity(
+              agentId,
+              AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
+              "info",
+              contextHandoffActivity(percent),
+            ),
+          );
+          const session = this.#agentProcessManager.session(agentId);
+          if (!session?.notify) return;
+          void session.notify(prompt).catch((error: unknown) => {
+            logger.warning("Context handoff request was not accepted", {
+              event: "agent.context_handoff.request_failed",
+              agent_id: agentId,
+              error_code: error instanceof Error ? error.name : "UnknownError",
+            });
+          });
+        });
+        this.#contextHandoffs.set(agentId, handoff);
+      }
+      handoff.observe(event.usedTokens, event.windowTokens);
       return;
     }
     if (event.type === "activity" || event.type === "tool-start") {
@@ -2287,7 +2422,7 @@ export class DaemonRuntime {
         activity.entries?.some((entry) => entry.kind !== "tool_start");
       // A trajectory entry carrying a subagent scope (Claude parent_tool_use_id)
       // reports as subagent_activity regardless of its original detail kind, so
-      // the display shows one unified "Subagent working…" signal (ADR 0021).
+      // the display shows one unified "Subagent working…" signal.
       // An error stays classified as an error so it remains visible as one.
       const subagentScoped =
         activity.level !== "error" &&
@@ -2313,7 +2448,7 @@ export class DaemonRuntime {
       return;
     }
     if (event.type === "tool-end") {
-      // Liveness-only filler (ADR 0021): renews the busy lease, never stored.
+      // Liveness-only filler: renews the busy lease, never stored.
       this.#emitAgentActivity(
         agentId,
         launch,
@@ -2394,7 +2529,7 @@ export class DaemonRuntime {
       return;
     }
     if (event.type === "notice-undelivered") {
-      // ADR 0048: a steer-mode provider accepted this notice but later learned it never reached
+      // A steer-mode provider accepted this notice but later learned it never reached
       // the model (Kiro's own steering buffer discarded it, or the steer call itself was never
       // accepted). Hold the exact text for redelivery once this Agent is next idle — no ACK
       // bookkeeping here; whatever originally accepted this text already settled its own ACK (or
@@ -2403,11 +2538,16 @@ export class DaemonRuntime {
       return;
     }
     if (event.type !== "completed") return;
-    // ADR 0055: only a genuinely successful turn clears the delivery-backoff streak and the
+    // Capture provider error text before clearing crashDetail for Activity wording.
+    const collectorFailReason =
+      event.status === "failed"
+        ? (launch.crashDetail?.message ?? "Agent runtime failed.").slice(0, 2000)
+        : undefined;
+    // Only a genuinely successful turn clears the delivery-backoff streak and the
     // fingerprint fence; a failed or interrupted turn leaves both exactly as they were, so a
     // still-active backoff correctly keeps holding across it.
     if (event.status === "completed") this.#resetRuntimeErrorRecovery(agentId);
-    // ADR 0048: release whatever a queue_until_idle provider held while this turn ran, as one
+    // Release whatever a queue_until_idle provider held while this turn ran, as one
     // coalesced notice for the next turn — never blocking this turn-end Activity on it.
     const held = this.#deliveryQueue.idle(agentId);
     if (held.length) this.#flushHeldDeliveries(agentId, held);
@@ -2458,7 +2598,26 @@ export class DaemonRuntime {
             ? this.#interruptedActivity(agentId)
             : this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.IDLE, "info", ""),
       );
+    if (collectorFailReason && this.#collectSkillAgents.has(agentId))
+      void this.#failCollectorRunningSlots(agentId, collectorFailReason).catch(() => {});
     void this.drainAppInboxNotices(agentId).catch(() => {});
+  }
+
+  /**
+   * ADR 0032: a collector turn that dies before HTTPS submit (e.g. model 405) must
+   * still settle Collect Run slots — Activity alone is not a completion boundary.
+   */
+  async #failCollectorRunningSlots(agentId: string, failureReason: string): Promise<void> {
+    const agentApiKey = this.#agentApiKeys.get(agentId);
+    if (!agentApiKey || !this.#transport.agentWeeklyReportCollect) return;
+    await this.#transport.agentWeeklyReportCollect(
+      {
+        idempotencyKey: crypto.randomUUID(),
+        failRunningSlots: true,
+        failureReason,
+      },
+      agentApiKey,
+    );
   }
 
   #rememberUsage(snapshot: UsageSnapshot): void {
@@ -2523,6 +2682,7 @@ export class DaemonRuntime {
       requestId: intent.requestId,
       previousLaunchId: intent.previousLaunchId,
       sessionMode: intent.sessionMode,
+      resumePrompt: intent.resumePrompt,
     });
   }
 
@@ -2600,6 +2760,50 @@ export class DaemonRuntime {
       throw new Error("unsupported agent protocol major");
     if (message.workspaceId !== this.#connection.workspaceId)
       throw new Error("agent message targets another Workspace");
+    const exited =
+      this.#runnerHold === undefined &&
+      !this.#agentProcessManager.session(message.agentId) &&
+      !this.#agentLaunches.has(message.agentId);
+    // An exited Agent is not woken for a message it has already consumed: the delivery is
+    // acknowledged and dropped here, before any launch, rather than after one.
+    if (exited && this.#messageAttention.hasConsumed(message))
+      return this.#messageAttention.acknowledge(message);
+    // A wake launch failed moments ago, so launching again now would most likely fail the same
+    // way. The delivery waits, acknowledged as the daemon keeps it, for the first launch after the
+    // cooldown.
+    const wakeable = exited ? this.#agentProcessManager.restartConfig(message.agentId) : undefined;
+    if (wakeable && this.#wakeLaunchFailures.isBlocked(message.agentId)) {
+      this.#deliveryQueue.enqueue(message.agentId, message);
+      this.#acknowledgeCustody(message);
+      logger.info("Agent wake deferred by a launch-failure cooldown", {
+        event: "agent.wake.cooldown_deferred",
+        agent_id: message.agentId,
+        delivery_id: message.deliveryId,
+        until: new Date(this.#wakeLaunchFailures.blockedUntil(message.agentId)!).toISOString(),
+      });
+      return;
+    }
+    // Deliveries are already waiting for this Agent's next launch: this one joins them, so the
+    // launch presents all of them in a single notice instead of this one alone.
+    if (wakeable && this.#deliveryQueue.hasQueued(message.agentId)) {
+      this.#deliveryQueue.enqueue(message.agentId, message);
+      this.#acknowledgeCustody(message);
+      await this.#wakeAgent(message.agentId, wakeable);
+      return;
+    }
+    // A wake launch that will present waiting deliveries is still in flight: join them as well,
+    // rather than arriving as a second notice right after theirs. Only a wake: a recovery launch
+    // drops what waits once its own notice is accepted, and that notice does not cover this one.
+    if (
+      this.#runnerHold === undefined &&
+      !this.#agentProcessManager.session(message.agentId) &&
+      this.#wakeLaunches.has(message.agentId) &&
+      this.#deliveryQueue.hasQueued(message.agentId)
+    ) {
+      this.#deliveryQueue.enqueue(message.agentId, message);
+      this.#acknowledgeCustody(message);
+      return;
+    }
     const delivery = this.#enqueueAgentInput(message.agentId, (completion) => ({
       kind: "delivery",
       message,
@@ -2624,15 +2828,56 @@ export class DaemonRuntime {
       return delivery;
     }
     if (this.#agentLaunches.has(message.agentId)) return delivery;
-    const wakeable = this.#agentProcessManager.restartConfig(message.agentId);
-    if (!wakeable) {
+    const restart = this.#agentProcessManager.restartConfig(message.agentId);
+    if (!restart) {
       this.#closeAgentInputQueue(message.agentId, new Error("Agent is inactive"));
       return delivery;
     }
-    const launch = this.#startAgent(message.agentId, wakeable.config, undefined, {
-      sessionId: wakeable.sessionId,
+    await Promise.all([this.#wakeAgent(message.agentId, restart), delivery]);
+  }
+
+  /** Relaunches an exited Agent for a message; a failure starts or extends the wake cooldown. A
+   * successful launch presents whatever `AgentDeliveryQueue` holds for it as one notice. */
+  #wakeAgent(agentId: string, restart: AgentRestartConfig): Promise<AgentRuntime> {
+    const launch = this.#startAgent(agentId, restart.config, undefined, {
+      sessionId: restart.sessionId,
     });
-    await Promise.all([launch, delivery]);
+    this.#wakeLaunches.add(agentId);
+    void launch
+      .catch(() => this.#wakeLaunchFailures.recordFailure(agentId))
+      .finally(() => this.#wakeLaunches.delete(agentId));
+    return launch;
+  }
+
+  /** Drops an Agent's local state for channels it can no longer read: waiting deliveries (each
+   * acknowledged, so a rejoin does not bring them back on `ready`) and the pending attention of
+   * those channels and their threads. */
+  handleAgentInboxPurge(purge: AgentInboxPurge): void {
+    this.#assertRunning();
+    if (purge.workspaceId !== this.#connection.workspaceId)
+      throw new Error("agent inbox purge targets another Workspace");
+    const conversations = new Set(purge.conversationIds);
+    let dropped = 0;
+    const queue = this.#agentInputQueues.get(purge.agentId);
+    if (queue)
+      queue.items = queue.items.filter((item) => {
+        if (item.kind !== "delivery" || !conversations.has(item.message.conversationId))
+          return true;
+        // Taken and dropped: acknowledged, so the server does not bring it back after a rejoin.
+        this.#acknowledgeCustody(item.message);
+        item.completion.resolve();
+        dropped++;
+        return false;
+      });
+    dropped += this.#deliveryQueue.discardConversations(purge.agentId, conversations).length;
+    this.#messageAttention.clearTargets(purge.agentId, purge.targets);
+    logger.info("Agent inbox purged for channels it can no longer read", {
+      event: "agent.inbox.purged",
+      agent_id: purge.agentId,
+      reason: purge.reason,
+      conversation_count: conversations.size,
+      dropped_delivery_count: dropped,
+    });
   }
 
   stopAgent(agentId: string): Promise<void> {
@@ -2677,9 +2922,9 @@ export class DaemonRuntime {
   }
 
   /**
-   * Stop's outcome depends only on the local process exiting (docs/adr/0033): revoking the
+   * Stop's outcome depends only on the local process exiting: revoking the
    * Agent API key is fire-and-forget alongside it, so a failed or slow revoke never fails or
-   * delays the Stop. A failed revoke is logged and not retried (docs/adr/0043).
+   * delays the Stop. A failed revoke is logged and not retried.
    */
   async #releaseAgentRuntime(agentId: string, publishStopped = false): Promise<void> {
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
@@ -2688,9 +2933,9 @@ export class DaemonRuntime {
     });
     await this.#agentProcessManager.stop(agentId);
     this.#messageAttention.clearAgent(agentId);
-    // ADR 0048: explicit Stop discards anything a queue_until_idle provider was holding.
+    // Explicit Stop discards anything a queue_until_idle provider was holding.
     this.#deliveryQueue.clearAgent(agentId);
-    // ADR 0055: an explicit Stop discards the runtime-error recovery streaks the same way — a
+    // An explicit Stop discards the runtime-error recovery streaks the same way — a
     // fresh start should not inherit a backoff/fence from a process that no longer exists.
     this.#clearRuntimeErrorBackoffTimer(agentId);
     this.#runtimeErrorDeliveryBackoff.reset(agentId);
@@ -2726,7 +2971,7 @@ export class DaemonRuntime {
     if (proxyToken) this.#agentProxy?.revoke(proxyToken);
   }
 
-  /** The single place a `tool-start` event becomes an Activity (ADR 0021): resolves the
+  /** The single place a `tool-start` event becomes an Activity: resolves the
    * provider's raw name/input through the shared `toolActivity` allowlist, then reattaches
    * subagent lineage the provider reported alongside the tool call. */
   #toolStartActivity(event: Extract<AgentRuntimeEvent, { type: "tool-start" }>) {
@@ -2760,7 +3005,7 @@ export class DaemonRuntime {
   /**
    * Builds the one wire shape both `invalidateSession` emit sites send (previously constructed
    * twice, field by field). No control-fence fields (no `startRequestId`/`controlEpoch`, unlike
-   * `AgentSessionReport`) — see ADR 0040, "Why no control fence fields": `launchId` is always
+   * `AgentSessionReport`): `launchId` is always
    * present at both call sites, so there is no separate gating condition here either.
    */
   #sessionInvalidateMessage(
@@ -2789,7 +3034,7 @@ export class DaemonRuntime {
   }
 
   /**
-   * ADR 0055: decides what a mid-turn runtime error means for this Agent's queued deliveries —
+   * Decides what a mid-turn runtime error means for this Agent's queued deliveries —
    * retry after a backoff, stop retrying, or stop retrying because the same fingerprint has now
    * failed `RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD` times in a row — and returns the Activity
    * that should actually be reported (unchanged, unless the fence just tripped). The retry
@@ -2860,7 +3105,7 @@ export class DaemonRuntime {
   }
 
   /**
-   * ADR 0055: a tripped fingerprint fence stops retrying — cancels any pending release timer and
+   * A tripped fingerprint fence stops retrying — cancels any pending release timer and
    * keeps (or starts) an indefinite explicit hold, so nothing currently held, and nothing newly
    * queued, reaches the runtime that just failed the same way three times in a row. Deliberately
    * never releases or flushes anything already held: doing so would deliver straight into the
@@ -2875,7 +3120,7 @@ export class DaemonRuntime {
     this.#deliveryQueue.hold(agentId);
   }
 
-  /** A genuinely successful turn (ADR 0055): forgets both streaks entirely. */
+  /** A genuinely successful turn: forgets both streaks entirely. */
   #resetRuntimeErrorRecovery(agentId: string): void {
     this.#stopRuntimeErrorDeliveryBackoff(agentId);
     this.#runtimeErrorFingerprintFence.reset(agentId);
@@ -2900,13 +3145,14 @@ export class DaemonRuntime {
 
   /** Attempts delivery of everything just released from an explicit or busy-gated hold, as one
    * coalesced notice — never blocking the caller on it. Shared by ordinary turn-end draining and
-   * the runtime-error delivery backoff (ADR 0048/0055). */
+   * the runtime-error delivery backoff. */
   #flushHeldDeliveries(agentId: string, held: AgentMessageDelivery[]): void {
     void this.#messageAttention.flush(agentId, held).catch((error: unknown) => {
       logger.warn("Held Agent deliveries were not accepted", {
         event: "agent.delivery_queue.flush_rejected",
         agent_id: agentId,
         held_count: held.length,
+        already_acknowledged: true,
         error_code: error instanceof Error ? error.name : "UnknownError",
       });
     });
@@ -2921,7 +3167,7 @@ export class DaemonRuntime {
     );
   }
 
-  /** A running turn was cut by a requested stop/restart (ADR 0021). */
+  /** A running turn was cut by a requested stop/restart. */
   #interruptedActivity(agentId: string): ActivityDraft {
     return this.#activity(
       agentId,
@@ -2964,7 +3210,7 @@ export class DaemonRuntime {
       clientSeq: ++launch.clientSeq,
       observedAtMs: Date.now(),
     });
-    // ADR 0042: survives a later exit so a wake reusing this launchId can continue the counter
+    // Survives a later exit so a wake reusing this launchId can continue the counter
     // instead of colliding with the server's (agentId, launchId, clientSeq) idempotency key.
     this.#agentProcessManager.recordClientSeq(agentId, launch.clientSeq);
     if (TERMINAL_ACTIVITY_DETAIL_KINDS.has(activity.detailKind)) {
@@ -3020,7 +3266,7 @@ export class DaemonRuntime {
   }
 
   /**
-   * ADR 0050: fire-and-forget, never blocking or failing the turn it observed. Skipped when the
+   * Fire-and-forget, never blocking or failing the turn it observed. Skipped when the
    * Agent's current native session id is not yet known (the daemon has not yet reported this
    * launch's first identity) or the reading is unchanged from the last one sent for this launch
    * — `#lastContextUsage` is forgotten on launch end/dispose alongside `#compactionTracker`, so a
@@ -3054,7 +3300,7 @@ export class DaemonRuntime {
       daemonInstanceId: this.#runtimeInstanceId,
       clientSeq: ++launch.clientSeq,
     });
-    // ADR 0042: survives a later exit so a wake reusing this launchId can continue the counter,
+    // Survives a later exit so a wake reusing this launchId can continue the counter,
     // the same reason `#emitAgentActivity` records it after every send on this shared counter.
     this.#agentProcessManager.recordClientSeq(agentId, launch.clientSeq);
   }
@@ -3087,8 +3333,8 @@ export class DaemonRuntime {
 
   /**
    * Revokes the key of an Agent process that is gone: it exited, its Stop was requested, or its
-   * launch failed after the key was minted. One request, exactly then, and never again
-   * (docs/adr/0043): a key still in use by a running Agent is never revoked by the daemon, and
+   * launch failed after the key was minted. One request, exactly then, and never again:
+   * a key still in use by a running Agent is never revoked by the daemon, and
    * a revoke that fails is logged and left to the server, which invalidates every earlier key
    * of the Agent when it mints the next one.
    */
@@ -3145,12 +3391,11 @@ export class DaemonRuntime {
       roundCount += 1;
       const result = await this.#transport.agentMessage!(
         {
-          protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-          requestId: request.requestId,
+          idempotencyKey: request.idempotencyKey,
           agentId,
           workspaceId: this.#connection.workspaceId,
           operation: "check",
-          target: "",
+          target: request.target || "",
           limit: request.limit,
         },
         agentApiKey,
@@ -3169,12 +3414,13 @@ export class DaemonRuntime {
       if (message.sequence > current) maxSequenceByTarget.set(message.target, message.sequence);
     }
     for (const [target, sequence] of maxSequenceByTarget) {
+      // A check consumes what it returned without reviewing the target, so it takes no read order
+      // and never outranks a thread the Agent read (Raft's `check` records none either).
       this.#messageAttention.recordModelSeen(agentId, target, sequence);
-      this.#messageAttention.recordReadContext(agentId, target);
     }
     logger.info("Agent checked pending messages", {
       event: "agent.message.checked",
-      ...this.#agentLogScope(agentId, request.requestId),
+      ...this.#agentLogScope(agentId, request.idempotencyKey),
       pending_count: attention.reduce((count, item) => count + item.pendingCount, 0),
       displayed_count: messages.length,
       round_count: roundCount,
@@ -3183,7 +3429,7 @@ export class DaemonRuntime {
       outcome: "ok",
     });
     return {
-      requestId: request.requestId,
+      idempotencyKey: request.idempotencyKey,
       accepted: true,
       attentionCount: attention.reduce((n, a) => n + a.pendingCount, 0),
       summaries: attention.map((item) => ({ ...item, flags: [...item.flags] })),
@@ -3191,6 +3437,36 @@ export class DaemonRuntime {
       messageId: "",
       hasMore,
     };
+  }
+
+  /**
+   * The saved draft `--send-draft` re-sends, checked before anything is issued (Raft 1.0.38): an
+   * expired draft is discarded and returned as the error's last copy, a missing one is refused, and
+   * `--expected-draft-key` refuses a draft that now belongs to a different logical send.
+   */
+  async #draftToResend(
+    inbox: AgentInboxStateMachine,
+    target: string,
+    request: LocalAgentMessageRequest,
+  ) {
+    const lookup = await inbox.lookup(target);
+    if (lookup.status === "expired")
+      throw expiredDraftError(target, lookup.content, lookup.savedAt);
+    if (lookup.status === "missing")
+      throw new AgentPreflightError(`No saved draft for target: ${target}`, "SEND_DRAFT_NOT_FOUND");
+    const draft = lookup.draft;
+    if (request.expectedDraftKey !== undefined && draft.idempotencyKey !== request.expectedDraftKey)
+      throw new AgentPreflightError(
+        "The saved draft no longer matches the expected idempotency key. No request was made and the current draft was left unchanged because it belongs to a different logical send.",
+        "SAVED_DRAFT_IDENTITY_CHANGED",
+        {
+          draftSaved: false,
+          retryable: false,
+          suggestedNextAction:
+            "Review the current draft before deciding whether to send it; do not treat it as the earlier logical send.",
+        },
+      );
+    return draft;
   }
 
   /** Sends a body or a held draft, honouring the server's freshness hold decision. */
@@ -3202,23 +3478,14 @@ export class DaemonRuntime {
   ): Promise<AgentMessageResponse> {
     const startedAt = performance.now();
     const inbox = this.#agentInbox(agentId);
-    // Task #70: the daemon owns the per-target draft for every request, and a transport retry
-    // re-runs this whole flow with the SAME request id. Without this bookkeeping, a retry of an
-    // older send to the same target rewrites the draft and, once it is finally accepted, clears the
-    // draft a newer hold just stored — the Agent was told its held message is saved, and
-    // `--send-draft` then answers SEND_DRAFT_NOT_FOUND. A replay of an older request therefore
-    // touches nothing about the draft; the newest writer owns it until its own outcome.
-    const draftBookkeeping = this.#draftBookkeepingFor(agentId, target);
-    const replayed = draftBookkeeping.seenRequestIds.includes(request.requestId);
-    if (!replayed) {
-      draftBookkeeping.seenRequestIds.push(request.requestId);
-      if (draftBookkeeping.seenRequestIds.length > DRAFT_REPLAY_MEMORY)
-        draftBookkeeping.seenRequestIds.shift();
-      draftBookkeeping.ownerRequestId = request.requestId;
-    }
-    const draft = request.sendDraft ? await inbox.draft(target) : undefined;
-    if (request.sendDraft && !draft)
-      throw new AgentPreflightError(`No saved draft for target: ${target}`, "SEND_DRAFT_NOT_FOUND");
+    // The daemon owns the per-target draft, and the draft names its own send by key: every local
+    // request carries a key the CLI minted for that invocation, so the draft's key alone decides
+    // which accepted send may clear it (`clearIfIdempotencyKeyMatches` below, task #70).
+    const draft = request.sendDraft ? await this.#draftToResend(inbox, target, request) : undefined;
+    // Raft 1.0.38: one logical send keeps one idempotency key. A fresh send's key is this
+    // invocation's; `--send-draft` re-sends under the key the draft was saved with, so a resend
+    // after an unknown outcome can never commit the same message twice.
+    const idempotencyKey = draft?.idempotencyKey ?? request.idempotencyKey;
     // A normal send replaces whatever draft was there; Raft reports that (and the hold count the
     // draft had reached) so the server can compute `continueAnywaySuggested`.
     const priorDraft = draft ?? (request.sendDraft ? undefined : await inbox.draft(target));
@@ -3271,14 +3538,18 @@ export class DaemonRuntime {
         const parentOrder = this.#messageAttention.readOrder(agentId, target);
         if (parentOrder === undefined || parentOrder < latestThread.order) {
           // Raft-aligned: the outgoing content is saved as the local draft before refusing, so the
-          // documented recovery is resending that exact draft, not retyping it. A replay of an
-          // older request must not overwrite the draft the newest one owns.
-          if (!replayed)
-            await inbox.save(target, { content, attachmentIds, mentions, seenUpToSeq });
+          // documented recovery is resending that exact draft, not retyping it.
+          await inbox.save(target, {
+            content,
+            attachmentIds,
+            mentions,
+            seenUpToSeq,
+            idempotencyKey,
+          });
           throw new AgentPreflightError(
             targetConfirmationRequiredMessage(target, latestThread.target),
             "THREAD_CONTEXT_TARGET_CONFIRMATION_REQUIRED",
-            true,
+            { draftSaved: true },
           );
         }
       }
@@ -3286,11 +3557,11 @@ export class DaemonRuntime {
     // `inbox.save` persists the draft locally BEFORE the request is issued to the transport below;
     // any failure past this point leaves delivery state unknown, never "not sent" (see
     // `agent-preflight-error.ts` / `agent-proxy-failure.ts` and `message send`'s CLI renderer).
-    if (!request.sendDraft && !replayed)
-      await inbox.save(target, { content, attachmentIds, mentions, seenUpToSeq });
+    if (!request.sendDraft)
+      await inbox.save(target, { content, attachmentIds, mentions, seenUpToSeq, idempotencyKey });
     // The daemon's own freshness decision, taken BEFORE any transport call: a send it holds must
     // never be issued, because a re-issue of the same request would re-decide it (observed: the
-    // same requestId held at 00:18:30 and forwarded at 00:19:30 delivered a message the Agent had
+    // same idempotencyKey held at 00:18:30 and forwarded at 00:19:30 delivered a message the Agent had
     // been told was held, and the deliberate `--send-draft` resend then duplicated it). A hold
     // decided here is terminal; the server still gets the request when the daemon forwards, so its
     // own check remains the race guard for anything that arrived in between.
@@ -3305,7 +3576,7 @@ export class DaemonRuntime {
         ? locallyHeldSend(
             freshness,
             {
-              requestId: request.requestId,
+              idempotencyKey,
               draftReholdCount,
               freshnessContextMode: request.freshnessContextMode,
             },
@@ -3331,10 +3602,9 @@ export class DaemonRuntime {
                 attachments: [],
               })),
           )
-        : await this.#transport.agentMessage!(
+        : await settleAgentSend(
             {
-              protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-              requestId: request.requestId,
+              idempotencyKey,
               agentId,
               workspaceId: this.#connection.workspaceId,
               operation: "send",
@@ -3343,12 +3613,26 @@ export class DaemonRuntime {
               continueAnyway: request.continueAnyway,
               draftReholdCount,
               draftReplacedExisting: !request.sendDraft && draftReholdCount > 0,
+              sendDraft: request.sendDraft,
               seenUpToSeq,
               freshnessContextMode: request.freshnessContextMode,
               attachmentIds: attachmentIds ? [...attachmentIds] : undefined,
               mentions: mentions ? [...mentions] : undefined,
             },
-            agentApiKey,
+            {
+              send: (send) => this.#transport.agentMessage!(send, agentApiKey),
+              reconcile: (reconciliation) => {
+                if (!this.#transport.reconcileAgentSend)
+                  throw new Error("daemon connection cannot reconcile a send");
+                return this.#transport.reconcileAgentSend(reconciliation, agentApiKey);
+              },
+              draftHoldsKey: async (draftTarget, key) =>
+                (await inbox.draft(draftTarget))?.idempotencyKey === key,
+            },
+            {
+              reviewerIsolation: request.freshnessContextMode === "withheld",
+              logScope: this.#agentLogScope(agentId, idempotencyKey),
+            },
           );
     const held = result.state === "held";
     // Raft's `contextWasWithheld`: a withheld context was never presented to the Agent, so nothing
@@ -3364,20 +3648,12 @@ export class DaemonRuntime {
         // hold later, remembering the frontier the notice presented so the resend clears the hold.
         reholdCount: draftReholdCount + 1,
         seenUpToSeq: contextWasWithheld ? seenUpToSeq : (result.seenUpToSeq ?? seenUpToSeq),
+        idempotencyKey,
       });
-      // A hold is the newest user-visible draft state for this target, so it takes ownership.
-      draftBookkeeping.ownerRequestId = request.requestId;
     } else if (result.accepted) {
-      // Only the request that owns the draft may consume it: an older send's accepted replay must
-      // leave a newer hold's draft alone (task #70). An absent owner means the daemon restarted and
-      // has no record, which keeps the pre-existing behaviour of clearing on acceptance.
-      if (
-        draftBookkeeping.ownerRequestId === undefined ||
-        draftBookkeeping.ownerRequestId === request.requestId
-      ) {
-        await inbox.clear(target);
-        draftBookkeeping.ownerRequestId = undefined;
-      }
+      // Raft's `clearSavedDraftIfIdempotencyKeyMatches`: only the send whose key the draft holds
+      // consumes it, so an older send accepted late leaves a newer draft alone (task #70).
+      await inbox.clearIfIdempotencyKeyMatches(target, idempotencyKey);
     }
     const targetMessages = result.messages.filter((message) => message.target === target);
     // Raft's `recordConsumedSeqs(data.seenUpToSeq)`: the notice presented this frontier, so the
@@ -3390,8 +3666,10 @@ export class DaemonRuntime {
     );
     if (consumedBoundary > 0) {
       this.#messageAttention.recordModelSeen(agentId, target, consumedBoundary);
-      // The held-context read inside `send`: the Agent just consumed these messages for `target`.
-      this.#messageAttention.recordReadContext(agentId, target);
+      // The held-context read inside `send`: the Agent just reviewed these messages for `target`.
+      // A withheld context was never presented, so it reviews nothing (Raft records none either).
+      if (!contextWasWithheld)
+        this.#messageAttention.recordReadContext(agentId, target, consumedBoundary);
     }
     const recentUnread = contextWasWithheld
       ? []
@@ -3426,7 +3704,7 @@ export class DaemonRuntime {
         // field for field, so a locally decided hold is auditable next to a server-decided one.
         logger.info("Agent inbox freshness decision", {
           event: "agent.inbox.freshness_decision",
-          ...this.#agentLogScope(agentId, request.requestId),
+          ...this.#agentLogScope(agentId, idempotencyKey),
           producer_fact_id: producerFactId,
           action: "send",
           decision: heldDecision,
@@ -3467,15 +3745,19 @@ export class DaemonRuntime {
     }
     logger.info("Agent sent a message", {
       event: "agent.message.sent",
-      ...this.#agentLogScope(agentId, request.requestId),
-      freshness_decision: result.decision ?? "forward",
+      ...this.#agentLogScope(agentId, idempotencyKey),
+      // A commit confirmed by reconciliation carries no freshness decision of its own, so it logs
+      // none (the decision vocabulary stays Raft's) and says `reconciled` instead.
+      ...(result.state === "committed"
+        ? { reconciled: true }
+        : { freshness_decision: result.decision ?? "forward" }),
       accepted: result.accepted,
       message_id: result.messageId,
       duration_ms: Math.round(performance.now() - startedAt),
       outcome: result.accepted ? "ok" : "rejected",
     });
     return {
-      requestId: request.requestId,
+      idempotencyKey,
       accepted: result.accepted,
       attentionCount: result.attentionCount,
       messageId: result.messageId ?? "",
@@ -3496,6 +3778,9 @@ export class DaemonRuntime {
         ? (result.withheldMessageCount ?? result.attentionCount)
         : undefined,
       recentUnread,
+      // What a sent message did not deliver, for the Agent's `coforge mention` recovery.
+      pendingMentionActions: result.pendingMentionActions,
+      unresolvedMentionHandles: result.unresolvedMentionHandles,
     };
   }
 
@@ -3514,8 +3799,7 @@ export class DaemonRuntime {
       : undefined;
     const result = await this.#transport.agentMessage!(
       {
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId: request.requestId,
+        idempotencyKey: request.idempotencyKey,
         agentId,
         workspaceId: this.#connection.workspaceId,
         operation,
@@ -3534,24 +3818,30 @@ export class DaemonRuntime {
       },
       agentApiKey,
     );
+    // Whatever a read showed the Agent counts as seen, including what an anchored read showed
+    // beyond the contiguous frontier, which it does not move. A search does not: it shows a
+    // truncated preview without whether the message mentions the Agent.
+    if (result.accepted && operation === "read")
+      this.#messageAttention.recordSeenMessages(agentId, result.messages);
+    // The newest message a successful read showed for `target` itself; one pass, no copies.
+    let visibleSequence = 0;
+    if (operation === "read" && result.accepted && !request.around)
+      for (const message of result.messages)
+        if (message.target === target && message.sequence > visibleSequence)
+          visibleSequence = message.sequence;
     if (settlesAttention && result.accepted) {
-      const visibleSequence = Math.max(
-        ...result.messages
-          .filter((message) => message.target === target)
-          .map(({ sequence }) => sequence),
-        0,
-      );
       if (visibleSequence > 0)
         this.#messageAttention.recordModelSeen(agentId, target, visibleSequence);
       else if (result.messages.length === 0 && attentionUpperBound !== undefined)
         this.#messageAttention.clearThrough(agentId, target, attentionUpperBound);
     }
-    // The `--target-confirmed` guard's read-context tracking: any successful `read` (anchored or
-    // not) counts as the Agent having consumed messages for `target`.
-    if (operation === "read" && target && result.accepted)
-      this.#messageAttention.recordReadContext(agentId, target);
+    // The thread-mismatch guard's read context: a successful `read` reviews `target`, including a
+    // paged one, and remembers the newest message it showed. An `--around` read only looks
+    // something up, so it orders nothing (Raft's `read --around` records no order either).
+    if (operation === "read" && target && result.accepted && !request.around)
+      this.#messageAttention.recordReadContext(agentId, target, visibleSequence);
     return {
-      requestId: request.requestId,
+      idempotencyKey: request.idempotencyKey,
       accepted: result.accepted,
       attentionCount: result.attentionCount,
       messageId: result.messageId ?? "",
@@ -3564,9 +3854,11 @@ export class DaemonRuntime {
     };
   }
 
-  #agentLogScope(agentId: string, requestId: string) {
+  /** The log's correlation field is `request_id`; on the Agent HTTP path it carries the request's
+   * idempotency key. */
+  #agentLogScope(agentId: string, idempotencyKey: string) {
     return {
-      request_id: requestId,
+      request_id: idempotencyKey,
       workspace_id: this.#connection.workspaceId,
       computer_id: this.#connection.computerId,
       agent_id: agentId,
@@ -3626,11 +3918,11 @@ export class DaemonRuntime {
   }
 
   /**
-   * `coforge version`'s local-only query (ADR 0036): answered entirely from this already-running
+   * `coforge version`'s local-only query: answered entirely from this already-running
    * Workspace child, never forwarded to Web/backend. `computerVersion` is the Computer executable
    * version this Daemon was launched with (`runDaemon(args, computerVersion)`, `packages/computer/
    * src/main.ts`'s `__workspace-daemon` dispatch); it bundles both the Computer and Daemon package
-   * roles into one executable (see `docs/architecture.md`), so this is not a second installation.
+   * roles into one executable, so this is not a second installation.
    */
   async version(
     context: string,
@@ -3696,6 +3988,31 @@ export class DaemonRuntime {
     return this.#transport.agentOpenviking(command, agentApiKey);
   }
 
+  async mentionPending(
+    context: string,
+    _request: Record<string, never>,
+    agentApiKey: string,
+  ): Promise<AgentMentionPendingResponse> {
+    this.#authorizedAgent(context, agentApiKey);
+    if (!this.#transport.mentionPending)
+      throw new Error("Agent mention actions endpoint is not configured");
+    return this.#transport.mentionPending(agentApiKey);
+  }
+
+  async mentionExecute(
+    context: string,
+    request: AgentMentionExecuteRequest,
+    agentApiKey: string,
+  ): Promise<AgentMentionExecuteResponse> {
+    this.#authorizedAgent(context, agentApiKey);
+    if (!this.#transport.mentionExecute)
+      throw new Error("Agent mention actions endpoint is not configured");
+    return this.#transport.mentionExecute(request, agentApiKey);
+  }
+
+  /** Dispatches one task command to the cloud task route over its HTTPS path. The body is the
+   * plain command — the route derives its principal from the Agent API key, so no envelope
+   * travels with it. */
   async agentTask(context: string, command: TaskCommand, agentApiKey: string): Promise<TaskResult> {
     this.#assertRunning();
     const agentId = this.#agentIdForContext(context);
@@ -3706,15 +4023,7 @@ export class DaemonRuntime {
       const held = await this.#heldTaskResult(agentId, command, command.target, agentApiKey);
       if (held) return held;
     }
-    return this.#transport.agentTask(
-      {
-        ...command,
-        protocolMajor: TASK_PROTOCOL_MAJOR,
-        workspaceId: this.#connection.workspaceId,
-        agentId,
-      },
-      agentApiKey,
-    );
+    return this.#transport.agentTask({ ...command }, agentApiKey);
   }
 
   /** Dispatches a channel lifecycle/roster command to the cloud route `agentChannel` maps it
@@ -3731,7 +4040,6 @@ export class DaemonRuntime {
     return this.#transport.agentChannel(
       {
         ...command,
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
         workspaceId: this.#connection.workspaceId,
         agentId,
       },
@@ -3777,8 +4085,7 @@ export class DaemonRuntime {
     if (!attention && modelSeen !== 0) return undefined;
     const context = await this.#transport.agentMessage?.(
       {
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
         agentId,
         workspaceId: this.#connection.workspaceId,
         operation: "read",
@@ -3833,8 +4140,7 @@ export class DaemonRuntime {
     return this.#transport.agentWeeklyReport(
       {
         ...command,
-        protocolMajor: WEEKLY_REPORT_PROTOCOL_MAJOR,
-        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
         workspaceId: this.#connection.workspaceId,
         agentId,
       },
@@ -3845,9 +4151,11 @@ export class DaemonRuntime {
   /** Forwards Collect Run pack submit over Agent HTTPS (ADR 0032 return path). */
   async agentWeeklyReportCollect(
     context: string,
-    command: import("../connection/weekly-report-collect").WeeklyReportCollectCommand,
+    command:
+      | import("#src/connection/weekly-report-collect").WeeklyReportCollectCommand
+      | import("#src/connection/weekly-report-collect").WeeklyReportCollectFailRunningCommand,
     agentApiKey?: string,
-  ): Promise<import("../connection/weekly-report-collect").WeeklyReportCollectResult> {
+  ): Promise<import("#src/connection/weekly-report-collect").WeeklyReportCollectResult> {
     if (this.#stopping || !this.#started) throw new Error("daemon runtime is not running");
     this.#agentIdForContext(context);
     if (!this.#transport.agentWeeklyReportCollect)
@@ -3859,9 +4167,9 @@ export class DaemonRuntime {
   /** Forwards personal key-point extraction write-back over Agent HTTPS. */
   async agentWeeklyReportKeyPoints(
     context: string,
-    command: import("../connection/weekly-report-key-points").WeeklyReportKeyPointsCommand,
+    command: import("#src/connection/weekly-report-key-points").WeeklyReportKeyPointsCommand,
     agentApiKey?: string,
-  ): Promise<import("../connection/weekly-report-key-points").WeeklyReportKeyPointsResult> {
+  ): Promise<import("#src/connection/weekly-report-key-points").WeeklyReportKeyPointsResult> {
     if (this.#stopping || !this.#started) throw new Error("daemon runtime is not running");
     this.#agentIdForContext(context);
     if (!this.#transport.agentWeeklyReportKeyPoints)
@@ -3881,8 +4189,7 @@ export class DaemonRuntime {
     const parent = match[1]!;
     const result = await this.#transport.agentMessage!(
       {
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
         agentId,
         workspaceId: this.#connection.workspaceId,
         operation: "read",
@@ -3912,16 +4219,30 @@ export class DaemonRuntime {
   async reminder(context: string, request: LocalReminderRequest, agentApiKey: string) {
     const agentId = this.#authorizedAgent(context, agentApiKey);
     if (request.operation === "ack" || request.operation === "dismiss") {
+      const itemId = `reminder:${request.reminderId}:${request.revision}`;
       const accepted = await this.#reminders.acknowledge(
         agentId,
         request.reminderId!,
         request.revision!,
       );
-      if (!accepted)
-        return { accepted: false, reason: "reminder receipt not found for exact revision" };
-      await (
-        await this.#appInbox(agentId)
-      ).remove(`reminder:${request.reminderId}:${request.revision}`);
+      const inbox = await this.#appInbox(agentId);
+      if (!accepted) {
+        // Neither the receipt file nor this daemon knows the receipt (the file was lost or is
+        // unreadable, and the daemon has restarted since), but the Agent was shown this exact
+        // revision: its inbox item proves the delivery. Clear it rather than leave an item nothing
+        // can ever acknowledge; the cloud already refuses to fire this revision again.
+        if (!(await inbox.remove(itemId)))
+          return { accepted: false, reason: "reminder receipt not found for exact revision" };
+        logger.info("Reminder acknowledged from its inbox item without a local receipt", {
+          event: "reminder.ack_without_receipt",
+          outcome: "ok",
+          agent_id: agentId,
+          reminder_id: request.reminderId,
+          reminder_version: request.revision,
+        });
+        return { accepted: true, reminderId: request.reminderId, revision: request.revision };
+      }
+      await inbox.remove(itemId);
       return { accepted: true, reminderId: request.reminderId, revision: request.revision };
     }
     if (!this.#transport.agentReminder) throw new Error("Agent reminder transport is unavailable");
@@ -3929,7 +4250,6 @@ export class DaemonRuntime {
     return this.#transport.agentReminder(
       {
         ...fields,
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
         workspaceId: this.#connection.workspaceId,
         computerId: this.#connection.computerId,
         agentId,
@@ -3938,7 +4258,7 @@ export class DaemonRuntime {
     );
   }
 
-  async #acceptReminderDue(job: ReminderJob): Promise<boolean> {
+  async #acceptReminderDue(job: ReminderJob, late: boolean): Promise<boolean> {
     const item = await (
       await this.#appInbox(job.ownerAgentId)
     ).upsert({
@@ -3946,7 +4266,7 @@ export class DaemonRuntime {
       notificationClass: "due",
       sourceRef: { kind: "reminder", id: job.reminderId, revision: String(job.version) },
       title: reminderAppInboxPreview(job.title),
-      summary: "Reminder due",
+      summary: reminderAppInboxSummary(job, late),
     });
     return this.#notifyAppItem(job.ownerAgentId, item.itemId);
   }
@@ -3968,7 +4288,7 @@ export class DaemonRuntime {
     const agentId = this.#agentIdForContext(context);
     const inbox = await this.#appInbox(agentId);
     return {
-      requestId: request.requestId,
+      idempotencyKey: request.idempotencyKey,
       accepted: true,
       entries: [
         ...this.#messageAttention.check(agentId).map((messageTarget) => ({
@@ -3991,21 +4311,6 @@ export class DaemonRuntime {
     const opened = AgentAppInbox.open(this.stateDirectory, this.#connection.workspaceId, agentId);
     this.#appInboxes.set(agentId, opened);
     return opened;
-  }
-
-  /** Per Agent+target draft bookkeeping (task #70), created on first use. */
-  #draftBookkeepingFor(agentId: string, target: string): AgentDraftBookkeeping {
-    let byTarget = this.#draftBookkeeping.get(agentId);
-    if (!byTarget) {
-      byTarget = new Map<string, AgentDraftBookkeeping>();
-      this.#draftBookkeeping.set(agentId, byTarget);
-    }
-    let state = byTarget.get(target);
-    if (!state) {
-      state = { seenRequestIds: [] };
-      byTarget.set(target, state);
-    }
-    return state;
   }
 
   #agentInbox(agentId: string): AgentInboxStateMachine {
@@ -4037,7 +4342,7 @@ export class DaemonRuntime {
         ).session;
       }
       if (!session.notify) return false;
-      // ADR 0048: a queue_until_idle provider's session/notify has no safe busy path, same as an
+      // A queue_until_idle provider's session/notify has no safe busy path, same as an
       // ordinary message delivery — hold this app-item notice instead of sending it now, and
       // release it (re-attempting this same call) at the next turn end.
       if (this.#deliveryQueue.shouldHold(agentId)) {
@@ -4059,7 +4364,7 @@ export class DaemonRuntime {
     }
   }
 
-  /** ADR 0048: re-attempts every app-item notice `AgentDeliveryQueue` held for `agentId` — each
+  /** Re-attempts every app-item notice `AgentDeliveryQueue` held for `agentId` — each
    * one re-checks `shouldHold` itself inside `#notifyAppItem`, so one that is still busy (e.g. a
    * coalesced delivery flush that just re-armed busy) simply re-holds itself for the next
    * release rather than being lost or sent too early. */
@@ -4069,7 +4374,7 @@ export class DaemonRuntime {
   }
 
   /**
-   * ADR 0048: redelivers every fallback notice text `AgentDeliveryQueue` held for `agentId`
+   * Redelivers every fallback notice text `AgentDeliveryQueue` held for `agentId`
    * (Kiro's `notice-undelivered` event) as a bare `session.notify` call — never through
    * `AgentMessageAttentionIndex`, since the delivery or App Inbox item this text originally came
    * from already settled its own ACK (or never had one); this call must never produce a second
@@ -4209,7 +4514,7 @@ export class DaemonRuntime {
   /**
    * Agents whose last emitted Activity is a busy detail kind with no terminal kind since -
    * `#lastBusyActivity` is set on every busy emission and cleared by `#clearActivityHeartbeat`,
-   * which every terminal kind and every stop path already runs (ADR 0016).
+   * which every terminal kind and every stop path already runs.
    */
   busyAgents(): BusyAgentReport[] {
     return [...this.#lastBusyActivity.entries()].map(([agentId, remembered]) => ({
@@ -4279,7 +4584,7 @@ export class DaemonRuntime {
     this.#currentActivityLaunches.clear();
     this.#sessionReferences.clear();
     // Every Agent process is down now; each key they were using gets its one revoke request
-    // here, best-effort (docs/adr/0033, 0043): a failure is logged, never fails teardown, and is
+    // here, best-effort: a failure is logged, never fails teardown, and is
     // not retried.
     await Promise.all(
       [...this.#agentApiKeys].map(([agentId, agentApiKey]) =>

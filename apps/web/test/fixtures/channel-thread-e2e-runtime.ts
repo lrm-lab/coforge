@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
-import { run } from "../../../../packages/coforge";
-import { connectLocal } from "../../../../packages/coforge/src/local-client";
+import { run } from "@lrm/coforge";
+import { connectLocal } from "@lrm/coforge/local-client";
 
 const decoder = new TextDecoder();
 let buffer = "";
@@ -95,7 +95,7 @@ async function call(input: {
       authorization: `Bearer ${Bun.env.COFORGE_AGENT_CONTEXT}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify({ ...input, requestId: crypto.randomUUID() }),
+    body: JSON.stringify({ ...input, idempotencyKey: crypto.randomUUID() }),
   });
   if (!response.ok)
     throw new Error(`Agent proxy returned ${response.status}: ${await response.text()}`);

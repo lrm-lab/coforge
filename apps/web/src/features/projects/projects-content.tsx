@@ -1,17 +1,18 @@
 import { useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Folder, Plus } from "@untitledui/icons";
-import { Button } from "@/components/base/buttons/button";
-import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "#src/components/base/buttons/button";
+import { PageHeader } from "#src/components/layout/page-header";
 import {
   Empty,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
   EmptyDescription,
-} from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
-import { m } from "@/paraglide/messages";
+} from "#src/components/ui/empty";
+import { Skeleton } from "#src/components/ui/skeleton";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { m } from "#src/paraglide/messages";
 import { CreateProjectDialog } from "./create-project-dialog";
 import type { listProjects } from "./projects.functions";
 import { ProjectImage } from "./project-image";
@@ -23,6 +24,7 @@ export function ProjectsContent({
 }) {
   const [creating, setCreating] = useState(false);
   const router = useRouter();
+  const workspaceSlug = useWorkspaceSlug();
   return (
     <main className="flex h-svh min-w-0 flex-col bg-primary">
       <PageHeader
@@ -54,8 +56,8 @@ export function ProjectsContent({
                 className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4 first:pt-0"
               >
                 <Link
-                  to="/projects/$projectSlug"
-                  params={{ projectSlug: project.slug }}
+                  to="/w/$workspaceSlug/projects/$projectSlug"
+                  params={{ workspaceSlug, projectSlug: project.slug }}
                   className="flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-4"
                 >
                   <ProjectImage name={project.name} url={project.iconUrl} />

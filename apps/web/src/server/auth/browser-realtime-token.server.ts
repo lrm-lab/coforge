@@ -1,12 +1,19 @@
 import { importJWK, SignJWT, type JWK } from "jose";
 
-import { agentStatusChannel } from "../../features/agents/agent-status-realtime";
-import { agentActivityChannel } from "../../features/agents/agent-activity";
+import {
+  agentStatusChannel,
+  agentStatusChannelForAgent,
+} from "#src/features/agents/agent-status-realtime";
+import {
+  agentActivityChannel,
+  agentActivityChannelForAgent,
+} from "#src/features/agents/agent-activity";
 import {
   conversationRealtimeChannel,
   userConversationChannel,
   workspaceConversationChannel,
-} from "../../features/conversations/conversation-realtime";
+} from "#src/features/conversations/conversation-realtime";
+import { workspacePresenceChannel } from "#src/features/workspaces/presence-channel";
 
 async function browserRealtimeSigner(
   environment: Record<string, string | undefined>,
@@ -60,6 +67,34 @@ export async function issueAgentStatusSubscriptionToken(
   );
 }
 
+/**
+ * A private Agent's per-Agent Activity channel. Callers must check `canSeeAgent` for
+ * `input.agentId` before calling this — the token itself grants exactly this one channel, so a
+ * viewer who cannot see the Agent must never be issued one.
+ */
+export async function issueAgentActivitySubscriptionTokenForAgent(
+  input: { userId: string; workspaceId: string; agentId: string },
+  environment: Record<string, string | undefined> = process.env,
+): Promise<string> {
+  return browserRealtimeSigner(
+    environment,
+    { channel: agentActivityChannelForAgent(input.workspaceId, input.agentId) },
+    input.userId,
+  );
+}
+
+/** The per-Agent status-channel sibling of `issueAgentActivitySubscriptionTokenForAgent`. */
+export async function issueAgentStatusSubscriptionTokenForAgent(
+  input: { userId: string; workspaceId: string; agentId: string },
+  environment: Record<string, string | undefined> = process.env,
+): Promise<string> {
+  return browserRealtimeSigner(
+    environment,
+    { channel: agentStatusChannelForAgent(input.workspaceId, input.agentId) },
+    input.userId,
+  );
+}
+
 export function issueConversationRealtimeToken(
   input: { userId: string; conversationId: string },
   environment: Record<string, string | undefined> = process.env,
@@ -79,6 +114,18 @@ export async function issueWorkspaceConversationSubscriptionToken(
   return browserRealtimeSigner(
     environment,
     { channel: workspaceConversationChannel(input.workspaceId) },
+    input.userId,
+  );
+}
+
+/** The Workspace presence channel (`presence-channel.ts`). */
+export async function issueWorkspacePresenceSubscriptionToken(
+  input: { userId: string; workspaceId: string },
+  environment: Record<string, string | undefined> = process.env,
+): Promise<string> {
+  return browserRealtimeSigner(
+    environment,
+    { channel: workspacePresenceChannel(input.workspaceId) },
     input.userId,
   );
 }

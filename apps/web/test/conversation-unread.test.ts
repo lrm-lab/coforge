@@ -1,18 +1,19 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  activityInClosedConversation,
   applyUnreadEvent,
   clearUnread,
   seedUnreadCounts,
   replaceUnreadCounts,
   latestTopLevelSequence,
   persistReadCursor,
-} from "../src/features/conversations/conversation-unread";
+} from "#src/features/conversations/conversation-unread";
 import {
   decodeMessageAvailableEvent,
   userConversationChannel,
   workspaceConversationChannel,
-} from "../src/features/conversations/conversation-realtime";
+} from "#src/features/conversations/conversation-realtime";
 
 const channels = new Set(["channel-a", "channel-b"]);
 
@@ -110,46 +111,47 @@ describe("applyUnreadEvent", () => {
     expect(state["channel-a:seq"]).toBe(2);
   });
 
-  test("bumps a DM badge by the event's own Agent id, with no conversation alias", () => {
-    // The user channel is already scoped to this viewer and names its badge directly, so the
-    // event needs no listed-conversation check: a DM created after the last list fetch still
-    // bumps live (ADR 0046).
+  test("bumps a DM badge by its conversation id, even for a DM the list has not read yet", () => {
+    // The user channel is already scoped to this viewer, and a DM event says it is one (the Agent
+    // or member on the other side): a DM created after the last list fetch still bumps live.
     const next = applyUnreadEvent(
       {},
       { conversationId: "dm-conversation", sequence: 4, agentId: "agent-1" },
       { conversations: new Set() },
     );
-    expect(next).toEqual({ "agent-1": 1, "agent-1:seq": 4 });
+    expect(next).toEqual({ "dm-conversation": 1, "dm-conversation:seq": 4 });
+  });
+
+  test("bumps a DM between members by its conversation id too", () => {
+    const next = applyUnreadEvent(
+      {},
+      { conversationId: "dm-people", sequence: 2, peerUserId: "grace" },
+      { conversations: new Set() },
+    );
+    expect(next).toEqual({ "dm-people": 1, "dm-people:seq": 2 });
   });
 
   test("does not double-count a replayed DM event", () => {
-    const seeded = { "agent-1": 1, "agent-1:seq": 4 };
+    const seeded = { "dm-conversation": 1, "dm-conversation:seq": 4 };
     const next = applyUnreadEvent(
       seeded,
       { conversationId: "dm-conversation", sequence: 4, agentId: "agent-1" },
       { conversations: new Set() },
     );
-    expect(next).toEqual({ "agent-1": 1, "agent-1:seq": 4 });
+    expect(next).toEqual(seeded);
   });
 
   test("suppresses a DM event while that DM is the open conversation", () => {
-    const next = applyUnreadEvent(
-      {},
+    for (const event of [
       { conversationId: "dm-conversation", sequence: 4, agentId: "agent-1" },
-      { conversations: new Set(), openConversationId: "dm-conversation" },
-    );
-    expect(next).toEqual({});
-  });
-
-  test("suppresses a DM event while its Agent badge is the open conversation", () => {
-    // The open DM's own incoming events must not flash its badge, even though the DM signal
-    // channel carries no conversation id the channel route could match on.
-    const next = applyUnreadEvent(
-      {},
-      { conversationId: "dm-conversation", sequence: 4, agentId: "agent-1" },
-      { conversations: new Set(), openAgentId: "agent-1" },
-    );
-    expect(next).toEqual({});
+      { conversationId: "dm-conversation", sequence: 4, peerUserId: "grace" },
+    ])
+      expect(
+        applyUnreadEvent({}, event, {
+          conversations: new Set(),
+          openConversationId: "dm-conversation",
+        }),
+      ).toEqual({});
   });
 
   test("never counts a thread reply in a DM", () => {
@@ -326,4 +328,44 @@ describe("persistReadCursor", () => {
     expect(warnings).toHaveLength(1);
     expect(String(warnings[0])).toContain("read cursor did not persist");
   });
+});
+
+test("a new top-level message in a chat the sidebar is not showing is activity in a closed chat", () => {
+  // The listed chats: channels and the DMs the sidebar shows, by conversation id.
+  const listed = new Set(["channel-1", "dm-listed"]);
+  const message = { conversationId: "channel-2", sequence: 5 };
+
+  // A channel missing from the list (the viewer closed it), a closed DM, and a DM that started
+  // after the sidebar read its list all count.
+  expect(activityInClosedConversation(message, listed)).toBe(true);
+  expect(
+    activityInClosedConversation(
+      { ...message, conversationId: "dm-closed", agentId: "agent-closed" },
+      listed,
+    ),
+  ).toBe(true);
+  expect(
+    activityInClosedConversation(
+      { ...message, conversationId: "dm-new", agentId: "agent-new" },
+      listed,
+    ),
+  ).toBe(true);
+  expect(
+    activityInClosedConversation(
+      { ...message, conversationId: "dm-member", peerUserId: "grace" },
+      listed,
+    ),
+  ).toBe(true);
+
+  // Listed chats and thread replies do not: nothing new would appear in the list.
+  expect(activityInClosedConversation({ ...message, conversationId: "channel-1" }, listed)).toBe(
+    false,
+  );
+  expect(
+    activityInClosedConversation(
+      { ...message, conversationId: "dm-listed", agentId: "agent-open" },
+      listed,
+    ),
+  ).toBe(false);
+  expect(activityInClosedConversation({ ...message, threadRootId: "root-1" }, listed)).toBe(false);
 });

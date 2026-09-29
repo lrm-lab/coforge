@@ -14,8 +14,7 @@ import {
 
 test("accepts the targetless events-drain check operation", () => {
   const request = {
-    protocolMajor: 1,
-    requestId: "request-check",
+    idempotencyKey: "request-check",
     workspaceId: "workspace-a",
     agentId: "agent-a",
     operation: "check" as const,
@@ -25,10 +24,20 @@ test("accepts the targetless events-drain check operation", () => {
   expect(validateAgentMessageRequest(request)).toBe(request);
 });
 
+test("accepts a targeted events-drain check operation", () => {
+  const request = {
+    idempotencyKey: "request-check-target",
+    workspaceId: "workspace-a",
+    agentId: "agent-a",
+    operation: "check" as const,
+    target: "@ada",
+  };
+  expect(validateAgentMessageRequest(request)).toBe(request);
+});
+
 test.each(["mute", "unmute"] as const)("accepts Agent channel %s", (operation) => {
   const request = {
-    protocolMajor: 1,
-    requestId: "request-mute",
+    idempotencyKey: "request-mute",
     workspaceId: "workspace-a",
     agentId: "agent-a",
     operation,
@@ -39,8 +48,7 @@ test.each(["mute", "unmute"] as const)("accepts Agent channel %s", (operation) =
 
 test("accepts Agent channel thread unfollow", () => {
   const request = {
-    protocolMajor: 1,
-    requestId: "request-unfollow",
+    idempotencyKey: "request-unfollow",
     workspaceId: "workspace-a",
     agentId: "agent-a",
     operation: "thread-unfollow" as const,
@@ -51,8 +59,7 @@ test("accepts Agent channel thread unfollow", () => {
 
 test("accepts Agent message resolve", () => {
   const request = {
-    protocolMajor: 1,
-    requestId: "request-resolve",
+    idempotencyKey: "request-resolve",
     workspaceId: "workspace-a",
     agentId: "agent-a",
     operation: "resolve" as const,
@@ -64,8 +71,7 @@ test("accepts Agent message resolve", () => {
 
 test.each(["react", "unreact"] as const)("accepts Agent message %s", (operation) => {
   const request = {
-    protocolMajor: 1,
-    requestId: "request-react",
+    idempotencyKey: "request-react",
     workspaceId: "workspace-a",
     agentId: "agent-a",
     operation,
@@ -78,8 +84,7 @@ test.each(["react", "unreact"] as const)("accepts Agent message %s", (operation)
 
 test("rejects a cloud react request without an emoji", () => {
   const request = {
-    protocolMajor: 1,
-    requestId: "request-react",
+    idempotencyKey: "request-react",
     workspaceId: "workspace-a",
     agentId: "agent-a",
     operation: "react" as const,
@@ -91,8 +96,7 @@ test("rejects a cloud react request without an emoji", () => {
 
 test("rejects a cloud resolve request without a message id", () => {
   const request = {
-    protocolMajor: 1,
-    requestId: "request-resolve",
+    idempotencyKey: "request-resolve",
     workspaceId: "workspace-a",
     agentId: "agent-a",
     operation: "resolve" as const,
@@ -103,8 +107,7 @@ test("rejects a cloud resolve request without a message id", () => {
 
 test("rejects an unknown operation", () => {
   const request = {
-    protocolMajor: 1,
-    requestId: "request-unknown",
+    idempotencyKey: "request-unknown",
     workspaceId: "workspace-a",
     agentId: "agent-a",
     operation: "bogus" as unknown as "read",
@@ -115,8 +118,7 @@ test("rejects an unknown operation", () => {
 
 test("rejects a targeted operation without a target", () => {
   const request = {
-    protocolMajor: 1,
-    requestId: "request-read",
+    idempotencyKey: "request-read",
     workspaceId: "workspace-a",
     agentId: "agent-a",
     operation: "read" as const,
@@ -127,8 +129,7 @@ test("rejects a targeted operation without a target", () => {
 
 test("accepts Agent lexical message search filters", () => {
   const request = {
-    protocolMajor: 1,
-    requestId: "request-search",
+    idempotencyKey: "request-search",
     workspaceId: "workspace-a",
     agentId: "agent-a",
     operation: "search",
@@ -167,10 +168,30 @@ test("round-trips an Agent direct message delivery", () => {
   expect(decodeAgentMessageDelivery(encodeAgentMessageDelivery(delivery))).toEqual(delivery);
 });
 
+test("round-trips mentionsAgent on an Agent delivery", () => {
+  for (const mentionsAgent of [true, false] as const) {
+    const delivery = {
+      protocolMajor: 1,
+      requestId: `request-mention-${mentionsAgent}`,
+      messageId: `message-mention-${mentionsAgent}`,
+      deliveryId: `delivery-mention-${mentionsAgent}`,
+      sequence: 3,
+      workspaceId: "workspace-a",
+      conversationId: "conversation-a",
+      agentId: "agent-a",
+      body: "please look",
+      method: AGENT_MESSAGE_METHOD,
+      target: "#general",
+      mentionsAgent,
+    } as const;
+
+    expect(decodeAgentMessageDelivery(encodeAgentMessageDelivery(delivery))).toEqual(delivery);
+  }
+});
+
 test("accepts a trusted model-seen sequence on send", () => {
   const request = {
-    protocolMajor: 1,
-    requestId: "send-seen",
+    idempotencyKey: "send-seen",
     agentId: "agent-a",
     workspaceId: "workspace-a",
     operation: "send" as const,
@@ -183,8 +204,7 @@ test("accepts a trusted model-seen sequence on send", () => {
 
 test("rejects seen-up-to sequences on non-send operations", () => {
   const request = {
-    protocolMajor: 1,
-    requestId: "read-seen",
+    idempotencyKey: "read-seen",
     agentId: "agent-a",
     workspaceId: "workspace-a",
     operation: "read" as const,
@@ -214,7 +234,7 @@ test("round-trips all Agent delivery ACK identity and ordering fields", () => {
 
 test("round-trips daemon-local message attention summaries", () => {
   const response = {
-    requestId: "request-check",
+    idempotencyKey: "request-check",
     accepted: true,
     attentionCount: 2,
     summaries: [
@@ -234,9 +254,38 @@ test("round-trips daemon-local message attention summaries", () => {
   expect(decodeAgentMessageResponse(encodeAgentMessageResponse(response))).toEqual(response);
 });
 
+test("round-trips a message whose Task owner is a deleted Agent", () => {
+  const response = {
+    idempotencyKey: "request-read",
+    accepted: true,
+    attentionCount: 0,
+    summaries: [],
+    messages: [
+      {
+        id: "message-46",
+        sequence: 46,
+        senderKind: "human" as const,
+        senderHandle: "ada",
+        senderDescription: "",
+        target: "#general",
+        body: "Ship the login page",
+        createdAt: "2026-09-24T10:00:00Z",
+        attachments: [],
+        task: {
+          number: 46,
+          status: "in_progress" as const,
+          owner: { displayName: "Kiro", handle: "kiro", deleted: true },
+        },
+      },
+    ],
+    messageId: "",
+  };
+  expect(decodeAgentMessageResponse(encodeAgentMessageResponse(response))).toEqual(response);
+});
+
 test("round-trips an Agent Inbox held response", () => {
   const response = {
-    requestId: "held",
+    idempotencyKey: "held",
     accepted: false,
     attentionCount: 1,
     summaries: [],
@@ -252,7 +301,7 @@ test("round-trips an Agent Inbox held response", () => {
 
 test("round-trips the daemon-local events drain hasMore flag for the CLI", () => {
   const local = {
-    requestId: "request-events",
+    idempotencyKey: "request-events",
     accepted: true,
     attentionCount: 2,
     summaries: [],
@@ -265,7 +314,7 @@ test("round-trips the daemon-local events drain hasMore flag for the CLI", () =>
 
 test("withholds the daemon-local events drain hasMore flag under reviewer isolation", () => {
   const local = {
-    requestId: "request-events",
+    idempotencyKey: "request-events",
     accepted: true,
     attentionCount: 2,
     summaries: [],

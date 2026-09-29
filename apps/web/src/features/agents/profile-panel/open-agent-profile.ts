@@ -1,6 +1,7 @@
 import { useRouter } from "@tanstack/react-router";
 
 import {
+  agentIdFromProfileParam,
   agentProfileSearchWithoutThread,
   formatAgentProfileParam,
   type AgentProfileTab,
@@ -18,7 +19,7 @@ type AgentProfileSearch = {
 
 /**
  * The one way a conversation page or the Members directory opens/closes/switches the Agent
- * profile panel. Per `apps/web/AGENTS.md` ("the conversations feature does not own Agent state"),
+ * profile panel. Per `src/features/agents/AGENTS.md` ("the conversations feature does not own Agent state"),
  * callers use this instead of writing `profile`/`agentTab` search params themselves.
  *
  * Opening pushes a history entry (plain `router.navigate` without `replace`, the same default
@@ -53,4 +54,25 @@ export function useOpenAgentProfile() {
       },
     });
   return { openAgentProfile, setAgentProfileTab, closeAgentProfile };
+}
+
+/**
+ * The Agent profile panel's props for a conversation, from its host's `profile` / `agentTab`
+ * search params. Every conversation host (both conversation routes, the search preview) spreads
+ * them into the conversation.
+ */
+export function useConversationAgentProfile({
+  profile,
+  agentTab,
+}: {
+  profile?: string;
+  agentTab?: AgentProfileTab;
+}) {
+  const { openAgentProfile, setAgentProfileTab, closeAgentProfile } = useOpenAgentProfile();
+  return {
+    onOpenAgentProfile: openAgentProfile,
+    agentProfile: { agentId: agentIdFromProfileParam(profile), tab: agentTab },
+    onAgentProfileTabChange: setAgentProfileTab,
+    onCloseAgentProfile: closeAgentProfile,
+  };
 }

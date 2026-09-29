@@ -4,31 +4,31 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../generated/client";
-import { DEV_BROWSER_USER } from "../src/server/auth/dev-skip-auth.server";
-import { ComputerRegistrar } from "../src/server/computers/registration.server";
+import { PrismaClient } from "#src/generated/prisma/client";
+import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { ComputerRegistrar } from "#src/server/computers/registration.server";
 import {
   PrismaComputerRegistrationRepository,
   PrismaWorkspaceAccess,
-} from "../src/server/db/repositories/setup.repositories.server";
-import { PrismaAgentRepository } from "../src/server/db/repositories/agent.repositories.server";
-import { ManageAgents } from "../src/server/agents/manage-agents.server";
-import { PrismaDirectConversationRepository } from "../src/server/db/repositories/direct-conversation.repositories.server";
-import { SendDirectMessage } from "../src/server/conversations/direct-message.server";
-import { RedisMessageRequestIdempotency } from "../src/server/conversations/redis-message-request-idempotency.server";
+} from "#src/server/db/repositories/setup.repositories.server";
+import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
+import { ManageAgents } from "#src/server/agents/manage-agents.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
+import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import {
   createCentrifugoServerApi,
   createUsageScan,
-} from "../src/server/centrifugo/server-api.server";
-import { RedisUsageCache } from "../src/server/centrifugo/usage-cache.server";
+} from "#src/server/centrifugo/server-api.server";
+import { RedisUsageCache } from "#src/server/centrifugo/usage-cache.server";
 import {
   DaemonConnection,
   DaemonRuntime,
   InMemoryDaemonCredentialStore,
   defaultCentrifugeWorkspaceClientFactory,
   startAgentProxy,
-} from "../../../packages/daemon";
-import { createCodeAgentProvider } from "../../../packages/daemon/src/code-agent/registry";
+} from "@lrm/coforge-daemon";
+import { createCodeAgentProvider } from "@lrm/coforge-daemon";
 
 test("real Kiro v3 reads and replies through Web, Centrifugo and Daemon", async () => {
   const databaseUrl = process.env.DATABASE_URL;
@@ -42,6 +42,7 @@ test("real Kiro v3 reads and replies through Web, Centrifugo and Daemon", async 
   const redis = new Bun.RedisClient(process.env.REDIS_URL!);
   const root = await mkdtemp(join(tmpdir(), "coforge-kiro-e2e-"));
   const workspaceId = "10000000-0000-4000-8000-000000000001";
+  const workspaceSlug = "e2e-workspace";
   let runtime: DaemonRuntime | undefined;
   let launchError: unknown;
   const proxy = startAgentProxy({
@@ -60,7 +61,7 @@ test("real Kiro v3 reads and replies through Web, Centrifugo and Daemon", async 
       {
         protocolMajor: 1,
         requestId: crypto.randomUUID(),
-        workspaceSlug: "e2e-workspace",
+        workspaceSlug,
         name: `kiro-${crypto.randomUUID().slice(0, 8)}`,
         displayName: "Kiro native E2E",
         machineId: crypto.randomUUID(),
@@ -179,7 +180,9 @@ test("real Kiro v3 reads and replies through Web, Centrifugo and Daemon", async 
           where: { agentId: created.agent.id, receivedAt: { not: null } },
         })),
     );
-    const page = await fetch(`http://127.0.0.1:8789/messages/${created.agent.id}`);
+    const page = await fetch(
+      `http://127.0.0.1:8789/w/${workspaceSlug}/dm/${opened.conversationId}`,
+    );
     expect(page.status).toBe(200);
     expect(await page.text()).toContain(marker);
     const usageKey = {
@@ -204,7 +207,7 @@ test("real Kiro v3 reads and replies through Web, Centrifugo and Daemon", async 
     expect(resetsAt).toBeDefined();
     expect(Date.parse(resetsAt ?? "")).toBeGreaterThan(Date.now());
     console.log(
-      `Verified native Kiro reply, delivery ACK and account usage scan; review /messages/${created.agent.id}`,
+      `Verified native Kiro reply, delivery ACK and account usage scan; review /w/${workspaceSlug}/dm/${opened.conversationId}`,
     );
   } finally {
     await runtime?.stop();

@@ -8,7 +8,8 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "./environment";
 
-type Root = { path: string; label: string; legacy?: "commands" | "pi" };
+export type AgentSkillScanRoot = { path: string; label: string; legacy?: "commands" | "pi" };
+type Root = AgentSkillScanRoot;
 const MAX_FILE_BYTES = 262_144;
 
 /** Directory observation only. Does not load/execute resources or alter a session. */
@@ -75,6 +76,13 @@ export async function listAgentSkills(options: {
       // claim no global scope rather than guess one.
       locals = [local(".opencode/skills")];
       break;
+    case RUNTIME_PROVIDER.GROK:
+      // Grok Build discovers project skills from `.grok/skills/` in the workspace; Raft's
+      // execenv writes the same path, and its runtime home links the user's `~/.grok/skills` as
+      // the personal scope. Managed by the daemon before launch (ADR 0068).
+      locals = [local(".grok/skills")];
+      if (home) globals = [native("GROK_HOME", ".grok", "skills")];
+      break;
     case RUNTIME_PROVIDER.PI:
       locals = [local(".pi/skills", "pi"), local(".agents/skills")];
       if (home)
@@ -92,16 +100,35 @@ export async function listAgentSkills(options: {
     }
   }
   const deadline = Date.now() + 3_000;
-  return {
-    global:
-      options.provider === RUNTIME_PROVIDER.COFORGE || !home
-        ? { status: "unsupported", entries: [], directories: [] }
-        : await scan(globals, deadline),
-    workspace: await scan(locals, deadline),
-  };
+  if (options.provider === RUNTIME_PROVIDER.COFORGE || !home) {
+    return {
+      global: { status: "unsupported", entries: [], directories: [] },
+      workspace: await scan(locals, deadline),
+    };
+  }
+  return scanAgentSkillScopes(globals, locals, deadline);
 }
 
-async function scan(roots: Root[], deadline: number): Promise<AgentSkillsScope> {
+export async function scanAgentSkillScopes(
+  globalRoots: readonly AgentSkillScanRoot[],
+  workspaceRoots: readonly AgentSkillScanRoot[],
+  deadline: number,
+  scanner: (
+    roots: readonly AgentSkillScanRoot[],
+    deadline: number,
+  ) => Promise<AgentSkillsScope> = scan,
+): Promise<{ global: AgentSkillsScope; workspace: AgentSkillsScope }> {
+  const [global, workspace] = await Promise.all([
+    scanner(globalRoots, deadline),
+    scanner(workspaceRoots, deadline),
+  ]);
+  return { global, workspace };
+}
+
+async function scan(
+  roots: readonly AgentSkillScanRoot[],
+  deadline: number,
+): Promise<AgentSkillsScope> {
   const result: AgentSkillsScope = { status: "ok", entries: [], directories: [] };
   let visited = 0;
   for (const root of roots) {
@@ -158,8 +185,7 @@ async function scan(roots: Root[], deadline: number): Promise<AgentSkillsScope> 
             ((root.legacy === "commands" || (root.legacy === "pi" && depth === 1)) &&
               path.endsWith(".md")))
         ) {
-          // The containing scan directory, not the per-file path: the UI groups entries by it
-          // (ADR 0045).
+          // The containing scan directory, not the per-file path: the UI groups entries by it.
           const sourcePath = root.label;
           const file = await open(
             canonical,
@@ -220,7 +246,7 @@ async function scan(roots: Root[], deadline: number): Promise<AgentSkillsScope> 
       if (directory.status !== "missing") result.status = "partial";
     }
   }
-  // Deduplicate by `name` within this scope: the first root/entry found wins (ADR 0045).
+  // Deduplicate by `name` within this scope: the first root/entry found wins.
   // Global and Workspace are separate scopes and are not deduplicated against each other.
   const seen = new Map<string, (typeof result.entries)[number]>();
   for (const entry of result.entries) if (!seen.has(entry.name)) seen.set(entry.name, entry);

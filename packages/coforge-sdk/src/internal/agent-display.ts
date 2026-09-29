@@ -1,5 +1,6 @@
 import { parseActivityEntries, type ActivityTrajectoryEntry } from "./activity-entries";
 
+import { utf8Decoder } from "./text-codec";
 export type AgentActivityKind = "online" | "working" | "thinking" | "error" | "offline";
 
 /** Cloud-authored display projection, separate from Daemon process/Activity facts. */
@@ -16,7 +17,7 @@ export type AgentDisplaySnapshot = {
   /** The cloud must be queried again at this deadline; it is not a client reducer rule. */
   expiresAt: number | null;
   /**
-   * The Agent's most recently observed context-window reading (ADR 0050), display-only —
+   * The Agent's most recently observed context-window reading, display-only —
    * nothing triggers on it. `undefined` on an older server that has never written this field;
    * `null` once written but the process is offline, a different launch/daemon instance started,
    * or no reading has been observed yet for the current one.
@@ -35,7 +36,7 @@ const activityKinds = new Set<AgentActivityKind>([
 /** Parses the cloud-authored browser display protocol at its public boundary. */
 export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
   const value =
-    data instanceof Uint8Array ? (JSON.parse(new TextDecoder().decode(data)) as unknown) : data;
+    data instanceof Uint8Array ? (JSON.parse(utf8Decoder.decode(data)) as unknown) : data;
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("invalid Agent display snapshot");
   const item = value as Record<string, unknown>;

@@ -7,25 +7,33 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "./environment";
 import { JsonlProcess, JsonlRequestError } from "./jsonl-process";
-import { probeClaudeCodeVersion, resolveClaudeCodeExecutable } from "./claude-code/runtime";
-import { COFORGE_DAEMON_VERSION } from "../version";
-import { codeAgentExecutableSearchPath } from "../platform/code-agent-path";
+import {
+  probeClaudeCodeVersion,
+  resolveClaudeCodeExecutable,
+} from "#src/code-agent/claude-code/runtime";
+import { COFORGE_DAEMON_VERSION } from "#src/version";
+import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import {
   COFORGE_PROVIDER_MODELS_GENERATED,
   discoverPiModels,
   getAgentDir,
   PI_SDK_VERSION,
 } from "@coforge/agent";
-import { COFORGE_AGENT_RUNTIME_METADATA } from "./pi/metadata";
-import { discoverKiroCatalog } from "./kiro/catalog";
-import { isKiroVersionUnsupported, logKiroVersionUnsupported } from "./kiro/version";
-import { discoverCursorCatalog } from "./cursor/catalog";
-import { isOpenCodeVersionUnsupported, logOpenCodeVersionUnsupported } from "./opencode/version";
+import { COFORGE_AGENT_RUNTIME_METADATA } from "#src/code-agent/pi/metadata";
+import { discoverKiroCatalog } from "#src/code-agent/kiro/catalog";
+import { isKiroVersionUnsupported, logKiroVersionUnsupported } from "#src/code-agent/kiro/version";
+import { discoverCursorCatalog } from "#src/code-agent/cursor/catalog";
+import { isGrokVersionUnsupported, logGrokVersionUnsupported } from "#src/code-agent/grok/version";
+import { discoverOpenCodeCatalog } from "#src/code-agent/opencode/catalog";
+import {
+  isOpenCodeVersionUnsupported,
+  logOpenCodeVersionUnsupported,
+} from "#src/code-agent/opencode/version";
 import { getLogger } from "@logtape/logtape";
 import type { CodeAgentProbe } from "./contract";
 import { createCodeAgentProvider } from "./registry";
 import { asRecord } from "./json-record";
-import { diagnosticErrorCode } from "../platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
 import {
   CATALOG_CACHE_TTL_MS,
   fileStatCacheKey,
@@ -69,6 +77,7 @@ const externalCodeAgents = [
   { provider: RUNTIME_PROVIDER.KIRO, executable: "kiro-cli" },
   { provider: RUNTIME_PROVIDER.CURSOR, executable: "cursor-agent" },
   { provider: RUNTIME_PROVIDER.OPENCODE, executable: "opencode" },
+  { provider: RUNTIME_PROVIDER.GROK, executable: "grok" },
 ] as const;
 
 /** The subset of RuntimeProvider backed by an external executable this module probes. */
@@ -107,7 +116,15 @@ async function probeRuntimeVersion(
     });
     return undefined;
   }
-  const version = lastWord(output);
+  // Grok prints `grok <version> (<build hash>)`; the version is the dotted-numeric token, not the
+  // last word.
+  const version =
+    provider === RUNTIME_PROVIDER.GROK
+      ? output
+          .trim()
+          .split(/\s+/)
+          .find((token) => /^\d+(\.\d+)*$/.test(token))
+      : lastWord(output);
   if (!version) return undefined;
   if (provider === RUNTIME_PROVIDER.KIRO && isKiroVersionUnsupported(version)) {
     logKiroVersionUnsupported(name, version);
@@ -115,6 +132,10 @@ async function probeRuntimeVersion(
   }
   if (provider === RUNTIME_PROVIDER.OPENCODE && isOpenCodeVersionUnsupported(version)) {
     logOpenCodeVersionUnsupported(name, version);
+    return undefined;
+  }
+  if (provider === RUNTIME_PROVIDER.GROK && isGrokVersionUnsupported(version)) {
+    logGrokVersionUnsupported(name, version);
     return undefined;
   }
   return { provider, version, displayName: externalRuntimeDisplayName(provider) };
@@ -131,59 +152,98 @@ export async function discoverExternalCodeAgents(
   const searchPath = codeAgentExecutableSearchPath(environment, platform);
   const cache = cacheDirectory ? await readInventoryCache(cacheDirectory) : undefined;
   let dirty = false;
-  for (const { provider, executable: name } of externalCodeAgents) {
-    if (requestedProvider && requestedProvider !== provider) continue;
-    try {
-      const executable =
-        (await probe.resolve?.(provider, name, searchPath)) ?? probe.which(name, searchPath);
-      if (!executable) {
-        logger.info("Code Agent executable was not found", {
-          event: "code_agent_runtime:not_found",
-          provider,
-          executable_name: name,
-          outcome: "unavailable",
-        });
-        continue;
-      }
-      const cacheKey = cache ? await fileStatCacheKey([executable]) : undefined;
-      const cached = cacheKey ? cache?.[provider] : undefined;
-      if (cacheKey && cached?.key === cacheKey && cached.runtime) {
-        // A cache entry written by an older daemon build must be re-validated against the
-        // current minimum before it is trusted; the executable itself has not changed, so a
-        // too-old cached version would only reproduce the same gate on a live re-probe.
-        if (
-          provider === RUNTIME_PROVIDER.KIRO &&
-          isKiroVersionUnsupported(cached.runtime.version)
-        ) {
-          logKiroVersionUnsupported(name, cached.runtime.version);
-          continue;
+  const results = await Promise.all(
+    externalCodeAgents
+      .filter(({ provider }) => !requestedProvider || requestedProvider === provider)
+      .map(async ({ provider, executable: name }) => {
+        let executable: string | undefined;
+        try {
+          executable =
+            (await probe.resolve?.(provider, name, searchPath)) ?? probe.which(name, searchPath);
+          if (!executable) {
+            logger.info("Code Agent executable was not found", {
+              event: "code_agent_runtime:not_found",
+              provider,
+              executable_name: name,
+              outcome: "unavailable",
+            });
+            return undefined;
+          }
+          const cacheKey = cache ? await fileStatCacheKey([executable]) : undefined;
+          const cached = cacheKey ? cache?.[provider] : undefined;
+          if (cacheKey && cached?.key === cacheKey && cached.runtime) {
+            // A cache entry written by an older daemon build must be re-validated against the
+            // current minimum before it is trusted; the executable itself has not changed, so a
+            // too-old cached version would only reproduce the same gate on a live re-probe.
+            if (
+              provider === RUNTIME_PROVIDER.KIRO &&
+              isKiroVersionUnsupported(cached.runtime.version)
+            ) {
+              logKiroVersionUnsupported(name, cached.runtime.version);
+              return undefined;
+            }
+            logger.info("Code Agent runtime probe served from cache", {
+              event: "code_agent_runtime:cache_hit",
+              provider,
+              executable_name: name,
+              outcome: "ok",
+            });
+            return { runtime: cached.runtime, cacheKey: undefined };
+          }
+          const runtime = await probeRuntimeVersion(provider, name, executable, probe);
+          if (runtime) return { runtime, cacheKey };
+          // A transient version/app-server failure must not make an installed runtime vanish
+          // from the Computer inventory. Keep the last successful result when the executable
+          // itself is unchanged; the next refresh will retry the live probe.
+          if (cached?.runtime) {
+            logger.warning("Code Agent runtime probe failed; using cached runtime", {
+              event: "code_agent_runtime:cache_fallback",
+              provider,
+              executable_name: name,
+              outcome: "degraded",
+            });
+            return { runtime: cached.runtime, cacheKey: undefined };
+          }
+          return undefined;
+        } catch (error) {
+          logger.warning("Code Agent runtime probe failed", {
+            event: "code_agent_runtime:probe_failed",
+            provider,
+            executable_name: name,
+            error_code: diagnosticErrorCode(error),
+            outcome: "unavailable",
+          });
+          // A transient probe failure must not erase an otherwise known installed runtime.
+          const fallbackCacheKey = executable
+            ? cache
+              ? await fileStatCacheKey([executable])
+              : undefined
+            : undefined;
+          const fallbackCached = fallbackCacheKey ? cache?.[provider] : undefined;
+          if (fallbackCached?.runtime) {
+            logger.warning("Code Agent runtime probe failed; using cached runtime", {
+              event: "code_agent_runtime:cache_fallback",
+              provider,
+              executable_name: name,
+              outcome: "degraded",
+            });
+            return { runtime: fallbackCached.runtime, cacheKey: undefined };
+          }
+          // An executable without a usable version is not available inventory.
+          return undefined;
         }
-        runtimes.push(cached.runtime);
-        logger.info("Code Agent runtime probe served from cache", {
-          event: "code_agent_runtime:cache_hit",
-          provider,
-          executable_name: name,
-          outcome: "ok",
-        });
-        continue;
-      }
-      const runtime = await probeRuntimeVersion(provider, name, executable, probe);
-      if (runtime) {
-        runtimes.push(runtime);
-        if (cache && cacheKey) {
-          cache[provider] = { ...cache[provider], key: cacheKey, runtime };
-          dirty = true;
-        }
-      }
-    } catch (error) {
-      logger.warning("Code Agent runtime probe failed", {
-        event: "code_agent_runtime:probe_failed",
-        provider,
-        executable_name: name,
-        error_code: diagnosticErrorCode(error),
-        outcome: "unavailable",
-      });
-      // An executable without a usable version is not available inventory.
+      }),
+  );
+  for (const result of results) {
+    if (!result) continue;
+    runtimes.push(result.runtime);
+    if (cache && result.cacheKey) {
+      cache[result.runtime.provider] = {
+        ...cache[result.runtime.provider],
+        key: result.cacheKey,
+        runtime: result.runtime,
+      };
+      dirty = true;
     }
   }
   if (cache && dirty && cacheDirectory) await writeInventoryCache(cacheDirectory, cache);
@@ -199,6 +259,7 @@ type CatalogCommands = {
   codex?: readonly string[];
   kiro?: readonly string[];
   cursor?: readonly string[];
+  opencode?: readonly string[];
 };
 
 export type CodeAgentDiscoveryOptions = {
@@ -371,6 +432,25 @@ export async function discoverCodeAgentCatalogs(
           .catch(() => undefined)
           .then((catalog) => ({
             provider: RUNTIME_PROVIDER.CURSOR,
+            keyPaths: [executable],
+            catalog,
+          })),
+      );
+  }
+  // OpenCode was the one cacheable provider this refresh had no branch for, so its catalog was
+  // never probed: an Agent whose runtime is OpenCode saw an empty model list in the UI even
+  // though `opencode models` lists models fine on the CLI.
+  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.OPENCODE)) {
+    const executable = probe.which(
+      externalCodeAgentExecutable[RUNTIME_PROVIDER.OPENCODE],
+      searchPath,
+    );
+    if (executable)
+      discoveries.push(
+        discoverOpenCodeCatalog(commands.opencode ?? [executable, "models"], cwd, environment)
+          .catch(() => undefined)
+          .then((catalog) => ({
+            provider: RUNTIME_PROVIDER.OPENCODE,
             keyPaths: [executable],
             catalog,
           })),
@@ -722,6 +802,8 @@ function externalRuntimeDisplayName(provider: ExternalCodeAgentProvider): string
       return "Cursor CLI";
     case RUNTIME_PROVIDER.OPENCODE:
       return "OpenCode";
+    case RUNTIME_PROVIDER.GROK:
+      return "Grok Build";
     default: {
       const unreachable: never = provider;
       throw new Error(`Unhandled external Code Agent provider: ${unreachable}`);

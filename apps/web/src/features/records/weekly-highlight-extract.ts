@@ -12,7 +12,19 @@ export type RecordAssistantPayload =
       userGuidance?: string;
     }
   | { kind: "intent-declined" }
-  | { kind: "offer-send" };
+  | {
+      kind: "offer-send";
+      year?: number;
+      week?: number;
+      /** e.g. `2026 W36 (08.31-09.04)` */
+      weekTitle?: string;
+      updatedAt?: string;
+      recipients?: Array<{
+        displayName: string;
+        avatarUrl: string | null;
+      }>;
+      recipientTotal?: number;
+    };
 
 export function parseRecordAssistantPayload(value: unknown): RecordAssistantPayload | null {
   if (!value || typeof value !== "object") return null;
@@ -24,8 +36,41 @@ export function parseRecordAssistantPayload(value: unknown): RecordAssistantPayl
     week?: unknown;
     intent?: unknown;
     userGuidance?: unknown;
+    weekTitle?: unknown;
+    updatedAt?: unknown;
+    recipients?: unknown;
+    recipientTotal?: unknown;
   };
-  if (row.kind === "offer-send") return { kind: "offer-send" };
+  if (row.kind === "offer-send") {
+    const recipients = Array.isArray(row.recipients)
+      ? row.recipients.flatMap((entry) => {
+          if (!entry || typeof entry !== "object") return [];
+          const person = entry as { displayName?: unknown; avatarUrl?: unknown };
+          if (typeof person.displayName !== "string" || !person.displayName.trim()) return [];
+          return [
+            {
+              displayName: person.displayName.trim(),
+              avatarUrl: typeof person.avatarUrl === "string" ? person.avatarUrl : null,
+            },
+          ];
+        })
+      : undefined;
+    return {
+      kind: "offer-send",
+      ...(typeof row.year === "number" ? { year: row.year } : {}),
+      ...(typeof row.week === "number" ? { week: row.week } : {}),
+      ...(typeof row.weekTitle === "string" && row.weekTitle.trim()
+        ? { weekTitle: row.weekTitle.trim() }
+        : {}),
+      ...(typeof row.updatedAt === "string" && row.updatedAt.trim()
+        ? { updatedAt: row.updatedAt.trim() }
+        : {}),
+      ...(recipients && recipients.length > 0 ? { recipients } : {}),
+      ...(typeof row.recipientTotal === "number" && Number.isInteger(row.recipientTotal)
+        ? { recipientTotal: row.recipientTotal }
+        : {}),
+    };
+  }
   if (row.kind === "offer-help-generate") return { kind: "offer-help-generate" };
   if (row.kind === "intent-declined") return { kind: "intent-declined" };
   if (
@@ -88,6 +133,34 @@ export function looksLikeCollectAgainRequest(body: string): boolean {
 }
 
 /** User asks to synthesize the member report from ready collect packs. */
+/**
+ * Leader asks, on a weekly-report template, to send or resend this week's template.
+ * Exact short commands, or a sentence that both asks to send again and names the weekly report.
+ */
+export function looksLikeFormatTemplateSendRequest(body: string): boolean {
+  const text = body.trim();
+  if (!text) return false;
+  if (
+    /^(重新发送|再发送|再发一次|重新发一次|重新发一遍|再发一遍|发送周报|发送模板|发送周报模板|重新发送周报|重新发送模板|重新发送本周周报|帮我发送|帮我重新发送)[!！。.?？]*$/i.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  const asksAgain = /(重新发送|再发送|再发一次|需要重新发送)/.test(text);
+  const namesReport = /(周报模板|本周周报|这周周报|本周的周报|周报发送)/.test(text);
+  if (asksAgain && namesReport) return true;
+  if (/发送周报模板/.test(text)) return true;
+  return /取消了.{0,24}(周报)?发送/.test(text) && asksAgain;
+}
+
+export function shouldUseFormatTemplateSendPath(
+  surface: RecordSideChatSurface,
+  body: string,
+): boolean {
+  return surface === "format" && looksLikeFormatTemplateSendRequest(body);
+}
+
 export function looksLikeSynthesizeWeeklyReportRequest(body: string): boolean {
   const text = body.trim();
   if (!text) return false;
@@ -115,18 +188,6 @@ export function looksLikeTeamKeyPointReorganizeRequest(body: string): boolean {
     return true;
   }
   return /(重新|再).{0,4}(整理|提炼).{0,8}(要点|全员)?|(整理|提炼).{0,8}全员.{0,4}(要点|周报)|帮我.{0,10}(整理|提炼).{0,10}(全员|要点)/i.test(
-    text,
-  );
-}
-
-/**
- * Short greeting-only turns in Records side chat. Platform replies immediately so
- * the panel does not wait on the Agent LLM (which may skip repeated greetings).
- */
-export function looksLikeSideChatGreeting(body: string): boolean {
-  const text = body.trim();
-  if (!text || text.length > 24) return false;
-  return /^(hi|hello|hey|yo|hola|你好|您好|嗨|哈喽|哈啰|早|早上好|下午好|晚上好|在吗|在不在)[!！。.?？~\s]*$/i.test(
     text,
   );
 }

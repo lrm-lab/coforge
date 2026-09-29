@@ -3,9 +3,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { CpuChip01 as Cpu, Hash01 as Hash, UserPlus01 as UserPlus } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
 
-import { Button } from "@/components/base/buttons/button";
-import { Badge } from "@/components/base/badges/badges";
-import { m } from "@/paraglide/messages";
+import { Button } from "#src/components/base/buttons/button";
+import { Badge } from "#src/components/base/badges/badges";
+import { m } from "#src/paraglide/messages";
 import {
   cancelActionCard,
   commitChannelAddMemberActionCard,
@@ -14,10 +14,14 @@ import {
 } from "./action-cards.functions";
 import { CreateChannelDialog } from "./create-channel-dialog";
 import { ChannelMembersDialog } from "./channel-members-dialog";
-import { AgentCreateDialog } from "@/features/agents/agent-create-dialog";
-import { createAgent } from "@/features/agents/agents.functions";
-import { getComputerRuntimeCatalog, listComputers } from "@/features/computers/computers.functions";
-import { formatAgentProfileParam } from "@/features/agents/profile-panel/profile-panel-search";
+import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
+import { createAgent } from "#src/features/agents/agents.functions";
+import {
+  getComputerRuntimeCatalog,
+  listComputers,
+} from "#src/features/computers/computers.functions";
+import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 
 export type ActionCardRef = { id: string; displayName: string };
 type ActionCardBase = {
@@ -68,11 +72,12 @@ function chipList(items: ActionCardRef[]) {
   );
 }
 
-/** Renders an Agent-prepared action card below its message body (ADR 0027 "Commit and cancel").
+/** Renders an Agent-prepared action card below its message body.
  * Owns its own commit/cancel dialogs and a self-refresh after acting; the conversation view also
  * refreshes every currently pending card on realtime signals and window focus (see
  * `conversation-queries.ts`). */
 export function ActionCard({ card }: { card: ActionCardView }) {
+  const workspaceSlug = useWorkspaceSlug();
   const [view, setView] = useState(card);
   useEffect(() => setView(card), [card]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -228,8 +233,8 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             <>
               {" · "}
               <Link
-                to="/messages/channels/$channelId"
-                params={{ channelId: view.result.channelId }}
+                to="/w/$workspaceSlug/channel/$channelId"
+                params={{ workspaceSlug, channelId: view.result.channelId }}
                 className="text-brand-secondary hover:underline"
               >
                 #{view.name}
@@ -240,7 +245,8 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             <>
               {" · "}
               <Link
-                to="/agents"
+                to="/w/$workspaceSlug/members"
+                params={{ workspaceSlug }}
                 search={{
                   profile: formatAgentProfileParam(view.result.agentId),
                   agentTab: "profile",
@@ -280,7 +286,6 @@ export function ActionCard({ card }: { card: ActionCardView }) {
       {dialogOpen && view.kind === "channel:add_member" && (
         <ChannelMembersDialog
           channelId={view.channel.id}
-          channelName={view.channel.displayName}
           open
           onOpenChange={setDialogOpen}
           preselected={{

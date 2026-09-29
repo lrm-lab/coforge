@@ -1,29 +1,29 @@
 import { useCallback, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 
-import { useRealtimeSubscription } from "../realtime/browser-realtime";
+import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import {
   getUserConversationSubscriptionToken,
   getWorkspaceConversationSubscriptionToken,
-} from "../realtime/realtime.functions";
+} from "#src/features/realtime/realtime.functions";
 import {
+  decodeChannelUpdatedEvent,
   decodeMessageAvailableEvent,
   userConversationChannel,
   workspaceConversationChannel,
 } from "./conversation-realtime";
 
 /**
- * Sidebar unread state for the Chat page (ADR 0046, Slack/Discord model): a per-badge count
+ * Sidebar unread state for the Chat page (Slack/Discord model): a per-badge count
  * of unread top-level messages, seeded from the server's persisted read cursors and kept
  * live by realtime signals. Opening a conversation clears its badge; every list fetch
  * replaces local arithmetic with the server's own count.
  *
- * A badge key is the conversation id for channels and the Agent id for direct messages (the
- * directory rows' own keys). Channels and direct messages arrive on separate signal channels:
- * the workspace channel carries every channel event, and each user's own channel carries only
- * their direct messages, already labelled with the Agent badge they belong to. Neither path
- * needs a conversation→Agent alias map, so a DM created after the last list fetch still bumps
- * its badge live.
+ * A badge key is the conversation id, for channels and direct messages alike (the directory
+ * rows' own keys). Channels and direct messages arrive on separate signal channels: the
+ * workspace channel carries every channel event, and each user's own channel carries only their
+ * direct messages, each naming who is on the other side. A DM event counts without a listed
+ * conversation, so a DM created after the last list fetch still bumps its badge live.
  *
  * Counts live alongside a per-badge sequence high-water mark (`<key>:seq`), so a late or
  * reordered event can never double-count a message the badge already reflects.
@@ -31,9 +31,6 @@ import {
 export type UnreadCounts = Record<string, number>;
 
 export type UnreadChannel = { id: string; unreadCount?: number };
-
-/** DM unread counts, keyed by the Agent whose sidebar row owns the badge. */
-export type DirectUnreadSeed = Readonly<Record<string, number>>;
 
 /** Seeds local state from the server's list payload. */
 export function seedUnreadCounts(entries: readonly UnreadChannel[]): UnreadCounts {
@@ -47,33 +44,34 @@ export type UnreadEventInput = {
   conversationId: string;
   sequence: number;
   threadRootId?: string;
-  /** Present on a direct-message signal: the Agent badge this event belongs to. */
+  /** Present on a signal of a DM with an Agent: that Agent. */
   agentId?: string;
+  /** Present on a signal of a DM between members: the other member. */
+  peerUserId?: string;
 };
 
 /**
  * Applies one `message.available.v1` event. Only a top-level message in a listed,
  * not-currently-open conversation bumps the badge: thread replies belong to their thread
  * target (reading a thread never consumes the main conversation's unread), and the open
- * conversation is being read right now. A direct-message event carries its own badge key
- * (`agentId`); a channel event is keyed by its conversation id.
+ * conversation is being read right now. Every badge is keyed by its conversation id; a channel
+ * event counts only for a listed channel, a direct-message event (it names the Agent or member on
+ * the other side) always.
  */
 export function applyUnreadEvent(
   current: UnreadCounts,
   event: UnreadEventInput,
   options: {
     openConversationId?: string;
-    /** The open direct message's Agent badge key, if a DM is open. */
-    openAgentId?: string;
-    /** Every conversation id a badge currently stands for (channels; DMs use `agentId`). */
+    /** Every listed channel's conversation id. */
     conversations: ReadonlySet<string>;
   },
 ): UnreadCounts {
   if (event.conversationId === options.openConversationId) return current;
-  if (event.agentId && event.agentId === options.openAgentId) return current;
   if (event.threadRootId) return current;
-  const key = event.agentId ?? event.conversationId;
-  if (!event.agentId && !options.conversations.has(event.conversationId)) return current;
+  const key = event.conversationId;
+  const direct = event.agentId !== undefined || event.peerUserId !== undefined;
+  if (!direct && !options.conversations.has(key)) return current;
   const highWater = current[`${key}:seq`] ?? 0;
   if (event.sequence <= highWater) return current;
   return {
@@ -81,6 +79,18 @@ export function applyUnreadEvent(
     [`${key}:seq`]: event.sequence,
     [key]: (current[key] ?? 0) + 1,
   };
+}
+
+/**
+ * Whether a new message landed in a chat the sidebar is not showing: one the viewer closed, or a DM
+ * that started after the list was read. Such a message brings the chat in, so the sidebar re-reads
+ * its list. Thread replies never do.
+ */
+export function activityInClosedConversation(
+  event: UnreadEventInput,
+  listed: ReadonlySet<string>,
+): boolean {
+  return !event.threadRootId && !listed.has(event.conversationId);
 }
 
 /** A conversation was read: clear its badge and remember the boundary it was read to. */
@@ -99,7 +109,7 @@ export function clearUnread(
 
 /**
  * The highest top-level sequence in a loaded conversation page — the boundary "I have read
- * everything shown in the main pane". Thread replies never advance it (ADR 0046). Shared by
+ * everything shown in the main pane". Thread replies never advance it. Shared by
  * the channel and DM routes so the two mark-read paths cannot drift.
  */
 export function latestTopLevelSequence(
@@ -141,8 +151,8 @@ export async function persistReadCursor(
  * Sequence boundaries survive the refresh, so a stale event that raced the fetch cannot
  * double-count a message the server already counted.
  *
- * `suppressKeys` names the conversations the viewer is looking at right now (the open channel
- * and the open DM). They keep their boundary but lose their count, exactly like
+ * `suppressKeys` names the conversation the viewer is looking at right now (the open channel or
+ * DM). It keeps its boundary but loses its count, exactly like
  * `applyUnreadEvent`: without this, a refresh in the `newest-unread` preference — where the
  * server cursor has deliberately not advanced yet — would re-raise the badge of the very
  * conversation being read. Leaving the conversation re-seeds it from the server.
@@ -171,7 +181,7 @@ export type UnreadState = {
 /**
  * The Chat page's two signal subscriptions and its unread-count state. Renders nothing: the
  * directory reads `counts`, the conversation routes call `clear`, and every loader refresh
- * flows through `replace`. Both subscriptions ride the `_app` layout's one Centrifuge
+ * flows through `replace`. Both subscriptions ride the Workspace layout's one Centrifuge
  * connection; neither opens a WebSocket of its own.
  */
 export function useChannelUnread({
@@ -179,38 +189,64 @@ export function useChannelUnread({
   userId,
   channels,
   openConversationId,
-  openAgentId,
+  listedConversationIds,
+  onClosedConversationActivity,
+  onChannelUpdated,
 }: {
   workspaceId?: string;
   /** The viewer, whose own direct-message signal channel carries their DM badges. */
   userId?: string;
   /** Channel rows currently listed; channel events for anything else are ignored. */
   channels: readonly UnreadChannel[];
-  /** The conversation currently shown in the detail pane, if any. */
+  /** The channel or DM currently shown in the detail pane, if any. */
   openConversationId?: string;
-  /** The Agent badge of the direct message currently shown, if a DM is open. */
-  openAgentId?: string;
+  /** Every chat the sidebar lists, channels and DMs, by conversation id. */
+  listedConversationIds: ReadonlySet<string>;
+  /** A new message arrived in a closed chat: the sidebar re-reads its list to bring it back. */
+  onClosedConversationActivity: () => void;
+  /** A channel was renamed, described, archived or unarchived: the sidebar re-reads its list. */
+  onChannelUpdated: () => void;
 }): UnreadState {
   const [counts, setCounts] = useState<UnreadCounts>({});
   const getWorkspaceToken = useServerFn(getWorkspaceConversationSubscriptionToken);
   const getUserToken = useServerFn(getUserConversationSubscriptionToken);
-  const refs = useRef({ channels, openConversationId, openAgentId });
-  refs.current = { channels, openConversationId, openAgentId };
+  const refs = useRef({
+    channels,
+    openConversationId,
+    listedConversationIds,
+    onClosedConversationActivity,
+    onChannelUpdated,
+  });
+  refs.current = {
+    channels,
+    openConversationId,
+    listedConversationIds,
+    onClosedConversationActivity,
+    onChannelUpdated,
+  };
 
   const onPublication = useCallback((publication: { data: unknown }) => {
+    try {
+      decodeChannelUpdatedEvent(publication.data);
+      refs.current.onChannelUpdated();
+      return;
+    } catch {
+      // Not a channel update; the other payload is a message signal.
+    }
     try {
       const event = decodeMessageAvailableEvent(publication.data);
       const {
         channels: channelRows,
         openConversationId: open,
-        openAgentId: openAgent,
+        listedConversationIds: listed,
+        onClosedConversationActivity: reopenFromActivity,
       } = refs.current;
       const conversations = new Set(channelRows.map((channel) => channel.id));
+      if (activityInClosedConversation(event, listed)) reopenFromActivity();
       setCounts((current) =>
         applyUnreadEvent(current, event, {
           conversations,
           openConversationId: open,
-          openAgentId: openAgent,
         }),
       );
     } catch {
@@ -238,11 +274,8 @@ export function useChannelUnread({
     // The conversation on screen keeps no badge, exactly like a live event for it: in
     // `newest-unread` the server cursor deliberately lags, so seeding it here would
     // re-raise the badge of the conversation being read.
-    const { openConversationId: open, openAgentId: openAgent } = refs.current;
-    const suppressed = new Set<string>();
-    if (open) suppressed.add(open);
-    if (openAgent) suppressed.add(openAgent);
-    setCounts((current) => replaceUnreadCounts(current, next, suppressed));
+    const open = refs.current.openConversationId;
+    setCounts((current) => replaceUnreadCounts(current, next, new Set(open ? [open] : [])));
   }, []);
   return { counts, clear, replace };
 }

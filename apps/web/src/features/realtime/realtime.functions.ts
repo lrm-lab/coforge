@@ -1,15 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { AppError } from "../../lib/app-error";
+import { AppError } from "#src/lib/app-error";
 import {
   issueBrowserRealtimeToken,
   issueConversationRealtimeToken,
   issueUserConversationSubscriptionToken,
   issueWorkspaceConversationSubscriptionToken,
-} from "../../server/auth/browser-realtime-token.server";
-import { workspaceUserMiddleware } from "../../server/auth/function-auth";
-import { ACTIVE_MEMBER_WHERE } from "../../server/conversations/active-member.server";
+  issueWorkspacePresenceSubscriptionToken,
+} from "#src/server/auth/browser-realtime-token.server";
+import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import {
+  ACTIVE_MEMBER_WHERE,
+  VISIBLE_CONVERSATION_WHERE,
+} from "#src/server/conversations/active-member.server";
 
 export const getBrowserRealtimeConnectionToken = createServerFn({
   method: "GET",
@@ -33,6 +37,8 @@ export const getConversationRealtimeToken = createServerFn({ method: "GET" })
           { channelName: null, members: { some: { userId: user.id, ...ACTIVE_MEMBER_WHERE } } },
           {
             channelName: { not: null },
+            // A channel hidden from the Workspace has no live signal for anyone.
+            ...VISIBLE_CONVERSATION_WHERE,
             workspace: { members: { some: { userId: user.id } } },
           },
         ],
@@ -62,4 +68,12 @@ export const getUserConversationSubscriptionToken = createServerFn({ method: "GE
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     return issueUserConversationSubscriptionToken({ userId: context.user.id });
+  });
+
+/** Subscription token for the Workspace presence channel. */
+export const getWorkspacePresenceSubscriptionToken = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context }) => {
+    const { user, workspaceId } = context;
+    return issueWorkspacePresenceSubscriptionToken({ userId: user.id, workspaceId });
   });

@@ -3,10 +3,12 @@ import {
   classifyAgentProxyFailure,
   AGENT_PROXY_CORRELATION_HEADER,
   type AgentProxyFailureClass,
-} from "../src/agent-proxy-failure";
-import { AgentTransportError } from "../src/connection/agent-transport-error";
-import { AgentPreflightError } from "../src/daemon-runtime/agent-preflight-error";
-import { AgentMessageRequestError } from "../src/connection/agent-message-request-error";
+} from "#src/agent-proxy-failure";
+import { AgentTransportError } from "#src/connection/agent-transport-error";
+import { AgentPreflightError } from "#src/daemon-runtime/agent-preflight-error";
+import { AgentSendVerdictError } from "#src/daemon-runtime/agent-send-verdict";
+import { AgentMessageRequestError } from "#src/connection/agent-message-request-error";
+import { AgentUpstreamRefusalError } from "#src/connection/agent-upstream-refusal-error";
 
 const context = {
   method: "POST",
@@ -82,7 +84,7 @@ test("a preflight error that saved a draft (e.g. the --target-confirmed guard) c
     new AgentPreflightError(
       "Possible thread target mismatch",
       "THREAD_CONTEXT_TARGET_CONFIRMATION_REQUIRED",
-      true,
+      { draftSaved: true },
     ),
     context,
   );
@@ -153,4 +155,100 @@ test("credentials never ride along in the detail that is returned and logged", (
   );
   expect(classified.logFields.detail).toBe("upstream rejected [redacted] sent as [redacted]");
   expect(JSON.stringify(classified.body)).not.toContain(key);
+});
+
+test("an unclassifiable upstream refusal logs the server's code, and publishes none of it", () => {
+  const classified = classifyAgentProxyFailure(
+    new AgentUpstreamRefusalError("server Agent Task request failed (400)", "ACCESS_DENIED"),
+    { ...context, path: "/api/agent/v1/tasks", routeFamily: "agent-api/task" },
+  );
+
+  // Log-only: the daemon operator can see *why* the server refused…
+  expect(classified.logFields.upstream_code).toBe("ACCESS_DENIED");
+  // …while the caller's body carries the correlation id and nothing about the upstream's internals.
+  expect(JSON.stringify(classified.body)).not.toContain("ACCESS_DENIED");
+  expect(classified.body.proxy.cause_code).toBe("UNCLASSIFIED_PROXY_FAILURE");
+});
+
+test("a business refusal reaches the caller as its own status and code, not an opaque 502", () => {
+  const classified = classifyAgentProxyFailure(
+    new AgentUpstreamRefusalError("server Agent Task request failed (409)", "CONFLICT", 409),
+    { ...context, path: "/api/agent/v1/tasks", routeFamily: "agent-api/task" },
+  );
+  expect(classified.status).toBe(409);
+  expect(classified.body.code).toBe("CONFLICT");
+  expect(classified.body.proxy.cause_code).toBe("CONFLICT");
+  expect(classified.body.proxy.failure_class).toBe("upstream_http_response");
+  expect(classified.body.proxy.upstream_status).toBe(409);
+  expect(classified.body.error).toContain("changed since");
+});
+
+test("reviewer isolation withholds the refusal entirely, mapped or not", () => {
+  const redacted = classifyAgentProxyFailure(
+    new AgentUpstreamRefusalError("server Agent Task request failed (409)", "CONFLICT", 409),
+    { ...context, path: "/api/agent/v1/tasks", routeFamily: "agent-api/task", redact: true },
+  );
+  expect(redacted.status).toBe(502);
+  expect(redacted.body.proxy.cause_code).toBe("REVIEWER_ISOLATION_WITHHELD");
+  expect(JSON.stringify(redacted.body)).not.toContain("CONFLICT");
+});
+
+test("a refusal status outside the business set stays opaque", () => {
+  const classified = classifyAgentProxyFailure(
+    new AgentUpstreamRefusalError("server Agent Task request failed (500)", "INTERNAL_ERROR", 500),
+    context,
+  );
+  expect(classified.status).toBe(502);
+  expect(classified.body.proxy.cause_code).toBe("UNCLASSIFIED_PROXY_FAILURE");
+});
+
+test("a send precondition carries its verdict, and its code-specific details", () => {
+  const classified = classifyAgentProxyFailure(
+    new AgentPreflightError(
+      "The saved draft for this target expired",
+      "SEND_DRAFT_EXPIRED",
+      { draftSaved: false, retryable: false, suggestedNextAction: "Read @ada before resending." },
+      { discarded_draft: { content: "stale reply", saved_at: "2026-09-28T00:00:00.000Z" } },
+    ),
+    context,
+  );
+  expect(classified.status).toBe(400);
+  expect(classified.body).toMatchObject({
+    code: "SEND_DRAFT_EXPIRED",
+    retryable: false,
+    suggested_next_action: "Read @ada before resending.",
+    details: { discarded_draft: { content: "stale reply", saved_at: "2026-09-28T00:00:00.000Z" } },
+    proxy: { failure_class: "local_precondition", draft_saved: false },
+  });
+});
+
+test("a judged send failure is classified by its cause, then carries the daemon's verdict", () => {
+  const judged = new AgentSendVerdictError(
+    "replay failed",
+    AgentTransportError.preResponseTransport("agent send", new TypeError("fetch failed")),
+    { retryable: true, draftSaved: true, suggestedNextAction: "retry with the same key" },
+  );
+  const classified = classifyAgentProxyFailure(judged, context);
+  expect(classified.status).toBe(502);
+  expect(classified.body).toMatchObject({
+    retryable: true,
+    suggested_next_action: "retry with the same key",
+    proxy: { failure_class: "pre_response_transport", draft_saved: true },
+  });
+
+  // Reviewer isolation withholds the upstream detail, never the verdict.
+  const redacted = classifyAgentProxyFailure(
+    new AgentSendVerdictError(
+      "replay failed",
+      AgentTransportError.upstreamHttpResponse("agent send", 503),
+      { retryable: false, draftSaved: false, suggestedNextAction: "CANNOT_CONFIRM" },
+    ),
+    { ...context, redact: true },
+  );
+  expect(redacted.body).toMatchObject({
+    retryable: false,
+    suggested_next_action: "CANNOT_CONFIRM",
+    proxy: { cause_code: "REVIEWER_ISOLATION_WITHHELD", draft_saved: false },
+  });
+  expect(redacted.body.proxy.upstream_status).toBeUndefined();
 });

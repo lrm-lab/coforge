@@ -1,7 +1,7 @@
-import type { PrismaClient } from "../../../generated/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { AppError } from "../../lib/app-error";
-import { enrollGeneralChannel } from "../conversations/public-channels.server";
+import { AppError } from "#src/lib/app-error";
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 
 export const WEEKLY_REPORT_COLLECTOR_DISPLAY_NAME_PREFIX = "采集 · ";
 
@@ -29,6 +29,8 @@ export type CollectorComputerSlot = {
   computerId: string;
   displayName: string;
   hostname: string;
+  /** Daemon-reported host platform (`win32`, `linux`, `darwin`), or null when unknown. */
+  platform: string | null;
   bindingId: string | null;
   collectorAgentId: string | null;
   computerConfigured: boolean;
@@ -92,15 +94,25 @@ export async function ensureCollector(
         where: {
           workspaceId_name: { workspaceId: input.workspaceId, name: agentName },
         },
-        select: { id: true, ownerId: true, computerId: true },
+        select: { id: true, ownerId: true, computerId: true, visibility: true },
       });
       let agentId = orphan?.id;
       if (orphan) {
         if (orphan.ownerId !== input.userId) throw new AppError("ACCESS_DENIED");
+        const patch: {
+          computerId?: string;
+          visibility?: typeof AGENT_VISIBILITY.PRIVATE;
+        } = {};
         if (orphan.computerId !== input.computerId) {
+          patch.computerId = input.computerId;
+        }
+        if (orphan.visibility !== AGENT_VISIBILITY.PRIVATE) {
+          patch.visibility = AGENT_VISIBILITY.PRIVATE;
+        }
+        if (Object.keys(patch).length > 0) {
           await tx.agent.update({
             where: { id_workspaceId: { id: orphan.id, workspaceId: input.workspaceId } },
-            data: { computerId: input.computerId },
+            data: patch,
           });
         }
       } else {
@@ -113,6 +125,9 @@ export async function ensureCollector(
             name: agentName,
             displayName: weeklyReportCollectorDisplayName(label),
             description: "",
+            // ADR 0059: a Collector works on its owning User's own records and should not appear
+            // to the rest of the Workspace at all.
+            visibility: AGENT_VISIBILITY.PRIVATE,
             runtimeConfig: {
               runtime: RUNTIME_PROVIDER.COFORGE,
               provider: { kind: "default" },
@@ -126,7 +141,6 @@ export async function ensureCollector(
       }
       if (!agentId) throw new AppError("INVALID_INPUT");
 
-      await enrollGeneralChannel(tx, input.workspaceId);
       return tx.weeklyReportCollectorBinding.create({
         data: {
           workspaceId: input.workspaceId,
@@ -161,7 +175,9 @@ export async function listOwnedComputerSlots(
     where: { workspaceId: input.workspaceId },
     select: {
       computerId: true,
-      computer: { select: { id: true, ownerId: true, displayName: true, name: true } },
+      computer: {
+        select: { id: true, ownerId: true, displayName: true, name: true, platform: true },
+      },
     },
     orderBy: { computerId: "asc" },
   });
@@ -193,6 +209,7 @@ export async function listOwnedComputerSlots(
       computerId: row.computerId,
       displayName: row.computer.displayName || row.computer.name || row.computerId,
       hostname: row.computer.name,
+      platform: row.computer.platform,
       bindingId: binding?.id ?? null,
       collectorAgentId: binding?.collectorAgentId ?? null,
       computerConfigured,

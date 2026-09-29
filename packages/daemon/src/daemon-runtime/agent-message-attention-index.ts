@@ -7,12 +7,13 @@ import type {
 import { getLogger } from "@logtape/logtape";
 import {
   AGENT_MESSAGE_ACK_METHOD,
+  HELD_CONTEXT_LIMIT,
   isChannelMessageTarget,
   isValidMessageSender,
   renderMessageSender,
 } from "@lrm/coforge-sdk/internal";
-import type { AgentProcessManager } from "../agent-runtime/agent-process-manager";
-import { HELD_CONTEXT_LIMIT } from "./agent-inbox-freshness";
+import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
+import type { AgentConsumedSeqPort } from "#src/persistence/agent-consumed-seq-store";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
 
@@ -32,21 +33,45 @@ export type MessageAttention = Readonly<{
  * as new, which only costs one extra inbox notice.
  */
 const REMEMBERED_DELIVERIES = 4096;
+/** Out-of-order seen message ids remembered per Agent and target; the oldest go first. */
+const SEEN_MESSAGE_LIMIT = 1024;
 
 /** How many of the newest unreviewed deliveries per target the index keeps for a locally decided
  * freshness hold to show: exactly Raft's `DEFAULT_HELD_CONTEXT_LIMIT` (`HELD_CONTEXT_LIMIT` in
- * `agent-inbox-freshness.ts`), because the hold shows the newest that many and no more — and
+ * the SDK's `freshness-decision.ts`), because the hold shows the newest that many and no more — and
  * anything older is consumed by the same frontier anyway. No invented slack. */
 const PENDING_WINDOW_LIMIT = HELD_CONTEXT_LIMIT;
+
+/** Footer shared by live and recovery inbox notices. Names the targeted drain; does not claim
+ * unread state, because a notice can race a check/read that already advanced the cursor. */
+const INBOX_DRAIN_HINT =
+  "Drain each listed target with `coforge message check --target <target>`, or inspect with `coforge message read --target <target>`. Either may return nothing, because a message can already have been read.";
 
 /** One unreviewed delivery plus the moment this daemon learned about it. Deliveries carry no
  * message timestamp of their own (only the server knows when a message was written), so the
  * arrival time is what a locally built preview can honestly show. */
 export type PendingWindowEntry = { delivery: AgentMessageDelivery; receivedAt: number };
 
+/** The fields `#localViewRows` reads — a live delivery or a recovery message. */
+type LocalViewItem = {
+  target?: string;
+  messageId: string;
+  sequence?: number;
+  latestSenderKind?: MessageSenderKind;
+  latestSenderHandle?: string;
+};
+
+type LocalViewRow = {
+  target: string;
+  newIds: Set<string>;
+  heldIds: Set<string>;
+  latestSenderKind?: MessageSenderKind;
+  latestSenderHandle?: string;
+};
+
 /**
- * Validates a `(kind, handle)` pair before it can reach a model-visible notice (ADR 0052,
- * decision D): the kind must be one of the closed values and the handle must match the public
+ * Validates a `(kind, handle)` pair before it can reach a model-visible notice:
+ * the kind must be one of the closed values and the handle must match the public
  * handle grammar (or be empty for `system`). This replaces the former regex guard on a single
  * composed string — a newline can no longer reach a notice through a sender name, because the
  * handle is matched against the handle grammar and the kind against the closed set separately.
@@ -75,6 +100,22 @@ function countDistinctMessages(deliveries: readonly AgentMessageDelivery[]): num
   return new Set(deliveries.map((delivery) => delivery.messageId)).size;
 }
 
+/** The fields every delivery must carry before it can touch attention or be acknowledged. */
+function hasDeliveryScope(
+  message: AgentMessageDelivery,
+): message is AgentMessageDelivery & { target: string } {
+  return Boolean(
+    message.conversationId &&
+    message.agentId &&
+    message.messageId &&
+    message.body &&
+    message.target &&
+    (message.target.startsWith("@") || isChannelMessageTarget(message.target)) &&
+    message.target.length >= 2 &&
+    message.sequence >= 1,
+  );
+}
+
 /** Daemon-owned volatile attention and model-visible sequence index. */
 export class AgentMessageAttentionIndex {
   readonly #generations = new Map<
@@ -88,6 +129,10 @@ export class AgentMessageAttentionIndex {
   >();
   readonly #attention = new Map<string, Map<string, MessageAttention>>();
   readonly #modelSeen = new Map<string, Map<string, number>>();
+  /** Messages the Agent was shown one by one, per target, beyond its contiguous frontier: an
+   * anchored `read` or a `search` shows messages without moving `#modelSeen`. Volatile, bounded by
+   * `SEEN_MESSAGE_LIMIT` per target, and dropped with the Agent. */
+  readonly #seenMessageIds = new Map<string, Map<string, Set<string>>>();
   readonly #pendingSequences = new Map<string, Map<string, Set<number>>>();
   /** The newest unreviewed deliveries per Agent and target, with the moment the daemon learned
    * about each. Kept so a locally decided freshness hold can show the Agent the same bounded
@@ -101,9 +146,23 @@ export class AgentMessageAttentionIndex {
    * here for this target at all", which its freshness decision needs. */
   readonly #latestKnown = new Map<string, Map<string, number>>();
   readonly #readContext = new Map<string, Map<string, number>>();
+  /** The newest message a review (`recordReadContext`) of each target showed. Unlike `#modelSeen`,
+   * a `check` never moves it: it answers "has a review shown the Agent anything here", which is what
+   * makes a thread count as reply context. Persisted apart from the frontier as `reviewedSeq`. */
+  readonly #reviewedSequence = new Map<string, Map<string, number>>();
   readonly #readContextCounters = new Map<string, number>();
+  /** Raft's `consumed-seqs.json`: the durable copy of `#modelSeen` (the `seq` frontier),
+   * `#readContext` (the `readOrder` each target was last reviewed at) and `#reviewedSequence`
+   * (`reviewedSeq`). */
+  readonly #consumedSeqs?: AgentConsumedSeqPort;
+  /** Agents whose durable cursor has already been folded into the maps above. Raft reads the file
+   * on every lookup; reading it once per Agent per daemon life is the same answer, minus the
+   * syscall in a message loop, and `clearAgent` drops the marker so a re-registered Agent reads it
+   * again. */
+  readonly #hydrated = new Set<string>();
   readonly #workspaceId: string;
   readonly #runtimes: Pick<AgentProcessManager, "session">;
+  readonly #memoryReminders = new Map<string, string>();
 
   constructor(
     workspaceId: string,
@@ -111,7 +170,7 @@ export class AgentMessageAttentionIndex {
     private readonly sendAck: (ack: AgentMessageDeliveryAck) => Promise<void>,
     private readonly messageReceived: (agentId: string) => void = () => {},
     /**
-     * The daemon-owned delivery queue (ADR 0048, `agent-delivery-queue.ts`). `shouldHold` decides
+     * The daemon-owned delivery queue (`agent-delivery-queue.ts`). `shouldHold` decides
      * whether this delivery must wait rather than reach `AgentSession.notify` now; `enqueue`
      * records it as held once this class has already updated its own attention/dedupe
      * bookkeeping for it. `busy` marks the Agent mid-turn — called synchronously, right before
@@ -131,31 +190,32 @@ export class AgentMessageAttentionIndex {
        * while held keeps both attempts for ACK bookkeeping — and a notice must count messages,
        * not attempts. Optional: a composition without a delivery queue holds nothing. */
       queued?(agentId: string): readonly AgentMessageDelivery[];
+      /** The Agent's durable consumed cursor (Raft's `consumed-seqs.json`). Without it the index is
+       * exactly as volatile as it was: the cursor then only lives as long as this process. */
+      consumedSeqs?: AgentConsumedSeqPort;
     } = { shouldHold: () => false, enqueue: () => {}, busy: () => {} },
   ) {
     this.#workspaceId = workspaceId;
     this.#runtimes = runtimes;
+    this.#consumedSeqs = hold.consumedSeqs;
+  }
+
+  /** Appended once to the next notice; the daemon never edits the Agent's MEMORY.md. */
+  setMemoryReminder(agentId: string, text: string): void {
+    this.#memoryReminders.set(agentId, text);
   }
 
   async receive(message: AgentMessageDelivery): Promise<void> {
     if (message.workspaceId !== this.#workspaceId)
       throw new Error("agent message targets another Workspace");
-    if (
-      !message.conversationId ||
-      !message.agentId ||
-      !message.messageId ||
-      !message.body ||
-      !message.target ||
-      (!message.target.startsWith("@") && !isChannelMessageTarget(message.target)) ||
-      message.target.length < 2 ||
-      message.sequence < 1
-    )
-      throw new Error("invalid agent message scope");
+    if (!hasDeliveryScope(message)) throw new Error("invalid agent message scope");
     const generation = this.#generation(message.agentId);
     if (generation.seenDeliveryIds.has(message.deliveryId)) {
       if (!generation.notified.has(message.deliveryId)) {
         if (this.hold.shouldHold(message.agentId)) {
           this.hold.enqueue(message.agentId, message);
+          // Held for a later notice: the daemon has it, so it is acknowledged now.
+          this.acknowledgeCustody(message);
           return;
         }
         const attempt = generation.notificationAttempts.get(message.deliveryId);
@@ -170,8 +230,7 @@ export class AgentMessageAttentionIndex {
       return;
     }
     this.#remember(generation, message.deliveryId);
-    const target = message.target;
-    if (this.modelSeenSequence(message.agentId, target) >= message.sequence) {
+    if (this.#consumed(message)) {
       await this.sendAck({
         ...message,
         method: AGENT_MESSAGE_ACK_METHOD,
@@ -179,31 +238,11 @@ export class AgentMessageAttentionIndex {
       });
       return;
     }
-    const latestSender = printableSender(message.latestSenderKind, message.latestSenderHandle);
-    const byTarget = this.#attention.get(message.agentId) ?? new Map<string, MessageAttention>();
-    const previous = byTarget.get(target);
-    const pendingByTarget =
-      this.#pendingSequences.get(message.agentId) ?? new Map<string, Set<number>>();
-    const pending = pendingByTarget.get(target) ?? new Set<number>();
-    pending.add(message.sequence);
-    pendingByTarget.set(target, pending);
-    this.#pendingSequences.set(message.agentId, pendingByTarget);
-    const current = {
-      target,
-      pendingCount: (previous?.pendingCount ?? 0) + 1,
-      firstPendingSequence: previous?.firstPendingSequence ?? message.sequence,
-      latestSequence: Math.max(previous?.latestSequence ?? 0, message.sequence),
-      ...(latestSender
-        ? { latestSenderKind: latestSender.kind, latestSenderHandle: latestSender.handle }
-        : {}),
-      flags: [isChannelMessageTarget(target) ? "channel" : target.includes(":") ? "thread" : "dm"],
-    };
-    byTarget.set(target, current);
-    this.#attention.set(message.agentId, byTarget);
-    this.#recordLatest(message.agentId, target, message.sequence);
-    this.#recordPendingWindow(message.agentId, target, message);
+    const current = this.#recordAttention(message);
     if (this.hold.shouldHold(message.agentId)) {
       this.hold.enqueue(message.agentId, message);
+      // Held for a later notice: the daemon has it, so it is acknowledged now.
+      this.acknowledgeCustody(message);
       return;
     }
     await this.#notify(message, current);
@@ -215,29 +254,79 @@ export class AgentMessageAttentionIndex {
     });
   }
 
+  /** Records one delivery the Agent has not been shown yet: its target's attention, pending
+   * sequences, newest known sequence, and the window a local hold presents. */
+  #recordAttention(message: AgentMessageDelivery & { target: string }): MessageAttention {
+    const target = message.target;
+    const latestSender = printableSender(message.latestSenderKind, message.latestSenderHandle);
+    const byTarget = this.#attention.get(message.agentId) ?? new Map<string, MessageAttention>();
+
+    const previous = byTarget.get(target);
+    const pendingByTarget =
+      this.#pendingSequences.get(message.agentId) ?? new Map<string, Set<number>>();
+    const pending = pendingByTarget.get(target) ?? new Set<number>();
+    pending.add(message.sequence);
+    pendingByTarget.set(target, pending);
+    this.#pendingSequences.set(message.agentId, pendingByTarget);
+    const current: MessageAttention = {
+      target,
+      pendingCount: (previous?.pendingCount ?? 0) + 1,
+      firstPendingSequence: previous?.firstPendingSequence ?? message.sequence,
+      latestSequence: Math.max(previous?.latestSequence ?? 0, message.sequence),
+      ...(latestSender
+        ? { latestSenderKind: latestSender.kind, latestSenderHandle: latestSender.handle }
+        : {}),
+      flags: [
+        isChannelMessageTarget(target) ? "channel" : target.includes(":") ? "thread" : "dm",
+        // Reached the Agent from outside the channel: it can read the message, not reply there.
+        ...(message.nonMemberMention || previous?.flags.includes("non_member_mention")
+          ? ["non_member_mention"]
+          : []),
+      ],
+    };
+    byTarget.set(target, current);
+    this.#attention.set(message.agentId, byTarget);
+    this.#recordLatest(message.agentId, target, message.sequence);
+    this.#recordPendingWindow(message.agentId, target, message);
+    return current;
+  }
+
   /**
-   * Delivers every notice `AgentDeliveryQueue` held for `agentId` (ADR 0048), oldest first, as
+   * Delivers every notice `AgentDeliveryQueue` held for `agentId`, oldest first, as
    * one call to `AgentSession.notify` once the Agent is idle — the daemon core is the only
-   * caller, right after `AgentDeliveryQueue.idle`/`release` hands back what it drained. `receive`
-   * already recorded each held delivery's attention while it was held, so `#notify`'s existing
-   * coalesced-notice wording (built from that live attention) reads exactly as it would have for
-   * the most recent one, had it not been held. ACKs every held delivery only once that single
-   * notice is accepted — never on failure, so an un-acked delivery stays safe to hold or
-   * redeliver.
+   * caller, right after `AgentDeliveryQueue.idle`/`release` hands back what it drained. A delivery
+   * held by `receive` already passed its checks and has its attention recorded. One the runtime
+   * queued before the Agent's process existed (a wake cooldown, a batched wake) gets `receive`'s
+   * treatment here: an already-consumed one is not announced and a malformed one is skipped.
+   * Every delivery was acknowledged when the daemon took it into the queue, so this only
+   * presents them.
    */
   async flush(agentId: string, held: readonly AgentMessageDelivery[]): Promise<void> {
     if (!held.length) return;
     const generation = this.#generation(agentId);
+    const settled: AgentMessageDelivery[] = [];
+    const announced: AgentMessageDelivery[] = [];
+    for (const message of held) {
+      if (!hasDeliveryScope(message)) continue;
+      settled.push(message);
+      if (generation.seenDeliveryIds.has(message.deliveryId)) {
+        announced.push(message);
+        continue;
+      }
+      this.#remember(generation, message.deliveryId);
+      if (this.#consumed(message)) continue;
+      this.#recordAttention(message);
+      announced.push(message);
+    }
     // One notice for the whole coalesced batch, carrying the batch itself: the queue is per Agent,
     // so a batch legitimately spans channels, DMs and threads, and each target needs its own line.
-    await this.#notify(held[held.length - 1]!, undefined, held);
-    if (this.#generations.get(agentId) !== generation) return;
-    for (const message of held)
-      await this.sendAck({
-        ...message,
-        method: AGENT_MESSAGE_ACK_METHOD,
-        requestId: message.requestId,
-      });
+    if (announced.length) {
+      await this.#notify(announced[announced.length - 1]!, undefined, announced);
+      if (this.#generations.get(agentId) !== generation) return;
+    }
+    // Every held delivery was acknowledged when the daemon took it; a redelivery of one after this
+    // notice is acknowledged again without another notice.
+    for (const message of settled) generation.notified.add(message.deliveryId);
   }
 
   async recover(
@@ -252,7 +341,6 @@ export class AgentMessageAttentionIndex {
     const byTarget = new Map(currentAttention);
     const recoveredTargets = new Set<string>();
     const suppliedTargets = new Set<string>();
-    const recoveredCountByTarget = new Map<string, number>();
     const recoveredMessages: AgentRecoveryMessage[] = [];
     for (const message of [...messages].sort(
       (left, right) =>
@@ -276,10 +364,6 @@ export class AgentMessageAttentionIndex {
         continue;
       recoveredMessages.push(message);
       recoveredTargets.add(message.target);
-      recoveredCountByTarget.set(
-        message.target,
-        (recoveredCountByTarget.get(message.target) ?? 0) + 1,
-      );
       const previous = byTarget.get(message.target);
       byTarget.set(message.target, {
         target: message.target,
@@ -297,6 +381,9 @@ export class AgentMessageAttentionIndex {
             : message.target.includes(":")
               ? "thread"
               : "dm",
+          ...(message.nonMemberMention || previous?.flags.includes("non_member_mention")
+            ? ["non_member_mention"]
+            : []),
         ],
       });
     }
@@ -307,61 +394,54 @@ export class AgentMessageAttentionIndex {
         count > 0,
     );
     if (!recoveredTargets.size && !summaryOnly.length) return;
-    const lines = recoveredMessages
-      .filter((message) => !isChannelMessageTarget(message.target))
-      .map(
-        (message) =>
-          `[target=${message.target} msg=${message.messageId.slice(0, 8)} seq=${message.sequence} type=${message.latestSenderKind}] ${renderMessageSender(message.latestSenderKind, message.latestSenderHandle, message.latestSenderDescription)}: ${message.body}`,
-      );
-    const instructions = Object.entries(unreadSummary)
-      .filter(
-        ([target, count]) =>
-          recoveredTargets.has(target) &&
-          (target.startsWith("@") || isChannelMessageTarget(target)) &&
-          count > (recoveredCountByTarget.get(target) ?? 0),
-      )
-      .map(
-        ([target]) =>
-          `Run \`coforge message read --target ${isChannelMessageTarget(target) ? `"${target}"` : target}\` to read additional messages.`,
-      );
-    for (const [target, count] of summaryOnly)
-      instructions.push(
-        `${target} has ${count} unread message${count === 1 ? "" : "s"}; run \`coforge message read --target ${isChannelMessageTarget(target) ? `"${target}"` : target}\` to read them.`,
-      );
-    for (const [target, count] of recoveredCountByTarget) {
-      if (isChannelMessageTarget(target))
-        instructions.push(
-          `${target} has ${count} pending notification${count === 1 ? "" : "s"}. Run \`coforge message check\` to read pending messages. Use \`coforge channel mute --target "${target}"\` to stop future ordinary notifications; human @mentions still notify you.`,
-        );
-    }
-    const concrete = lines.length
-      ? `${lines.length === 1 ? "New message received:" : "New messages received:"}\n\n${lines.join("\n")}\n\nRespond as appropriate. Complete all your work before stopping.`
-      : "New messages received:";
-    // ADR 0048: same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
-    this.hold.busy(agentId);
-    await session.notify(
-      `${concrete}${instructions.length ? `\n\n${instructions.join("\n")}` : ""}`,
+    // Recovery is a wakeup, not a second copy of the bodies: the same messages will come back
+    // through `coforge message check`. DM and channel share `#localViewRows` (one target per
+    // line, no body). `recordModelSeen` is not advanced here — the server cursor has not moved,
+    // and `check` is what advances both.
+    const recoveryRows = this.#localViewRows(recoveredMessages, []);
+    const rows = [
+      ...this.#renderLocalViewRows(recoveryRows.rows),
+      ...summaryOnly.map(
+        ([target, count]) => `${target}  new: ${count} message${count === 1 ? "" : "s"}`,
+      ),
+    ];
+    const totalCount =
+      recoveredMessages.length + summaryOnly.reduce((sum, [, count]) => sum + count, 0);
+    const notice = this.#withMemoryReminder(
+      agentId,
+      `[CoForge inbox notice (restart recovery):
+Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
+${rows.join("\n")}
+${INBOX_DRAIN_HINT}]`,
     );
+    // Same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
+    this.hold.busy(agentId);
+    await session.notify(notice);
     if (this.#generations.get(agentId) !== generation) return;
     this.#attention.set(agentId, byTarget);
     for (const message of recoveredMessages) {
       this.#recordLatest(agentId, message.target, message.sequence);
       this.#remember(generation, message.deliveryId, message.messageId);
       generation.notified.add(message.deliveryId);
-      if (isChannelMessageTarget(message.target)) {
-        const byTarget = this.#pendingSequences.get(agentId) ?? new Map<string, Set<number>>();
-        const pending = byTarget.get(message.target) ?? new Set<number>();
-        pending.add(message.sequence);
-        byTarget.set(message.target, pending);
-        this.#pendingSequences.set(agentId, byTarget);
-      } else this.recordModelSeen(agentId, message.target, message.sequence);
+      const pendingByTarget = this.#pendingSequences.get(agentId) ?? new Map<string, Set<number>>();
+      const pending = pendingByTarget.get(message.target) ?? new Set<number>();
+      pending.add(message.sequence);
+      pendingByTarget.set(message.target, pending);
+      this.#pendingSequences.set(agentId, pendingByTarget);
     }
     if (recoveredMessages.length) this.messageReceived(agentId);
   }
 
+  #withMemoryReminder(agentId: string, notice: string): string {
+    const reminder = this.#memoryReminders.get(agentId);
+    if (!reminder) return notice;
+    this.#memoryReminders.delete(agentId);
+    return `${notice}\n\n${reminder}`;
+  }
+
   /**
    * One line per target, in the order the targets first appear: what this notice announces (`new`)
-   * and what stays queued for this Agent (`held`). The delivery queue is per Agent (ADR 0048), so
+   * and what stays queued for this Agent (`held`). The delivery queue is per Agent, so
    * a coalesced flush can mix a channel, a DM and a thread; attributing the whole batch to the
    * last delivery's target would hide the others.
    *
@@ -370,21 +450,20 @@ export class AgentMessageAttentionIndex {
    * were, which is the same kind of unexplainable number this change exists to remove.
    */
   #localViewRows(
-    announced: readonly AgentMessageDelivery[],
-    queued: readonly AgentMessageDelivery[],
-  ): string[] {
+    announced: readonly LocalViewItem[],
+    queued: readonly LocalViewItem[],
+  ): {
+    rows: LocalViewRow[];
+    countedIds: Set<string>;
+  } {
     const announcedIds = new Set(announced.map((delivery) => delivery.messageId));
-    type Row = {
-      newIds: Set<string>;
-      heldIds: Set<string>;
-      latestSenderKind?: MessageSenderKind;
-      latestSenderHandle?: string;
-    };
-    const byTarget = new Map<string, Row>();
+    const countedIds = new Set<string>();
+    const byTarget = new Map<string, LocalViewRow>();
     const rowFor = (target: string) => {
       const existing = byTarget.get(target);
       if (existing) return existing;
-      const created: Row = {
+      const created: LocalViewRow = {
+        target,
         newIds: new Set<string>(),
         heldIds: new Set<string>(),
       };
@@ -397,6 +476,7 @@ export class AgentMessageAttentionIndex {
       if (!delivery.target) continue;
       const row = rowFor(delivery.target);
       row.newIds.add(delivery.messageId);
+      countedIds.add(delivery.messageId);
       const sender = printableSender(delivery.latestSenderKind, delivery.latestSenderHandle);
       if (sender) {
         row.latestSenderKind = sender.kind;
@@ -407,13 +487,18 @@ export class AgentMessageAttentionIndex {
       if (!delivery.target || announcedIds.has(delivery.messageId)) continue;
       const row = rowFor(delivery.target);
       row.heldIds.add(delivery.messageId);
+      countedIds.add(delivery.messageId);
       const sender = printableSender(delivery.latestSenderKind, delivery.latestSenderHandle);
       if (sender) {
         row.latestSenderKind = sender.kind;
         row.latestSenderHandle = sender.handle;
       }
     }
-    return [...byTarget].map(([target, row]) => {
+    return { rows: [...byTarget.values()], countedIds };
+  }
+
+  #renderLocalViewRows(rows: readonly LocalViewRow[]): string[] {
+    return rows.map((row) => {
       const parts: string[] = [];
       if (row.newIds.size)
         parts.push(`new: ${row.newIds.size} message${row.newIds.size === 1 ? "" : "s"}`);
@@ -423,7 +508,7 @@ export class AgentMessageAttentionIndex {
         parts.push(
           `latest sender ${renderMessageSender(row.latestSenderKind, row.latestSenderHandle ?? "")}`,
         );
-      return `${target}  ${parts.join(" · ")}`;
+      return `${row.target}  ${parts.join(" · ")}`;
     });
   }
 
@@ -438,7 +523,7 @@ export class AgentMessageAttentionIndex {
     if (!session?.notify)
       return Promise.reject(new Error("Agent session cannot receive a wakeup notice"));
     if (!message.target) return Promise.reject(new Error("delivery target is missing"));
-    // ADR 0048: mark busy synchronously, in the same tick as this decision to write to the
+    // Mark busy synchronously, in the same tick as this decision to write to the
     // session — before the next queued input for this Agent can be drained and see a stale
     // "not busy yet" state.
     this.hold.busy(message.agentId);
@@ -454,14 +539,16 @@ export class AgentMessageAttentionIndex {
     // advanced that cursor. Only those commands answer what is left, and either may answer
     // "nothing".
     const queued = this.hold.queued?.(message.agentId) ?? [];
-    const rows = this.#localViewRows(announced, queued);
+    const view = this.#localViewRows(announced, queued);
+    const rows = this.#renderLocalViewRows(view.rows);
     const totalCount = countDistinctMessages([...announced, ...queued]);
-    const notice = `[CoForge inbox notice:
+    const notice = this.#withMemoryReminder(
+      message.agentId,
+      `[CoForge inbox notice:
 Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
 ${rows.join("\n")}
-What the server still has for you is answered only by \`coforge message check\`, or
-\`coforge message read --target <target>\`; either may return nothing, because a message can
-already have been read. A notice you have not acted on does not establish that there is no work.]`;
+${INBOX_DRAIN_HINT}]`,
+    );
     const notification = Promise.resolve()
       .then(() => session.notify!(notice))
       .then(() => {
@@ -542,7 +629,65 @@ already have been read. A notice you have not acted on does not establish that t
     return [...(this.#attention.get(agentId)?.values() ?? [])];
   }
 
+  /** Whether the Agent's consumed cursor already covers this well-formed delivery. Reads the
+   * durable cursor, so it throws for an Agent id that cursor cannot store. Lets the runtime drop a
+   * stale delivery before it wakes an exited Agent for it. */
+  hasConsumed(message: AgentMessageDelivery): boolean {
+    return hasDeliveryScope(message) && this.#consumed(message);
+  }
+
+  /**
+   * ACKs a delivery the daemon has just taken into its own keeping (held for a later notice or
+   * launch, or dropped), without waiting: a failed ACK only means the server replays it on the
+   * next `ready`, and a daemon restart recovers unread messages from the cloud read boundary.
+   */
+  acknowledgeCustody(message: AgentMessageDelivery): void {
+    void this.acknowledge(message).catch((error: unknown) => {
+      logger.warn("Agent delivery could not be acknowledged on taking it", {
+        event: "agent.message.custody_ack_failed",
+        agent_id: message.agentId,
+        delivery_id: message.deliveryId,
+        error_code: error instanceof Error ? error.name : "UnknownError",
+      });
+    });
+  }
+
+  /** ACKs a delivery without notifying the Agent: the caller has established it needs no attention. */
+  acknowledge(message: AgentMessageDelivery): Promise<void> {
+    return this.sendAck({
+      ...message,
+      method: AGENT_MESSAGE_ACK_METHOD,
+      requestId: message.requestId,
+    });
+  }
+
+  /** Records messages the Agent was shown individually, so a later delivery of any of them is
+   * treated as already consumed even when the contiguous frontier has not reached it. */
+  recordSeenMessages(agentId: string, messages: readonly { target: string; id: string }[]): void {
+    for (const { target, id } of messages) {
+      if (!target || !id) continue;
+      const byTarget = this.#seenMessageIds.get(agentId) ?? new Map<string, Set<string>>();
+      const ids = byTarget.get(target) ?? new Set<string>();
+      ids.delete(id);
+      ids.add(id);
+      if (ids.size > SEEN_MESSAGE_LIMIT) ids.delete(ids.values().next().value!);
+      byTarget.set(target, ids);
+      this.#seenMessageIds.set(agentId, byTarget);
+    }
+  }
+
+  /** Whether the Agent has already been shown this delivery's message: at or below its target's
+   * contiguous frontier, or shown individually. */
+  #consumed(message: AgentMessageDelivery & { target: string }): boolean {
+    return (
+      this.modelSeenSequence(message.agentId, message.target) >= message.sequence ||
+      this.#seenMessageIds.get(message.agentId)?.get(message.target)?.has(message.messageId) ===
+        true
+    );
+  }
+
   modelSeenSequence(agentId: string, target: string): number {
+    this.#hydrate(agentId);
     return this.#modelSeen.get(agentId)?.get(target) ?? 0;
   }
 
@@ -594,9 +739,14 @@ already have been read. A notice you have not acted on does not establish that t
 
   recordModelSeen(agentId: string, target: string, sequence: number): void {
     if (!Number.isInteger(sequence) || sequence < 1) return;
+    this.#hydrate(agentId);
     const byTarget = this.#modelSeen.get(agentId) ?? new Map<string, number>();
     byTarget.set(target, Math.max(byTarget.get(target) ?? 0, sequence));
     this.#modelSeen.set(agentId, byTarget);
+    // The Agent has consumed this frontier, so it survives the process: the same cursor that
+    // decides the next hold and the `seenUpToSeq` a fresh send inherits. Consuming is not reviewing:
+    // a `check` page lands here and orders nothing; only `recordReadContext` takes a read order.
+    this.#consumedSeqs?.recordConsumedSeqs(agentId, { [target]: sequence });
 
     // The window the Agent has now been shown (or the boundary it reported) is reviewed: drop what
     // it covers, so a locally decided hold cannot present the same messages twice.
@@ -618,14 +768,28 @@ already have been read. A notice you have not acted on does not establish that t
   }
 
   /**
-   * Records that the Agent just consumed messages for `target` (a `read`, a `check`/events drain
-   * page, or the held-context read inside `send`), under a per-Agent monotonically increasing
-   * counter. Volatile, like `modelSeen`; used only by the `--target-confirmed` guard to compare how
-   * recently a thread was read against how recently its parent target was read.
+   * Records that the Agent just reviewed `target` (a `read` other than `--around`, or the context a
+   * held `send` presented), under a per-Agent monotonically increasing read order, and the newest
+   * `sequence` that review showed, if any. Used only by the thread-mismatch send guard, to compare
+   * how recently a thread was read against how recently its parent target was read.
    */
-  recordReadContext(agentId: string, target: string): void {
-    const order = (this.#readContextCounters.get(agentId) ?? 0) + 1;
-    this.#readContextCounters.set(agentId, order);
+  recordReadContext(agentId: string, target: string, sequence?: number): void {
+    this.#hydrate(agentId);
+    if (sequence !== undefined && Number.isInteger(sequence) && sequence > 0) {
+      const reviewed = this.#reviewedSequence.get(agentId) ?? new Map<string, number>();
+      reviewed.set(target, Math.max(reviewed.get(target) ?? 0, sequence));
+      this.#reviewedSequence.set(agentId, reviewed);
+    }
+    // Reviewing a target is what orders it against every other target, which is the comparison
+    // the thread-mismatch guard makes (Raft's `recordConsumedRead`).
+    // With a durable cursor present the file hands out the order, so this process's orders continue
+    // the ones a previous process handed out; without one this counter is the only home, as before.
+    const persisted = this.#consumedSeqs?.recordConsumedRead(agentId, target, sequence);
+    const order = persisted ?? (this.#readContextCounters.get(agentId) ?? 0) + 1;
+    this.#readContextCounters.set(
+      agentId,
+      Math.max(this.#readContextCounters.get(agentId) ?? 0, order),
+    );
     const byTarget = this.#readContext.get(agentId) ?? new Map<string, number>();
     byTarget.set(target, order);
     this.#readContext.set(agentId, byTarget);
@@ -633,33 +797,93 @@ already have been read. A notice you have not acted on does not establish that t
 
   /** The most recently read context order for `target`, or `undefined` if never recorded. */
   readOrder(agentId: string, target: string): number | undefined {
+    this.#hydrate(agentId);
     return this.#readContext.get(agentId)?.get(target);
   }
 
-  /** The most recently read thread target rooted under `parentTarget`, or `undefined` if none. */
+  /** The most recently read thread target rooted under `parentTarget` whose reads have shown the
+   * Agent at least one message, or `undefined` if none. A thread read that returned nothing gave the
+   * Agent no thread context to reply to (Raft's `getMostRecentConsumedThreadForParent` likewise
+   * skips a record without a `seq`). */
   latestThreadReadUnderParent(
     agentId: string,
     parentTarget: string,
   ): { target: string; order: number } | undefined {
+    this.#hydrate(agentId);
     const byTarget = this.#readContext.get(agentId);
     if (!byTarget) return undefined;
     const prefix = `${parentTarget}:`;
     let latest: { target: string; order: number } | undefined;
+    const reviewed = this.#reviewedSequence.get(agentId);
     for (const [target, order] of byTarget)
-      if (target.startsWith(prefix) && (!latest || order > latest.order))
+      if (
+        target.startsWith(prefix) &&
+        (reviewed?.get(target) ?? 0) > 0 &&
+        (!latest || order > latest.order)
+      )
         latest = { target, order };
     return latest;
   }
 
+  /** Folds the durable consumed cursor for one Agent into this index's own maps, once per daemon
+   * life. Every value is merged with `Math.max`, so a cursor that travelled backwards — a file
+   * written by an older build, or a hand-edit — can never un-review context this process already
+   * consumed. The read-order counter resumes above every order in the file, exactly as Raft's
+   * `normalizeState` leaves `nextReadOrder`. */
+  #hydrate(agentId: string): void {
+    const store = this.#consumedSeqs;
+    if (!store || this.#hydrated.has(agentId)) return;
+    this.#hydrated.add(agentId);
+    const state = store.read(agentId);
+    const modelSeen = this.#modelSeen.get(agentId) ?? new Map<string, number>();
+    const readContext = this.#readContext.get(agentId) ?? new Map<string, number>();
+    const reviewedSequence = this.#reviewedSequence.get(agentId) ?? new Map<string, number>();
+    for (const [target, entry] of Object.entries(state.targets)) {
+      const seq = entry.seq;
+      if (typeof seq === "number" && seq > 0)
+        modelSeen.set(target, Math.max(modelSeen.get(target) ?? 0, seq));
+      const order = entry.readOrder;
+      if (typeof order === "number" && order > 0)
+        readContext.set(target, Math.max(readContext.get(target) ?? 0, order));
+      const reviewed = entry.reviewedSeq;
+      if (typeof reviewed === "number" && reviewed > 0)
+        reviewedSequence.set(target, Math.max(reviewedSequence.get(target) ?? 0, reviewed));
+    }
+    if (modelSeen.size > 0) this.#modelSeen.set(agentId, modelSeen);
+    if (readContext.size > 0) this.#readContext.set(agentId, readContext);
+    if (reviewedSequence.size > 0) this.#reviewedSequence.set(agentId, reviewedSequence);
+    this.#readContextCounters.set(
+      agentId,
+      Math.max(this.#readContextCounters.get(agentId) ?? 0, state.nextReadOrder - 1),
+    );
+  }
+
   clearAgent(agentId: string): void {
+    this.#hydrated.delete(agentId);
     this.#generations.delete(agentId);
     this.#attention.delete(agentId);
     this.#modelSeen.delete(agentId);
+    this.#reviewedSequence.delete(agentId);
+    this.#seenMessageIds.delete(agentId);
     this.#pendingSequences.delete(agentId);
     this.#pendingWindow.delete(agentId);
     this.#latestKnown.delete(agentId);
     this.#readContext.delete(agentId);
     this.#readContextCounters.delete(agentId);
+    this.#memoryReminders.delete(agentId);
+  }
+
+  /** Forgets the pending attention of these channel targets and every thread under them: the Agent
+   * can no longer read them. */
+  clearTargets(agentId: string, targets: readonly string[]): void {
+    const lost = (target: string) =>
+      targets.some((channel) => target === channel || target.startsWith(`${channel}:`));
+    const keys = new Set([
+      ...(this.#attention.get(agentId)?.keys() ?? []),
+      ...(this.#pendingSequences.get(agentId)?.keys() ?? []),
+      ...(this.#pendingWindow.get(agentId)?.keys() ?? []),
+    ]);
+    for (const target of keys) if (lost(target)) this.clear(agentId, target);
   }
 
   clear(agentId: string, target: string): void {

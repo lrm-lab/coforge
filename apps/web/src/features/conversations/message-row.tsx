@@ -1,45 +1,58 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { FileIcon as FileTypeIcon } from "@untitledui/file-icons";
 import {
+  Bookmark,
+  BookmarkCheck,
   Code02,
   Copy01,
   CornerUpLeft,
   Download01,
-  MessageSquare01 as MessageSquare,
   XClose,
 } from "@untitledui/icons";
 import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
 
-import { getReadableFileSize } from "@/components/application/file-upload/file-upload-base";
-import { Avatar } from "@/components/base/avatar/avatar";
-import { Button } from "@/components/base/buttons/button";
-import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
-import { useAppToast } from "@/components/ui/toast";
-import { ButtonUtility } from "@/components/base/buttons/button-utility";
-import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
-import { AgentDisplayAvatar } from "@/features/agents/agent-activity-avatar";
-import { avatarInitial, avatarToneClassName } from "@/lib/avatar-tone";
-import { DELETED_AGENT_AVATAR_CLASS, DeletedAgentBadge } from "@/features/agents/deleted-agent";
-import { useBreakpoint } from "@/hooks/use-breakpoint";
-import { useCoarsePointer } from "@/hooks/use-coarse-pointer";
-import { cn } from "@/lib/utils";
-import { m } from "@/paraglide/messages";
+import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
+import { Avatar } from "#src/components/base/avatar/avatar";
+import { Button } from "#src/components/base/buttons/button";
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { useAppToast } from "#src/components/ui/toast";
+import { Skeleton } from "#src/components/ui/skeleton";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import {
+  Dialog,
+  DialogTrigger,
+  Modal,
+  ModalOverlay,
+} from "#src/components/application/modals/modal";
+import { AgentDisplayAvatar } from "#src/features/agents/agent-activity-avatar";
+import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
+import { AgentModelLabel } from "#src/features/agents/agent-model-label";
+import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { DELETED_AGENT_AVATAR_CLASS, DeletedAgentBadge } from "#src/features/agents/deleted-agent";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
+import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
 import { ActionCard, type ActionCardView } from "./action-card";
 import { AttachmentPreview } from "./attachment-preview";
 import { attachmentPreviewKind } from "./attachment-preview-kind";
+import { useIsMessageSaved } from "./conversation-host";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-markdown";
 import { formatSelectionQuote, selectionAffordancePlacement } from "./message-quote";
 import { MessageReactionPicker, QUICK_REACTION_EMOJIS } from "./message-reaction-picker";
-import { UnreadBadge } from "./conversation-directory";
+import { ThreadPreview, ThreadSheetEntry, ThreadToolbarEntry } from "./thread-summary";
 import {
   copyFragmentMarkdown,
   copyFragmentStyled,
   messagePlainText,
   selectionFragmentHtml,
 } from "./selection-copy";
-import { copyText } from "../records/report-editor/lib/clipboard";
+import { copyText } from "#src/features/records/report-editor/lib/clipboard";
+import { MessageTask } from "#src/features/tasks/message-task";
+import { useTimeFormat } from "#src/lib/time-format-context";
+import { hour12For, type TimeFormat } from "#src/lib/time-format";
+import { dateTimeFormat } from "#src/lib/dates";
 
 export type MessageView = {
   id: string;
@@ -55,7 +68,7 @@ export type MessageView = {
   /** The sender's Agent id, present only when `senderKind === "agent"`; opens the Agent profile
    * panel (`features/agents/profile-panel/`) from the avatar or the sender name. */
   senderAgentId?: string;
-  /** True when the sending Agent has since been deleted (ADR 0044): the sender renders greyed
+  /** True when the sending Agent has since been deleted: the sender renders greyed
    * with a `DELETED` marker, and no longer opens that Agent's profile. */
   senderDeleted?: boolean;
   senderAvatarUrl?: string | null;
@@ -80,66 +93,49 @@ export type MessageView = {
     label: string;
   }[];
   reactions?: { emoji: string; count: number; reactors: string[] }[];
-  /** Present when this message is the summary posted for an Agent-prepared action card
-   * (ADR 0027). Replaces the plain-text draft hint line with the interactive card; the
+  /** Present when this message is the summary posted for an Agent-prepared action card.
+   * Replaces the plain-text draft hint line with the interactive card; the
    * underlying `body` stays available to assistive technology. */
   actionCard?: ActionCardView;
 };
 
-/** A row's entry into the message's thread: the viewer's unread reply count and the action
- * that opens the thread. The conversation supplies the facts; the row owns presentation —
- * a hover-toolbar button on desktop, a row in the tap action sheet on touch devices. */
-export type MessageThreadEntry = {
-  unread: number;
-  open: () => void;
-};
+export const GROUPING_WINDOW_MS = 5 * 60 * 1000;
 
-const GROUPING_WINDOW_MS = 5 * 60 * 1000;
-
-/** The top edge of the visible region a floating control must stay inside: the nearest
- * scrollport ancestor's box, or the viewport top when the element is not inside a scroller. */
-function visibleBoundaryTop(el: HTMLElement): number {
+/** The vertical edges of the visible region a floating control must stay inside: the nearest
+ * scrollport ancestor's box, or the viewport when the element is not inside a scroller. */
+function visibleBoundary(el: HTMLElement): { top: number; bottom: number } {
   let node = el.parentElement;
   while (node) {
     const overflowY = getComputedStyle(node).overflowY;
-    if (overflowY === "auto" || overflowY === "scroll") return node.getBoundingClientRect().top;
+    if (overflowY === "auto" || overflowY === "scroll") {
+      const { top, bottom } = node.getBoundingClientRect();
+      return { top, bottom };
+    }
     node = node.parentElement;
   }
-  return 0;
-}
-
-// Intl.DateTimeFormat construction dominates per-row formatting cost; keep one per locale.
-const dayFormatters = new Map<string, Intl.DateTimeFormat>();
-const clockFormatters = new Map<string, Intl.DateTimeFormat>();
-function cachedFormatter(
-  cache: Map<string, Intl.DateTimeFormat>,
-  locale: string,
-  options: Intl.DateTimeFormatOptions,
-) {
-  let formatter = cache.get(locale);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat(locale, options);
-    cache.set(locale, formatter);
-  }
-  return formatter;
+  return { top: 0, bottom: window.innerHeight };
 }
 
 export function dayLabel(value: Date | string, locale?: string): string {
   // Keep server/first-client markup identical; browser locale and zone apply after mount.
   if (!locale) return new Date(value).toISOString().slice(0, 10);
-  return cachedFormatter(dayFormatters, locale, {
+  return dateTimeFormat(locale, {
     year: "numeric",
     month: "short",
     day: "numeric",
   }).format(new Date(value));
 }
 
-export function clockLabel(value: Date | string, locale?: string): string {
+export function clockLabel(
+  value: Date | string,
+  locale?: string,
+  timeFormat: TimeFormat | null = null,
+): string {
   if (!locale) return "";
-  return cachedFormatter(clockFormatters, locale, {
+  return dateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hour12: hour12For(timeFormat),
   }).format(new Date(value));
 }
 
@@ -257,8 +253,10 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
   // it streams as octet-stream, which <img> refuses): drop to the plain file row below rather
   // than leaving a broken thumbnail behind.
   const [imgBroken, setImgBroken] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const previewSrc = !previewFailed && attachment.previewUrl ? attachment.previewUrl : href;
   const handlePreviewError = () => {
+    setImgLoaded(false);
     if (previewFailed || !attachment.previewUrl) setImgBroken(true);
     else setPreviewFailed(true);
   };
@@ -274,11 +272,6 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
   );
   /** Inside a file row the control is part of the row, so it stays visible. */
   const download = downloadButton();
-  /** Over an image thumbnail it covers content, so it waits for the pointer — unless the pointer
-   * cannot hover, where there is nothing to wait for. */
-  const downloadOverlay = downloadButton(
-    "opacity-0 transition-opacity group-hover/attachment:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100",
-  );
   /** Separates the file from its actions. Both row variants carry it, so a previewable file and a
    * download-only one are the same shape. */
   const actionDivider = (
@@ -290,7 +283,7 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
     "group/attachment mt-1 flex w-full max-w-sm min-w-0 items-center rounded-xl bg-primary ring-1 ring-secondary ring-inset";
   if (attachment.contentType.startsWith("image/") && !imgBroken)
     return (
-      <div className="group/attachment relative mt-1 w-fit max-w-full">
+      <div className="relative mt-1 w-fit max-w-full">
         {/* Clicking the preview opens the image at full size in a lightbox. */}
         <DialogTrigger>
           <Button
@@ -298,13 +291,16 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
             noTextPadding
             aria-label={attachment.fileName}
             // The min footprint centers degenerate images (a 1×1 png, a still-loading one) inside
-            // a card-sized box: without it the card collapses around them and the absolutely
-            // positioned download overlay escapes over the next row's avatar.
+            // a card-sized box while the image loads.
             className="grid h-auto min-h-16 min-w-16 place-items-center overflow-hidden rounded-lg p-0 ring-1 ring-secondary ring-inset hover:bg-transparent"
           >
+            {!imgLoaded && (
+              <Skeleton className="pointer-events-none absolute inset-0 rounded-lg bg-secondary/70" />
+            )}
             <img
               src={previewSrc}
               onError={handlePreviewError}
+              onLoad={() => setImgLoaded(true)}
               alt={attachment.fileName}
               loading="lazy"
               className="block max-h-80 max-w-full object-contain"
@@ -364,7 +360,6 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
             </Modal>
           </ModalOverlay>
         </DialogTrigger>
-        <div className="absolute top-2 right-2">{downloadOverlay}</div>
       </div>
     );
   const typeLabel = attachmentTypeLabel(attachment.fileName, attachment.contentType);
@@ -468,7 +463,7 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
 }
 
 /** The "new messages" divider (Slack-style): a brand rule naming where unread begins. */
-function UnreadDivider() {
+export function UnreadDivider() {
   return (
     <div
       role="separator"
@@ -486,6 +481,19 @@ function UnreadDivider() {
   );
 }
 
+/** The date rule drawn above the first message of a day. */
+export function DayDivider({ value, locale }: { value: Date | string; locale?: string }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2 md:px-6">
+      <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
+      <span className="shrink-0 bg-primary px-2 text-xs text-tertiary tabular-nums">
+        {dayLabel(value, locale)}
+      </span>
+      <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
+    </div>
+  );
+}
+
 /** A row is a plain flow item: its height is whatever its content needs, and nothing — neither
  * this file nor the conversation around it — estimates that height in advance.
  *
@@ -497,24 +505,49 @@ function UnreadDivider() {
  * that pins the main thread until the renderer is killed. */
 const ROW_CLASS = "flex flex-col";
 
+/** An Agent's avatar in the stream, with that Agent's live status dot: it reads that one Agent, so
+ * another Agent's activity never repaints this row. */
+function MessageAgentAvatar({
+  agentId,
+  name,
+  src,
+  deleted,
+}: {
+  agentId: string;
+  name: string;
+  src?: string | null;
+  deleted: boolean;
+}) {
+  const display = useLiveAgentDisplay(agentId);
+  return <AgentDisplayAvatar name={name} src={src} display={display} deleted={deleted} size="sm" />;
+}
+
 /** One history row: optional day divider, then the message with its hover actions. */
-export function MessageRow({
+/**
+ * Memoized: a conversation re-renders on every send, poll, page and pane change, and a row only
+ * needs to when its own message or row state does. Callers keep its props stable (`useCallback`,
+ * `useLatestCallback` for event handlers) so an unrelated change skips the row.
+ */
+export const MessageRow = memo(function MessageRow({
   message,
+  showsTask = false,
   own,
   dayChanged,
   grouped,
   expanded,
   onToggleExpanded,
-  agentDisplay,
+  collapsible = true,
   unreadStartsHere,
+  highlighted,
   dateLocale,
-  threadEntry,
-  threadPreview,
-  messageFooter,
+  onOpenThread,
   onToggleReaction,
+  onToggleSave,
   onOpenAgentProfile,
   viewerHandle,
   plainMentions,
+  onOpenTask,
+  channelNames,
   onQuoteSelection,
 }: {
   message: MessageView;
@@ -525,18 +558,28 @@ export function MessageRow({
    * than the row, so a row that re-renders (or is skipped and rendered again as you scroll) never
    * collapses behind the reader. */
   expanded: boolean;
-  onToggleExpanded: () => void;
-  /** The live display snapshot for one Agent, from the app shell's subscription. Absent where the
-   * surface has no access to it; the avatar then renders without a dot rather than as a wrong one. */
-  agentDisplay?: (agentId: string) => AgentDisplaySnapshot | undefined;
-  /** The conversation's unread run begins at this row (ADR 0046): draws the divider above. */
+  /** Called with this row's message id, so one stable handler serves every row. */
+  onToggleExpanded: (messageId: string) => void;
+  /** Whether a long body may fold at all (the viewer's "Collapse long messages" preference). */
+  collapsible?: boolean;
+  /** The conversation's unread run begins at this row: draws the divider above. */
   unreadStartsHere?: boolean;
+  /** A position jump just landed on this row, so it wears the anchor highlight for a moment. The
+   * `#message-<id>` deep link gets that from `:target` below; a saved jump carries no hash
+   * (#713) and the pane highlights the row by id instead — same classes, either way. */
+  highlighted?: boolean;
   dateLocale?: string;
-  threadEntry?: (message: MessageView) => MessageThreadEntry;
-  threadPreview?: (message: MessageView) => ReactNode;
-  messageFooter?: (message: MessageView) => ReactNode;
+  /** Opens a root's thread. Present, the row offers its thread (the toolbar and sheet entries,
+   * and the preview card), each reading its own root's thread summary (`thread-summary.tsx`). */
+  onOpenThread?: (rootId: string) => void;
+  /** Shows the Task the message became under it (`MessageTask`): the conversation's own stream
+   * does, a thread pane (whose root the Task popup already shows) does not. */
+  showsTask?: boolean;
   /** Toggles the viewer's own emoji reaction on a message; the conversation refreshes it. */
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => void;
+  /** Saves/unsaves this message for the viewer (#127): the conversation owns the write, the
+   * Chat page's Saved context supplies `saved`. Absent, the row offers no save action. */
+  onToggleSave?: (messageId: string, saved: boolean) => Promise<void>;
   /** Opens the Agent profile panel; present only where the conversation owns that slot
    * (`features/agents/profile-panel/`'s `openAgentProfile`). Absent, the avatar/name render inert. */
   onOpenAgentProfile?: (agentId: string) => void;
@@ -546,12 +589,17 @@ export function MessageRow({
    * (DM text, or a channel body written without the completion) still renders the member's
    * display label. Absent, plain handles render as literal text. */
   plainMentions?: Map<string, ChipMention>;
+  /** Opens a task reference's detail popup (see `MessageBody`). */
+  onOpenTask?: (number: number) => void;
+  /** Channel id → current name, for the channel links in the body (see `MessageBody`). */
+  channelNames?: ReadonlyMap<string, string>;
   /** Offers "reply to this selection" on a highlight inside this row's body: the row hands back
    * the finished markdown quote, credited to the message it came from. Absent (e.g. the
    * conversation has no composer to put it in), no affordance is offered and no selection is
    * read at all. */
   onQuoteSelection?: (quote: string) => void;
 }) {
+  const timeFormat = useTimeFormat();
   const displayName = own ? m.conversation_you() : message.senderName;
   const deleted = Boolean(message.senderDeleted);
   const openableAgentId =
@@ -563,21 +611,20 @@ export function MessageRow({
       ? message.senderAgentId
       : undefined;
   // A deleted sender is inert and visually muted: no profile affordance, a grey avatar tone, and
-  // a `DELETED` badge beside the name (ADR 0044).
+  // a `DELETED` badge beside the name.
   // An Agent's avatar in the stream carries the same online/working/thinking/error/offline dot the
   // sidebar, conversation header and @-mention popup use, so you can tell whether the Agent that
-  // wrote a message is around right now without opening its profile. The snapshot comes from the
-  // app shell's one subscription, looked up by the conversation and passed in. A person has no
-  // presence in the product, so a person's avatar stays plain; a deleted Agent shows no dot
+  // wrote a message is around right now without opening its profile. The avatar reads that one
+  // Agent from the app shell's live Agent store (`MessageAgentAvatar`). A person's avatar
+  // stays plain here (people's presence is drawn on the Members page); a deleted Agent shows no dot
   // either (`AgentDisplayAvatar` greys it and drops the dot) — a deletion is not a presence state.
   const avatar =
     message.senderKind === "agent" && message.senderAgentId ? (
-      <AgentDisplayAvatar
+      <MessageAgentAvatar
+        agentId={message.senderAgentId}
         name={message.senderName}
         src={message.senderAvatarUrl}
-        display={agentDisplay?.(message.senderAgentId)}
         deleted={deleted}
-        size="sm"
       />
     ) : (
       <Avatar
@@ -595,7 +642,11 @@ export function MessageRow({
   // over this message while selecting another one never raises it.
   const bodyRef = useRef<HTMLDivElement>(null);
   const quoteAffordanceRef = useRef<HTMLDivElement>(null);
+  /** Whether the latest pointer press was a finger or a pen rather than a mouse: a selection made
+   * that way raises the platform's own edit menu above the highlight, so the bar goes below it. */
+  const touchSelectionRef = useRef(false);
   const toast = useAppToast();
+  const saveSaved = useIsMessageSaved(message.id);
   const [quoteOffer, setQuoteOffer] = useState<
     { quote: string; html: string; text: string; top: number; left: number } | undefined
   >(undefined);
@@ -618,21 +669,23 @@ export function MessageRow({
       return;
     }
     const quote = formatSelectionQuote(
-      { author: displayName, time: clockLabel(message.createdAt, dateLocale) },
+      { author: displayName, time: clockLabel(message.createdAt, dateLocale, timeFormat) },
       selection.toString(),
     );
     if (!quote) {
       setQuoteOffer(undefined);
       return;
     }
-    // Anchored above the highlight and centered on it; the visible history scroller is the flip
-    // boundary, so the bar only drops below the highlight when it would scroll out of view. The
+    // Centered on the highlight, above it for a mouse selection and below it for a touch one
+    // (the platform's own edit menu takes the space above); the visible history scroller is the
+    // flip boundary, so the bar only changes side when it would scroll out of view. The
     // fragment and its text are captured now: clicking a bar button may collapse the live
     // selection, but the copy actions must still carry what the reader highlighted.
     const placement = selectionAffordancePlacement(
       range.getBoundingClientRect(),
       container.getBoundingClientRect(),
-      { top: visibleBoundaryTop(container) },
+      visibleBoundary(container),
+      touchSelectionRef.current ? "below" : "above",
     );
     setQuoteOffer({
       quote,
@@ -640,7 +693,7 @@ export function MessageRow({
       text: selection.toString(),
       ...placement,
     });
-  }, [onQuoteSelection, displayName, message.createdAt, dateLocale]);
+  }, [onQuoteSelection, displayName, message.createdAt, dateLocale, timeFormat]);
   // A gesture anywhere else (a click, a scroll, Escape) withdraws the offer. The affordance
   // itself is exempt: pointerdown on it would otherwise unmount the button before its click.
   useEffect(() => {
@@ -701,8 +754,9 @@ export function MessageRow({
       clearTimeout(timer);
       timer = setTimeout(readQuoteSelection, 200);
     };
-    const onPointerDown = () => {
+    const onPointerDown = (event: PointerEvent) => {
       pointerDownRef.current = true;
+      touchSelectionRef.current = event.pointerType !== "mouse";
     };
     const onPointerUp = () => {
       pointerDownRef.current = false;
@@ -724,70 +778,64 @@ export function MessageRow({
     };
   }, [onQuoteSelection, readQuoteSelection]);
   // A system message (task/membership notices, etc.) is not a person talking: it carries no
-  // avatar and no sender heading, and renders as a compact, muted line in the stream — like
-  // Slack's channel notices. The body still goes through `MessageBody` so a `@handle` mention in
-  // it stays a resolved chip. The wrapper (`li`) is the same in both branches, so a system row
-  // costs the browser exactly what a normal one does.
+  // avatar and no sender heading, and renders as a compact, muted line of plain text in the
+  // stream — like Slack's channel notices. It still carries the unread divider and the jump
+  // highlight, since the unread run can begin at a notice and a jump can land on one. The
+  // wrapper (`li`) is the same in both branches, so a system row costs the browser exactly what a
+  // normal one does. A run of two or more notices is folded into one summary line by
+  // `SystemMessageGroup`, which renders these rows when opened.
   if (message.senderKind === "system") {
     return (
       <li data-message-id={message.id} className={ROW_CLASS}>
-        {dayChanged && (
-          <div className="flex items-center gap-3 px-4 py-2 md:px-6">
-            <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
-            <span className="shrink-0 bg-primary px-2 text-xs text-tertiary tabular-nums">
-              {dayLabel(message.createdAt, dateLocale)}
-            </span>
-            <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
-          </div>
-        )}
+        {unreadStartsHere && <UnreadDivider />}
+        {dayChanged && <DayDivider value={message.createdAt} locale={dateLocale} />}
         <div
           id={`message-${message.id}`}
           data-message="system"
-          className="group/message flex scroll-m-6 items-baseline gap-2 px-4 py-1 text-xs text-tertiary md:px-6"
+          data-scroll-anchor
+          className={cn(
+            "group/message flex scroll-m-6 items-baseline gap-2 px-4 py-1 text-xs text-tertiary transition-[background-color,box-shadow] duration-500 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:px-6",
+            highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
+          )}
         >
           {/* System bodies are short plain text (task/membership notices, authored with a plain
               `@handle`, not a mention token), so they render as a single muted line rather than
-              full Markdown. */}
-          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{message.body}</span>
+              full Markdown. One line, never wrapped: overflow becomes an ellipsis (the boss's
+              ruling on the phone — a notice is skimmable or it is noise). The span is a flex
+              item with min-w-0, so `truncate` collapses against the hover timestamp and works. */}
+          {/* The tooltip wraps the span itself: our `Tooltip` already renders RAC's
+              `TooltipTrigger` around its child, and the wrapper version put a `<button>` between
+              the flex row and this span — so the span's `min-w-0 flex-1` stopped governing the
+              row, the row grew past the container, and the whole stream scrolled sideways on a
+              phone. As a direct child the span is the flex item again, so `truncate` clips. */}
+          <Tooltip title={message.body}>
+            <span className="min-w-0 flex-1 truncate">{message.body}</span>
+          </Tooltip>
           <time
             dateTime={new Date(message.createdAt).toISOString()}
             className="shrink-0 tabular-nums opacity-0 group-hover/message:opacity-100"
           >
-            {clockLabel(message.createdAt, dateLocale)}
+            {clockLabel(message.createdAt, dateLocale, timeFormat)}
           </time>
         </div>
       </li>
     );
   }
-  const thread = threadEntry?.(message);
-  // The badge already shows the count visually, so it stays out of the tooltip; screen readers
-  // still get it through the accessible name.
-  const threadLabel = m.conversation_thread_reply();
-  const threadAccessibleLabel = thread?.unread
-    ? `${threadLabel} · ${m.conversation_thread_unread({ count: thread.unread })}`
-    : threadLabel;
   // #544's whole-message copy (the IM-standard "Copy text", the only copy path for a collapsed,
   // unselectable body) rides the action strip on desktop and the tap action sheet on the mobile
   // shell; the sheet therefore also opens for a message with no thread and no reactions.
-  const copyable = Boolean(messagePlainText(message).trim());
+  const copyable = Boolean(messagePlainText(message, channelNames).trim());
   return (
     <li data-message-id={message.id} className={ROW_CLASS}>
       {unreadStartsHere && <UnreadDivider />}
-      {dayChanged && (
-        <div className="flex items-center gap-3 px-4 py-2 md:px-6">
-          <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
-          <span className="shrink-0 bg-primary px-2 text-xs text-tertiary tabular-nums">
-            {dayLabel(message.createdAt, dateLocale)}
-          </span>
-          <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
-        </div>
-      )}
+      {dayChanged && <DayDivider value={message.createdAt} locale={dateLocale} />}
       <div
         id={`message-${message.id}`}
         data-message={own ? "own" : "other"}
         onClick={openActions}
         className={cn(
-          "group/message relative flex scroll-m-6 gap-3 px-4 transition-[background-color,box-shadow] duration-500 hover:bg-secondary focus-within:bg-secondary target:bg-active target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:px-6",
+          "group/message relative flex scroll-m-6 gap-3 px-4 transition-[background-color,box-shadow] duration-500 hover:bg-secondary focus-within:bg-secondary target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:px-6",
+          highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
           grouped ? "py-0.5" : "py-2",
         )}
       >
@@ -797,7 +845,7 @@ export function MessageRow({
               dateTime={new Date(message.createdAt).toISOString()}
               className="mt-0.5 text-xs text-quaternary tabular-nums opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100"
             >
-              {clockLabel(message.createdAt, dateLocale)}
+              {clockLabel(message.createdAt, dateLocale, timeFormat)}
             </time>
           ) : openableAgentId ? (
             <Button
@@ -830,12 +878,15 @@ export function MessageRow({
                   {displayName}
                 </span>
               )}
+              {message.senderKind === "agent" && message.senderAgentId && !deleted && (
+                <AgentModelLabel agentId={message.senderAgentId} seenAt={message.createdAt} />
+              )}
               {deleted && <DeletedAgentBadge />}
               <time
                 dateTime={new Date(message.createdAt).toISOString()}
                 className="shrink-0 text-xs text-tertiary tabular-nums"
               >
-                {clockLabel(message.createdAt, dateLocale)}
+                {clockLabel(message.createdAt, dateLocale, timeFormat)}
               </time>
             </p>
           )}
@@ -848,9 +899,11 @@ export function MessageRow({
           ) : (
             // `relative` anchors the reply-to-selection affordance to the body it was highlighted
             // out of; the gesture handlers live here rather than on the row so dragging from a
-            // message's text (its timestamp, say) cannot raise an offer for it.
+            // message's text (its timestamp, say) cannot raise an offer for it. It is also the text
+            // the scroll anchor holds in place across a load (`data-scroll-anchor`).
             <div
               ref={bodyRef}
+              data-scroll-anchor
               onMouseUp={readQuoteSelection}
               onKeyUp={readQuoteSelection}
               className={cn(
@@ -866,9 +919,12 @@ export function MessageRow({
                 mentions={message.mentions}
                 plainMentions={plainMentions}
                 viewerHandle={viewerHandle}
+                onOpenTask={onOpenTask}
+                channelNames={channelNames}
                 onOpenAgentProfile={onOpenAgentProfile}
                 expanded={expanded}
-                onToggleExpanded={onToggleExpanded}
+                collapsible={collapsible}
+                onToggleExpanded={() => onToggleExpanded(message.id)}
               />
               {quoteOffer && onQuoteSelection && (
                 <div
@@ -951,49 +1007,47 @@ export function MessageRow({
               })}
             </div>
           )}
-          {messageFooter?.(message)}
-          {threadPreview?.(message)}
+          {showsTask && <MessageTask messageId={message.id} />}
+          {onOpenThread && <ThreadPreview rootId={message.id} onOpen={onOpenThread} />}
         </div>
-        {(threadEntry || onToggleReaction || copyable) && (
+        {(onOpenThread || onToggleReaction || onToggleSave || copyable) && (
           /* Hidden until revealed: hover/focus in the wide desktop shell (`lg` and up, with
-             a hover-capable fine pointer), and always while it carries an unread-thread
-             badge. Everywhere else the row tap opens the action sheet instead. The reveal
-             needs all three conditions: below `lg` the mobile shell is in charge even on a
-             mouse-driven narrow window; mobile browsers stick `:hover` onto a tapped row (it
-             has a click handler); and some touch devices (iOS Safari) report `hover: hover`
-             anyway — any missing gate would leave the bar visible after the sheet closes.
-             Hidden also means `pointer-events-none` — an invisible bar must not swallow taps
-             aimed at the message under it. Order is thread, reactions, then whole-message
-             copy last — the IM-standard order (#546). */
+             a hover-capable fine pointer). An unread-thread badge stays inside this bar, but
+             does not force it open: the thread preview already exposes the unread count, so
+             showing both would duplicate the same signal. Everywhere else the row tap opens
+             the action sheet instead. The reveal needs all three conditions: below `lg` the
+             mobile shell is in charge even on a mouse-driven narrow window; mobile browsers
+             stick `:hover` onto a tapped row (it has a click handler); and some touch devices
+             (iOS Safari) report `hover: hover` anyway — any missing gate would leave the bar
+             visible after the sheet closes. Hidden also means `pointer-events-none` — an
+             invisible bar must not swallow taps aimed at the message under it. Order is thread,
+             reactions, then whole-message copy last — the IM-standard order (#546). */
           <div
             className={cn(
               "pointer-events-none absolute top-0.5 right-3 flex items-center gap-0.5 rounded-lg border border-secondary bg-primary p-0.5 opacity-0 shadow-lg transition-opacity",
-              "has-[[data-thread-unread]]:pointer-events-auto has-[[data-thread-unread]]:opacity-100",
               "lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:opacity-100",
               "lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:opacity-100",
             )}
           >
-            {thread && (
-              <span className="relative inline-flex">
-                <ButtonUtility
-                  icon={MessageSquare}
-                  size="xs"
-                  color="tertiary"
-                  tooltip={threadLabel}
-                  aria-label={threadAccessibleLabel}
-                  onClick={thread.open}
-                  className="p-1 *:data-icon:size-3.5"
-                />
-                {thread.unread > 0 && (
-                  <span data-thread-unread className="absolute -top-1.5 -right-1">
-                    <UnreadBadge count={thread.unread} />
-                  </span>
-                )}
-              </span>
-            )}
+            {onOpenThread && <ThreadToolbarEntry rootId={message.id} onOpen={onOpenThread} />}
             {onToggleReaction && (
               <MessageReactionPicker
                 onPick={(emoji) => onToggleReaction(message.id, emoji, true)}
+              />
+            )}
+            {onToggleSave && (
+              <ButtonUtility
+                size="xs"
+                color="tertiary"
+                icon={saveSaved ? BookmarkCheck : Bookmark}
+                tooltip={saveSaved ? m.conversation_unsave() : m.conversation_save()}
+                aria-label={saveSaved ? m.conversation_unsave() : m.conversation_save()}
+                onClick={() => {
+                  void onToggleSave(message.id, !saveSaved).catch(() => {
+                    toast.error(m.conversation_save_failed());
+                  });
+                }}
+                className="p-1 *:data-icon:size-3.5"
               />
             )}
             <ButtonUtility
@@ -1002,7 +1056,7 @@ export function MessageRow({
               icon={Copy01}
               tooltip={m.conversation_message_copy_text()}
               onClick={() => {
-                void copyText(messagePlainText(message)).then((copied) => {
+                void copyText(messagePlainText(message, channelNames)).then((copied) => {
                   if (copied) toast.success(m.conversation_message_copied());
                   else toast.error(m.conversation_copy_failed());
                 });
@@ -1011,7 +1065,7 @@ export function MessageRow({
             />
           </div>
         )}
-        {sheetActions && (thread || onToggleReaction || copyable) && (
+        {sheetActions && (onOpenThread || onToggleReaction || onToggleSave || copyable) && (
           /* The mobile-shell counterpart of the hover toolbar: a bottom action sheet in the
              Slack/Discord mobile layout — the quoted message card, a quick-reaction row,
              then full-width actions (thread row, whole-message copy last) — opened by a tap
@@ -1061,11 +1115,11 @@ export function MessageRow({
                         dateTime={new Date(message.createdAt).toISOString()}
                         className="shrink-0 text-xs text-tertiary tabular-nums"
                       >
-                        {clockLabel(message.createdAt, dateLocale)}
+                        {clockLabel(message.createdAt, dateLocale, timeFormat)}
                       </time>
                     </p>
                     <p className="line-clamp-2 text-sm leading-5 text-secondary [overflow-wrap:anywhere]">
-                      {message.body}
+                      {messagePlainText(message, channelNames)}
                     </p>
                   </div>
                 </div>
@@ -1095,29 +1149,36 @@ export function MessageRow({
                   </div>
                 )}
                 <div className="flex flex-col px-3 pt-1 pb-3">
-                  {onToggleReaction && (copyable || thread) && (
-                    <div aria-hidden="true" className="mx-1 mt-1 mb-1 h-px bg-secondary" />
-                  )}
-                  {thread && (
+                  {onToggleSave && (
                     <Button
                       color="tertiary"
                       size="md"
                       noTextPadding
-                      iconLeading={MessageSquare}
-                      iconTrailing={
-                        thread.unread > 0 ? <UnreadBadge count={thread.unread} /> : undefined
-                      }
-                      aria-label={threadAccessibleLabel}
+                      iconLeading={saveSaved ? BookmarkCheck : Bookmark}
                       onPress={() => {
                         setActionsOpen(false);
-                        thread.open();
+                        void onToggleSave(message.id, !saveSaved).catch(() => {
+                          toast.error(m.conversation_save_failed());
+                        });
                       }}
                       className="w-full justify-start rounded-lg py-3 *:data-icon:size-5 [&>[data-text]]:flex-1 [&>[data-text]]:text-left"
                     >
-                      {threadLabel}
+                      {saveSaved ? m.conversation_unsave() : m.conversation_save()}
                     </Button>
                   )}
-                  {copyable && thread && (
+                  {(onToggleReaction || onToggleSave) && (copyable || onOpenThread) && (
+                    <div aria-hidden="true" className="mx-1 mt-1 mb-1 h-px bg-secondary" />
+                  )}
+                  {onOpenThread && (
+                    <ThreadSheetEntry
+                      rootId={message.id}
+                      onOpen={(rootId) => {
+                        setActionsOpen(false);
+                        onOpenThread(rootId);
+                      }}
+                    />
+                  )}
+                  {copyable && onOpenThread && (
                     <div aria-hidden="true" className="mx-1 my-1 h-px bg-secondary" />
                   )}
                   {copyable && (
@@ -1128,7 +1189,7 @@ export function MessageRow({
                       iconLeading={Copy01}
                       onPress={() => {
                         setActionsOpen(false);
-                        void copyText(messagePlainText(message)).then((copied) => {
+                        void copyText(messagePlainText(message, channelNames)).then((copied) => {
                           if (copied) toast.success(m.conversation_message_copied());
                           else toast.error(m.conversation_copy_failed());
                         });
@@ -1146,4 +1207,4 @@ export function MessageRow({
       </div>
     </li>
   );
-}
+});

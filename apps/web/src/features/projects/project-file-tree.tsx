@@ -20,11 +20,12 @@ import {
   RouterProvider,
   type Key,
 } from "react-aria-components";
-import { Dropdown } from "@/components/base/dropdown/dropdown";
-import { useAppToast } from "@/components/ui/toast";
-import { copyText } from "@/features/records/report-editor/lib/clipboard";
-import { cn } from "@/lib/utils";
-import { m } from "@/paraglide/messages";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { useAppToast } from "#src/components/ui/toast";
+import { copyText } from "#src/features/records/report-editor/lib/clipboard";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
 import { projectFileDownloadUrl } from "./project-file-urls";
 import { projectObjectQuery } from "./project-tree-queries";
 import {
@@ -55,6 +56,7 @@ export function ProjectFileTree({
   className?: string;
 }) {
   const router = useRouter();
+  const workspaceSlug = useWorkspaceSlug();
   const queryClient = useQueryClient();
   const toast = useAppToast();
   // Hover intent, as the router's own preloading does it: a pointer sweeping across the tree
@@ -62,8 +64,8 @@ export function ProjectFileTree({
   const hoverPrefetch = useRef<ReturnType<typeof setTimeout>>(undefined);
   const hrefOf = (path: string) =>
     router.buildLocation({
-      to: "/projects/$projectSlug/tree/$",
-      params: { projectSlug: slug, _splat: path },
+      to: "/w/$workspaceSlug/projects/$projectSlug/tree/$",
+      params: { workspaceSlug, projectSlug: slug, _splat: path },
     }).href;
 
   // The folders holding the current file open by themselves; everything else is the User's.

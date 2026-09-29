@@ -10,15 +10,15 @@ import {
   encodeReminderSync,
   type AgentReminderOperationRequest,
 } from "@lrm/coforge-sdk/internal";
-import { PrismaClient } from "../generated/client";
-import { ReminderNotices } from "../src/server/conversations/reminder-notices.server";
+import { PrismaClient } from "#src/generated/prisma/client";
+import { ReminderNotices } from "#src/server/conversations/reminder-notices.server";
 import {
   createAgentReminderMethod,
   createReminderFireMethod,
   createReminderSnapshotMethod,
-} from "../src/server/centrifugo/rpc-handler.server";
-import { PrismaReminderRepository } from "../src/server/db/repositories/reminder.repositories.server";
-import { MAX_ACTIVE_REMINDERS, Reminders } from "../src/server/reminders/reminders.server";
+} from "#src/server/centrifugo/rpc-handler.server";
+import { PrismaReminderRepository } from "#src/server/db/repositories/reminder.repositories.server";
+import { MAX_ACTIVE_REMINDERS, Reminders } from "#src/server/reminders/reminders.server";
 
 const connectionString = Bun.env.REMINDER_TEST_DATABASE_URL;
 if (!connectionString)
@@ -201,6 +201,26 @@ test("Agent operation credential cannot act as another same-owner Agent", async 
   });
 });
 
+test("an eight-hex message anchor resolves to the message it prefixes", async () => {
+  // `Message.id` is a native `uuid` column, so a prefix has to be matched as an id RANGE — a
+  // `startsWith`/`LIKE` pattern does not apply to a `uuid` and the query fails outright. This pins
+  // the documented anchor form the CLI passes (`--message-id` accepts eight hex characters).
+  const repository = new PrismaReminderRepository(db);
+  const anchor = await repository.resolveAnchor(
+    {
+      workspaceId: fixture.workspaceId,
+      computerId: fixture.computerId,
+      agentId: fixture.agentId,
+      userId: fixture.userId,
+    },
+    fixture.target,
+    fixture.messageId.slice(0, 8),
+  );
+
+  // The anchor is normalized to the full id it prefixes.
+  expect(anchor).toEqual({ messageId: fixture.messageId, target: fixture.target });
+});
+
 afterAll(async () => {
   const workspaceIds = [fixture.workspaceId, fixture.otherWorkspaceId].filter(Boolean);
   const userIds = [fixture.userId, fixture.otherUserId].filter(Boolean);
@@ -211,11 +231,10 @@ afterAll(async () => {
 });
 
 const schedule = (
-  requestId: string,
+  idempotencyKey: string,
   extra: Partial<AgentReminderOperationRequest> = {},
 ): AgentReminderOperationRequest => ({
-  protocolMajor: 1,
-  requestId,
+  idempotencyKey,
   workspaceId: fixture.workspaceId,
   computerId: fixture.computerId,
   agentId: fixture.agentId,
@@ -378,8 +397,7 @@ test("update computes fireAt from delaySeconds exactly as snooze does", async ()
     const snoozed = (
       await reminders.execute(
         {
-          protocolMajor: 1,
-          requestId: `delay-update-snooze-${crypto.randomUUID()}`,
+          idempotencyKey: `delay-update-snooze-${crypto.randomUUID()}`,
           workspaceId: fixture.workspaceId,
           computerId: fixture.computerId,
           agentId: fixture.agentId,
@@ -753,8 +771,7 @@ test("PostgreSQL reminder lifecycle is scoped, idempotent, concurrent, and chron
   ).reminders[0]!;
   expect(noRepeat.repeat).toBeUndefined();
   const snoozeRequest: AgentReminderOperationRequest = {
-    protocolMajor: 1,
-    requestId: "snooze-replay",
+    idempotencyKey: "snooze-replay",
     workspaceId: fixture.workspaceId,
     computerId: fixture.computerId,
     agentId: fixture.agentId,
@@ -806,7 +823,7 @@ test("PostgreSQL reminder lifecycle is scoped, idempotent, concurrent, and chron
     reminders.execute(
       {
         ...snoozeRequest,
-        requestId: "snooze-at-cap",
+        idempotencyKey: "snooze-at-cap",
         reminderId: concurrent.reminderId,
       },
       fixture.userId,
@@ -815,8 +832,7 @@ test("PostgreSQL reminder lifecycle is scoped, idempotent, concurrent, and chron
   await expect(
     reminders.execute(
       {
-        protocolMajor: 1,
-        requestId: "missing-update",
+        idempotencyKey: "missing-update",
         workspaceId: fixture.workspaceId,
         computerId: fixture.computerId,
         agentId: fixture.agentId,

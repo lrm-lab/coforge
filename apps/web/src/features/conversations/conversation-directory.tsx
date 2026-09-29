@@ -1,19 +1,41 @@
-import { ChevronRight, Hash01 as Hash, Plus } from "@untitledui/icons";
-import { useEffect, useId, useState, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { Bookmark, ChevronRight, Hash01 as Hash, Plus } from "@untitledui/icons";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { Link, useRouter } from "@tanstack/react-router";
+import { DndContext } from "@dnd-kit/core";
+import { Link as AriaLink } from "react-aria-components";
 
-import { Button } from "@/components/base/buttons/button";
-import { ButtonUtility } from "@/components/base/buttons/button-utility";
-import { AgentDisplayAvatar } from "@/features/agents/agent-activity-avatar";
-import type { LiveAgent } from "@/features/agents/workspace-agents-realtime";
-import { cx } from "@/utils/cx";
-import { m } from "@/paraglide/messages";
+import { Avatar } from "#src/components/base/avatar/avatar";
+import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useAppToast } from "#src/components/ui/toast";
+import { AgentDisplayAvatar } from "#src/features/agents/agent-activity-avatar";
+import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
+import { useMemberOnline } from "#src/features/workspaces/member-presence";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { cx } from "#src/utils/cx";
+import { m } from "#src/paraglide/messages";
 import { useChannelUnreadCounts, useCloseConversationList } from "./conversation-navigation";
+import { useSavedEntries } from "./conversation-host";
+import { ConversationRowMenu } from "./conversation-row-menu";
+import { conversationRowMenuEnabled } from "./conversation-row-menu-model";
+import { useSidebarActions } from "./sidebar-lists";
+import type { DirectRow } from "./sidebar-rows";
+import { DirectoryDragRow, DirectoryDropList, useDirectoryDrag } from "./directory-drag";
 import {
+  channelRowKey,
+  directRowKey,
+  splitPinnedConversations,
+  type DirectoryLayout,
+} from "./pinned-conversations";
+import { conversationRoute, type ConversationTarget } from "./last-conversation";
+import {
+  directorySectionHideable,
   readCollapsedSections,
   writeCollapsedSections,
   type DirectorySectionId,
 } from "./directory-sections";
+import { EMPTY_SECTION_HIDDEN_CLASS } from "#src/features/settings/hide-empty-sidebar-sections";
 
 type DirectoryChannel = {
   id: string;
@@ -21,7 +43,31 @@ type DirectoryChannel = {
   joined: boolean;
   /** The member muted this channel; its unread badge degrades to a bare dot. */
   muted?: boolean;
+  /** The member pinned this row; it moves to the Pinned section and its menu item reads "Unpin". */
+  pinned: boolean;
+  /** Where the row sits in the Pinned section, among the member's pinned channels and DMs. */
+  pinSortOrder: number | null;
 };
+
+/** A DM row as the directory shows it: its row, the name it goes by, and its live Agent when it is
+ * one with an Agent. */
+type DirectEntry = DirectRow & { name: string; agent?: LiveAgent; self: boolean };
+
+/** A member's avatar in their DM row, with the online dot once presence is known (an unknown
+ * state is never drawn as offline). */
+function MemberAvatar({ userId, name, src }: { userId: string; name: string; src: string | null }) {
+  const online = useMemberOnline(userId);
+  return (
+    <Avatar
+      size="xs"
+      alt={name}
+      src={src ?? undefined}
+      initials={avatarInitial(name)}
+      contentClassName={avatarToneClassName(name)}
+      status={online === undefined ? undefined : online ? "online" : "offline"}
+    />
+  );
+}
 
 /** Slack-style badge: the count up to 99, then "99+". Hidden from AT by the row's label. */
 export function UnreadBadge({ count }: { count: number }) {
@@ -35,8 +81,9 @@ export function UnreadBadge({ count }: { count: number }) {
   );
 }
 
-/** A muted channel de-emphasises its badge to a bare dot (Slack's muted treatment). */
-function UnreadDot() {
+/** The unread marker without a number: "there is something here", not "how much". Used where the
+ * marker sits on an icon — a count on a small glyph is noise, and the sidebar keeps the numbers. */
+export function UnreadDot() {
   return (
     <span aria-hidden="true" className="inline-flex size-2 shrink-0 rounded-full bg-brand-solid" />
   );
@@ -57,32 +104,44 @@ function ConversationRow({
   icon,
   muted,
   unreadCount,
+  count,
   label,
   children,
 }: {
-  target: { channelId: string } | { agentId: string };
+  target: ConversationTarget;
   current?: boolean;
   icon: ReactNode;
   muted?: boolean;
   unreadCount?: number;
+  /** A plain total shown at the row's end (the Saved entry's bookmark count), not an unread
+   * signal: muted, and absent at zero. `label` is how the row's accessible name says it. */
+  count?: { value: number; label: string };
   /** The row's own name, so an unread row keeps its accessible name instead of replacing it. */
   label: string;
   children: ReactNode;
 }) {
   const closeList = useCloseConversationList();
+  const router = useRouter();
+  const workspaceSlug = useWorkspaceSlug();
+  const route = conversationRoute(target, workspaceSlug);
   return (
-    <Link
-      {...("channelId" in target
-        ? { to: "/messages/channels/$channelId", params: target }
-        : { to: "/messages/$agentId", params: target })}
+    // The row is a React Aria link so the conversation menu's `MenuTrigger trigger="contextMenu"`
+    // can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
+    // navigation (React Aria's documented client-side routing pattern, react-aria.adobe.com/Link).
+    <AriaLink
+      href={router.buildLocation(route).href}
+      // `href` is always set, so React Aria renders an `<a>`; the check narrows the props type.
+      render={(props) => ("href" in props ? <Link {...props} {...route} /> : <span {...props} />)}
       aria-current={current ? "page" : undefined}
-      aria-label={rowLabel(unreadCount, label)}
+      aria-label={rowLabel(unreadCount, label) ?? (count ? `${label}, ${count.label}` : undefined)}
       // On mobile the list is a separate pane; choosing a row reveals the conversation even when
       // the URL is unchanged (re-opening the channel already in the address bar), which the
       // pathname-based reset in `ConversationNavigation` cannot see.
-      onClick={closeList}
+      onPress={closeList}
       className={cx(
-        "flex max-h-9 w-full cursor-pointer items-center gap-2 rounded-md p-2 outline-focus-ring transition duration-100 ease-linear select-none focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
+        // `-webkit-user-drag: none`: a sidebar drag moves the row (see `directory-drag.tsx`), never
+        // the browser's own link drag.
+        "flex max-h-9 w-full cursor-pointer items-center gap-2 rounded-md p-2 outline-focus-ring transition duration-100 ease-linear select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
         current ? "bg-sidebar-accent" : "hover:bg-primary_hover",
       )}
     >
@@ -100,7 +159,12 @@ function ConversationRow({
         {children}
       </span>
       {unreadCount ? muted ? <UnreadDot /> : <UnreadBadge count={unreadCount} /> : null}
-    </Link>
+      {count ? (
+        <span aria-hidden="true" className="shrink-0 text-xs text-quaternary tabular-nums">
+          {count.value}
+        </span>
+      ) : null}
+    </AriaLink>
   );
 }
 
@@ -169,22 +233,78 @@ function DirectorySection({
 export function ConversationDirectory({
   channels,
   agents,
+  directRows: directRowList,
+  viewerId,
   selectedChannelId,
-  selectedAgentId,
+  selectedDmId,
+  selectedSaved,
   onCreateChannel,
 }: {
   channels: DirectoryChannel[];
   agents: LiveAgent[];
+  /** The viewer's DMs, with their Agents and with members, in the list's order: who each is with,
+   * which are pinned (and in what order), and which are closed. */
+  directRows: readonly DirectRow[];
+  /** The viewer, whose DM with themself reads "(you)". */
+  viewerId?: string;
   selectedChannelId?: string;
-  selectedAgentId?: string;
+  /** The open direct message, by conversation id (from the URL, so it highlights at once). */
+  selectedDmId?: string;
+  /** The Saved view is open — its sidebar entry renders as the current row. */
+  selectedSaved?: boolean;
   /** Opens the create-channel flow from the "+" next to the CHANNELS caption. */
   onCreateChannel?: () => void;
 }) {
   const unreadCounts = useChannelUnreadCounts();
-  const sortedChannels = [...channels].sort((left, right) =>
-    left.joined === right.joined ? 0 : left.joined ? -1 : 1,
-  );
-  /** Both groups start expanded so SSR and the first client render agree; the stored preference
+  const savedCount = useSavedEntries()?.length;
+  // Derived once per list change, not per render: the drag reads `base` and `natural` on every
+  // pointer move.
+  const { sortedChannels, directRows, base, natural } = useMemo(() => {
+    const sortedChannels = [...channels].sort((left, right) =>
+      left.joined === right.joined ? 0 : left.joined ? -1 : 1,
+    );
+    /** One row per existing DM (an Agent or member the viewer never wrote to has none, as in
+     * Raft), Agents and members mixed in the list's order. A DM with an Agent that is gone is left
+     * out; a closed one is left out of its section by the split. */
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+    const directRows = directRowList.flatMap((row): DirectEntry[] => {
+      if (row.peer.kind === "people")
+        return [{ ...row, name: row.peer.displayName, self: row.peer.userId === viewerId }];
+      const agent = agentsById.get(row.peer.agentId);
+      return agent ? [{ ...row, name: agent.displayName, agent, self: false }] : [];
+    });
+    const sections = splitPinnedConversations(sortedChannels, directRows);
+    const base: DirectoryLayout = {
+      pinned: sections.pinned.map((entry) =>
+        entry.kind === "channel" ? channelRowKey(entry.id) : directRowKey(entry.id),
+      ),
+      channels: sections.channels.map((channel) => channelRowKey(channel.id)),
+      agents: sections.directs.map((direct) => directRowKey(direct.conversationId)),
+    };
+    /** Where a row returns to when it is dragged out of Pinned: its list's own order. A closed DM
+     * that is still pinned is included so it can be seen while it is dragged. */
+    const natural = {
+      channels: sortedChannels.map((channel) => channelRowKey(channel.id)),
+      agents: directRows
+        .filter((direct) => direct.pinned || !direct.hidden)
+        .map((direct) => directRowKey(direct.conversationId)),
+    };
+    return { sortedChannels, directRows, base, natural };
+  }, [channels, agents, directRowList, viewerId]);
+  const toast = useAppToast();
+  const actions = useSidebarActions();
+  const drag = useDirectoryDrag({
+    layout: base,
+    natural,
+    commit: (change) => {
+      // Nothing in the sidebar can be dragged before hydration, when `actions` arrives.
+      actions?.arrange(change).catch((cause: unknown) => {
+        console.error("pinned conversations could not be saved", cause);
+        toast.error(m.conversation_menu_action_error());
+      });
+    },
+  });
+  /** All groups start expanded so SSR and the first client render agree; the stored preference
    * is applied right after mount (`localStorage` is unavailable during SSR). */
   const [collapsed, setCollapsed] = useState<DirectorySectionId[]>([]);
   useEffect(() => setCollapsed(readCollapsedSections()), []);
@@ -196,9 +316,140 @@ export function ConversationDirectory({
       writeCollapsedSections(next);
       return next;
     });
+
+  const channelRow = (channel: DirectoryChannel) => {
+    const current = channel.id === selectedChannelId;
+    return (
+      <ConversationRowMenu target={{ kind: "channel", ...channel }}>
+        <ConversationRow
+          target={{ channelId: channel.id }}
+          current={current}
+          muted={!channel.joined || channel.muted}
+          unreadCount={unreadCounts[channel.id]}
+          label={`#${channel.name}`}
+          icon={
+            <Hash
+              aria-hidden="true"
+              className={cx("size-4", current ? "text-brand-secondary" : "text-tertiary")}
+            />
+          }
+        >
+          {channel.name}
+        </ConversationRow>
+      </ConversationRowMenu>
+    );
+  };
+  const directRow = ({ conversationId, peer, pinned, name, agent, self }: DirectEntry) => (
+    <ConversationRowMenu target={{ kind: "direct", conversationId, pinned }}>
+      <ConversationRow
+        target={{ dmId: conversationId }}
+        current={conversationId === selectedDmId}
+        unreadCount={unreadCounts[conversationId]}
+        label={self ? `${name} ${m.conversation_dm_self_suffix()}` : name}
+        icon={
+          agent ? (
+            <AgentDisplayAvatar
+              name={agent.displayName}
+              src={agent.avatarUrl}
+              display={agent.display}
+              size="xs"
+            />
+          ) : peer.kind === "people" ? (
+            <MemberAvatar userId={peer.userId} name={name} src={peer.avatarUrl} />
+          ) : null
+        }
+      >
+        {name}
+        {self && <span className="ml-1 text-quaternary">{m.conversation_dm_self_suffix()}</span>}
+      </ConversationRow>
+    </ConversationRowMenu>
+  );
+  /** Every row by key, with whether it can be pinned (only a conversation the member is in). */
+  const rows = new Map<string, { node: ReactNode; draggable: boolean }>([
+    ...sortedChannels.map(
+      (channel) =>
+        [
+          channelRowKey(channel.id),
+          { node: channelRow(channel), draggable: conversationRowMenuEnabled(channel) },
+        ] as const,
+    ),
+    ...directRows.map(
+      (row) =>
+        [directRowKey(row.conversationId), { node: directRow(row), draggable: true }] as const,
+    ),
+  ]);
+  const list = (section: DirectorySectionId) =>
+    drag.layout[section].map((key) => {
+      const row = rows.get(key);
+      if (!row) return null;
+      return (
+        <DirectoryDragRow key={key} id={key} section={section} disabled={!row.draggable}>
+          {row.node}
+        </DirectoryDragRow>
+      );
+    });
+  const pinnedEmpty = drag.layout.pinned.length === 0;
+
   return (
-    <>
-      <div className="mt-2">
+    <DndContext {...drag.context}>
+      <div className="mt-2 px-4">
+        <ConversationRow
+          target={{ view: "saved" }}
+          current={selectedSaved}
+          count={
+            savedCount
+              ? { value: savedCount, label: m.conversation_saved_count({ count: savedCount }) }
+              : undefined
+          }
+          label={m.conversation_saved_nav()}
+          icon={
+            <Bookmark
+              aria-hidden="true"
+              className={cx("size-4", selectedSaved ? "text-brand-secondary" : "text-tertiary")}
+            />
+          }
+        >
+          {m.conversation_saved_nav()}
+        </ConversationRow>
+      </div>
+      {/* Pinned channels and DMs, together and in the order they were pinned. Empty, it shows
+          where to drop a row; a device without a mouse cannot drag, so it leaves it out there
+          (its rows pin from their long-press menu), and so does Hide empty sidebar sections until
+          a row is dragged. */}
+      <div
+        className={cx(
+          "mt-2",
+          pinnedEmpty && "hidden any-pointer-fine:block",
+          directorySectionHideable({
+            itemCount: base.pinned.length,
+            dragging: drag.dragging,
+            revealWhileDragging: true,
+          }) && EMPTY_SECTION_HIDDEN_CLASS,
+        )}
+      >
+        <DirectorySection
+          label={m.conversation_pinned_section()}
+          expanded={!collapsed.includes("pinned")}
+          onToggle={() => toggle("pinned")}
+        >
+          <div className="px-4">
+            <DirectoryDropList
+              section="pinned"
+              keys={drag.layout.pinned}
+              label={m.conversation_pinned_section()}
+            >
+              {pinnedEmpty ? (
+                <li className="flex min-h-9 items-center px-2 text-xs text-quaternary">
+                  {m.conversation_pinned_empty_hint()}
+                </li>
+              ) : (
+                list("pinned")
+              )}
+            </DirectoryDropList>
+          </div>
+        </DirectorySection>
+      </div>
+      <div className="mt-4">
         <DirectorySection
           label={m.channels_title()}
           expanded={!collapsed.includes("channels")}
@@ -217,62 +468,41 @@ export function ConversationDirectory({
             ) : undefined
           }
         >
-          <ul aria-label={m.channels_title()} className="flex flex-col px-4">
-            {sortedChannels.map((channel) => {
-              const current = channel.id === selectedChannelId;
-              return (
-                <li key={channel.id} className="py-px">
-                  <ConversationRow
-                    target={{ channelId: channel.id }}
-                    current={current}
-                    muted={!channel.joined || channel.muted}
-                    unreadCount={unreadCounts[channel.id]}
-                    label={`#${channel.name}`}
-                    icon={
-                      <Hash
-                        aria-hidden="true"
-                        className={cx("size-4", current ? "text-brand-secondary" : "text-tertiary")}
-                      />
-                    }
-                  >
-                    {channel.name}
-                  </ConversationRow>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="px-4">
+            <DirectoryDropList
+              section="channels"
+              keys={drag.layout.channels}
+              label={m.channels_title()}
+            >
+              {list("channels")}
+            </DirectoryDropList>
+          </div>
         </DirectorySection>
       </div>
 
-      <div className="mt-4">
+      <div
+        className={cx(
+          "mt-4",
+          directorySectionHideable({ itemCount: base.agents.length, dragging: drag.dragging }) &&
+            EMPTY_SECTION_HIDDEN_CLASS,
+        )}
+      >
         <DirectorySection
           label={m.messages_agents_action()}
           expanded={!collapsed.includes("agents")}
           onToggle={() => toggle("agents")}
         >
-          <ul aria-label={m.messages_agents_action()} className="flex flex-col px-4 pb-3">
-            {agents.map((agent) => (
-              <li key={agent.id} className="py-px">
-                <ConversationRow
-                  target={{ agentId: agent.id }}
-                  current={agent.id === selectedAgentId}
-                  unreadCount={unreadCounts[agent.id]}
-                  label={agent.displayName}
-                  icon={
-                    <AgentDisplayAvatar
-                      name={agent.displayName}
-                      display={agent.display}
-                      size="xs"
-                    />
-                  }
-                >
-                  {agent.displayName}
-                </ConversationRow>
-              </li>
-            ))}
-          </ul>
+          <div className="px-4 pb-3">
+            <DirectoryDropList
+              section="agents"
+              keys={drag.layout.agents}
+              label={m.messages_agents_action()}
+            >
+              {list("agents")}
+            </DirectoryDropList>
+          </div>
         </DirectorySection>
       </div>
-    </>
+    </DndContext>
   );
 }

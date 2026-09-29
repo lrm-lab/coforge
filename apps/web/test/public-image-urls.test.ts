@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
 
-import { computerCreatorAvatarUrl } from "../src/server/computers/computer-creator-avatar.server";
+import { computerCreatorAvatarUrl } from "#src/server/computers/computer-creator-avatar.server";
 import {
   createPublicImageDelivery,
   type ProfileImageStyle,
-} from "../src/server/files/public-image-delivery.server";
+} from "#src/server/files/public-image-delivery.server";
 import {
   avatarUrl,
   workspaceUserAvatarUrl,
-} from "../src/server/db/repositories/user-profile.repositories.server";
-import { projectIconUrl } from "../src/server/projects/project-images.server";
+} from "#src/server/db/repositories/user-profile.repositories.server";
+import { projectIconUrl } from "#src/server/projects/project-images.server";
 
 const delivery = createPublicImageDelivery({ baseUrl: "https://images-staging.coforge.cn" });
 const publicImageUrl = (objectKey: string, style: ProfileImageStyle) =>
@@ -53,6 +53,6 @@ test("without delivery every image falls back to its authenticated route", () =>
     "/api/projects/project-1/icon?v=icon-1",
   );
   expect(computerCreatorAvatarUrl("computer-1", "workspace-1", avatarKey, noDelivery)).toBe(
-    "/api/computers/computer-1/creator-avatar?workspaceId=workspace-1",
+    "/api/computers/computer-1/creator-avatar?workspaceId=workspace-1&v=avatar-1",
   );
 });

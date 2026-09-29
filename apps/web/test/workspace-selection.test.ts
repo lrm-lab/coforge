@@ -4,7 +4,7 @@ import {
   memoizeForRequest,
   readPreferredWorkspaceSlug,
   serializeWorkspaceCookie,
-} from "../src/server/workspaces/selection.server";
+} from "#src/server/workspaces/selection.server";
 
 test("the preferred Workspace cookie is host-only and readable from the header", () => {
   const cookie = serializeWorkspaceCookie("research", false);
@@ -46,4 +46,17 @@ test("a failed Workspace lookup is not cached for the request", async () => {
 
   await expect(memoizeForRequest(request, "user-1", load)).rejects.toThrow("transient");
   await expect(memoizeForRequest(request, "user-1", load)).resolves.toBe("workspace-1");
+});
+
+test("the lookup is cached per key, so one request can serve two Workspaces", async () => {
+  const request = new Request("https://server.example/app");
+  const loads: string[] = [];
+  const load = (slug: string) => async () => {
+    loads.push(slug);
+    return `workspace-${slug}`;
+  };
+  expect(await memoizeForRequest(request, "user-1/a", load("a"))).toBe("workspace-a");
+  expect(await memoizeForRequest(request, "user-1/b", load("b"))).toBe("workspace-b");
+  expect(await memoizeForRequest(request, "user-1/a", load("a"))).toBe("workspace-a");
+  expect(loads).toEqual(["a", "b"]);
 });

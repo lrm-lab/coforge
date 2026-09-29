@@ -1,12 +1,13 @@
 import { RefreshCcw01 as Refresh } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
 
-import { Button } from "@/components/base/buttons/button";
-import { cn } from "@/lib/utils";
-import { m } from "@/paraglide/messages";
-import { formatAgentProfileParam } from "@/features/agents/profile-panel/profile-panel-search";
+import { Button } from "#src/components/base/buttons/button";
+import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
+import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { KeyPointExtractionMeta } from "./records-content";
-import { ReportSectionEditor } from "./report-editor/report-section-editor";
+import { ReportSectionEditor } from "#src/features/records/report-editor/report-section-editor";
 import { RecordsReadingColumn } from "./records-reading-column";
 
 export const KEY_POINT_EXTRACTION_TAB = "✨ 要点提炼";
@@ -36,6 +37,7 @@ export function KeyPointExtractionPanel({
   className?: string;
   framed?: boolean;
 }) {
+  const workspaceSlug = useWorkspaceSlug();
   const status = extraction?.status;
   const canRestart =
     Boolean(onRestart) &&
@@ -53,7 +55,8 @@ export function KeyPointExtractionPanel({
         <div className="flex flex-wrap items-center justify-end gap-3">
           {editPrompt ? (
             <Link
-              to="/records/settings"
+              to="/w/$workspaceSlug/records/settings"
+              params={{ workspaceSlug }}
               search={{
                 tab: "weekly",
                 section: "key_points",
@@ -91,7 +94,8 @@ export function KeyPointExtractionPanel({
           <p className="text-sm text-secondary">{m.records_key_points_pending_setup()}</p>
           {assistantAgentId ? (
             <Link
-              to="/agents"
+              to="/w/$workspaceSlug/members"
+              params={{ workspaceSlug }}
               search={{
                 profile: formatAgentProfileParam(assistantAgentId),
                 agentTab: "profile",
@@ -103,7 +107,12 @@ export function KeyPointExtractionPanel({
           ) : null}
         </div>
       ) : null}
-      {status === "failed" ? (
+      {status === "failed" && extraction?.error === "no_submitted_member_reports" ? (
+        <p className="text-sm text-tertiary">
+          {waitingLabel ?? m.records_key_points_waiting_submit()}
+        </p>
+      ) : null}
+      {status === "failed" && extraction?.error !== "no_submitted_member_reports" ? (
         <p className="text-sm text-error-primary">
           {extraction?.error?.trim() || m.records_key_points_failed()}
         </p>

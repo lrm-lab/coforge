@@ -1,10 +1,9 @@
 import {
-  WEEKLY_REPORT_PROTOCOL_MAJOR,
   type WeeklyReportCommand,
   type WeeklyReportRequest,
   type WeeklyReportResponse,
 } from "@lrm/coforge-sdk/internal";
-import { isAppError } from "../../lib/app-error";
+import { isAppError } from "#src/lib/app-error";
 
 type WeeklyReportCatalog = {
   loadAssistantContextManifest(input: {
@@ -63,7 +62,6 @@ export async function executeAgentWeeklyReport(
       )
     : undefined;
   if (
-    request.protocolMajor !== WEEKLY_REPORT_PROTOCOL_MAJOR ||
     !principal.agentId ||
     request.agentId !== principal.agentId ||
     request.workspaceId !== principal.workspaceId ||
@@ -77,18 +75,11 @@ export async function executeAgentWeeklyReport(
   if (!owner || owner.userId !== principal.userId)
     return { error: { code: 403, message: "Weekly report assistant access denied" } };
   try {
-    const {
-      protocolMajor: _protocolMajor,
-      workspaceId,
-      agentId: _agentId,
-      requestId,
-      ...command
-    } = request;
+    const { workspaceId, agentId: _agentId, idempotencyKey, ...command } = request;
     const result = await executeWeeklyReportRead(catalog, workspaceId, owner.userId, command);
     return {
       response: {
-        protocolMajor: WEEKLY_REPORT_PROTOCOL_MAJOR,
-        requestId,
+        idempotencyKey,
         operation: command.operation,
         result,
       },

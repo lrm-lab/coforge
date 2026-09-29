@@ -1,13 +1,29 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { declareNoStore } from "#src/features/no-store-response.server";
+
 import { z } from "zod";
-import { AppError } from "../../lib/app-error";
-import { authMiddleware } from "../../server/auth/function-auth";
-import { configuredGitHub } from "../../server/integrations/github-config.server";
+import { AppError } from "#src/lib/app-error";
+import {
+  authMiddleware,
+  workspaceUserMiddleware,
+  type WorkspaceUserContext,
+} from "#src/features/auth/function-auth";
+import { configuredGitHub } from "#src/server/integrations/github-config.server";
 import {
   githubInstallationStateCookie,
+  githubReturnCookie,
   githubStateCookie,
-} from "../../server/integrations/github-http.server";
+} from "#src/server/integrations/github-http.server";
+
+/** The cookie that brings the callback back to Settings in the Workspace the page names. */
+async function returnHere(context: { db: WorkspaceUserContext["db"]; workspaceId: string }) {
+  const { slug } = await context.db.workspace.findUniqueOrThrow({
+    where: { id: context.workspaceId },
+    select: { slug: true },
+  });
+  return githubReturnCookie(slug);
+}
 
 async function requiredGitHub() {
   const github = await configuredGitHub();
@@ -18,7 +34,7 @@ async function requiredGitHub() {
 export const getGitHubConnection = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    setResponseHeader("cache-control", "no-store");
+    declareNoStore();
     const userId = context.user.id;
     const github = await configuredGitHub();
     if (!github) return { status: "unconfigured" as const, login: null, installUrl: null };
@@ -26,7 +42,7 @@ export const getGitHubConnection = createServerFn({ method: "GET" })
   });
 
 export const startGitHubConnection = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     const userId = context.user.id;
     const github = await requiredGitHub();
@@ -34,30 +50,33 @@ export const startGitHubConnection = createServerFn({ method: "POST" })
     if (getRequest().headers.get("origin") !== new URL(github.config.callbackUrl).origin)
       throw new AppError("ACCESS_DENIED");
     const attempt = await github.connection.begin(userId);
-    setResponseHeader("set-cookie", githubStateCookie(attempt.state));
+    setResponseHeader("set-cookie", [githubStateCookie(attempt.state), await returnHere(context)]);
     return { url: attempt.url };
   });
 
 export const startGitHubReauthorization = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     const userId = context.user.id;
     const github = await requiredGitHub();
     if (getRequest().headers.get("origin") !== new URL(github.config.callbackUrl).origin)
       throw new AppError("ACCESS_DENIED");
     const attempt = await github.connection.begin(userId, "reauthorize");
-    setResponseHeader("set-cookie", githubStateCookie(attempt.state));
+    setResponseHeader("set-cookie", [githubStateCookie(attempt.state), await returnHere(context)]);
     return { url: attempt.url };
   });
 
 export const startGitHubInstallation = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .handler(async () => {
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context }) => {
     const github = await requiredGitHub();
     if (getRequest().headers.get("origin") !== new URL(github.config.callbackUrl).origin)
       throw new AppError("ACCESS_DENIED");
     const attempt = github.connection.beginInstallation();
-    setResponseHeader("set-cookie", githubInstallationStateCookie(attempt.state));
+    setResponseHeader("set-cookie", [
+      githubInstallationStateCookie(attempt.state),
+      await returnHere(context),
+    ]);
     return { url: attempt.url };
   });
 

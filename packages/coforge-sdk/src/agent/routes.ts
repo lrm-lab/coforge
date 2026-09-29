@@ -7,9 +7,12 @@ export const agentApiRoutes = {
       search: { method: "GET", path: "/api/agent/v1/manual/search" },
     },
     // Local-only: answered entirely by the Daemon's Agent proxy and never forwarded to Web/backend
-    // (`coforge version`; see `docs/adr/0036-agent-manual.md`'s placement-table rows).
+    // (`coforge version`).
     version: { method: "GET", path: "/api/agent/v1/version" },
     messages: { method: "POST", path: "/api/agent/v1/messages" },
+    // Local-only, like `version`: `DaemonRuntime.inbox()` assembles the answer from the Agent's own
+    // state (message attention plus the app inbox) and never forwards it to Web/backend. It also
+    // takes no key argument, unlike the runtime methods that do reach Web.
     inbox: { method: "POST", path: "/api/agent/v1/inbox" },
     reminders: { method: "POST", path: "/api/agent/v1/reminders" },
     tasks: { method: "POST", path: "/api/agent/v1/tasks" },
@@ -25,13 +28,21 @@ export const agentApiRoutes = {
       method: "GET",
       path: (name: string) => `/api/agent/v1/users/${encodeURIComponent(name)}`,
     },
+    mentionActions: {
+      pending: { method: "GET", path: "/api/agent/v1/mention-actions/pending" },
+      execute: { method: "POST", path: "/api/agent/v1/mention-actions/execute" },
+    },
     profile: {
       get: { method: "GET", path: "/api/agent/v1/profile" },
       update: { method: "POST", path: "/api/agent/v1/profile" },
     },
   },
   local: {
-    messages: { method: "POST", path: "/api/agent/v1/messages" },
+    messages: {
+      method: "POST",
+      path: "/api/agent/v1/messages",
+    },
+    // Local-only, like `version`; see the same entry under `proxy`.
     inbox: { method: "POST", path: "/api/agent/v1/inbox" },
     reminders: { method: "POST", path: "/api/agent/v1/reminders" },
     tasks: { method: "POST", path: "/api/agent/v1/tasks" },
@@ -45,6 +56,10 @@ export const agentApiRoutes = {
     openviking: { method: "POST", path: "/api/agent/v1/openviking" },
     attachments: {
       method: "GET",
+      /** Served by Web ahead of the id route: what a client may upload, and whether it uploads
+       * directly. It was reachable before this declaration only because the proxy forwards any
+       * segment after the attachment prefix as an opaque id. */
+      capabilities: { method: "GET", path: "/api/agent/v1/attachments/capabilities" },
       path: (attachmentId: string) =>
         `/api/agent/v1/attachments/${encodeURIComponent(attachmentId)}`,
       upload: { method: "POST", path: "/api/agent/v1/attachments" },
@@ -70,6 +85,10 @@ export const agentApiRoutes = {
     users: {
       method: "GET",
       path: (name: string) => `/api/agent/v1/users/${encodeURIComponent(name)}`,
+    },
+    mentionActions: {
+      pending: { method: "GET", path: "/api/agent/v1/mention-actions/pending" },
+      execute: { method: "POST", path: "/api/agent/v1/mention-actions/execute" },
     },
     profile: {
       get: { method: "GET", path: "/api/agent/v1/profile" },
@@ -172,6 +191,8 @@ export const agentApiRoutes = {
     attachments: {
       method: "GET",
       collectionPath: "/api/agent/v1/attachments",
+      /** Served by Web ahead of the id route; see the same entry under `proxy`. */
+      capabilities: { method: "GET", path: "/api/agent/v1/attachments/capabilities" },
       path: (attachmentId: string) =>
         `/api/agent/v1/attachments/${encodeURIComponent(attachmentId)}`,
       upload: { method: "POST", path: "/api/agent/v1/attachments" },
@@ -197,6 +218,10 @@ export const agentApiRoutes = {
     users: {
       method: "GET",
       path: (name: string) => `/api/agent/v1/users/${encodeURIComponent(name)}`,
+    },
+    mentionActions: {
+      pending: { method: "GET", path: "/api/agent/v1/mention-actions/pending" },
+      execute: { method: "POST", path: "/api/agent/v1/mention-actions/execute" },
     },
     profile: {
       get: { method: "GET", path: "/api/agent/v1/profile" },

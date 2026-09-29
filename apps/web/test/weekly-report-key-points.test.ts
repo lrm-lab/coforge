@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { PrismaClient } from "../generated/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   applyPersonalKeyPointExtraction,
   applyTeamKeyPointExtraction,
@@ -9,11 +9,11 @@ import {
   mergeKeyPointPromptSlot,
   startPersonalKeyPointExtraction,
   startTeamKeyPointExtraction,
-} from "../src/server/records/weekly-report-key-points.server";
-import { emptyKeyPointPrompts } from "../src/features/records/records-content";
-import { AppError } from "../src/lib/app-error";
-import { SendDirectMessage } from "../src/server/conversations/direct-message.server";
-import { looksLikeTeamKeyPointReorganizeRequest } from "../src/features/records/weekly-highlight-extract";
+} from "#src/server/records/weekly-report-key-points.server";
+import { emptyKeyPointPrompts } from "#src/features/records/records-content";
+import { AppError } from "#src/lib/app-error";
+import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
+import { looksLikeTeamKeyPointReorganizeRequest } from "#src/features/records/weekly-highlight-extract";
 
 test("looksLikeTeamKeyPointReorganizeRequest matches overview side-chat phrases", () => {
   expect(looksLikeTeamKeyPointReorganizeRequest("重新整理")).toBe(true);
@@ -376,6 +376,7 @@ test("applyPersonalKeyPointExtraction denies a non-owner assistant", async () =>
 
 test("buildTeamKeyPointWakeText lists submitted members and asks for overview submit", () => {
   const body = buildTeamKeyPointWakeText({
+    workspaceSlug: "acme",
     overviewReportId: "22222222-2222-4222-8222-222222222222",
     prompt: "全员提炼",
     year: 2026,
@@ -392,7 +393,7 @@ test("buildTeamKeyPointWakeText lists submitted members and asks for overview su
   expect(body).toContain("全员提炼");
   expect(body).toContain("weekly-report-key-points submit");
   expect(body).toContain("来源标注（必须）");
-  expect(body).toContain("[@Alice](/records/33333333-3333-4333-8333-333333333333)");
+  expect(body).toContain("[@Alice](/w/acme/records/33333333-3333-4333-8333-333333333333)");
 });
 
 test("startTeamKeyPointExtraction is idempotent when already generating", async () => {
@@ -423,6 +424,54 @@ test("startTeamKeyPointExtraction is idempotent when already generating", async 
     },
   });
   expect(result).toEqual({ started: false, status: "generating" });
+});
+
+test("startTeamKeyPointExtraction returns no_submitted without persisting a failed panel state", async () => {
+  let writeCount = 0;
+  const db = {
+    weeklyReport: {
+      findFirst: async () => ({
+        id: "overview-1",
+        content: {
+          tabs: { Summary: { markdown: "" } },
+          keyPointExtraction: {
+            status: "failed",
+            error: "no_submitted_member_reports",
+            promptSnapshot: "旧提示",
+          },
+        },
+        authorId: "leader-1",
+        settingsId: "settings-1",
+        cycle: { year: 2026, week: 39 },
+      }),
+      count: async () => 2,
+      findMany: async () => [],
+      update: async () => {
+        writeCount += 1;
+        throw new Error("should not persist no_submitted failure");
+      },
+    },
+    weeklyReportSettings: {
+      findUnique: async () => ({
+        keyPointPrompts: emptyKeyPointPrompts(),
+      }),
+    },
+  } as unknown as PrismaClient;
+
+  const result = await startTeamKeyPointExtraction(db, {
+    workspaceId: "ws-1",
+    overviewReportId: "overview-1",
+    force: true,
+    wake: async () => {
+      throw new Error("should not wake");
+    },
+  });
+  expect(result).toEqual({
+    started: false,
+    status: "failed",
+    error: "no_submitted_member_reports",
+  });
+  expect(writeCount).toBe(0);
 });
 
 test("startTeamKeyPointExtraction marks pending_setup when Leader assistant is not ready", async () => {
@@ -525,6 +574,7 @@ test("applyTeamKeyPointExtraction writes ready markdown on the overview template
           keyPointExtraction: { status: "generating", promptSnapshot: "团队提示词" },
         },
         authorId: "leader-1",
+        workspace: { slug: "acme" },
       }),
       count: async () => 2,
       findMany: async () => [
@@ -551,7 +601,8 @@ test("applyTeamKeyPointExtraction writes ready markdown on the overview template
   expect(written).toMatchObject({
     keyPointExtraction: {
       status: "ready",
-      markdown: "## 本周进展\n- 完成 A [@Alice](/records/r-alice?returnTo=%2Frecords%2Foverview-1)",
+      markdown:
+        "## 本周进展\n- 完成 A [@Alice](/w/acme/records/r-alice?returnTo=%2Fw%2Facme%2Frecords%2Foverview-1)",
       promptSnapshot: "团队提示词",
     },
   });
@@ -577,6 +628,7 @@ test("applyTeamKeyPointExtraction parks side-chat-confirm delivery as awaiting_c
             confirmSessionId: "22222222-2222-2222-2222-222222222222",
           },
         },
+        workspace: { slug: "acme" },
       }),
       count: async () => 1,
       findMany: async () => [],
@@ -610,6 +662,8 @@ test("applyTeamKeyPointExtraction parks side-chat-confirm delivery as awaiting_c
       threadRootId: null,
       attachments: [],
       workspaceId: "ws-1",
+      pendingMentionActions: [],
+      unresolvedMentionHandles: [],
     };
   }) as typeof originalFromAgent;
 
@@ -644,7 +698,7 @@ test("applyTeamKeyPointExtraction parks side-chat-confirm delivery as awaiting_c
 });
 
 test("applyConfirmedKeyPointMarkdown writes ready extraction without replacing body tabs", async () => {
-  const { RecordCatalog } = await import("../src/server/records/record-catalog.server");
+  const { RecordCatalog } = await import("#src/server/records/record-catalog.server");
   let written: unknown = null;
   const db = {
     workspaceMembership: {
@@ -659,6 +713,7 @@ test("applyConfirmedKeyPointMarkdown writes ready extraction without replacing b
           tabs: { Notes: { markdown: "keep me" } },
           keyPointExtraction: { status: "ready", promptSnapshot: "团队提示词", markdown: "old" },
         },
+        workspace: { slug: "acme" },
       }),
       findMany: async () => [],
       update: async ({ data }: { data: { content: unknown } }) => {

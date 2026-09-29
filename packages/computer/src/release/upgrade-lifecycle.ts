@@ -14,6 +14,41 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Windows only: true when supervisor.lock owner names a still-living process. Missing,
+ * unreadable, or non-positive PIDs are treated as not alive so schtasks /End cannot wedge
+ * upgrades. macOS/Linux keep waiting for the owner file to disappear on its own. */
+async function windowsSupervisorLockOwnerAlive(ownerPath: string): Promise<boolean> {
+  try {
+    const text = (await Bun.file(ownerPath).text()).trim();
+    const pid = Number(text);
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Windows only: after schtasks /End, force the owner PID down and remove the lock marker.
+ * `/End` often returns success while the Coordinator keeps running, which otherwise burns the
+ * full 35s wait and fails the upgrade with "old supervisor did not confirm process-tree shutdown". */
+async function windowsForceClearSupervisorLockOwner(ownerPath: string): Promise<void> {
+  try {
+    const text = (await Bun.file(ownerPath).text()).trim();
+    const pid = Number(text);
+    if (Number.isInteger(pid) && pid > 0) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // already gone
+      }
+    }
+  } catch {
+    // unreadable owner — still remove the marker below
+  }
+  await rm(ownerPath, { force: true });
+}
+
 /**
  * What a person is told when the Computer supervisor could not be stopped for an upgrade.
  * `foregroundSupervised` is true only where CoForge has actually established that no user
@@ -53,7 +88,7 @@ export type UpgradeProbe = {
  * or reuse of the old Supervisor identity. Workspace children remain stopped under launch-hold
  * until the terminal receipt is committed and `resumeLaunches` reconciles them.
  *
- * When `restartsInPlace` is true (launchd, ADR 0032), `stop` performs only the pre-switch
+ * When `restartsInPlace` is true (launchd), `stop` performs only the pre-switch
  * restartability check and `start` performs the in-place kickstart; neither one actually stops or
  * starts a process tree, so `switchStageText` (`upgrade-coordinator.ts`) must not describe them
  * as if they did. */
@@ -117,14 +152,14 @@ export function createSupervisorUpgradeLifecycle(
         : "cn.coforge.computer.daemon");
   let previousSupervisorId: string | undefined;
   let supervisorWasRunning = false;
-  // Capability check (ADR 0032), never an `instanceof`/platform branch: only `LaunchdDaemonHost`
+  // Capability check, never an `instanceof`/platform branch: only `LaunchdDaemonHost`
   // declares this, so `host` narrows through the `in` checks below wherever it matters.
   const restartsInPlace = "restartsInPlace" in host && host.restartsInPlace === true;
   // Set once this upgrade has proven the label was loaded (the first, pre-activation `stop()`
   // call). A *second* `stop()` finding it not loaded is the rollback path re-entering after a
   // kickstart that never completed, not a foreground-supervised Computer that never had a
   // launchd job at all — `restart()`'s own bootstrap fallback recovers that, so it must not abort
-  // the restore (ADR 0032).
+  // the restore.
   let inPlaceRestartVerified = false;
   return {
     restartsInPlace,
@@ -178,7 +213,7 @@ export function createSupervisorUpgradeLifecycle(
           return response;
         },
         // The wait itself now lives in the daemon package, shared with the Coordinator's restart
-        // hold (ADR 0021). Keep this path's own logger and `upgrade:` event names (ADR 0020).
+        // hold. Keep this path's own logger and `upgrade:` event names.
         logger,
         eventPrefix: "upgrade",
       });
@@ -247,10 +282,28 @@ export function createSupervisorUpgradeLifecycle(
         });
         throw coordinatorStopFailure(error, false);
       });
+      const ownerPath = join(options.supervisorStatePath, "supervisor.lock", "owner");
       const deadline = Date.now() + 35_000;
-      while (
-        await Bun.file(join(options.supervisorStatePath, "supervisor.lock", "owner")).exists()
-      ) {
+      // Windows: give schtasks /End a short grace, then SIGKILL the lock owner. Other platforms
+      // keep waiting for a clean owner removal as before.
+      const windowsForceAfter = process.platform === "win32" ? Date.now() + 3_000 : null;
+      while (await Bun.file(ownerPath).exists()) {
+        if (process.platform === "win32" && !(await windowsSupervisorLockOwnerAlive(ownerPath))) {
+          await rm(ownerPath, { force: true });
+          break;
+        }
+        if (windowsForceAfter !== null && Date.now() >= windowsForceAfter) {
+          logger.warn(
+            "Windows Coordinator still held supervisor.lock after schtasks /End; forcing",
+            {
+              event: "upgrade:coordinator_stop_forced",
+              label: coordinatorLabel,
+              operation: "stop",
+            },
+          );
+          await windowsForceClearSupervisorLockOwner(ownerPath);
+          break;
+        }
         if (Date.now() > deadline) {
           logger.error("Old Computer coordinator did not confirm shutdown", {
             event: "upgrade:coordinator_stop_failed",

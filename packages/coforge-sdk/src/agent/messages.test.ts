@@ -23,8 +23,7 @@ test("models a message send request without internal transport fields", () => {
 
 test("models the read route's own response shape, including multiple attachments and Task metadata", () => {
   const response: AgentHistoryResponse = {
-    protocolMajor: 1,
-    requestId: "request-1",
+    idempotencyKey: "request-1",
     messages: [
       {
         id: "message-1",
@@ -52,7 +51,7 @@ test("models the read route's own response shape, including multiple attachments
         task: {
           number: 42,
           status: "in_progress",
-          owner: { displayName: "Ada", handle: "@ada" },
+          owner: { displayName: "Ada", handle: "ada" },
         },
       },
     ],
@@ -66,8 +65,7 @@ test("models the read route's own response shape, including multiple attachments
 
 test("models the dedicated search route's own response shape", () => {
   const response: AgentSearchResponse = {
-    protocolMajor: 1,
-    requestId: "request-search",
+    idempotencyKey: "request-search",
     results: [],
   };
   expect(response.results).toEqual([]);
@@ -75,8 +73,7 @@ test("models the dedicated search route's own response shape", () => {
 
 test("models the send route's state discriminant and held context", () => {
   const held: AgentSendResponse = {
-    protocolMajor: 1,
-    requestId: "request-send-held",
+    idempotencyKey: "request-send-held",
     state: "held",
     decision: "local_hold",
     reason: "exact_target_pending",
@@ -97,8 +94,7 @@ test("models the send route's state discriminant and held context", () => {
     ],
   };
   const bypassed: AgentSendResponse = {
-    protocolMajor: 1,
-    requestId: "request-send-bypass",
+    idempotencyKey: "request-send-bypass",
     state: "sent",
     decision: "bypass",
     reason: "continue_anyway",
@@ -110,10 +106,26 @@ test("models the send route's state discriminant and held context", () => {
   expect(bypassed.heldMessages).toBeUndefined();
 });
 
+test("models the answers to a reconcileOnly send: committed without a receipt, or not_found", () => {
+  const committed: AgentSendResponse = {
+    idempotencyKey: "request-send-lost",
+    state: "committed",
+    reconciliation: true,
+    receiptComplete: false,
+    messageId: "message-5",
+  };
+  const notFound: AgentSendResponse = {
+    idempotencyKey: "request-send-lost",
+    state: "not_found",
+    reconciliation: true,
+  };
+  expect(committed.state === "committed" && committed.messageId).toBe("message-5");
+  expect(notFound.state).toBe("not_found");
+});
+
 test("models the resolve route's own response shape", () => {
   const response: AgentResolveResponse = {
-    protocolMajor: 1,
-    requestId: "request-resolve",
+    idempotencyKey: "request-resolve",
     message: {
       id: "message-4",
       sequence: 4,
@@ -131,8 +143,7 @@ test("models the resolve route's own response shape", () => {
 
 test("models the reaction route's own response shape", () => {
   const response: AgentReactionResponse = {
-    protocolMajor: 1,
-    requestId: "request-react",
+    idempotencyKey: "request-react",
     messageId: "message-4",
     emoji: "👍",
     active: true,
@@ -143,8 +154,7 @@ test("models the reaction route's own response shape", () => {
 test("models an events drain request and its own response shape with a hasMore continuation flag", () => {
   const request: AgentEventsGetRequest = { limit: 50 };
   const response: AgentEventsResponse = {
-    protocolMajor: 1,
-    requestId: "request-2",
+    idempotencyKey: "request-2",
     events: [],
     hasMore: true,
   };
@@ -154,14 +164,12 @@ test("models an events drain request and its own response shape with a hasMore c
 
 test("models the channel and thread attention response shapes", () => {
   const muted: AgentChannelAttentionResponse = {
-    protocolMajor: 1,
-    requestId: "request-3",
+    idempotencyKey: "request-3",
     target: "#general",
     muted: true,
   };
   const unfollowed: AgentThreadAttentionResponse = {
-    protocolMajor: 1,
-    requestId: "request-4",
+    idempotencyKey: "request-4",
     target: "#general:12345678-0000-4000-8000-000000000001",
     followed: false,
   };

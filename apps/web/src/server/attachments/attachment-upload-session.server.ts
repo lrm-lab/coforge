@@ -1,13 +1,14 @@
-import type { PrismaClient, Prisma } from "../../../generated/client";
+import type { PrismaClient, Prisma } from "#src/generated/prisma/client";
 import { ATTACHMENT_MAX_BYTES, ATTACHMENT_SESSION_SECONDS } from "./attachment.server";
-import type { FileStorage } from "../files/file-storage.server";
+import type { FileStorage } from "#src/server/files/file-storage.server";
+import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 
 /**
- * Presigned direct-upload sessions (ADR 0028): the Agent PUTs bytes straight to storage with a
+ * Presigned direct-upload sessions: the Agent PUTs bytes straight to storage with a
  * short-lived presigned URL this module hands out, then `complete` verifies the object and
  * creates the real `Attachment` row that `attachmentId` reserved ahead of time. Mirrors Raft
  * 1.0.32's `attachment-upload-sessions` state machine and error codes; deviations are called out
- * where they occur (see the module's own doc comments and ADR 0028).
+ * where they occur (see the module's own doc comments).
  */
 export type AttachmentUploadSessionState =
   | "pending"
@@ -104,7 +105,7 @@ type AttachmentUploadSessionRow = {
   fileName: string;
   contentType: string;
   sizeBytes: number;
-  clientRequestId: string;
+  idempotencyKey: string;
   state: string;
   terminalReason: string | null;
   expiresAt: Date;
@@ -137,19 +138,10 @@ function toSessionView(
   };
 }
 
-function isUniqueConstraintViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code: unknown }).code === "P2002"
-  );
-}
-
 /**
- * Creates (or, for a repeated `clientRequestId`, replays) a direct-upload session. The caller has
+ * Creates (or, for a repeated `idempotencyKey`, replays) a direct-upload session. The caller has
  * already authorized `conversationId` (target resolution happens one layer up, in the route —
- * see ADR 0028's deviation from Raft's `channelId` field to this repo's `#channel`/`@user`
+ * a deviation from Raft's `channelId` field to this repo's `#channel`/`@user`
  * target grammar) and confirmed the storage backend supports direct upload.
  */
 export async function createAttachmentUploadSession(
@@ -162,7 +154,7 @@ export async function createAttachmentUploadSession(
     fileName: string;
     contentType: string;
     sizeBytes: number;
-    clientRequestId: string;
+    idempotencyKey: string;
   },
   options: { now?: Date; sessionExpiresInSeconds?: number } = {},
 ): Promise<AttachmentUploadSessionCreated> {
@@ -181,7 +173,7 @@ export async function createAttachmentUploadSession(
 
   const existing = await db.attachmentUploadSession.findUnique({
     where: {
-      agentId_clientRequestId: { agentId: input.agentId, clientRequestId: input.clientRequestId },
+      agentId_idempotencyKey: { agentId: input.agentId, idempotencyKey: input.idempotencyKey },
     },
   });
   if (existing) return replaySession(storage, existing, input, sessionExpiresInSeconds);
@@ -202,17 +194,17 @@ export async function createAttachmentUploadSession(
         fileName: input.fileName,
         contentType: input.contentType,
         sizeBytes: input.sizeBytes,
-        clientRequestId: input.clientRequestId,
+        idempotencyKey: input.idempotencyKey,
         state: "pending",
         expiresAt,
       },
     });
   } catch (error) {
-    if (!isUniqueConstraintViolation(error)) throw error;
-    // Lost a create race on the same `clientRequestId`: treat it the same as finding it above.
+    if (!isUniqueViolation(error)) throw error;
+    // Lost a create race on the same `idempotencyKey`: treat it the same as finding it above.
     const raced = await db.attachmentUploadSession.findUnique({
       where: {
-        agentId_clientRequestId: { agentId: input.agentId, clientRequestId: input.clientRequestId },
+        agentId_idempotencyKey: { agentId: input.agentId, idempotencyKey: input.idempotencyKey },
       },
     });
     if (!raced) throw error;
@@ -250,16 +242,16 @@ async function replaySession(
   if (!matches)
     throw new AttachmentUploadSessionError(
       "UPLOAD_IDEMPOTENCY_CONFLICT",
-      "clientRequestId was already used with different upload parameters",
+      "idempotencyKey was already used with different upload parameters",
     );
   // A session that has moved past `pending` (including mid-verification) has nothing left to
   // (re-)sign; fabricating a fresh "pending" reply with an empty upload URL would be a lie the
   // CLI would PUT to. Refuse instead — the caller must start a new upload with a new
-  // `clientRequestId`.
+  // `idempotencyKey`.
   if (existing.state !== "pending")
     throw new AttachmentUploadSessionError(
       "UPLOAD_IDEMPOTENCY_CONFLICT",
-      `clientRequestId was already used by a session that is now ${existing.state}; start a new upload`,
+      `idempotencyKey was already used by a session that is now ${existing.state}; start a new upload`,
     );
   // `createAttachmentUploadSession` already refused to reach here without a presigning
   // backend; this only guards against a caller that bypasses that check.

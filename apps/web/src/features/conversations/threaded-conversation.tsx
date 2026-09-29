@@ -1,0 +1,417 @@
+import { useEffect, useMemo, useRef } from "react";
+import { ClientOnly } from "@tanstack/react-router";
+import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
+import { MessageSquare01 as MessageSquare } from "@untitledui/icons";
+
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
+import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
+import { resolveVisibleConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
+import { TaskDetailDialog } from "#src/features/tasks/task-detail-dialog";
+
+import { ConversationPane } from "./conversation-pane";
+import { useConversationDetailVisible } from "./conversation-navigation";
+import { useConversationHostChannels } from "./conversation-host";
+import { useConversationSync } from "./use-conversation-sync";
+import {
+  useConversationPositionJump,
+  useOpenConversationTask,
+  useOpenConversationThread,
+} from "./open-conversation-thread";
+import { makeReferenceBodyFormatter } from "./mention-text";
+import { groupRepliesByRoot } from "./conversation-messages";
+import { ThreadRootState, type ThreadRootLoad } from "./thread-root-state";
+import { conversationLayoutStorage } from "./layout-storage";
+import { ConversationPending } from "./conversation-pending";
+import { ConversationIdProvider } from "./conversation-id";
+import { ThreadStoreProvider, useConversationThreadStore } from "./thread-store";
+import { resolveConversationThreadRoot } from "./conversation-thread-search";
+import type { DirectConversationView, ThreadedConversationProps } from "./conversation-types";
+import type { ChannelSuggestion } from "./reference-completion";
+
+/** No channels to link or suggest: one array, so what is memoized on the list keeps. */
+const NO_CHANNELS: readonly ChannelSuggestion[] = [];
+
+export function ThreadedConversation(props: ThreadedConversationProps) {
+  // Persisted panel sizes use localStorage; mount that UI only after hydration.
+
+  return (
+    <ClientOnly fallback={props.taskPopup ? null : <ConversationPending />}>
+      <ConversationIdProvider conversationId={props.conversation.conversationId}>
+        <ThreadedConversationContent {...props} />
+      </ConversationIdProvider>
+    </ClientOnly>
+  );
+}
+
+function ThreadedConversationContent(props: ThreadedConversationProps) {
+  const {
+    conversation,
+    onReadThread,
+    header,
+    threadHeaderAction,
+    threadFollow,
+    threadContext,
+    agentProfile,
+    onAgentProfileTabChange,
+    onCloseAgentProfile,
+    onLoadMessageAround,
+    // Held out of `conversationProps` so the thread panes (which spread it) never receive it:
+    // only the main pane may advance the conversation-level read cursor.
+    onReadLatest,
+    conversationName,
+    tasksPane,
+    channels,
+    taskPopup,
+    jumpMessage,
+    ...conversationProps
+  } = props;
+  const detailVisible = useConversationDetailVisible();
+  const { searchThreadRootId, openThread, openThreadFromHash, closeThread, showThreadRoot } =
+    useOpenConversationThread();
+  // The Saved view's `?message=` position jump reads its search state here, next to the
+  // thread's — the wrapper owns the router so `ConversationPane` below stays hook-free.
+  const { jumpMessageId, clearJumpMessage } = useConversationPositionJump();
+  const mainMessages = useMemo(
+    () => conversation.messages.filter((message) => !message.threadRootId),
+    [conversation.messages],
+  );
+  // Replies grouped once per message list, instead of a filter per rendered root; the grouping
+  // keeps its identity while the replies are unchanged, so the thread entry and preview below
+  // (and every memoized row that takes them) survive a new top-level message.
+  const previousRepliesByRoot =
+    useRef<ReturnType<typeof groupRepliesByRoot<DirectConversationView["messages"][number]>>>(
+      undefined,
+    );
+  const repliesByRoot = useMemo(
+    () => groupRepliesByRoot(conversation.messages, previousRepliesByRoot.current),
+    [conversation.messages],
+  );
+  previousRepliesByRoot.current = repliesByRoot;
+  // An open thread keeps its last-seen root and replies. The bounded window drops a root's page
+  // (and with it the root's replies, which ride on the same page) when the main stream is scrolled
+  // far enough; the thread pane then keeps showing the thread as it was, plus any reply that has
+  // arrived since, rather than going blank or reloading the stream around the root.
+  const threadSnapshots = useRef(
+    new Map<
+      string,
+      {
+        root: DirectConversationView["messages"][number];
+        replies: DirectConversationView["messages"];
+      }
+    >(),
+  );
+  const mainMessageIds = useMemo(
+    () => new Set(mainMessages.map((message) => message.id)),
+    [mainMessages],
+  );
+  /** A thread's replies: as loaded, and, while its root is not, those last seen before it went. */
+  const repliesOf = (rootId: string) => {
+    const loaded = repliesByRoot.get(rootId) ?? [];
+    const snapshot = mainMessageIds.has(rootId) ? undefined : threadSnapshots.current.get(rootId);
+    if (!snapshot) return loaded;
+    const seen = new Set(snapshot.replies.map((reply) => reply.id));
+    return [...snapshot.replies, ...loaded.filter((reply) => !seen.has(reply.id))];
+  };
+  // A stored channel reference links to its channel, under its current name, only when the
+  // Workspace has that channel: every channel by id, closed ones included, from the hosting page.
+  const hostChannels = useConversationHostChannels();
+  const channelList = channels ?? hostChannels ?? NO_CHANNELS;
+  const channelNames = useMemo(
+    () => new Map(channelList.map((channel) => [channel.id, channel.name])),
+    [channelList],
+  );
+  // Preview rows would otherwise spell a reference as its raw `<@kind:…>` token; resolve those
+  // the way the message list does.
+  const formatPreviewBody = useMemo(
+    () => makeReferenceBodyFormatter(conversation.mentionables ?? [], channelNames),
+    [conversation.mentionables, channelNames],
+  );
+  const conversationTaskPopup = useOpenConversationTask();
+  const {
+    openTaskNumber,
+    openTask: openTaskReference,
+    closeTask: closeTaskReference,
+  } = taskPopup ?? conversationTaskPopup;
+  const openTask =
+    openTaskNumber === undefined
+      ? undefined
+      : props.tasks?.find((task) => task.number === openTaskNumber);
+  const openTaskRoot =
+    openTask && mainMessages.find((message) => message.id === openTask.messageId);
+  // What every thread pane shares: the side pane and the thread under the task popup.
+  const threadPaneProps = (root: DirectConversationView["messages"][number]) => ({
+    ...conversationProps,
+    streamRead: windowRead,
+    onOpenTask: openTaskReference,
+    channelNames,
+    channels: channelList,
+    onLoadMessageAround,
+    root,
+    conversation: {
+      ...conversation,
+      messages: repliesOf(root.id),
+      readThroughSequence: threadCursor(root.id),
+    },
+    onSend: (...[body, requestId, attachmentIds]: Parameters<typeof conversationProps.onSend>) =>
+      conversationProps.onSend(body, requestId, attachmentIds, root.id),
+  });
+  const taskDialog = openTask ? (
+    <TaskDetailDialog
+      // One popup instance per task: switching tasks from a chip inside the popup starts fresh.
+      key={openTask.messageId}
+      task={openTask}
+      open
+      onOpenChange={(next) => {
+        if (!next) closeTaskReference();
+      }}
+      conversationName={conversationName}
+      members={conversation.mentionables}
+      currentMemberId={conversation.senderMemberId || null}
+      thread={
+        openTaskRoot &&
+        ((taskSection) => (
+          <ConversationPane
+            {...threadPaneProps(openTaskRoot)}
+            rootSlot={taskSection}
+            openAtTop
+            emptyState={{
+              title: m.tasks_no_replies(),
+              description: "",
+              media: <MessageSquare aria-hidden="true" className="size-6 text-tertiary" />,
+            }}
+          />
+        ))
+      }
+    />
+  ) : null;
+  // The popup shows the task's thread itself, so a side pane for the same thread closes (two
+  // composers on one thread would share and overwrite its draft), and a task message outside the
+  // loaded window is fetched the way a thread link is.
+  const openTaskMessageId = openTask?.messageId;
+  const selected = resolveConversationThreadRoot({
+    searchThreadRootId,
+    messages: conversation.messages,
+  });
+
+  // The conversation's shared right-hand slot: Thread (`threadRootId` search) and the Agent
+  // profile panel (`profile` search) are mutually exclusive. Their open hooks clear the other
+  // search param; the resolver remains defensive for legacy URLs containing both.
+  const profileAgentId = agentProfile?.agentId;
+  const visibleSlot = resolveVisibleConversationSlot({
+    threadOpen: Boolean(selected),
+    profileOpen: Boolean(profileAgentId),
+  });
+  const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
+  // The thread/profile pane's share of the width is the user's to set; remembered across visits,
+  // and kept separate per slot (`react-resizable-panels` derives its storage key from `panelIds`,
+  // so ["main","thread"] and ["main","profile"] never share or corrupt each other's saved size).
+  const threadLayout = useDefaultLayout({
+    id: "coforge-conversation",
+    panelIds: visibleSlot ? ["main", visibleSlot] : ["main"],
+    onlySaveAfterUserInteractions: true,
+    storage: conversationLayoutStorage,
+  });
+  // Panels are flex items sized by the library's inline styles, so a narrow viewport cannot
+  // collapse the split with CSS; unmount the resizable Group and stack full-width panes
+  // instead. Both panes stay mounted so drafts and scroll survive, matching the desktop slot.
+  const wideViewport = useBreakpoint("md");
+  // The thread in view is marked read: the task popup's when it is open, else the side pane's.
+  const threadInView = openTaskRoot?.id ?? (detailVisible ? selected : undefined);
+  const threadInViewSequence = threadInView ? (repliesOf(threadInView).at(-1)?.sequence ?? 0) : 0;
+  const { visited, windowRead, readThrough, threadCursor, threadRootFailure, loadThreadRoot } =
+    useConversationSync({
+      conversation,
+      searchThreadRootId,
+      openTaskMessageId,
+      selected,
+      threadInView,
+      threadInViewSequence,
+      onLoadMessageAround,
+      onReadThread,
+      openThreadFromHash,
+      closeThread,
+    });
+  /** A thread's root: as loaded, else as last seen while it was open (its replies: `repliesOf`). */
+  const threadRootOf = (rootId: string) =>
+    mainMessages.find((message) => message.id === rootId) ??
+    threadSnapshots.current.get(rootId)?.root;
+  const selectedThreadKnown = selected !== undefined && threadRootOf(selected) !== undefined;
+  const attemptedRootLoad = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!selected) {
+      attemptedRootLoad.current = undefined;
+      return;
+    }
+    if (selectedThreadKnown || attemptedRootLoad.current === selected) return;
+    attemptedRootLoad.current = selected;
+    void loadThreadRoot(selected);
+  }, [selected, selectedThreadKnown, loadThreadRoot]);
+  // The selected thread's first message has not been seen: the window around the root is read, as
+  // for any fresh open, and the thread slot says so while it is, and why if the read failed —
+  // instead of opening an empty pane. Only a read's failure is kept: a read that succeeded centres
+  // the window on the root, so until the root shows up it is loading.
+  const selectedRootLoad: ThreadRootLoad | undefined =
+    selected && !selectedThreadKnown
+      ? threadRootFailure?.rootId === selected
+        ? threadRootFailure.load
+        : { status: "loading" }
+      : undefined;
+  // What the stream's thread summaries read, each by its own root (`thread-summary.tsx`).
+  const threadState = useMemo(
+    () => ({
+      replies: repliesByRoot,
+      persistedReads: conversation.threadReadThrough,
+      localReads: readThrough,
+      formatBody: formatPreviewBody,
+    }),
+    [repliesByRoot, conversation.threadReadThrough, readThrough, formatPreviewBody],
+  );
+  const threads = useConversationThreadStore(threadState);
+  // Records each open thread's root and replies while they are loaded (see `threadSnapshots`).
+  useEffect(() => {
+    const snapshots = threadSnapshots.current;
+    for (const rootId of snapshots.keys()) if (!visited.includes(rootId)) snapshots.delete(rootId);
+    for (const rootId of visited) {
+      const root = mainMessages.find((message) => message.id === rootId);
+      if (root) snapshots.set(rootId, { root, replies: repliesByRoot.get(rootId) ?? [] });
+    }
+  }, [visited, mainMessages, repliesByRoot]);
+  // Outside the conversation's page only its Task popup shows; the panes stay unmounted.
+  if (taskPopup) return taskDialog;
+  const conversationMainPane = (
+    <ThreadStoreProvider store={threads}>
+      <ConversationPane
+        {...conversationProps}
+        streamRead={windowRead}
+        onOpenTask={openTaskReference}
+        channelNames={channelNames}
+        channels={channelList}
+        jumpMessage={jumpMessage ?? jumpMessageId}
+        onJumpMessageConsumed={jumpMessage ? undefined : clearJumpMessage}
+        onLoadMessageAround={onLoadMessageAround}
+        onReadLatest={onReadLatest}
+        header={header}
+        conversation={{ ...conversation, messages: mainMessages }}
+        onOpenThread={openThread}
+      />
+    </ThreadStoreProvider>
+  );
+  const conversationSidePane = visibleSlot && (
+    <>
+      {visibleSlot === "profile" && profileAgentId && (
+        <AgentProfilePanel
+          agentId={profileAgentId}
+          requestedTab={agentProfile?.tab}
+          onTabChange={(tab) => onAgentProfileTabChange?.(tab)}
+          onClose={() => onCloseAgentProfile?.()}
+        />
+      )}
+      {/* Thread panes stay mounted under the profile so drafts and scroll survive. */}
+      {visited.map((rootId) => {
+        const root = threadRootOf(rootId);
+        if (!root) return null;
+        return (
+          <section
+            key={rootId}
+            aria-label={m.conversation_thread()}
+            hidden={!threadPaneVisible(rootId)}
+            className={cn(
+              "min-h-0 min-w-0 flex-1 flex-col",
+              threadPaneVisible(rootId) ? "flex" : "hidden",
+            )}
+          >
+            <ConversationPane
+              {...threadPaneProps(root)}
+              onClose={closeThread}
+              threadContext={threadContext}
+              onViewInConversation={() => showThreadRoot(rootId)}
+              threadFollow={threadFollow?.(rootId)}
+              emptyState={{
+                title: m.conversation_thread_empty_title(),
+                description: m.conversation_thread_empty(),
+                media: <MessageSquare aria-hidden="true" className="size-6 text-tertiary" />,
+              }}
+              threadHeaderAction={threadHeaderAction?.(rootId)}
+            />
+          </section>
+        );
+      })}
+      {selected && selectedRootLoad && (
+        <section
+          aria-label={m.conversation_thread()}
+          hidden={!threadPaneVisible(selected)}
+          className={cn(
+            "min-h-0 min-w-0 flex-1 flex-col",
+            threadPaneVisible(selected) ? "flex" : "hidden",
+          )}
+        >
+          <ThreadRootState
+            load={selectedRootLoad}
+            context={threadContext}
+            onClose={closeThread}
+            onRetry={() => void loadThreadRoot(selected)}
+          />
+        </section>
+      )}
+    </>
+  );
+  if (!wideViewport) {
+    // Small screens have no room for a resizable split: the slot pane covers the main pane,
+    // which stays mounted (hidden) so returning keeps its scroll, drafts and read state.
+    return (
+      <>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", visibleSlot && "hidden")}>
+            {tasksPane ?? conversationMainPane}
+          </div>
+          {conversationSidePane && (
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{conversationSidePane}</div>
+          )}
+        </div>
+        {taskDialog}
+      </>
+    );
+  }
+  return (
+    <>
+      <Group
+        id="conversation"
+        orientation="horizontal"
+        defaultLayout={threadLayout.defaultLayout}
+        onLayoutChanged={threadLayout.onLayoutChanged}
+        className="flex min-h-0 min-w-0 flex-1"
+      >
+        <Panel
+          id="main"
+          // Strings are percentages of the group; numbers would be pixels.
+          minSize="40"
+          className="flex min-h-0 min-w-0 flex-col"
+        >
+          {tasksPane ?? conversationMainPane}
+        </Panel>
+        {visibleSlot && (
+          <>
+            <Separator
+              aria-label={
+                visibleSlot === "thread" ? m.conversation_thread() : m.agent_profile_resize()
+              }
+              className="hidden w-px shrink-0 bg-border-secondary transition-colors hover:bg-brand-solid data-[separator=active]:bg-brand-solid md:block"
+            />
+            <Panel
+              id={visibleSlot}
+              defaultSize="35"
+              minSize="25"
+              maxSize="60"
+              className="flex min-h-0 min-w-0 flex-col"
+            >
+              {conversationSidePane}
+            </Panel>
+          </>
+        )}
+      </Group>
+      {taskDialog}
+    </>
+  );
+}

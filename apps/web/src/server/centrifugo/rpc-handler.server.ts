@@ -2,14 +2,17 @@
 import {
   decodeComputerRegisterRequest,
   encodeComputerRegisterResponse,
+  utf8Encoder,
+  utf8Decoder,
 } from "@lrm/coforge-sdk/internal";
-import { ComputerRegistrationError } from "../computers/registration.server";
+import { isRecord } from "@lrm/coforge-sdk/internal";
+import { ComputerRegistrationError } from "#src/server/computers/registration.server";
 import {
   handleRequestError,
   RequestAuthenticationError,
-} from "../errors/request-error-handler.server";
+} from "#src/server/errors/request-error-handler.server";
 import { getComputerStatusCache, type ComputerStatusCache } from "./computer-status.server";
-import { WorkspaceQueryError, WorkspaceQueryUseCase } from "../workspaces/query.server";
+import { WorkspaceQueryError, WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
 import { decodeWorkspaceGetRequest, decodeWorkspaceListRequest } from "@lrm/coforge-sdk/internal";
 import {
   decodeAgentContextScanResponse,
@@ -28,36 +31,38 @@ import {
   type AgentContextReport,
 } from "./agent-context-cache.server";
 import { getUsageCache, type UsageCache, type UsageSnapshot } from "./usage-cache.server";
-import { PublishAgentRuntimeControl } from "../agents/agent-runtime-control.server";
+import { PublishAgentRuntimeControl } from "#src/server/agents/agent-runtime-control.server";
 import { decodeAgentMessageDeliveryAck } from "@lrm/coforge-sdk/internal";
 import {
   AGENT_STATUS_LEASE_MS,
   getAgentStatusCache,
   type AgentStatusCache,
-} from "../agents/agent-status.server";
+} from "#src/server/agents/agent-status.server";
 import {
   agentStatusChannel,
+  agentStatusChannelForAgent,
   encodeAgentStatusEvent,
-} from "../../features/agents/agent-status-realtime";
+} from "#src/features/agents/agent-status-realtime";
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { CentrifugoServerApi } from "./server-api.server";
-import type { AgentDisplay } from "../agents/agent-display.server";
+import type { AgentDisplay } from "#src/server/agents/agent-display.server";
 import {
   decodeReminderFireRequest,
   decodeReminderSnapshotRequest,
   encodeAgentReminderOperationResponse,
   decodeAgentReminderOperationRequest,
 } from "@lrm/coforge-sdk/internal";
-import type { Reminders } from "../reminders/reminders.server";
-import type { ComputerRestartStore } from "../computers/computer-restart-store.server";
+import type { Reminders } from "#src/server/reminders/reminders.server";
+import type { ComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 import {
   getComputerUpgradeStore,
   type RedisComputerUpgradeStore,
-} from "../computers/computer-upgrade-store.server";
+} from "#src/server/computers/computer-upgrade-store.server";
 import { decodeComputerUpgradeResult } from "@lrm/coforge-sdk/internal";
 import {
   computerObservationSchema,
   type ComputerObservation,
-} from "../computers/computer-metadata.server";
+} from "#src/server/computers/computer-metadata.server";
 export {
   createAgentSessionMethod,
   createAgentSessionInvalidateMethod,
@@ -81,8 +86,7 @@ export const createAgentReminderMethod =
     } catch (error) {
       if (request)
         return encodeAgentReminderOperationResponse({
-          protocolMajor: 1,
-          requestId: request.requestId,
+          idempotencyKey: request.idempotencyKey,
           workspaceId: request.workspaceId,
           computerId: request.computerId,
           agentId: request.agentId,
@@ -186,7 +190,9 @@ export function createAgentStartMethod(useCase: PublishAgentRuntimeControl): Cen
 
 export function createAgentStatusMethod(
   agents: {
-    getById(id: string): Promise<{ workspaceId: string; computerId?: string } | undefined>;
+    getById(
+      id: string,
+    ): Promise<{ workspaceId: string; computerId?: string; visibility?: string } | undefined>;
   },
   statuses?: AgentStatusCache,
   events?: Pick<CentrifugoServerApi, "publish">,
@@ -217,10 +223,21 @@ export function createAgentStatusMethod(
         // The optional display read model cannot reject an accepted process fact.
       }
     }
+    // Folded into the Agent row already fetched above for authorization — no extra
+    // query, and never optional in effect: `visibility === undefined` (the lookup found nothing
+    // to route by; never happens once the authorization check above passed for a real Agent row)
+    // skips fan-out entirely — fails closed — rather than guessing the shared channel. The
+    // process lease above is still accepted independently of this decision.
+    const visibility = agent.visibility;
+    const isPrivate = visibility !== undefined && visibility !== AGENT_VISIBILITY.PUBLIC;
+    const channel = isPrivate
+      ? agentStatusChannelForAgent(status.workspaceId, status.agentId)
+      : agentStatusChannel(status.workspaceId);
     try {
+      if (visibility === undefined) return new Uint8Array();
       if (events) {
         await events.publish(
-          agentStatusChannel(status.workspaceId),
+          channel,
           encodeAgentStatusEvent({
             agentId: status.agentId,
             status: status.status,
@@ -232,7 +249,7 @@ export function createAgentStatusMethod(
         );
       }
       if (snapshot && displayEvents)
-        await displayEvents.publishJson(agentStatusChannel(status.workspaceId), {
+        await displayEvents.publishJson(channel, {
           type: "agent:display",
           ...snapshot,
         });
@@ -402,7 +419,7 @@ export function createDaemonConnectionStatusMethod(
   upgrades?: Pick<RedisComputerUpgradeStore, "touchIdentity">,
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
-    const request = JSON.parse(new TextDecoder().decode(payload)) as {
+    const request = JSON.parse(utf8Decoder.decode(payload)) as {
       workspaceId?: string;
       computerId?: string;
       online?: boolean;
@@ -525,7 +542,7 @@ export function createDaemonRuntimeProviderModelRefreshResultMethod(): Centrifug
 }
 
 /**
- * The Daemon's terminal report for one Agent context-composition scan (ADR 0051). Mirrors the
+ * The Daemon's terminal report for one Agent context-composition scan. Mirrors the
  * usage-scan result method's principal checks; a valid `report_json` is parsed and stored, and
  * nothing else here interprets the report - the Web feature owns that. A result the daemon could
  * not produce (`no_session`, `unparsed`, ...) is still stored, as the visible reason the popover
@@ -582,7 +599,7 @@ function decodeAgentContextReport(
   if (bytes.byteLength > 65_536) return undefined;
   let value: unknown;
   try {
-    value = JSON.parse(new TextDecoder().decode(bytes));
+    value = JSON.parse(utf8Decoder.decode(bytes));
   } catch {
     return undefined;
   }
@@ -705,7 +722,7 @@ function decodeUsageSnapshot(
   if (bytes.byteLength > 16_384) return undefined;
   let value: unknown;
   try {
-    value = JSON.parse(new TextDecoder().decode(bytes));
+    value = JSON.parse(utf8Decoder.decode(bytes));
   } catch {
     return undefined;
   }
@@ -837,9 +854,7 @@ function usageWindow(value: unknown): UsageSnapshot["primary"] | undefined {
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? value : undefined;
 }
 
 function usageStatus(
@@ -1005,7 +1020,7 @@ function decodePayload(request: CentrifugoRpcRequest) {
   }
   if (Object.prototype.hasOwnProperty.call(request, "data")) {
     try {
-      return new TextEncoder().encode(JSON.stringify(request.data));
+      return utf8Encoder.encode(JSON.stringify(request.data));
     } catch {
       return undefined;
     }

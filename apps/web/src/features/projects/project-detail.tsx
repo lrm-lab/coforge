@@ -13,17 +13,18 @@ import {
   Settings01,
   XCircle,
 } from "@untitledui/icons";
-import { Avatar } from "@/components/base/avatar/avatar";
-import { Badge } from "@/components/base/badges/badges";
-import { Button } from "@/components/base/buttons/button";
-import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
-import { PageHeader } from "@/components/layout/page-header";
-import { RelativeTime } from "@/components/ui/relative-time";
-import { Skeleton } from "@/components/ui/skeleton";
-import { CreateChannelDialog } from "@/features/conversations/create-channel-dialog";
-import { createPublicChannel } from "@/features/conversations/channels.functions";
-import { avatarInitial, avatarToneClassName } from "@/lib/avatar-tone";
-import { m } from "@/paraglide/messages";
+import { Avatar } from "#src/components/base/avatar/avatar";
+import { Badge } from "#src/components/base/badges/badges";
+import { Button } from "#src/components/base/buttons/button";
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { PageHeader } from "#src/components/layout/page-header";
+import { RelativeTime } from "#src/components/ui/relative-time";
+import { Skeleton } from "#src/components/ui/skeleton";
+import { CreateChannelDialog } from "#src/features/conversations/create-channel-dialog";
+import { createPublicChannel } from "#src/features/conversations/channels.functions";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { m } from "#src/paraglide/messages";
 import type { getProject, getProjectRepository } from "./projects.functions";
 import { ProjectImage } from "./project-image";
 import { RepositoryStatusMessage } from "./repository-status";
@@ -38,6 +39,7 @@ export function ProjectDetail({
   repository: Promise<Repository>;
 }) {
   const router = useRouter();
+  const workspaceSlug = useWorkspaceSlug();
   const create = useServerFn(createPublicChannel);
   const [creating, setCreating] = useState(false);
   return (
@@ -46,8 +48,8 @@ export function ProjectDetail({
         heading={project.name}
         meta={
           <Link
-            to="/projects/$projectSlug/settings"
-            params={{ projectSlug: project.slug }}
+            to="/w/$workspaceSlug/projects/$projectSlug/settings"
+            params={{ workspaceSlug, projectSlug: project.slug }}
             aria-label={m.project_settings()}
             className="shrink-0 rounded-lg p-2 text-tertiary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
           >
@@ -57,7 +59,8 @@ export function ProjectDetail({
         leading={
           <>
             <Link
-              to="/projects"
+              to="/w/$workspaceSlug/projects"
+              params={{ workspaceSlug }}
               aria-label={m.project_back()}
               className="shrink-0 rounded-lg p-2 text-tertiary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
             >
@@ -106,8 +109,8 @@ export function ProjectDetail({
                   {project.conversations.map((conversation) => (
                     <li key={conversation.id}>
                       <Link
-                        to="/messages/channels/$channelId"
-                        params={{ channelId: conversation.id }}
+                        to="/w/$workspaceSlug/channel/$channelId"
+                        params={{ workspaceSlug, channelId: conversation.id }}
                         className="flex min-w-0 items-center gap-3 px-4 py-4 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2"
                       >
                         <Avatar
@@ -220,6 +223,7 @@ function RepositoryLoading() {
 }
 
 function RepositoryContents({ data, projectSlug }: { data: Repository; projectSlug: string }) {
+  const workspaceSlug = useWorkspaceSlug();
   if (data.status !== "ready") {
     return (
       <>
@@ -359,8 +363,8 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
                       <div className="flex min-w-0 items-center gap-3 px-4 py-3 hover:bg-primary_hover">
                         {file.type === "dir" || file.type === "file" ? (
                           <Link
-                            to="/projects/$projectSlug/tree/$"
-                            params={{ projectSlug, _splat: file.path }}
+                            to="/w/$workspaceSlug/projects/$projectSlug/tree/$"
+                            params={{ workspaceSlug, projectSlug, _splat: file.path }}
                             className={nameLinkClassName}
                           >
                             {/* Both types open in the file browser, but only one is a folder. */}

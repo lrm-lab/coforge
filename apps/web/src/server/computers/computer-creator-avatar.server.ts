@@ -1,19 +1,24 @@
 import { z } from "zod";
-import type { PrismaClient } from "../../../generated/client";
-import { AppError, isAppError } from "../../lib/app-error";
-import { optionalBrowserUser } from "../auth/require-user.server";
-import { getDatabaseClient } from "../db/client.server";
+import type { PrismaClient } from "#src/generated/prisma/client";
+import { AppError, isAppError } from "#src/lib/app-error";
+import { optionalBrowserUser } from "#src/server/auth/require-user.server";
+import { privateImageHeaders } from "#src/server/http/image-headers.server";
+import { getDatabaseClient } from "#src/server/db/client.server";
 import {
   PROFILE_IMAGE_STYLES,
+  publicImageVersion,
   publicImageUrl,
+  publicImageUrlOrFallback,
   type PublicImageUrlResolver,
-} from "../files/public-image-delivery.server";
-import { readUserAvatar } from "../profiles/user-avatar.server";
+} from "#src/server/files/public-image-delivery.server";
+import { readUserAvatar } from "#src/server/profiles/user-avatar.server";
 
 /**
  * Where the browser reads the avatar of the person who connected a Computer. The image CDN
  * addresses the object directly; without one, the workspace-scoped route below serves it, which
- * is why that route exists at all.
+ * is why that route exists at all. The fallback carries the object's version token (`?v=`) like
+ * the other three avatars: it is what makes the route's one-year immutable answer safe — a new
+ * upload lands on a new URL. (The fallback only runs with a key, so the token is always there.)
  */
 export function computerCreatorAvatarUrl(
   computerId: string,
@@ -21,16 +26,18 @@ export function computerCreatorAvatarUrl(
   objectKey: string | null,
   publicUrl: PublicImageUrlResolver = publicImageUrl,
 ) {
-  if (!objectKey) return null;
-  return (
-    publicUrl(objectKey, PROFILE_IMAGE_STYLES.avatar) ??
-    `/api/computers/${computerId}/creator-avatar?workspaceId=${workspaceId}`
+  return publicImageUrlOrFallback(
+    objectKey,
+    PROFILE_IMAGE_STYLES.avatar,
+    (key) =>
+      `/api/computers/${computerId}/creator-avatar?workspaceId=${workspaceId}&v=${encodeURIComponent(publicImageVersion(key))}`,
+    publicUrl,
   );
 }
 
 const scopeSchema = z.object({ computerId: z.uuid(), workspaceId: z.uuid() });
 type Dependencies = {
-  authenticate(cookie: string | undefined): { id: string };
+  authenticate(cookie: string | undefined): { id: string } | Promise<{ id: string }>;
   database(): PrismaClient | null | undefined;
   read(
     db: PrismaClient,
@@ -39,8 +46,8 @@ type Dependencies = {
 };
 
 const dependencies: Dependencies = {
-  authenticate(cookie) {
-    const user = optionalBrowserUser(cookie);
+  async authenticate(cookie) {
+    const user = await optionalBrowserUser(cookie);
     if (!user) throw new AppError("ACCESS_DENIED");
     return user;
   },
@@ -54,7 +61,7 @@ export async function handleComputerCreatorAvatar(
   deps = dependencies,
 ) {
   try {
-    const user = deps.authenticate(request.headers.get("cookie") ?? undefined);
+    const user = await deps.authenticate(request.headers.get("cookie") ?? undefined);
     const scope = scopeSchema.safeParse({
       computerId,
       workspaceId: new URL(request.url).searchParams.get("workspaceId"),
@@ -69,12 +76,7 @@ export async function handleComputerCreatorAvatar(
     if (!connection) throw new AppError("NOT_FOUND");
     const avatar = await deps.read(db, connection.computer.ownerId);
     return new Response(avatar.body, {
-      headers: {
-        "Content-Type": avatar.contentType,
-        "Content-Disposition": "inline",
-        "X-Content-Type-Options": "nosniff",
-        "Cache-Control": "no-store",
-      },
+      headers: privateImageHeaders(avatar.contentType),
     });
   } catch (error) {
     const code = isAppError(error) ? error.code : "INTERNAL_ERROR";
@@ -86,6 +88,6 @@ export async function handleComputerCreatorAvatar(
           : code === "INVALID_INPUT"
             ? 400
             : 503;
-    return Response.json({ code }, { status, headers: { "Cache-Control": "no-store" } });
+    return Response.json({ code }, { status, headers: { "cache-control": "no-store" } });
   }
 }

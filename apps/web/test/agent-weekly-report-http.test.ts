@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
-import { WEEKLY_REPORT_PROTOCOL_MAJOR } from "@lrm/coforge-sdk/internal";
-import { AppError } from "../src/lib/app-error";
-import { executeAgentWeeklyReport } from "../src/server/agents/agent-weekly-report-http.server";
+import { validateWeeklyReportRequest } from "@lrm/coforge-sdk/internal";
+import { AppError } from "#src/lib/app-error";
+import { executeAgentWeeklyReport } from "#src/server/agents/agent-weekly-report-http.server";
 
 const request = {
-  protocolMajor: WEEKLY_REPORT_PROTOCOL_MAJOR,
-  requestId: "request",
+  idempotencyKey: "request",
   workspaceId: "workspace",
   agentId: "assistant",
   operation: "read" as const,
@@ -37,8 +36,7 @@ test("weekly-report Agent reads use the assistant owner User and deny ordinary A
   });
   expect(allowed).toEqual({
     response: {
-      protocolMajor: WEEKLY_REPORT_PROTOCOL_MAJOR,
-      requestId: "request",
+      idempotencyKey: "request",
       operation: "read",
       result: { markdown: "ok", truncated: false },
     },
@@ -88,4 +86,40 @@ test("weekly-report Agent reads do not leak unauthorized report existence", asyn
     },
   );
   expect(outcome).toEqual({ error: { code: 400, message: "Weekly report not found" } });
+});
+
+const REPORT = "33333333-3333-4333-8333-333333333333";
+
+test("weekly-report HTTP echoes the caller's idempotencyKey after validation", async () => {
+  const validated = validateWeeklyReportRequest({
+    idempotencyKey: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    workspaceId: "workspace",
+    agentId: "assistant",
+    operation: "read",
+    reportId: REPORT,
+    section: "Progress",
+  });
+  expect(validated.idempotencyKey).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+
+  const outcome = await executeAgentWeeklyReport(
+    {
+      loadAssistantContextManifest: async () => ({}),
+      listAssistantVisibleReports: async () => ({ reports: [], nextCursor: null }),
+      readAssistantReportSection: async () => ({ markdown: "ok", truncated: false }),
+    },
+    {
+      computerIdForAuthorizedAgent: async () => "computer",
+      weeklyReportAssistantOwner: async () => ({ userId: "owner" }),
+    },
+    validated,
+    {
+      userId: "owner",
+      workspaceId: "workspace",
+      computerId: "computer",
+      agentId: "assistant",
+    },
+  );
+  expect(outcome).toMatchObject({
+    response: { idempotencyKey: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+  });
 });

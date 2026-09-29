@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import type { PrismaClient } from "../generated/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   AGENT_REMINDER_PAGE_SIZE,
   AgentRemindersQuery,
   prismaAgentReminderReadStore,
   type AgentReminderReadStore,
-} from "@/server/agents/agent-reminders.server";
+} from "#src/server/agents/agent-reminders.server";
 
 const viewer = { userId: "user-1", workspaceId: "workspace-1" };
 const item = (id: string) => ({
@@ -18,7 +18,7 @@ const item = (id: string) => ({
   createdAt: "2026-09-09T10:00:00.000Z",
   anchor: {
     kind: "direct" as const,
-    agentId: "agent-1",
+    conversationId: "dm-1",
     messageId: "message-1",
     threadRootId: null,
   },
@@ -132,7 +132,7 @@ test("exposes targets and derives readable message anchors from the canonical co
   expect(rows.map((row) => row.anchor)).toEqual([
     {
       kind: "direct",
-      agentId: "agent-1",
+      conversationId: "owned-conversation",
       messageId: "message-owned-dm",
       threadRootId: null,
     },

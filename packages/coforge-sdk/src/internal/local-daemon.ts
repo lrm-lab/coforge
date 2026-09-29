@@ -4,11 +4,11 @@ import {
   DaemonHandshakeResponseSchema,
   DaemonCommandRequestSchema,
   DaemonCommandResponseSchema,
-} from "./gen/coforge/rpc/v1/daemon_pb";
+} from "#src/internal/gen/coforge/rpc/v1/daemon_pb";
 import {
   DaemonRuntimeConfigureRequestSchema,
   DaemonRuntimeConfigureResponseSchema,
-} from "./gen/coforge/rpc/v1/daemon_runtime_pb";
+} from "#src/internal/gen/coforge/rpc/v1/daemon_runtime_pb";
 import {
   LocalRpcRequestSchema,
   LocalRpcResponseSchema,
@@ -22,8 +22,9 @@ import {
   UsageScanResponseSchema,
   DaemonHoldRequestSchema,
   DaemonHoldResponseSchema,
-} from "./gen/coforge/rpc/v1/local_rpc_pb";
+} from "#src/internal/gen/coforge/rpc/v1/local_rpc_pb";
 import { assertValidMessageSender, type MessageSenderKind } from "./message-sender";
+import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
 
 export const LOCAL_RPC_PROTOCOL_MAJOR = 1 as const;
 export const LOCAL_RPC_METHODS = {
@@ -43,7 +44,7 @@ export const LOCAL_RPC_METHODS = {
   USAGE_SCAN: "usage:scan",
 } as const;
 export type LocalInboxRequest = {
-  requestId: string;
+  idempotencyKey: string;
   context: string;
   operation: "check";
 };
@@ -61,18 +62,14 @@ export type AppInboxItem = {
 export type InboxEntry =
   | { kind: "message_target"; messageTarget: MessageAttentionSummary }
   | { kind: "app"; app: AppInboxItem };
-export type InboxResponse = { requestId: string; accepted: boolean; entries: InboxEntry[] };
+export type InboxResponse = { idempotencyKey: string; accepted: boolean; entries: InboxEntry[] };
 export function encodeLocalInboxRequest(value: LocalInboxRequest): Uint8Array {
-  return toBinary(LocalInboxRequestSchema, create(LocalInboxRequestSchema, value));
+  return toBinary(LocalInboxRequestSchema, create(LocalInboxRequestSchema, toWireRequestId(value)));
 }
 export function decodeLocalInboxRequest(bytes: Uint8Array): LocalInboxRequest {
-  const value = fromBinary(LocalInboxRequestSchema, bytes);
-  if (value.operation !== "check") throw new Error("invalid App Inbox operation");
-  return {
-    requestId: value.requestId,
-    context: value.context,
-    operation: value.operation,
-  };
+  const { requestId, context, operation } = fromBinary(LocalInboxRequestSchema, bytes);
+  if (operation !== "check") throw new Error("invalid App Inbox operation");
+  return fromWireRequestId({ requestId, context, operation: "check" as const });
 }
 export function encodeInboxResponse(value: InboxResponse): Uint8Array {
   for (const entry of value.entries)
@@ -85,8 +82,7 @@ export function encodeInboxResponse(value: InboxResponse): Uint8Array {
   return toBinary(
     InboxResponseSchema,
     create(InboxResponseSchema, {
-      requestId: value.requestId,
-      accepted: value.accepted,
+      ...toWireRequestId(value),
       entries: value.entries.map((entry) =>
         create(
           InboxEntrySchema,
@@ -121,7 +117,7 @@ export function encodeInboxResponse(value: InboxResponse): Uint8Array {
 }
 export function decodeInboxResponse(bytes: Uint8Array): InboxResponse {
   const value = fromBinary(InboxResponseSchema, bytes);
-  return {
+  return fromWireRequestId({
     requestId: value.requestId,
     accepted: value.accepted,
     entries: value.entries.map((entry): InboxEntry => {
@@ -169,7 +165,7 @@ export function decodeInboxResponse(bytes: Uint8Array): InboxResponse {
         },
       };
     }),
-  };
+  });
 }
 export type UsageScanRequest = { protocolMajor: number; requestId: string; provider: string };
 export type UsageScanResponse = {
@@ -203,7 +199,7 @@ export const decodeUsageScanResponse = (b: Uint8Array): UsageScanResponse => {
 export type LocalMentionSelector = { type: "user" | "agent"; id: string; name: string };
 
 export type LocalAgentMessageRequest = {
-  requestId: string;
+  idempotencyKey: string;
   context: string;
   operation:
     | "check"
@@ -219,6 +215,9 @@ export type LocalAgentMessageRequest = {
   target?: string;
   content?: string;
   sendDraft?: boolean;
+  /** `message send --send-draft` only: refuse, before any request, unless the saved draft still
+   * belongs to the logical send with this idempotency key. */
+  expectedDraftKey?: string;
   continueAnyway?: boolean;
   /** `message send` only (daemon-internal): the boundary the sender has already reviewed. */
   seenUpToSeq?: number;
@@ -265,17 +264,22 @@ export type AgentMessageRecord = {
   /** Always present, possibly empty; order matches send/upload order. */
   attachments: LocalAttachment[];
   task?: MessageTaskMetadata;
+  /** True when this message personally @mentioned the reading Agent. */
+  mentionsAgent?: boolean;
+  /** True when the reading Agent is not in the channel and was notified of this one message. */
+  nonMemberMention?: boolean;
 };
 export type MessageTaskMetadata = {
   number: number;
   status: import("./tasks").TaskStatus;
-  owner?: { displayName: string; handle: string };
+  /** `handle` has no leading "@"; `deleted` marks an Agent deleted while still holding the Task. */
+  owner?: { displayName: string; handle: string; deleted?: boolean };
 };
 
 export function decodeMessageTask(value: {
   number: number;
   status: string;
-  owner?: { displayName: string; handle: string };
+  owner?: { displayName: string; handle: string; deleted?: boolean };
 }): MessageTaskMetadata {
   let status: MessageTaskMetadata["status"];
   switch (value.status) {
@@ -294,7 +298,11 @@ export function decodeMessageTask(value: {
     status,
     ...(value.owner
       ? {
-          owner: { displayName: value.owner.displayName, handle: value.owner.handle },
+          owner: {
+            displayName: value.owner.displayName,
+            handle: value.owner.handle,
+            ...(value.owner.deleted ? { deleted: true } : {}),
+          },
         }
       : {}),
   };
@@ -319,15 +327,30 @@ export function decodeLocalAttachments(values: readonly RawLocalAttachment[]): L
     sizeBytes: Number(value.sizeBytes),
   }));
 }
+/** One mention the sender's message did not deliver, as the send reports it. */
+export type AgentPendingMentionAction = {
+  resolutionId: string;
+  messageId: string;
+  targetType: "user" | "agent";
+  targetHandle: string;
+  targetAvatarUrl: string | null;
+  /** Why it was not delivered: the target was not in the conversation at send time. */
+  reason: "not_member";
+  /** What the sender may still do: `notify` and/or `add`. */
+  availableActions: string[];
+  /** ISO time after which the action can no longer be taken. */
+  expiresAt: string;
+};
 export type AgentMessageResponse = {
-  requestId: string;
+  idempotencyKey: string;
   accepted: boolean;
   attentionCount: number;
   messages: AgentMessageRecord[];
   messageId: string;
   summaries: MessageAttentionSummary[];
-  /** `message send` only: Raft's send contract, `"sent"` or `"held"`. */
-  state?: "sent" | "held";
+  /** `message send` only: Raft's send contract, `"sent"` or `"held"`, or `"committed"` when the
+   * daemon confirmed an ambiguous send's commit by its key and has no delivery receipt for it. */
+  state?: "sent" | "held" | "committed";
   /** `message send` only: `forward`/`bypass` sent the message, `local_hold`/`syncing_hold` held it. */
   decision?: "forward" | "bypass" | "local_hold" | "syncing_hold";
   reason?: string;
@@ -350,6 +373,10 @@ export type AgentMessageResponse = {
   hasMore?: boolean;
   /** `message send` only: pending messages a bypassed hold chose not to review; empty otherwise. */
   recentUnread?: AgentMessageRecord[];
+  /** `message send` only: mentions of people outside the channel, which notified no one. */
+  pendingMentionActions?: AgentPendingMentionAction[];
+  /** `message send` only: `@handle`s that name nobody the Agent can see. */
+  unresolvedMentionHandles?: string[];
 };
 export type MessageAttentionSummary = {
   target: string;
@@ -357,7 +384,7 @@ export type MessageAttentionSummary = {
   firstPendingSequence: number;
   latestSequence: number;
   latestSenderKind?: MessageSenderKind;
-  /** Public handle without a leading "@". No description on this summary (ADR 0052, decision D). */
+  /** Public handle without a leading "@". No description on this summary. */
   latestSenderHandle?: string;
   flags: string[];
 };
@@ -385,6 +412,7 @@ function decodeAgentMessageRecords(
     createdAt: string;
     attachments: readonly RawLocalAttachment[];
     task?: Parameters<typeof decodeMessageTask>[0];
+    mentionsAgent?: boolean;
   }[],
 ): AgentMessageRecord[] {
   return records.map((m) => {
@@ -400,6 +428,7 @@ function decodeAgentMessageRecords(
       createdAt: m.createdAt,
       attachments: decodeLocalAttachments(m.attachments),
       ...(m.task ? { task: decodeMessageTask(m.task) } : {}),
+      ...(m.mentionsAgent ? { mentionsAgent: true } : {}),
     };
   });
 }
@@ -424,7 +453,7 @@ export function encodeAgentMessageResponse(value: AgentMessageResponse): Uint8Ar
   return toBinary(
     AgentMessageResponseSchema,
     create(AgentMessageResponseSchema, {
-      ...safeValue,
+      ...toWireRequestId(safeValue),
       messages: encodeAgentMessageRecords(safeValue.messages),
       heldMessages: encodeAgentMessageRecords(safeValue.heldMessages ?? []),
       recentUnread: encodeAgentMessageRecords(safeValue.recentUnread ?? []),
@@ -453,7 +482,7 @@ export function decodeAgentMessageResponse(bytes: Uint8Array): AgentMessageRespo
   if (v.freshnessContextMode && !["inline", "withheld"].includes(v.freshnessContextMode))
     throw new Error("invalid Agent message freshness context mode");
   if (v.freshnessContextMode === "withheld")
-    return {
+    return fromWireRequestId({
       requestId: v.requestId,
       accepted: v.accepted,
       attentionCount: v.attentionCount,
@@ -470,11 +499,11 @@ export function decodeAgentMessageResponse(bytes: Uint8Array): AgentMessageRespo
       newMessageCount: v.newMessageCount,
       shownMessageCount: v.shownMessageCount,
       omittedMessageCount: v.omittedMessageCount,
-      freshnessContextMode: "withheld",
+      freshnessContextMode: "withheld" as const,
       withheldMessageCount: v.withheldMessageCount ?? v.attentionCount,
       recentUnread: [],
-    };
-  return {
+    });
+  return fromWireRequestId({
     requestId: v.requestId,
     accepted: v.accepted,
     attentionCount: v.attentionCount,
@@ -523,7 +552,7 @@ export function decodeAgentMessageResponse(bytes: Uint8Array): AgentMessageRespo
       | undefined,
     withheldMessageCount: v.withheldMessageCount,
     hasMore: v.hasMore || undefined,
-  };
+  });
 }
 export const DAEMON_HANDSHAKE_METHOD = LOCAL_RPC_METHODS.HANDSHAKE;
 export const DAEMON_RUNTIME_CONFIGURE_METHOD = LOCAL_RPC_METHODS.CONFIGURE;

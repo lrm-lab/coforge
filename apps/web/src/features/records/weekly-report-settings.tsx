@@ -1,29 +1,26 @@
-import {
-  ChevronLeft,
-  Edit01 as Edit,
-  Plus,
-  Trash01 as Trash,
-  XClose as X,
-} from "@untitledui/icons";
+import { ChevronLeft, Edit01 as Edit, Plus, Trash01 as Trash } from "@untitledui/icons";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Heading } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "@/components/application/modals/modal";
-import { Badge } from "@/components/base/badges/badges";
-import { Button } from "@/components/base/buttons/button";
-import { ButtonUtility } from "@/components/base/buttons/button-utility";
-import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { m } from "@/paraglide/messages";
+import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
+import { Button } from "#src/components/base/buttons/button";
+import { Empty, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
+import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { m } from "#src/paraglide/messages";
 import { CreateWeeklyTemplateDialog } from "./create-weekly-template-dialog";
 import { KeyPointPromptEditor } from "./key-point-prompt-editor";
+import { RecordsDeleteConfirmDialog } from "./records-delete-confirm-dialog";
+import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import {
   emptyKeyPointPrompts,
   formatRecipientSummary,
+  keyPointHistoryIndexOf,
+  type KeyPointPromptHistoryEntry,
   type KeyPointPromptsMeta,
 } from "./records-content";
-import { memberLabel, weekdayLabel, type TemplateMemberOption } from "./weekly-template-members";
+import { WeeklyTemplateDetailDialog } from "./weekly-template-detail-dialog";
+import { weekdayLabel, type TemplateMemberOption } from "./weekly-template-members";
 import {
   applyWeeklyTemplate,
   createWeeklyTemplate,
@@ -68,7 +65,7 @@ export function WeeklyReportSettings({
   returnTo?: string;
 }) {
   const router = useRouter();
-  const navigate = useNavigate({ from: "/records/settings" });
+  const navigate = useNavigate({ from: "/w/$workspaceSlug/records/settings" });
   const create = useServerFn(createWeeklyTemplate);
   const update = useServerFn(updateWeeklyTemplate);
   const apply = useServerFn(applyWeeklyTemplate);
@@ -90,6 +87,21 @@ export function WeeklyReportSettings({
   const [editing, setEditing] = useState<WeeklyTemplateList[number] | null>(null);
   const [detail, setDetail] = useState<WeeklyTemplateList[number] | null>(null);
   const [busy, setBusy] = useState(false);
+  // Each delete confirm keeps its target after closing so the dialog's text stays intact through
+  // the modal's exit animation; the separate `open` flag drives visibility.
+  const [templateDeleteOpen, setTemplateDeleteOpen] = useState(false);
+  const [templatePendingDelete, setTemplatePendingDelete] = useState<
+    WeeklyTemplateList[number] | null
+  >(null);
+  const [templateDeleteError, setTemplateDeleteError] = useState("");
+  const [deletingTemplate, guardTemplateDelete] = useSubmitGuard();
+  const [historyDeleteOpen, setHistoryDeleteOpen] = useState(false);
+  const [historyPendingDelete, setHistoryPendingDelete] = useState<{
+    slot: KeyPointSlot;
+    entry: KeyPointPromptHistoryEntry;
+  } | null>(null);
+  const [historyDeleteError, setHistoryDeleteError] = useState("");
+  const [deletingHistory, guardHistoryDelete] = useSubmitGuard();
 
   function readEditorText(): string {
     return textareaRef.current?.value ?? draftText;
@@ -158,16 +170,26 @@ export function WeeklyReportSettings({
     }
   }
 
-  async function onDelete(template: WeeklyTemplateList[number]) {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await remove({ data: { templateId: template.id } });
-      await router.invalidate({ sync: true });
-      if (detail?.id === template.id) setDetail(null);
-    } finally {
-      setBusy(false);
-    }
+  function askDeleteTemplate(template: WeeklyTemplateList[number]) {
+    setTemplatePendingDelete(template);
+    setTemplateDeleteError("");
+    setTemplateDeleteOpen(true);
+  }
+
+  function confirmDeleteTemplate() {
+    const template = templatePendingDelete;
+    if (!template) return;
+    void guardTemplateDelete(async () => {
+      setTemplateDeleteError("");
+      try {
+        await remove({ data: { templateId: template.id } });
+        if (detail?.id === template.id) setDetail(null);
+        setTemplateDeleteOpen(false);
+        await router.invalidate({ sync: true });
+      } catch {
+        setTemplateDeleteError(m.records_delete_error());
+      }
+    });
   }
 
   async function onSavePrompt() {
@@ -190,65 +212,94 @@ export function WeeklyReportSettings({
     }
   }
 
-  async function onDeleteHistory(historyIndex: number) {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const saved = await deleteHistory({
-        data: { slot: keyPointSlot, historyIndex },
-      });
-      setPrompts(saved);
-      await router.invalidate({ sync: true });
-      setPrompts(saved);
-    } finally {
-      setBusy(false);
-    }
+  function askDeleteHistory(entry: KeyPointPromptHistoryEntry) {
+    setHistoryPendingDelete({ slot: keyPointSlot, entry });
+    setHistoryDeleteError("");
+    setHistoryDeleteOpen(true);
+  }
+
+  function confirmDeleteHistory() {
+    const target = historyPendingDelete;
+    if (!target) return;
+    void guardHistoryDelete(async () => {
+      setHistoryDeleteError("");
+      // Resolve the entry's position in the latest snapshot: a history that changed while the
+      // dialog was open must not make this delete a different entry.
+      const historyIndex = keyPointHistoryIndexOf(prompts[target.slot].history, target.entry);
+      if (historyIndex < 0) {
+        setHistoryDeleteOpen(false);
+        return;
+      }
+      try {
+        const saved = await deleteHistory({ data: { slot: target.slot, historyIndex } });
+        setPrompts(saved);
+        setHistoryDeleteOpen(false);
+        await router.invalidate({ sync: true });
+        setPrompts(saved);
+      } catch {
+        setHistoryDeleteError(m.records_delete_error());
+      }
+    });
   }
 
   const activePrompt = prompts[keyPointSlot];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 sm:px-6">
-        {returnTo ? (
-          <Button
-            size="sm"
-            color="link-color"
-            iconLeading={ChevronLeft}
-            onPress={() => {
-              void router.navigate({ href: returnTo });
-            }}
+    <>
+      <Tabs
+        selectedKey={topTab}
+        onSelectionChange={(key) => {
+          if (key === "templates" || key === "key_points") setTopTab(key);
+        }}
+        className="min-h-0 flex-1"
+      >
+        <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 sm:px-6">
+          {returnTo ? (
+            <Button
+              size="sm"
+              color="link-color"
+              iconLeading={ChevronLeft}
+              onPress={() => {
+                void router.navigate({ href: returnTo });
+              }}
+            >
+              {m.records_key_points_back_to_report()}
+            </Button>
+          ) : (
+            <BackToRecords />
+          )}
+          <TabList
+            aria-label={m.records_settings()}
+            type="underline"
+            className="-mb-px min-w-0 flex-1 gap-4 self-end overflow-x-auto before:hidden"
           >
-            {m.records_key_points_back_to_report()}
-          </Button>
-        ) : (
-          <BackToRecords />
-        )}
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          <SettingsTabButton
-            active={topTab === "templates"}
-            label={m.records_settings_tab_templates()}
-            onPress={() => setTopTab("templates")}
-          />
-          <SettingsTabButton
-            active={topTab === "key_points"}
-            label={m.records_settings_tab_key_points()}
-            onPress={() => setTopTab("key_points")}
-          />
+            <Tab id="templates">{m.records_settings_tab_templates()}</Tab>
+            <Tab id="key_points">{m.records_settings_tab_key_points()}</Tab>
+          </TabList>
+          {topTab === "templates" ? (
+            <Button
+              size="sm"
+              color="primary"
+              className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
+              iconLeading={Plus}
+              onPress={openCreate}
+            >
+              {m.records_create_template()}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              color="primary"
+              className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
+              isDisabled={busy}
+              onPress={() => void onSavePrompt()}
+            >
+              {m.records_key_points_prompt_save()}
+            </Button>
+          )}
         </div>
-        {topTab === "templates" ? (
-          <Button size="sm" color="primary" iconLeading={Plus} onPress={openCreate}>
-            {m.records_create_template()}
-          </Button>
-        ) : (
-          <Button size="sm" color="primary" isDisabled={busy} onPress={() => void onSavePrompt()}>
-            {m.records_key_points_prompt_save()}
-          </Button>
-        )}
-      </div>
 
-      {topTab === "templates" ? (
-        <div className="min-h-0 flex-1 overflow-auto bg-primary p-4 sm:p-6">
+        <TabPanel id="templates" className="min-h-0 flex-1 overflow-auto bg-primary p-4 sm:p-6">
           {templates.length === 0 ? (
             <Empty className="py-10">
               <EmptyHeader>
@@ -273,10 +324,21 @@ export function WeeklyReportSettings({
                     <tr
                       key={template.id}
                       className="cursor-pointer border-t border-secondary hover:bg-primary_hover"
-                      aria-label={`${m.records_template_open_detail()}: ${template.name}`}
                       onClick={() => setDetail(template)}
                     >
-                      <td className="px-4 py-3 font-medium">{template.name}</td>
+                      <td className="px-4 py-3">
+                        {/* The row stays clickable for pointers; this button is the same action
+                            for keyboard and assistive technology. */}
+                        <Button
+                          size="sm"
+                          color="link-gray"
+                          aria-label={`${m.records_template_open_detail()}: ${template.name}`}
+                          onPress={() => setDetail(template)}
+                          className="font-medium text-primary"
+                        >
+                          {template.name}
+                        </Button>
+                      </td>
                       <td className="px-4 py-3 text-secondary">{recipientsCell(template)}</td>
                       <td className="px-4 py-3 text-secondary">
                         {m.records_template_frequency_weekly()}
@@ -312,10 +374,10 @@ export function WeeklyReportSettings({
                           </Button>
                           <Button
                             size="sm"
-                            color="link-destructive"
+                            color="tertiary-destructive"
                             iconLeading={Trash}
                             isDisabled={busy}
-                            onPress={() => void onDelete(template)}
+                            onPress={() => askDeleteTemplate(template)}
                           >
                             {m.records_template_delete()}
                           </Button>
@@ -327,41 +389,75 @@ export function WeeklyReportSettings({
               </table>
             </div>
           )}
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col bg-primary">
-          <div className="flex shrink-0 items-center gap-1 border-b border-secondary px-4 sm:px-8">
-            <SettingsTabButton
-              active={keyPointSlot === "team"}
-              label={m.records_key_points_slot_team()}
-              onPress={() => selectKeyPointSlot("team")}
-            />
-            <SettingsTabButton
-              active={keyPointSlot === "personal"}
-              label={m.records_key_points_slot_personal()}
-              onPress={() => selectKeyPointSlot("personal")}
-            />
-          </div>
-          <KeyPointPromptEditor
-            prompt={activePrompt}
-            text={draftText}
-            busy={busy}
-            textareaRef={textareaRef}
-            onChange={(text) => {
-              editingRef.current = true;
-              setDraftText(text);
+        </TabPanel>
+        <TabPanel id="key_points" className="flex min-h-0 flex-1 flex-col bg-primary">
+          <Tabs
+            selectedKey={keyPointSlot}
+            onSelectionChange={(key) => {
+              if (key === "team" || key === "personal") selectKeyPointSlot(key);
             }}
-            onFocus={() => {
-              editingRef.current = true;
-            }}
-            onBlur={() => {
-              editingRef.current = false;
-              setDraftText(readEditorText());
-            }}
-            onDeleteHistory={(index) => void onDeleteHistory(index)}
-          />
-        </div>
-      )}
+            className="min-h-0 flex-1"
+          >
+            <TabList
+              aria-label={m.records_settings_tab_key_points()}
+              type="underline"
+              className="shrink-0 gap-4 px-4 pt-3 sm:px-8"
+            >
+              <Tab id="team">{m.records_key_points_slot_team()}</Tab>
+              <Tab id="personal">{m.records_key_points_slot_personal()}</Tab>
+            </TabList>
+            <TabPanel id={keyPointSlot} className="flex min-h-0 flex-1 flex-col">
+              <KeyPointPromptEditor
+                prompt={activePrompt}
+                text={draftText}
+                busy={busy}
+                textareaRef={textareaRef}
+                onChange={(text) => {
+                  editingRef.current = true;
+                  setDraftText(text);
+                }}
+                onFocus={() => {
+                  editingRef.current = true;
+                }}
+                onBlur={() => {
+                  editingRef.current = false;
+                  setDraftText(readEditorText());
+                }}
+                onDeleteHistory={askDeleteHistory}
+              />
+            </TabPanel>
+          </Tabs>
+        </TabPanel>
+      </Tabs>
+
+      {/* ModalOverlay must stay outside Tabs — CollectionBuilder's Hidden tree would remount it. */}
+      <RecordsDeleteConfirmDialog
+        open={templateDeleteOpen}
+        title={m.records_template_delete_confirm_title({
+          name: templatePendingDelete?.name ?? "",
+        })}
+        description={m.records_template_delete_confirm_body()}
+        busy={deletingTemplate}
+        error={templateDeleteError}
+        onOpenChange={(open) => {
+          setTemplateDeleteOpen(open);
+          setTemplateDeleteError("");
+        }}
+        onConfirm={confirmDeleteTemplate}
+      />
+
+      <RecordsDeleteConfirmDialog
+        open={historyDeleteOpen}
+        title={m.records_key_points_prompt_history_delete_confirm_title()}
+        description={m.records_key_points_prompt_history_delete_confirm_body()}
+        busy={deletingHistory}
+        error={historyDeleteError}
+        onOpenChange={(open) => {
+          setHistoryDeleteOpen(open);
+          setHistoryDeleteError("");
+        }}
+        onConfirm={confirmDeleteHistory}
+      />
 
       <WeeklyTemplateDetailDialog
         template={detail}
@@ -391,137 +487,6 @@ export function WeeklyReportSettings({
           }
         }}
       />
-    </div>
-  );
-}
-
-function SettingsTabButton({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      size="sm"
-      color="tertiary"
-      aria-pressed={active}
-      onPress={onPress}
-      className={`-mb-px shrink-0 rounded-none px-3 py-3 ${
-        active
-          ? "border-b-2 border-brand text-brand-secondary"
-          : "border-b-2 border-transparent text-tertiary hover:text-secondary"
-      }`}
-    >
-      {label}
-    </Button>
-  );
-}
-
-function WeeklyTemplateDetailDialog({
-  template,
-  members,
-  onClose,
-}: {
-  template: WeeklyTemplateList[number] | null;
-  members: TemplateMemberOption[];
-  onClose: () => void;
-}) {
-  if (!template) return null;
-  const recipientNames = template.allMembers
-    ? [m.records_template_all_members()]
-    : template.recipients.map((row) => {
-        const member = members.find((item) => item.userId === row.userId);
-        return memberLabel(member ?? row);
-      });
-
-  return (
-    <ModalOverlay isOpen onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <Modal className="flex max-h-[min(90vh,40rem)] w-[calc(100vw-2rem)] max-w-lg flex-col">
-        <Dialog className="flex min-h-0 flex-1 flex-col">
-          {({ close }) => (
-            <>
-              <div className="flex items-start justify-between gap-6 px-6 pt-6">
-                <Heading slot="title" className="text-lg font-semibold text-primary">
-                  {m.records_template_details()}
-                </Heading>
-                <ButtonUtility
-                  aria-label={m.controls_close()}
-                  icon={X}
-                  size="sm"
-                  color="tertiary"
-                  onClick={close}
-                />
-              </div>
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5 text-sm">
-                <DetailRow label={m.records_template_name()} value={template.name} />
-                {template.sections.map((section, index) => (
-                  <div key={`${section.title}-${index}`} className="space-y-2">
-                    <DetailRow
-                      label={m.records_template_heading_level_one()}
-                      value={section.title}
-                    />
-                    {section.children.map((child) => (
-                      <DetailRow
-                        key={child}
-                        label={m.records_template_heading_level_two()}
-                        value={child}
-                        nested
-                      />
-                    ))}
-                  </div>
-                ))}
-                <div className="flex gap-4">
-                  <span className="w-20 shrink-0 text-tertiary">
-                    {m.records_template_recipients()}
-                  </span>
-                  <div className="flex min-w-0 flex-wrap gap-1.5">
-                    {recipientNames.map((name) => (
-                      <Badge key={name} size="sm" color="gray" type="modern">
-                        {name}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <DetailRow
-                  label={m.records_template_frequency()}
-                  value={m.records_template_frequency_weekly()}
-                />
-                <DetailRow label={m.records_template_send_time()} value={template.sendTime} />
-                <DetailRow
-                  label={m.records_template_enabled()}
-                  value={
-                    template.active
-                      ? m.records_template_enabled_yes()
-                      : m.records_template_enabled_no()
-                  }
-                />
-              </div>
-            </>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
-  );
-}
-
-function DetailRow({
-  label,
-  value,
-  nested = false,
-}: {
-  label: string;
-  value: string;
-  nested?: boolean;
-}) {
-  return (
-    <div className={`flex gap-4 ${nested ? "pl-6" : ""}`}>
-      <span className="w-20 shrink-0 text-tertiary">{label}</span>
-      <span className="min-w-0 text-primary">{value}</span>
-    </div>
+    </>
   );
 }

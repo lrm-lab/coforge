@@ -1,17 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { agentAuthMiddleware } from "#/server/agents/agent-http.middleware";
+import { UUID_LIKE_PATTERN, MIME_TYPE_PATTERN } from "@lrm/coforge-sdk/internal";
+import { errorResponse } from "#src/server/agents/agent-http-error.server";
+import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import {
   createAttachmentUploadSession,
   AttachmentUploadSessionError,
   type AttachmentUploadSessionCreated,
-} from "#/server/attachments/attachment-upload-session.server";
-import { getFileStorage } from "#/server/files/file-storage.server";
-import { PrismaDirectConversationRepository } from "#/server/db/repositories/direct-conversation.repositories.server";
-import { isAppError } from "#/lib/app-error";
+} from "#src/server/attachments/attachment-upload-session.server";
+import { getFileStorage } from "#src/server/files/file-storage.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { targetResolutionStatus } from "#src/server/agents/agent-target-status.server";
 
-/** RFC 6838 `type/subtype`, case-insensitively; matches the multipart upload route's pattern. */
-const MIME_TYPE_PATTERN = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = UUID_LIKE_PATTERN;
 
 export type AttachmentUploadSessionCreatePrincipal = { workspaceId: string; agentId: string };
 
@@ -28,20 +28,9 @@ export type AttachmentUploadSessionCreateDependencies = {
     fileName: string;
     contentType: string;
     sizeBytes: number;
-    clientRequestId: string;
+    idempotencyKey: string;
   }): Promise<AttachmentUploadSessionCreated>;
 };
-
-/** Mirrors `targetResolutionStatus` in `attachments/index.ts` (see its own doc comment). */
-function targetResolutionStatus(error: unknown): number {
-  if (isAppError(error)) return error.code === "ACCESS_DENIED" ? 403 : 400;
-  if (error instanceof Error && error.message === "invalid message target") return 400;
-  return 403;
-}
-
-function errorResponse(code: string, message: string, status: number, retryable: boolean) {
-  return Response.json({ error: message, code, retryable }, { status });
-}
 
 export async function handleAttachmentUploadSessionCreate(
   request: Request,
@@ -61,7 +50,7 @@ export async function handleAttachmentUploadSessionCreate(
       400,
       false,
     );
-  const { target, fileName, contentType, sizeBytes, clientRequestId } = body as Record<
+  const { target, fileName, contentType, sizeBytes, idempotencyKey } = body as Record<
     string,
     unknown
   >;
@@ -83,8 +72,8 @@ export async function handleAttachmentUploadSessionCreate(
       400,
       false,
     );
-  if (typeof clientRequestId !== "string" || !UUID_PATTERN.test(clientRequestId))
-    return errorResponse("UPLOAD_INVALID_REQUEST", "clientRequestId must be a UUID", 400, false);
+  if (typeof idempotencyKey !== "string" || !UUID_PATTERN.test(idempotencyKey))
+    return errorResponse("UPLOAD_INVALID_REQUEST", "idempotencyKey must be a UUID", 400, false);
 
   // The attachment belongs to the conversation, not a message; strip any `:root` thread suffix
   // rather than resolving it, exactly as the multipart upload route already does.
@@ -114,7 +103,7 @@ export async function handleAttachmentUploadSessionCreate(
       fileName,
       contentType,
       sizeBytes,
-      clientRequestId,
+      idempotencyKey,
     });
     return Response.json(session, { status: 201 });
   } catch (error) {

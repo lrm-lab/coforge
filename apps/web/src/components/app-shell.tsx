@@ -1,6 +1,8 @@
-import { useCallback, type FC } from "react";
+import { useCallback, useEffect, type FC, type ReactNode } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Activity,
   ChevronSelectorVertical,
   CheckSquare as ListTodo,
   File02 as FileText,
@@ -8,65 +10,112 @@ import {
   LogOut01 as LogOut,
   MessageChatSquare,
   Monitor01 as Monitor,
+  SearchLg,
   Settings01,
   Users01 as Users,
 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
-import type { NavItemType } from "@/components/application/app-navigation/config";
-import { Avatar } from "@/components/base/avatar/avatar";
-import { Dropdown } from "@/components/base/dropdown/dropdown";
-import { SidebarRail } from "@/components/layout/sidebar/sidebar-rail";
-import { MobileDrawerProvider } from "@/components/layout/sidebar/mobile-header";
-import { SidebarMobileDrawer } from "@/components/layout/sidebar/sidebar-channels";
-import { WorkspaceSwitcher, type WorkspaceOption } from "@/features/workspaces/workspace-switcher";
-import { avatarInitial, avatarToneClassName } from "@/lib/avatar-tone";
-import { m } from "@/paraglide/messages";
-import { localizeHref } from "@/paraglide/runtime";
+import type { NavItemType } from "#src/components/application/app-navigation/config";
+import { Avatar } from "#src/components/base/avatar/avatar";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
+import { MobileDrawerProvider } from "#src/components/layout/sidebar/mobile-header";
+import { SidebarMobileDrawer } from "#src/components/layout/sidebar/sidebar-channels";
+import { rememberRecordsLastPath, recordsNavHref } from "#src/features/records/records-last-path";
+import {
+  ACTIVITY_INBOX_QUERY_PREFIX,
+  activityNavAttentionQuery,
+} from "#src/features/inbox/activity-inbox-queries";
+import { useActivityInboxRealtime } from "#src/features/inbox/use-activity-inbox-realtime";
+import {
+  WorkspaceSwitcher,
+  type WorkspaceOption,
+} from "#src/features/workspaces/workspace-switcher";
+import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { m } from "#src/paraglide/messages";
+import { localizeHref } from "#src/paraglide/runtime";
+import { workspacePath } from "#src/features/workspaces/workspace-url";
 
 export type AppUser = {
+  id: string;
   name: string;
   email: string;
   avatarUrl?: string | null;
 };
 
+/** Whether the viewer has unread activity anywhere — the nav Activity dot. Shares the inbox's
+ * query prefix (an Activity page refresh also re-reads it) and re-reads on the same realtime
+ * message signals the Activity page listens to, so a new message moves it without navigation. */
+function useActivityAttention(user: AppUser, workspaceId?: string) {
+  const queryClient = useQueryClient();
+  const refresh = useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: [...ACTIVITY_INBOX_QUERY_PREFIX, "nav-attention"],
+      }),
+    [queryClient],
+  );
+  useActivityInboxRealtime({
+    workspaceId: workspaceId ?? "",
+    userId: user.id,
+    onActivity: refresh,
+  });
+  const query = useQuery(activityNavAttentionQuery());
+  return (query.data?.unread ?? 0) > 0;
+}
+
+/** Chat is the Workspace's home page ("") and its conversations. */
+const CHAT_SECTIONS = ["", "channel", "messages", "saved"];
+
 function useNavItems(
-  recordsPreview = false,
-): (NavItemType & { icon: FC<{ className?: string }>; bareHref: string })[] {
+  base: string,
+  recordsPreview: boolean,
+  workspaceId: string,
+  activityDot?: ReactNode,
+): (NavItemType & {
+  icon: FC<{ className?: string }>;
+  bareHref: string;
+  /** Sections under `base` this item is also current for. */
+  sections?: readonly string[];
+})[] {
   const recordsDot = recordsPreview ? (
     <span className="ml-auto size-1.5 shrink-0 rounded-full bg-brand-solid" />
   ) : undefined;
+  const recordsHref = recordsNavHref(workspaceId);
+  const item = (section: string) => ({
+    bareHref: `${base}/${section}`,
+    href: localizeHref(`${base}/${section}`),
+  });
   return [
+    { label: m.search_title(), ...item("search"), icon: SearchLg },
     {
       label: m.navigation_chat(),
-      bareHref: "/messages",
-      href: localizeHref("/messages"),
+      bareHref: base,
+      href: localizeHref(base),
+      sections: CHAT_SECTIONS,
       icon: MessageChatSquare,
     },
-    {
-      label: m.projects_title(),
-      bareHref: "/projects",
-      href: localizeHref("/projects"),
-      icon: Folder,
-    },
+    { label: m.navigation_activity(), ...item("activity"), icon: Activity, badge: activityDot },
+    { label: m.tasks_tab(), ...item("tasks"), icon: ListTodo },
+    { label: m.projects_title(), ...item("projects"), icon: Folder },
     {
       label: m.navigation_agents(),
-      bareHref: "/agents",
-      href: localizeHref("/agents"),
+      ...item("members"),
+      sections: ["members", "agent"],
       icon: Users,
     },
-    { label: m.tasks_tab(), bareHref: "/tasks", href: localizeHref("/tasks"), icon: ListTodo },
     {
       label: m.navigation_records(),
-      bareHref: "/records",
-      href: localizeHref("/records?tab=weekly"),
+      bareHref: `${base}/records`,
+      href: localizeHref(`${base}${recordsHref}`),
       icon: FileText,
       badge: recordsDot,
     },
     {
       label: m.navigation_computers(),
-      bareHref: "/computers",
-      href: localizeHref("/computers"),
+      ...item("computers"),
+      sections: ["computers", "computer"],
       icon: Monitor,
     },
   ];
@@ -95,8 +144,8 @@ function useSpaNavigation() {
 
 export function AppShell({
   user,
-  workspaces = [],
-  currentWorkspace = null,
+  workspaces,
+  currentWorkspace,
   onSelectWorkspace,
   onCreateWorkspace,
   onSignOut,
@@ -104,21 +153,42 @@ export function AppShell({
   recordsPreview = false,
 }: {
   user: AppUser;
-  workspaces?: WorkspaceOption[];
-  currentWorkspace?: WorkspaceOption | null;
+  workspaces: WorkspaceOption[];
+  /** The Workspace the page URL names. */
+  currentWorkspace: WorkspaceOption;
   onSelectWorkspace?: (slug: string) => Promise<void> | void;
   onCreateWorkspace?: (input: { name: string; slug: string }) => Promise<void>;
   onSignOut?: () => Promise<void> | void;
-  /** Purple dot on 记录 while a weekly template is in the one-hour preview window. */
+  /** Purple dot on 记录 for a Leader preview hour or an unread member assignment. */
   recordsPreview?: boolean;
   children: React.ReactNode;
 }) {
   // pathname is de-localized (src/router.tsx); item.href is localized, so we
   // match on bareHref (with sub-route prefix matching) instead.
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const navItems = useNavItems(recordsPreview);
-  const activeUrl = navItems.find(
-    (item) => pathname === item.bareHref || pathname.startsWith(`${item.bareHref}/`),
+  const searchStr = useRouterState({ select: (state) => state.location.searchStr });
+  const workspaceId = currentWorkspace.id;
+  const base = workspacePath(currentWorkspace.slug);
+  useEffect(() => {
+    if (!pathname.startsWith(`${base}/records`)) return;
+    const search = !searchStr ? "" : searchStr.startsWith("?") ? searchStr : `?${searchStr}`;
+    // Remembered within the Workspace, so it holds the path under `/w/<slug>`.
+    rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${search}`);
+  }, [workspaceId, base, pathname, searchStr]);
+  const hasActivityAttention = useActivityAttention(user, workspaceId);
+  const navItems = useNavItems(
+    base,
+    recordsPreview,
+    workspaceId,
+    hasActivityAttention ? (
+      <span className="ml-auto size-1.5 shrink-0 rounded-full bg-brand-solid" />
+    ) : undefined,
+  );
+  const section = pathname.slice(base.length).split("/")[1] ?? "";
+  const activeUrl = navItems.find((item) =>
+    item.sections
+      ? item.sections.includes(section)
+      : pathname === item.bareHref || pathname.startsWith(`${item.bareHref}/`),
   )?.href;
   const onSidebarClickCapture = useSpaNavigation();
 
@@ -139,7 +209,7 @@ export function AppShell({
                 onCreate={onCreateWorkspace}
               />
             }
-            footer={<UserMenuCard user={user} onSignOut={onSignOut} />}
+            footer={<UserMenuCard base={base} user={user} onSignOut={onSignOut} />}
           />
           <SidebarRail
             activeUrl={activeUrl}
@@ -153,7 +223,7 @@ export function AppShell({
                 onCreate={onCreateWorkspace}
               />
             }
-            footer={<UserMenuCard compact user={user} onSignOut={onSignOut} />}
+            footer={<UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />}
           />
         </div>
 
@@ -164,10 +234,13 @@ export function AppShell({
 }
 
 function UserMenuCard({
+  base,
   user,
   onSignOut,
   compact = false,
 }: {
+  /** The Workspace path (`/w/<slug>`) Settings lives under. */
+  base: string;
   user: AppUser;
   onSignOut?: () => Promise<void> | void;
   compact?: boolean;
@@ -218,7 +291,7 @@ function UserMenuCard({
           <Dropdown.Item
             id="settings"
             label={m.navigation_personal_settings()}
-            href={localizeHref("/settings")}
+            href={localizeHref(`${base}/settings`)}
             icon={Settings01}
           />
           <Dropdown.Separator />

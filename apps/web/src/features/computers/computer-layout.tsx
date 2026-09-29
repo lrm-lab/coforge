@@ -7,8 +7,8 @@ import {
   Plus,
 } from "@untitledui/icons";
 
-import { PageHeader } from "@/components/layout/page-header";
-import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { PageHeader } from "#src/components/layout/page-header";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import {
   Empty,
   EmptyContent,
@@ -16,9 +16,10 @@ import {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "@/components/ui/empty";
-import { cn } from "@/lib/utils";
-import { m } from "@/paraglide/messages";
+} from "#src/components/ui/empty";
+import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import {
   computerLabel,
   operatingSystemLabel,
@@ -26,11 +27,11 @@ import {
   type ComputerPlatformInfo,
 } from "./computer-identity";
 import { ComputerTile } from "./computer-tile";
-import { Avatar } from "@/components/base/avatar/avatar";
-import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
-import { Button } from "@/components/base/buttons/button";
-import { avatarInitial, avatarToneClassName } from "@/lib/avatar-tone";
-import { isComputerUpdateAvailable } from "./computer-identity";
+import { Avatar } from "#src/components/base/avatar/avatar";
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { Button } from "#src/components/base/buttons/button";
+import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { computerVersionLabel, isComputerUpdateAvailable } from "./computer-identity";
 
 export type ComputerListItem = ComputerIdentity &
   ComputerPlatformInfo & {
@@ -97,6 +98,7 @@ export function ComputerLayout({
   children: ReactNode;
 }) {
   const { upgradingComputerIds } = useUpgradingComputer();
+  const workspaceSlug = useWorkspaceSlug();
   const [showMobileList, setShowMobileList] = useState(!selectedComputerId);
   const listHidden = Boolean(selectedComputerId) && !showMobileList;
 
@@ -131,8 +133,8 @@ export function ComputerLayout({
               <li key={computer.id}>
                 <div className="flex min-w-0 items-center">
                   <Link
-                    to="/computers/$computerId"
-                    params={{ computerId: computer.id }}
+                    to="/w/$workspaceSlug/computer/$computerId"
+                    params={{ workspaceSlug, computerId: computer.id }}
                     aria-current={selected ? "page" : undefined}
                     resetScroll={false}
                     onClick={() => setShowMobileList(false)}
@@ -157,15 +159,25 @@ export function ComputerLayout({
                       <span className="truncate text-sm font-semibold">
                         {computerLabel(computer)}
                       </span>
-                      {computer.name && computer.name !== computerLabel(computer) ? (
-                        <span className="truncate font-mono text-xs text-tertiary">
-                          {computer.name}
-                        </span>
-                      ) : (
-                        <span className="truncate text-xs text-tertiary">
-                          {operatingSystemLabel(computer)}
-                        </span>
-                      )}
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        {computer.name && computer.name !== computerLabel(computer) ? (
+                          <span className="truncate font-mono text-xs text-tertiary">
+                            {computer.name}
+                          </span>
+                        ) : (
+                          <span className="truncate text-xs text-tertiary">
+                            {operatingSystemLabel(computer)}
+                          </span>
+                        )}
+                        {/* The same version the detail panel states, in mono like that panel's own
+                            row. The hostname or OS gives up its width first: the release is short and
+                            is what this row was asked to carry. */}
+                        {computer.computerVersion && (
+                          <span className="shrink-0 font-mono text-xs text-tertiary">
+                            {computerVersionLabel(computer)}
+                          </span>
+                        )}
+                      </span>
                     </span>
                     {computer.creator && (
                       <Tooltip

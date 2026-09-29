@@ -3,8 +3,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
-import { connectLocal } from "../src/local-client";
-import { CliError } from "../src/cli-error";
+import { AGENT_SEND_LOCAL_DEADLINE_MS } from "@lrm/coforge-sdk/internal";
+import { connectLocal } from "#src/local-client";
+import { CliError, renderCliErrorJson, renderCliErrorText } from "#src/cli-error";
 
 const proxyUrl = (route: { path: string } | string) =>
   `http://proxy.test${typeof route === "string" ? route : route.path}`;
@@ -25,7 +26,7 @@ afterEach(() => {
 
 test("accepts sfp_ daemon-local Proxy tokens", async () => {
   const fetch = spyOn(globalThis, "fetch").mockResolvedValue(
-    Response.json({ requestId: "request", accepted: true, attentionCount: 0, messages: [] }),
+    Response.json({ idempotencyKey: "request", accepted: true, attentionCount: 0, messages: [] }),
   );
 
   await connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages)).check();
@@ -35,7 +36,7 @@ test("accepts sfp_ daemon-local Proxy tokens", async () => {
 
 test("forwards attachmentIds, mentions, and targetConfirmed on a send request", async () => {
   const fetch = spyOn(globalThis, "fetch").mockResolvedValue(
-    Response.json({ requestId: "request", accepted: true, attentionCount: 0, messages: [] }),
+    Response.json({ idempotencyKey: "request", accepted: true, attentionCount: 0, messages: [] }),
   );
   const mentions = [{ type: "user" as const, id: "actor-1", name: "ada" }];
 
@@ -131,6 +132,34 @@ test("rejects malformed GitHub credentials from the daemon-local proxy", async (
 });
 
 test("shows actionable validation errors returned by the Agent proxy", async () => {
+  // The daemon's own contract for a safe validation message (`request_validation`).
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json(
+      {
+        error: "ambiguous message prefix; use the full UUID",
+        code: "AGENT_MESSAGE_VALIDATION_FAILED",
+        proxy: {
+          layer: "local_daemon_proxy",
+          correlation_id: "corr-v",
+          route_family: "agent-api/read",
+          failure_class: "request_validation",
+          cause_code: "AGENT_MESSAGE_VALIDATION_FAILED",
+          response_started: true,
+          response_complete: true,
+        },
+      },
+      { status: 400 },
+    ),
+  );
+
+  await expect(
+    connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages)).read(
+      "deadbeef",
+    ),
+  ).rejects.toThrow("ambiguous message prefix; use the full UUID");
+});
+
+test("never relays a bare-text proxy body, not even one that reads like a validation message", async () => {
   spyOn(globalThis, "fetch").mockResolvedValue(
     new Response("ambiguous message prefix; use the full UUID", { status: 400 }),
   );
@@ -139,7 +168,7 @@ test("shows actionable validation errors returned by the Agent proxy", async () 
     connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages)).read(
       "deadbeef",
     ),
-  ).rejects.toThrow("ambiguous message prefix; use the full UUID");
+  ).rejects.toThrow(/^HTTP 400$/);
 });
 
 test("sanitizes unknown Agent proxy error bodies", async () => {
@@ -175,7 +204,7 @@ test("redacts upstream detail for a withheld reviewer-isolation Task failure", a
 
   await expect(
     connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages)).task({
-      requestId: "request",
+      idempotencyKey: "request",
       operation: "update",
       target: "#general",
       number: 1,
@@ -183,7 +212,47 @@ test("redacts upstream detail for a withheld reviewer-isolation Task failure", a
       expectedRevision: 1,
       freshnessContextMode: "withheld",
     } as never),
-  ).rejects.toThrow("reviewer-isolation Task request failed (400); upstream detail withheld");
+  ).rejects.toMatchObject({
+    code: "UPDATE_FAILED",
+    message:
+      "Reviewer-isolation task update failed (HTTP 400); upstream error detail was withheld.",
+  });
+});
+
+test("a refused Task write fails typed with its operation's code and the proxy's reason", async () => {
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json(
+      {
+        error: "this agent is not allowed to do that",
+        code: "ACCESS_DENIED",
+        proxy: {
+          correlation_id: "correlation-1",
+          route_family: "agent-api/task",
+          failure_class: "upstream_http_response",
+          upstream_status: 403,
+        },
+      },
+      { status: 403 },
+    ),
+  );
+  const attempt = connectLocal(
+    "",
+    `sfp_${"a".repeat(43)}`,
+    proxyUrl(agentApiRoutes.local.messages),
+  ).task({
+    idempotencyKey: "request",
+    operation: "assign",
+    target: "#general",
+    number: 1,
+    assignee: "@ada",
+  });
+  await expect(attempt).rejects.toBeInstanceOf(CliError);
+  await expect(attempt).rejects.toMatchObject({
+    code: "ASSIGN_FAILED",
+    message: "this agent is not allowed to do that",
+    correlationId: "correlation-1",
+    proxy: { upstreamStatus: 403 },
+  });
 });
 
 test("downloads attachments through the daemon-local proxy", async () => {
@@ -732,8 +801,7 @@ test("rejects legacy cf_proxy_ tokens without contacting the proxy", async () =>
 test("posts validated reminders to the derived endpoint with implicit bearer context", async () => {
   const fetch = spyOn(globalThis, "fetch").mockResolvedValue(
     Response.json({
-      protocolMajor: 1,
-      requestId: "request",
+      idempotencyKey: "request",
       workspaceId: "workspace",
       computerId: "computer",
       agentId: "agent",
@@ -765,13 +833,13 @@ test("posts validated reminders to the derived endpoint with implicit bearer con
     repeat: "daily@09:30",
     timezone: "Asia/Shanghai",
   });
-  expect(body.requestId).toMatch(/^[0-9a-f-]{36}$/);
+  expect(body.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
   expect(body.context).toBeUndefined();
 });
 
 test("resolve posts the messageId as a resolve operation", async () => {
   const fetch = spyOn(globalThis, "fetch").mockResolvedValue(
-    Response.json({ requestId: "request", accepted: true, attentionCount: 0, messages: [] }),
+    Response.json({ idempotencyKey: "request", accepted: true, attentionCount: 0, messages: [] }),
   );
   await connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages)).resolve(
     "abcd1234",
@@ -881,11 +949,7 @@ test("a send that fails after a transport/protocol failure marks the draft saved
       },
       { status: 500 },
     );
-  // A fresh response per attempt: a mock that reuses one body would be consumed after the first read.
-  const fetch = spyOn(globalThis, "fetch")
-    .mockResolvedValueOnce(upstream500())
-    .mockResolvedValueOnce(upstream500())
-    .mockResolvedValueOnce(upstream500());
+  const fetch = spyOn(globalThis, "fetch").mockResolvedValue(upstream500());
   const error = await connectLocal(
     "",
     `sfp_${"a".repeat(43)}`,
@@ -900,8 +964,8 @@ test("a send that fails after a transport/protocol failure marks the draft saved
   expect(cliError.retryable).toBe(false);
   expect(cliError.correlationId).toBe("corr-2");
   expect(cliError.suggestedNextAction).toContain("Do not resend on this evidence");
-  // A transient gateway 5xx is retried first; only the exhaustion reports the unknown state.
-  expect(fetch).toHaveBeenCalledTimes(3);
+  // The daemon already reconciled the send by its key; the CLI never re-issues it blind.
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 test("a network failure reaching the local daemon proxy is treated as possibly-issued for send", async () => {
@@ -924,7 +988,7 @@ test.each([
   [true, "unreact"],
 ] as const)("react posts the messageId and emoji as a %s operation", async (remove, operation) => {
   const fetch = spyOn(globalThis, "fetch").mockResolvedValue(
-    Response.json({ requestId: "request", accepted: true, attentionCount: 0, messages: [] }),
+    Response.json({ idempotencyKey: "request", accepted: true, attentionCount: 0, messages: [] }),
   );
   await connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages)).react(
     "abcd1234",
@@ -1018,6 +1082,27 @@ test("channel: a 404 from a target operation becomes CliError NOT_FOUND with a f
   expect(cliError.retryable).toBe(false);
 });
 
+test("channel: an agent_not_visible JSON envelope becomes CliError AGENT_NOT_VISIBLE, never the fixed Channel-not-found text", async () => {
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json(
+      { ok: false, errorCode: "agent_not_visible", error: "@ghost is not visible to you." },
+      { status: 404 },
+    ),
+  );
+  const error = await connectLocal(
+    "",
+    `sfp_${"a".repeat(43)}`,
+    proxyUrl(agentApiRoutes.local.channels),
+  )
+    .channel({ operation: "add-member", target: "#eng", agent: "@ghost" })
+    .catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(CliError);
+  const cliError = error as CliError;
+  expect(cliError.code).toBe("AGENT_NOT_VISIBLE");
+  expect(cliError.message).toBe("@ghost is not visible to you.");
+  expect(cliError.retryable).toBe(false);
+});
+
 test("channel: a 404 from info/members (no single-channel target operation) is not remapped to NOT_FOUND", async () => {
   spyOn(globalThis, "fetch").mockResolvedValue(new Response("channel not found", { status: 404 }));
   const error = await connectLocal(
@@ -1033,8 +1118,7 @@ test("channel: a 404 from info/members (no single-channel target operation) is n
 
 test("channel: a successful response is returned as parsed JSON", async () => {
   const rawResponse = {
-    protocolMajor: 1,
-    requestId: "r-1",
+    idempotencyKey: "r-1",
     target: "#eng",
     joined: true,
     alreadyJoined: false,
@@ -1104,45 +1188,45 @@ test("version without a configured Agent proxy URL fails as a local precondition
   expect((error as CliError).code).toBe("VERSION_FAILED");
 });
 
-test("retries a send that hit a transient upstream 502, reusing the same requestId", async () => {
-  const fetch = spyOn(globalThis, "fetch")
-    .mockResolvedValueOnce(
-      Response.json(
-        {
-          code: "SERVER_5XX",
-          error: "upstream unavailable",
-          proxy: { failure_class: "upstream_http_response", upstream_status: 502 },
-        },
-        { status: 502 },
-      ),
-    )
-    .mockResolvedValueOnce(
-      Response.json({ requestId: "request", accepted: true, attentionCount: 0, messages: [] }),
-    );
-  const client = connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages));
-
-  await client.send("@ada", "hello");
-
-  expect(fetch).toHaveBeenCalledTimes(2);
-  const first = JSON.parse(fetch.mock.calls[0]![1]!.body as string);
-  const second = JSON.parse(fetch.mock.calls[1]![1]!.body as string);
-  // The same requestId is what makes the retry safe: the server suppresses the duplicate.
-  expect(second.requestId).toEqual(first.requestId);
-});
-
-test("retries a send that never reached the proxy at all", async () => {
-  const fetch = spyOn(globalThis, "fetch")
-    .mockRejectedValueOnce(new TypeError("fetch failed"))
-    .mockResolvedValueOnce(
-      Response.json({ requestId: "request", accepted: true, attentionCount: 0, messages: [] }),
-    );
-
-  await connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages)).send(
-    "@ada",
-    "hello",
+test("a send is issued once: the daemon reconciles an ambiguous outcome, the CLI never retries blind", async () => {
+  const fetch = spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json(
+      {
+        code: "agent_proxy_failed",
+        error: "upstream unavailable",
+        proxy: { failure_class: "upstream_http_response", upstream_status: 502 },
+      },
+      { status: 502 },
+    ),
   );
 
-  expect(fetch).toHaveBeenCalledTimes(2);
+  const error = await connectLocal(
+    "",
+    `sfp_${"a".repeat(43)}`,
+    proxyUrl(agentApiRoutes.local.messages),
+  )
+    .send("@ada", "hello")
+    .catch((caught: unknown) => caught as CliError);
+
+  expect(error).toMatchObject({ code: "SERVER_5XX", draftSaved: true, retryable: false });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test("a send that never reached the proxy is reported unknown after one attempt", async () => {
+  const fetch = spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("fetch failed"));
+
+  const error = await connectLocal(
+    "",
+    `sfp_${"a".repeat(43)}`,
+    proxyUrl(agentApiRoutes.local.messages),
+  )
+    .send("@ada", "hello")
+    .catch((caught: unknown) => caught as CliError);
+
+  expect(error).toBeInstanceOf(CliError);
+  expect((error as CliError).code).toBe("SEND_FAILED");
+  expect((error as CliError).draftSaved).toBe(true);
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 test("does not retry a send the server refused with a definite answer", async () => {
@@ -1166,21 +1250,148 @@ test("does not retry a send the server refused with a definite answer", async ()
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-test("still reports an unknown delivery state when every send attempt fails", async () => {
-  const fetch = spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("fetch failed"));
+/** The daemon's answer when a send's same-key replay failed (its verdict, see `AgentSendVerdict`). */
+const replayFailure = (retryable: boolean) =>
+  Response.json(
+    {
+      error: "upstream request failed before a response was received",
+      code: "agent_proxy_failed",
+      retryable,
+      suggested_next_action: retryable
+        ? 'Retry: `coforge message send --send-draft --expected-draft-key "key-1" --target "@ada"`.'
+        : "CANNOT_CONFIRM; do not resend on this evidence.",
+      proxy: {
+        correlation_id: "corr-9",
+        route_family: "agent-api/send",
+        failure_class: "pre_response_transport",
+        cause_code: "TypeError",
+        response_started: false,
+        response_complete: false,
+        draft_saved: retryable,
+      },
+    },
+    { status: 502 },
+  );
 
-  const error = await connectLocal(
+test("a failed same-key replay relays the daemon's verdict: retryable with the exact command, or not", async () => {
+  spyOn(globalThis, "fetch").mockResolvedValueOnce(replayFailure(true));
+  const client = connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages));
+  const retryable = (await client
+    .send("@ada", "hello")
+    .catch((caught: unknown) => caught)) as CliError;
+  expect(retryable).toMatchObject({ code: "SEND_FAILED", retryable: true, draftSaved: true });
+  expect(retryable.suggestedNextAction).toContain('--expected-draft-key "key-1"');
+
+  spyOn(globalThis, "fetch").mockResolvedValueOnce(replayFailure(false));
+  const settled = (await client
+    .send("@ada", "hello")
+    .catch((caught: unknown) => caught)) as CliError;
+  expect(settled).toMatchObject({ retryable: false, draftSaved: false });
+  expect(settled.suggestedNextAction).toContain("CANNOT_CONFIRM");
+});
+
+test("a reviewer-isolated replay failure withholds upstream detail but keeps the retry verdict", async () => {
+  spyOn(globalThis, "fetch").mockResolvedValue(replayFailure(true));
+  const error = (await connectLocal(
     "",
     `sfp_${"a".repeat(43)}`,
     proxyUrl(agentApiRoutes.local.messages),
   )
-    .send("@ada", "hello")
-    .catch((caught: unknown) => caught as CliError);
+    .send("@ada", "hello", { freshnessContextMode: "withheld" })
+    .catch((caught: unknown) => caught)) as CliError;
+  expect(error.message).toContain("upstream error detail was withheld");
+  // One derivation with the ordinary path: only the message, code and proxy fields are redacted.
+  expect(error).toMatchObject({ retryable: true, draftSaved: true, correlationId: "corr-9" });
+  expect(error.proxy).toEqual({ upstreamStatus: 502 });
+  expect(error.suggestedNextAction).toContain('--expected-draft-key "key-1"');
+});
 
-  expect(error).toBeInstanceOf(CliError);
-  expect((error as CliError).code).toBe("SEND_FAILED");
-  expect((error as CliError).draftSaved).toBe(true);
-  expect(fetch).toHaveBeenCalledTimes(3);
+test("an expired draft's body travels once: structured details, printed as the last copy in text", async () => {
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json(
+      {
+        error: "The saved draft for this target expired and was discarded",
+        code: "SEND_DRAFT_EXPIRED",
+        retryable: false,
+        suggested_next_action: "Read @ada before resending.",
+        details: {
+          discarded_draft: { content: "stale reply", saved_at: "2026-09-28T00:00:00.000Z" },
+        },
+        proxy: {
+          correlation_id: "corr-10",
+          route_family: "agent-api/send",
+          failure_class: "local_precondition",
+          cause_code: "SEND_DRAFT_EXPIRED",
+          response_started: false,
+          response_complete: false,
+          draft_saved: false,
+        },
+      },
+      { status: 400 },
+    ),
+  );
+  const error = (await connectLocal(
+    "",
+    `sfp_${"a".repeat(43)}`,
+    proxyUrl(agentApiRoutes.local.messages),
+  )
+    .send("@ada", undefined, { sendDraft: true })
+    .catch((caught: unknown) => caught)) as CliError;
+  expect(error).toMatchObject({
+    code: "SEND_DRAFT_EXPIRED",
+    retryable: false,
+    draftSaved: false,
+    suggestedNextAction: "Read @ada before resending.",
+    details: {
+      discarded_draft: { content: "stale reply", saved_at: "2026-09-28T00:00:00.000Z" },
+    },
+  });
+  const text = renderCliErrorText(error);
+  expect(text.split("stale reply")).toHaveLength(2);
+  expect(text).toEndWith(
+    "The discarded draft body is no longer stored anywhere; this is its last copy:\n---\nstale reply\n---",
+  );
+  const json = renderCliErrorJson(error);
+  expect(json.split("stale reply")).toHaveLength(2);
+});
+
+test("a send waits out the daemon's whole settlement; other operations keep their short deadline", async () => {
+  const timeout = spyOn(AbortSignal, "timeout");
+  // A fresh body per call: `mockResolvedValue` would hand both calls one consumed Response.
+  spyOn(globalThis, "fetch").mockImplementation((async (input: string | URL | Request) =>
+    Response.json({
+      idempotencyKey: String(input),
+      accepted: true,
+      attentionCount: 0,
+      messages: [],
+    })) as typeof fetch);
+  try {
+    const client = connectLocal(
+      "",
+      `sfp_${"a".repeat(43)}`,
+      proxyUrl(agentApiRoutes.local.messages),
+    );
+    await client.send("@ada", "hello");
+    await client.check();
+    expect(timeout.mock.calls).toEqual([[AGENT_SEND_LOCAL_DEADLINE_MS], [10_000]]);
+  } finally {
+    timeout.mockRestore();
+  }
+});
+
+test("a send forwards --expected-draft-key to the proxy", async () => {
+  const fetch = spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json({ idempotencyKey: "request", accepted: true, attentionCount: 0, messages: [] }),
+  );
+  await connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages)).send(
+    "@ada",
+    undefined,
+    { sendDraft: true, expectedDraftKey: "key-1" },
+  );
+  expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toMatchObject({
+    sendDraft: true,
+    expectedDraftKey: "key-1",
+  });
 });
 
 test("never retries a non-send operation", async () => {
@@ -1190,4 +1401,64 @@ test("never retries a non-send operation", async () => {
     connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages)).check(),
   ).rejects.toThrow("agent proxy request failed (network or timeout)");
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+const MENTION_CONTEXT = `sfp_${"a".repeat(43)}`;
+const MENTION_ID = "22222222-2222-4222-8222-222222222222";
+
+test("mention pending GETs the pending list through the Proxy", async () => {
+  const body = { ok: true, pendingMentionActions: [] };
+  const fetch = spyOn(globalThis, "fetch").mockResolvedValue(Response.json(body));
+  const result = await connectLocal(
+    "",
+    MENTION_CONTEXT,
+    proxyUrl(agentApiRoutes.local.messages),
+  ).mentionPending();
+  expect(result).toEqual({ ok: true, pendingMentionActions: [] });
+  const [url, init] = fetch.mock.calls[0]!;
+  expect(url).toEqual(new URL(proxyUrl(agentApiRoutes.local.mentionActions.pending)));
+  expect(init?.method).toBe("GET");
+});
+
+test("mention add POSTs the action and its resolution ids through the Proxy", async () => {
+  const fetch = spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json({ ok: true, action: "add", results: [] }),
+  );
+  await connectLocal("", MENTION_CONTEXT, proxyUrl(agentApiRoutes.local.messages)).mentionExecute({
+    action: "add",
+    resolutionIds: [MENTION_ID],
+  });
+  const [url, init] = fetch.mock.calls[0]!;
+  expect(url).toEqual(new URL(proxyUrl(agentApiRoutes.local.mentionActions.execute)));
+  expect(init?.method).toBe("POST");
+  expect(JSON.parse(init!.body as string)).toEqual({ action: "add", resolutionIds: [MENTION_ID] });
+});
+
+test("a mention action server error is SERVER_5XX, and a refusal carries the server's text", async () => {
+  spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    Response.json({ error: "upstream failed", code: "UPSTREAM_HTTP_ERROR" }, { status: 502 }),
+  );
+  const client = connectLocal("", MENTION_CONTEXT, proxyUrl(agentApiRoutes.local.messages));
+  const serverError = (await client
+    .mentionExecute({ action: "add", resolutionIds: [MENTION_ID] })
+    .catch((caught: unknown) => caught)) as CliError;
+  expect(serverError).toBeInstanceOf(CliError);
+  expect(serverError.code).toBe("SERVER_5XX");
+
+  spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    Response.json(
+      { ok: false, errorCode: "invalid_request", error: 'action must be "add".' },
+      { status: 400 },
+    ),
+  );
+  const refusal = (await client
+    .mentionExecute({ action: "add", resolutionIds: [MENTION_ID] })
+    .catch((caught: unknown) => caught)) as CliError;
+  expect(refusal.code).toBe("MENTION_ACTION_FAILED");
+  expect(refusal.message).toBe('action must be "add".');
+
+  spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response("bad request", { status: 400 }));
+  const pending = (await client.mentionPending().catch((caught: unknown) => caught)) as CliError;
+  expect(pending.code).toBe("MENTION_PENDING_FAILED");
+  expect(pending.message).toBe("bad request");
 });

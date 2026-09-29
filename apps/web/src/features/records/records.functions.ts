@@ -1,24 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { workspaceUserMiddleware } from "../../server/auth/function-auth";
-import { AppError } from "../../lib/app-error";
+import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { AppError } from "#src/lib/app-error";
 
-import { recordCatalog } from "../../server/records/record-catalog.server";
-import { tryCreateWeeklyAssignmentDelivery } from "../../server/records/weekly-assignment-delivery-composition.server";
+import { recordCatalog } from "#src/server/records/record-catalog.server";
 import {
   ensureWeeklyReportAssistant,
   WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
-} from "../../server/records/weekly-report-assistant.server";
-import { WeeklyReportAssistantChat } from "../../server/records/weekly-report-assistant-chat.server";
-import { parseAgentRuntimeConfig } from "../../server/agents/agent-runtime-config.server";
-import { createCentrifugoServerApi } from "../../server/centrifugo/server-api.server";
-import { CentrifugoConversationRealtime } from "../../server/conversations/conversation-realtime.server";
-import { getMessageRequestIdempotency } from "../../server/conversations/redis-message-request-idempotency.server";
-import { PrismaDirectConversationRepository } from "../../server/db/repositories/direct-conversation.repositories.server";
+} from "#src/server/records/weekly-report-assistant.server";
+import { openWeeklyReportAssistantChat } from "#src/server/records/weekly-report-assistant-chat.server";
+import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import {
+  looksLikeFormatTemplateSendRequest,
   looksLikeMemberReportRuleIntent,
-  looksLikeSideChatGreeting,
 } from "./weekly-highlight-extract";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 
@@ -139,6 +134,18 @@ export const deleteWeeklyCycle = createServerFn({ method: "POST" })
       workspaceId,
       userId: user.id,
       cycleId: data.cycleId,
+    });
+  });
+
+/** Deletes the Leader overview week node without removing member or favorited reports. */
+export const deleteOverviewReport = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ reportId: z.string().uuid() }))
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    return recordCatalog(db).deleteOverviewReport({
+      workspaceId,
+      userId: user.id,
+      reportId: data.reportId,
     });
   });
 
@@ -278,6 +285,23 @@ export const saveWeeklyReportContent = createServerFn({ method: "POST" })
     });
   });
 
+export const updateFormatReportMeta = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(
+    z.object({
+      reportId: z.string().uuid(),
+      title: z.string().trim().min(1),
+    }),
+  )
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    return recordCatalog(db).updateFormatReportMeta({
+      workspaceId,
+      userId: user.id,
+      reportId: data.reportId,
+      title: data.title,
+    });
+  });
+
 export const markWeeklyAssignmentOpened = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.string().uuid() }))
@@ -298,7 +322,7 @@ export const sendWeeklyReportAssignments = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db, tryCreateWeeklyAssignmentDelivery(db)).sendWeeklyAssignments({
+    return recordCatalog(db).sendWeeklyAssignments({
       workspaceId,
       userId: user.id,
       sourceReportId: data.sourceReportId,
@@ -355,6 +379,17 @@ export const loadWeeklyTemplates = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
     return recordCatalog(db).listTemplates({ workspaceId, userId: user.id });
+  });
+
+export const loadWeeklyTemplateForReport = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ reportId: z.string().uuid() }))
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    return recordCatalog(db).loadTemplateForReport({
+      workspaceId,
+      userId: user.id,
+      reportId: data.reportId,
+    });
   });
 
 export const loadKeyPointPrompts = createServerFn({ method: "GET" })
@@ -585,14 +620,7 @@ export const addRecordComment = createServerFn({ method: "POST" })
   });
 
 function weeklyReportAssistantChat(db: Parameters<typeof recordCatalog>[0]) {
-  const centrifugo = createCentrifugoServerApi();
-  return new WeeklyReportAssistantChat(
-    db,
-    new PrismaDirectConversationRepository(db),
-    getMessageRequestIdempotency(),
-    centrifugo,
-    new CentrifugoConversationRealtime(centrifugo),
-  );
+  return openWeeklyReportAssistantChat(db);
 }
 
 export const ensureWeeklyReportAssistantChatSessions = createServerFn({ method: "POST" })
@@ -605,7 +633,7 @@ export const ensureWeeklyReportAssistantChatSessions = createServerFn({ method: 
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { ensureWeeklyReportAssistantChatSession } =
-      await import("../../server/records/weekly-report-assistant-chat-session.server");
+      await import("#src/server/records/weekly-report-assistant-chat-session.server");
     return ensureWeeklyReportAssistantChatSession(db, {
       workspaceId,
       userId: user.id,
@@ -625,7 +653,7 @@ export const createWeeklyReportAssistantChatSessionFn = createServerFn({ method:
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { createWeeklyReportAssistantChatSession } =
-      await import("../../server/records/weekly-report-assistant-chat-session.server");
+      await import("#src/server/records/weekly-report-assistant-chat-session.server");
     return createWeeklyReportAssistantChatSession(db, {
       workspaceId,
       userId: user.id,
@@ -645,7 +673,7 @@ export const renameWeeklyReportAssistantChatSessionFn = createServerFn({ method:
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { renameWeeklyReportAssistantChatSession } =
-      await import("../../server/records/weekly-report-assistant-chat-session.server");
+      await import("#src/server/records/weekly-report-assistant-chat-session.server");
     return renameWeeklyReportAssistantChatSession(db, {
       workspaceId,
       userId: user.id,
@@ -659,7 +687,7 @@ export const archiveWeeklyReportAssistantChatSessionFn = createServerFn({ method
   .validator(z.object({ sessionId: z.string().uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { archiveWeeklyReportAssistantChatSession } =
-      await import("../../server/records/weekly-report-assistant-chat-session.server");
+      await import("#src/server/records/weekly-report-assistant-chat-session.server");
     return archiveWeeklyReportAssistantChatSession(db, {
       workspaceId,
       userId: user.id,
@@ -680,14 +708,14 @@ export const postWeeklyReportAssistantRequest = createServerFn({ method: "POST" 
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { requireOwnedChatSession, touchWeeklyReportAssistantChatSession } =
-      await import("../../server/records/weekly-report-assistant-chat-session.server");
+      await import("#src/server/records/weekly-report-assistant-chat-session.server");
     await requireOwnedChatSession(db, {
       workspaceId,
       userId: user.id,
       sessionId: data.sessionId,
     });
-    if (looksLikeSideChatGreeting(data.body)) {
-      const comments = await recordCatalog(db).postSideChat({
+    if (data.subjectType === "report" && looksLikeFormatTemplateSendRequest(data.body)) {
+      const comments = await recordCatalog(db).sendFormatTemplateFromSideChat({
         workspaceId,
         userId: user.id,
         subjectType: data.subjectType,
@@ -695,13 +723,15 @@ export const postWeeklyReportAssistantRequest = createServerFn({ method: "POST" 
         body: data.body,
         assistantSessionId: data.sessionId,
       });
-      await touchWeeklyReportAssistantChatSession(db, {
-        workspaceId,
-        userId: user.id,
-        sessionId: data.sessionId,
-        title: data.body,
-      });
-      return { kind: "rule" as const, comments };
+      if (comments) {
+        await touchWeeklyReportAssistantChatSession(db, {
+          workspaceId,
+          userId: user.id,
+          sessionId: data.sessionId,
+          title: data.body,
+        });
+        return { kind: "rule" as const, comments };
+      }
     }
     if (data.subjectType === "report" && looksLikeMemberReportRuleIntent(data.body)) {
       const comments = await recordCatalog(db).postMemberReportRuleSideChatIfApplicable({
@@ -773,7 +803,6 @@ export const ensureRecordAssistantIntro = createServerFn({ method: "POST" })
       subjectId: z.string().uuid(),
       assistantSessionId: z.string().uuid(),
       surface: z.enum(["format", "member-leader", "member-assignee", "plain"]),
-      formatCopy: z.enum(["preview", "cancelled", "ready"]).optional(),
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
@@ -784,7 +813,23 @@ export const ensureRecordAssistantIntro = createServerFn({ method: "POST" })
       subjectId: data.subjectId,
       assistantSessionId: data.assistantSessionId,
       surface: data.surface,
-      formatCopy: data.formatCopy,
+    });
+  });
+
+export const dismissWeeklyFormatSend = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(
+    z.object({
+      reportId: z.string().uuid(),
+      assistantSessionId: z.string().uuid().optional(),
+    }),
+  )
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    return recordCatalog(db).dismissWeeklyFormatSend({
+      workspaceId,
+      userId: user.id,
+      reportId: data.reportId,
+      assistantSessionId: data.assistantSessionId,
     });
   });
 
@@ -847,7 +892,7 @@ export const declineMemberReportIntent = createServerFn({ method: "POST" })
       const status = await readWeeklyReportAssistantStatus(db, user.id, workspaceId);
       if (status.computerConfigured && status.runtimeConfigured) {
         const { touchWeeklyReportAssistantChatSession } =
-          await import("../../server/records/weekly-report-assistant-chat-session.server");
+          await import("#src/server/records/weekly-report-assistant-chat-session.server");
         await weeklyReportAssistantChat(db).postRequest({
           workspaceId,
           userId: user.id,
@@ -873,7 +918,7 @@ export const listWeeklyReportCollectorSlots = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
     const { loadCollectPlanSlots } =
-      await import("../../server/records/weekly-report-collect-orchestrate.server");
+      await import("#src/server/records/weekly-report-collect-orchestrate.server");
     return loadCollectPlanSlots(db, { workspaceId, userId: user.id });
   });
 
@@ -882,7 +927,7 @@ export const ensureWeeklyReportCollector = createServerFn({ method: "POST" })
   .validator(z.object({ computerId: z.string().uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { ensureCollectPlanCollector } =
-      await import("../../server/records/weekly-report-collect-orchestrate.server");
+      await import("#src/server/records/weekly-report-collect-orchestrate.server");
     return ensureCollectPlanCollector(db, {
       workspaceId,
       userId: user.id,
@@ -914,7 +959,7 @@ export const submitWeeklyReportCollectPlan = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { submitWeeklyReportCollectPlan: submit } =
-      await import("../../server/records/weekly-report-collect-orchestrate.server");
+      await import("#src/server/records/weekly-report-collect-orchestrate.server");
     return submit(db, {
       workspaceId,
       userId: user.id,
@@ -935,7 +980,7 @@ export const loadWeeklyReportCollectRun = createServerFn({ method: "GET" })
   .validator(z.object({ runId: z.string().uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { getCollectRunWithPacks } =
-      await import("../../server/records/weekly-report-collect-run.server");
+      await import("#src/server/records/weekly-report-collect-run.server");
     return getCollectRunWithPacks(db, {
       workspaceId,
       userId: user.id,

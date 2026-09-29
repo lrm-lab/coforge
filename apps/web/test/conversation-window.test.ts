@@ -5,11 +5,11 @@ import {
   CONVERSATION_WINDOW_PAGE_SIZE,
   flushWindowUpdates,
   foldWindowUpdates,
-  newestSequence,
+  newestRootSequence,
   nextPageCursor,
   previousPageCursor,
   windowPageFlags,
-} from "../src/lib/conversation-window";
+} from "#src/lib/conversation-window";
 
 describe("previousPageCursor", () => {
   test("pages up from the oldest loaded sequence while older history remains", () => {
@@ -43,13 +43,31 @@ describe("nextPageCursor", () => {
   });
 });
 
-describe("newestSequence", () => {
-  test("is the last message's sequence, reply included", () => {
-    expect(newestSequence([{ sequence: 3 }, { sequence: 4 }, { sequence: 9 }])).toBe(9);
+describe("newestRootSequence", () => {
+  test("is the last top-level message's sequence when the page ends in a reply", () => {
+    // Root 20 was fetched and answered twice; root 30 is the next root the page did not fetch.
+    // Using the last message (reply 32) as the cursor would skip root 30 entirely.
+    expect(
+      newestRootSequence([
+        { sequence: 20 },
+        { sequence: 25, threadRootId: "root-20" },
+        { sequence: 32, threadRootId: "root-20" },
+      ]),
+    ).toBe(20);
+  });
+
+  test("is the newest root, not the newest reply, when roots follow one another", () => {
+    expect(
+      newestRootSequence([
+        { sequence: 10 },
+        { sequence: 12, threadRootId: "root-10" },
+        { sequence: 20 },
+      ]),
+    ).toBe(20);
   });
 
   test("is undefined for an empty page", () => {
-    expect(newestSequence([])).toBeUndefined();
+    expect(newestRootSequence([])).toBeUndefined();
   });
 });
 
@@ -76,7 +94,7 @@ describe("window size", () => {
   });
 });
 
-type TestMessage = { id: string; sequence: number };
+type TestMessage = { id: string; sequence: number; threadRootId?: string };
 
 const bySequence = (base: readonly TestMessage[], incoming: readonly TestMessage[]) => {
   const byId = new Map(base.map((message) => [message.id, message]));
@@ -97,16 +115,19 @@ describe("foldWindowUpdates", () => {
     expect(fold).toEqual({ messages: [message("a", 1), message("b", 2)], pending: [] });
   });
 
-  test("buffers a late reply while the newest page is not the tail", () => {
-    // The reply to a still-retained root: the forward page loader can never fetch it, so it must
-    // not be dropped.
+  test("shows a late reply to a retained root while buffering unrelated updates", () => {
+    // A reply to a still-retained root must be visible in its open thread immediately; the forward
+    // page loader can never fetch it. Unrelated top-level updates still wait for the tail.
     const fold = foldWindowUpdates(
       { hasNewer: true, messages: [message("a", 1)] },
-      [message("reply", 50)],
-      [message("reply", 50)],
+      [],
+      [{ ...message("reply", 50), threadRootId: "a" }, message("new-root", 51)],
       bySequence,
     );
-    expect(fold).toEqual({ messages: undefined, pending: [message("reply", 50)] });
+    expect(fold).toEqual({
+      messages: [message("a", 1), { ...message("reply", 50), threadRootId: "a" }],
+      pending: [message("new-root", 51)],
+    });
   });
 
   test("a page that is gone folds nothing", () => {

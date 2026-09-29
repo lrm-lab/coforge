@@ -1,3 +1,4 @@
+import { ProgressBar } from "react-aria-components";
 import {
   useEffect,
   useLayoutEffect,
@@ -11,11 +12,13 @@ import {
 import { Link, getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  Loading02,
   ChevronDown,
   ChevronRightDouble,
+  CheckCircle,
   DotsHorizontal,
   Edit01 as Edit,
-  File02 as FileIcon,
+  Link01 as LinkIcon,
   Microphone02 as Microphone,
   Paperclip,
   Pin01 as Pin,
@@ -25,23 +28,25 @@ import {
   Trash01 as Trash,
 } from "@untitledui/icons";
 
-import { Avatar } from "@/components/base/avatar/avatar";
-import { Dropdown } from "@/components/base/dropdown/dropdown";
-import { Dialog, Modal, ModalOverlay } from "@/components/application/modals/modal";
-import { LoadingIndicator } from "@/components/ui/loading-indicator";
+import { Avatar } from "#src/components/base/avatar/avatar";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { useSendWindowCountdown } from "./use-send-window";
-import { Button } from "@/components/base/buttons/button";
-import { ButtonUtility } from "@/components/base/buttons/button-utility";
-import { Input } from "@/components/base/input/input";
-import { TextArea } from "@/components/base/textarea/textarea";
-import { avatarInitial, avatarToneClassName } from "@/lib/avatar-tone";
-import { m } from "@/paraglide/messages";
-import { formatAgentProfileParam } from "@/features/agents/profile-panel/profile-panel-search";
-import { cx } from "@/utils/cx";
-import { shouldSendOnEnter } from "../conversations/composer-behavior";
-import { useConversationRealtime } from "../conversations/conversation-realtime-client";
-import type { WeeklyReportAssistantSuggestion } from "../../server/records/weekly-report-assistant-suggestion.server";
+import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Input } from "#src/components/base/input/input";
+import { TextArea } from "#src/components/base/textarea/textarea";
+import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { m } from "#src/paraglide/messages";
+import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { cx } from "#src/utils/cx";
+import { shouldSendOnEnter } from "#src/features/conversations/composer-behavior";
+import { useConversationRealtime } from "#src/features/conversations/conversation-realtime-client";
+import type { WeeklyReportAssistantSuggestion } from "#src/server/records/weekly-report-assistant-suggestion.server";
 import type { KeyPointExtractionMeta, ReportContent } from "./records-content";
+import { formatWeeklyReportCompletedAt } from "./records-content";
+import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import {
   addRecordComment,
   acceptMemberGenerateHelp,
@@ -54,6 +59,8 @@ import {
   declineMemberReportIntent,
   ensureRecordAssistantIntro,
   ensureWeeklyReportAssistantChatSessions,
+  dismissWeeklyFormatSend,
+  loadWeeklyTemplateForReport,
   loadWeeklyReportAssistantContext,
   loadWeeklyReportAssistantMessages,
   loadWeeklyReportAssistantStatus,
@@ -64,7 +71,7 @@ import {
 import {
   looksLikeMemberGenerateOfferAccept,
   looksLikeTeamKeyPointReorganizeRequest,
-  looksLikeSideChatGreeting,
+  shouldUseFormatTemplateSendPath,
   shouldUseMemberReportRulePath,
   looksLikeSynthesizeWeeklyReportRequest,
   parseRecordAssistantPayload,
@@ -81,8 +88,14 @@ import {
   type RecordSideSurface,
 } from "./record-side-panel-pin";
 import { resolveAwaitingAssistantResume } from "./record-side-panel-awaiting";
+import { loadWorkspaceMembers } from "#src/features/workspaces/members.functions";
 import { WeeklyReportCollectPlanCard } from "./weekly-report-collect-plan-card";
 import { WeeklyReportCollectRunCard } from "./weekly-report-collect-run-card";
+import {
+  WeeklyTemplateDetailDialog,
+  type WeeklyTemplateDetail,
+} from "./weekly-template-detail-dialog";
+import type { TemplateMemberOption } from "./weekly-template-members";
 
 type CommentRow = Awaited<ReturnType<typeof ensureRecordAssistantIntro>>[number];
 type ChatSessionRow = Awaited<
@@ -96,9 +109,10 @@ function payloadOf(comment: CommentRow): RecordAssistantPayload | null {
 }
 
 const SIDE_PANEL_WIDTH_STORAGE_KEY = "coforge.records.side-panel-width";
-const appRoute = getRouteApi("/_app");
+const appRoute = getRouteApi("/w/$workspaceSlug");
 const DEFAULT_SIDE_PANEL_WIDTH = 384;
 const MIN_SIDE_PANEL_WIDTH = 280;
+const SIDE_PANEL_WIDTH_TRANSITION = "width 220ms cubic-bezier(0.32, 0.72, 0, 1)";
 
 function readStoredSidePanelWidth(): number {
   if (typeof window === "undefined") return DEFAULT_SIDE_PANEL_WIDTH;
@@ -133,12 +147,13 @@ export function RecordSidePanel({
   subjectType,
   subjectId,
   surface,
-  formatCopy,
   countdownUntil,
   refreshToken = 0,
   open,
   onOpenChange,
   onRequestSend,
+  onWeekSendDismissed,
+  sendOfferActive = false,
   onBodyApplied,
   keyPointExtraction,
   keyPointRestartBusy,
@@ -147,13 +162,16 @@ export function RecordSidePanel({
   subjectType: "report" | "cycle";
   subjectId: string;
   surface: RecordSideSurface;
-  formatCopy?: "preview" | "cancelled" | "ready";
   /** End of the open send window; the panel renders the countdown itself. */
   countdownUntil?: Date | null;
   refreshToken?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRequestSend?: () => void;
+  /** After Leader dismisses this week's send from the offer-send card. */
+  onWeekSendDismissed?: () => void;
+  /** Whether the format can still be sent (hides offer actions when false). */
+  sendOfferActive?: boolean;
   /** After Confirm body-edit, parent syncs the open editor (draft + view). */
   onBodyApplied?: (reportId: string, content: ReportContent) => void;
   /** Leader member-report: show personal key-point status + re-extract. */
@@ -162,6 +180,7 @@ export function RecordSidePanel({
   onRestartKeyPointExtraction?: () => void;
 }) {
   const router = useRouter();
+  const workspaceSlug = useWorkspaceSlug();
   const { user: viewer } = appRoute.useLoaderData();
   const viewerName = viewer.name?.trim() || viewer.username?.trim() || m.records_side_chat_user();
   const countdown = useSendWindowCountdown(countdownUntil);
@@ -174,6 +193,9 @@ export function RecordSidePanel({
   const acceptGenerateHelp = useServerFn(acceptMemberGenerateHelp);
   const confirmIntent = useServerFn(confirmMemberReportIntent);
   const declineIntent = useServerFn(declineMemberReportIntent);
+  const dismissWeekSend = useServerFn(dismissWeeklyFormatSend);
+  const loadTemplateForReport = useServerFn(loadWeeklyTemplateForReport);
+  const loadMembers = useServerFn(loadWorkspaceMembers);
   const loadAssistantContext = useServerFn(loadWeeklyReportAssistantContext);
   const loadAssistantStatus = useServerFn(loadWeeklyReportAssistantStatus);
   const loadAssistantMessages = useServerFn(loadWeeklyReportAssistantMessages);
@@ -186,6 +208,8 @@ export function RecordSidePanel({
   const sessionKey = weeklyReportAssistantSubjectKey(subjectType, subjectId);
   const session = sessionStore.get(sessionKey);
   const [pinned, setPinned] = useState(() => readSidePanelPinned(subjectType, subjectId, surface));
+  const [templateDetail, setTemplateDetail] = useState<WeeklyTemplateDetail | null>(null);
+  const [templateMembers, setTemplateMembers] = useState<TemplateMemberOption[]>([]);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [chatSessions, setChatSessions] = useState<ChatSessionRow[]>([]);
@@ -228,6 +252,7 @@ export function RecordSidePanel({
   const [panelWidth, setPanelWidth] = useState(DEFAULT_SIDE_PANEL_WIDTH);
   panelWidthRef.current = panelWidth;
   const [displayWidth, setDisplayWidth] = useState(() => (open ? DEFAULT_SIDE_PANEL_WIDTH : 0));
+  const [resizing, setResizing] = useState(false);
   const wasOpenRef = useRef(open);
 
   useEffect(() => {
@@ -270,13 +295,26 @@ export function RecordSidePanel({
     return () => window.removeEventListener("resize", clampToParent);
   }, []);
 
+  function commitPanelWidth(width: number) {
+    panelWidthRef.current = width;
+    setPanelWidth(width);
+    setDisplayWidth(width);
+  }
+
   function onPanelResizePointerDown(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     event.preventDefault();
     panelDragRef.current = { startX: event.clientX, startWidth: panelWidthRef.current };
-    event.currentTarget.setPointerCapture(event.pointerId);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
+    // Drop the open/close ease before the first move, so a move in this frame cannot restart it.
+    if (asideRef.current) asideRef.current.style.transition = "none";
+    setResizing(true);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is best-effort; the move handler still tracks clientX.
+    }
   }
 
   function onPanelResizePointerMove(event: PointerEvent<HTMLDivElement>) {
@@ -284,9 +322,9 @@ export function RecordSidePanel({
     if (!drag) return;
     const parent = asideRef.current?.parentElement;
     const max = parent ? Math.floor(parent.clientWidth / 2) : Math.floor(window.innerWidth / 2);
-    // Dragging the left edge leftward widens the panel.
+    // Dragging the left edge leftward widens the panel. Integer pixels keep the pinned right edge still.
     const next = drag.startWidth + (drag.startX - event.clientX);
-    setPanelWidth(Math.min(Math.max(next, MIN_SIDE_PANEL_WIDTH), max));
+    commitPanelWidth(Math.round(Math.min(Math.max(next, MIN_SIDE_PANEL_WIDTH), max)));
   }
 
   function onPanelResizePointerUp(event: PointerEvent<HTMLDivElement>) {
@@ -299,6 +337,7 @@ export function RecordSidePanel({
     }
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
+    setResizing(false);
     writeStoredSidePanelWidth(panelWidthRef.current);
   }
 
@@ -322,7 +361,7 @@ export function RecordSidePanel({
   async function loadThread(sessionId: string, legacyId: string | null) {
     const [rows, status, context, chat] = await Promise.all([
       ensureIntro({
-        data: { subjectType, subjectId, assistantSessionId: sessionId, surface, formatCopy },
+        data: { subjectType, subjectId, assistantSessionId: sessionId, surface },
       }),
       loadAssistantStatus().catch(() => null),
       loadAssistantContext({ data: { subjectType, subjectId } }).catch(() => null),
@@ -397,7 +436,6 @@ export function RecordSidePanel({
     subjectType,
     subjectId,
     surface,
-    formatCopy,
     ensureSessions,
     ensureIntro,
     loadAssistantContext,
@@ -527,6 +565,44 @@ export function RecordSidePanel({
     }
   }
 
+  async function onDismissWeekSend() {
+    if (busy || subjectType !== "report" || !sendOfferActive) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const rows = await dismissWeekSend({
+        data: {
+          reportId: subjectId,
+          assistantSessionId: activeSessionId ?? undefined,
+        },
+      });
+      setComments(rows);
+      onWeekSendDismissed?.();
+    } catch {
+      setError(m.records_weekly_ai_request_failed());
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openTemplateDetail() {
+    if (busy || subjectType !== "report") return;
+    setBusy(true);
+    setError(null);
+    try {
+      const [template, directory] = await Promise.all([
+        loadTemplateForReport({ data: { reportId: subjectId } }),
+        loadMembers(),
+      ]);
+      setTemplateMembers(directory.members);
+      setTemplateDetail(template);
+    } catch {
+      setError(m.records_template_detail_failed());
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function dismissSuggestion(messageId: string) {
     const next = sessionStore.markSuggestionDismissed(sessionKey, messageId);
     setDismissedSuggestionIds(next);
@@ -561,7 +637,6 @@ export function RecordSidePanel({
     if (busy) return;
     if (appliedSuggestionIds.includes(messageId)) return;
     if (suggestion.type === "send-prompt") {
-      markSuggestionApplied(messageId);
       onRequestSend?.();
       return;
     }
@@ -645,7 +720,7 @@ export function RecordSidePanel({
         subjectType === "report" &&
         looksLikeTeamKeyPointReorganizeRequest(body)
       ) {
-        await startTeamFromSideChat({
+        const outcome = await startTeamFromSideChat({
           data: {
             overviewReportId: subjectId,
             sessionId: activeSessionId,
@@ -655,6 +730,11 @@ export function RecordSidePanel({
         });
         session.draft = "";
         setDraft("");
+        if (outcome.error === "no_submitted_member_reports") {
+          setError(m.records_key_points_team_none_submitted());
+          await loadThread(activeSessionId, legacySessionId);
+          return;
+        }
         synthesisStartedAtRef.current = Date.now();
         setAwaitingSynthesis(true);
         await loadThread(activeSessionId, legacySessionId);
@@ -663,9 +743,7 @@ export function RecordSidePanel({
       }
 
       const useRulePath =
-        looksLikeSideChatGreeting(body) ||
-        shouldUseMemberReportRulePath(surface, body) ||
-        !assistantReady(assistantStatus);
+        shouldUseMemberReportRulePath(surface, body) || !assistantReady(assistantStatus);
       if (useRulePath) {
         if (!assistantReady(assistantStatus)) {
           session.setupDismissed = false;
@@ -677,6 +755,9 @@ export function RecordSidePanel({
         session.draft = "";
         setDraft("");
         setComments(rows);
+        if (shouldUseFormatTemplateSendPath(surface, body)) {
+          await router.invalidate({ sync: true });
+        }
         if (looksLikeSynthesizeWeeklyReportRequest(body)) {
           void loadThread(activeSessionId, legacySessionId);
         }
@@ -706,6 +787,9 @@ export function RecordSidePanel({
         setComments(result.comments);
         const ensured = await ensureSessions({ data: { subjectType, subjectId } });
         setChatSessions(ensured.sessions);
+        if (shouldUseFormatTemplateSendPath(surface, body)) {
+          await router.invalidate({ sync: true });
+        }
         return;
       }
 
@@ -908,7 +992,7 @@ export function RecordSidePanel({
       ref={asideRef}
       style={{
         width: displayWidth,
-        transition: "width 220ms cubic-bezier(0.32, 0.72, 0, 1)",
+        transition: resizing ? "none" : SIDE_PANEL_WIDTH_TRANSITION,
       }}
       aria-hidden={!open}
       className={cx(
@@ -1063,7 +1147,8 @@ export function RecordSidePanel({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Link
-                  to="/agents"
+                  to="/w/$workspaceSlug/members"
+                  params={{ workspaceSlug }}
                   search={{
                     profile: formatAgentProfileParam(assistantStatus.agentId),
                     agentTab: "profile",
@@ -1150,6 +1235,17 @@ export function RecordSidePanel({
                     (row.authorType === "user" && (row.body === "确认" || row.body === "不是"))
                   );
                 });
+              const offerResolved =
+                payload?.kind === "offer-send" &&
+                (!sendOfferActive ||
+                  (commentIndex >= 0 &&
+                    comments.slice(commentIndex + 1).some((row) => {
+                      const later = payloadOf(row);
+                      return (
+                        later?.kind === "offer-send" ||
+                        (row.authorType === "assistant" && row.body.includes("已取消本周周报"))
+                      );
+                    })));
               return (
                 <article key={item.id} className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -1169,12 +1265,31 @@ export function RecordSidePanel({
                     {comment.body}
                   </p>
                   {payload?.kind === "offer-send" ? (
-                    <AssistantAttachmentCard payload={payload} countdown={countdown} />
+                    <div className="space-y-3">
+                      <AssistantAttachmentCard
+                        payload={payload}
+                        disabled={busy}
+                        onOpen={() => void openTemplateDetail()}
+                      />
+                      <div className={`space-y-2 ${offerResolved ? "opacity-60" : ""}`}>
+                        <FormatSendActions
+                          disabled={busy || offerResolved}
+                          onSend={() => onRequestSend?.()}
+                          onCancel={() => void onDismissWeekSend()}
+                        />
+                        {countdown && !offerResolved ? (
+                          <p className="text-xs text-tertiary">
+                            {m.records_assistant_auto_send_in({ countdown })}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
                   ) : null}
                   {payload?.kind === "offer-help-generate" && !generateHelpConsumed ? (
                     <Button
                       size="sm"
                       color="primary"
+                      className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                       isDisabled={busy}
                       onPress={() => void onAcceptGenerateHelp()}
                     >
@@ -1186,6 +1301,7 @@ export function RecordSidePanel({
                       <Button
                         size="sm"
                         color="primary"
+                        className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                         isDisabled={busy}
                         onPress={() => void onConfirmIntent(payload.intent, payload.userGuidance)}
                       >
@@ -1232,16 +1348,6 @@ export function RecordSidePanel({
                       }}
                     />
                   ) : null}
-                  {payload?.kind === "offer-send" ? (
-                    <Button
-                      size="sm"
-                      color="primary"
-                      isDisabled={busy}
-                      onPress={() => onRequestSend?.()}
-                    >
-                      {m.records_assistant_confirm_send()}
-                    </Button>
-                  ) : null}
                 </article>
               );
             }
@@ -1252,9 +1358,7 @@ export function RecordSidePanel({
             const suggestion = message.suggestion ?? null;
             const showSuggestion =
               suggestion !== null &&
-              (suggestion.type === "body-edit" ||
-                suggestion.type === "key-point-edit" ||
-                suggestion.type === "send-prompt");
+              (suggestion.type === "body-edit" || suggestion.type === "key-point-edit");
             const suggestionApplied = appliedSuggestionIds.includes(message.id);
             const suggestionDismissed = dismissedSuggestionIds.includes(message.id);
             const suggestionFrozen = suggestionApplied || suggestionDismissed;
@@ -1274,6 +1378,16 @@ export function RecordSidePanel({
                   </span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm leading-6 text-primary">{message.body}</p>
+                {suggestion?.type === "send-prompt" && !suggestionFrozen ? (
+                  <FormatSendActions
+                    disabled={busy}
+                    onSend={() => void confirmSuggestion(message.id, suggestion)}
+                    onCancel={() => {
+                      void onIgnoreSuggestion(message.id, suggestion);
+                      void onDismissWeekSend();
+                    }}
+                  />
+                ) : null}
                 {showSuggestion ? (
                   <div
                     className={`space-y-2 rounded-lg border p-3 ${
@@ -1292,38 +1406,31 @@ export function RecordSidePanel({
                         {m.records_assistant_suggestion_inserted()}
                       </p>
                     ) : null}
-                    {suggestion.type === "send-prompt" ? (
-                      <p className="text-sm text-secondary">{m.records_assistant_confirm_send()}</p>
-                    ) : (
-                      <>
-                        <p className="text-sm font-medium text-primary">{suggestion.summary}</p>
-                        {preview ? (
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-tertiary">
-                              {suggestion.type === "key-point-edit"
-                                ? m.records_key_points_suggestion_preview()
-                                : m.records_assistant_suggestion_preview()}
-                            </p>
-                            <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-primary p-2 text-xs leading-5 text-secondary">
-                              {preview}
-                            </pre>
-                          </div>
-                        ) : null}
-                      </>
-                    )}
+                    <p className="text-sm font-medium text-primary">{suggestion.summary}</p>
+                    {preview ? (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-tertiary">
+                          {suggestion.type === "key-point-edit"
+                            ? m.records_key_points_suggestion_preview()
+                            : m.records_assistant_suggestion_preview()}
+                        </p>
+                        <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-primary p-2 text-xs leading-5 text-secondary">
+                          {preview}
+                        </pre>
+                      </div>
+                    ) : null}
                     {!suggestionFrozen ? (
                       <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
                           color="primary"
+                          className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                           isDisabled={busy}
                           onPress={() => void confirmSuggestion(message.id, suggestion)}
                         >
-                          {suggestion.type === "send-prompt"
-                            ? m.records_assistant_confirm_send()
-                            : suggestion.type === "key-point-edit"
-                              ? m.records_key_points_insert()
-                              : m.records_assistant_confirm_write()}
+                          {suggestion.type === "key-point-edit"
+                            ? m.records_key_points_insert()
+                            : m.records_assistant_confirm_write()}
                         </Button>
                         <Button
                           size="sm"
@@ -1347,10 +1454,13 @@ export function RecordSidePanel({
 
         {awaitingSynthesis ? (
           <div className="flex items-center gap-2 border-t border-secondary px-4 py-2">
-            <LoadingIndicator
-              label={m.records_side_chat_assistant_running()}
-              className="size-4 text-brand-secondary"
-            />
+            <ProgressBar
+              isIndeterminate
+              aria-label={m.records_side_chat_assistant_running()}
+              className="inline-flex shrink-0 size-4 text-brand-secondary"
+            >
+              <Loading02 aria-hidden className="size-full motion-safe:animate-spin" />
+            </ProgressBar>
             <span className="text-xs text-tertiary">{m.records_side_chat_assistant_running()}</span>
           </div>
         ) : null}
@@ -1406,7 +1516,7 @@ export function RecordSidePanel({
                 size="sm"
                 color="secondary"
                 icon={Send}
-                className="bg-brand-solid text-white hover:bg-brand-solid"
+                className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                 aria-label={m.records_side_chat_send()}
                 isDisabled={sendLocked || !draft.trim()}
               />
@@ -1449,6 +1559,7 @@ export function RecordSidePanel({
                 <Button
                   size="sm"
                   color="primary"
+                  className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                   isDisabled={!renameDraft.trim() || busy}
                   onPress={() => void submitRename()}
                 >
@@ -1459,28 +1570,112 @@ export function RecordSidePanel({
           </Modal>
         </ModalOverlay>
       ) : null}
+
+      <WeeklyTemplateDetailDialog
+        template={templateDetail}
+        members={templateMembers}
+        onClose={() => setTemplateDetail(null)}
+      />
     </aside>
   );
 }
 
+function FormatSendActions({
+  disabled,
+  onSend,
+  onCancel,
+}: {
+  disabled: boolean;
+  onSend: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        size="sm"
+        color="primary"
+        className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
+        isDisabled={disabled}
+        onPress={onSend}
+      >
+        {m.records_assistant_confirm_send()}
+      </Button>
+      <Button size="sm" color="secondary" isDisabled={disabled} onPress={onCancel}>
+        {m.records_assistant_cancel_week()}
+      </Button>
+    </div>
+  );
+}
+
 function AssistantAttachmentCard({
-  countdown,
+  payload,
+  disabled,
+  onOpen,
 }: {
   payload: Extract<RecordAssistantPayload, { kind: "offer-send" }>;
-  countdown?: string | null;
+  disabled: boolean;
+  onOpen: () => void;
 }) {
-  const status = countdown ?? m.records_assistant_template_ready();
+  const title =
+    payload.weekTitle?.trim() ||
+    (payload.year != null && payload.week != null
+      ? `${payload.year} W${payload.week}`
+      : m.records_assistant_template());
+  const updatedLabel = payload.updatedAt
+    ? m.records_assistant_template_updated({
+        time: formatWeeklyReportCompletedAt(payload.updatedAt).replace(/:\d{2}$/, ""),
+      })
+    : m.records_assistant_template_ready();
+  const recipients = payload.recipients ?? [];
+  const shown = recipients.slice(0, 5);
+  const overflow =
+    typeof payload.recipientTotal === "number"
+      ? Math.max(0, payload.recipientTotal - shown.length)
+      : Math.max(0, recipients.length - shown.length);
+
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-brand-primary_alt px-3 py-2">
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-brand-secondary">
-        <FileIcon className="size-4" />
+    <Button
+      size="sm"
+      color="tertiary"
+      noTextPadding
+      isDisabled={disabled}
+      aria-label={`${m.records_template_open_detail()}: ${title}`}
+      onPress={onOpen}
+      className="h-auto w-full items-start justify-start whitespace-normal rounded-xl bg-gradient-to-br from-secondary via-secondary/40 to-primary p-3 text-left font-normal hover:bg-primary_hover"
+    >
+      <div className="flex w-full items-start gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-tertiary text-fg-secondary">
+          <LinkIcon className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-primary">{title}</p>
+          <p className="text-xs text-tertiary">{m.records_assistant_template()}</p>
+          <p className="mt-1 flex items-center gap-1 text-xs text-tertiary">
+            <CheckCircle className="size-3.5 text-success-primary" />
+            <span>{updatedLabel}</span>
+          </p>
+          {shown.length > 0 ? (
+            <div className="mt-2 flex items-center">
+              {shown.map((person, index) => (
+                <Avatar
+                  key={`${person.displayName}-${index}`}
+                  size="xs"
+                  alt={person.displayName}
+                  src={person.avatarUrl ?? undefined}
+                  initials={avatarInitial(person.displayName)}
+                  contentClassName={avatarToneClassName(person.displayName)}
+                  className={cx("ring-2 ring-primary", index > 0 ? "-ml-1.5" : undefined)}
+                />
+              ))}
+              {overflow > 0 ? (
+                <span className="ml-1.5 text-xs font-medium text-tertiary">
+                  {m.records_assistant_recipients_overflow({ count: overflow })}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-primary">
-          {m.records_assistant_template()}
-        </p>
-        <p className="text-xs text-tertiary">{status}</p>
-      </div>
-    </div>
+    </Button>
   );
 }

@@ -1,66 +1,56 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import {
-  workspaceUserMiddleware,
-  type WorkspaceUserContext,
-} from "../../server/auth/function-auth";
-import { ACTIVE_AGENT_WHERE } from "../../server/agents/active-agent.server";
-import {
-  agentConversationInputSchema,
-  agentConversationPageInputSchema,
-  agentConversationUpdatesInputSchema,
   conversationAroundInputSchema,
+  directConversationInputSchema,
+  directConversationPageInputSchema,
+  directConversationUpdatesInputSchema,
   ownMessageIndexInputSchema,
   readConversationThreadInputSchema,
   sendConversationMessageInputSchema,
   toggleMessageReactionInputSchema,
 } from "./conversation.schemas";
-import { createCentrifugoServerApi } from "../../server/centrifugo/server-api.server";
-import { SendDirectMessage } from "../../server/conversations/direct-message.server";
-import { CentrifugoConversationRealtime } from "../../server/conversations/conversation-realtime.server";
-import { ConversationHistory } from "../../server/conversations/conversation-history.server";
-import { attachActionCardViews } from "../../server/conversations/action-cards.server";
-import { getMessageRequestIdempotency } from "../../server/conversations/redis-message-request-idempotency.server";
-import { PrismaDirectConversationRepository } from "../../server/db/repositories/direct-conversation.repositories.server";
-import { withMessageSendTrace } from "../../server/observability/tracing.server";
-import { workspaceUserAvatarUrl } from "../../server/db/repositories/user-profile.repositories.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
+import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
+import { attachActionCardViews } from "#src/server/conversations/action-cards.server";
+import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
+import { withMessageSendTrace } from "#src/server/observability/tracing.server";
+import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 
-/**
- * The caller's own direct conversation repository, or a failure when the Agent is not theirs.
- * `canSend` distinguishes writing from reading: a deleted Agent's DM stays readable (ADR 0044
- * keeps its history, rendered with a `DELETED` sender), but no new message may be sent to it.
- */
-async function ownedConversations(
-  { db, workspaceId, user }: WorkspaceUserContext,
-  agentId: string,
-  options: { canSend?: boolean } = {},
-) {
-  const agent = await db.agent.findFirst({
-    where: {
-      id: agentId,
-      workspaceId,
-      ownerId: user.id,
-      ...(options.canSend ? ACTIVE_AGENT_WHERE : {}),
-    },
-    select: { id: true },
-  });
-  if (!agent) throw new Error("conversation scope is not authorized");
-  return new PrismaDirectConversationRepository(db);
-}
+/** The viewer's direct conversation with an Agent or a member, started on first open. */
+export const openDirectConversation = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.union([z.object({ agentId: z.uuid() }), z.object({ userId: z.uuid() })]))
+  .handler(({ data, context }) =>
+    new DirectConversations(context.db).open(context.workspaceId, context.user.id, data),
+  );
+
+/** Who a direct conversation of the viewer's (`dm/<id>`) is with. */
+export const loadDirectConversationTarget = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(directConversationInputSchema)
+  .handler(({ data, context }) =>
+    new DirectConversations(context.db).authorize(
+      context.workspaceId,
+      context.user.id,
+      data.conversationId,
+    ),
+  );
 
 export const loadDirectConversation = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
-  .validator(agentConversationPageInputSchema)
+  .validator(directConversationPageInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
-    const conversations = await ownedConversations(context, data.agentId);
-    const page = await conversations.openForUser(workspaceId, user.id, data.agentId, {
+    const page = await new DirectConversations(db).page(workspaceId, user.id, data.conversationId, {
       beforeSequence: data.beforeSequence,
       afterSequence: data.afterSequence,
       limit: data.limit,
     });
     return {
-      viewerHandle: user.username,
       ...page,
       messages: await attachActionCardViews(db, workspaceId, user.id, page.messages),
     };
@@ -68,14 +58,13 @@ export const loadDirectConversation = createServerFn({ method: "GET" })
 
 export const loadDirectConversationUpdates = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
-  .validator(agentConversationUpdatesInputSchema)
+  .validator(directConversationUpdatesInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
-    const conversations = await ownedConversations(context, data.agentId);
-    const messages = await conversations.updatesForUser(
+    const messages = await new DirectConversations(db).updates(
       workspaceId,
       user.id,
-      data.agentId,
+      data.conversationId,
       data.afterSequence,
     );
     return attachActionCardViews(db, workspaceId, user.id, messages);
@@ -110,56 +99,87 @@ export const loadConversationAround = createServerFn({ method: "GET" })
 export const markDirectThreadRead = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(readConversationThreadInputSchema)
-  .handler(async ({ context, data }) => {
-    const { user, workspaceId } = context;
-    const conversations = await ownedConversations(context, data.agentId);
-    await conversations.markThreadReadForUser(
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    await new DirectConversations(db).markThreadRead(
       workspaceId,
       user.id,
-      data.agentId,
+      data.conversationId,
       data.threadRootId,
       data.throughSequence,
     );
   });
 
-/** Per-DM unread for the sidebar, keyed by the Agent row that owns each badge — the same key
- * the realtime publication carries, so no conversation→Agent alias map is needed (ADR 0046). */
+/** Per-DM unread for the sidebar, by conversation id: the key a DM's realtime signal carries
+ * too, for a DM with an Agent and one between members alike. */
 export type DirectConversationUnread = Record<string, number>;
 
 export type DirectConversationBadges = {
   /** The signed-in user's id, for their own direct-message signal channel. */
   viewerId: string;
-  /** Unread counts keyed by the Agent whose sidebar row owns the badge. */
+  /** Unread counts by conversation id. */
   unread: DirectConversationUnread;
 };
 
 /**
- * Everything the Chat sidebar needs about direct messages in one round trip: the viewer's own
- * id (their personal signal channel) and the per-Agent unread counts seeded into the badges.
+ * Everything the Chat sidebar needs about direct-message badges in one round trip: the viewer's
+ * own id (their personal signal channel) and the unread counts seeded into the badges.
  */
 export const loadDirectConversationBadges = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }): Promise<DirectConversationBadges> => {
     const { user, db, workspaceId } = context;
-    const rows =
-      (await new PrismaDirectConversationRepository(db).unreadCountsForUser?.(
-        workspaceId,
-        user.id,
-      )) ?? [];
+    const rows = await new DirectConversations(db).unreadCounts(workspaceId, user.id);
     const unread: DirectConversationUnread = {};
-    for (const row of rows) unread[row.agentId] = row.unread;
+    for (const row of rows) unread[row.conversationId] = row.unread;
     return { viewerId: user.id, unread };
   });
 
-/** Advances the DM read cursor for the sidebar badge; monotone and clamped (ADR 0046). */
+/** Advances the DM read cursor for the sidebar badge; monotone and clamped. */
 export const markDirectConversationRead = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(agentConversationInputSchema.extend({ throughSequence: z.number().int().positive() }))
-  .handler(async ({ context, data }) => {
-    const { user, workspaceId } = context;
-    const conversations = await ownedConversations(context, data.agentId);
-    await conversations.markReadForUser?.(workspaceId, user.id, data.agentId, data.throughSequence);
+  .validator(directConversationInputSchema.extend({ throughSequence: z.number().int().positive() }))
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    await new DirectConversations(db).markRead(
+      workspaceId,
+      user.id,
+      data.conversationId,
+      data.throughSequence,
+    );
   });
+
+/** Pins the viewer's DM after their other pins, or unpins it (#121). */
+export const setDirectConversationPinned = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(directConversationInputSchema.extend({ pinned: z.boolean() }))
+  .handler(({ context: { user, db, workspaceId }, data }) =>
+    new DirectConversations(db).setPinned(workspaceId, user.id, data.conversationId, data.pinned),
+  );
+
+/** Marks the viewer's DM unread, or clears the marker (#122). */
+export const setDirectConversationUnread = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(directConversationInputSchema.extend({ unread: z.boolean() }))
+  .handler(({ context: { user, db, workspaceId }, data }) =>
+    new DirectConversations(db).setUnread(workspaceId, user.id, data.conversationId, data.unread),
+  );
+
+/** Closes the viewer's DM in their list only, or brings it back (#122). */
+export const setDirectConversationHidden = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(directConversationInputSchema.extend({ hidden: z.boolean() }))
+  .handler(({ context: { user, db, workspaceId }, data }) =>
+    new DirectConversations(db).setHidden(workspaceId, user.id, data.conversationId, data.hidden),
+  );
+
+/**
+ * The sidebar's Direct messages, by conversation id: the viewer's DMs (the sidebar lists only
+ * these) and who each is with, which are pinned (with their order) and which are closed.
+ */
+export const loadDirectConversationPreferences = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(({ context: { user, db, workspaceId } }) =>
+    new DirectConversations(db).list(workspaceId, user.id),
+  );
 
 export const sendDirectConversationMessage = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -168,40 +188,40 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
     const { user, db, workspaceId } = context;
     return withMessageSendTrace(
       data.requestId,
-      { "coforge.agent_id": data.agentId },
+      { "coforge.conversation_id": data.conversationId },
       async (sendTrace) => {
-        const conversations = await sendTrace.measure("message.context", () =>
-          ownedConversations(context, data.agentId, { canSend: true }),
-        );
-        const opened = await conversations.memberForUser(workspaceId, user.id, data.agentId);
-        const message = await sendTrace.measure("message.persist_and_publish", () => {
-          const centrifugo = createCentrifugoServerApi();
-          return new SendDirectMessage(
-            conversations,
-            getMessageRequestIdempotency(),
-            centrifugo,
-            new CentrifugoConversationRealtime(centrifugo),
-          ).execute({
-            requestId: data.requestId,
-            workspaceId,
-            conversationId: opened.conversationId,
-            senderMemberId: opened.senderMemberId,
-            senderUserId: user.id,
-            body: data.body,
-            attachmentIds: data.attachmentIds,
-            threadRootId: data.threadRootId,
-          });
-        });
-        const profile = await db.user.findUnique({
-          where: { id: user.id },
-          select: { displayName: true, avatarObjectKey: true },
-        });
+        const centrifugo = createCentrifugoServerApi();
+        // The echo's sender profile does not depend on the send.
+        const [message, profile] = await Promise.all([
+          sendTrace.measure("message.persist_and_publish", () =>
+            new DirectConversations(db).send(
+              workspaceId,
+              user.id,
+              data.conversationId,
+              {
+                requestId: data.requestId,
+                body: data.body,
+                attachmentIds: data.attachmentIds,
+                threadRootId: data.threadRootId,
+              },
+              {
+                idempotency: getMessageRequestIdempotency(),
+                centrifugo,
+                realtime: new CentrifugoConversationRealtime(centrifugo),
+              },
+            ),
+          ),
+          db.user.findUnique({
+            where: { id: user.id },
+            select: { displayName: true, avatarObjectKey: true },
+          }),
+        ]);
         return {
           id: message.id,
           sequence: message.sequence,
           threadRootId: data.threadRootId,
           senderKind: "user" as const,
-          senderMemberId: opened.senderMemberId,
+          senderMemberId: message.senderMemberId,
           // Reads exactly like the same message after a reload: display name, handle separately.
           senderName: profile?.displayName?.trim() || user.username,
           senderHandle: user.username,
@@ -229,16 +249,8 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
 /** The viewer's own emoji reaction on a DM message; returns the message's fresh summaries. */
 export const toggleDirectMessageReaction = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(agentConversationInputSchema.extend(toggleMessageReactionInputSchema.shape))
-  .handler(async ({ context, data }) => {
-    const { user, workspaceId } = context;
-    const conversations = await ownedConversations(context, data.agentId);
-    return conversations.setUserMessageReaction(
-      workspaceId,
-      user.id,
-      data.agentId,
-      data.messageId,
-      data.emoji,
-      data.active,
-    );
+  .validator(directConversationInputSchema.extend(toggleMessageReactionInputSchema.shape))
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    const { conversationId, ...reaction } = data;
+    return new DirectConversations(db).react(workspaceId, user.id, conversationId, reaction);
   });
