@@ -8,6 +8,10 @@ import {
   MemoryCitationUngroundedError,
   type MemoryCitationBindings,
 } from "../workspace-memory/memory-citations";
+import {
+  assertDiscoveryServable,
+  isRetiredFromMemoryDiscovery,
+} from "../workspace-memory/memory-discovery-eligibility";
 import type { OpenVikingMemoryReadClient } from "./memory-agent-reads";
 
 export { MemoryAgentMutationError } from "./memory-agent-reads";
@@ -58,7 +62,7 @@ export function createOpenVikingMemoryReads(deps: {
       return deps.citations.bindOpenVikingHits(
         input.workspaceId,
         input.operationId,
-        collectHits(payload, input.workspaceId),
+        publicHits(payload, input.workspaceId),
       );
     },
 
@@ -78,18 +82,21 @@ export function createOpenVikingMemoryReads(deps: {
       return deps.citations.bindOpenVikingHits(
         input.workspaceId,
         input.operationId,
-        collectHits(payload, input.workspaceId),
+        publicHits(payload, input.workspaceId),
       );
     },
 
     async read(input) {
+      assertDiscoveryServable(input.uri);
       const payload = await deps.client.invoke({
         workspaceId: input.workspaceId,
         agentId: input.agentId,
         operation: "read",
         query: { uri: input.uri },
       });
+      assertDiscoveryServable(payload);
       const hit = asReadHit(payload, input);
+      assertDiscoveryServable(hit);
       const [citation] = await deps.citations.bindOpenVikingHits(
         input.workspaceId,
         input.operationId,
@@ -99,6 +106,10 @@ export function createOpenVikingMemoryReads(deps: {
       return { citation, content: hit.content };
     },
   };
+}
+
+function publicHits(payload: unknown, workspaceId: string): unknown[] {
+  return collectHits(payload, workspaceId).filter((hit) => !isRetiredFromMemoryDiscovery(hit));
 }
 
 function collectHits(payload: unknown, workspaceId: string): unknown[] {

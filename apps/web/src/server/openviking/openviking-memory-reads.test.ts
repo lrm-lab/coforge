@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { OPENVIKING_CITATION_KIND } from "@lrm/coforge-sdk/agent";
 import type { OpenVikingCitationRecord } from "../db/repositories/workspace-memory-citation.repositories.server";
 import { createMemoryCitationBindings } from "../workspace-memory/memory-citations";
+import { RetiredFromMemoryDiscoveryError } from "../workspace-memory/memory-discovery-eligibility";
 import { createOpenVikingMemoryReads } from "./openviking-memory-reads";
 import type { OpenVikingMemoryReadInvocation } from "./memory-agent-reads";
 
@@ -140,4 +141,57 @@ test("search_context disables query expansion and never issues an OpenViking wri
       query: "x",
     }),
   ).resolves.toEqual([]);
+});
+
+test("find keeps a skill revision and drops episode, insight, and episodeInsight", async () => {
+  const { reads, ovRows } = harness({
+    accountId: "acct-a",
+    results: [
+      {
+        uri: "viking://skills/deploy/revisions/3",
+        kind: "skill_revision",
+        matchedLevel: "L1",
+        excerpt: "rollback still runs the smoke",
+      },
+      {
+        uri: "viking://memories/episodes/ep-1",
+        kind: "episode",
+        matchedLevel: "L1",
+        excerpt: "old episode",
+      },
+      {
+        uri: "viking://resources/docs/note.md",
+        kind: "insight",
+        matchedLevel: "L1",
+        excerpt: "old insight",
+      },
+      {
+        uri: "viking://skills/deploy/revisions/9",
+        relation: "episodeInsight",
+        matchedLevel: "L1",
+        excerpt: "retired relation",
+      },
+    ],
+  });
+  const found = await reads.find({
+    workspaceId: "ws-a",
+    agentId: "mem-1",
+    operationId: "find-q160",
+    query: "deploy",
+  });
+  expect(found.map((item) => item.uri)).toEqual(["viking://skills/deploy/revisions/3"]);
+  expect([...ovRows.keys()]).toEqual(["ws-a:ov:viking://skills/deploy/revisions/3"]);
+});
+
+test("read refuses an episode uri before the upstream read", async () => {
+  const { reads, calls } = harness({ content: "should not be served" });
+  await expect(
+    reads.read({
+      workspaceId: "ws-a",
+      agentId: "mem-1",
+      operationId: "read-ep",
+      uri: "viking://memories/episodes/ep-1",
+    }),
+  ).rejects.toBeInstanceOf(RetiredFromMemoryDiscoveryError);
+  expect(calls).toEqual([]);
 });

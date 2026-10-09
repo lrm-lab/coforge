@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { OPENVIKING_CITATION_KIND, type OpenVikingCitation } from "@lrm/coforge-sdk/agent";
 import type { OpenVikingCitationRecord } from "../db/repositories/workspace-memory-citation.repositories.server";
 import { createMemoryCitationBindings, MemoryCitationUngroundedError } from "./memory-citations";
+import { RetiredFromMemoryDiscoveryError } from "./memory-discovery-eligibility";
 
 const openvikingHit = {
   citationId: "ov:wiki/deploy",
@@ -75,4 +76,22 @@ test("Offer refs keep the single openviking kind", async () => {
   expect(memory.toOfferRefs(resolved)).toEqual([
     { kind: OPENVIKING_CITATION_KIND, citationId: "ov:wiki/deploy" },
   ]);
+});
+
+test("a stored episode citation stays immutable and cannot be offered again", async () => {
+  const { openviking, memory } = bindings();
+  const historical = {
+    workspaceId: "ws-a",
+    citationId: "ov:episode-1",
+    accountId: "acct-a",
+    uri: "viking://memories/episodes/ep-1",
+    matchedLevel: "L1" as const,
+    boundOperationId: "old-find",
+    excerpt: "historical episode",
+  };
+  await openviking.putOpenVikingCitation(historical);
+  await expect(memory.resolveOfferCitations("ws-a", ["ov:episode-1"])).rejects.toBeInstanceOf(
+    RetiredFromMemoryDiscoveryError,
+  );
+  expect(openviking.rows.get("ws-a:ov:episode-1")).toEqual(historical);
 });

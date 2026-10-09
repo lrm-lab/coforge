@@ -14,6 +14,7 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { WorkspaceMemoryScopeError } from "../db/repositories/workspace-memory-errors.server";
 import { MemoryCitationUngroundedError, type MemoryCitationBindings } from "./memory-citations";
+import { RetiredFromMemoryDiscoveryError } from "./memory-discovery-eligibility";
 import { MemoryAgentBudgetError, type MemoryAgentBudgetLedger } from "./memory-agent-budget";
 import type { MemoryOffers } from "./memory-offers";
 import {
@@ -229,6 +230,8 @@ function fenceAllows(
 function translateError(command: OpenVikingAgentCommand, error: unknown): MemoryAgentCommandResult {
   if (error instanceof MemoryAgentBudgetError)
     return failure(429, command.operationId, "budget", error.message);
+  if (error instanceof RetiredFromMemoryDiscoveryError)
+    return failure(400, command.operationId, "retired", error.message);
   if (error instanceof MemoryCitationUngroundedError)
     return failure(400, command.operationId, "citation", error.message);
   if (error instanceof MemoryAgentMutationError)
@@ -247,7 +250,7 @@ function translateError(command: OpenVikingAgentCommand, error: unknown): Memory
 function failure(
   status: number,
   operationId: string | undefined,
-  kind: "unauthorized" | "invalid" | "citation" | "budget",
+  kind: "unauthorized" | "invalid" | "citation" | "budget" | "retired",
   message?: string,
 ): MemoryAgentCommandResult {
   const codes = {
@@ -255,12 +258,14 @@ function failure(
     invalid: "openviking-request-invalid",
     citation: "openviking-citation-ungrounded",
     budget: "openviking-budget-exhausted",
+    retired: "retired_from_memory_discovery",
   } as const;
   const messages = {
     unauthorized: "not the workspace Memory Agent",
     invalid: message ?? "invalid memory request",
     citation: message ?? "citation was not served",
     budget: message ?? "memory budget exhausted",
+    retired: message ?? "retired_from_memory_discovery",
   };
   return {
     ok: false,

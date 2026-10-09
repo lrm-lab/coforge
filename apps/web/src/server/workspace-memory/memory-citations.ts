@@ -15,6 +15,7 @@ import type {
   OpenVikingCitationRecord,
   WorkspaceMemoryCitationStore,
 } from "../db/repositories/workspace-memory-citation.repositories.server";
+import { assertDiscoveryServable } from "./memory-discovery-eligibility";
 
 export class MemoryCitationUngroundedError extends Error {
   constructor(message = "citation was not served") {
@@ -67,6 +68,7 @@ export function createMemoryCitationBindings(deps: {
       for (const citationId of citationRefs) {
         const record = await deps.openviking.getOpenVikingCitation(workspaceId, citationId);
         if (!record) throw new MemoryCitationUngroundedError();
+        assertDiscoveryServable(record);
         citations.push(openVikingRecordToCitation(record));
       }
       return citations;
