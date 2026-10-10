@@ -528,42 +528,53 @@ export class GitHubConnection {
   }
 
   async complete(userId: string, browserState: string, state: string, code: string) {
-    if (!state || state.length > 256 || state !== browserState || code.length > 2048) return false;
+    // Every `return failed(...)` below logs the stage and a short reason; see `authorizationFailed`.
+    if (!state || state.length > 256) return authorizationFailed("state", "state_invalid");
+    if (!browserState) return authorizationFailed("state", "browser_state_missing");
+    if (state !== browserState) return authorizationFailed("state", "browser_state_mismatch");
+    if (code.length > 2048) return authorizationFailed("state", "code_too_long");
     // Commit consumption before external I/O. A later transaction abort must not
     // restore a usable verifier and permit replay of an already exchanged code.
+    let rejection = "no_attempt";
     const verifier = await this.locked(userId, async (tx) => {
       const attempt = await tx.gitHubAuthorization.findUnique({ where: { userId } });
       if (!attempt || attempt.stateHash !== hash(state) || !attempt.verifier) return null;
       if (attempt.expiresAt.getTime() <= this.now() || !code) {
         await tx.gitHubAuthorization.delete({ where: { userId } });
+        rejection = code ? "expired" : "no_code";
         return null;
       }
       await tx.gitHubAuthorization.update({ where: { userId }, data: { verifier: "" } });
       return attempt.verifier;
     });
-    if (!verifier) return false;
+    if (!verifier) return authorizationFailed("attempt", rejection);
     const result = await this.locked(userId, async (tx) => {
       const attempt = await tx.gitHubAuthorization.findUnique({ where: { userId } });
       // A disconnect or new begin between transactions cancels finalization.
-      if (!attempt || attempt.stateHash !== hash(state) || attempt.verifier) return false;
+      if (!attempt || attempt.stateHash !== hash(state) || attempt.verifier)
+        return authorizationFailed("attempt", "cancelled");
       await tx.gitHubAuthorization.delete({ where: { userId } });
-      if (attempt.expiresAt.getTime() <= this.now() || !code) return false;
+      if (attempt.expiresAt.getTime() <= this.now() || !code)
+        return authorizationFailed("attempt", code ? "expired" : "no_code");
       // Consume failed exchanges too. Never replay a code after an ambiguous network result.
       let authorized;
+      let stage = "open";
       try {
         const stored = JSON.parse(await this.open(userId, "oauth", verifier)) as {
           verifier?: string;
           expectedGithubUserId?: string;
         };
+        stage = "exchange";
         const tokens = await this.exchange({
           code,
           redirect_uri: this.config.callbackUrl,
           code_verifier: stored.verifier ?? verifier,
         });
+        stage = "user";
         const user = userSchema.parse(await this.api("/user", tokens.access_token));
         authorized = { tokens, user };
-      } catch {
-        return false;
+      } catch (error) {
+        return authorizationFailed(stage, failureReason(error));
       }
       const { tokens, user } = authorized;
       const existing = await tx.gitHubConnection.findUnique({
@@ -571,7 +582,8 @@ export class GitHubConnection {
           clientId_githubUserId: { clientId: this.config.clientId, githubUserId: String(user.id) },
         },
       });
-      if (existing && existing.userId !== userId) return false;
+      if (existing && existing.userId !== userId)
+        return authorizationFailed("owner", "github_account_taken");
       const storedAuthorization = JSON.parse(await this.open(userId, "oauth", verifier)) as {
         expectedGithubUserId?: string;
       };
@@ -1312,6 +1324,10 @@ export class GitHubConnection {
       result.error === "bad_refresh_token"
     )
       throw new GitHubUnauthorized();
+    // GitHub answers a refused exchange with HTTP 200 and `{ "error": "<name>" }`. Keep the name
+    // (a short identifier) for the log; the description and every other field stay unread.
+    if (typeof result === "object" && result !== null && "error" in result)
+      throw new GitHubOAuthRejected(String(result.error));
     return tokensSchema.parse(result);
   }
 
@@ -1419,6 +1435,35 @@ export class GitHubConnection {
 }
 
 class GitHubUnauthorized extends Error {}
+
+/** GitHub refused an OAuth exchange; `reason` is its short error name, never its description. */
+class GitHubOAuthRejected extends Error {
+  readonly reason: string;
+  constructor(name: string) {
+    super("GitHub rejected the OAuth exchange");
+    this.reason = /^[a-z_]{1,64}$/.test(name) ? name : "unknown";
+  }
+}
+
+/** What to log about a failed authorization step: a short identifier, never a message or body. */
+function failureReason(error: unknown) {
+  if (error instanceof GitHubOAuthRejected) return error.reason;
+  if (error instanceof GitHubUnauthorized) return "unauthorized";
+  if (error instanceof AppError) return error.code.toLowerCase();
+  if (error instanceof z.ZodError) return "invalid_response";
+  return "error";
+}
+
+/**
+ * The callback answers every failure with the same page, so this line is the only place the cause
+ * shows. It names the stage and a short reason; it never carries a code, token, secret, or any
+ * GitHub response text.
+ */
+function authorizationFailed(stage: string, reason: string) {
+  console.warn(JSON.stringify({ event: "github.authorization_failed", stage, reason }));
+  return false as const;
+}
+
 function randomValue() {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 }
