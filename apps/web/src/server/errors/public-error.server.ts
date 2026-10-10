@@ -7,7 +7,19 @@ type ErrorReport = {
   errorId: string;
   errorType: "error" | "non_error";
   stackPositions: string[];
+  /** `model.method` of the Prisma query that failed, when the error names one. */
+  prismaOperation?: string;
 };
+
+/**
+ * Prisma opens its errors with ``Invalid `prisma.<model>.<method>()` invocation``. Only those two
+ * identifiers are taken: the rest of the message carries the query's arguments and a file path.
+ */
+function prismaOperationOf(cause: unknown) {
+  if (!(cause instanceof Error)) return undefined;
+  const match = /Invalid `prisma\.([A-Za-z]+)\.([A-Za-z]+)\(\)` invocation/.exec(cause.message);
+  return match ? `${match[1]}.${match[2]}` : undefined;
+}
 
 export function toPublicServerError(
   cause: unknown,
@@ -17,10 +29,12 @@ export function toPublicServerError(
   if (isAppError(cause) || isRedirect(cause) || isNotFound(cause)) return cause;
 
   const errorId = createId();
+  const prismaOperation = prismaOperationOf(cause);
   report({
     event: "server_operation_failed",
     errorId,
     errorType: cause instanceof Error ? "error" : "non_error",
+    ...(prismaOperation ? { prismaOperation } : {}),
     // Numeric source positions locate failures in the deployed bundle without
     // logging exception messages, SQL, credentials, or filesystem paths.
     stackPositions:

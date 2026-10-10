@@ -32,6 +32,25 @@ describe("server error disclosure", () => {
     });
   });
 
+  test("names the Prisma query that failed, and nothing from its arguments", () => {
+    const report = mock((_record: unknown) => {});
+    const cause = new Error(
+      "\nInvalid `prisma.project.findFirst()` invocation in\n/private/secret.ts:12:34\n\n" +
+        "{ where: { workspaceId: 'secret-workspace' } }\n\nArgument `x` is missing.",
+    );
+    cause.stack = "secret\n    at query (/private/secret.ts:12:34)";
+    toPublicServerError(cause, report, () => "error-id");
+
+    expect(report).toHaveBeenCalledWith({
+      event: "server_operation_failed",
+      errorId: "error-id",
+      errorType: "error",
+      stackPositions: ["12:34"],
+      prismaOperation: "project.findFirst",
+    });
+    expect(JSON.stringify(report.mock.calls)).not.toContain("secret");
+  });
+
   test("preserves deliberate public errors and Router control flow", () => {
     const publicError = new AppError("INVALID_INPUT");
     const redirectResult = redirect({ href: "/login" });
