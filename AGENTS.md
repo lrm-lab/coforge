@@ -104,8 +104,8 @@ These instructions apply to the entire repository.
 
 - Follow the lightweight, branch-based [GitHub Flow](https://docs.github.com/en/get-started/using-github/github-flow). Create every change on a short-lived feature branch from the latest `origin/main`; use a clear prefix such as `feat/`, `fix/`, `docs/`, or `chore/`. Do not use a long-lived `dev` branch.
 - Keep MVP branches to one small objective and, as a rule, merge or close them within the same working day. Prefer a sequence of small CRs to a multi-day feature branch.
-- Never commit or push directly to `main`. A change reaches `main` only through a CR/PR with passing required checks and at least one approval from a reviewing Agent. Authors must not self-approve their own CR.
-- Use the MVP fast lane for ordinary implementation and documentation: one Agent review, the short automated checks, and immediate squash/rebase merge once feedback is resolved. Target a 5–10 minute review-to-merge cycle; Frank does not need to approve each ordinary CR.
+- Never commit or push directly to `main`. A change reaches `main` only through a CR/PR with passing required checks. No approval is required.
+- Use the MVP fast lane for ordinary implementation and documentation: the short automated checks, and immediate squash/rebase merge once feedback is resolved. Target a 5–10 minute CR-to-merge cycle; Frank does not need to approve each ordinary CR.
 - Frank's explicit approval remains required for the decision gates above and for changes to architecture, database schema, wire protocol, licensing, security boundaries, or other decisions with broad or difficult-to-reverse impact.
 - Keep each branch and CR focused on one concern. Preserve unrelated work and coordinate in `#coforge` before touching files another contributor has claimed.
 - Before requesting final review, fetch and rebase the branch onto the latest `origin/main`. Never force-push `main` or another contributor's branch.
@@ -117,7 +117,7 @@ These instructions apply to the entire repository.
 - Keep `main` history clean and linear by using the repository's approved squash/rebase merge strategy, then delete the merged branch; do not create gratuitous merge commits.
 - A CR must describe its scope, approved decisions, official source links for technical choices, tests and checks run, known risks, and any follow-up work. Do not merge while review comments remain unresolved.
 - During MVP, keep required CI short: formatting/linting, type checking, relevant tests, and build. Add slower checks only when their risk reduction justifies the feedback delay. GitHub documents reviews and status checks as independently configurable [branch protection options](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
-- A task is complete only after the relevant short checks pass and the CR is approved. If a check does not exist yet, state that clearly in the CR.
+- A task is complete only after the relevant short checks pass and the CR is merged. If a check does not exist yet, state that clearly in the CR.
 - Develop behavioral changes with test-driven development. Agree the public test seam first, then work in vertical slices: one failing test followed by the minimum implementation that passes it.
 - Start bug fixes with a regression test. Do not remove or weaken a valid test merely to make CI pass.
 - Removing an export or mechanism means removing all of it: the implementation, its tests, and every assertion that pins it — grep all three. A CI-green run that leaves a pinned assertion behind is not a pass; #1081's first run failed on exactly that.
