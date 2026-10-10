@@ -58,8 +58,8 @@ services:
       AUTHING_REDIRECT_URI: https://staging.coforge.cn/auth/callback
       COFORGE_SESSION_SECRET_FILE: /run/secrets/coforge_session_secret
       COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE: /run/secrets/coforge_agent_credential_encryption_key
-      COFORGE_GITHUB_APP_ID: "4937758"
-      COFORGE_GITHUB_CLIENT_ID: Iv23lip3Ca7BRl50L2O4
+      COFORGE_GITHUB_APP_ID: "5261083"
+      COFORGE_GITHUB_CLIENT_ID: Iv23lid60sKPeuSOuXO1
       COFORGE_GITHUB_APP_SLUG: ${COFORGE_GITHUB_APP_SLUG:-}
       COFORGE_GITHUB_APP_BOT_USER_ID: ${COFORGE_GITHUB_APP_BOT_USER_ID:-}
       COFORGE_GITHUB_CALLBACK_URL: https://staging.coforge.cn/api/integrations/github/callback

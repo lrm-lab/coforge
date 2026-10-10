@@ -1,6 +1,6 @@
 # Personal GitHub connection
 
-The staging App ID is `4937758`, Client ID is `Iv23lip3Ca7BRl50L2O4`, and its
+The staging App ID is `5261083`, Client ID is `Iv23lid60sKPeuSOuXO1`, and its
 authorization callback must be
 `https://staging.coforge.cn/api/integrations/github/callback`.
 Keep expiring user access tokens enabled. Repository discovery requires Metadata
