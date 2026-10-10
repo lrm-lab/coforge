@@ -114,7 +114,8 @@ impl Scenario {
 }
 
 fn plist_in(home: &std::path::Path) -> PathBuf {
-    home.join("Library/LaunchAgents")
+    home.join("Library")
+        .join("LaunchAgents")
         .join(format!("{LABEL}.plist"))
 }
 

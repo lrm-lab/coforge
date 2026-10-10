@@ -26,7 +26,15 @@ use crate::store::VersionStore;
 use crate::switch::Ports;
 use crate::test_support::{Release, Scratch, Server};
 
+/// The release target of the machine the tests run on: `activate` switches by the target's
+/// platform (a symlink on Unix, a junction on Windows), so a fixture claiming another platform
+/// than the host's would exercise a switch the host cannot perform.
+#[cfg(not(windows))]
 pub(crate) const TARGET: &str = "linux-x64";
+#[cfg(all(windows, target_arch = "aarch64"))]
+pub(crate) const TARGET: &str = "windows-arm64";
+#[cfg(all(windows, not(target_arch = "aarch64")))]
+pub(crate) const TARGET: &str = "windows-x64";
 pub(crate) const OLD: &str = "0.1.0";
 pub(crate) const NEW: &str = "0.2.0";
 /// A valid RFC 9562 UUID (version 4, variant 9).
