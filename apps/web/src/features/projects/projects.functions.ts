@@ -13,7 +13,7 @@ import { createProjectInput, projectIconUploadInput, updateProjectInput } from "
 import { ProjectImages, withProjectIconUrl } from "#src/server/projects/project-images.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import { PROJECT_DETAIL_SELECT } from "#src/server/projects/project-detail.server";
 
 export const uploadProjectIcon = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -125,47 +125,7 @@ export const getProject = createServerFn({ method: "GET" })
     const { db, workspaceId } = context;
     const project = await db.project.findFirst({
       where: { workspaceId, slug: data.slug },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true,
-        iconObjectKey: true,
-        githubFullName: true,
-        githubHtmlUrl: true,
-        commitCoAuthor: true,
-        conversations: {
-          select: {
-            id: true,
-            channelName: true,
-            createdAt: true,
-            // Who is in the channel now: not someone who left it, or left the Workspace.
-            _count: { select: { members: { where: ACTIVE_MEMBER_WHERE }, messages: true } },
-            messages: {
-              take: 1,
-              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              select: {
-                createdAt: true,
-                sender: {
-                  select: {
-                    user: {
-                      select: {
-                        id: true,
-                        displayName: true,
-                        fullName: true,
-                        username: true,
-                        avatarObjectKey: true,
-                      },
-                    },
-                    agent: { select: { displayName: true } },
-                  },
-                },
-              },
-            },
-          },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        },
-      },
+      select: PROJECT_DETAIL_SELECT,
     });
     if (!project) return null;
     const { conversations, ...view } = project;
