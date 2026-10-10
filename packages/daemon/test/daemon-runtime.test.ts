@@ -2916,6 +2916,7 @@ describe("DaemonRuntime", () => {
       "agentWeeklyReport",
       "agentWeeklyReportCollect",
       "agentWeeklyReportKeyPoints",
+      "agentWeeklyReportMemory",
       "agentAttachment",
       "agentAttachmentUpload",
       "agentAttachmentUploadSessionCreate",

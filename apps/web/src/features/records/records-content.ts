@@ -120,6 +120,11 @@ export type ReportContent = {
    * until the author sends again.
    */
   delivered?: { tabs: Record<string, ReportTab> };
+  /**
+   * Body inserted from the assistant. Later author edits change `tabs` and
+   * leave this snapshot in place until the next confirmed assistant write.
+   */
+  assistantDraft?: { tabs: Record<string, ReportTab> };
 };
 
 type LegacyOutlineNode = {
@@ -168,6 +173,14 @@ function withDeliveredBody(
 ): ReportContent {
   if (!delivered) return content;
   return { ...content, delivered };
+}
+
+function withAssistantDraft(
+  content: ReportContent,
+  assistantDraft: { tabs: Record<string, ReportTab> } | undefined,
+): ReportContent {
+  if (!assistantDraft) return content;
+  return { ...content, assistantDraft };
 }
 
 function parseAssignmentMeta(value: unknown): ReportAssignmentMeta | undefined {
@@ -417,28 +430,34 @@ export function alignReportContentToTemplate(
   for (const name of Object.keys(next.tabs ?? {})) {
     next.tabs![name] = normalizedTabs[name] ?? { markdown: "" };
   }
-  return withOptionalMeta(
-    next,
-    normalized.assignment,
-    normalized.schedule,
-    normalized.keyPointPrompts,
-    normalized.keyPointExtraction,
+  return withAssistantDraft(
+    withOptionalMeta(
+      next,
+      normalized.assignment,
+      normalized.schedule,
+      normalized.keyPointPrompts,
+      normalized.keyPointExtraction,
+    ),
+    normalized.assistantDraft,
   );
 }
 
 /** Clear every display page without removing the page structure. */
 export function clearReportContent(content: ReportContent): ReportContent {
   const normalized = normalizeReportContent(content);
-  return withOptionalMeta(
-    {
-      tabs: Object.fromEntries(
-        Object.keys(normalized.tabs ?? {}).map((name) => [name, { markdown: "" }]),
-      ),
-    },
-    normalized.assignment,
-    normalized.schedule,
-    normalized.keyPointPrompts,
-    normalized.keyPointExtraction,
+  return withAssistantDraft(
+    withOptionalMeta(
+      {
+        tabs: Object.fromEntries(
+          Object.keys(normalized.tabs ?? {}).map((name) => [name, { markdown: "" }]),
+        ),
+      },
+      normalized.assignment,
+      normalized.schedule,
+      normalized.keyPointPrompts,
+      normalized.keyPointExtraction,
+    ),
+    normalized.assistantDraft,
   );
 }
 
@@ -453,43 +472,54 @@ export function normalizeReportContent(value: unknown): ReportContent {
     keyPointPrompts?: unknown;
     keyPointExtraction?: unknown;
     delivered?: unknown;
+    assistantDraft?: unknown;
   };
   const assignment = parseAssignmentMeta(record.assignment);
   const schedule = parseScheduleMeta(record.schedule);
   const keyPointPrompts = parseKeyPointPrompts(record.keyPointPrompts);
   const keyPointExtraction = parseKeyPointExtraction(record.keyPointExtraction);
   const delivered = parseDeliveredBody(record.delivered);
+  const assistantDraft = parseDeliveredBody(record.assistantDraft);
 
   if (record.tabs && typeof record.tabs === "object") {
     const tabs = parseReportTabs(record.tabs);
     const base = tabs ? { tabs } : emptyReportContent();
-    return withDeliveredBody(
-      withOptionalMeta(base, assignment, schedule, keyPointPrompts, keyPointExtraction),
-      delivered,
+    return withAssistantDraft(
+      withDeliveredBody(
+        withOptionalMeta(base, assignment, schedule, keyPointPrompts, keyPointExtraction),
+        delivered,
+      ),
+      assistantDraft,
     );
   }
 
   if (typeof record.markdown === "string") {
-    return withDeliveredBody(
+    return withAssistantDraft(
+      withDeliveredBody(
+        withOptionalMeta(
+          { tabs: { [newTabName()]: { markdown: record.markdown } } },
+          assignment,
+          schedule,
+          keyPointPrompts,
+          keyPointExtraction,
+        ),
+        delivered,
+      ),
+      assistantDraft,
+    );
+  }
+  return withAssistantDraft(
+    withDeliveredBody(
       withOptionalMeta(
-        { tabs: { [newTabName()]: { markdown: record.markdown } } },
+        emptyReportContent(),
         assignment,
         schedule,
         keyPointPrompts,
         keyPointExtraction,
       ),
       delivered,
-    );
-  }
-  return withDeliveredBody(
-    withOptionalMeta(
-      emptyReportContent(),
-      assignment,
-      schedule,
-      keyPointPrompts,
-      keyPointExtraction,
     ),
-    delivered,
+    assistantDraft,
   );
 }
 
@@ -515,15 +545,19 @@ export function retainMemberReportDelivery(
   };
 }
 
-/** Author editor: working body, without the recipient snapshot. */
+/** Author editor: working body, without the recipient snapshot or assistant original. */
 export function reportContentForAuthor(content: ReportContent): ReportContent {
-  const { delivered: _delivered, ...rest } = normalizeReportContent(content);
+  const {
+    delivered: _delivered,
+    assistantDraft: _assistantDraft,
+    ...rest
+  } = normalizeReportContent(content);
   return rest;
 }
 
 /** Recipient view: the last sent body, or the only stored body when none was snapshotted. */
 export function reportContentForRecipient(content: ReportContent): ReportContent {
-  const { delivered, ...rest } = normalizeReportContent(content);
+  const { delivered, assistantDraft: _assistantDraft, ...rest } = normalizeReportContent(content);
   if (!delivered) return rest;
   return { ...rest, tabs: delivered.tabs };
 }

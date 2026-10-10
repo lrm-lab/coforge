@@ -52,6 +52,7 @@ import {
 } from "#src/features/records/template-outline-sections";
 import { isVisibleTemplateSubmission } from "./template-submission-visibility.server";
 import { canEditWeeklyReportContent } from "./weekly-report-editability.server";
+import { memoryForPrompt, parseStoredWeeklyReportMemory } from "./weekly-report-memory.server";
 import { buildWeeklyReportHtml } from "./weekly-report-html.server";
 import { buildWeeklyReportPresentation } from "./weekly-report-presentation.server";
 import {
@@ -1536,6 +1537,14 @@ export class RecordCatalog {
     });
   }
 
+  private async memberMemoryPrompt(workspaceId: string, userId: string) {
+    const assistant = await this.db.weeklyReportAssistant.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { memory: true },
+    });
+    return memoryForPrompt(parseStoredWeeklyReportMemory(assistant?.memory));
+  }
+
   async loadAssistantContextManifest(input: {
     workspaceId: string;
     userId: string;
@@ -1569,6 +1578,9 @@ export class RecordCatalog {
         templateFormats: formats.templates,
         templateFormatsNextCursor: formats.nextCursor,
         contextVersion: subject.report.updatedAt,
+        ...(subject.report.kind === "member"
+          ? await this.memberMemoryPrompt(input.workspaceId, subject.report.author.userId)
+          : {}),
       } as const;
     }
 
@@ -2107,6 +2119,9 @@ export class RecordCatalog {
     if (stored.keyPointExtraction && !content.keyPointExtraction) {
       content = { ...content, keyPointExtraction: stored.keyPointExtraction };
     }
+    if (stored.assistantDraft && !content.assistantDraft) {
+      content = { ...content, assistantDraft: stored.assistantDraft };
+    }
     const publishing = isSentMemberReport(report.kind, input.status ?? "");
     const alreadySent = isSentMemberReport(report.kind, report.status);
     if (publishing) {
@@ -2206,6 +2221,16 @@ export class RecordCatalog {
       } catch {
         // Extraction is best-effort; member submit must still succeed.
       }
+      try {
+        const { startWeeklyReportMemorySettlement } =
+          await import("./weekly-report-memory-settlement.server");
+        await startWeeklyReportMemorySettlement(this.db, {
+          workspaceId: input.workspaceId,
+          reportId: report.id,
+        });
+      } catch {
+        // Memory settlement is best-effort; member submit must still succeed.
+      }
     }
 
     return {
@@ -2226,11 +2251,15 @@ export class RecordCatalog {
     reportId: string;
     content: ReportContent;
   }) {
+    const content = normalizeReportContent(input.content);
     return this.saveReportContent({
       workspaceId: input.workspaceId,
       userId: input.userId,
       reportId: input.reportId,
-      content: input.content,
+      content: {
+        ...content,
+        ...(content.tabs ? { assistantDraft: { tabs: { ...content.tabs } } } : {}),
+      },
       askToSend: false,
     });
   }

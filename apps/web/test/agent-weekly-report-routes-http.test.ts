@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import { handleWeeklyReportCollectPost } from "#src/routes/api/agent/v1/weekly-report-collect";
 import { handleWeeklyReportKeyPointsPost } from "#src/routes/api/agent/v1/weekly-report-key-points";
+import { handleWeeklyReportMemoryPost } from "#src/routes/api/agent/v1/weekly-report-memory";
 import type { CollectRunView } from "#src/server/records/weekly-report-collect-run.server";
 
 const principal = {
@@ -110,4 +111,54 @@ test("the key-points route echoes the request's idempotencyKey", async () => {
   expect(response.status).toBe(200);
   expect(received?.requestId).toBe(KEY);
   expect(await response.json()).toEqual({ idempotencyKey: KEY, reportId: REPORT, status: "ready" });
+});
+
+test("the memory route echoes the request's idempotencyKey and stores the settlement", async () => {
+  let received:
+    | { settlement: { explicitRules: Array<{ statement: string; effect: string }> } }
+    | undefined;
+  const response = await handleWeeklyReportMemoryPost(
+    request("weekly-report-memory", {
+      idempotencyKey: KEY,
+      reportId: REPORT,
+      year: 2026,
+      week: 40,
+      preferences: ["先写结果"],
+      explicitRules: [{ statement: "以后都先写结果", effect: "adopt" }],
+      factCorrections: ["已上线改为还在测试"],
+      threads: [{ title: "登录改造", status: "open" }],
+    }),
+    principal,
+    async (input) => {
+      received = input;
+      return { status: "saved", reportId: REPORT };
+    },
+  );
+
+  expect(response.status).toBe(200);
+  expect(received?.settlement.explicitRules).toEqual([
+    { statement: "以后都先写结果", effect: "adopt" },
+  ]);
+  expect(await response.json()).toEqual({ idempotencyKey: KEY, reportId: REPORT, status: "saved" });
+});
+
+test("the memory route rejects a settlement with an empty preference", async () => {
+  const response = await handleWeeklyReportMemoryPost(
+    request("weekly-report-memory", {
+      idempotencyKey: KEY,
+      reportId: REPORT,
+      year: 2026,
+      week: 40,
+      preferences: ["  "],
+      explicitRules: [],
+      factCorrections: [],
+      threads: [],
+    }),
+    principal,
+    async () => {
+      throw new Error("service called");
+    },
+  );
+
+  expect(response.status).toBe(400);
 });

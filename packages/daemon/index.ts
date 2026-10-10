@@ -314,6 +314,8 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
             agentRequests().agentWeeklyReportCollect(...input),
           agentWeeklyReportKeyPoints: async (...input) =>
             agentRequests().agentWeeklyReportKeyPoints(...input),
+          agentWeeklyReportMemory: async (...input) =>
+            agentRequests().agentWeeklyReportMemory(...input),
           workspaceInfo: async (...input) => agentRequests().workspaceInfo(...input),
           githubCredential: async (...input) => agentRequests().githubCredential(...input),
           githubCommitTrailers: async (...input) => agentRequests().githubCommitTrailers(...input),

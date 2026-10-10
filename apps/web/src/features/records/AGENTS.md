@@ -45,6 +45,12 @@ These rules also cover `src/server/records/`.
   (Leader report, dashboard summary, PPT) keep the last sent copy in
   `content.delivered` until the author sends again. Do not add a column for
   this snapshot.
+- A confirmed assistant insert keeps its tabs in `content.assistantDraft`.
+  Later author saves keep that original. Author and recipient views omit it.
+- `WeeklyReportAssistant.memory` stores one member's versioned writing habits,
+  observations, and threads. The first submit or share wakes settlement through
+  `coforge weekly-report-memory submit`. A later send does not settle again.
+  The next personal report injects active habits and remaining threads only.
 
 - `server/records/weekly-report-workflow.server.ts` owns owner-scoped DM actions
   (discover, configure, send, save, submit, summarize); `weekly-report-distribution.server.ts`

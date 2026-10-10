@@ -123,3 +123,8 @@ Read the matching file before changing code in that directory:
 submit-pack|submit-empty|submit-failure`. Daemon injects the Agent API key and
   forwards the body; Web/backend accepts the pack against the collector Agent's
   Collect Slot.
+
+- Weekly-report memory settlement uses Credential Proxy + Agent HTTPS
+  (`POST /api/agent/v1/weekly-report-memory`) and `coforge weekly-report-memory
+submit`. Daemon forwards the JSON file; Web/backend applies the memory rules.
+  The skill text does not store habits.

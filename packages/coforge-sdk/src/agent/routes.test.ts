@@ -39,6 +39,10 @@ test("uses versioned Agent API routes for the Proxy and cloud", () => {
   expect(agentApiRoutes.proxy.weeklyReportKeyPoints.path).toBe(
     agentApiRoutes.cloud.weeklyReportKeyPoints.path,
   );
+  expect(agentApiRoutes.proxy.weeklyReportMemory.path).toBe("/api/agent/v1/weekly-report-memory");
+  expect(agentApiRoutes.proxy.weeklyReportMemory.path).toBe(
+    agentApiRoutes.cloud.weeklyReportMemory.path,
+  );
   expect(agentApiRoutes.proxy.reminders.path).toBe("/api/agent/v1/reminders");
   expect(agentApiRoutes.proxy.inbox.path).toBe("/api/agent/v1/inbox");
   expect(agentApiRoutes.proxy.messages.path).toBe(agentApiRoutes.cloud.messages.list.path);

@@ -501,6 +501,24 @@ test("buildCollectSynthesizerWakeText forwards user revision guidance", async ()
   expect(text).toContain("刚才整理的周报太细碎了，帮我抽取的更概括一些");
 });
 
+test("buildCollectSynthesizerWakeText includes active habits and open threads", async () => {
+  const { buildCollectSynthesizerWakeText } =
+    await import("#src/server/records/weekly-report-collect-orchestrate.server");
+  const text = buildCollectSynthesizerWakeText({
+    reportId: "report-1",
+    runId: "run-1",
+    memoryPrompt: {
+      writingHabits: ["先写结果"],
+      openThreads: [{ title: "采集服务", status: "done" }],
+    },
+    slots: [],
+  });
+  expect(text).toContain("## 写作习惯");
+  expect(text).toContain("- 先写结果");
+  expect(text).toContain("- 采集服务：上周已完成");
+  expect(text).not.toContain("提交次数");
+});
+
 test("acceptCollectSlotReport advances collecting→synthesizing when every slot is ready", async () => {
   const { acceptCollectSlotReport, COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS } =
     await import("#src/server/records/weekly-report-collect-run.server");

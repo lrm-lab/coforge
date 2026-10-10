@@ -192,6 +192,14 @@ For platform wakes only:
 coforge weekly-report-key-points submit --report-id <uuid> --idempotency-key <uuid> --markdown <file>
 \`\`\`
 
+A [weekly-report-memory] wake compares the assistant original with the submitted
+body. Submit one JSON file with preferences, explicitRules, factCorrections and
+threads. Do not store habits in this skill.
+
+\`\`\`
+coforge weekly-report-memory submit --report-id <uuid> --idempotency-key <uuid> --file <json>
+\`\`\`
+
 Collect Run wakes supply ready packs, template outline and slot status. Synthesize
 from those packs without rescanning the OS. Keep evidence attribution and mark
 missing sources. Return a preview for the existing Insert control:

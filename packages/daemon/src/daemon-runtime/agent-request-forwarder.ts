@@ -52,6 +52,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "agentWeeklyReport"
     | "agentWeeklyReportCollect"
     | "agentWeeklyReportKeyPoints"
+    | "agentWeeklyReportMemory"
     | "agentAttachment"
     | "agentAttachmentUpload"
     | "agentAttachmentUploadSessionCreate"
@@ -287,6 +288,18 @@ export class AgentRequestForwarder {
     if (!this.#ports.transport.agentWeeklyReportKeyPoints)
       throw new Error("daemon connection is not connected");
     return this.#ports.transport.agentWeeklyReportKeyPoints(command, agentApiKey);
+  }
+
+  /** Forwards weekly-report memory settlement write-back over Agent HTTPS. */
+  async agentWeeklyReportMemory(
+    context: string,
+    command: import("#src/connection/weekly-report-memory").WeeklyReportMemoryCommand,
+    agentApiKey: string,
+  ): Promise<import("#src/connection/weekly-report-memory").WeeklyReportMemoryResult> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    if (!this.#ports.transport.agentWeeklyReportMemory)
+      throw new Error("daemon connection is not connected");
+    return this.#ports.transport.agentWeeklyReportMemory(command, agentApiKey);
   }
 
   async agentAttachment(

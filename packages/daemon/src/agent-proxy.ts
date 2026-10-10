@@ -68,6 +68,11 @@ import {
   type WeeklyReportKeyPointsCommand,
   type WeeklyReportKeyPointsResult,
 } from "#src/connection/weekly-report-key-points";
+import {
+  validateWeeklyReportMemoryCommand,
+  type WeeklyReportMemoryCommand,
+  type WeeklyReportMemoryResult,
+} from "#src/connection/weekly-report-memory";
 import { getLogger } from "@logtape/logtape";
 import {
   admitOpenVikingOffer,
@@ -199,6 +204,11 @@ export type AgentProxyRuntime = {
     request: WeeklyReportKeyPointsCommand,
     agentApiKey: string,
   ): Promise<WeeklyReportKeyPointsResult>;
+  agentWeeklyReportMemory?(
+    context: string,
+    request: WeeklyReportMemoryCommand,
+    agentApiKey: string,
+  ): Promise<WeeklyReportMemoryResult>;
   agentOpenviking?(
     context: string,
     request: OpenVikingAgentProxyCommand,
@@ -869,6 +879,15 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     maxBodyBytes: WEEKLY_REPORT_COLLECT_MAX_BODY_BYTES,
     handler: "agentWeeklyReportKeyPoints",
     parse: ({ fields }) => validateWeeklyReportKeyPointsCommand(fields) ?? badRequest(),
+  }),
+  defineRoute({
+    family: "agent-api/weekly-report-memory",
+    method: LOCAL_PROXY_ROUTES.weeklyReportMemory.method,
+    match: exactPath(LOCAL_PROXY_ROUTES.weeklyReportMemory.path),
+    body: "json-object",
+    maxBodyBytes: WEEKLY_REPORT_COLLECT_MAX_BODY_BYTES,
+    handler: "agentWeeklyReportMemory",
+    parse: ({ fields }) => validateWeeklyReportMemoryCommand(fields) ?? badRequest(),
   }),
   defineRoute({
     family: "agent-api/github-credential",
