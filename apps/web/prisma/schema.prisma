@@ -368,6 +368,8 @@ model WeeklyReportAssistant {
   workspaceId String    @db.Uuid
   userId      String    @db.Uuid
   agentId     String    @unique @db.Uuid
+  /// Versioned writing habits, observations, and open work threads for this user.
+  memory      Json?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

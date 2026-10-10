@@ -25,6 +25,9 @@ import {
   type WorkspaceInfoResponse,
   type WeeklyReportCommand,
   type WeeklyReportResponse,
+  validateWeeklyReportMemoryCommand,
+  type WeeklyReportMemoryCommand,
+  type WeeklyReportMemoryResult,
   WEEKLY_REPORT_SUBJECT_TYPES,
 } from "@lrm/coforge-sdk/internal";
 import { parseDurationSeconds } from "#src/reminder-duration";
@@ -236,6 +239,12 @@ export type WeeklyReportKeyPointsInvocation = {
   /** When set, `run` loads this file into `keyPoints.markdown` before posting. */
   markdownPath?: string;
 };
+export type { WeeklyReportMemoryCommand, WeeklyReportMemoryResult };
+export type WeeklyReportMemoryInvocation = {
+  command: "weekly-report-memory";
+  filePath: string;
+  memory: Pick<WeeklyReportMemoryCommand, "idempotencyKey" | "reportId">;
+};
 export type ActionPrepareInvocation = { command: "action-prepare"; target: string };
 export type ActionPrepareResult = { messageId?: string; metadata?: { kind: string } };
 export type ManualInvocation =
@@ -307,6 +316,7 @@ export type MessageTransport = {
   weeklyReportKeyPoints?(
     command: WeeklyReportKeyPointsCommand,
   ): Promise<WeeklyReportKeyPointsResult>;
+  weeklyReportMemory?(command: WeeklyReportMemoryCommand): Promise<WeeklyReportMemoryResult>;
   githubCredential?(): Promise<GitHubCredentialResponse>;
   /** Server-decided `Co-authored-by` trailers for `coforge git prepare-commit-msg`; never built by
    * the CLI itself. */
@@ -350,6 +360,7 @@ export function parseArgs(
   | WeeklyReportInvocation
   | WeeklyReportCollectInvocation
   | WeeklyReportKeyPointsInvocation
+  | WeeklyReportMemoryInvocation
   | ActionPrepareInvocation
   | ManualInvocation
   | WhoamiInvocation
@@ -371,6 +382,7 @@ export function parseArgs(
   if (args[0] === "task") return parseTaskArgs(args.slice(1));
   if (args[0] === "weekly-report-collect") return parseWeeklyReportCollectArgs(args.slice(1));
   if (args[0] === "weekly-report-key-points") return parseWeeklyReportKeyPointsArgs(args.slice(1));
+  if (args[0] === "weekly-report-memory") return parseWeeklyReportMemoryArgs(args.slice(1));
   if (args[0] === "weekly-report") return parseWeeklyReportArgs(args.slice(1));
   if (args[0] === "action" && args[1] === "prepare") return parseActionPrepareArgs(args.slice(2));
   if (
@@ -1339,6 +1351,21 @@ export async function run(args: readonly string[], transport: MessageTransport):
     const result = await transport.weeklyReportKeyPoints(keyPoints);
     return `Key points ${result.status} (report ${result.reportId}).`;
   }
+  if (invocation.command === "weekly-report-memory") {
+    if (!transport.weeklyReportMemory)
+      throw new Error("Weekly report memory transport is unavailable");
+    const file = (await Bun.file(invocation.filePath).json()) as unknown;
+    if (!file || typeof file !== "object" || Array.isArray(file))
+      throw new Error("invalid weekly-report-memory file");
+    const memory = validateWeeklyReportMemoryCommand({
+      ...(file as Record<string, unknown>),
+      idempotencyKey: invocation.memory.idempotencyKey,
+      reportId: invocation.memory.reportId,
+    });
+    if (!memory) throw new Error("invalid weekly-report-memory file");
+    const result = await transport.weeklyReportMemory(memory);
+    return `Memory ${result.status} (report ${result.reportId}).`;
+  }
   if (invocation.command === "action-prepare") {
     if (!transport.actionPrepare) throw new Error("Action transport is unavailable");
     const raw = await new Response(Bun.stdin.stream()).text();
@@ -2300,6 +2327,35 @@ function parseWeeklyReportKeyPointsArgs(args: readonly string[]): WeeklyReportKe
     command: "weekly-report-key-points",
     markdownPath,
     keyPoints: { idempotencyKey, reportId, markdown: "" },
+  };
+}
+
+function parseWeeklyReportMemoryArgs(args: readonly string[]): WeeklyReportMemoryInvocation {
+  if (args[0] !== "submit") throw new Error("Usage:");
+  const values = new Map<string, string>();
+  for (let index = 1; index < args.length; index++) {
+    const name = args[index];
+    const value = args[++index];
+    if (!name?.startsWith("--") || !value || value.startsWith("--") || values.has(name))
+      throw new Error("Usage:");
+    values.set(name, value);
+  }
+  const reportId = values.get("--report-id");
+  const idempotencyKey = values.get("--idempotency-key");
+  const filePath = values.get("--file");
+  if (
+    !reportId ||
+    !RFC_UUID_PATTERN.test(reportId) ||
+    !idempotencyKey ||
+    !RFC_UUID_PATTERN.test(idempotencyKey) ||
+    !filePath ||
+    values.size !== 3
+  )
+    throw new Error("Usage:");
+  return {
+    command: "weekly-report-memory",
+    filePath,
+    memory: { idempotencyKey, reportId },
   };
 }
 

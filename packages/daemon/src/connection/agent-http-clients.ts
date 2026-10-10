@@ -341,6 +341,11 @@ export interface AgentWeeklyReportKeyPointsHttpClient {
     input: AgentHttpInput<import("./weekly-report-key-points").WeeklyReportKeyPointsCommand>,
   ): Promise<import("./weekly-report-key-points").WeeklyReportKeyPointsResult>;
 }
+export interface AgentWeeklyReportMemoryHttpClient {
+  execute(
+    input: AgentHttpInput<import("./weekly-report-memory").WeeklyReportMemoryCommand>,
+  ): Promise<import("./weekly-report-memory").WeeklyReportMemoryResult>;
+}
 
 export const createAgentMessageHttpClient = (
   httpClient: HttpFetch = globalThis.fetch,
@@ -707,6 +712,29 @@ export const defaultAgentWeeklyReportKeyPointsHttpClient: AgentWeeklyReportKeyPo
       (await response.json()) as import("./weekly-report-key-points").WeeklyReportKeyPointsResult;
     if (result.idempotencyKey !== request.idempotencyKey)
       throw new Error("weekly-report-key-points response idempotency key does not match request");
+    return result;
+  },
+};
+
+export const defaultAgentWeeklyReportMemoryHttpClient: AgentWeeklyReportMemoryHttpClient = {
+  async execute({ url, request, ...keys }) {
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
+        headers: agentHeaders(keys, true),
+        body: JSON.stringify(request),
+      });
+    } catch (cause) {
+      throw AgentTransportError.preResponseTransport("Agent weekly-report-memory", cause);
+    }
+    if (!response.ok)
+      throw AgentTransportError.upstreamHttpResponse("Agent weekly-report-memory", response.status);
+    const result =
+      (await response.json()) as import("./weekly-report-memory").WeeklyReportMemoryResult;
+    if (result.idempotencyKey !== request.idempotencyKey)
+      throw new Error("weekly-report-memory response idempotency key does not match request");
     return result;
   },
 };

@@ -1000,6 +1000,7 @@ export * from "./workspace-slug";
 export * from "./uuid";
 export * from "./daemon-connect-rejection";
 export * from "./weekly-report-limits";
+export * from "./weekly-report-memory";
 export * from "./codec";
 export * from "./agent-send-budget";
 export * from "./agent-proxy-failure";

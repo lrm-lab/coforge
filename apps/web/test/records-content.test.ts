@@ -62,6 +62,22 @@ test("alignReportContentToTemplate adds and removes display pages without losing
   });
 });
 
+test("template alignment and clearing keep the assistant original", () => {
+  const assistantDraft = { tabs: { Summary: { markdown: "assistant" } } };
+  const content = {
+    tabs: { Summary: { markdown: "author" }, Old: { markdown: "remove" } },
+    assistantDraft,
+  };
+  expect(alignReportContentToTemplate(content, ["Summary", "Research"]).assistantDraft).toEqual(
+    assistantDraft,
+  );
+  expect(clearReportContent(content).assistantDraft).toEqual(assistantDraft);
+  expect(clearReportContent(content).tabs).toEqual({
+    Summary: { markdown: "" },
+    Old: { markdown: "" },
+  });
+});
+
 test("clearReportContent clears every page and keeps its names", () => {
   expect(
     clearReportContent({

@@ -637,6 +637,8 @@ export function connectLocal(
       callWeeklyReportCollect(command),
     weeklyReportKeyPoints: (command: import("../index").WeeklyReportKeyPointsCommand) =>
       callWeeklyReportKeyPoints(command),
+    weeklyReportMemory: (command: import("../index").WeeklyReportMemoryCommand) =>
+      callWeeklyReportMemory(command),
     githubCredential: async () => {
       if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
         throw new Error("coforge agent context is invalid");
@@ -1310,5 +1312,24 @@ export function connectLocal(
         `agent weekly-report-key-points request failed (${response.status}): ${await response.text()}`,
       );
     return (await response.json()) as import("../index").WeeklyReportKeyPointsResult;
+  }
+
+  async function callWeeklyReportMemory(
+    command: import("../index").WeeklyReportMemoryCommand,
+  ): Promise<import("../index").WeeklyReportMemoryResult> {
+    if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+      throw new Error("coforge agent context is invalid");
+    if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
+    const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.weeklyReportMemory.path), {
+      method: agentApiRoutes.proxy.weeklyReportMemory.method,
+      headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
+      body: JSON.stringify(command),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!response.ok)
+      throw new Error(
+        `agent weekly-report-memory request failed (${response.status}): ${await response.text()}`,
+      );
+    return (await response.json()) as import("../index").WeeklyReportMemoryResult;
   }
 }
