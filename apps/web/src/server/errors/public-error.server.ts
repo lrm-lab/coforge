@@ -12,12 +12,14 @@ type ErrorReport = {
 };
 
 /**
- * Prisma opens its errors with ``Invalid `prisma.<model>.<method>()` invocation``. Only those two
- * identifiers are taken: the rest of the message carries the query's arguments and a file path.
+ * Prisma opens its errors with ``Invalid `<client>.<model>.<method>()` invocation``, the client spelled
+ * as the caller wrote it (`db`, `this.db`, `tx`). Only the last two identifiers are taken: the rest of the message carries the query's arguments and a file path.
  */
 function prismaOperationOf(cause: unknown) {
   if (!(cause instanceof Error)) return undefined;
-  const match = /Invalid `prisma\.([A-Za-z]+)\.([A-Za-z]+)\(\)` invocation/.exec(cause.message);
+  const match = /Invalid `(?:[\w$]+\.)*([A-Za-z]+)\.([A-Za-z]+)\(\)` invocation/.exec(
+    cause.message,
+  );
   return match ? `${match[1]}.${match[2]}` : undefined;
 }
 

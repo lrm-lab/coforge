@@ -32,24 +32,29 @@ describe("server error disclosure", () => {
     });
   });
 
-  test("names the Prisma query that failed, and nothing from its arguments", () => {
-    const report = mock((_record: unknown) => {});
-    const cause = new Error(
-      "\nInvalid `prisma.project.findFirst()` invocation in\n/private/secret.ts:12:34\n\n" +
-        "{ where: { workspaceId: 'secret-workspace' } }\n\nArgument `x` is missing.",
-    );
-    cause.stack = "secret\n    at query (/private/secret.ts:12:34)";
-    toPublicServerError(cause, report, () => "error-id");
+  // Prisma writes the call site as the source spells it, so the receiver is whatever the caller
+  // named its client: `db.` in a server function, `this.db.` in a repository, `tx.` in a transaction.
+  test.each(["prisma", "db", "this.db", "tx", "context.db"])(
+    "names the Prisma query that failed when the client is `%s`, and nothing from its arguments",
+    (receiver) => {
+      const report = mock((_record: unknown) => {});
+      const cause = new Error(
+        `\nInvalid \`${receiver}.project.findFirst()\` invocation in\n/private/secret.ts:12:34\n\n` +
+          "{ where: { workspaceId: 'secret-workspace' } }\n\nArgument `x` is missing.",
+      );
+      cause.stack = "secret\n    at query (/private/secret.ts:12:34)";
+      toPublicServerError(cause, report, () => "error-id");
 
-    expect(report).toHaveBeenCalledWith({
-      event: "server_operation_failed",
-      errorId: "error-id",
-      errorType: "error",
-      stackPositions: ["12:34"],
-      prismaOperation: "project.findFirst",
-    });
-    expect(JSON.stringify(report.mock.calls)).not.toContain("secret");
-  });
+      expect(report).toHaveBeenCalledWith({
+        event: "server_operation_failed",
+        errorId: "error-id",
+        errorType: "error",
+        stackPositions: ["12:34"],
+        prismaOperation: "project.findFirst",
+      });
+      expect(JSON.stringify(report.mock.calls)).not.toContain("secret");
+    },
+  );
 
   test("preserves deliberate public errors and Router control flow", () => {
     const publicError = new AppError("INVALID_INPUT");
