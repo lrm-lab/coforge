@@ -22,9 +22,7 @@ import { FileBindingStore } from "./binding-store";
 import { dispose, getLogger, withContext } from "@logtape/logtape";
 import { configureDaemonLogging } from "#src/platform/daemon-logging";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
-import { SystemdWorkspaceInstance } from "./systemd-workspace-instance";
-import { LaunchdWorkspaceInstance } from "./launchd-workspace-instance";
-import { WindowsWorkspaceInstance } from "./windows-workspace-instance";
+import { platformWorkspaceInstance, workspaceInstanceConfig } from "./platform-workspace-instance";
 import { startWindowsWorkspaceReconcileLoop } from "./windows-workspace-reconcile";
 import { workspaceStateDirectory, type WorkspaceInstance } from "./workspace-instance";
 import {
@@ -187,35 +185,16 @@ async function runWithSupervisorLock(
       socketPath: workspaceSocketPath(stateDirectory, workspaceId),
       spawn: () => {},
     });
-  const workspaceInstance = (workspaceId: string): WorkspaceInstance => {
-    const config = {
-      stateRoot: stateDirectory,
-      workspaceId,
-      executablePath: process.execPath,
-      socketPath: workspaceSocketPath(stateDirectory, workspaceId),
-      stateDirectory: workspaceDirectory(workspaceId),
-      unitDirectory:
-        process.platform === "darwin"
-          ? join(stateDirectory, "launchd-workspaces")
-          : process.platform === "win32"
-            ? join(stateDirectory, "windows-workspaces")
-            : join(homedir(), ".config", "systemd", "user"),
-      supervisorSocketPath: socketPath,
-      daemonConnectionEndpoint: Bun.env.COFORGE_DAEMON_CONNECTION_ENDPOINT,
-    };
-    if (process.platform === "darwin") return new LaunchdWorkspaceInstance(config);
-    if (process.platform === "win32") return new WindowsWorkspaceInstance(config);
-    if (process.platform !== "linux")
-      throw new Error("per-Workspace OS containment is not implemented on this platform");
-    return new SystemdWorkspaceInstance(config, async (args) => {
-      const command = Bun.spawn(["systemctl", "--user", ...args], {
-        stdin: "ignore",
-        stdout: "ignore",
-        stderr: "ignore",
-      });
-      return await command.exited;
-    });
-  };
+  const workspaceInstance = (workspaceId: string): WorkspaceInstance =>
+    platformWorkspaceInstance(
+      workspaceInstanceConfig(stateDirectory, socketPath, workspaceId, {
+        platform: process.platform,
+        homeDirectory: homedir(),
+        executablePath: process.execPath,
+        daemonConnectionEndpoint: Bun.env.COFORGE_DAEMON_CONNECTION_ENDPOINT,
+      }),
+      process.platform,
+    );
   const supervisorLogger = getLogger(["coforge", "daemon", "supervisor"]);
   /**
    * Asks one Workspace daemon to hold (or release) its runners. A Workspace that does not answer
