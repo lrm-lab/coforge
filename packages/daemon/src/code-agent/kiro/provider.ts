@@ -12,7 +12,6 @@ import type {
   SessionNotification,
   SessionConfigOption,
   NewSessionRequest,
-  ToolKind,
 } from "@agentclientprotocol/sdk";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
@@ -20,22 +19,11 @@ import { AgentSessionRecoveryError } from "#src/code-agent/contract";
 import { scrubRuntimeErrorText } from "#src/agent-runtime/runtime-error-activity";
 import { bounded, KIRO_ACP_ARGS, KiroConnection, record } from "./connection";
 import { readKiroUsage } from "./usage";
+import { kiroUpdateEvents } from "./update-events";
 import { discoverKiroCatalog } from "./catalog";
 import { discoverExternalCodeAgents } from "#src/code-agent/runtime-inventory";
 import { assertKiroVersionSupported } from "./version";
 import type { ProviderDiscoveryOptions } from "#src/code-agent/contract";
-
-// Kiro's tool_call frames never carry a programmatic name (only a
-// human-readable title, e.g. "Run Command", "Read File"), so the ACP `kind`
-// field is the only stable source for the canonical tool name. Kinds with no
-// canonical CoForge tool fall back to the title.
-const TOOL_KIND_NAMES: Readonly<Partial<Record<ToolKind, string>>> = {
-  execute: "bash",
-  read: "read_file",
-  edit: "edit_file",
-  search: "grep",
-  fetch: "web_fetch",
-};
 
 /** How long a turn end waits for the steering outcome Kiro wrote before its prompt response. The
  * frames are already on the wire, so this only bounds a pathological dispatch delay. */
@@ -501,57 +489,7 @@ class KiroSession implements AgentSession {
         this.#pending.resolve();
       }
     }
-    if (
-      (update.sessionUpdate === "agent_message_chunk" ||
-        update.sessionUpdate === "agent_thought_chunk") &&
-      update.content.type === "text"
-    ) {
-      this.#emit({
-        type: update.sessionUpdate === "agent_message_chunk" ? "text-delta" : "thinking-delta",
-        text: update.content.text,
-      });
-    }
-    if (update.sessionUpdate === "tool_call") {
-      const name = (update.kind && TOOL_KIND_NAMES[update.kind]) || update.title;
-      this.#emit({ type: "tool-start", id: update.toolCallId, name, input: update.rawInput });
-    }
-    if (update.sessionUpdate === "tool_call_update") {
-      for (const item of update.content ?? []) {
-        if (item.type === "content" && item.content.type === "text" && item.content.text)
-          this.#emit({ type: "tool-output", id: update.toolCallId, text: item.content.text });
-      }
-      if (update.status === "completed" || update.status === "failed")
-        this.#emit({
-          type: "tool-end",
-          id: update.toolCallId,
-          isError: update.status === "failed",
-        });
-    }
-    if (update.sessionUpdate === "compaction_update") {
-      // Report the raw CompactionUpdate.status transition every time; the daemon core de-dupes
-      // repeated "in_progress" updates into a single reported episode
-      // (agent-runtime/compaction-tracker.ts). "failed"/"cancelled" are a provider-observed
-      // interruption, distinct from a normal "completed" finish.
-      if (update.status === "in_progress") this.#emit({ type: "compaction-started" });
-      else if (update.status === "completed") this.#emit({ type: "compaction-finished" });
-      else if (update.status === "failed" || update.status === "cancelled")
-        this.#emit({ type: "compaction-interrupted" });
-    }
-    if (
-      update.sessionUpdate === "tool_call_update" &&
-      update.status === "in_progress" &&
-      !update.content?.length
-    ) {
-      // A still-running tool with no new content this notification: content-free liveness.
-      this.#emit({ type: "progress", source: "kiro_tool_call_update" });
-    }
-    if (update.sessionUpdate === "plan" || update.sessionUpdate === "plan_update") {
-      // Task-plan bookkeeping carries no message content; still shows the turn is live.
-      this.#emit({ type: "progress", source: "kiro_plan_update" });
-    }
-    if (update.sessionUpdate === "usage_update") {
-      this.#emit({ type: "progress", source: "kiro_usage_update" });
-    }
+    for (const event of kiroUpdateEvents(update)) this.#emit(event);
     if (
       update.sessionUpdate === "session_info_update" &&
       meta?.kind === "steering_injected" &&
