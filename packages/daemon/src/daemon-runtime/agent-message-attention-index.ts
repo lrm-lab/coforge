@@ -165,6 +165,8 @@ export class AgentMessageAttentionIndex {
    * never move it: it answers "has a review shown the Agent anything here", which is what makes a
    * thread count as reply context. Persisted apart from the frontier as `reviewedSeq`. */
   readonly #reviewedSequence = new Map<string, Map<string, number>>();
+  /** The conversation each target's consumed cursor counts in (`conversationId`, persisted). */
+  readonly #cursorConversation = new Map<string, Map<string, string>>();
   readonly #readContextCounters = new Map<string, number>();
   /** `consumed-seqs.json`: the durable copy of `#modelSeen` (the `seq` frontier), `#readContext`
    * (the `readOrder` each target was last reviewed at), `#reviewedSequence` (`reviewedSeq`),
@@ -857,7 +859,40 @@ ${INBOX_DRAIN_HINT}]`,
 
   /** A delivery's target is the server's canonical spelling, so it needs no alias lookup. */
   #consumed(message: AgentMessageDelivery & { target: string }): boolean {
+    this.#bindCursorConversation(message);
     return this.hasSeen(message.agentId, message.target, message.sequence);
+  }
+
+  /**
+   * Ties `message.target`'s consumed cursor to the delivery's conversation. When the cursor was
+   * counting in another conversation (the channel was recreated under the same name, and its
+   * sequences restarted), every number it holds belongs to the old one, so the target starts over:
+   * otherwise each new message would read as already consumed and never be announced. A cursor
+   * with no recorded conversation (written by an older build) adopts this one unchanged.
+   */
+  #bindCursorConversation(message: AgentMessageDelivery & { target: string }): void {
+    const { agentId, target, conversationId } = message;
+    if (!conversationId) return;
+    this.#hydrate(agentId);
+    const byTarget = this.#cursorConversation.get(agentId) ?? new Map<string, string>();
+    this.#cursorConversation.set(agentId, byTarget);
+    const recorded = byTarget.get(target);
+    if (recorded === conversationId) return;
+    byTarget.set(target, conversationId);
+    if (recorded !== undefined) {
+      logger.info("Agent consumed cursor reset for a recreated conversation", {
+        event: "agent.message.consumed_cursor_reset",
+        agent_id: agentId,
+        target,
+        previous_conversation_id: recorded,
+        conversation_id: conversationId,
+        model_seen_seq: this.#modelSeen.get(agentId)?.get(target) ?? 0,
+      });
+      this.#modelSeen.get(agentId)?.delete(target);
+      this.#exactSeen.get(agentId)?.delete(target);
+      this.#reviewedSequence.get(agentId)?.delete(target);
+    }
+    this.#persist(agentId);
   }
 
   /** Adds `sequences` above the frontier to `target`'s exact set; whether anything was added. */
@@ -1037,6 +1072,8 @@ ${INBOX_DRAIN_HINT}]`,
     }
     for (const [target, exactSeqs] of this.#exactSeen.get(agentId) ?? [])
       if (exactSeqs.length > 0) entry(target).exactSeqs = exactSeqs;
+    for (const [target, conversationId] of this.#cursorConversation.get(agentId) ?? [])
+      if (targets[target]) entry(target).conversationId = conversationId;
     store.write(agentId, {
       targets,
       aliases: Object.fromEntries(this.#aliases.get(agentId) ?? []),
@@ -1145,7 +1182,9 @@ ${INBOX_DRAIN_HINT}]`,
     const readContext = new Map<string, number>();
     const reviewedSequence = new Map<string, number>();
     const exactSeen = new Map<string, readonly number[]>();
+    const cursorConversation = new Map<string, string>();
     for (const [target, entry] of Object.entries(state.targets)) {
+      if (entry.conversationId !== undefined) cursorConversation.set(target, entry.conversationId);
       if (entry.seq !== undefined) modelSeen.set(target, entry.seq);
       if (entry.readOrder !== undefined) readContext.set(target, entry.readOrder);
       if (entry.reviewedSeq !== undefined) reviewedSequence.set(target, entry.reviewedSeq);
@@ -1155,6 +1194,7 @@ ${INBOX_DRAIN_HINT}]`,
     this.#readContext.set(agentId, readContext);
     this.#reviewedSequence.set(agentId, reviewedSequence);
     this.#exactSeen.set(agentId, exactSeen);
+    this.#cursorConversation.set(agentId, cursorConversation);
     this.#aliases.set(agentId, new Map(Object.entries(state.aliases)));
     this.#readContextCounters.set(agentId, state.nextReadOrder - 1);
   }
@@ -1166,6 +1206,7 @@ ${INBOX_DRAIN_HINT}]`,
     this.#modelSeen.delete(agentId);
     this.#reviewedSequence.delete(agentId);
     this.#exactSeen.delete(agentId);
+    this.#cursorConversation.delete(agentId);
     this.#aliases.delete(agentId);
     this.#conversationTargets.delete(agentId);
     this.#attentionConversation.delete(agentId);

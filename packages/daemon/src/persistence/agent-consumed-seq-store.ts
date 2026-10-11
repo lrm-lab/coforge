@@ -30,6 +30,11 @@ export type AgentConsumedSeqEntry = Readonly<{
    * `SEEN_EXACT_SEQS_LIMIT`. A send reports them as `seenExactSeqs` so its freshness check does
    * not count them as unreviewed. */
   exactSeqs?: readonly number[];
+  /** The conversation the cursor's sequences count in. A channel recreated under the same name is
+   * another conversation whose sequences restart, so a delivery from a different conversation
+   * starts the target over. An entry written before this field existed has none, and takes the
+   * first delivery's conversation without being reset. */
+  conversationId?: string;
 }>;
 
 /** The `consumed-seqs.json` shape: a `targets` map, the `aliases` map, and the next `readOrder` to
@@ -186,6 +191,7 @@ function normalizeState(value: unknown): AgentConsumedSeqState {
         readOrder?: unknown;
         reviewedSeq?: unknown;
         exactSeqs?: unknown;
+        conversationId?: unknown;
       };
       const seq = positiveFiniteNumber(record.seq);
       const readOrder = positiveFiniteNumber(record.readOrder);
@@ -199,6 +205,9 @@ function normalizeState(value: unknown): AgentConsumedSeqState {
         ...(readOrder !== undefined ? { readOrder } : {}),
         ...(reviewedSeq !== undefined ? { reviewedSeq } : {}),
         ...(exactSeqs.length > 0 ? { exactSeqs } : {}),
+        ...(typeof record.conversationId === "string" && record.conversationId.length > 0
+          ? { conversationId: record.conversationId }
+          : {}),
       };
       // Only a real order counts. There is no fallback to `seq` (this file never had a shape
       // without `readOrder`), and a frontier recorded without a review must not push the order
