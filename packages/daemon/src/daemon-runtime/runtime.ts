@@ -36,6 +36,7 @@ import {
   type AgentRestartConfig,
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
+import { resolveLaunchIdentity, type SessionReference } from "./launch-identity";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import {
   AgentAuthorizationError,
@@ -426,21 +427,7 @@ export class DaemonRuntime {
   /** Agents launched with the weekly-report-collect skill pack (ADR 0032). */
   readonly #collectSkillAgents = new Set<string>();
   readonly #agentLaunches = new Map<string, Promise<AgentRuntime>>();
-  readonly #sessionReferences = new Map<
-    string,
-    {
-      requestId: string;
-      provider: AgentRuntimeConfig["provider"];
-      sessionId?: string;
-      sessionMode?: SessionMode;
-      launchId?: string;
-      /** The control epoch of the request this reference was last launched/rebound under;
-       * read live by `#launchAgent`'s `reportAgentSession` closure (via this
-       * same object, mutated in place by `#rebindAgent`, never replaced) so a session report
-       * sent after a rebind carries the new epoch instead of the one captured at launch time. */
-      controlEpoch?: number;
-    }
-  >();
+  readonly #sessionReferences = new Map<string, SessionReference>();
   readonly #agentInputQueues = new Map<string, AgentInputQueue>();
   readonly #stoppingAgents = new Set<string>();
   readonly #agentStops = new Map<string, Promise<void>>();
@@ -1984,43 +1971,19 @@ export class DaemonRuntime {
     // instead of minting a fresh one. An Agent with no remembered identity (never brought under
     // AgentControl, or already forgotten by an explicit Stop) keeps minting, unchanged.
     const serverLaunch = control ? undefined : this.#agentProcessManager.serverLaunch(agentId);
-    const reused = serverLaunch !== undefined;
-    const previous = this.#sessionReferences.get(agentId);
-    const continuing =
-      previous?.provider === config.provider &&
-      (!request.requestId || request.requestId === previous.requestId);
-    const requestId = request.requestId ?? (continuing ? previous.requestId : crypto.randomUUID());
-    const reference = {
-      requestId,
-      provider: config.provider,
-      sessionId: request.sessionId ?? (continuing ? previous.sessionId : undefined),
-      sessionMode: request.sessionMode ?? (continuing ? previous.sessionMode : undefined),
-      launchId: request.previousLaunchId ?? (continuing ? previous.launchId : undefined),
-      controlEpoch: request.control?.controlEpoch,
-    };
-    // A hand-over is meaningless when the reused launch's identity did not change; omit it so
-    // the server never sees a spurious previousLaunchId equal to the report's own launchId.
-    const previousLaunchId =
-      reference.launchId !== (control?.launchId ?? serverLaunch?.launchId)
-        ? reference.launchId
-        : undefined;
+    const { requestId, reference, previousLaunchId, launchId, reused, managedScope } =
+      resolveLaunchIdentity({
+        request,
+        provider: config.provider,
+        previous: this.#sessionReferences.get(agentId),
+        serverLaunch,
+      });
     this.#sessionReferences.set(agentId, reference);
     const launch: ActivityLaunch = {
-      launchId: control?.launchId ?? serverLaunch?.launchId ?? crypto.randomUUID(),
+      launchId,
       clientSeq: reused ? this.#agentProcessManager.lastClientSeq(agentId) : 0,
       stopping: false,
     };
-    // A managed launch's own scope; a reused wake resends the same scope it was remembered
-    // under so `authorizeLaunch` can accept it; an unmanaged/legacy launch sends none.
-    const managedScope = control
-      ? { controlEpoch: control.controlEpoch, requestId, launchId: launch.launchId }
-      : serverLaunch
-        ? {
-            controlEpoch: serverLaunch.controlEpoch,
-            requestId: serverLaunch.requestId,
-            launchId: serverLaunch.launchId,
-          }
-        : undefined;
     if (!control)
       logger.info("Agent self-initiated launch resolved its launch identity", {
         event: "agent_control:wake_launch",
