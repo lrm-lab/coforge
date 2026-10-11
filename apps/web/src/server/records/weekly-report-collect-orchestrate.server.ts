@@ -10,6 +10,7 @@ import {
   listOwnedComputerSlots,
   type CollectorComputerSlot,
 } from "./weekly-report-collector.server";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 import {
   acceptCollectSlotReport,
   canSynthesizeFromSlots,
@@ -259,7 +260,7 @@ export async function submitWeeklyReportCollectPlan(
         report_id: input.reportId,
         computer_ids: detailed.slots.map((slot) => slot.computerId),
         error_type: error instanceof Error ? error.name : typeof error,
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       }),
     );
     throw error;

@@ -1,3 +1,4 @@
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { recordCatalog } from "./record-catalog.server";
 
@@ -55,7 +56,7 @@ export function startWeeklyReportScheduleTick(deps: WeeklyReportScheduleTickDeps
       .catch((error: unknown) => {
         log({
           event: "weekly_report_schedule_tick_failed",
-          error: error instanceof Error ? error.message : String(error),
+          error: thrownMessage(error),
         });
       })
       .finally(() => {
