@@ -6,6 +6,7 @@ import type {
   UsageSnapshot,
 } from "@coforge/agent";
 import type { CodeAgentProvider } from "#src/code-agent/contract";
+import { codexItemStartedEvents } from "./item-events";
 import { readCodexUsage } from "./usage";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { JsonlProcess, JsonlRequestError } from "#src/code-agent/jsonl-process";
@@ -385,31 +386,9 @@ class CodexAgentSession implements AgentSession {
     }
     if (record.method === "item/started") {
       const item = asRecord(params?.item);
-      if (item?.type === "commandExecution" && typeof item.id === "string") {
+      if (item?.type === "commandExecution" && typeof item.id === "string")
         this.#commandOutputBytes.set(item.id, 0);
-        const command = typeof item.command === "string" ? item.command : "command";
-        // Reported as a raw "bash" tool-start, same as every other provider, so the
-        // daemon core's `toolActivity` resolves a `coforge …` command to its hidden
-        // tool (e.g. `send_message`) instead of showing it as a generic shell command.
-        this.#emit({
-          type: "tool-start",
-          id: item.id,
-          name: "bash",
-          input: { command },
-          occurredAt: eventTime(record),
-        });
-      } else if (item?.type === "fileChange") {
-        const itemId = typeof item.id === "string" ? item.id : "file-change";
-        fileChanges(item).forEach((change, index) => {
-          this.#emit({
-            type: "tool-start",
-            id: `${itemId}:${index}`,
-            name: change.kind === "add" ? "write_file" : "edit_file",
-            input: { file_path: change.path },
-            occurredAt: eventTime(record),
-          });
-        });
-      }
+      for (const started of codexItemStartedEvents(record)) this.#emit(started);
       return;
     }
     if (
@@ -551,20 +530,4 @@ function scrubError(message: string): string {
     .replace(/(?:sk|pk|api|token|key|secret)[_-]?[A-Za-z0-9_-]{8,}/gi, "[redacted]")
     .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
     .slice(0, 500);
-}
-
-function fileChanges(
-  item: Readonly<Record<string, unknown>>,
-): Array<{ kind: string; path: string }> {
-  const changes = Array.isArray(item.changes) ? item.changes : [item];
-  return changes.flatMap((value) => {
-    const change = asRecord(value);
-    if (!change || typeof change.path !== "string") return [];
-    return [
-      {
-        kind: typeof change.kind === "string" ? change.kind : "edit",
-        path: change.path,
-      },
-    ];
-  });
 }
