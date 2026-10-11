@@ -344,3 +344,82 @@ function killIfPresent(pid: number): void {
     if ((error as { code?: string }).code !== "ESRCH") throw error;
   }
 }
+
+/** The stderr lines a process reports for `chunks`, once it has exited and drained. */
+async function stderrLines(chunks: readonly (string | Uint8Array)[]): Promise<string[]> {
+  const encoder = new TextEncoder();
+  const closed = Promise.withResolvers<void>();
+  const tree = {
+    child: {
+      pid: 1,
+      exited: Promise.resolve(0),
+      exitCode: 0,
+      stdin: { write: () => true, end: () => undefined, flush: async () => undefined },
+      stdout: { async *[Symbol.asyncIterator]() {} },
+      stderr: {
+        async *[Symbol.asyncIterator]() {
+          for (const chunk of chunks)
+            yield typeof chunk === "string" ? encoder.encode(chunk) : chunk;
+        },
+      },
+      kill: () => undefined,
+    },
+    terminate: async () => undefined,
+    waitForExit: async () => true,
+  } satisfies OwnedProcessTree;
+  const lines: string[] = [];
+  const process = new JsonlProcess(["unused"], tmpdir(), {}, { spawn: () => tree });
+  process.onStderr((line) => lines.push(line));
+  process.onClose(() => closed.resolve());
+  await closed.promise;
+  return lines;
+}
+
+test("stderr lines arrive in order across chunk boundaries, without one trailing carriage return", async () => {
+  expect(await stderrLines(["first\r\nsec", "ond\nthi", "rd\r", "\n\nlast"])).toEqual([
+    "first",
+    "second",
+    "third",
+    "",
+    "last",
+  ]);
+});
+
+test("a stderr line whose UTF-8 is split across chunks is reported whole", async () => {
+  const bytes = new TextEncoder().encode("诊断😀信息\n");
+  expect(
+    await stderrLines([bytes.subarray(0, 4), bytes.subarray(4, 9), bytes.subarray(9)]),
+  ).toEqual(["诊断😀信息"]);
+});
+
+test("a stderr line is oversized only past 4096 characters, carriage return included", async () => {
+  const bound = "x".repeat(4096);
+  expect(
+    await stderrLines([
+      `${bound}\n`,
+      `${bound}y\nshort\n`,
+      `${bound}\r\n`,
+      `${"x".repeat(2000)}`,
+      `${"x".repeat(3000)}\nafter\n`,
+    ]),
+  ).toEqual([
+    bound,
+    "[oversized stderr diagnostic]",
+    "short",
+    "[oversized stderr diagnostic]",
+    "[oversized stderr diagnostic]",
+    "after",
+  ]);
+});
+
+test("a character that starts below the stderr bound is kept whole even when it ends past it", async () => {
+  const line = `${"x".repeat(4095)}😀`;
+  expect(await stderrLines([`${line}\n`, `${line}z\n`])).toEqual([
+    line,
+    "[oversized stderr diagnostic]",
+  ]);
+});
+
+test("an unterminated last stderr line is reported as written", async () => {
+  expect(await stderrLines(["done\npartial\r"])).toEqual(["done", "partial\r"]);
+});

@@ -217,18 +217,28 @@ export class JsonlProcess {
           diagnostic = (diagnostic + text).slice(-16_384);
           onDiagnostic(diagnostic);
         }
-        for (const part of text) {
-          if (part === "\n") {
-            lines++;
-            for (const listener of this.#stderrListeners)
-              listener(oversized ? "[oversized stderr diagnostic]" : line.replace(/\r$/, ""));
-            line = "";
-            oversized = false;
-          } else if (line.length < 4096) {
-            line += part;
-          } else {
-            oversized = true;
+        // Take each newline-separated run with one slice rather than one string append per
+        // character: a line keeps whole characters until it reaches the bound, then is oversized.
+        let start = 0;
+        while (start <= text.length) {
+          const newline = text.indexOf("\n", start);
+          const end = newline < 0 ? text.length : newline;
+          if (end > start) {
+            if (line.length >= STDERR_LINE_BOUND) {
+              oversized = true;
+            } else {
+              const take = boundedTake(text, start, end, STDERR_LINE_BOUND - line.length);
+              line += text.slice(start, start + take);
+              if (start + take < end) oversized = true;
+            }
           }
+          if (newline < 0) break;
+          lines++;
+          for (const listener of this.#stderrListeners)
+            listener(oversized ? "[oversized stderr diagnostic]" : line.replace(/\r$/, ""));
+          line = "";
+          oversized = false;
+          start = newline + 1;
         }
       }
       const tail = decoder.decode();
@@ -316,6 +326,21 @@ export class JsonlProcess {
     for (const pending of this.#pending.values()) pending.reject(new Error(message));
     this.#pending.clear();
   }
+}
+
+/** The UTF-16 length past which a stderr line is reported as oversized. */
+const STDERR_LINE_BOUND = 4096;
+
+/**
+ * How many UTF-16 units of `text[start, end)` fit in `room`, never splitting a surrogate pair: a
+ * character that starts inside the room is kept whole, as appending character by character would.
+ */
+function boundedTake(text: string, start: number, end: number, room: number): number {
+  if (end - start <= room) return end - start;
+  const cut = start + room;
+  const high = text.charCodeAt(cut - 1);
+  const low = text.charCodeAt(cut);
+  return high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff ? room + 1 : room;
 }
 
 function parseRecord(line: string): JsonRecord {
