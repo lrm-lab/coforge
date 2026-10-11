@@ -37,7 +37,8 @@ const define =
 const result = await Bun.build({
   entrypoints: [entrypoint],
   ...(packageName === "computer"
-    ? { compile: { outfile } }
+    ? // Split like the release build (compile-targets.ts), so each role loads only its own code.
+      { compile: { outfile }, splitting: true }
     : { target: "bun" as const, outdir: join(packageDirectory, "dist") }),
   define,
   plugins: [zodResolvePlugin(REPO_ROOT)],
