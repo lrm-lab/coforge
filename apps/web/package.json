@@ -11,6 +11,7 @@
     "seed:dev": "bun run ./scripts/seed-dev.ts",
     "ui:sweep": "bun run ./scripts/ui-sweep.mjs",
     "build": "bun --bun vite build",
+    "bundle:report": "bun run ./scripts/bundle-size-report.ts",
     "start": "bun run .output/server/index.mjs",
     "preview": "bun --bun vite preview",
     "test": "bun run generate-i18n && bun test --max-concurrency=1 --isolate",
