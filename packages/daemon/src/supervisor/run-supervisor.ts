@@ -17,7 +17,6 @@ import {
   UPGRADE_OPERATION_PENDING_TTL_MS,
   WorkspaceRecoveryError,
   type BindingStore,
-  type ManagedBinding,
 } from "./machine-supervisor";
 import { FileBindingStore } from "./binding-store";
 import { dispose, getLogger, withContext } from "@logtape/logtape";
@@ -34,6 +33,7 @@ import {
   workspaceHealthJournalPath,
 } from "./workspace-health-journal";
 import { answeredWithin } from "./runner-hold";
+import { workspaceDaemonConfig } from "./workspace-daemon-config";
 import {
   awaitCloudConnections,
   OPERATOR_COMMAND_BUDGET_MS,
@@ -283,51 +283,19 @@ async function runWithSupervisorLock(
     );
     return settlement;
   };
-  /**
-   * The config a Workspace daemon child reads: pending operations are ready hints; terminal ones
-   * are results it owes the server. `refreshChildUpgradeConfig` pushes a settled receipt to a child
-   * that is already running; its reconnect recovery is the fallback.
-   */
-  const buildChildConfig = (binding: ManagedBinding) => {
-    // Only the replacement receives the pending request as a cloud ready hint.
-    // Local completion still requires the application handshake and durable result.
-    const restartRequestIds = (binding.restartResults ?? [])
-      .filter((result) => result.status === "completed")
-      .map((result) => result.requestId);
-    if (binding.restart?.phase === "starting") restartRequestIds.push(binding.restart.requestId);
-    const {
-      enabled: _enabled,
-      restart: _restart,
-      restartResults: _results,
-      restartRequestIds: _legacy,
-      upgradeRequestIds: _upgrades,
-      upgradeRequests: _legacyUpgrades,
-      upgradeOperations,
-      ...config
-    } = binding;
-    const operations = (upgradeOperations ?? [])
-      .filter((operation) => operation.state !== "acknowledged")
-      .slice(-128);
-    return {
-      ...config,
-      restartRequestIds: restartRequestIds.slice(-128),
-      upgradeRequestIds: operations.map((entry) => entry.requestId),
-      upgradeExpectedVersions: Object.fromEntries(
-        operations.map((entry) => [entry.requestId, entry.expectedVersion]),
-      ),
-      upgradeOperations: operations,
-    };
-  };
   /** Rewrites one already-running Workspace's config file with its binding's current upgrade
    * state, without restarting it. Best-effort: a Workspace that was never started (no directory
-   * yet) or whose write fails is left for its next real start to pick up instead. */
+   * yet) or whose write fails is left for its next real start to pick up instead; a running
+   * child's reconnect recovery is the fallback for a settled receipt it missed. */
   const refreshChildUpgradeConfig = async (workspaceId: string): Promise<void> => {
     try {
       const binding = (await supervisor.snapshot()).find(
         (entry) => entry.workspaceId === workspaceId,
       );
       if (!binding) return;
-      await new DaemonConfigStore(workspaceDirectory(workspaceId)).save(buildChildConfig(binding));
+      await new DaemonConfigStore(workspaceDirectory(workspaceId)).save(
+        workspaceDaemonConfig(binding),
+      );
     } catch (error) {
       supervisorLogger.warn("Refreshing a Workspace's local upgrade config failed", {
         event: "upgrade:child_config_refresh_failed",
@@ -364,7 +332,7 @@ async function runWithSupervisorLock(
           });
           throw new Error(message);
         }
-        await new DaemonConfigStore(directory).save(buildChildConfig(binding));
+        await new DaemonConfigStore(directory).save(workspaceDaemonConfig(binding));
         const instance = workspaceInstance(binding.workspaceId);
         const processId = await instance.ensureStarted();
         const observed = await instance.identity();
