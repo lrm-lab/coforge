@@ -235,11 +235,10 @@ export class ActivityInbox {
          AND ${HUMAN_UNREAD_MESSAGE_SQL}
         WHERE ${conversationItemListedSql(userId)}
       ) + (
-        SELECT COUNT(*) FROM ${threadItemsSql(workspaceId, userId)}
-        JOIN "messages" m
-          ON m."conversationId" = threads."conversationId"
-         AND m."threadRootId" = threads."rootMessageId"
-         AND ${unreadReplySql}
+        -- Per thread, as the list counts it: an index range above that thread's read cursor. A
+        -- plain join let the planner read every reply of every followed thread before the cursor.
+        SELECT COALESCE(SUM(replies."unread"), 0) FROM ${threadItemsSql(workspaceId, userId)}
+        ${threadUnreadLateral}
         WHERE ${threadItemListedSql(userId)}
       ) + (
         -- Each notified mention is one unread item until the viewer reads it.
