@@ -1,4 +1,3 @@
-import { formatValidationError, isValidationError } from "@lrm/coforge-sdk/internal";
 import { isAppError } from "#src/lib/app-error";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
 import { MessageRequestInProgressError } from "#src/server/conversations/message-request-idempotency.server";
@@ -15,7 +14,6 @@ export function handleRequestError(error: unknown): HandledRequestError {
   if (error instanceof RequestAuthenticationError)
     return { code: 401, message: "authentication required" };
   if (error instanceof MessageRequestInProgressError) return { code: 409, message: error.message };
-  if (isValidationError(error)) return { code: 400, message: formatValidationError(error) };
   if (isAppError(error)) {
     const code = {
       INVALID_INPUT: 400,
