@@ -21,8 +21,21 @@ export function getDatabaseClient(): PrismaClient | undefined {
  */
 export const DATABASE_POOL_IDLE_TIMEOUT_MS = 5 * 60_000;
 
+/**
+ * Every pooled connection runs with PostgreSQL's JIT off. The planner compiles a query with LLVM
+ * once its estimated cost passes `jit_above_cost`, and an estimate that a correlated bound leaves
+ * wide crosses it on short OLTP reads: the channel list's per-channel unread count, on a Workspace
+ * of 60 channels with 10,000 messages each, spent 280 ms compiling to run for 3 ms. This app
+ * runs no query long enough for compiled code to pay that back.
+ */
+export const DATABASE_SESSION_OPTIONS = "-c jit=off";
+
 export function databasePoolConfig(url: string) {
-  return { connectionString: url, idleTimeoutMillis: DATABASE_POOL_IDLE_TIMEOUT_MS };
+  return {
+    connectionString: url,
+    idleTimeoutMillis: DATABASE_POOL_IDLE_TIMEOUT_MS,
+    options: DATABASE_SESSION_OPTIONS,
+  };
 }
 
 function createDatabaseClient(url: string): PrismaClient {
