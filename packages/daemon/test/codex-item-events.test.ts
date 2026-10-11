@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { codexItemStartedEvents } from "#src/code-agent/codex/item-events";
+import { codexDeltaEvent, codexItemStartedEvents } from "#src/code-agent/codex/item-events";
 
 const timestamp = "2026-10-11T11:00:00.000Z";
 const started = (item: unknown) => ({
@@ -84,5 +84,38 @@ describe("codexItemStartedEvents", () => {
     expect(codexItemStartedEvents(started({ type: "reasoning", id: "r1" }))).toEqual([]);
     expect(codexItemStartedEvents(started({ type: "commandExecution" }))).toEqual([]);
     expect(codexItemStartedEvents(started(undefined))).toEqual([]);
+  });
+});
+
+const delta = (method: string, value: unknown) => ({
+  method,
+  timestamp,
+  params: { threadId: "t", turnId: "u", delta: value },
+});
+
+describe("codexDeltaEvent", () => {
+  test("reports agent message text and reasoning summaries as deltas", () => {
+    expect(codexDeltaEvent(delta("item/agentMessage/delta", "Hi"))).toEqual({
+      type: "text-delta",
+      text: "Hi",
+    });
+    expect(codexDeltaEvent(delta("item/reasoning/summaryTextDelta", "Plan"))).toEqual({
+      type: "thinking-delta",
+      text: "Plan",
+    });
+  });
+
+  test("reports raw reasoning text only as content-free progress", () => {
+    expect(codexDeltaEvent(delta("item/reasoning/textDelta", "secret chain"))).toEqual({
+      type: "progress",
+      source: "codex_reasoning_text_delta",
+      occurredAt: timestamp,
+    });
+  });
+
+  test("reports nothing for a non-string delta or another method", () => {
+    expect(codexDeltaEvent(delta("item/agentMessage/delta", 1))).toBeUndefined();
+    expect(codexDeltaEvent(delta("item/commandExecution/outputDelta", "out"))).toBeUndefined();
+    expect(codexDeltaEvent({ method: "item/agentMessage/delta" })).toBeUndefined();
   });
 });

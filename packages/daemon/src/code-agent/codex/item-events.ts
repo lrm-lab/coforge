@@ -52,3 +52,26 @@ function fileChanges(
     ];
   });
 }
+
+/**
+ * The event one Codex streaming delta reports: agent message text, a readable reasoning summary,
+ * or, for raw reasoning text, a content-free progress signal (the raw reasoning itself is never
+ * shown, but a busy Agent stays visibly busy). Any other record, or a delta that is not a string,
+ * reports nothing.
+ */
+export function codexDeltaEvent(
+  record: Readonly<Record<string, unknown>>,
+): AgentRuntimeEvent | undefined {
+  const delta = asRecord(record.params)?.delta;
+  if (typeof delta !== "string") return undefined;
+  if (record.method === "item/agentMessage/delta") return { type: "text-delta", text: delta };
+  if (record.method === "item/reasoning/summaryTextDelta")
+    return { type: "thinking-delta", text: delta };
+  if (record.method === "item/reasoning/textDelta")
+    return {
+      type: "progress",
+      source: "codex_reasoning_text_delta",
+      occurredAt: eventTime(record),
+    };
+  return undefined;
+}

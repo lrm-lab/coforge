@@ -6,7 +6,7 @@ import type {
   UsageSnapshot,
 } from "@coforge/agent";
 import type { CodeAgentProvider } from "#src/code-agent/contract";
-import { codexItemStartedEvents } from "./item-events";
+import { codexDeltaEvent, codexItemStartedEvents } from "./item-events";
 import { codexTurnOutcome } from "./turn-outcome";
 import { readCodexUsage } from "./usage";
 import { agentEnvironment } from "#src/code-agent/environment";
@@ -367,22 +367,9 @@ class CodexAgentSession implements AgentSession {
       this.#emit({ type: "error", message: error.message, occurredAt: eventTime(record) });
       return;
     }
-    if (record.method === "item/agentMessage/delta" && typeof params?.delta === "string") {
-      this.#emit({ type: "text-delta", text: params.delta });
-      return;
-    }
-    // Readable summaries only. Deliberately ignore the raw reasoning text itself,
-    // but a busy Agent stays visibly busy: report it content-free as progress.
-    if (record.method === "item/reasoning/summaryTextDelta" && typeof params?.delta === "string") {
-      this.#emit({ type: "thinking-delta", text: params.delta });
-      return;
-    }
-    if (record.method === "item/reasoning/textDelta" && typeof params?.delta === "string") {
-      this.#emit({
-        type: "progress",
-        source: "codex_reasoning_text_delta",
-        occurredAt: eventTime(record),
-      });
+    const delta = codexDeltaEvent(record);
+    if (delta) {
+      this.#emit(delta);
       return;
     }
     if (record.method === "item/started") {
