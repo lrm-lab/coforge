@@ -1513,3 +1513,24 @@ test("every delivery decision is logged with its target, sequence and outcome", 
     expect.objectContaining({ target: "#general:11111111", sequence: 6, outcome: "held" }),
   ]);
 });
+
+test("a channel recreated under the same target name starts from a fresh consumed cursor", async () => {
+  const notices: string[] = [];
+  const store = new AgentConsumedSeqStore(temporaryStateDirectory());
+  const index = indexWithConsumedSeqs(store, () => undefined, notices);
+  const inConversation = (id: string, conversationId: string, sequence: number) => ({
+    ...delivery(id, "human", "ada"),
+    conversationId,
+    target: "#general",
+    sequence,
+  });
+
+  // The old #general reached message 5704 and the Agent consumed it.
+  await index.receive(inConversation("old", "conversation-old", 5704));
+  index.recordModelSeen("agent-1", "#general", 5704);
+  // The channel is recreated under the same name: a new conversation whose sequences restart.
+  await index.receive(inConversation("new", "conversation-new", 3));
+
+  expect(notices).toHaveLength(2);
+  expect(index.check("agent-1").find((row) => row.target === "#general")?.pendingCount).toBe(1);
+});
