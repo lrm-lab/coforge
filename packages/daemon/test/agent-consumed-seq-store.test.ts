@@ -35,8 +35,8 @@ test("writes one snapshot in the consumed-seqs shape and reads it back", async (
   const store = new AgentConsumedSeqStore(stateDirectory);
   const state = {
     targets: {
-      "@ada": { seq: 7, exactSeqs: [9, 12] },
-      "#general:abcd1234": { readOrder: 1, reviewedSeq: 3 },
+      "@ada": { conversationId: "conversation-1", seq: 7, exactSeqs: [9, 12] },
+      "#general:abcd1234": { conversationId: "conversation-1", readOrder: 1, reviewedSeq: 3 },
     },
     aliases: { "#general:ABCD1234": "#general:abcd1234" },
     nextReadOrder: 2,
@@ -56,17 +56,20 @@ test("reading a file nobody in this process wrote normalizes its exact sequences
     JSON.stringify({
       targets: {
         // Duplicates, non-integers and sequences at or below the frontier are not kept.
-        "@ada": { seq: 4, exactSeqs: [9, 6, 6, 3, 4, 2.5, "7"] },
+        "@ada": { conversationId: "conversation-1", seq: 4, exactSeqs: [9, 6, 6, 3, 4, 2.5, "7"] },
         // An entry that carries only exact sequences is kept.
-        "#general": { exactSeqs: [12] },
-        "@bea": { exactSeqs: Array.from({ length: 2600 }, (_, index) => index + 1) },
+        "#general": { conversationId: "conversation-1", exactSeqs: [12] },
+        "@bea": {
+          conversationId: "conversation-1",
+          exactSeqs: Array.from({ length: 2600 }, (_, index) => index + 1),
+        },
       },
     }),
   );
 
   const targets = new AgentConsumedSeqStore(stateDirectory).read("agent-1").targets;
-  expect(targets["@ada"]).toEqual({ seq: 4, exactSeqs: [6, 9] });
-  expect(targets["#general"]).toEqual({ exactSeqs: [12] });
+  expect(targets["@ada"]).toEqual({ conversationId: "conversation-1", seq: 4, exactSeqs: [6, 9] });
+  expect(targets["#general"]).toEqual({ conversationId: "conversation-1", exactSeqs: [12] });
   const kept = targets["@bea"]?.exactSeqs ?? [];
   expect([kept.length, kept[0], kept.at(-1)]).toEqual([2500, 101, 2600]);
 });
@@ -95,7 +98,10 @@ test("recomputes nextReadOrder from the orders the file holds, never trusting th
   // edit. Reading starts the counter above every order the file holds.
   await writeFile(
     storePath(stateDirectory),
-    JSON.stringify({ targets: { "@ada": { readOrder: 12 } }, nextReadOrder: 2 }),
+    JSON.stringify({
+      targets: { "@ada": { conversationId: "conversation-1", readOrder: 12 } },
+      nextReadOrder: 2,
+    }),
   );
 
   expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").nextReadOrder).toBe(13);
@@ -145,4 +151,25 @@ test("leaves no temporary file behind once a cursor has been written", async () 
   store.write("agent-1", { targets: { "@ada": { seq: 1 } }, aliases: {}, nextReadOrder: 1 });
 
   expect((await readdir(storeDirectory(stateDirectory))).sort()).toEqual(["consumed-seqs.json"]);
+});
+
+test("an entry that names no conversation is dropped: it cannot say whose sequences it holds", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  await mkdir(storeDirectory(stateDirectory), { recursive: true });
+  await writeFile(
+    storePath(stateDirectory),
+    JSON.stringify({
+      targets: {
+        "#legacy": { seq: 5704, readOrder: 1, exactSeqs: [5710] },
+        "#bound": { conversationId: "conversation-1", seq: 3 },
+        "#blank": { conversationId: "", seq: 9 },
+      },
+      aliases: {},
+      nextReadOrder: 2,
+    }),
+  );
+
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").targets).toEqual({
+    "#bound": { conversationId: "conversation-1", seq: 3 },
+  });
 });

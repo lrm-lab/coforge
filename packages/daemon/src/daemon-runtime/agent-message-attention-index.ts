@@ -859,20 +859,20 @@ ${INBOX_DRAIN_HINT}]`,
 
   /** A delivery's target is the server's canonical spelling, so it needs no alias lookup. */
   #consumed(message: AgentMessageDelivery & { target: string }): boolean {
-    this.#bindCursorConversation(message);
+    if (message.conversationId)
+      this.bindConversation(message.agentId, message.target, message.conversationId);
     return this.hasSeen(message.agentId, message.target, message.sequence);
   }
 
   /**
-   * Ties `message.target`'s consumed cursor to the delivery's conversation. When the cursor was
-   * counting in another conversation (the channel was recreated under the same name, and its
-   * sequences restarted), every number it holds belongs to the old one, so the target starts over:
-   * otherwise each new message would read as already consumed and never be announced. A cursor
-   * with no recorded conversation (written by an older build) adopts this one unchanged.
+   * Ties `target`'s consumed cursor to the conversation it counts in. When the cursor was counting
+   * in another conversation (the channel was recreated under the same name, and its sequences
+   * restarted), every number it holds belongs to the old one, so the target starts over: otherwise
+   * each new message would read as already consumed and never be announced. A cursor recorded in
+   * memory before its target was bound adopts the conversation unchanged; the file never holds one
+   * without a conversation, because a read drops it.
    */
-  #bindCursorConversation(message: AgentMessageDelivery & { target: string }): void {
-    const { agentId, target, conversationId } = message;
-    if (!conversationId) return;
+  bindConversation(agentId: string, target: string, conversationId: string): void {
     this.#hydrate(agentId);
     const byTarget = this.#cursorConversation.get(agentId) ?? new Map<string, string>();
     this.#cursorConversation.set(agentId, byTarget);

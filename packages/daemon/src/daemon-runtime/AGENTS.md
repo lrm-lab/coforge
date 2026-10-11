@@ -62,6 +62,11 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   advanced over messages already seen) moves the frontier. A `search` never
   counts: it shows a truncated preview without whether the message mentions
   the Agent.
+- A target's consumed cursor belongs to one conversation: a delivery binds the
+  target to its `conversationId`, and a target seen under another conversation
+  (a channel deleted and recreated under the same name, whose sequences restart
+  at 1) starts over. `consumed-seqs.json` entries without a `conversationId` are
+  dropped on read, since they cannot say whose sequences they hold.
 - The attention index is the consumed cursor's source of truth once it has
   read the file, and an operation that changed it writes one snapshot. A read's
   state is kept under its `consumptionScope.target` (a channel's top level is

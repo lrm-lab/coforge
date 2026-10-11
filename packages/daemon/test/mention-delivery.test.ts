@@ -611,7 +611,7 @@ test("a pending mention issued again for the next launch is told to that launch 
 
 test("a mention the Agent already consumed is drained without a running process", async () => {
   new AgentConsumedSeqStore().write("agent-a", {
-    targets: { "#general": { seq: 5 } },
+    targets: { "#general": { conversationId: "conversation-a", seq: 5 } },
     aliases: {},
     nextReadOrder: 1,
   });
@@ -639,7 +639,7 @@ test("a mention the Agent already consumed is drained without a running process"
 
 test("a mention drained as already consumed logs why the Agent was not told", async () => {
   new AgentConsumedSeqStore().write("agent-a", {
-    targets: { "#general": { seq: 5 } },
+    targets: { "#general": { conversationId: "conversation-a", seq: 5 } },
     aliases: {},
     nextReadOrder: 1,
   });
@@ -667,7 +667,7 @@ test("a mention drained as already consumed logs why the Agent was not told", as
 
 test("a mention the Agent already consumed is drained even when its envelope names an older launch", async () => {
   new AgentConsumedSeqStore().write("agent-a", {
-    targets: { "#general": { seq: 5 } },
+    targets: { "#general": { conversationId: "conversation-a", seq: 5 } },
     aliases: {},
     nextReadOrder: 1,
   });
