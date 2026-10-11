@@ -5,8 +5,9 @@ authorization callback must be
 `https://staging.coforge.cn/api/integrations/github/callback`.
 Keep expiring user access tokens enabled. Repository discovery requires Metadata
 (read). Agent HTTPS Git and the planned GitHub operations require repository
-permissions Actions (read), Checks (read), Contents (write), Pull requests
-(write), Commit statuses (read), and Workflows (write); no organization-member or
+permissions Actions (write, so the App can dispatch and re-run workflows),
+Checks (read), Contents (write), Pull requests (write), Commit statuses (read),
+and Workflows (write); no organization-member or
 email permission is needed. Installation and personal authorization are separate
 actions. Existing installations must approve changed permissions and select the
 repositories Agents may use.
