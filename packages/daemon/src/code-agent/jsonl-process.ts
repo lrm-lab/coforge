@@ -4,6 +4,7 @@ import {
   type OwnedProcessTree,
   type ProcessTreeSpawner,
 } from "#src/platform/process-tree";
+import { LineBuffer } from "./line-buffer";
 import { cleanupOwnedTree } from "./process-tree-cleanup";
 import { getLogger } from "@logtape/logtape";
 
@@ -160,20 +161,15 @@ export class JsonlProcess {
 
   async #readStdout(): Promise<void> {
     const decoder = new TextDecoder();
-    let buffer = "";
+    const lines = new LineBuffer();
+    const accept = (line: string) => {
+      if (line) this.#accept(parseRecord(line));
+    };
     try {
       for await (const chunk of this.#child.stdout) {
-        buffer += decoder.decode(chunk, { stream: true });
-        let newline = buffer.indexOf("\n");
-        while (newline >= 0) {
-          const line = buffer.slice(0, newline).replace(/\r$/, "");
-          buffer = buffer.slice(newline + 1);
-          if (line) this.#accept(parseRecord(line));
-          newline = buffer.indexOf("\n");
-        }
+        lines.push(decoder.decode(chunk, { stream: true }), accept);
       }
-      buffer += decoder.decode();
-      if (buffer.trim()) throw new Error("truncated JSONL record");
+      if ((lines.rest() + decoder.decode()).trim()) throw new Error("truncated JSONL record");
     } catch (error) {
       this.#fail(
         error instanceof JsonlProtocolError
