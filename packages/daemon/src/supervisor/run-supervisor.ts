@@ -32,6 +32,7 @@ import {
 } from "./workspace-health-journal";
 import { askWorkspaceRunnerHold } from "./runner-hold";
 import { workspaceDaemonConfig } from "./workspace-daemon-config";
+import { workspaceRuntimeView } from "./workspace-runtime-view";
 import {
   awaitCloudConnections,
   OPERATOR_COMMAND_BUDGET_MS,
@@ -395,27 +396,9 @@ async function runWithSupervisorLock(
    * exited, e.g. after parking, is reaped here), plus why it is parked, when it is. */
   const runtimes = async (bindings: Awaited<ReturnType<typeof supervisor.snapshot>>) =>
     Promise.all(
-      bindings.map(async (binding) => {
-        // A start, restart, or configure queued or running: an upgrade waits for it instead of
-        // reading the Workspace as down, and the CLI reports it as still starting.
-        const underWay = binding.inFlight ? { lifecycleUnderWay: true } : {};
-        const child = children.get(binding.workspaceId);
-        if (child && binding.instanceId === child.osInstanceId)
-          return { ...child.identity, enabled: binding.enabled, ...underWay };
-        // Only a Workspace that is down can be parked.
-        const reason = await startPorts.parkReason(binding.workspaceId);
-        const parked = reason ? { parkReason: reason } : {};
-        return {
-          workspaceId: binding.workspaceId,
-          computerId: binding.computerId,
-          enabled: binding.enabled,
-          processId: 0,
-          instanceId: "",
-          version: "",
-          ...parked,
-          ...underWay,
-        };
-      }),
+      bindings.map((binding) =>
+        workspaceRuntimeView(binding, children.get(binding.workspaceId), startPorts.parkReason),
+      ),
     );
   /** After every lifecycle mutation queued so far: what the Coordinator's own steps act on. */
   const snapshot = async () => runtimes(await supervisor.snapshot());
