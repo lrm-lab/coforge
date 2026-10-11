@@ -9,6 +9,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import { captureDaemonLogs } from "./log-capture";
 
 const stateDirectories: string[] = [];
 
@@ -1471,4 +1472,44 @@ test("a consumption scope settles in other spellings only the messages the read 
   expect(index.pendingWindow("agent-1", upper, 3).map(({ delivery }) => delivery.sequence)).toEqual(
     [6],
   );
+});
+
+test("every delivery decision is logged with its target, sequence and outcome", async () => {
+  let holding = false;
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session() },
+    async () => {},
+    () => {},
+    { shouldHold: () => holding, enqueue: () => {}, busy: () => {} },
+  );
+  index.recordModelSeen("agent-1", "#general", 4);
+  const decisions = async (run: () => Promise<void>) =>
+    (await captureDaemonLogs(run)).records
+      .filter((record) => record.properties.event === "agent.message.attention_decision")
+      .map((record) => record.properties);
+
+  expect(
+    await decisions(() => index.receive({ ...delivery("seen"), target: "#general", sequence: 3 })),
+  ).toEqual([
+    expect.objectContaining({
+      delivery_id: "delivery-seen",
+      target: "#general",
+      sequence: 3,
+      tracked_mention: false,
+      outcome: "consumed",
+      model_seen_seq: 4,
+    }),
+  ]);
+  expect(
+    await decisions(() => index.receive({ ...delivery("fresh"), target: "#general", sequence: 5 })),
+  ).toEqual([expect.objectContaining({ target: "#general", sequence: 5, outcome: "notified" })]);
+  holding = true;
+  expect(
+    await decisions(() =>
+      index.receive({ ...delivery("busy"), target: "#general:11111111", sequence: 6 }),
+    ),
+  ).toEqual([
+    expect.objectContaining({ target: "#general:11111111", sequence: 6, outcome: "held" }),
+  ]);
 });

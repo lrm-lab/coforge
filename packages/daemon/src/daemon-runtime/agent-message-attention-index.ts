@@ -24,6 +24,9 @@ import type {
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
 
+/** What the daemon decided for one delivery (`agent.message.attention_decision`). */
+export type AttentionDecisionOutcome = "notified" | "held" | "consumed" | "already_notified";
+
 export type MessageAttention = Readonly<{
   target: string;
   pendingCount: number;
@@ -228,15 +231,17 @@ export class AgentMessageAttentionIndex {
     if (generation.seenDeliveryIds.has(message.deliveryId)) {
       if (!generation.notified.has(message.deliveryId)) {
         if (this.hold.shouldHold(message.agentId)) {
+          this.logDecision(message, "held");
           this.hold.enqueue(message.agentId, message);
           // Held for a later notice: the daemon has it, so it is acknowledged now.
           this.acknowledgeCustody(message);
           return;
         }
         const attempt = generation.notificationAttempts.get(message.deliveryId);
+        this.logDecision(message, attempt ? "already_notified" : "notified");
         await (attempt ?? this.#notify(message));
         if (this.#generations.get(message.agentId) !== generation) return;
-      }
+      } else this.logDecision(message, "already_notified");
       await this.sendAck({
         ...message,
         method: AGENT_MESSAGE_ACK_METHOD,
@@ -246,6 +251,7 @@ export class AgentMessageAttentionIndex {
     }
     this.#remember(generation, message.deliveryId);
     if (this.#consumed(message)) {
+      this.logDecision(message, "consumed");
       await this.sendAck({
         ...message,
         method: AGENT_MESSAGE_ACK_METHOD,
@@ -255,11 +261,13 @@ export class AgentMessageAttentionIndex {
     }
     const current = this.#recordAttention(message);
     if (this.hold.shouldHold(message.agentId)) {
+      this.logDecision(message, "held");
       this.hold.enqueue(message.agentId, message);
       // Held for a later notice: the daemon has it, so it is acknowledged now.
       this.acknowledgeCustody(message);
       return;
     }
+    this.logDecision(message, "notified");
     await this.#notify(message, current);
     if (this.#generations.get(message.agentId) !== generation) return;
     await this.sendAck({
@@ -283,10 +291,40 @@ export class AgentMessageAttentionIndex {
     const generation = this.#generation(message.agentId);
     if (!generation.seenDeliveryIds.has(message.deliveryId)) {
       this.#remember(generation, message.deliveryId);
+      this.logDecision(message, "notified");
       await this.#notify(message, this.#recordAttention(message));
-    } else if (!generation.notified.has(message.deliveryId))
-      await (generation.notificationAttempts.get(message.deliveryId) ?? this.#notify(message));
+    } else if (!generation.notified.has(message.deliveryId)) {
+      const attempt = generation.notificationAttempts.get(message.deliveryId);
+      this.logDecision(message, attempt ? "already_notified" : "notified");
+      await (attempt ?? this.#notify(message));
+    }
     return this.#generations.get(message.agentId) === generation ? "told" : "gone";
+  }
+
+  /**
+   * Logs what the daemon decided for one delivery: whether it notified the Agent's session now,
+   * held it for a later notice, found it already consumed (with the frontier that covered it), or
+   * found its notice already given. Without this line every outcome looks the same in the log,
+   * because `agent.message.delivery_indexed` is written after the decision either way.
+   */
+  logDecision(message: AgentMessageDelivery, outcome: AttentionDecisionOutcome): void {
+    const target = message.target ?? "";
+    logger.info("Agent delivery attention decided", {
+      event: "agent.message.attention_decision",
+      workspace_id: message.workspaceId,
+      agent_id: message.agentId,
+      delivery_id: message.deliveryId,
+      message_id: message.messageId,
+      target,
+      sequence: message.sequence,
+      tracked_mention: isTrackedMention(message),
+      outcome,
+      model_seen_seq: this.modelSeenSequence(message.agentId, target),
+      exact_seen: containsSorted(
+        this.#exactSeen.get(message.agentId)?.get(target),
+        message.sequence,
+      ),
+    });
   }
 
   /** Whether the Agent's current session accepted a notice of this delivery. */
@@ -354,7 +392,10 @@ export class AgentMessageAttentionIndex {
         continue;
       }
       this.#remember(generation, message.deliveryId);
-      if (this.#consumed(message)) continue;
+      if (this.#consumed(message)) {
+        this.logDecision(message, "consumed");
+        continue;
+      }
       this.#recordAttention(message);
       announced.push(message);
     }

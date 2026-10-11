@@ -14,6 +14,7 @@ import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import { RUNNER_HOLD_REASONS } from "@lrm/coforge-sdk/internal";
 import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
+import { captureDaemonLogs } from "./log-capture";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -631,6 +632,34 @@ test("a mention the Agent already consumed is drained without a running process"
       },
       { kind: "ack", deliveryId: "delivery-1", mentionDelivery: mention },
     ]);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("a mention drained as already consumed logs why the Agent was not told", async () => {
+  new AgentConsumedSeqStore().write("agent-a", {
+    targets: { "#general": { seq: 5 } },
+    aliases: {},
+    nextReadOrder: 1,
+  });
+  const { runtime, notices, envelope, deliver } = await harness();
+  try {
+    const { records } = await captureDaemonLogs(() => deliver(1, envelope(1)));
+
+    expect(notices).toEqual([]);
+    const decision = records.find(
+      (record) => record.properties.event === "agent.message.attention_decision",
+    );
+    expect(decision?.properties).toMatchObject({
+      agent_id: "agent-a",
+      delivery_id: "delivery-1",
+      target: "#general",
+      sequence: 1,
+      tracked_mention: true,
+      outcome: "consumed",
+      model_seen_seq: 5,
+    });
   } finally {
     await runtime.stop();
   }

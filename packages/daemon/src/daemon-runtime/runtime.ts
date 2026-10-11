@@ -526,6 +526,7 @@ export class DaemonRuntime {
       running: (agentId) => this.#runningMentionIdentity(agentId),
       consumed: (message) => this.#messageAttention.hasConsumed(message),
       told: (message) => this.#messageAttention.wasNotified(message),
+      decided: (message, outcome) => this.#messageAttention.logDecision(message, outcome),
       announce: (message) => this.#messageAttention.announce(message),
       busy: (agentId) => this.#deliveryQueue.isBusy(agentId),
       blocked: (agentId) =>
@@ -2896,8 +2897,10 @@ export class DaemonRuntime {
   async #deliverToExitedAgent(message: AgentMessageDelivery): Promise<void> {
     // An exited Agent is not woken for a message it has already consumed: the delivery is
     // acknowledged and dropped here, before any launch, rather than after one.
-    if (this.#messageAttention.hasConsumed(message))
+    if (this.#messageAttention.hasConsumed(message)) {
+      this.#messageAttention.logDecision(message, "consumed");
       return this.#messageAttention.acknowledge(message);
+    }
     const restart = this.#agentProcessManager.restartConfig(message.agentId);
     if (!restart && this.#agentControl.startPending(message.agentId))
       return this.#holdForPendingStart(message);
