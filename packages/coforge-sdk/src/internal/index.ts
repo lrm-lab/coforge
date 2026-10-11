@@ -1015,6 +1015,7 @@ export * from "./mime-type";
 export * from "./json-record";
 export * from "./agent-environment";
 export * from "./error-code";
+export * from "./thrown-message";
 export * from "./text-codec";
 export * from "./mention-delivery";
 

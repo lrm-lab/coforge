@@ -27,6 +27,7 @@ import {
   type DaemonCommandRequest,
   type ManagedRuntimeIdentity,
   type WorkspaceCloudConnection,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
@@ -104,7 +105,7 @@ export async function startDaemonLocalRpcServer(
           .catch((error: unknown) => {
             logger.error("Local RPC connection failed", {
               event: "daemon.local_rpc.connection_failed",
-              error: error instanceof Error ? error.message : String(error),
+              error: thrownMessage(error),
               outcome: "error",
             });
             socket.end();
@@ -182,7 +183,7 @@ class LocalRpcDispatcher {
         logger.error("Local RPC request failed", {
           event: "daemon.local_rpc.failed",
           method,
-          error: error instanceof Error ? error.message : String(error),
+          error: thrownMessage(error),
           errorName: error instanceof Error ? error.name : undefined,
           outcome: "error",
         });
@@ -289,13 +290,13 @@ class LocalRpcDispatcher {
         event: "daemon.local_rpc.lifecycle_refused",
         method,
         error_code: code,
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       });
       return encodeDaemonCommandResponse({
         protocolMajor: 1,
         requestId: request.requestId,
         accepted: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: thrownMessage(error),
         ...(code ? { errorCode: code } : {}),
         ...(workspaceId ? { workspaceId } : {}),
       });

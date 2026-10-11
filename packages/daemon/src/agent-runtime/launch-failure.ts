@@ -1,4 +1,4 @@
-import { hasErrorCode, truncateCodePoints } from "@lrm/coforge-sdk/internal";
+import { hasErrorCode, truncateCodePoints, thrownMessage } from "@lrm/coforge-sdk/internal";
 import { RuntimeModelNotFoundError } from "#src/code-agent/contract";
 import { fingerprintRuntimeError, scrubRuntimeErrorText } from "./runtime-error-activity";
 import { RUNTIME_ERROR_CLASS } from "./runtime-error-classification";
@@ -85,12 +85,7 @@ const TYPED_REASONS: readonly LaunchFailureReason[] = [
 export class AgentAuthorizationError extends Error {
   readonly code = LAUNCH_FAILURE_REASON.AGENT_AUTHORIZATION_FAILED;
   constructor(cause: unknown) {
-    super(
-      `Agent launch configuration could not be obtained: ${
-        cause instanceof Error ? cause.message : String(cause)
-      }`,
-      { cause },
-    );
+    super(`Agent launch configuration could not be obtained: ${thrownMessage(cause)}`, { cause });
     this.name = "AgentAuthorizationError";
   }
 }
@@ -181,7 +176,7 @@ export function launchFailureActivity(
 export function launchFailureLogFields(error: unknown) {
   return {
     failure_reason: launchFailureReason(error),
-    error_message: scrubRuntimeErrorText(error instanceof Error ? error.message : String(error)),
+    error_message: scrubRuntimeErrorText(thrownMessage(error)),
     ...launchFailureTrace(error),
   };
 }

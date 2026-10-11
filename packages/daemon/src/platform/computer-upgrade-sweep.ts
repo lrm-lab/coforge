@@ -8,6 +8,7 @@ import {
 } from "./computer-upgrade-launcher";
 import { resolveComputerInstallDirectory } from "./computer-install-directory";
 import { upgradeReceiptPath, upgradeResultsDirectory } from "./upgrade-receipt-file";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 const UPGRADE_JOB_LABEL =
   /^cn\.coforge\.upgrade\.([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
@@ -75,7 +76,7 @@ async function sweepDarwin(options: SweepLeftoverComputerUpgradeJobsOptions): Pr
       logger.error("Could not remove a leftover Computer upgrade job", {
         event: "upgrade:leftover_job_removal_failed",
         label,
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       });
     }
   }
@@ -110,7 +111,7 @@ async function sweepWindows(options: SweepLeftoverComputerUpgradeJobsOptions): P
       logger.error("Could not remove a leftover Computer upgrade Scheduled Task", {
         event: "upgrade:leftover_job_removal_failed",
         label: taskName,
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       });
     }
   }

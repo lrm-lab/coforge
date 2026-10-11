@@ -5,6 +5,7 @@ import { CliError, renderCliError } from "./cli-error";
 import { runGitHubCli, runGitHubCredentialHelper } from "./github-credential";
 import { runGitPrepareCommitMsg } from "./git-prepare-commit-msg";
 import { COFORGE_CLI_VERSION } from "./version";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 export async function runAgentCli(args: readonly string[]): Promise<void> {
   // `coforge --version`/`-V` reports only the CLI carrier, unlike `coforge version`, which also
@@ -40,9 +41,7 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
       try {
         await runGitPrepareCommitMsg(args.slice(2), transport.githubCommitTrailers!);
       } catch (error) {
-        console.error(
-          `coforge: CoForge co-author trailer skipped: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        console.error(`coforge: CoForge co-author trailer skipped: ${thrownMessage(error)}`);
       }
       process.exitCode = 0;
       return;
@@ -54,7 +53,7 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
     if (error instanceof CliError) {
       if (error.stdoutText) console.log(error.stdoutText);
       console.error(renderCliError(error));
-    } else console.error(error instanceof Error ? error.message : String(error));
+    } else console.error(thrownMessage(error));
     process.exitCode = 1;
   }
 }

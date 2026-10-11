@@ -13,6 +13,7 @@ import {
   resolveSupervisorPaths,
   type SupervisorStatusReader,
 } from "./supervisor-status";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 /**
  * `coforge-computer __lifecycle <command>`: the versioned JSON surface through which the
@@ -68,12 +69,7 @@ async function runCommand(
       print(lifecycleError(LIFECYCLE_ERROR_CODE.USAGE, error.message));
       return LIFECYCLE_EXIT_CODE.USAGE;
     }
-    print(
-      lifecycleError(
-        LIFECYCLE_ERROR_CODE.FAILED,
-        error instanceof Error ? error.message : String(error),
-      ),
-    );
+    print(lifecycleError(LIFECYCLE_ERROR_CODE.FAILED, thrownMessage(error)));
     return LIFECYCLE_EXIT_CODE.FAILED;
   }
 }

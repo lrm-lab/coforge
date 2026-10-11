@@ -1,5 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import type { HeldBusyAgent } from "@lrm/coforge-sdk/internal";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 /**
  * How long a lifecycle operation lets in-flight Agent work finish after the runner hold is
@@ -95,7 +96,7 @@ export async function holdRunnersUntilQuiescent(
       logger.warn("Runner hold could not be applied; continuing without it", {
         event: "restart:runner_hold_failed",
         elapsed_ms: elapsed(),
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       });
       return { ...snapshot, busyAgents: [], quiescent: true, elapsedMs: elapsed() };
     }

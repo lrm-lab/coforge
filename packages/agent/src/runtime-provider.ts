@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 // oxlint-disable-next-line no-restricted-imports -- Reads Bun's bundled roots, opens no socket: https://bun.com/reference/node/tls/rootCertificates
 import { rootCertificates } from "node:tls";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 export const API_KEY_ENV_BY_PROVIDER = {
   deepseek: "DEEPSEEK_API_KEY",
@@ -90,7 +91,7 @@ function extraCertificateAuthorities(
   } catch (error) {
     throw new SessionEnvironmentError(
       "NODE_EXTRA_CA_CERTS",
-      `NODE_EXTRA_CA_CERTS names ${path}, which could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      `NODE_EXTRA_CA_CERTS names ${path}, which could not be read: ${thrownMessage(error)}`,
       { cause: error },
     );
   }

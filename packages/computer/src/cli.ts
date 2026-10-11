@@ -33,6 +33,7 @@ import {
   ComputerRegistrationClient,
   RUNNER_HOLD_REASONS,
   type HeldBusyAgent,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import {
   createDaemonHost,
@@ -545,7 +546,7 @@ export async function restartSupervisor(
 ): Promise<void> {
   const foregroundRefusal = (cause: unknown): Error =>
     new Error(
-      `Cannot restart the supervisor of a foreground externally supervised Computer while it is running: ${cause instanceof Error ? cause.message : String(cause)} Restart it through its external supervisor, or install the supported user service with \`coforge-computer start\`.`,
+      `Cannot restart the supervisor of a foreground externally supervised Computer while it is running: ${thrownMessage(cause)} Restart it through its external supervisor, or install the supported user service with \`coforge-computer start\`.`,
       { cause },
     );
   // launchd only: refuse outright rather than silently falling back to bootstrapping a fresh

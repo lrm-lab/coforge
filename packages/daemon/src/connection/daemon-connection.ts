@@ -144,6 +144,7 @@ import {
   type WeeklyReportResponse,
   agentEnvironmentViolation,
   utf8Encoder,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import type { AgentRuntimeProviderConfig } from "#src/code-agent/contract";
@@ -1914,9 +1915,7 @@ export class DaemonConnection implements DaemonConnectionClient {
       // and reporting only the final attempt named a cause that belonged to a frame kind this
       // publication may never have been. An Agent that never woke leaves nothing else behind.
       rejections: rejections
-        .map(
-          ({ kind, error }) => `${kind}: ${error instanceof Error ? error.message : String(error)}`,
-        )
+        .map(({ kind, error }) => `${kind}: ${thrownMessage(error)}`)
         .join("; "),
       // The fields the payload carries, never their values, so a frame no decoder accepted can
       // still be matched against a schema without putting message text in the log.

@@ -109,6 +109,7 @@ import {
   AGENT_CONTEXT_SCAN_STATUS,
   UUID_LIKE_SOURCE,
   utf8Encoder,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { memoryIndexReminder } from "#src/agent-runtime/agent-memory-seed";
@@ -1219,7 +1220,7 @@ export class DaemonRuntime {
     try {
       await requestUpgrade(requestId, expectedVersion);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = thrownMessage(error);
       const errorCode = parseUpgradeErrorCode((error as { code?: unknown } | null)?.code);
       logger.warn("Computer upgrade request was refused", {
         event: "upgrade:request_refused",

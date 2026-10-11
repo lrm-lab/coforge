@@ -10,7 +10,7 @@ import {
 import { tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { getLogger } from "@logtape/logtape";
-import { normalizeSeenExactSeqs } from "@lrm/coforge-sdk/internal";
+import { normalizeSeenExactSeqs, thrownMessage } from "@lrm/coforge-sdk/internal";
 import { escapePathIdentity, isSafePathScope } from "./path-scope";
 
 const logger = getLogger(["coforge", "daemon", "consumed-seqs"]);
@@ -151,7 +151,7 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
       logger.warn("could not persist the consumed sequence cursor", {
         event: "message.consumed_seqs_write_failed",
         agent_id: agentId,
-        error: error instanceof Error ? error.message : String(error),
+        error: thrownMessage(error),
       });
     }
   }

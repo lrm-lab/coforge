@@ -31,6 +31,7 @@ import type {
   StatusPorts,
   SupportedStatusPlatform,
 } from "./types";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 /** How long a Workspace process gets to answer its handshake before status reports it unknown. */
 const CLOUD_CONNECTION_PROBE_MS = 2_000;
@@ -115,7 +116,7 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
           })),
         };
       } catch (error) {
-        return { reachable: false, error: error instanceof Error ? error.message : String(error) };
+        return { reachable: false, error: thrownMessage(error) };
       }
     },
     async loadBindings(): Promise<BindingsLoad> {
@@ -126,7 +127,7 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
         ).load()) as StatusBinding[];
         return { ok: true, bindings };
       } catch (error) {
-        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+        return { ok: false, error: thrownMessage(error) };
       }
     },
     listWorkspaceAgents:
@@ -197,7 +198,7 @@ async function readActiveInstall(path: string): Promise<ActiveInstallRead> {
     text = await readFile(path, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent" };
-    return { kind: "corrupt", error: error instanceof Error ? error.message : String(error) };
+    return { kind: "corrupt", error: thrownMessage(error) };
   }
   let value: unknown;
   try {

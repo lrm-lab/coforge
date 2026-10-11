@@ -5,6 +5,7 @@ import {
   UPGRADE_ERROR_CODE,
   type ManagedRuntimeIdentity,
   type RunnerHoldReason,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { startDaemonLocalRpcServer, type DaemonHoldReport } from "#src/local-rpc";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
@@ -98,7 +99,7 @@ export async function runMachineSupervisor(
           }).catch((error) =>
             logger.error("Leftover Computer upgrade job sweep failed", {
               event: "upgrade:leftover_job_sweep_failed",
-              error_message: error instanceof Error ? error.message : String(error),
+              error_message: thrownMessage(error),
             }),
           );
           if (process.platform !== "win32") await leftoverSweep;
@@ -254,7 +255,7 @@ async function runWithSupervisorLock(
         workspace_id: workspaceId,
         operation,
         timeout_ms: RUNNER_HOLD_WORKSPACE_TIMEOUT_MS,
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       });
       return { held, busyAgents: [], unreachableWorkspaceIds: [workspaceId] };
     }
@@ -331,7 +332,7 @@ async function runWithSupervisorLock(
       supervisorLogger.warn("Refreshing a Workspace's local upgrade config failed", {
         event: "upgrade:child_config_refresh_failed",
         workspace_id: workspaceId,
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       });
     }
   };
@@ -554,7 +555,7 @@ async function runWithSupervisorLock(
     } catch (error) {
       supervisorLogger.error("Computer upgrade receipt sweep failed", {
         event: "upgrade:receipt_sweep_failed",
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       });
     }
   };
@@ -580,7 +581,7 @@ async function runWithSupervisorLock(
         event: "upgrade:receipt_watch_failed",
         workspace_id: workspaceId,
         request_id: requestId,
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       }),
     );
     upgradeWatches.add(watch);
@@ -635,7 +636,7 @@ async function runWithSupervisorLock(
         }
         supervisorLogger.error("Windows Workspace reconcile failed", {
           event: "workspace:windows_reconcile_failed",
-          error_message: error instanceof Error ? error.message : String(error),
+          error_message: thrownMessage(error),
         });
       },
     });
@@ -683,7 +684,7 @@ async function runWithSupervisorLock(
                   // TTL, refusing every later upgrade in the meantime (the requirement this
                   // record exists for: never leave an operation pending when the launch itself is
                   // what failed).
-                  const message = error instanceof Error ? error.message : String(error);
+                  const message = thrownMessage(error);
                   await completeUpgrade(request.workspaceId, request.requestId, {
                     requestId: request.requestId,
                     status: "failed",
