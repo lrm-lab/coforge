@@ -13,6 +13,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/errors";
 import { terminalText } from "#src/terminal-output";
+import { unsettledWorkspaceLine } from "./workspace-report-line";
 
 /** A locally registered Workspace a `--workspace <slug-or-id>` selector names. */
 export type LocalWorkspace = { id: string; slug: string };
@@ -90,25 +91,13 @@ export function createCommand(input: {
     const resolved = await names(unsettled);
     const failed: string[] = [];
     for (const [index, runtime] of unsettled.entries()) {
-      const name = resolved[index]!;
-      if (runtime.lifecycleUnderWay) {
-        const under = operation === "start" ? "still starting" : "still restarting";
-        write(`  ${name}: ${under}. Run 'coforge-computer status' to follow it.`);
-        continue;
-      }
-      if (runtime.cloudConnection === "connecting") {
-        const retrying = runtime.cloudConnectionError
-          ? `, retrying after ${terminalText(runtime.cloudConnectionError)}`
-          : "";
-        write(
-          `  ${name}: still connecting${retrying}. Run 'coforge-computer status' to follow it.`,
-        );
-        continue;
-      }
-      failed.push(name);
-      write(
-        `  ${name}: not connected (${terminalText(runtime.cloudConnectionError ?? "unknown error")}).`,
+      const { line, failed: notConnected } = unsettledWorkspaceLine(
+        operation,
+        resolved[index]!,
+        runtime,
       );
+      write(line);
+      if (notConnected) failed.push(resolved[index]!);
     }
     if (!failed.length) return;
     const restarts = failed.map((name) => `'${workspaceHealthRecoveryCommand(name)}'`);
