@@ -13,8 +13,20 @@ export function getDatabaseClient(): PrismaClient | undefined {
   return (client ??= createDatabaseClient(url));
 }
 
+/**
+ * How long an idle pooled connection stays open. `pg`'s default closes it after 10 s, so any
+ * request after a 10 s lull first opens a new connection (TCP, startup, SCRAM) for each query it
+ * runs concurrently: about 20 ms on a local PostgreSQL. Agents check and send in bursts minutes
+ * apart, so most of their requests landed after such a lull.
+ */
+export const DATABASE_POOL_IDLE_TIMEOUT_MS = 5 * 60_000;
+
+export function databasePoolConfig(url: string) {
+  return { connectionString: url, idleTimeoutMillis: DATABASE_POOL_IDLE_TIMEOUT_MS };
+}
+
 function createDatabaseClient(url: string): PrismaClient {
-  const adapter = new PrismaPg({ connectionString: url });
+  const adapter = new PrismaPg(databasePoolConfig(url));
   // Query events make Prisma format every query's parameters, so they are on only while the
   // deployment asks for Server-Timing.
   if (!isServerTimingEnabled()) return new PrismaClient({ adapter });
