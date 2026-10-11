@@ -14,16 +14,43 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
  */
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 
+/** Ten times the Agent's 4 Tasks, and still two orders of magnitude below the others' 4,000. */
+const OWNED_ROW_BUDGET = 40;
+
 type PlanNode = {
   "Node Type": string;
   "Relation Name"?: string;
   "Index Name"?: string;
   "Index Cond"?: string;
+  "Actual Rows"?: number;
+  "Actual Loops"?: number;
+  "Rows Removed by Filter"?: number;
+  "Rows Removed by Index Recheck"?: number;
   Plans?: PlanNode[];
 };
 
 function planNodes(node: PlanNode): PlanNode[] {
   return [node, ...(node.Plans ?? []).flatMap(planNodes)];
+}
+
+/**
+ * Task rows a scan read from the table: the ones it kept plus the ones it discarded afterwards.
+ * This, not the plan's shape, is what the reads must keep small. On a database that also holds
+ * other Workspaces' Tasks the planner may combine the owner index with another Task index (a
+ * BitmapAnd), which is just as cheap.
+ */
+function taskRowsRead(nodes: PlanNode[]): number {
+  return nodes
+    .filter((node) => node["Relation Name"] === "tasks")
+    .reduce(
+      (sum, node) =>
+        sum +
+        ((node["Actual Rows"] ?? 0) +
+          (node["Rows Removed by Filter"] ?? 0) +
+          (node["Rows Removed by Index Recheck"] ?? 0)) *
+          (node["Actual Loops"] ?? 1),
+      0,
+    );
 }
 
 test.skipIf(!connectionString)(
@@ -114,7 +141,7 @@ test.skipIf(!connectionString)(
       for (const { query, params } of reads) {
         const [{ "QUERY PLAN": plan }] = await db.$queryRawUnsafe<
           [{ "QUERY PLAN": [{ Plan: PlanNode }] }]
-        >(`EXPLAIN (FORMAT JSON) ${query}`, ...params);
+        >(`EXPLAIN (ANALYZE, FORMAT JSON) ${query}`, ...params);
         const nodes = planNodes(plan[0].Plan);
         const taskScans = nodes.filter((node) => node["Relation Name"] === "tasks");
         expect(taskScans).toHaveLength(1);
@@ -123,8 +150,9 @@ test.skipIf(!connectionString)(
         const taskIndexConds = nodes.flatMap((node) =>
           node["Index Name"]?.startsWith("tasks_") ? [node["Index Cond"] ?? ""] : [],
         );
-        expect(taskIndexConds).toHaveLength(1);
-        expect(taskIndexConds[0]).toContain("ownerMemberId");
+        expect(taskIndexConds.some((cond) => cond.includes("ownerMemberId"))).toBe(true);
+        // The Agent's own 4 Tasks, not every Task other members own.
+        expect(taskRowsRead(nodes)).toBeLessThanOrEqual(OWNED_ROW_BUDGET);
       }
     } finally {
       await db.workspace.delete({ where: { id: workspace.id } });

@@ -143,4 +143,7 @@ test.skipIf(!connectionString)(
       await db.$disconnect();
     }
   },
+  // Seeding 20,000 deliveries outlasts bun's 5 s default on a database that already holds other
+  // Workspaces' data, as `channel-mention-affinity-plan.integration.test.ts` allows for.
+  60_000,
 );
