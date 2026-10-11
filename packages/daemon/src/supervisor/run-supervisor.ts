@@ -30,7 +30,7 @@ import {
   workspaceDegradedMessage,
   workspaceHealthJournalPath,
 } from "./workspace-health-journal";
-import { answeredWithin } from "./runner-hold";
+import { askWorkspaceRunnerHold } from "./runner-hold";
 import { workspaceDaemonConfig } from "./workspace-daemon-config";
 import {
   awaitCloudConnections,
@@ -53,12 +53,6 @@ import {
 /** How often a Coordinator checks for a receipt from a job it is watching. */
 const UPGRADE_RECEIPT_POLL_MS = 2_000;
 
-/**
- * How long the Coordinator waits for one Workspace daemon to answer a runner hold. A Workspace
- * that does not answer is reported unreachable and counted as idle: a wedged or dead Workspace
- * daemon must never be able to block a Computer upgrade or a restart.
- */
-const RUNNER_HOLD_WORKSPACE_TIMEOUT_MS = 5_000;
 /** How long a Workspace start waits for its process to answer. */
 const WORKSPACE_READINESS_MS = 30_000;
 
@@ -196,49 +190,20 @@ async function runWithSupervisorLock(
       process.platform,
     );
   const supervisorLogger = getLogger(["coforge", "daemon", "supervisor"]);
-  /**
-   * Asks one Workspace daemon to hold (or release) its runners. A Workspace that does not answer
-   * inside `RUNNER_HOLD_WORKSPACE_TIMEOUT_MS`, answers `accepted: false`, or fails outright is
-   * reported unreachable and counted as idle: a wedged or dead Workspace daemon must never be
-   * able to block a Computer upgrade or a restart. Shared by the
-   * Coordinator-wide fan-out below and by the per-Workspace restart hold.
-   */
-  const holdWorkspaceRunners = async (
+  /** `askWorkspaceRunnerHold` against one Workspace daemon's local socket. */
+  const holdWorkspaceRunners = (
     workspaceId: string,
     operation: "hold" | "release",
     reason: RunnerHoldReason | undefined,
     eventPrefix: string,
-    // `unreachableWorkspaceIds` is optional on the wire report but always known here, so the
-    // restart hold can read it without a fallback.
-  ): Promise<DaemonHoldReport & { unreachableWorkspaceIds: string[] }> => {
-    const held = operation === "hold";
-    try {
-      const response = await answeredWithin(
-        childClient(workspaceId).hold(operation, reason),
-        RUNNER_HOLD_WORKSPACE_TIMEOUT_MS,
-        `Workspace ${workspaceId} did not answer the runner hold`,
-      );
-      if (!response.accepted)
-        return { held, busyAgents: [], unreachableWorkspaceIds: [workspaceId] };
-      return {
-        held,
-        busyAgents: response.busyAgents.map((agent) => ({
-          ...agent,
-          workspaceId: agent.workspaceId || workspaceId,
-        })),
-        unreachableWorkspaceIds: [],
-      };
-    } catch (error) {
-      supervisorLogger.warn("Workspace daemon did not answer the runner hold; treating as idle", {
-        event: `${eventPrefix}:runner_hold_unreachable`,
-        workspace_id: workspaceId,
-        operation,
-        timeout_ms: RUNNER_HOLD_WORKSPACE_TIMEOUT_MS,
-        error_message: thrownMessage(error),
-      });
-      return { held, busyAgents: [], unreachableWorkspaceIds: [workspaceId] };
-    }
-  };
+  ) =>
+    askWorkspaceRunnerHold({
+      workspaceId,
+      operation,
+      reason,
+      eventPrefix,
+      hold: (operation, reason) => childClient(workspaceId).hold(operation, reason),
+    });
   /**
    * Read-only settle check for `MachineSupervisor.recordUpgrade`'s blocking pending operation: a
    * receipt already on disk, or the pending TTL already passed, settles it right there instead of
