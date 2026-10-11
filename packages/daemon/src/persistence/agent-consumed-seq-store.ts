@@ -22,6 +22,11 @@ const logger = getLogger(["coforge", "daemon", "consumed-seqs"]);
  * from; a sent send's advanced boundary moves the frontier without reviewing anything; only a
  * presented hold does both. */
 export type AgentConsumedSeqEntry = Readonly<{
+  /** `conversationId`: the conversation this target's cursor belongs to. A channel deleted and
+   * recreated under the same name is a new conversation whose sequences restart at 1, so a cursor
+   * means something only in the conversation it was recorded in. An entry without one is dropped on
+   * read. */
+  conversationId?: string;
   seq?: number;
   readOrder?: number;
   reviewedSeq?: number;
@@ -32,9 +37,9 @@ export type AgentConsumedSeqEntry = Readonly<{
   exactSeqs?: readonly number[];
 }>;
 
-/** The `consumed-seqs.json` shape: a `targets` map, the `aliases` map, and the next `readOrder` to
- * hand out. `nextReadOrder` is never trusted as a starting point on read — `read` recomputes it
- * from the orders it actually sees. */
+/** The `consumed-seqs.json` shape: a `targets` map (each target bound to its conversation), the
+ * `aliases` map, and the next `readOrder` to hand out. `nextReadOrder` is never trusted as a
+ * starting point on read — `read` recomputes it from the orders it actually sees. */
 export type AgentConsumedSeqState = Readonly<{
   targets: Readonly<Record<string, AgentConsumedSeqEntry>>;
   /** `aliases`: another spelling of a target mapped to the spelling its cursor is kept under, so
@@ -64,7 +69,8 @@ function positiveFiniteNumber(value: unknown): number | undefined {
 
 /**
  * The daemon's durable copy of the consumed cursor, kept as one file
- * (`{ targets: { <target>: { seq, readOrder, reviewedSeq, exactSeqs } }, aliases, nextReadOrder }`).
+ * (`{ targets: { <target>: { conversationId, seq, readOrder, reviewedSeq, exactSeqs } }, aliases,
+ * nextReadOrder }`). A cursor is keyed by target and bound to the conversation it belongs to.
  *
  * Why it has to be durable: the cursor decides whether a send is held (`modelSeenSequence`), which
  * frontier and exact sequences travel with a send, and whether a top-level send under a parent
@@ -164,12 +170,13 @@ function encodeIdentity(identity: string): string {
 }
 
 /**
- * Keeps the entries that carry an order, a sequence or exact sequences above that sequence,
- * compresses alias chains, and starts from a `nextReadOrder` that is above every order in the
- * file — so a cursor written by an older build (or hand-edited) can never hand out an order it
- * already used. A `reviewedSeq` is kept only beside a `readOrder`, since it describes a review. A
- * file written before `reviewedSeq` existed has none, so no thread counts as read context until
- * it is read again.
+ * Keeps the entries that carry a conversation and an order, a sequence or exact sequences above
+ * that sequence, compresses alias chains, and starts from a `nextReadOrder` that is above every
+ * order in the file — so a cursor written by an older build (or hand-edited) can never hand out an
+ * order it already used. An entry without a `conversationId` is dropped with its orders: a cursor
+ * written before entries carried one cannot say whose sequences it holds. A `reviewedSeq` is kept
+ * only beside a `readOrder`, since it describes a review. A file written before `reviewedSeq`
+ * existed has none, so no thread counts as read context until it is read again.
  */
 function normalizeState(value: unknown): AgentConsumedSeqState {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -182,11 +189,13 @@ function normalizeState(value: unknown): AgentConsumedSeqState {
       if (target.length === 0 || !entry || typeof entry !== "object" || Array.isArray(entry))
         continue;
       const record = entry as {
+        conversationId?: unknown;
         seq?: unknown;
         readOrder?: unknown;
         reviewedSeq?: unknown;
         exactSeqs?: unknown;
       };
+      if (typeof record.conversationId !== "string" || record.conversationId.length === 0) continue;
       const seq = positiveFiniteNumber(record.seq);
       const readOrder = positiveFiniteNumber(record.readOrder);
       const exactSeqs = normalizeSeenExactSeqs(record.exactSeqs, seq ?? 0);
@@ -195,6 +204,7 @@ function normalizeState(value: unknown): AgentConsumedSeqState {
       const reviewedSeq =
         readOrder === undefined ? undefined : positiveFiniteNumber(record.reviewedSeq);
       targets[target] = {
+        conversationId: record.conversationId,
         ...(seq !== undefined ? { seq } : {}),
         ...(readOrder !== undefined ? { readOrder } : {}),
         ...(reviewedSeq !== undefined ? { reviewedSeq } : {}),

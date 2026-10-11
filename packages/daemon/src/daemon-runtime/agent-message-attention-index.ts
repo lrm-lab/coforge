@@ -171,6 +171,11 @@ export class AgentMessageAttentionIndex {
    * `#exactSeen` (`exactSeqs`) and `#aliases`. Once an Agent is hydrated these maps are the
    * source of truth, and each operation writes one snapshot of them. */
   readonly #consumedSeqs?: AgentConsumedSeqPort;
+  /** The conversation each target's cursor belongs to, bound before anything is recorded against
+   * it. Sequences restart at 1 in a recreated channel, so a cursor is meaningful only within one
+   * conversation. A target with no binding stays in memory: the file cannot say whose sequences it
+   * would hold. */
+  readonly #cursorConversation = new Map<string, Map<string, string>>();
   /** Agents whose durable cursor has already been folded into the maps above. The file is read
    * once per Agent per daemon life rather than on every lookup: the same answer, minus the
    * syscall in a message loop, and `clearAgent` drops the marker so a re-registered Agent reads
@@ -227,6 +232,7 @@ export class AgentMessageAttentionIndex {
     if (message.workspaceId !== this.#workspaceId)
       throw new Error("agent message targets another Workspace");
     if (!hasDeliveryScope(message)) throw new Error("invalid agent message scope");
+    this.bindConversation(message.agentId, message.target, message.conversationId);
     const generation = this.#generation(message.agentId);
     if (generation.seenDeliveryIds.has(message.deliveryId)) {
       if (!generation.notified.has(message.deliveryId)) {
@@ -288,6 +294,7 @@ export class AgentMessageAttentionIndex {
     if (message.workspaceId !== this.#workspaceId)
       throw new Error("agent message targets another Workspace");
     if (!hasDeliveryScope(message)) throw new Error("invalid agent message scope");
+    this.bindConversation(message.agentId, message.target, message.conversationId);
     const generation = this.#generation(message.agentId);
     if (!generation.seenDeliveryIds.has(message.deliveryId)) {
       this.#remember(generation, message.deliveryId);
@@ -386,6 +393,7 @@ export class AgentMessageAttentionIndex {
     const announced: AgentMessageDelivery[] = [];
     for (const message of held) {
       if (!hasDeliveryScope(message)) continue;
+      this.bindConversation(agentId, message.target, message.conversationId);
       settled.push(message);
       if (generation.seenDeliveryIds.has(message.deliveryId)) {
         announced.push(message);
@@ -418,6 +426,11 @@ export class AgentMessageAttentionIndex {
     const generation = this.#generation(agentId);
     const session = this.#runtimes.session(agentId);
     if (!session?.notify) throw new Error("Agent session cannot receive a wakeup notice");
+    // Bound before the Agent's attention is copied below: a target that a new conversation replaces
+    // must not carry the old conversation's pending attention into the copy.
+    for (const message of messages)
+      if (message.target && message.conversationId)
+        this.bindConversation(agentId, message.target, message.conversationId);
     const currentAttention = this.#attention.get(agentId) ?? new Map<string, MessageAttention>();
     const byTarget = new Map(currentAttention);
     const recoveredTargets = new Set<string>();
@@ -755,6 +768,18 @@ ${INBOX_DRAIN_HINT}]`,
   }
 
   /**
+   * Binds `target`'s durable cursor to the conversation it belongs to. A target seen under another
+   * conversation (a channel deleted and recreated under the same name) forgets everything the old
+   * conversation recorded for it, since its sequences restart and no longer name the same messages.
+   * A cursor recorded before any binding is adopted instead, so it survives the first binding. At
+   * most one snapshot.
+   */
+  bindConversation(agentId: string, target: string, conversationId: string): void {
+    this.#hydrate(agentId);
+    if (this.#bind(agentId, target, conversationId)) this.#persist(agentId);
+  }
+
+  /**
    * Records the messages the Agent was shown one by one, per target, above its contiguous frontier
    * (what a `check` does): a later delivery of any of them is already consumed, a send reports
    * them as `seenExactSeqs`, and their pending attention is settled. The frontier does not move.
@@ -791,7 +816,12 @@ ${INBOX_DRAIN_HINT}]`,
   ): void {
     this.#hydrate(agentId);
     const { target } = read;
-    let changed = this.#setAlias(agentId, read.spelling, target);
+    // A read of another conversation starts that conversation's cursor empty, so the binding comes
+    // before anything the read records.
+    let changed = false;
+    if (read.scope?.target === target)
+      changed = this.#bind(agentId, target, read.scope.conversationId);
+    changed = this.#setAlias(agentId, read.spelling, target) || changed;
     if (read.through > 0) changed = this.#advanceFrontier(agentId, target, read.through) || changed;
     changed = this.#addExact(agentId, target, read.shown) || changed;
     this.#settleSeen(agentId, target);
@@ -1005,6 +1035,25 @@ ${INBOX_DRAIN_HINT}]`,
     return true;
   }
 
+  /** Binds `target` to `conversationId` without writing; whether the binding changed. Re-binding a
+   * target to another conversation drops the old conversation's frontier, exact sequences, read
+   * order and pending attention for it. */
+  #bind(agentId: string, target: string, conversationId: string): boolean {
+    const byTarget = this.#cursorConversation.get(agentId) ?? new Map<string, string>();
+    this.#cursorConversation.set(agentId, byTarget);
+    const bound = byTarget.get(target);
+    if (bound === conversationId) return false;
+    if (bound !== undefined) {
+      this.#modelSeen.get(agentId)?.delete(target);
+      this.#exactSeen.get(agentId)?.delete(target);
+      this.#readContext.get(agentId)?.delete(target);
+      this.#reviewedSequence.get(agentId)?.delete(target);
+      this.clear(agentId, target);
+    }
+    byTarget.set(target, conversationId);
+    return true;
+  }
+
   #takeReadOrder(agentId: string, target: string, sequence: number): void {
     if (Number.isInteger(sequence) && sequence > 0) {
       const reviewed = this.#reviewedSequence.get(agentId) ?? new Map<string, number>();
@@ -1021,7 +1070,7 @@ ${INBOX_DRAIN_HINT}]`,
     this.#readContext.set(agentId, byTarget);
   }
 
-  /** Writes one snapshot of the Agent's durable consumed state. */
+  /** Writes one snapshot of the Agent's durable consumed state: the targets bound to a conversation. */
   #persist(agentId: string): void {
     const store = this.#consumedSeqs;
     if (!store) return;
@@ -1037,8 +1086,13 @@ ${INBOX_DRAIN_HINT}]`,
     }
     for (const [target, exactSeqs] of this.#exactSeen.get(agentId) ?? [])
       if (exactSeqs.length > 0) entry(target).exactSeqs = exactSeqs;
+    const durable: Record<string, AgentConsumedSeqEntry> = {};
+    for (const [target, conversationId] of this.#cursorConversation.get(agentId) ?? []) {
+      const record = targets[target];
+      if (record) durable[target] = { ...record, conversationId };
+    }
     store.write(agentId, {
-      targets,
+      targets: durable,
       aliases: Object.fromEntries(this.#aliases.get(agentId) ?? []),
       nextReadOrder: (this.#readContextCounters.get(agentId) ?? 0) + 1,
     });
@@ -1145,7 +1199,9 @@ ${INBOX_DRAIN_HINT}]`,
     const readContext = new Map<string, number>();
     const reviewedSequence = new Map<string, number>();
     const exactSeen = new Map<string, readonly number[]>();
+    const conversations = new Map<string, string>();
     for (const [target, entry] of Object.entries(state.targets)) {
+      if (entry.conversationId !== undefined) conversations.set(target, entry.conversationId);
       if (entry.seq !== undefined) modelSeen.set(target, entry.seq);
       if (entry.readOrder !== undefined) readContext.set(target, entry.readOrder);
       if (entry.reviewedSeq !== undefined) reviewedSequence.set(target, entry.reviewedSeq);
@@ -1157,6 +1213,7 @@ ${INBOX_DRAIN_HINT}]`,
     this.#exactSeen.set(agentId, exactSeen);
     this.#aliases.set(agentId, new Map(Object.entries(state.aliases)));
     this.#readContextCounters.set(agentId, state.nextReadOrder - 1);
+    this.#cursorConversation.set(agentId, conversations);
   }
 
   clearAgent(agentId: string): void {
@@ -1167,6 +1224,7 @@ ${INBOX_DRAIN_HINT}]`,
     this.#reviewedSequence.delete(agentId);
     this.#exactSeen.delete(agentId);
     this.#aliases.delete(agentId);
+    this.#cursorConversation.delete(agentId);
     this.#conversationTargets.delete(agentId);
     this.#attentionConversation.delete(agentId);
     this.#pendingSequences.delete(agentId);

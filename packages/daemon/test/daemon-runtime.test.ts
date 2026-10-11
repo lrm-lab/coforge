@@ -3182,6 +3182,13 @@ describe("DaemonRuntime", () => {
 
   test("a server-held send stores the draft fields and the resend carries its seenUpToSeq", async () => {
     const stateDirectory = join(tempRoot, `coforge-message-drafts-${crypto.randomUUID()}`);
+    // The Agent has met @ada's conversation before: a cursor is durable only for a target bound to
+    // one, and nothing in this test delivers to or reads @ada.
+    new AgentConsumedSeqStore().write("agent-a", {
+      targets: { "@ada": { conversationId: "conversation-b", readOrder: 1 } },
+      aliases: {},
+      nextReadOrder: 1,
+    });
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const operations: string[] = [];
@@ -3555,7 +3562,7 @@ describe("DaemonRuntime", () => {
     // The Agent reviewed @agent through message 3 before its process exited; the consumed cursor
     // outlives the process.
     new AgentConsumedSeqStore().write("agent-a", {
-      targets: { "@agent": { seq: 3 } },
+      targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
       aliases: {},
       nextReadOrder: 1,
     });
@@ -3909,7 +3916,7 @@ describe("DaemonRuntime", () => {
 
   test("acknowledges, rather than rejects, a message an Agent with no process has already seen", async () => {
     new AgentConsumedSeqStore().write("agent-a", {
-      targets: { "@agent": { seq: 3 } },
+      targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
       aliases: {},
       nextReadOrder: 1,
     });
