@@ -1,4 +1,4 @@
-import { useContext, type ReactNode } from "react";
+import { forwardRef, useContext, type ReactNode } from "react";
 import {
   Button,
   OverlayTriggerStateContext,
@@ -81,21 +81,24 @@ export function HoverPopover({
 /** The trigger, inside `PreviewTrigger` so it can reach the peek's open state: `PreviewTrigger`
  * provides it through `OverlayTriggerStateContext`, the context React Aria's own overlay triggers
  * share with their content. */
-function PreviewTriggerButton({ onPress, ...props }: ButtonProps) {
-  const closePreview = useClosePreview();
-  return (
-    <Button
-      {...props}
-      onPress={
-        onPress &&
-        ((event) => {
-          closePreview();
-          onPress(event);
-        })
-      }
-    />
-  );
-}
+const PreviewTriggerButton = forwardRef<HTMLButtonElement, ButtonProps>(
+  function PreviewTriggerButton({ onPress, ...props }, ref) {
+    const closePreview = useClosePreview();
+    return (
+      <Button
+        {...props}
+        ref={ref}
+        onPress={
+          onPress &&
+          ((event) => {
+            closePreview();
+            onPress(event);
+          })
+        }
+      />
+    );
+  },
+);
 
 /** Closes the peek the calling content sits in; for an action inside the popover that moves the
  * reader somewhere else (the Agent card's "Recent activity" link opens the profile panel). */
