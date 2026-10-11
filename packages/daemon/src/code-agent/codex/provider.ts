@@ -7,6 +7,7 @@ import type {
 } from "@coforge/agent";
 import type { CodeAgentProvider } from "#src/code-agent/contract";
 import { codexItemStartedEvents } from "./item-events";
+import { codexTurnOutcome } from "./turn-outcome";
 import { readCodexUsage } from "./usage";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { JsonlProcess, JsonlRequestError } from "#src/code-agent/jsonl-process";
@@ -447,33 +448,24 @@ class CodexAgentSession implements AgentSession {
       }
       this.#commandOutputBytes.clear();
       this.#lastCompletedTurnId = turn.id;
-      const status =
-        turn.status === "interrupted"
-          ? "interrupted"
-          : turn.status === "completed"
-            ? "completed"
-            : "failed";
-      if (status === "failed") {
-        const error = asRecord(turn.error);
-        // Raw fact only (no scrub/cap here) — the daemon core owns redaction and
-        // truncation for the visible Activity; this local scrub only bounds what
-        // reaches the daemon's own structured log line below.
-        const rawMessage =
-          typeof error?.message === "string" ? error.message : "Codex turn failed.";
+      const { status, failure } = codexTurnOutcome(turn);
+      if (failure) {
+        // The raw message goes to the Activity (the daemon core redacts and truncates it); this
+        // local scrub only bounds what reaches the daemon's own structured log line.
         logger.error("Codex turn failed", {
           event: "codex.turn.failed",
           agent_id: this.#agentId,
           runtime_id: this.#runtimeId,
           turn_status: turn.status,
-          error_code: typeof error?.code === "string" ? error.code : undefined,
-          error_message: scrubError(rawMessage),
+          error_code: failure.code,
+          error_message: scrubError(failure.message),
           outcome: "error",
         });
         this.#emit({
           type: "error",
-          message: rawMessage,
+          message: failure.message,
           occurredAt: eventTime(record),
-          providerErrorClass: typeof error?.code === "string" ? error.code : "CodexTurnError",
+          providerErrorClass: failure.code ?? "CodexTurnError",
           providerErrorReason: "turn_failed",
         });
       }
