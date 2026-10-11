@@ -128,18 +128,19 @@ test.skipIf(!connectionString)(
         const taskScans = nodes.filter((node) => node["Relation Name"] === "tasks");
         expect(taskScans).toHaveLength(1);
         expect(taskScans[0]!["Node Type"]).not.toBe("Seq Scan");
+        // The 4 open Tasks, not the 4,000 finished ones. Checked before the index condition so a
+        // failure reports the rows read. Known to fail on a database already full of other
+        // Workspaces' Tasks: there the `--mine` read BitmapAnds both Task indexes without their
+        // `status` column and filters the finished history out of the heap, because the
+        // statistics do not know this owner's Tasks are nearly all finished. That costs about 1 ms
+        // at this test's extreme 4,000, and the fix (a partial index on open Tasks) is not worth a
+        // migration yet.
+        expect(taskRowsRead(nodes)).toBeLessThanOrEqual(UNFINISHED_ROW_BUDGET);
         // A bitmap scan carries its index condition on the child Bitmap Index Scan.
         const taskIndexConds = nodes.flatMap((node) =>
           node["Index Name"]?.startsWith("tasks_") ? [node["Index Cond"] ?? ""] : [],
         );
         expect(taskIndexConds.some((cond) => cond.includes("status = ANY"))).toBe(true);
-        // The 4 open Tasks, not the 4,000 finished ones. Known to fail on a database already full of
-        // other Workspaces' Tasks: there the `--mine` read BitmapAnds both Task indexes without
-        // their `status` column and filters the finished history out of the heap, because the
-        // statistics do not know this owner's Tasks are nearly all finished. That costs about 1 ms
-        // at this test's extreme 4,000, and the fix (a partial index on open Tasks) is not worth a
-        // migration yet.
-        expect(taskRowsRead(nodes)).toBeLessThanOrEqual(UNFINISHED_ROW_BUDGET);
       }
     } finally {
       await db.workspace.delete({ where: { id: workspace.id } });
