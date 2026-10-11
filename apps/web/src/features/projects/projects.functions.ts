@@ -13,7 +13,10 @@ import { createProjectInput, projectIconUploadInput, updateProjectInput } from "
 import { ProjectImages, withProjectIconUrl } from "#src/server/projects/project-images.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import { PROJECT_DETAIL_SELECT } from "#src/server/projects/project-detail.server";
+import {
+  PROJECT_DETAIL_SELECT,
+  readProjectChannelActivity,
+} from "#src/server/projects/project-detail.server";
 
 export const uploadProjectIcon = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -129,9 +132,13 @@ export const getProject = createServerFn({ method: "GET" })
     });
     if (!project) return null;
     const { conversations, ...view } = project;
+    const activity = await readProjectChannelActivity(
+      db,
+      conversations.map((conversation) => conversation.id),
+    );
     const mappedConversations = conversations
-      .map(({ _count, messages, ...conversation }) => {
-        const lastMessage = messages[0];
+      .map((conversation) => {
+        const { memberCount, messageCount, lastMessage } = activity.get(conversation.id)!;
         const sender = lastMessage?.sender;
         const lastSender = sender
           ? sender.user
@@ -149,8 +156,8 @@ export const getProject = createServerFn({ method: "GET" })
           : null;
         return {
           ...conversation,
-          memberCount: _count.members,
-          messageCount: _count.messages,
+          memberCount,
+          messageCount,
           lastActivityAt: (lastMessage?.createdAt ?? conversation.createdAt).toISOString(),
           lastSender,
         };
