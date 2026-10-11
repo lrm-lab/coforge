@@ -26,7 +26,8 @@ import { join } from "node:path";
 import type { RuntimeMetadata } from "@lrm/coforge-sdk/internal";
 import { discoverCoforgeCatalog, discoverPiCatalog } from "#src/code-agent/runtime-inventory";
 import { COFORGE_AGENT_RUNTIME_METADATA } from "./metadata";
-import { errorMessage, textContent } from "#src/code-agent/json-record";
+import { errorMessage } from "#src/code-agent/json-record";
+import { piSessionEvents } from "./session-events";
 
 export class PiProvider implements CodeAgentProvider {
   readonly provider: RuntimeProvider = RUNTIME_PROVIDER.PI;
@@ -194,53 +195,7 @@ class AgentSessionImpl implements AgentSession {
         // only makes that prompt abortable once its run starts.
         void this.#trackPrompt(runtime.session.abort());
       }
-      if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta")
-        this.#emit({
-          type: "text-delta",
-          text: event.assistantMessageEvent.delta,
-        });
-      if (event.type === "message_update" && event.assistantMessageEvent.type === "thinking_delta")
-        this.#emit({
-          type: "thinking-delta",
-          text: event.assistantMessageEvent.delta,
-        });
-      // Content-free lifecycle frames (a new turn/message beginning, or a streamed block
-      // opening/continuing before it carries renderable text/thinking) still show the turn is
-      // live, without duplicating the text/thinking deltas already handled above.
-      if (event.type === "turn_start" || event.type === "message_start")
-        this.#emit({ type: "progress", source: "pi_turn_lifecycle" });
-      if (
-        event.type === "message_update" &&
-        (event.assistantMessageEvent.type === "start" ||
-          event.assistantMessageEvent.type === "text_start" ||
-          event.assistantMessageEvent.type === "thinking_start" ||
-          event.assistantMessageEvent.type === "toolcall_start" ||
-          event.assistantMessageEvent.type === "toolcall_delta")
-      )
-        this.#emit({ type: "progress", source: "pi_message_event" });
-      if (event.type === "compaction_start") this.#emit({ type: "compaction-started" });
-      if (event.type === "compaction_end")
-        this.#emit(
-          event.aborted ? { type: "compaction-interrupted" } : { type: "compaction-finished" },
-        );
-      if (event.type === "tool_execution_start") {
-        this.#emit({
-          type: "tool-start",
-          id: event.toolCallId,
-          name: event.toolName,
-          input: event.args,
-        });
-      }
-      if (event.type === "tool_execution_update") {
-        const text = textContent(event.partialResult.content);
-        if (text) this.#emit({ type: "tool-output", id: event.toolCallId, text });
-      }
-      if (event.type === "tool_execution_end")
-        this.#emit({
-          type: "tool-end",
-          id: event.toolCallId,
-          isError: event.isError,
-        });
+      for (const translated of piSessionEvents(event)) this.#emit(translated);
       // A failed attempt may be retried, and cancellation may surface as an error.
       // Only settlement determines the run's terminal result.
       if (event.type === "message_end" && event.message.role === "assistant") {
