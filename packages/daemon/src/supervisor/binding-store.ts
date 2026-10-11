@@ -1,5 +1,6 @@
 import { mkdir, open, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { isRecord } from "@lrm/coforge-sdk/internal";
 import {
   LIFECYCLE_FAILURE_OPERATIONS,
   UPGRADE_OPERATION_HISTORY,
@@ -75,15 +76,12 @@ export class FileBindingStore implements BindingStore {
   }
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 function text(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 function validLastFailure(failure: unknown): boolean {
   return (
-    record(failure) &&
+    isRecord(failure) &&
     (LIFECYCLE_FAILURE_OPERATIONS as readonly unknown[]).includes(failure.operation) &&
     text(failure.message) &&
     integer(failure.at)
@@ -95,7 +93,7 @@ function validLastFailure(failure: unknown): boolean {
 function dropMalformedLastFailures(value: unknown): void {
   if (!Array.isArray(value)) return;
   for (const binding of value)
-    if (record(binding) && "lastFailure" in binding && !validLastFailure(binding.lastFailure))
+    if (isRecord(binding) && "lastFailure" in binding && !validLastFailure(binding.lastFailure))
       delete binding.lastFailure;
 }
 
@@ -104,7 +102,7 @@ function validateBindings(value: unknown): asserts value is ManagedBinding[] {
   const ids = new Set<string>();
   for (const binding of value) {
     if (
-      !record(binding) ||
+      !isRecord(binding) ||
       !text(binding.workspaceId) ||
       !text(binding.computerId) ||
       !text(binding.workspaceRoot) ||
@@ -117,7 +115,7 @@ function validateBindings(value: unknown): asserts value is ManagedBinding[] {
       const pending = binding.restart;
       if (
         !binding.enabled ||
-        !record(pending) ||
+        !isRecord(pending) ||
         !text(pending.requestId) ||
         !["stopping", "starting"].includes(String(pending.phase)) ||
         !(pending.previousInstanceId === null || text(pending.previousInstanceId))
@@ -130,7 +128,7 @@ function validateBindings(value: unknown): asserts value is ManagedBinding[] {
       const requests = new Set<string>();
       for (const result of binding.restartResults) {
         if (
-          !record(result) ||
+          !isRecord(result) ||
           !text(result.requestId) ||
           requests.has(result.requestId) ||
           !(
@@ -142,7 +140,7 @@ function validateBindings(value: unknown): asserts value is ManagedBinding[] {
           throw new Error("invalid binding registry result");
         requests.add(result.requestId);
       }
-      if (record(binding.restart) && requests.has(String(binding.restart.requestId)))
+      if (isRecord(binding.restart) && requests.has(String(binding.restart.requestId)))
         throw new Error("invalid binding registry conflicting restart");
     }
     if (binding.lastFailure !== undefined && !validLastFailure(binding.lastFailure))
@@ -162,7 +160,7 @@ function validateBindings(value: unknown): asserts value is ManagedBinding[] {
       const requests = new Set<string>();
       for (const request of binding.upgradeRequests) {
         if (
-          !record(request) ||
+          !isRecord(request) ||
           !text(request.requestId) ||
           !text(request.expectedVersion) ||
           requests.has(request.requestId)
@@ -186,7 +184,7 @@ function validateUpgradeOperations(value: unknown): void {
   let pending = 0;
   for (const operation of value) {
     if (
-      !record(operation) ||
+      !isRecord(operation) ||
       !text(operation.requestId) ||
       !text(operation.expectedVersion) ||
       !integer(operation.requestedAt) ||
@@ -201,7 +199,7 @@ function validateUpgradeOperations(value: unknown): void {
       if (terminal !== undefined) throw new Error("invalid binding registry upgrade operation");
     } else if (operation.state !== "acknowledged" || terminal !== undefined) {
       if (
-        !record(terminal) ||
+        !isRecord(terminal) ||
         !integer(terminal.at) ||
         (terminal.version !== undefined && !text(terminal.version)) ||
         (terminal.error !== undefined && !text(terminal.error))
