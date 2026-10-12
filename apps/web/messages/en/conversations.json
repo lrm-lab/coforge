@@ -1,7 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "conversation_back_to_list": "Back to conversations",
-  "channels_title": "Group chats",
+  "channels_title": "Channels",
   "channel_create": "Create channel",
   "channel_start_group": "Start group chat",
   "channel_group_selected_count": "{count} selected",
@@ -492,7 +492,7 @@
   "conversation_unsave": "Remove from Saved",
   "conversation_saved_nav": "Saved",
   "conversation_pinned_section": "Pinned",
-  "conversation_pinned_empty_hint": "Drag group chats or DMs here to pin",
+  "conversation_pinned_empty_hint": "Drag channels or DMs here to pin",
   "conversation_saved_count": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],
