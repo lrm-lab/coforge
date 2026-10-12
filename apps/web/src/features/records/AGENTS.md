@@ -41,6 +41,10 @@ These rules also cover `src/server/records/`.
 - Present mode shows one template-dimension page at a time and zooms images in
   place. It does not rewrite report JSON. Use a full-bleed portal
   (`report-present-mode.tsx`); `ModalOverlay` is padded and is not full-bleed.
+- Reading a sent member report turns one wheel gesture at the body edge into
+  the next template page, then the next submitted person of the same template.
+  The author's editor does not. The chain stops at that template. Present mode
+  stays on arrow keys within one report.
 - After a member sends, further edits stay on the working body. Recipients
   (Leader report, dashboard summary, PPT) keep the last sent copy in
   `content.delivered` until the author sends again. Do not add a column for
