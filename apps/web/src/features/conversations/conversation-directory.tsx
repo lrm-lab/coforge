@@ -249,17 +249,17 @@ function ConversationRow({
   );
 }
 
+/** Every row, title and list in the directory shares one inset, so a title's chevron, the Saved
+ * entry's bookmark and a channel row's avatar all start on the same x: 0.75rem here plus the
+ * 0.5rem a row pads itself by is the 1.25rem the design asks for. */
+const DIRECTORY_INSET = "px-3";
+
 /**
  * A sidebar group's title and its rows. A group that can collapse (Channels, Direct messages)
  * makes the whole caption its toggle, like Slack's sidebar sections, and draws a chevron in the
  * leading 20px gutter. A group that cannot (Pinned, per the design mockup) draws its own mark in
  * that same gutter instead, so every title in the list keeps the same x either way.
  */
-/** Every row, title and list in the directory shares one inset, so a title's chevron, the Saved
- * entry's bookmark and a channel row's avatar all start on the same x: 0.75rem here plus the
- * 0.5rem a row pads itself by is the 1.25rem the design asks for. */
-const DIRECTORY_INSET = "px-3";
-
 function DirectorySection({
   label,
   icon: Icon,

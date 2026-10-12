@@ -16,13 +16,6 @@ export type AttachmentView = {
   previewUrl?: string;
 };
 
-/**
- * The browser-facing shape of one attachment, attached to every browser message payload — page
- * reads, polled updates, and the immediate response to the sender's own send — so `<img src>`
- * can be pointed straight at the CDN (Discord-style) instead of the backend proxy. `objectKey`
- * exists on the input only so this function can sign a delivery URL with it; it is never part of
- * the returned view and must never reach the client, logs, or analytics.
- */
 /** A signing failure must never take a message read down: the client falls back to the
  * authenticated route, which streams the bytes. Logged once per process without the key. */
 function signPreviewUrl(delivery: FileDelivery, objectKey: string): string | undefined {
@@ -44,6 +37,13 @@ function signPreviewUrl(delivery: FileDelivery, objectKey: string): string | und
 
 let signingFailureLogged = false;
 
+/**
+ * The browser-facing shape of one attachment, attached to every browser message payload — page
+ * reads, polled updates, and the immediate response to the sender's own send — so `<img src>`
+ * can be pointed straight at the CDN (Discord-style) instead of the backend proxy. `objectKey`
+ * exists on the input only so this function can sign a delivery URL with it; it is never part of
+ * the returned view and must never reach the client, logs, or analytics.
+ */
 export function attachmentView(
   row: { id: string; fileName: string; contentType: string; sizeBytes: number; objectKey: string },
   delivery: FileDelivery | null = getFileDelivery(),
