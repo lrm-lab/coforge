@@ -80,6 +80,8 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
   validateSearch: z.object({
     section: z.enum(settingsSections).optional().catch(undefined),
     github: z.enum(["connected", "error", "wrong_account"]).optional().catch(undefined),
+    // Settings → Account shows the platform avatar picker instead of the profile.
+    avatar: z.literal("choose").optional().catch(undefined),
   }),
   loader: async () => {
     const [preferences, members, generalChannel, archivedChannels, createdAgents] =
@@ -117,7 +119,7 @@ function SettingsPage() {
   const [liveAgentActivity, setLiveAgentActivity] = useState(true);
   const [hideEmptySidebarSections, setHideEmptySidebarSections] = useState(false);
   const [messageFullWidth, setMessageFullWidth] = useState(false);
-  const { section, github } = Route.useSearch();
+  const { section, github, avatar } = Route.useSearch();
   const { workspaceSlug } = Route.useParams();
   const navigate = Route.useNavigate();
   const {
@@ -358,6 +360,12 @@ function SettingsPage() {
       onProfileSave={changeProfile}
       onAvatarUpload={uploadAvatar}
       onAvatarRemove={removeAvatar}
+      avatarPicker={avatar === "choose"}
+      onAvatarPickerChange={(open) =>
+        void navigate({
+          search: { section: "account", avatar: open ? "choose" : undefined },
+        })
+      }
       onLocaleChange={setLocale}
       onThemeChange={changeTheme}
       railLabels={railLabels}
