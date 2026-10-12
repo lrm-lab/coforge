@@ -61,6 +61,8 @@ The architecture invariants every change must respect are in
 | [packages/coforge-sdk/README.md](packages/coforge-sdk/README.md) | Shared contracts and transports |
 | [infra/README.md](infra/README.md) | Local Docker Compose services |
 | [docs/operations/staging/](docs/operations/staging/README.md) | Staging environment runbook |
+| [docs/operations/production/](docs/operations/production/README.md) | Production environment runbook |
+| [infra/production/README.md](infra/production/README.md) | Production Compose environment (points to its runbook) |
 
 Project skills live in `.agents/skills`; `skills-lock.json` pins the upstream ones.
 
