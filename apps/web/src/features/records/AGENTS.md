@@ -45,8 +45,12 @@ These rules also cover `src/server/records/`.
   (Leader report, dashboard summary, PPT) keep the last sent copy in
   `content.delivered` until the author sends again. Do not add a column for
   this snapshot.
-- A confirmed assistant insert keeps its tabs in `content.assistantDraft`.
-  Later author saves keep that original. Author and recipient views omit it.
+- A weekly-report assistant body-edit writes the member report when that
+  message is stored. `content.bodyRestore` keeps the previous body and that
+  insert; the author switches between them, and edits stay on the side they
+  leave. The assistant original stays in `content.assistantDraft`. Author and
+  recipient views omit both snapshots. A card whose message was not written
+  still shows Insert.
 - `WeeklyReportAssistant.memory` stores one member's versioned writing habits,
   observations, threads, and one raw settlement per week. Submit, share, and a
   later send each wake settlement through `coforge weekly-report-memory submit`.
@@ -68,8 +72,8 @@ These rules also cover `src/server/records/`.
   DM is the conversational entry point. Do not restore a duplicate assistant page.
 - Agent template discovery does not require a cycle or submitted member reports.
   DM and page-scoped explicit requests use the same workflow operations. Do not
-  intercept send or summarize phrases with side-panel keyword rules. Previews
-  and Collect handoffs retain Insert; legacy pending cards must stay usable.
+  intercept send or summarize phrases with side-panel keyword rules. A stored
+  body-edit writes immediately; a card that was not written still shows Insert.
 - Template discovery shares the workspace format catalog across DM/page context;
   only owner entries expose delivery settings and can be configured or sent.
   Other entries are reusable outlines, not grants to another owner's settings.

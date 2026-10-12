@@ -12,7 +12,9 @@ import {
   applyConfirmedWeeklyReportBody,
   confirmWeeklyReportSend,
   dismissWeeklyFormatSend,
+  switchWeeklyReportBodyVersion,
 } from "./records.functions";
+import type { ReportBodyRestoreView } from "./records-content";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { WeeklySendConfirmDialog } from "./weekly-send-confirm-dialog";
 import { WeeklyReportCollectPlanCard } from "./weekly-report-collect-plan-card";
@@ -40,10 +42,12 @@ export function WeeklyReportMessageCard(props: {
   const router = useRouter();
   const cardKey = `${workspaceSlug}:${props.messageId}`;
   const applyBody = useServerFn(applyConfirmedWeeklyReportBody);
+  const switchBody = useServerFn(switchWeeklyReportBodyVersion);
   const confirmSendPrompt = useServerFn(confirmWeeklyReportSend);
   const dismissWeek = useServerFn(dismissWeeklyFormatSend);
   const [runId, setRunId] = useState<string | null>(null);
   const [applied, setApplied] = useState(false);
+  const [restoreView, setRestoreView] = useState<ReportBodyRestoreView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -66,9 +70,31 @@ export function WeeklyReportMessageCard(props: {
     setBusy(true);
     setError(null);
     try {
-      await applyBody({ data: { reportId: suggestion.reportId, content: suggestion.content } });
+      const written = await applyBody({
+        data: {
+          reportId: suggestion.reportId,
+          content: suggestion.content,
+          sourceMessageId: props.messageId,
+        },
+      });
+      setRestoreView(written.bodyRestoreView);
       setApplied(true);
       writeAppliedSuggestionIds(cardKey, [props.messageId]);
+      await router.invalidate({ sync: true });
+    } catch {
+      setError(m.records_assistant_write_failed());
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function switchVersion() {
+    if (suggestion.type !== "body-edit" || busy || props.disabled) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await switchBody({ data: { reportId: suggestion.reportId } });
+      setRestoreView(result.bodyRestoreView);
       await router.invalidate({ sync: true });
     } catch {
       setError(m.records_assistant_write_failed());
@@ -170,15 +196,29 @@ export function WeeklyReportMessageCard(props: {
               .map(([name, tab]) => `${name}\n${tab.markdown}`)
               .join("\n\n") || suggestion.content.markdown}
           </p>
-          <Button
-            size="sm"
-            color="secondary"
-            isDisabled={busy || applied || props.disabled}
-            isLoading={busy}
-            onPress={() => void insertDraft()}
-          >
-            {m.records_assistant_confirm_write()}
-          </Button>
+          {restoreView?.sourceMessageId === props.messageId ? (
+            <Button
+              size="sm"
+              color="secondary"
+              isDisabled={busy || props.disabled}
+              isLoading={busy}
+              onPress={() => void switchVersion()}
+            >
+              {restoreView.showing === "latest"
+                ? m.records_body_restore_previous()
+                : m.records_body_restore_latest()}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              color="secondary"
+              isDisabled={busy || applied || props.disabled}
+              isLoading={busy}
+              onPress={() => void insertDraft()}
+            >
+              {m.records_assistant_confirm_write()}
+            </Button>
+          )}
           {error ? <p className="text-sm text-error-primary">{error}</p> : null}
         </>
       )}

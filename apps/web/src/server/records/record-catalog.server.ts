@@ -17,10 +17,13 @@ import {
   isHourlySendTime,
   memberReportTitle,
   memberWeekTitle,
+  insertAssistantReportBody,
   normalizeReportContent,
   publishMemberReportDelivery,
+  reportBodyRestoreView,
   reportContentForAuthor,
   reportContentForRecipient,
+  switchReportBodyVersion,
   reportTabsEqual,
   retainMemberReportDelivery,
   withAssignmentUnread,
@@ -1877,6 +1880,10 @@ export class RecordCatalog {
               : report.title,
           status: report.status,
           content,
+          bodyRestoreView:
+            report.kind === "member" && report.author.id === input.userId
+              ? reportBodyRestoreView(asReportContent(report.content))
+              : null,
           submittedAt: report.submittedAt?.toISOString() ?? null,
           updatedAt: report.updatedAt.toISOString(),
           author: {
@@ -2082,6 +2089,11 @@ export class RecordCatalog {
     now?: Date;
     /** Explicit「保存」: ask assistant whether to send when still eligible. */
     askToSend?: boolean;
+    /**
+     * Assistant body-edit message that should become the latest version.
+     * The same message id does not capture the pair again.
+     */
+    assistantInsertMessageId?: string;
   }) {
     await requireMembership(this.db, input.workspaceId, input.userId);
     const report = await this.db.weeklyReport.findFirst({
@@ -2121,6 +2133,12 @@ export class RecordCatalog {
     }
     if (stored.assistantDraft && !content.assistantDraft) {
       content = { ...content, assistantDraft: stored.assistantDraft };
+    }
+    if (stored.bodyRestore && !content.bodyRestore) {
+      content = { ...content, bodyRestore: stored.bodyRestore };
+    }
+    if (input.assistantInsertMessageId) {
+      content = insertAssistantReportBody(stored, content, input.assistantInsertMessageId);
     }
     const publishing = isSentMemberReport(report.kind, input.status ?? "");
     const alreadySent = isSentMemberReport(report.kind, report.status);
@@ -2239,17 +2257,21 @@ export class RecordCatalog {
       updatedAt: updated.updatedAt.toISOString(),
       autoSendJustCancelled,
       assistantPosted,
+      content: reportContentForAuthor(content),
+      bodyRestoreView: reportBodyRestoreView(content),
     };
   }
 
   /**
-   * Confirmed assistant body-edit write. Does not ask-to-send; the user still controls send.
+   * Assistant body-edit write. Does not ask-to-send; the user still controls send.
+   * A message id captures the previous body so the author can switch back.
    */
   async applyConfirmedReportBody(input: {
     workspaceId: string;
     userId: string;
     reportId: string;
     content: ReportContent;
+    sourceMessageId?: string;
   }) {
     const content = normalizeReportContent(input.content);
     return this.saveReportContent({
@@ -2258,8 +2280,41 @@ export class RecordCatalog {
       reportId: input.reportId,
       content: {
         ...content,
-        ...(content.tabs ? { assistantDraft: { tabs: { ...content.tabs } } } : {}),
+        ...(content.tabs && !input.sourceMessageId
+          ? { assistantDraft: { tabs: { ...content.tabs } } }
+          : {}),
       },
+      askToSend: false,
+      assistantInsertMessageId: input.sourceMessageId,
+    });
+  }
+
+  /** Show the other stored version, keeping edits on the side the author leaves. */
+  async switchWeeklyReportBodyVersion(input: {
+    workspaceId: string;
+    userId: string;
+    reportId: string;
+  }) {
+    await requireMembership(this.db, input.workspaceId, input.userId);
+    const report = await this.db.weeklyReport.findFirst({
+      where: { id: input.reportId, workspaceId: input.workspaceId },
+      select: { id: true, authorId: true, content: true },
+    });
+    if (!report) throw new AppError("NOT_FOUND");
+    if (
+      !canEditWeeklyReportContent({
+        viewerUserId: input.userId,
+        authorUserId: report.authorId,
+      })
+    ) {
+      throw new AppError("ACCESS_DENIED");
+    }
+    const next = switchReportBodyVersion(asReportContent(report.content));
+    return this.saveReportContent({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      reportId: input.reportId,
+      content: next,
       askToSend: false,
     });
   }

@@ -148,6 +148,8 @@
   "records_assistant_confirm_generate": "Generate",
   "records_assistant_confirm_send": "Send",
   "records_assistant_confirm_write": "Insert into report",
+  "records_body_restore_previous": "Back to previous version",
+  "records_body_restore_latest": "Restore latest version",
   "records_assistant_ignore_suggestion": "Dismiss",
   "records_assistant_suggestion_ignored": "Dismissed",
   "records_assistant_suggestion_inserted": "Inserted",

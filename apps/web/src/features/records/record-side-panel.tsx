@@ -44,7 +44,11 @@ import { cx } from "#src/utils/cx";
 import { shouldSendOnEnter } from "#src/features/conversations/composer-behavior";
 import { useConversationRealtime } from "#src/features/conversations/conversation-realtime-client";
 import type { WeeklyReportAssistantSuggestion } from "#src/server/records/weekly-report-assistant-suggestion.server";
-import type { KeyPointExtractionMeta, ReportContent } from "./records-content";
+import type {
+  KeyPointExtractionMeta,
+  ReportBodyRestoreView,
+  ReportContent,
+} from "./records-content";
 import { formatWeeklyReportCompletedAt } from "./records-content";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import {
@@ -164,6 +168,8 @@ export function RecordSidePanel({
   onWeekSendDismissed,
   sendOfferActive = false,
   onBodyApplied,
+  bodyRestoreView = null,
+  onSwitchBodyVersion,
   keyPointExtraction,
   keyPointRestartBusy,
   onRestartKeyPointExtraction,
@@ -181,8 +187,14 @@ export function RecordSidePanel({
   onWeekSendDismissed?: () => void;
   /** Whether the format can still be sent (hides offer actions when false). */
   sendOfferActive?: boolean;
-  /** After Confirm body-edit, parent syncs the open editor (draft + view). */
-  onBodyApplied?: (reportId: string, content: ReportContent) => void;
+  /** After a body-edit write or version switch, parent syncs the open editor. */
+  onBodyApplied?: (
+    reportId: string,
+    content: ReportContent,
+    restore?: ReportBodyRestoreView | null,
+  ) => void;
+  bodyRestoreView?: ReportBodyRestoreView | null;
+  onSwitchBodyVersion?: () => void;
   /** Leader member-report: show personal key-point status + re-extract. */
   keyPointExtraction?: KeyPointExtractionMeta;
   keyPointRestartBusy?: boolean;
@@ -432,6 +444,17 @@ export function RecordSidePanel({
     const label = awaitingLabelRef.current;
     if (label != null && /请稍候/.test(label)) hideAwaitingAssistant();
   }
+
+  const invalidatedBodyEditRef = useRef<string | null>(null);
+  useEffect(() => {
+    const latest = [...assistantMessages]
+      .reverse()
+      .find((message) => message.suggestion?.type === "body-edit");
+    if (!latest || latest.id === bodyRestoreView?.sourceMessageId) return;
+    if (invalidatedBodyEditRef.current === latest.id) return;
+    invalidatedBodyEditRef.current = latest.id;
+    void router.invalidate();
+  }, [assistantMessages, bodyRestoreView?.sourceMessageId, router]);
 
   activeSessionIdRef.current = activeSessionId;
   legacySessionIdRef.current = legacySessionId;
@@ -722,13 +745,14 @@ export function RecordSidePanel({
     setError(null);
     session.error = null;
     try {
-      await applyBody({
+      const written = await applyBody({
         data: {
           reportId: suggestion.reportId,
           content: suggestion.content as ReportContent,
+          sourceMessageId: messageId,
         },
       });
-      onBodyApplied?.(suggestion.reportId, suggestion.content as ReportContent);
+      onBodyApplied?.(suggestion.reportId, written.content, written.bodyRestoreView);
       markSuggestionApplied(messageId);
       await router.invalidate({ sync: true });
     } catch {
@@ -1378,7 +1402,9 @@ export function RecordSidePanel({
                 suggestion.type === "template-create");
             const suggestionApplied = appliedSuggestionIds.includes(message.id);
             const suggestionDismissed = dismissedSuggestionIds.includes(message.id);
-            const suggestionFrozen = suggestionApplied || suggestionDismissed;
+            const writtenByServer =
+              suggestion?.type === "body-edit" && bodyRestoreView?.sourceMessageId === message.id;
+            const suggestionFrozen = suggestionApplied || suggestionDismissed || writtenByServer;
             const preview = showSuggestion && suggestion ? suggestionPreview(suggestion) : "";
             return (
               <article key={item.id} className="space-y-2">
@@ -1425,7 +1451,7 @@ export function RecordSidePanel({
                         {m.records_assistant_suggestion_ignored()}
                       </p>
                     ) : null}
-                    {suggestionApplied && !suggestionDismissed ? (
+                    {(suggestionApplied || writtenByServer) && !suggestionDismissed ? (
                       <p className="text-sm font-medium text-tertiary">
                         {m.records_assistant_suggestion_inserted()}
                       </p>
@@ -1442,6 +1468,18 @@ export function RecordSidePanel({
                           {preview}
                         </pre>
                       </div>
+                    ) : null}
+                    {writtenByServer && bodyRestoreView && onSwitchBodyVersion ? (
+                      <Button
+                        size="sm"
+                        color="secondary"
+                        isDisabled={busy}
+                        onPress={onSwitchBodyVersion}
+                      >
+                        {bodyRestoreView.showing === "latest"
+                          ? m.records_body_restore_previous()
+                          : m.records_body_restore_latest()}
+                      </Button>
                     ) : null}
                     {!suggestionFrozen ? (
                       <div className="flex flex-wrap gap-2">
