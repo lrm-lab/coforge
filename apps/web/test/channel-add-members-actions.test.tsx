@@ -18,6 +18,15 @@ const render = (canAdd: boolean, count = 1) =>
 
 const addLabel = (count: number) => m.channel_members_add_selected({ count });
 
+/** The opening tag of the button carrying `label`, so an attribute is read off that button and
+ * not off its neighbour or off a Tailwind `disabled:` variant in some other class list. */
+function buttonTag(markup: string, label: string): string {
+  const at = markup.indexOf(label);
+  expect(at).toBeGreaterThan(-1);
+  const open = markup.lastIndexOf("<button", at);
+  return markup.slice(open, markup.indexOf(">", open) + 1);
+}
+
 /**
  * `PublicChannels.addMembers` rejects a non-member with `ACCESS_DENIED`, so the dialog must not
  * offer the action either: the viewer gets the explanation and no Add button. A regression here
@@ -42,6 +51,7 @@ test("a member who may add gets both the Add button, counted, and Cancel", () =>
 test("nothing is selected yet, so the Add button is there but not pressable", () => {
   const markup = render(true, 0);
 
-  expect(markup).toContain(addLabel(0));
-  expect(markup).toContain("disabled");
+  expect(buttonTag(markup, addLabel(0))).toContain('disabled=""');
+  // Cancel stays pressable: closing the dialog is always available.
+  expect(buttonTag(markup, m.channel_members_cancel())).not.toContain('disabled=""');
 });

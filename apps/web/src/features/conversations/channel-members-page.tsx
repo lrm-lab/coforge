@@ -38,6 +38,7 @@ import {
 import { memberMatchesSearch } from "./channel-member-search";
 import {
   buildChannelCandidates,
+  candidateKey,
   candidateSearchTerm,
   ChannelCandidateChips,
   ChannelCandidateGroups,
@@ -596,7 +597,7 @@ function AddMembersView({
       setSearch("");
     } else {
       // Like any pick, the new Agent is selected, so Add selected retries it too.
-      setSelected((previous) => new Set(previous).add(`agent:${agent.id}`));
+      setSelected((previous) => new Set(previous).add(candidateKey("agent", agent.id)));
     }
   }
 
