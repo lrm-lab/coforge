@@ -1795,12 +1795,6 @@ export class DaemonRuntime {
     this.#releaseFallbackNotices(agentId);
   }
 
-  /**
-   * The daemon has taken this delivery into its own keeping (for a later launch, a batch, or to
-   * drop it), so it acknowledges it now, as the server needs no further copy. A failed ACK only
-   * means the server replays it on the next `ready`; nothing is lost, since a daemon restart
-   * recovers unread messages from the cloud read boundary, not from ACK state.
-   */
   /** The fields every daemon -> server report opens with: this protocol, a fresh request id, and
    * this runtime's own Workspace and Computer. */
   #envelope() {
@@ -1812,6 +1806,12 @@ export class DaemonRuntime {
     };
   }
 
+  /**
+   * The daemon has taken this delivery into its own keeping (for a later launch, a batch, or to
+   * drop it), so it acknowledges it now, as the server needs no further copy. A failed ACK only
+   * means the server replays it on the next `ready`; nothing is lost, since a daemon restart
+   * recovers unread messages from the cloud read boundary, not from ACK state.
+   */
   #acknowledgeCustody(message: AgentMessageDelivery): void {
     this.#messageAttention.acknowledgeCustody(message);
   }
