@@ -117,6 +117,7 @@ function ConversationRow({
   target,
   current,
   card,
+  pinned,
   icon,
   muted,
   unreadCount,
@@ -129,6 +130,9 @@ function ConversationRow({
   current?: boolean;
   /** The selected row is a bordered card, as a channel's is. */
   card?: boolean;
+  /** The member pinned this row: its name draws the sidebar foreground colour (design spec),
+   * darker than an unpinned row's, until it is selected or muted. */
+  pinned?: boolean;
   icon: ReactNode;
   muted?: boolean;
   unreadCount?: number;
@@ -168,8 +172,8 @@ function ConversationRow({
         "flex w-full cursor-pointer items-center gap-2 p-2 outline-focus-ring transition duration-100 ease-linear select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
         card ? "rounded-xl border" : "rounded-md",
         !lastMessage && "max-h-9",
-        current ? "bg-sidebar-accent" : "hover:bg-primary_hover",
-        card && (current ? "border-secondary" : "border-transparent"),
+        current ? (card ? "bg-chat-selected-bg" : "bg-sidebar-accent") : "hover:bg-primary_hover",
+        card && (current ? "border-chat-selected-border" : "border-transparent"),
       )}
     >
       {lastMessage ? (
@@ -183,7 +187,13 @@ function ConversationRow({
             <span
               className={cx(
                 "min-w-0 flex-1 truncate text-sm font-medium",
-                current ? "text-brand-secondary" : muted ? "text-tertiary" : "text-secondary",
+                current
+                  ? "text-brand-secondary"
+                  : muted
+                    ? "text-tertiary"
+                    : pinned
+                      ? "text-sidebar-fg"
+                      : "text-secondary",
               )}
             >
               {children}
@@ -397,6 +407,7 @@ export function ConversationDirectory({
           target={{ channelId: channel.id }}
           current={current}
           card
+          pinned={channel.pinned}
           muted={!channel.joined || channel.muted}
           unreadCount={unreadCounts[channel.id]}
           label={`#${channel.name}`}
@@ -448,6 +459,7 @@ export function ConversationDirectory({
       <ConversationRow
         target={{ dmId: conversationId }}
         current={conversationId === selectedDmId}
+        pinned={pinned}
         unreadCount={unreadCounts[conversationId]}
         label={self ? m.conversation_dm_self_name({ name }) : name}
         lastMessage={{

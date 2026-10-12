@@ -38,6 +38,10 @@
   --color-sidebar-item: #f7f6ff;
   --color-sidebar-item-active: #f3f1ff;
 
+  /* The chat list's selected row (design spec): a bordered card whose fill and outline are flat
+     in both themes; its radius is rounded-xl (12px) in the row component. */
+  --color-chat-selected-bg: #f4f6fa;
+  --color-chat-selected-border: #e0e5f1;
   /* Terminal / command blocks stay dark in both themes. */
   --color-terminal: #171b23;
   --color-terminal-fg: #f4f6fb;

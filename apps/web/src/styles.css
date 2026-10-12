@@ -173,16 +173,16 @@ input[type="search"]::-webkit-search-cancel-button {
     --avatar-size: 3rem;
   }
 
-  /* A channel row's collage avatar (`group-avatar.tsx`): the same 44 × 48px rounded square and
-     light-violet frame as `avatar-dm`, drawn by the frame's own gradient. The 1px gaps between
-     member tiles show the frame colour. */
+  /* A channel row's collage avatar (`group-avatar.tsx`): a 44 × 48px rounded square with the
+     design spec's 1px violet frame (the frame gradient shows through the 1px padding); the member
+     tiles run edge to edge with no separation of their own (design spec: no inner borders). */
   .avatar-group {
     position: relative;
     flex-shrink: 0;
     width: 2.75rem;
     height: 3rem;
     border-radius: 0.75rem;
-    padding: 0.09375rem;
+    padding: 0.0625rem;
     background: linear-gradient(
       135deg,
       var(--color-avatar-border-start) 0%,
@@ -196,10 +196,10 @@ input[type="search"]::-webkit-search-cancel-button {
     height: 100%;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
-    gap: 1px;
+    gap: 0;
     overflow: hidden;
-    border-radius: 0.65625rem;
-    background: var(--color-avatar-border-start);
+    border-radius: 0.6875rem;
+    background: transparent;
   }
 
   [data-avatar] > :first-child {
