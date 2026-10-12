@@ -1,6 +1,6 @@
 # CoForge release contract
 
-Status: approved workflow contract; the cloud staging deployment workflow and a local Computer distribution staging publish workflow are implemented; production stays disabled behind the human approval gate
+Status: approved workflow contract; the cloud staging and production deployment workflows and the local Computer and installer staging and production publish workflows are implemented; every production run waits for the human approval gate
 
 Updated: 2026-09-09
 

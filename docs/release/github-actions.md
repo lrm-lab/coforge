@@ -6,6 +6,8 @@
 | **Deploy Web (staging)**       | A commit reaches `main`             | Validate → build and push Docker image → deploy and verify Web                           |
 | **Publish Computer (staging)** | Manually started from `main`        | Validate → build all six platforms → upload and verify release → update staging `latest` |
 | **Publish installer (staging)** | Manually started from `main`       | Validate → plan → build each target natively → package, upload, and verify, write the manifest, and update `installer/latest`; or with `pointer_only` move that pointer alone |
+| **Publish installer (production)** | Manually started from `main` with an approved commit and version | Verify staging published it → approval → plan → build that commit natively against the production feed → package, upload, and verify, and update `installer/latest`; or with `pointer_only` move that pointer alone |
+| **Publish Computer (production)** | Manually started from `main` with an approved commit and version | Verify staging's `latest` and manifest name it → approval → build that commit against the production feed → upload and verify → update production `latest` |
 
 The Web workflow skips image build and deployment when the commit does not
 affect Web. Computer publication is manual and its run title includes the
@@ -108,6 +110,11 @@ input. No beta or release-candidate stage is required. Previously published
 versions, including historical `rc` versions, remain immutable and available
 by exact version; the next successful publication moves `latest` without
 renaming or deleting them.
+
+The production workflows take no `Validate` job: staging published that exact
+commit only after its gates, and the `candidate` job requires that evidence.
+How to run them is in
+[the production release runbook](../operations/production/computer-release.md).
 
 The installer has its own manual workflow and its own version, described in
 [Installer feed and release workflow](installer-feed.md); the two publications

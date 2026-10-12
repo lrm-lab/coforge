@@ -151,9 +151,13 @@ gh workflow run release-installer-staging.yml --repo lrm-lab/coforge -f pointer_
   pending `pointer_only` run was replaced, dispatch it again once the running run
   finishes, and confirm the pointer with the job summary or
   `curl -s https://releases-staging.coforge.cn/installer/latest`.
-- Only staging exists. A production installer follows the Computer's rule: the
-  approved commit is built again against the production feed, never copied
+- A production installer follows the Computer's rule: the approved commit is
+  built again against the production feed, never copied
   ([Staging to production](staging-to-production.md)).
+  `release-installer-production.yml` is this workflow with a `candidate` job in
+  place of `gates` (staging must have published that version from that commit),
+  the production role and bucket `coforge-releases-prod`, and the group
+  `release-installer-production`.
 
 ## Product gate
 

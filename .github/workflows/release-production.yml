@@ -1,0 +1,159 @@
+name: Publish Computer (production)
+run-name: Publish Computer ${{ inputs.version }} from ${{ inputs.commit }} to production
+
+# Production promotion of the local Computer distribution (docs/release/staging-to-production.md).
+# The feed a build trusts is compiled into it, so production never copies staging's binaries: it
+# builds the approved commit again against https://releases.coforge.cn. The `candidate` job checks
+# that staging's `latest` names this stable version and that staging published it from this commit;
+# staging publishes only from `main` and only after the release gates. The `production` GitHub
+# Environment carries the required human reviewer, who approves this exact commit and version.
+# Publish the production installer (release-installer-production.yml) first: install.sh reads
+# `installer/latest` from the same feed.
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full source commit that staging published this version from (40 hex)
+        required: true
+        type: string
+      version:
+        description: Stable version that staging's latest names, e.g. 0.1.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    name: Verify the staging-published candidate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      # The workflow's own commit (`main`), with history: the verifier is this run's, and the
+      # candidate commit is checked against `main` without being checked out.
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          install: false
+
+      - name: Install toolchain
+        run: mise install
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate protocol sources
+        run: bun run --cwd packages/coforge-sdk generate
+
+      # The inputs are caller-controlled text: they reach the script only through env vars, and the
+      # script validates them before it names any object.
+      - name: Require the version staging published from this commit
+        env:
+          INPUT_COMMIT: ${{ inputs.commit }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          bun scripts/release/production-candidate.ts computer \
+            "$INPUT_VERSION" "$INPUT_COMMIT" https://releases-staging.coforge.cn
+          # Validated above as 40 hex characters, so it cannot be read as an option.
+          git merge-base --is-ancestor "$INPUT_COMMIT" HEAD
+          echo "- Candidate: Computer ${INPUT_VERSION} from ${INPUT_COMMIT}, published to staging and on main" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Build and publish Computer
+    needs: candidate
+    runs-on: ubuntu-latest
+    environment: production
+    # `id-token: write` lets this job mint the GitHub OIDC token it exchanges for the Alibaba Cloud
+    # STS credential of the production publisher role, whose trust policy names only this
+    # repository's `production` environment.
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          install: false
+
+      - name: Install toolchain
+        run: mise install
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate protocol sources
+        run: bun run --cwd packages/coforge-sdk generate
+
+      - name: Request an OIDC token for Alibaba Cloud
+        env:
+          AUDIENCE: sts.aliyuncs.com
+        run: |
+          token_file="$RUNNER_TEMP/aliyun-oidc-token"
+          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
+            | jq -r '.value' > "$token_file"
+          chmod 600 "$token_file"
+          echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+          # The RAM role's trust policy matches these three claims exactly; print them so a
+          # trust-policy mismatch is diagnosable from the run log. The payload is public run
+          # metadata; the signature (the only secret part) is never printed.
+          payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
+          printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"
+
+      - name: Build six platforms, upload, and verify release
+        env:
+          ALIBABA_CLOUD_ROLE_ARN: acs:ram::1085194890307801:role/coforge-release-publisher-production
+          ALIBABA_CLOUD_OIDC_PROVIDER_ARN: acs:ram::1085194890307801:oidc-provider/github-actions
+          ALIBABA_CLOUD_ROLE_SESSION_NAME: github-actions-${{ github.run_id }}
+          ALIBABA_CLOUD_ECS_METADATA_DISABLED: "true"
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+        # Transfer acceleration, as staging: the endpoint is global, so the bucket's region is
+        # passed for V4 signing.
+        run: |
+          bun scripts/release/publish.ts \
+            --version "$INPUT_VERSION" \
+            --commit "$INPUT_COMMIT" \
+            --feed-url "https://releases.coforge.cn" \
+            --bucket coforge-releases-prod \
+            --endpoint oss-accelerate.aliyuncs.com \
+            --region oss-cn-beijing
+
+      - name: Summarize published release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+        run: |
+          {
+            echo "## Computer published to production"
+            echo ""
+            echo "- Version: ${INPUT_VERSION}"
+            echo "- Source commit: ${INPUT_COMMIT}"
+            echo "- Feed: https://releases.coforge.cn"
+            echo "- Platforms: Linux, macOS, Windows (x64 and arm64)"
+            echo "- Verified: uploaded bytes, checksums, private storage access, and latest version selector"
+            echo "- CDN delivery and complete install/upgrade/rollback acceptance are separate checks."
+          } >> "$GITHUB_STEP_SUMMARY"

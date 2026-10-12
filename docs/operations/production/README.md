@@ -25,7 +25,9 @@ over the VPC, so the Compose project defines no database or cache containers.
 - **CDN:** `files.coforge.cn` (signed attachment URLs; signing key is the
   secret `coforge_file_delivery_key`) and `images.coforge.cn` (public avatars
   and project icons, bucket `coforge-images-prod`).
-- **Release feed:** `https://releases.coforge.cn`.
+- **Release feed:** `https://releases.coforge.cn`, bucket `coforge-releases-prod`,
+  published by `release-production.yml` and `release-installer-production.yml`
+  ([runbook](computer-release.md)).
 
 Not yet enabled in production: GitHub integration (the Web code returns no
 GitHub client when `COFORGE_GITHUB_CLIENT_ID` is unset), OpenTelemetry tracing,
@@ -125,4 +127,5 @@ of truth, backed up in 1Password.
 ## Not yet covered
 
 - Production CDN and OSS provisioning details are in
-  [`docs/operations/aliyun-oss-cdn/`](../aliyun-oss-cdn/README.md).
+  [`docs/operations/aliyun-oss-cdn/`](../aliyun-oss-cdn/README.md); the release
+  feed's are in [`computer-release.md`](computer-release.md).
