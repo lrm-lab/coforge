@@ -386,6 +386,37 @@ candidate_diagnostics() {
 	if [[ "$status" =~ ^[0-9]{3}$ ]]; then
 		printf 'candidate loopback health HTTP status: %s\n' "$status" >&2
 	fi
+	proxy_diagnostics || true
+	return 0
+}
+
+# The reverse proxy owns the public entry, so its certificate state is the
+# difference between "the application is up but 443 cannot complete a TLS
+# handshake" and "the application itself is broken". Classify it the way the
+# web container's startup signature is classified: read a bounded slice of the
+# proxy's log, print only a fixed vocabulary code, never the log itself.
+proxy_diagnostics() {
+	local container logs state
+	container="$(timeout --kill-after=1s 5s docker ps --filter "label=com.docker.compose.project=$project" \
+		--filter label=com.docker.compose.service=caddy --all --format '{{.ID}}' 2>/dev/null | head -n 1)" || true
+	[[ "$container" =~ ^[0-9a-f]{6,64}$ ]] || return 0
+	state="$(timeout --kill-after=1s 5s docker inspect --format '{{.State.Status}} {{.State.ExitCode}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null)" || true
+	if [[ "$state" =~ ^(created|running|paused|restarting|removing|exited|dead)\ [0-9]+\ [0-9]+\ (none|starting|healthy|unhealthy)$ ]]; then
+		printf 'proxy state/exit/restarts/health: %s\n' "$state" >&2
+	fi
+	logs="$(timeout --kill-after=1s 5s docker logs --tail 120 --since 10m "$container" 2>&1 | head -c 16384)" || true
+	case "$logs" in
+	*'certificate obtained successfully'*) printf 'proxy_signature=certificate_obtained\n' >&2 ;;
+	*'connection refused'* | *'i/o timeout'* | *'no route to host'*)
+		printf 'proxy_signature=acme_challenge_unreachable\n' >&2
+		;;
+	*'rate limit'* | *'too many certificates'*) printf 'proxy_signature=acme_rate_limited\n' >&2 ;;
+	*'permission denied'* | *'read-only file system'*)
+		printf 'proxy_signature=certificate_storage_denied\n' >&2
+		;;
+	*'could not get certificate'* | *'acme'* | *'obtain'*) printf 'proxy_signature=acme_failed\n' >&2 ;;
+	*) printf 'proxy_signature=unclassified_or_unavailable\n' >&2 ;;
+	esac
 	return 0
 }
 
