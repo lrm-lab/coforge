@@ -145,6 +145,8 @@ jobs:
             ssh -i "$SSH_DIR/key" \
               -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
               -o BatchMode=yes \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=8 \
               "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
               "docker login ghcr.io --username '${{ github.actor }}' --password-stdin"
 
@@ -158,6 +160,8 @@ jobs:
           ssh -i "$SSH_DIR/key" \
             -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
             -o BatchMode=yes \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=8 \
             "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
             "mkdir -p $REMOTE_ROOT && tar -xzf - -C $REMOTE_ROOT" < "$REMOTE_ASSETS"
 
@@ -203,6 +207,8 @@ jobs:
           ssh -i "$SSH_DIR/key" \
             -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
             -o BatchMode=yes \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=8 \
             "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
             "set -eu; \
              secrets_dir='$REMOTE_ROOT/infra/staging/secrets'; \
@@ -227,6 +233,8 @@ jobs:
             ssh -i "$SSH_DIR/key" \
               -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
               -o BatchMode=yes \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=8 \
               "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
               "mkdir -p \$(dirname '$REMOTE_ROOT/state.env') && bash -s -- \
                 --image '$IMAGE' \
