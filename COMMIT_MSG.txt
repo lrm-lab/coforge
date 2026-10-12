@@ -1,0 +1,5 @@
+Left-nav icons: nav-icon token (#777DBD) + 2px stroke
+
+Implements task #45. New --color-nav-icon token; rail and expanded-sidebar
+resting icons draw text-nav-icon with stroke-[2px]; current item keeps the
+brand accent. Details in the PR description.

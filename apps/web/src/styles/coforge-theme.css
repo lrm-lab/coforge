@@ -38,6 +38,10 @@
   --color-sidebar-item: #f7f6ff;
   --color-sidebar-item-active: #f3f1ff;
 
+  /* Left-navigation icons (design spec): flat periwinkle for a resting nav icon, in both
+     themes; the current item's icon stays the brand accent. */
+  --color-nav-icon: #777dbd;
+
   /* Terminal / command blocks stay dark in both themes. */
   --color-terminal: #171b23;
   --color-terminal-fg: #f4f6fb;
