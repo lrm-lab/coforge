@@ -156,7 +156,7 @@ function SettingsPage() {
     const initialTheme =
       storedTheme === "system" || storedTheme === "dark" || storedTheme === "light"
         ? storedTheme
-        : "system";
+        : "light";
     setTheme(initialTheme);
     applyTheme(initialTheme);
     setRailLabels(readRailLabels());
