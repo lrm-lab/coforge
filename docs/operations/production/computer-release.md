@@ -1,11 +1,9 @@
 # Production Computer release: feed, publisher, and promotion
 
-Status: **workflows implemented; the feed's Alibaba Cloud resources are
-partly provisioned.** Bucket `coforge-releases` (transfer acceleration on) and
-CDN domain `releases.coforge.cn` (origin that bucket) were created on
-2026-10-12. Until the remaining items below are done and verified,
-`releases.coforge.cn` does not resolve and the production workflows fail at
-their first bucket call.
+Status: **workflows implemented; the feed's Alibaba Cloud resources were
+provisioned on 2026-10-12** (bucket, CDN domain and its rules, DNS, certificate,
+publisher role). `https://releases.coforge.cn/latest` answers 404 with
+`x-oss-cdn-auth: success` until the first publication.
 
 The production feed is `https://releases.coforge.cn`, served by Alibaba Cloud
 CDN from the private bucket `coforge-releases`. It mirrors staging's
@@ -38,14 +36,15 @@ Do these once, in the Alibaba Cloud console of account `1085194890307801`.
    | `/installer/latest` | directory | 0 s    | on                 | 99     | `no-cache, must-revalidate`           |
    | `/`                 | directory | 365 d  | off                | 80     | `public, max-age=31536000, immutable` |
 
-4. **DNS and certificate.** CNAME `releases` in the `coforge.cn` zone to
+4. **DNS and certificate** (done 2026-10-12, Let's Encrypt via acme.sh). CNAME `releases` in the `coforge.cn` zone to
    `releases.coforge.cn.w.kunlunaq.com` (done 2026-10-12). Add `releases.coforge.cn` to
    `CDN_DOMAINS` in `scripts/ops/renew-cdn-certificates.sh`,
    [`cdn-certificates/domains.md`](../cdn-certificates/domains.md), and the CDN
    ARNs of [its RAM policy](../cdn-certificates/ram-permissions.md), then run the
    script ([first run](../cdn-certificates/first-run.md)). Turn on 强制 HTTPS
    (`HTTP -> HTTPS`) on the CDN domain.
-5. **Publisher role.** Create RAM role `coforge-release-publisher-production`
+5. **Publisher role** (done 2026-10-12, policy
+   `CoForgeProductionReleasesBucketAccess`). RAM role `coforge-release-publisher-production`
    (type: OIDC identity provider, provider `github-actions`, the one staging's
    `coforge-release-publisher` trusts) with this trust policy, so only a job in
    this repository's `production` GitHub Environment can assume it:
