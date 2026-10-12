@@ -1821,6 +1821,22 @@ export class DaemonRuntime {
     this.#messageAttention.acknowledgeCustody(message);
   }
 
+  /** Keeps a delivery in `AgentDeliveryQueue` for the Agent's next launch, acknowledged now: the
+   * daemon has taken custody of it, so the server need not resend it. */
+  #keepForNextLaunch(agentId: string, message: AgentMessageDelivery): void {
+    this.#deliveryQueue.enqueue(agentId, message);
+    this.#acknowledgeCustody(message);
+  }
+
+  /** Queues a delivery as the Agent's next input; settles once the input drain handled it. */
+  #enqueueDelivery(agentId: string, message: AgentMessageDelivery): Promise<void> {
+    return this.#enqueueAgentInput(agentId, (completion) => ({
+      kind: "delivery",
+      message,
+      completion,
+    }));
+  }
+
   /** Drops whatever `AgentDeliveryQueue` held for `agentId` across an unexpected exit — used when
    * this launch's `recover()` pass already covered the same unread state, so notifying about them
    * again would be redundant. Each was acknowledged when the daemon took it. */
@@ -1896,8 +1912,7 @@ export class DaemonRuntime {
         item.completion.resolve();
         return false;
       }
-      this.#deliveryQueue.enqueue(agentId, item.message);
-      this.#acknowledgeCustody(item.message);
+      this.#keepForNextLaunch(agentId, item.message);
       // Kept, not failed: the delivery is not lost, so it is not reported as a failed delivery.
       item.completion.resolve();
       logger.info("Agent delivery kept for the next launch after a failed launch", {
@@ -2789,15 +2804,10 @@ export class DaemonRuntime {
       this.#wakeLaunches.has(message.agentId) &&
       this.#deliveryQueue.hasQueued(message.agentId)
     ) {
-      this.#deliveryQueue.enqueue(message.agentId, message);
-      this.#acknowledgeCustody(message);
+      this.#keepForNextLaunch(message.agentId, message);
       return;
     }
-    const delivery = this.#enqueueAgentInput(message.agentId, (completion) => ({
-      kind: "delivery",
-      message,
-      completion,
-    }));
+    const delivery = this.#enqueueDelivery(message.agentId, message);
     // Runner hold: the delivery is queued, never rejected and never indexed. Attention indexing is
     // what wakes a turn, and the server's canonical read boundary only advances when the Agent
     // itself drains `check` - so a held delivery stays undelivered server-side and is re-fetched
@@ -2836,11 +2846,7 @@ export class DaemonRuntime {
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
       return Promise.resolve();
     }
-    const delivery = this.#enqueueAgentInput(agentId, (completion) => ({
-      kind: "delivery",
-      message,
-      completion,
-    }));
+    const delivery = this.#enqueueDelivery(agentId, message);
     if (this.#runnerHold !== undefined) {
       void delivery.catch(() => {});
       return Promise.resolve();
@@ -2887,8 +2893,7 @@ export class DaemonRuntime {
       ? this.#wakeLaunchFailures.blockedUntil(message.agentId)
       : undefined;
     if (blockedUntil !== undefined) {
-      this.#deliveryQueue.enqueue(message.agentId, message);
-      this.#acknowledgeCustody(message);
+      this.#keepForNextLaunch(message.agentId, message);
       logger.info("Agent wake deferred by a launch-failure cooldown", {
         event: "agent.wake.cooldown_deferred",
         agent_id: message.agentId,
@@ -2900,16 +2905,11 @@ export class DaemonRuntime {
     // Deliveries are already waiting for this Agent's next launch: this one joins them, so the
     // launch presents all of them in a single notice instead of this one alone.
     if (this.#deliveryQueue.hasQueued(message.agentId)) {
-      this.#deliveryQueue.enqueue(message.agentId, message);
-      this.#acknowledgeCustody(message);
+      this.#keepForNextLaunch(message.agentId, message);
       await this.#wakeAgent(message.agentId, restart);
       return;
     }
-    const delivery = this.#enqueueAgentInput(message.agentId, (completion) => ({
-      kind: "delivery",
-      message,
-      completion,
-    }));
+    const delivery = this.#enqueueDelivery(message.agentId, message);
     await Promise.all([this.#wakeAgent(message.agentId, restart), delivery]);
   }
 
