@@ -34,24 +34,21 @@ export function isNonLocalizedRequest(request: Request): boolean {
   );
 }
 
-/** The request as the browser addressed it, for Paraglide's locale decision. Its redirect is an
- * absolute URL built from `request.url`, which behind the TLS-terminating proxy is `http://`;
- * production serves no plaintext, so the redirect has to carry the public origin. Only the URL and
- * headers matter to that decision: the body stays with the original request the handler gets. */
-function asAddressed(request: Request): Request {
+/** The URL the browser actually requested, for Paraglide's route matching and locale redirect.
+ * Behind the TLS-terminating proxy `request.url` is `http://`, and Paraglide builds its redirect
+ * as an absolute URL from it; production serves no plaintext. `effectiveRequestUrl` is the
+ * middleware's option for exactly this (https://paraglidejs.com/server). */
+function addressedUrl(request: Request): URL {
   const url = new URL(request.url);
-  const origin = publicOrigin(request);
-  if (url.origin === origin) return request;
-  return new Request(new URL(`${url.pathname}${url.search}`, origin), {
-    method: request.method,
-    headers: request.headers,
-  });
+  return new URL(`${url.pathname}${url.search}`, publicOrigin(request));
 }
 
 export default {
   async fetch(request: Request): Promise<Response> {
     return isNonLocalizedRequest(request)
       ? handler.fetch(request)
-      : paraglideMiddleware(asAddressed(request), () => handler.fetch(request));
+      : paraglideMiddleware(request, () => handler.fetch(request), {
+          effectiveRequestUrl: addressedUrl,
+        });
   },
 };
