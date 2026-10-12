@@ -876,7 +876,7 @@ function WorkspaceInventory({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium text-primary">{workspace.displayName}</span>
-                  <span className="rounded-full bg-secondary px-2 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-tertiary">
+                  <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-tertiary">
                     {workspace.state === "deleted"
                       ? m.computer_agent_workspace_deleted()
                       : m.computer_agent_workspace_active()}
