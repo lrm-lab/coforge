@@ -241,19 +241,22 @@ export function SettingsContent(props: SettingsContentProps) {
           showList ? "hidden" : "flex",
         )}
       >
-        <PageHeader
-          heading={sectionLabel}
-          leading={
-            <ButtonUtility
-              icon={ChevronLeft}
-              color="tertiary"
-              size="sm"
-              className="-ml-2 size-11 md:hidden"
-              tooltip={m.settings_title()}
-              onClick={() => setShowList(true)}
-            />
-          }
-        />
+        {/* The account banner is the top of the card on a desktop, so its heading steps aside. */}
+        <div className={section === "account" ? "md:hidden" : undefined}>
+          <PageHeader
+            heading={sectionLabel}
+            leading={
+              <ButtonUtility
+                icon={ChevronLeft}
+                color="tertiary"
+                size="sm"
+                className="-ml-2 size-11 md:hidden"
+                tooltip={m.settings_title()}
+                onClick={() => setShowList(true)}
+              />
+            }
+          />
+        </div>
 
         <section aria-label={sectionLabel} className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -446,11 +449,11 @@ function AccountSettings({
     : profile.avatarUrl;
 
   return (
-    <div className="w-full px-4 pb-8 sm:px-6">
+    <div className="w-full pb-8">
       <section>
         <div
           aria-hidden="true"
-          className="relative isolate h-32 overflow-hidden rounded-xl bg-linear-to-br from-bg-brand-section via-bg-brand-solid to-bg-brand-secondary sm:h-44"
+          className="relative isolate h-32 overflow-hidden bg-linear-to-br from-bg-brand-section via-bg-brand-solid to-bg-brand-secondary sm:h-44"
         >
           {gradientReady && (
             <AnimatedGradient config={heroGradient} theme="dark" paused={reducedMotion} />
