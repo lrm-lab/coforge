@@ -1,6 +1,7 @@
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { useHydrated } from "@tanstack/react-router";
+import { useReducedMotion } from "motion/react";
 import { Button as AriaButton, FileTrigger } from "react-aria-components";
 import {
   BellRinging01 as BellRing,
@@ -25,6 +26,8 @@ import {
 
 import { PageHeader } from "#src/components/layout/page-header";
 import { Avatar } from "#src/components/base/avatar/avatar";
+import AnimatedGradient from "#src/components/spell/animated-gradient";
+import { heroGradient, useWebGl2 } from "#src/features/landing/landing-brand-panel";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
@@ -341,6 +344,9 @@ function AccountSettings({
   onAvatarRemove,
 }: SettingsContentProps) {
   const hydrated = useHydrated();
+  // The banner is the homepage's gradient, which exists only where WebGL2 can draw it.
+  const gradientReady = useWebGl2();
+  const reducedMotion = useReducedMotion() ?? false;
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(profile.displayName ?? "");
   const [description, setDescription] = useState(profile.description);
@@ -444,8 +450,12 @@ function AccountSettings({
       <section>
         <div
           aria-hidden="true"
-          className="h-32 rounded-xl bg-linear-to-br from-bg-brand-section via-bg-brand-solid to-bg-brand-secondary sm:h-44"
-        />
+          className="relative isolate h-32 overflow-hidden rounded-xl bg-linear-to-br from-bg-brand-section via-bg-brand-solid to-bg-brand-secondary sm:h-44"
+        >
+          {gradientReady && (
+            <AnimatedGradient config={heroGradient} theme="dark" paused={reducedMotion} />
+          )}
+        </div>
         <header className="flex min-w-0 items-start gap-4 px-4 sm:gap-6 sm:px-8">
           <div className="-mt-12 shrink-0 rounded-2xl bg-primary p-1 shadow-lg">
             <Avatar
