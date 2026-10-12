@@ -142,6 +142,10 @@ input[type="search"]::-webkit-search-cancel-button {
     --avatar-size: 4rem;
   }
 
+  [data-avatar].size-24 {
+    --avatar-size: 6rem;
+  }
+
   [data-avatar][class] {
     border-radius: calc(var(--avatar-size) / 4);
   }

@@ -119,6 +119,11 @@ describe("PrismaUserProfileRepository", () => {
     });
   });
 
+  test("says when the person joined, as an ISO instant", async () => {
+    const joined = profileRepository({ username: "ada", displayName: "Countess" });
+    expect((await joined.repository.get("user-1")).joinedAt).toBe("2026-07-23T01:02:03.000Z");
+  });
+
   test("says whether the person has been asked for a name", async () => {
     const unasked = profileRepository({ username: "ada", displayName: null });
     expect((await unasked.repository.get("user-1")).named).toBe(false);
@@ -276,7 +281,12 @@ test("profile image HTTP boundary rejects unauthenticated requests", async () =>
 
 function profileRepository(row: { username: string; displayName: string | null }) {
   const updates: unknown[] = [];
-  const stored = { ...row, description: "", avatarObjectKey: null };
+  const stored = {
+    ...row,
+    description: "",
+    avatarObjectKey: null,
+    createdAt: new Date("2026-07-23T01:02:03.000Z"),
+  };
   const db = {
     user: {
       // Like the database, answer with only the columns the query selects.

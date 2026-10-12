@@ -1,5 +1,6 @@
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
+import { useHydrated } from "@tanstack/react-router";
 import { Button as AriaButton, FileTrigger } from "react-aria-components";
 import {
   BellRinging01 as BellRing,
@@ -59,6 +60,7 @@ import {
   type ConversationOpenMode,
 } from "#src/features/settings/conversation-open-mode";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { formatCalendarDate } from "#src/lib/dates";
 import { isTimeFormat, localeTimeFormat, type TimeFormat } from "#src/lib/time-format";
 import { cn } from "#src/lib/utils";
 import { isAppError } from "#src/lib/app-error";
@@ -90,7 +92,11 @@ interface SettingsContentProps {
     email: string | null;
     description: string;
     avatarUrl: string | null;
+    /** When the account was created, as an ISO instant. */
+    joinedAt: string;
   };
+  /** The Agents the person created in this Workspace, for the profile. */
+  createdAgents: Array<{ id: string; name: string; avatarUrl: string | null }>;
   members: {
     actorUserId: string;
     actorRole: string;
@@ -327,10 +333,14 @@ function SettingsNavigationButton({
 
 function AccountSettings({
   profile,
+  createdAgents,
+  locale,
+  timeZone,
   onProfileSave,
   onAvatarUpload,
   onAvatarRemove,
 }: SettingsContentProps) {
+  const hydrated = useHydrated();
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(profile.displayName ?? "");
   const [description, setDescription] = useState(profile.description);
@@ -423,29 +433,61 @@ function AccountSettings({
   const displayNameProblem = nameProblem(displayName);
   const canSave = changed && !saving && !displayNameProblem;
 
+  const headerAvatarSrc = editing
+    ? removeAvatar
+      ? null
+      : (pendingAvatarPreview ?? profile.avatarUrl)
+    : profile.avatarUrl;
+
   return (
     <div className="w-full px-4 pb-8 sm:px-6">
       <section>
-        <header className="flex min-h-12 items-center justify-between gap-4 py-3">
-          <h2 className="text-lg font-semibold">{m.settings_profile()}</h2>
+        <div
+          aria-hidden="true"
+          className="h-32 rounded-xl bg-linear-to-br from-bg-brand-section via-bg-brand-solid to-bg-brand-secondary sm:h-44"
+        />
+        <header className="flex min-w-0 items-start gap-4 px-4 sm:gap-6 sm:px-8">
+          <div className="-mt-12 shrink-0 rounded-2xl bg-primary p-1 shadow-lg">
+            <Avatar
+              size="2xl"
+              className="size-24"
+              src={headerAvatarSrc}
+              alt={profile.name}
+              initials={avatarInitial(profile.name)}
+              contentClassName={avatarToneClassName(profile.name)}
+            />
+          </div>
+          <div className="min-w-0 flex-1 pt-4">
+            <h2 className="break-words text-display-xs font-semibold text-primary">
+              {profile.name}
+            </h2>
+            {profile.email ? (
+              <p className="break-words text-md text-tertiary">{profile.email}</p>
+            ) : null}
+          </div>
           {!editing && (
-            <Button type="button" color="secondary" onPress={startEditing}>
+            <Button type="button" className="mt-4 shrink-0" onPress={startEditing}>
               {m.settings_profile_edit()}
             </Button>
           )}
         </header>
 
-        {editing ? (
-          <>
-            <div className="border-t border-secondary py-6">
-              <div className="flex flex-wrap items-center gap-4">
-                <Avatar
-                  size="2xl"
-                  src={removeAvatar ? null : (pendingAvatarPreview ?? profile.avatarUrl)}
-                  alt={profile.name}
-                  initials={avatarInitial(profile.name)}
-                  contentClassName={avatarToneClassName(profile.name)}
-                />
+        {saveSuccess && !editing && (
+          <p role="status" className="mt-6 text-sm text-tertiary">
+            <Check aria-hidden="true" className="mr-2 inline size-4 text-primary" />
+            {m.settings_profile_save_success()}
+          </p>
+        )}
+
+        <div className="mt-8 grid gap-6 px-4 sm:px-8 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-12">
+          <div>
+            <h3 className="text-sm font-semibold text-primary">{m.settings_profile()}</h3>
+            <p className="text-sm text-tertiary">{m.settings_profile_help()}</p>
+          </div>
+
+          {editing ? (
+            <div className="flex min-w-0 flex-col gap-6">
+              <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
@@ -479,80 +521,55 @@ function AccountSettings({
                     </Button>
                   )}
                 </div>
+                <p className="mt-2 text-xs text-tertiary">{m.settings_avatar_help()}</p>
               </div>
-              <p className="mt-2 text-xs text-tertiary">{m.settings_avatar_help()}</p>
 
-              <div className="mt-6 grid gap-6 border-t border-secondary pt-6 md:grid-cols-2 xl:grid-cols-3">
-                <Input
-                  label={m.settings_display_name()}
-                  hint={
-                    displayNameProblem ? (
-                      <span role="alert">{nameProblemText[displayNameProblem]()}</span>
-                    ) : undefined
-                  }
-                  isRequired
-                  isInvalid={displayNameProblem !== undefined}
-                  value={displayName}
-                  isDisabled={saving}
-                  onChange={setDisplayName}
-                />
-
-                <div className="flex flex-col gap-1.5 md:col-span-2 xl:col-span-3">
-                  <TextArea
-                    label={m.settings_user_description()}
-                    value={description}
-                    maxLength={280}
-                    rows={4}
-                    placeholder={m.settings_user_description_placeholder()}
-                    isDisabled={saving}
-                    hideRequiredIndicator
-                    onChange={setDescription}
-                  />
-                  <p className="text-right text-sm text-tertiary tabular-nums">
-                    {description.length}/280
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <footer className="flex flex-wrap items-center justify-end gap-3 border-t border-secondary py-4">
-              {saveError && (
-                <div className="mr-auto">
-                  <SaveErrorMessage error={saveError} />
-                </div>
-              )}
-              <Button type="button" color="secondary" isDisabled={saving} onPress={cancelEditing}>
-                {m.settings_profile_cancel()}
-              </Button>
-              <Button type="button" isDisabled={!canSave} onPress={save}>
-                {saving ? m.settings_profile_saving() : m.settings_profile_save()}
-              </Button>
-            </footer>
-          </>
-        ) : (
-          <>
-            {saveSuccess && (
-              <p role="status" className="border-t border-secondary py-3 text-sm text-tertiary">
-                <Check aria-hidden="true" className="mr-2 inline size-4 text-primary" />
-                {m.settings_profile_save_success()}
-              </p>
-            )}
-            <div className="flex min-w-0 items-center gap-4 border-t border-secondary py-6">
-              <Avatar
-                size="2xl"
-                src={profile.avatarUrl}
-                alt={profile.name}
-                initials={avatarInitial(profile.name)}
-                contentClassName={avatarToneClassName(profile.name)}
+              <Input
+                label={m.settings_display_name()}
+                hint={
+                  displayNameProblem ? (
+                    <span role="alert">{nameProblemText[displayNameProblem]()}</span>
+                  ) : undefined
+                }
+                isRequired
+                isInvalid={displayNameProblem !== undefined}
+                value={displayName}
+                isDisabled={saving}
+                onChange={setDisplayName}
               />
-              <div className="min-w-0">
-                <p className="break-words text-lg font-semibold">{profile.name}</p>
-                {profile.email ? (
-                  <p className="break-words text-sm text-tertiary">{profile.email}</p>
-                ) : null}
+
+              <div className="flex flex-col gap-1.5">
+                <TextArea
+                  label={m.settings_user_description()}
+                  value={description}
+                  maxLength={280}
+                  rows={4}
+                  placeholder={m.settings_user_description_placeholder()}
+                  isDisabled={saving}
+                  hideRequiredIndicator
+                  onChange={setDescription}
+                />
+                <p className="text-right text-sm text-tertiary tabular-nums">
+                  {description.length}/280
+                </p>
               </div>
+
+              <footer className="flex flex-wrap items-center justify-end gap-3">
+                {saveError && (
+                  <div className="mr-auto">
+                    <SaveErrorMessage error={saveError} />
+                  </div>
+                )}
+                <Button type="button" color="secondary" isDisabled={saving} onPress={cancelEditing}>
+                  {m.settings_profile_cancel()}
+                </Button>
+                <Button type="button" isDisabled={!canSave} onPress={save}>
+                  {saving ? m.settings_profile_saving() : m.settings_profile_save()}
+                </Button>
+              </footer>
             </div>
-            <dl className="grid gap-x-8 gap-y-6 border-t border-secondary pt-6 md:grid-cols-2 xl:grid-cols-3">
+          ) : (
+            <dl className="flex min-w-0 flex-col gap-6">
               <ProfileValue label={m.settings_display_name()} value={profile.displayName || "-"} />
               {profile.email ? (
                 <ProfileValue label={m.settings_email()} value={profile.email} />
@@ -560,11 +577,33 @@ function AccountSettings({
               <ProfileValue
                 label={m.settings_user_description()}
                 value={profile.description || "-"}
-                full
               />
+              <ProfileValue
+                label={m.settings_joined_at()}
+                value={hydrated ? formatCalendarDate(profile.joinedAt, timeZone, locale) : ""}
+              />
+              <div className="flex min-w-0 flex-col gap-2">
+                <dt className="text-sm font-semibold text-primary">
+                  {m.settings_created_agents()}
+                </dt>
+                <dd className="flex min-w-0 flex-wrap gap-2 text-sm text-primary">
+                  {createdAgents.length === 0
+                    ? "-"
+                    : createdAgents.map((agent) => (
+                        <Avatar
+                          key={agent.id}
+                          size="xs"
+                          src={agent.avatarUrl}
+                          alt={agent.name}
+                          initials={avatarInitial(agent.name)}
+                          contentClassName={avatarToneClassName(agent.name)}
+                        />
+                      ))}
+                </dd>
+              </div>
             </dl>
-          </>
-        )}
+          )}
+        </div>
       </section>
     </div>
   );
@@ -582,22 +621,11 @@ function nameProblem(name: string): PersonNameProblem | undefined {
   return checked.ok ? undefined : checked.problem;
 }
 
-function ProfileValue({
-  label,
-  value,
-  full = false,
-}: {
-  label: string;
-  value: string;
-  /** Long values (the description) span the full row. */
-  full?: boolean;
-}) {
+function ProfileValue({ label, value }: { label: string; value: string }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1", full && "md:col-span-2 xl:col-span-3")}>
-      <dt className="text-sm text-tertiary">{label}</dt>
-      <dd className="min-w-0 text-sm font-medium break-words whitespace-pre-wrap text-primary">
-        {value}
-      </dd>
+    <div className="flex min-w-0 flex-col gap-1">
+      <dt className="text-sm font-semibold text-primary">{label}</dt>
+      <dd className="min-w-0 text-sm break-words whitespace-pre-wrap text-primary">{value}</dd>
     </div>
   );
 }
