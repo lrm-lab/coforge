@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   CheckCircle,
@@ -80,6 +80,14 @@ import { normalizeLeaderFormatTabs } from "./template-outline-sections";
 import { WEEKLY_SEND_TOAST_MS, WeeklySendConfirmDialog } from "./weekly-send-confirm-dialog";
 import { zonedCalendarDate } from "./weekly-report-schedule-due";
 import { sendWindowEnd, useWeeklySendArmed } from "./use-send-window";
+import {
+  readingWheelSession,
+  sameTemplateNeighbors,
+  stageReadingEdge,
+  type ReadingEdge,
+} from "./weekly-report-reading-turn";
+
+const recordsRoute = getRouteApi("/w/$workspaceSlug/records");
 
 type ReportSubject = {
   type: "report";
@@ -222,6 +230,39 @@ function ReportDetail({
   const sendAckTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [sendAck, setSendAck] = useState(false);
   const sent = status === "submitted" || status === "shared";
+  const catalog = recordsRoute.useLoaderData();
+  const readingScroll = leaderReading && sent;
+  const neighbors = readingScroll
+    ? sameTemplateNeighbors(catalog.memberWeeks, report.id)
+    : { previousId: null, nextId: null };
+
+  useEffect(() => {
+    if (!readingScroll) return;
+    for (const recordId of [neighbors.previousId, neighbors.nextId]) {
+      if (!recordId) continue;
+      void router.preloadRoute({
+        to: "/w/$workspaceSlug/records/$recordId",
+        params: { workspaceSlug, recordId },
+        search: (previous) => ({
+          tab: previous.tab === "notes" ? "notes" : "weekly",
+          ...(typeof previous.returnTo === "string" ? { returnTo: previous.returnTo } : {}),
+        }),
+      });
+    }
+  }, [neighbors.nextId, neighbors.previousId, readingScroll, router, workspaceSlug]);
+
+  function openNeighbor(recordId: string, edge: ReadingEdge) {
+    stageReadingEdge(recordId, edge);
+    void navigate({
+      to: "/w/$workspaceSlug/records/$recordId",
+      params: { workspaceSlug, recordId },
+      search: (previous) => ({
+        tab: previous.tab === "notes" ? "notes" : "weekly",
+        ...(typeof previous.returnTo === "string" ? { returnTo: previous.returnTo } : {}),
+      }),
+      resetScroll: false,
+    });
+  }
 
   useEffect(() => {
     setFavorited(Boolean(report.favorited));
@@ -656,12 +697,24 @@ function ReportDetail({
                   extraction={content.keyPointExtraction}
                   restartBusy={keyPointRestartBusy}
                   onRestart={() => void restartPersonalKeyPoints()}
+                  scrollable={!readingScroll}
                   editPrompt={{
                     slot: "personal",
                     returnTo: `/w/${workspaceSlug}/records/${report.id}`,
                   }}
                 />
               ) : null
+            }
+            readingTurn={
+              readingScroll
+                ? {
+                    reportId: report.id,
+                    previousReportId: neighbors.previousId,
+                    nextReportId: neighbors.nextId,
+                    wheel: readingWheelSession(),
+                    onOpenReport: openNeighbor,
+                  }
+                : undefined
             }
             onChange={schedulePersist}
             onBlur={() => {

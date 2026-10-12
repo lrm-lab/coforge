@@ -24,6 +24,8 @@ export function KeyPointExtractionPanel({
   className,
   /** When false, skip the centered reading column (already nested in one). */
   framed = true,
+  /** When false, the parent scroller owns vertical overflow. */
+  scrollable = true,
 }: {
   extraction: KeyPointExtractionMeta | undefined;
   assistantAgentId?: string | null;
@@ -36,6 +38,7 @@ export function KeyPointExtractionPanel({
   };
   className?: string;
   framed?: boolean;
+  scrollable?: boolean;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const status = extraction?.status;
@@ -143,7 +146,7 @@ export function KeyPointExtractionPanel({
   }
 
   return (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
+    <div className={cn(scrollable && "min-h-0 flex-1 overflow-y-auto", className)}>
       <RecordsReadingColumn className="space-y-4">{body}</RecordsReadingColumn>
     </div>
   );
