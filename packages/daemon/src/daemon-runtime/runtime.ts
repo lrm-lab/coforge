@@ -1801,6 +1801,17 @@ export class DaemonRuntime {
    * means the server replays it on the next `ready`; nothing is lost, since a daemon restart
    * recovers unread messages from the cloud read boundary, not from ACK state.
    */
+  /** The fields every daemon -> server report opens with: this protocol, a fresh request id, and
+   * this runtime's own Workspace and Computer. */
+  #envelope() {
+    return {
+      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
+      requestId: crypto.randomUUID(),
+      workspaceId: this.#connection.workspaceId,
+      computerId: this.#connection.computerId,
+    };
+  }
+
   #acknowledgeCustody(message: AgentMessageDelivery): void {
     this.#messageAttention.acknowledgeCustody(message);
   }
@@ -2071,10 +2082,7 @@ export class DaemonRuntime {
                 );
               }
               await this.#reportAgentSession({
-                protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-                requestId: crypto.randomUUID(),
-                workspaceId: this.#connection.workspaceId,
-                computerId: this.#connection.computerId,
+                ...this.#envelope(),
                 agentId,
                 provider: config.provider,
                 sessionId: reportedSessionId,
@@ -2316,10 +2324,7 @@ export class DaemonRuntime {
     if (identity?.sessionId && this.#transport.reportAgentSession) {
       try {
         await this.#reportAgentSession({
-          protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-          requestId: crypto.randomUUID(),
-          workspaceId: this.#connection.workspaceId,
-          computerId: this.#connection.computerId,
+          ...this.#envelope(),
           agentId,
           provider: intent.provider,
           sessionId: identity.sessionId,
@@ -3155,10 +3160,7 @@ export class DaemonRuntime {
     reason: AgentSessionInvalidateReason,
   ): AgentSessionInvalidate {
     return {
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: crypto.randomUUID(),
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
+      ...this.#envelope(),
       agentId,
       provider,
       sessionId,
@@ -3306,10 +3308,7 @@ export class DaemonRuntime {
     const clientSeq = (this.#agentStatusSequences.get(agentId) ?? 0) + 1;
     this.#agentStatusSequences.set(agentId, clientSeq);
     this.#transport.sendAgentStatus?.({
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: crypto.randomUUID(),
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
+      ...this.#envelope(),
       agentId,
       status,
       daemonInstanceId: this.#runtimeInstanceId,
@@ -3339,10 +3338,7 @@ export class DaemonRuntime {
     if (last && last.usedTokens === usedTokens && last.windowTokens === windowTokens) return;
     this.#lastContextUsage.set(agentId, { usedTokens, windowTokens });
     this.#transport.sendAgentContextUsage?.({
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: crypto.randomUUID(),
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
+      ...this.#envelope(),
       agentId,
       provider,
       launchId: launch.launchId,
@@ -3640,10 +3636,7 @@ export class DaemonRuntime {
   async #requestReminderSnapshot(agentId: string): Promise<void> {
     if (!this.#transport.requestSnapshot) return;
     const sync: ReminderSync = await this.#transport.requestSnapshot({
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: crypto.randomUUID(),
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
+      ...this.#envelope(),
       agentId,
     });
     await this.#reminders.apply(sync);
@@ -3972,10 +3965,7 @@ export class DaemonRuntime {
       this.#settleReminders(),
       this.#connection.computerId
         ? this.#transport.sendShutdownNotice?.({
-            protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-            requestId: crypto.randomUUID(),
-            workspaceId: this.#connection.workspaceId,
-            computerId: this.#connection.computerId,
+            ...this.#envelope(),
             workerInstanceId: this.#runtimeInstanceId,
             reason: shutdownReason,
           })
