@@ -453,10 +453,14 @@ function AccountSettings({
       <section>
         <div
           aria-hidden="true"
-          className="relative isolate h-32 overflow-hidden bg-linear-to-br from-bg-brand-section via-bg-brand-solid to-bg-brand-secondary sm:h-44"
+          className="relative isolate h-32 overflow-hidden bg-primary-solid sm:h-44"
         >
+          {/* The banner is dark until the gradient is drawn, which then fades in over it, so the
+              page never flashes a different colour first. */}
           {gradientReady && (
-            <AnimatedGradient config={heroGradient} theme="dark" paused={reducedMotion} />
+            <div className="absolute inset-0 animate-in duration-1000 fade-in">
+              <AnimatedGradient config={heroGradient} theme="dark" paused={reducedMotion} />
+            </div>
           )}
         </div>
         <header className="flex min-w-0 items-start gap-4 px-4 sm:gap-6 sm:px-8">
