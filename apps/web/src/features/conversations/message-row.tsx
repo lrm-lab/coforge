@@ -540,8 +540,9 @@ function MessageAgentAvatar({
   return <AgentDisplayAvatar name={name} src={src} display={display} deleted={deleted} size="sm" />;
 }
 
-/** One history row: optional day divider, then the message with its hover actions. */
 /**
+ * One history row: optional day divider, then the message with its hover actions.
+ *
  * Memoized: a conversation re-renders on every send, poll, page and pane change, and a row only
  * needs to when its own message or row state does. Callers keep its props stable (`useCallback`,
  * `useLatestCallback` for event handlers) so an unrelated change skips the row.

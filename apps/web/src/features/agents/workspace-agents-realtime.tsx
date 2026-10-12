@@ -229,11 +229,14 @@ function inRoster(agent: { isExtra?: true }) {
   return !agent.isExtra;
 }
 
-/** The live Agent list (with realtime status), for the sidebar's Direct message section. */
-/** The Members directory / DM sidebar / mention list roster: never includes an `isExtra`
+/**
+ * The live Agent list (with realtime status), for the sidebar's Direct message section.
+ *
+ * The Members directory / DM sidebar / mention list roster: never includes an `isExtra`
  * placeholder, since those carry no real name/description and exist only so
  * `useLiveAgent(id)` can serve live status/Activity for an Agent outside the viewer's own
- * roster. */
+ * roster.
+ */
 export function useLiveAgents(): LiveAgent[] {
   const agents = useSelector(useContext(LiveAgentStoreContext), (state) => state);
   // One list per store value, not per call: consumers memoize on it, and a fresh array on every
