@@ -87,7 +87,7 @@ services:
       # metadata service (100.100.100.200), so the credential never exists as a file or
       # environment value. The internal endpoint keeps uploads off the public bandwidth.
       COFORGE_FILE_STORAGE: oss
-      COFORGE_OSS_BUCKET: coforge-files
+      COFORGE_OSS_BUCKET: coforge-files-prod
       COFORGE_OSS_REGION: cn-beijing
       COFORGE_OSS_INTERNAL: "1"
       ALIBABA_CLOUD_ECS_METADATA: coforge-production-web
@@ -103,7 +103,7 @@ services:
       # together: the URL without the bucket refuses to boot. The Web role reads that bucket
       # through its own grant, so losing the grant fails an avatar upload loudly instead of
       # writing somewhere unintended.
-      COFORGE_IMAGE_OSS_BUCKET: coforge-images
+      COFORGE_IMAGE_OSS_BUCKET: coforge-images-prod
       COFORGE_IMAGE_DELIVERY_URL: https://images.coforge.cn
     secrets:
       - source: authing_app_id

@@ -18,12 +18,12 @@ over the VPC, so the Compose project defines no database or cache containers.
 - **PostgreSQL:** managed RDS PostgreSQL 18, reached over the VPC. Prisma
   migrations run from the `migrate` service (profile `tools`).
 - **Redis:** managed Redis 7.0 (ApsaraDB for Redis), reached over the VPC.
-- **User files:** OSS private bucket `coforge-files`, accessed through the
+- **User files:** OSS private bucket `coforge-files-prod`, accessed through the
   `coforge-production-web` ECS RAM role (STS from instance metadata; no
   AccessKey file or environment value).
 - **CDN:** `files.coforge.cn` (signed attachment URLs; signing key is the
   secret `coforge_file_delivery_key`) and `images.coforge.cn` (public avatars
-  and project icons, bucket `coforge-images`).
+  and project icons, bucket `coforge-images-prod`).
 - **Release feed:** `https://releases.coforge.cn`.
 
 Not yet enabled in production: GitHub integration (the Web code returns no
@@ -33,8 +33,8 @@ and Server-Timing.
 ## Operator bootstrap
 
 1. Provision the ECS host, Docker rootless under the `deploy` user, and the
-   `coforge-production-web` RAM role with the bucket policy for `coforge-files`
-   and `coforge-images`. Follow the staging steps in
+   `coforge-production-web` RAM role with the bucket policy for `coforge-files-prod`
+   and `coforge-images-prod`. Follow the staging steps in
    [`docs/operations/staging/operator-bootstrap.md`](../staging/operator-bootstrap.md),
    replacing `staging` with `production` in names and paths.
 2. Create the directories on the host:
