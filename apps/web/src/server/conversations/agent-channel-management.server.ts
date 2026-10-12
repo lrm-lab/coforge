@@ -106,16 +106,16 @@ export type AgentChannelManagementRepository = Pick<
   | "removeMember"
 >;
 
-/**
- * Agent-facing channel lifecycle and roster management. Every read/write here is scoped by
- * Workspace and, where the operation targets a specific member, filtered through
- * `ACTIVE_MEMBER_WHERE` so a soft-left member never counts as present, joined, or listed.
- */
 /** A member handle that names no one this operation can reach (404). */
 function memberNotFound(handle: string) {
   return new AgentChannelManagementError(404, `member not found: @${handle}`);
 }
 
+/**
+ * Agent-facing channel lifecycle and roster management. Every read/write here is scoped by
+ * Workspace and, where the operation targets a specific member, filtered through
+ * `ACTIVE_MEMBER_WHERE` so a soft-left member never counts as present, joined, or listed.
+ */
 export class AgentChannelManagement {
   private readonly channels: PublicChannels;
   private readonly inboxPurge: Pick<AgentInboxPurgePublisher, "purge">;
