@@ -1,11 +1,4 @@
-import {
-  Bookmark,
-  ChevronRight,
-  Hash01 as Hash,
-  MessageChatSquare,
-  Pin01,
-  Plus,
-} from "@untitledui/icons";
+import { Bookmark, ChevronRight, Hash01 as Hash, Pin01, Plus } from "@untitledui/icons";
 import { useEffect, useId, useMemo, useState, type FC, type ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { DndContext } from "@dnd-kit/core";
@@ -40,6 +33,7 @@ import {
   directorySectionHideable,
   readCollapsedSections,
   writeCollapsedSections,
+  type CollapsibleSectionId,
   type DirectorySectionId,
 } from "./directory-sections";
 import { EMPTY_SECTION_HIDDEN_CLASS } from "#src/features/settings/hide-empty-sidebar-sections";
@@ -256,9 +250,10 @@ function ConversationRow({
 }
 
 /**
- * A collapsible sidebar group (CHANNELS, DIRECT MESSAGES). The caption itself is the toggle,
- * like Slack's sidebar sections; the chevron sits in a 20px gutter so the caption keeps the exact
- * x position it has without a toggle, and the list below stays aligned with it.
+ * A sidebar group's title and its rows. A group that can collapse (Channels, Direct messages)
+ * makes the whole caption its toggle, like Slack's sidebar sections, and draws a chevron in the
+ * leading 20px gutter. A group that cannot (Pinned, per the design mockup) draws its own mark in
+ * that same gutter instead, so every title in the list keeps the same x either way.
  */
 /** Every row, title and list in the directory shares one inset, so a title's chevron, the Saved
  * entry's bookmark and a channel row's avatar all start on the same x: 0.75rem here plus the
@@ -274,16 +269,24 @@ function DirectorySection({
   children,
 }: {
   label: string;
-  /** The section's own mark, next to the chevron, the way the Saved entry carries a bookmark. */
-  icon: FC<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
-  expanded: boolean;
-  onToggle: () => void;
+  /** A non-collapsible section's own mark, in the gutter a collapsible one gives its chevron —
+   * the way the Saved entry carries a bookmark. Ignored on a collapsible section: the mockup
+   * gives Channels and Direct messages a chevron and no second mark. */
+  icon?: FC<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
+  expanded?: boolean;
+  /** Absent on a section that cannot collapse: its rows are always shown, and its title row is
+   * not a control at all, so it draws no chevron and takes no hover highlight. */
+  onToggle?: () => void;
   /** Optional trailing control on the header row, e.g. a "+" that creates a channel. It sits
    * outside the toggle button so it is its own click target, not part of collapsing. */
   action?: ReactNode;
   children: ReactNode;
 }) {
   const listId = useId();
+  // The title carries its own size, weight and colour, so it reads as a title of the list rather
+  // than a caption above it (and beats the Button's own `font-semibold`, which belongs to a real
+  // button).
+  const title = <span className="truncate text-sm font-medium text-primary">{label}</span>;
   return (
     <>
       {/* One unified hover surface for the whole header row: the row itself carries the
@@ -292,40 +295,53 @@ function DirectorySection({
           independent click targets. `h-9` is the 2.25rem title row the list is built on: with no
           margin between the sections, consecutive titles land exactly 2.25rem apart. */}
       <div className={cx(DIRECTORY_INSET, "group/section")}>
-        <div className="flex h-9 items-center gap-1 rounded-md pr-2 pl-2 transition-colors duration-100 ease-linear group-hover/section:bg-primary_hover">
-          {/* The whole caption row is the toggle, and `flex-1` fills the row width, so the hit
-              area is large both ways (the user reported the old target was too small);
-              `justify-start pl-0` puts the chevron on the same x as a row's own icon. */}
-          <Button
-            color="tertiary"
-            size="sm"
-            aria-expanded={expanded}
-            aria-controls={listId}
-            onPress={onToggle}
-            className="min-w-0 flex-1 justify-start pr-2 pl-0 hover:bg-transparent!"
-            iconLeading={
-              <ChevronRight
-                aria-hidden="true"
-                className={cx(
-                  "size-4 shrink-0 transition-transform duration-100 ease-linear",
-                  expanded && "rotate-90",
-                )}
-              />
-            }
-          >
-            {/* The title carries its own size, weight and colour, so it reads as a title of the
-                list rather than a caption above it (and beats the Button's own `font-semibold`,
-                which belongs to a real button). */}
-            <span className="flex min-w-0 items-center gap-1.5">
-              <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-              <span className="truncate text-sm font-medium text-primary">{label}</span>
+        <div
+          className={cx(
+            "flex h-9 items-center gap-1 rounded-md pr-2 pl-2 transition-colors duration-100 ease-linear",
+            onToggle && "group-hover/section:bg-primary_hover",
+          )}
+        >
+          {onToggle ? (
+            // The whole caption row is the toggle, and `flex-1` fills the row width, so the hit
+            // area is large both ways (the user reported the old target was too small);
+            // `justify-start pl-0` puts the chevron on the same x as a row's own icon.
+            <Button
+              color="tertiary"
+              size="sm"
+              aria-expanded={expanded}
+              aria-controls={listId}
+              onPress={onToggle}
+              className="min-w-0 flex-1 justify-start pr-2 pl-0 hover:bg-transparent!"
+              iconLeading={
+                <ChevronRight
+                  aria-hidden="true"
+                  className={cx(
+                    "size-4 shrink-0 transition-transform duration-100 ease-linear",
+                    expanded && "rotate-90",
+                  )}
+                />
+              }
+            >
+              {title}
+            </Button>
+          ) : (
+            // Nothing to press: the mark takes the chevron's gutter and the title keeps its x, so
+            // this title line reads the same as the others without pretending to be a control.
+            // `gap-1.5`, not the Button's own `gap-1`: the Button's label span adds 2px of its
+            // own, so 6px here is what puts this title on the same x as a collapsible section's
+            // (measured in the browser, both at 262px in the 1440 layout).
+            <span className="flex min-w-0 flex-1 items-center gap-1.5 pr-2">
+              {Icon ? (
+                <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+              ) : null}
+              {title}
             </span>
-          </Button>
+          )}
           {action}
         </div>
       </div>
       {/* Kept mounted but hidden: collapsing must not throw away the rows' realtime state. */}
-      <div id={listId} hidden={!expanded}>
+      <div id={listId} hidden={onToggle ? !expanded : undefined}>
         {children}
       </div>
     </>
@@ -411,9 +427,9 @@ export function ConversationDirectory({
   });
   /** All groups start expanded so SSR and the first client render agree; the stored preference
    * is applied right after mount (`localStorage` is unavailable during SSR). */
-  const [collapsed, setCollapsed] = useState<DirectorySectionId[]>([]);
+  const [collapsed, setCollapsed] = useState<CollapsibleSectionId[]>([]);
   useEffect(() => setCollapsed(readCollapsedSections()), []);
-  const toggle = (id: DirectorySectionId) =>
+  const toggle = (id: CollapsibleSectionId) =>
     setCollapsed((current) => {
       const next = current.includes(id)
         ? current.filter((entry) => entry !== id)
@@ -576,12 +592,10 @@ export function ConversationDirectory({
           }) && EMPTY_SECTION_HIDDEN_CLASS,
         )}
       >
-        <DirectorySection
-          label={m.conversation_pinned_section()}
-          icon={Pin01}
-          expanded={!collapsed.includes("pinned")}
-          onToggle={() => toggle("pinned")}
-        >
+        {/* Pinned does not collapse (design mockup): it is the list's drop target, and a member
+            who pinned a handful of rows is saying those rows should stay in sight. Its pin takes
+            the gutter the other sections give their chevron. */}
+        <DirectorySection label={m.conversation_pinned_section()} icon={Pin01}>
           <div className={DIRECTORY_INSET}>
             <DirectoryDropList
               section="pinned"
@@ -602,7 +616,6 @@ export function ConversationDirectory({
       <div>
         <DirectorySection
           label={m.channels_title()}
-          icon={Hash}
           expanded={!collapsed.includes("channels")}
           onToggle={() => toggle("channels")}
           action={
@@ -634,7 +647,6 @@ export function ConversationDirectory({
       <div>
         <DirectorySection
           label={m.messages_agents_action()}
-          icon={MessageChatSquare}
           expanded={!collapsed.includes("agents")}
           onToggle={() => toggle("agents")}
           action={<StartDirectMessagePopover />}

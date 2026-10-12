@@ -60,4 +60,9 @@ describe("Chat sidebar section collapse state", () => {
     stubLocalStorage('["channels","projects"]');
     expect(readCollapsedSections()).toEqual(["channels"]);
   });
+
+  test("a device that collapsed Pinned before it stopped collapsing reads it as expanded", () => {
+    stubLocalStorage('["pinned","channels"]');
+    expect(readCollapsedSections()).toEqual(["channels"]);
+  });
 });
