@@ -95,6 +95,7 @@
   "settings_profile_help": "在此更新个人头像与信息",
   "settings_joined_at": "加入时间",
   "settings_created_agents": "创建过的智能体",
+  "settings_description_remaining": "还能输入{count}字",
   "settings_profile_edit": "编辑",
   "settings_profile_cancel": "取消",
   "settings_profile_save": "保存",

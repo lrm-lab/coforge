@@ -95,6 +95,7 @@
   "settings_profile_help": "Update your picture and details here.",
   "settings_joined_at": "Joined",
   "settings_created_agents": "Agents you created",
+  "settings_description_remaining": "{count} characters left",
   "settings_profile_edit": "Edit",
   "settings_profile_cancel": "Cancel",
   "settings_profile_save": "Save",

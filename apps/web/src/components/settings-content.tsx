@@ -12,6 +12,7 @@ import {
   Clock as Clock3,
   Translate01 as Languages,
   LayoutLeft,
+  Mail01,
   MessageSquare01 as MessagesSquare,
   Moon01 as Moon,
   Share01,
@@ -19,7 +20,6 @@ import {
   Sun,
   SunSetting01 as SunMoon,
   Type01 as TypeIcon,
-  Upload01 as Upload,
   UserCircle as UserRound,
   Users01 as Users,
 } from "@untitledui/icons";
@@ -477,8 +477,51 @@ function AccountSettings({
             {profile.email ? (
               <p className="break-words text-md text-tertiary">{profile.email}</p>
             ) : null}
+            {editing && (
+              <div className="mt-2 flex flex-wrap items-center gap-x-4">
+                <Button
+                  type="button"
+                  color="link-color"
+                  size="sm"
+                  isDisabled={saving}
+                  onPress={() => avatarInputRef.current?.click()}
+                >
+                  {m.settings_avatar_change()}
+                </Button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  aria-label={m.settings_avatar_change()}
+                  disabled={saving}
+                  className="sr-only"
+                  onChange={upload}
+                />
+                <Button
+                  type="button"
+                  color="link-gray"
+                  size="sm"
+                  isDisabled={saving || removeAvatar || !(profile.avatarUrl || pendingAvatar)}
+                  onPress={() => {
+                    setPendingAvatar(null);
+                    setRemoveAvatar(Boolean(profile.avatarUrl));
+                  }}
+                >
+                  {m.settings_avatar_remove()}
+                </Button>
+              </div>
+            )}
           </div>
-          {!editing && (
+          {editing ? (
+            <div className="mt-4 flex shrink-0 items-center gap-3">
+              <Button type="button" color="secondary" isDisabled={saving} onPress={cancelEditing}>
+                {m.settings_profile_cancel()}
+              </Button>
+              <Button type="button" isDisabled={!canSave} onPress={save}>
+                {saving ? m.settings_profile_saving() : m.settings_profile_save()}
+              </Button>
+            </div>
+          ) : (
             <Button type="button" className="mt-4 shrink-0" onPress={startEditing}>
               {m.settings_profile_edit()}
             </Button>
@@ -486,7 +529,7 @@ function AccountSettings({
         </header>
 
         {saveSuccess && !editing && (
-          <p role="status" className="mt-6 text-sm text-tertiary">
+          <p role="status" className="mt-6 px-4 text-sm text-tertiary sm:px-8">
             <Check aria-hidden="true" className="mr-2 inline size-4 text-primary" />
             {m.settings_profile_save_success()}
           </p>
@@ -500,43 +543,7 @@ function AccountSettings({
 
           {editing ? (
             <div className="flex min-w-0 flex-col gap-6">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    color="secondary"
-                    iconLeading={Upload}
-                    isDisabled={saving}
-                    onPress={() => avatarInputRef.current?.click()}
-                  >
-                    {m.settings_avatar_change()}
-                  </Button>
-                  <input
-                    ref={avatarInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    aria-label={m.settings_avatar_change()}
-                    disabled={saving}
-                    className="sr-only"
-                    onChange={upload}
-                  />
-                  {profile.avatarUrl && !removeAvatar && (
-                    <Button
-                      type="button"
-                      color="tertiary"
-                      isDisabled={saving}
-                      onPress={() => {
-                        setPendingAvatar(null);
-                        setRemoveAvatar(true);
-                      }}
-                    >
-                      {m.settings_avatar_remove()}
-                    </Button>
-                  )}
-                </div>
-                <p className="mt-2 text-xs text-tertiary">{m.settings_avatar_help()}</p>
-              </div>
-
+              {saveError && <SaveErrorMessage error={saveError} />}
               <Input
                 label={m.settings_display_name()}
                 hint={
@@ -551,35 +558,22 @@ function AccountSettings({
                 onChange={setDisplayName}
               />
 
-              <div className="flex flex-col gap-1.5">
-                <TextArea
-                  label={m.settings_user_description()}
-                  value={description}
-                  maxLength={280}
-                  rows={4}
-                  placeholder={m.settings_user_description_placeholder()}
-                  isDisabled={saving}
-                  hideRequiredIndicator
-                  onChange={setDescription}
-                />
-                <p className="text-right text-sm text-tertiary tabular-nums">
-                  {description.length}/280
-                </p>
-              </div>
+              {profile.email ? (
+                <Input label={m.settings_email()} icon={Mail01} value={profile.email} isReadOnly />
+              ) : null}
 
-              <footer className="flex flex-wrap items-center justify-end gap-3">
-                {saveError && (
-                  <div className="mr-auto">
-                    <SaveErrorMessage error={saveError} />
-                  </div>
-                )}
-                <Button type="button" color="secondary" isDisabled={saving} onPress={cancelEditing}>
-                  {m.settings_profile_cancel()}
-                </Button>
-                <Button type="button" isDisabled={!canSave} onPress={save}>
-                  {saving ? m.settings_profile_saving() : m.settings_profile_save()}
-                </Button>
-              </footer>
+              <TextArea
+                label={m.settings_user_description()}
+                value={description}
+                maxLength={280}
+                rows={4}
+                placeholder={m.settings_user_description_placeholder()}
+                isDisabled={saving}
+                hideRequiredIndicator
+                hint={m.settings_description_remaining({ count: 280 - description.length })}
+                onChange={setDescription}
+              />
+              <p className="-mt-4 text-xs text-tertiary">{m.settings_avatar_help()}</p>
             </div>
           ) : (
             <dl className="flex min-w-0 flex-col gap-6">
