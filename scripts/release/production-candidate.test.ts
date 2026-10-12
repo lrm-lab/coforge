@@ -121,3 +121,53 @@ test("an installer candidate is refused when the approved commit's crate has ano
     ),
   ).rejects.toThrow(/Cargo\.toml.*0\.1\.4/);
 });
+
+test("without staging evidence a candidate is checked for shape alone and the staging feed is never read", async () => {
+  const feed = stagingFeed({});
+  await verifyProductionCandidate(
+    {
+      track: "computer",
+      version: "0.1.0",
+      commit: COMMIT,
+      stagingFeedUrl: STAGING,
+      withoutStaging: true,
+    },
+    { fetch: feed.fetch },
+  );
+  await verifyProductionCandidate(
+    {
+      track: "installer",
+      version: "0.1.3",
+      commit: COMMIT,
+      stagingFeedUrl: STAGING,
+      cargoToml: cargoToml("0.1.3"),
+      withoutStaging: true,
+    },
+    { fetch: feed.fetch },
+  );
+  expect(feed.requested).toEqual([]);
+  for (const candidate of [
+    { version: "0.1.1-dev.10", commit: COMMIT },
+    { version: "0.1.0", commit: "main" },
+  ]) {
+    await expect(
+      verifyProductionCandidate(
+        { track: "computer", stagingFeedUrl: STAGING, withoutStaging: true, ...candidate },
+        { fetch: feed.fetch },
+      ),
+    ).rejects.toThrow(/stable|40 lowercase hex/);
+  }
+  await expect(
+    verifyProductionCandidate(
+      {
+        track: "installer",
+        version: "0.1.3",
+        commit: COMMIT,
+        stagingFeedUrl: STAGING,
+        cargoToml: cargoToml("0.1.4"),
+        withoutStaging: true,
+      },
+      { fetch: feed.fetch },
+    ),
+  ).rejects.toThrow(/Cargo\.toml.*0\.1\.4/);
+});

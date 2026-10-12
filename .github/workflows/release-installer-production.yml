@@ -1,5 +1,5 @@
 name: Publish installer (production)
-run-name: ${{ inputs.pointer_only && format('Move the production installer pointer to {0}', inputs.pointer_only) || format('Publish installer {0} from {1} to production', inputs.version, inputs.commit) }}
+run-name: ${{ inputs.pointer_only && format('Move the production installer pointer to {0}', inputs.pointer_only) || format('Publish installer {0} from {1} to production{2}', inputs.version, inputs.commit, inputs.without_staging && ' without staging' || '') }}
 
 # Production promotion of coforge-installer (docs/release/installer-feed.md,
 # docs/release/staging-to-production.md). The installer compiles its feed in, so production never
@@ -25,6 +25,13 @@ on:
           nothing else (no build, no publication). Leave empty to publish `version` from `commit`.
         required: false
         type: string
+      without_staging:
+        description: >-
+          Skip the staging comparison and check the commit and version for shape only. For a
+          release approved without a staging publication.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -83,6 +90,7 @@ jobs:
         env:
           INPUT_COMMIT: ${{ inputs.commit }}
           INPUT_VERSION: ${{ inputs.version }}
+          WITHOUT_STAGING: ${{ inputs.without_staging }}
         run: |
           if ! [[ "$INPUT_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo "commit must be a full commit, 40 lowercase hex characters: $INPUT_COMMIT" >&2
@@ -90,7 +98,9 @@ jobs:
           fi
           git merge-base --is-ancestor "$INPUT_COMMIT" HEAD
           git show "$INPUT_COMMIT:crates/installer/Cargo.toml" > "$RUNNER_TEMP/Cargo.toml"
-          bun scripts/release/production-candidate.ts installer \
+          flags=()
+          if [ "$WITHOUT_STAGING" = true ]; then flags=(--without-staging); fi
+          bun scripts/release/production-candidate.ts "${flags[@]}" installer \
             "$INPUT_VERSION" "$INPUT_COMMIT" https://releases-staging.coforge.cn "$RUNNER_TEMP/Cargo.toml"
           echo "- Candidate: installer ${INPUT_VERSION} from ${INPUT_COMMIT}, published to staging and on main" >> "$GITHUB_STEP_SUMMARY"
 

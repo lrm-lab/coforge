@@ -1,5 +1,5 @@
 name: Publish Computer (production)
-run-name: Publish Computer ${{ inputs.version }} from ${{ inputs.commit }} to production
+run-name: Publish Computer ${{ inputs.version }} from ${{ inputs.commit }} to production${{ inputs.without_staging && ' without staging' || '' }}
 
 # Production promotion of the local Computer distribution (docs/release/staging-to-production.md).
 # The feed a build trusts is compiled into it, so production never copies staging's binaries: it
@@ -20,6 +20,13 @@ on:
         description: Stable version that staging's latest names, e.g. 0.1.1
         required: true
         type: string
+      without_staging:
+        description: >-
+          Skip the staging comparison and check the commit and version for shape only. For a
+          release approved without a staging publication.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -66,8 +73,11 @@ jobs:
         env:
           INPUT_COMMIT: ${{ inputs.commit }}
           INPUT_VERSION: ${{ inputs.version }}
+          WITHOUT_STAGING: ${{ inputs.without_staging }}
         run: |
-          bun scripts/release/production-candidate.ts computer \
+          flags=()
+          if [ "$WITHOUT_STAGING" = true ]; then flags=(--without-staging); fi
+          bun scripts/release/production-candidate.ts "${flags[@]}" computer \
             "$INPUT_VERSION" "$INPUT_COMMIT" https://releases-staging.coforge.cn
           # Validated above as 40 hex characters, so it cannot be read as an option.
           git merge-base --is-ancestor "$INPUT_COMMIT" HEAD

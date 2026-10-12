@@ -158,3 +158,26 @@ test("production signs in as staging does, pins every action, and keeps inputs o
     }
   }
 });
+
+test("skipping the staging comparison is an explicit input the run title names", async () => {
+  for (const [name, file] of [
+    ["computer", "release-production.yml"],
+    ["installer", "release-installer-production.yml"],
+  ] as const) {
+    const workflow = workflows[name];
+    const input = workflow.on.workflow_dispatch!.inputs!.without_staging as
+      | { type?: string; default?: unknown }
+      | undefined;
+    expect(input?.type, name).toBe("boolean");
+    expect(input?.default, name).toBe(false);
+    const raw = Bun.YAML.parse(await Bun.file(`.github/workflows/${file}`).text()) as {
+      "run-name": string;
+    };
+    expect(raw["run-name"], name).toContain("inputs.without_staging");
+    const verify = workflow.jobs.candidate!.steps!.find((step) =>
+      step.run?.includes("production-candidate.ts"),
+    )!;
+    expect(verify.env?.WITHOUT_STAGING, name).toBe("${{ inputs.without_staging }}");
+    expect(verify.run, name).toContain("--without-staging");
+  }
+});

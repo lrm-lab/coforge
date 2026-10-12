@@ -58,6 +58,11 @@ Environment's required reviewer is step 2. The installer goes first, because
 `install.sh` reads `installer/latest` from the same feed. The runbook is
 [`operations/production/computer-release.md`](../operations/production/computer-release.md).
 
+Their `without_staging` input skips the staging comparison and checks only the
+commit's and version's shape. It exists for a release Frank approves without a
+staging publication (the first production release, `0.1.0` from `main`, on
+2026-10-12); the run title names it, so the approver sees it.
+
 Building a commit other than the approved one, or altering the source between
 approval and build, invalidates the approval. Because the artifacts are rebuilt
 rather than copied, the production checks in

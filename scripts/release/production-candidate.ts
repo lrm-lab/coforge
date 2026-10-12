@@ -10,6 +10,11 @@
  *   installer  the version `crates/installer/Cargo.toml` holds at the commit; the installer
  *              pointer moves on its own (`pointer_only`), so it is not compared
  *
+ * `withoutStaging` skips the staging comparison and checks the commit and version for shape
+ * alone (and the installer's Cargo.toml version). It exists for a production release Frank
+ * approved without a staging publication; the workflows expose it as an explicit input that the
+ * run title names.
+ *
  * Reads only the public staging feed; it holds no credential.
  */
 import { readFile } from "node:fs/promises";
@@ -26,6 +31,8 @@ export interface ProductionCandidate {
   stagingFeedUrl: string;
   /** The installer track's `crates/installer/Cargo.toml` at `commit`. */
   cargoToml?: string;
+  /** Check shape only: the release was approved without a staging publication. */
+  withoutStaging?: boolean;
 }
 
 export interface CandidateDependencies {
@@ -59,6 +66,16 @@ export async function verifyProductionCandidate(
     throw new Error(`version must be a stable major.minor.patch version: ${version}`);
   }
 
+  if (track === "installer") {
+    const crateVersion = installerVersionFromCargoToml(candidate.cargoToml ?? "");
+    if (crateVersion !== version) {
+      throw new Error(
+        `crates/installer/Cargo.toml at ${commit} holds ${crateVersion}, not the candidate ${version}`,
+      );
+    }
+  }
+  if (candidate.withoutStaging) return;
+
   let manifestKey: string;
   if (track === "computer") {
     const latest = (await readStagingObject(stagingFeedUrl, LATEST_OBJECT_KEY, fetch)).trim();
@@ -67,12 +84,6 @@ export async function verifyProductionCandidate(
     }
     manifestKey = manifestObjectKey(version);
   } else {
-    const crateVersion = installerVersionFromCargoToml(candidate.cargoToml ?? "");
-    if (crateVersion !== version) {
-      throw new Error(
-        `crates/installer/Cargo.toml at ${commit} holds ${crateVersion}, not the candidate ${version}`,
-      );
-    }
     manifestKey = installerManifestKey(version);
   }
 
@@ -88,10 +99,14 @@ export async function verifyProductionCandidate(
 }
 
 if (import.meta.main) {
-  const [track, version, commit, stagingFeedUrl, cargoTomlPath] = Bun.argv.slice(2);
+  const args = Bun.argv.slice(2);
+  const withoutStaging = args.includes("--without-staging");
+  const [track, version, commit, stagingFeedUrl, cargoTomlPath] = args.filter(
+    (arg) => arg !== "--without-staging",
+  );
   if ((track !== "computer" && track !== "installer") || !version || !commit || !stagingFeedUrl) {
     console.error(
-      "usage: production-candidate.ts <computer|installer> <version> <commit> <staging-feed-url> [cargo-toml]",
+      "usage: production-candidate.ts [--without-staging] <computer|installer> <version> <commit> <staging-feed-url> [cargo-toml]",
     );
     process.exit(2);
   }
@@ -102,8 +117,13 @@ if (import.meta.main) {
       commit,
       stagingFeedUrl,
       cargoToml: cargoTomlPath ? await readFile(cargoTomlPath, "utf8") : undefined,
+      withoutStaging,
     });
-    console.log(`staging published ${track} ${version} from ${commit}`);
+    console.log(
+      withoutStaging
+        ? `${track} ${version} from ${commit}: approved without a staging publication`
+        : `staging published ${track} ${version} from ${commit}`,
+    );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

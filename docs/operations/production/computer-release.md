@@ -115,5 +115,9 @@ and that staging published that version from it; the Computer workflow also
 requires staging's `latest` to name that stable version. A failed check stops the
 run before the approval gate.
 
+A release Frank approves without a staging publication adds
+`-f without_staging=true` to both commands; the version must still be stable and
+the commit on `main`.
+
 Roll a bad installer back with
 `gh workflow run release-installer-production.yml -f pointer_only=<version>`.
