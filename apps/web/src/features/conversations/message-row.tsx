@@ -1067,7 +1067,7 @@ export const MessageRow = memo(function MessageRow({
               `saved-messages-view.tsx`), where every entry is saved by definition. */}
           {saveSaved && (
             <div className="flex pt-0.5">
-              <BadgeWithIcon type="color" color="warning" size="sm" iconLeading={Bookmark}>
+              <BadgeWithIcon type="color" color="brand" size="sm" iconLeading={Bookmark}>
                 {m.conversation_saved_marker()}
               </BadgeWithIcon>
             </div>
