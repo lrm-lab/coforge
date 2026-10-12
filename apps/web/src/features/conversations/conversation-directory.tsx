@@ -1,5 +1,12 @@
-import { Bookmark, ChevronRight, Hash01 as Hash, Plus } from "@untitledui/icons";
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import {
+  Bookmark,
+  ChevronRight,
+  Hash01 as Hash,
+  MessageChatSquare,
+  Pin01,
+  Plus,
+} from "@untitledui/icons";
+import { useEffect, useId, useMemo, useState, type FC, type ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { DndContext } from "@dnd-kit/core";
 import { Link as AriaLink } from "react-aria-components";
@@ -260,12 +267,15 @@ const DIRECTORY_INSET = "px-3";
 
 function DirectorySection({
   label,
+  icon: Icon,
   expanded,
   onToggle,
   action,
   children,
 }: {
   label: string;
+  /** The section's own mark, next to the chevron, the way the Saved entry carries a bookmark. */
+  icon: FC<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
   expanded: boolean;
   onToggle: () => void;
   /** Optional trailing control on the header row, e.g. a "+" that creates a channel. It sits
@@ -306,7 +316,10 @@ function DirectorySection({
             {/* The title carries its own size, weight and colour, so it reads as a title of the
                 list rather than a caption above it (and beats the Button's own `font-semibold`,
                 which belongs to a real button). */}
-            <span className="truncate text-sm font-medium text-primary">{label}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+              <span className="truncate text-sm font-medium text-primary">{label}</span>
+            </span>
           </Button>
           {action}
         </div>
@@ -565,6 +578,7 @@ export function ConversationDirectory({
       >
         <DirectorySection
           label={m.conversation_pinned_section()}
+          icon={Pin01}
           expanded={!collapsed.includes("pinned")}
           onToggle={() => toggle("pinned")}
         >
@@ -588,6 +602,7 @@ export function ConversationDirectory({
       <div>
         <DirectorySection
           label={m.channels_title()}
+          icon={Hash}
           expanded={!collapsed.includes("channels")}
           onToggle={() => toggle("channels")}
           action={
@@ -619,6 +634,7 @@ export function ConversationDirectory({
       <div>
         <DirectorySection
           label={m.messages_agents_action()}
+          icon={MessageChatSquare}
           expanded={!collapsed.includes("agents")}
           onToggle={() => toggle("agents")}
           action={<StartDirectMessagePopover />}
