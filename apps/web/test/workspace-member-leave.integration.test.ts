@@ -334,8 +334,9 @@ test.skipIf(!connectionString)(
         senderUserId: owner.id,
         body: "take care",
       });
-      // The sender's own list is never signalled, and nobody else is left in it.
-      expect(announced.at(-1)?.directUserIds).toEqual([]);
+      // Only the sender's own list is signalled (so their other tabs refresh the row); the member
+      // who left is no longer in it.
+      expect(announced.at(-1)?.directUserIds).toEqual([owner.id]);
       await new TaskBoard(db, { realtime }).execute(
         { workspaceId: workspace.id, userId: owner.id },
         {
