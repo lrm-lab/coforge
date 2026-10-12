@@ -400,6 +400,16 @@ function isClosedAndUnpinned(channel: {
   return member?.hiddenAt != null && member.pins.length === 0;
 }
 
+/** The Workspace's channels as every read here sees them: channels only (not DMs), and not hidden
+ * from the Workspace. A caller narrows it further (`id`, `archivedAt`) by spreading it. */
+function visibleChannelWhere(workspaceId: string) {
+  return {
+    workspaceId,
+    channelName: { not: null },
+    ...VISIBLE_CONVERSATION_WHERE,
+  } satisfies Prisma.ConversationWhereInput;
+}
+
 /** Workspace-visible history with per-Agent notification preferences. */
 export class PublicChannels {
   private readonly inboxPurge: Pick<AgentInboxPurgePublisher, "purge">;
@@ -794,7 +804,7 @@ export class PublicChannels {
   async names(workspaceId: string, userId: string) {
     await this.authorize(workspaceId, userId);
     const channels = await this.db.conversation.findMany({
-      where: { workspaceId, channelName: { not: null }, ...VISIBLE_CONVERSATION_WHERE },
+      where: visibleChannelWhere(workspaceId),
       select: { id: true, channelName: true, description: true, archivedAt: true },
     });
     return channels.map((channel) => ({ id: channel.id, ...channelInfoOf(channel) }));
@@ -803,7 +813,7 @@ export class PublicChannels {
   async list(workspaceId: string, userId: string) {
     await this.authorize(workspaceId, userId);
     const channelRows = this.db.conversation.findMany({
-      where: { workspaceId, channelName: { not: null }, ...VISIBLE_CONVERSATION_WHERE },
+      where: visibleChannelWhere(workspaceId),
       orderBy: { channelName: "asc" },
       select: {
         id: true,
@@ -1295,12 +1305,7 @@ export class PublicChannels {
     const serverRole = await resolveActorServerRole(this.db, workspaceId, { userId });
     if (!canListArchivedChannels(serverRole)) throw new AppError("ACCESS_DENIED");
     const channels = await this.db.conversation.findMany({
-      where: {
-        workspaceId,
-        channelName: { not: null },
-        archivedAt: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
+      where: { ...visibleChannelWhere(workspaceId), archivedAt: { not: null } },
       orderBy: [{ archivedAt: "desc" }, { channelName: "asc" }],
       select: { id: true, channelName: true, archivedAt: true },
     });
@@ -1313,12 +1318,7 @@ export class PublicChannels {
 
   private async findChannelById(workspaceId: string, channelId: string) {
     const channel = await this.db.conversation.findFirst({
-      where: {
-        id: channelId,
-        workspaceId,
-        channelName: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
+      where: { id: channelId, ...visibleChannelWhere(workspaceId) },
       select: { id: true, channelName: true, description: true, archivedAt: true },
     });
     if (!channel) throw new AppError("NOT_FOUND");
@@ -1338,12 +1338,7 @@ export class PublicChannels {
         select: { role: true },
       }),
       this.db.conversation.findFirst({
-        where: {
-          id: channelId,
-          workspaceId,
-          channelName: { not: null },
-          ...VISIBLE_CONVERSATION_WHERE,
-        },
+        where: { id: channelId, ...visibleChannelWhere(workspaceId) },
         include: {
           project: {
             select: { id: true, name: true, slug: true, githubFullName: true, githubHtmlUrl: true },
@@ -1472,16 +1467,7 @@ export class PublicChannels {
     channelId: string,
     target: ChannelActor,
   ) {
-    const channel = await this.db.conversation.findFirst({
-      where: {
-        id: channelId,
-        workspaceId,
-        channelName: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
-      select: { id: true, channelName: true },
-    });
-    if (!channel) throw new AppError("NOT_FOUND");
+    const channel = await this.findChannelById(workspaceId, channelId);
     if (channel.channelName === "general") throw new AppError("CONFLICT");
     const authority = await resolveChannelAuthority(
       this.db,
@@ -1519,16 +1505,7 @@ export class PublicChannels {
    */
   async members(workspaceId: string, actor: ChannelActor, channelId: string) {
     await this.authorizeActor(workspaceId, actor);
-    const channel = await this.db.conversation.findFirst({
-      where: {
-        id: channelId,
-        workspaceId,
-        channelName: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
-      select: { id: true, channelName: true, archivedAt: true },
-    });
-    if (!channel) throw new AppError("NOT_FOUND");
+    const channel = await this.findChannelById(workspaceId, channelId);
     const isGeneral = channel.channelName === "general";
 
     const [memberRows, workspaceUsers, workspaceAgents, actorServerRole] = await Promise.all([
@@ -1690,16 +1667,7 @@ export class PublicChannels {
     input: { userIds: string[]; agentIds: string[] },
   ) {
     await this.authorizeActor(workspaceId, actor);
-    const channel = await this.db.conversation.findFirst({
-      where: {
-        id: channelId,
-        workspaceId,
-        channelName: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
-      select: { id: true, archivedAt: true },
-    });
-    if (!channel) throw new AppError("NOT_FOUND");
+    const channel = await this.findChannelById(workspaceId, channelId);
     // Nobody joins an archived channel, including by being added.
     if (channel.archivedAt) throw new AppError("CONFLICT");
 
