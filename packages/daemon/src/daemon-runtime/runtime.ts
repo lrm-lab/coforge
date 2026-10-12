@@ -169,7 +169,7 @@ import {
   reminderAppInboxSummary,
 } from "#src/agent-reminder/reminder-scheduler";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode, diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -1030,7 +1030,7 @@ export class DaemonRuntime {
               logger.warn("Agent inbox purge was not applied", {
                 event: "agent.inbox.purge_rejected",
                 agent_id: purge.agentId,
-                error_code: error instanceof Error ? error.name : "UnknownError",
+                error_code: diagnosticErrorName(error),
               });
             }
           }),
@@ -1063,7 +1063,7 @@ export class DaemonRuntime {
               logger.warn("Stopping Agents after the cloud refused the connection failed", {
                 event: "daemon_runtime:refused_stop_failed",
                 reason,
-                error_code: error instanceof Error ? error.name : "UnknownError",
+                error_code: diagnosticErrorName(error),
               }),
             )
             .then(() => this.lifecycle.connectionRefused?.(reason));
@@ -1770,7 +1770,7 @@ export class DaemonRuntime {
       logger.warn("Agent recovery notice was not accepted; canonical unread state remains", {
         event: "agent.recovery_notice.rejected",
         agent_id: agentId,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
       throw error;
     }
@@ -1842,7 +1842,7 @@ export class DaemonRuntime {
         agent_id: agentId,
         held_count: held.length,
         already_acknowledged: true,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
     });
   }
@@ -1903,7 +1903,7 @@ export class DaemonRuntime {
         event: "agent.message.delivery_kept",
         agent_id: agentId,
         delivery_id: item.message.deliveryId,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
       return false;
     });
@@ -2395,7 +2395,7 @@ export class DaemonRuntime {
             logger.warning("Context handoff request was not accepted", {
               event: "agent.context_handoff.request_failed",
               agent_id: agentId,
-              error_code: error instanceof Error ? error.name : "UnknownError",
+              error_code: diagnosticErrorName(error),
             });
           });
         });
@@ -3235,7 +3235,7 @@ export class DaemonRuntime {
         agent_id: agentId,
         held_count: held.length,
         already_acknowledged: true,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
     });
   }
@@ -3773,7 +3773,7 @@ export class DaemonRuntime {
           logger.warn("A steered notice could not be redelivered after its turn ended", {
             event: "agent.delivery_queue.fallback_notice_rejected",
             agent_id: agentId,
-            error_code: error instanceof Error ? error.name : "UnknownError",
+            error_code: diagnosticErrorName(error),
           });
           return this.#mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
         },

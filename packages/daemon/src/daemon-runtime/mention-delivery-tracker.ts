@@ -10,6 +10,7 @@ import {
   type MentionDeliveryTransitionOutcome,
 } from "@lrm/coforge-sdk/internal";
 import type { DeliveryHoldReason } from "./agent-delivery-queue";
+import { diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 
 const logger = getLogger(["coforge", "daemon", "mention-delivery"]);
 
@@ -329,7 +330,7 @@ export class MentionDeliveryTracker {
         report: kind,
         agent_id: message.agentId,
         delivery_id: message.deliveryId,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
     }
   }

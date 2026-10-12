@@ -21,6 +21,7 @@ import type {
   AgentConsumedSeqEntry,
   AgentConsumedSeqPort,
 } from "#src/persistence/agent-consumed-seq-store";
+import { diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
 
@@ -669,7 +670,7 @@ ${INBOX_DRAIN_HINT}]`,
           target_count: rows.length,
           pending_count: countDistinctMessages(announced),
           total_pending_count: totalCount,
-          error_code: error instanceof Error ? error.name : "UnknownError",
+          error_code: diagnosticErrorName(error),
           outcome: "failed",
         });
         throw error;
@@ -742,7 +743,7 @@ ${INBOX_DRAIN_HINT}]`,
         event: "agent.message.custody_ack_failed",
         agent_id: message.agentId,
         delivery_id: message.deliveryId,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
     });
   }
