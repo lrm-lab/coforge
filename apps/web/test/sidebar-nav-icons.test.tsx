@@ -1,6 +1,6 @@
 /**
  * Left-navigation icons follow the design spec: a resting icon draws in the
- * `--color-nav-icon` token (#777DBD) with a 2px stroke, while the current item
+ * `--color-nav-icon` token with a 2px stroke (#777DBD in light, lightened in dark), while the current item
  * keeps the brand accent and the token stays out of non-nav icon slots.
  */
 import { expect, test } from "bun:test";
@@ -47,9 +47,14 @@ test("The current item keeps the brand accent; the resting icon never uses the o
   expect(resting).not.toContain("text-tertiary");
 });
 
-test("The token exists in the theme with the specified value, in both modes", async () => {
+test("The token carries the spec's value in light, and a lighter one for the dark column", async () => {
   const css = await Bun.file(new URL("../src/styles/coforge-theme.css", import.meta.url)).text();
-  const matches = css.match(/--color-nav-icon:\s*([^;]+);/g) ?? [];
-  expect(matches.length).toBeGreaterThan(0);
-  for (const match of matches) expect(match.toLowerCase()).toContain("#777dbd");
+  const values = [...css.matchAll(/--color-nav-icon:\s*([^;]+);/g)].map((hit) =>
+    hit[1]!.trim().toLowerCase(),
+  );
+  // The spec's periwinkle is the light value; dark re-points it, because this one dropped to
+  // 4.4:1 on the dark sidebar and read muddy next to the current item's accent.
+  expect(values[0]).toBe("#777dbd");
+  expect(values).toHaveLength(2);
+  expect(values[1]).not.toBe("#777dbd");
 });
