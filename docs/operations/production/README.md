@@ -63,7 +63,7 @@ and Server-Timing.
 | `centrifugo_proxy_secret` | Shared secret for Centrifugo proxy calls into Web (`openssl rand -hex 32`). |
 | `worker_jwt_private_jwk` | Ed25519 private JWK, single-line JSON, for daemon-runtime tokens. |
 | `worker_jwt_key_id` | Stable key id for the JWK, for example `coforge-production`. |
-| `authing_app_id` | Authing application id for `coforge.authing.cn`. |
+| `authing_app_id` | Authing application id in the production user pool (`coforge-cn.authing.cn`). |
 | `authing_app_secret` | Authing application secret. |
 | `coforge_session_secret` | Web session secret (at least 32 characters). |
 | `coforge_agent_credential_encryption_key` | Encryption key for stored Agent credentials. |
