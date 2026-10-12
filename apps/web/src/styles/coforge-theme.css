@@ -34,16 +34,17 @@
   --color-sidebar-fg: #101319;
   --color-sidebar-accent: #ebeaf7;
   --color-sidebar-accent-fg: #5d36dc;
-  /* Expanded sidebar nav rows (design spec): resting and current/hover. */
+  /* Expanded sidebar nav rows (design spec): resting and current/hover. Re-pointed under
+     `.dark-mode` below, where an opaque resting fill cannot sit on the gradient. */
   --color-sidebar-item: #f7f6ff;
   --color-sidebar-item-active: #f3f1ff;
 
-  /* Left-navigation icons (design spec): flat periwinkle for a resting nav icon, in both
-     themes; the current item's icon stays the brand accent. */
+  /* Left-navigation icons (design spec): periwinkle for a resting nav icon; the current item's
+     icon stays the brand accent. Lightened under `.dark-mode` below. */
   --color-nav-icon: #777dbd;
 
-  /* The chat list's selected row (design spec): a bordered card whose fill and outline are flat
-     in both themes; its radius is rounded-xl (12px) in the row component. */
+  /* The chat list's selected row (design spec): a bordered card; its radius is rounded-xl (12px)
+     in the row component. Re-pointed under `.dark-mode` below. */
   --color-chat-selected-bg: #f4f6fa;
   --color-chat-selected-border: #e0e5f1;
   /* Terminal / command blocks stay dark in both themes. */
@@ -154,10 +155,29 @@
 
     --color-sidebar: #141720;
     --color-sidebar-fg: #f4f6fb;
-    --color-sidebar-accent: #2b2544;
-    --color-sidebar-item: #1c1930;
-    --color-sidebar-item-active: #262142;
+    /* One selected/hover fill for the rail and the expanded rows alike, light enough to read on
+       every stop of the sidebar gradient (1.4:1 against #21183b … #141720; the old #2b2544 was
+       1.15:1, i.e. invisible). */
+    --color-sidebar-accent: #3a3160;
+    /* A resting row paints nothing: the sidebar background is a gradient, so any opaque fill
+       reads darker than the gradient at the top of the column and lighter at the bottom — eight
+       hard-edged blocks instead of a list. The framework's own nav item (NavItemBase) is
+       transparent at rest too; only hover and the current item carry a fill. */
+    --color-sidebar-item: transparent;
+    --color-sidebar-item-active: var(--color-sidebar-accent);
     --color-sidebar-accent-fg: #c5bafe;
+
+    /* A resting nav icon keeps the light theme's periwinkle hue, lightened for a dark column
+       (7.6:1 on the gradient): dimmer than the row label, brighter than the light-theme value,
+       which on dark drops to 4.4:1 and reads muddy next to the #c5bafe current icon. */
+    --color-nav-icon: #a9a4d4;
+
+    /* The chat list's selected card, mirroring the light values' logic (a fill one step off the
+       list background plus a slightly lighter outline) with the sidebar's selected violet, so a
+       selected row and the current nav item speak the same language. The light values are opaque
+       and near-white, which on the dark list rendered as a white card under light-grey text. */
+    --color-chat-selected-bg: var(--color-sidebar-accent);
+    --color-chat-selected-border: #4c4081;
 
     --color-online: #42c83f;
     --color-offline: #778393;

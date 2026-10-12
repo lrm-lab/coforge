@@ -64,12 +64,15 @@ Untitled 自己的暗色模式规则是**不改梯度数值，只改语义 token
 | ------------------------- | ----------------------------------------- | ---------------------------------------- | ------------------------ |
 | `--color-sidebar`          | `#f8f7fe`                                 | `#141720`                                | 侧边栏底色（`bg-sidebar`）|
 | `--color-sidebar-fg`       | `#101319`                                 | `#f4f6fb`                                | 侧边栏默认文字            |
-| `--color-sidebar-accent`   | `#ebeaf7`                                 | `#2b2544`                                | 侧边栏选中/hover 底色     |
+| `--color-sidebar-accent`   | `#ebeaf7`                                 | `#3a3160`                                | 侧边栏选中/hover 底色；rail 与展开行共用一个高亮（暗色旧值 `#2b2544` 对渐变只有 1.15:1，等于看不见） |
 | `--color-sidebar-accent-fg`| `#5d36dc`                                 | `#c5bafe`                                | 侧边栏选中态文字/图标     |
+| `--color-sidebar-item`     | `#f7f6ff`                                 | `transparent`                            | 展开侧栏导航行的静止底色。暗色侧栏背景是渐变，不透明底色在列顶比背景暗、列底比背景亮（对两端分别 1.02:1 / 1.06:1），一列行就成了硬边色块；框架自己的 `NavItemBase` 静止态也是透明，只有 hover / 当前项有底色 |
+| `--color-sidebar-item-active` | `#f3f1ff`                              | `var(--color-sidebar-accent)`            | 同一行的 hover / 当前态底色 |
 | `--sidebar-gradient`（非 `@theme`，仅供 `style` 使用）| `linear-gradient(180deg,#f6f5fe 0%,#faf9ff 100%)` | `linear-gradient(155deg,#21183b 0%,#171421 52%,#141720 100%)` | 侧边栏渐变背景，Tailwind 颜色工具类无法表达渐变，App Shell 通过内联 style 读取 |
 | `--color-terminal`         | `#171b23`                                 | `#171b23`（明暗一致）                    | 终端/命令块底色           |
 | `--color-terminal-fg`      | `#f4f6fb`                                 | `#f4f6fb`（明暗一致）                    | 终端/命令块文字           |
-| `--color-nav-icon`         | `#777dbd`                                 | `#777dbd`（明暗一致）                   | 左导航图标静止态颜色；选中态仍用 brand 强调色 |
+| `--color-nav-icon`         | `#777dbd`                                 | `#a9a4d4`                                | 左导航图标静止态颜色；选中态仍用 brand 强调色。暗色沿用同一蓝紫色族但提亮（亮色值放到暗色上只有 4.4:1、发闷，提亮后 7.6:1，比行文字暗、比当前项的 `#c5bafe` 弱） |
+| `--color-chat-selected-bg` / `--color-chat-selected-border` | `#f4f6fa` / `#e0e5f1` | `var(--color-sidebar-accent)` / `#4c4081` | 聊天列表选中行那张卡的底色与描边（圆角 12px 在行组件里）。亮色值是设计稿给的近白卡；这两个值原先明暗一致，暗色下就是一张白卡配浅灰字，现在指向侧栏那套选中紫，选中会话与当前导航项是同一种高亮语言 |
 | `--color-avatar-border-start` / `--color-avatar-border-end` | `#c5bafe` / `rgb(93 54 220 / 50%)` | 同亮色 | 头像边框渐变，左上到右下 |
 | `--color-avatar-1…6`       | `#7556b9` `#d18a38` `#b65757` `#5268b7` `#497665` `#ba5937` | 同亮色 | 无头像时的占位底色（设计稿用真实头像图，未定义专门配色）|
 | `--color-avatar-deleted`   | `#afbccb`                                 | `#778393`                                | 已删除 Agent 的头像底色，取值与离线圆点一致但语义独立 |
