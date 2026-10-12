@@ -2368,6 +2368,10 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             senderAgentId: agentId,
           })
         : [];
+      // The message, its mention rows and its delivery rows are written flat rather than as one
+      // nested create: a nested create reads the message and each relation back afterwards, three
+      // more round trips while this transaction holds the conversation's sequence lock. What the
+      // send returns is already known here, except each recipient's Computer.
       const created = await tx.message.create({
         data: {
           conversationId,
@@ -2376,25 +2380,6 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           threadRootId: root?.id,
           body: stored.body,
           sequence,
-          mentions: stored.mentions.length
-            ? {
-                create: stored.mentions.map((mention) => ({
-                  memberId: mention.key,
-                  workspaceId: conversation.workspaceId,
-                  kind: mention.type,
-                  actorId: mention.id,
-                  handle: mention.handle,
-                })),
-              }
-            : undefined,
-          deliveries: {
-            create: recipients.map((wakeAgentId) => ({
-              workspaceId: conversation.workspaceId,
-              conversationId,
-              agentId: wakeAgentId,
-              sequence,
-            })),
-          },
         },
         select: {
           id: true,
@@ -2403,16 +2388,39 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           sequence: true,
           // Carried so the browser signal can exclude thread replies from channel unread.
           threadRootId: true,
-          mentions: { select: { kind: true, actorId: true, handle: true } },
-          deliveries: {
-            select: {
-              deliveryId: true,
-              agentId: true,
-              agent: { select: { computerId: true } },
-            },
-          },
         },
       });
+      if (stored.mentions.length)
+        await tx.messageMention.createMany({
+          data: stored.mentions.map((mention) => ({
+            messageId: created.id,
+            conversationId,
+            memberId: mention.key,
+            workspaceId: conversation.workspaceId,
+            kind: mention.type,
+            actorId: mention.id,
+            handle: mention.handle,
+          })),
+        });
+      // One statement writes every delivery row and reads back its Agent's Computer, which the
+      // daemon publication is addressed to. Rows come back in recipient order.
+      const deliveries = recipients.length
+        ? await tx.$queryRaw<{ deliveryId: string; agentId: string; computerId: string | null }[]>`
+            WITH inserted AS (
+              INSERT INTO "agent_message_deliveries"
+                ("deliveryId", "messageId", "workspaceId", "conversationId", "agentId", "sequence")
+              SELECT gen_random_uuid(), ${created.id}::uuid, ${conversation.workspaceId}::uuid,
+                ${conversationId}::uuid, recipient."agentId", ${sequence}
+              FROM unnest(${recipients}::uuid[]) WITH ORDINALITY AS recipient("agentId", position)
+              ORDER BY recipient.position
+              RETURNING "deliveryId", "agentId"
+            )
+            SELECT inserted."deliveryId"::text AS "deliveryId", inserted."agentId"::text AS "agentId",
+              agent."computerId"::text AS "computerId"
+            FROM inserted
+            JOIN "agents" agent ON agent."id" = inserted."agentId"
+            ORDER BY array_position(${recipients}::uuid[], inserted."agentId")`
+        : [];
       // A channel mention of someone outside the channel reached nobody; the sending Agent may
       // still act on it. A DM stores every `@handle` as text, so it records nothing.
       if (conversation.channelName)
@@ -2432,7 +2440,16 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           }),
         ),
       );
-      return { ...created, attachments };
+      return {
+        ...created,
+        mentions: stored.mentions.map((mention) => ({
+          kind: mention.type,
+          actorId: mention.id,
+          handle: mention.handle,
+        })),
+        deliveries,
+        attachments,
+      };
     });
     // Never falls back to the internal Agent id: a missing name fails loudly.
     const senderIdentity = agentMessageSender({ agentId, agent: sender.agent, user: null });
@@ -2445,11 +2462,6 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       latestSenderKind: senderIdentity.kind,
       latestSenderHandle: senderIdentity.handle,
       latestSenderDescription: senderIdentity.description,
-      deliveries: result.deliveries.map((delivery) => ({
-        deliveryId: delivery.deliveryId,
-        agentId: delivery.agentId,
-        computerId: delivery.agent.computerId,
-      })),
       target: conversation.channelName
         ? deliveryTarget(`#${conversation.channelName}`, root?.id)
         : "",

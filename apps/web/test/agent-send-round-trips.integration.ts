@@ -8,10 +8,12 @@ import {
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
 
 /**
- * An Agent's channel send resolves its channel for the Memory Offer check, for the freshness check
- * and for the send itself. The route's per-request repository resolves it once; the send still
- * re-reads the sender's membership when it writes. Drives the route's own wiring against local
- * PostgreSQL and Redis, with a stub Centrifugo.
+ * The database round trips of an Agent's channel send. Its channel is resolved for the Memory
+ * Offer check, for the freshness check and for the send itself; the route's per-request repository
+ * resolves it once, and the send still re-reads the sender's membership when it writes. Under the
+ * conversation's sequence lock the send writes its message, mention rows and delivery rows without
+ * reading any of them back. Drives the route's own wiring against local PostgreSQL and Redis, with
+ * a stub Centrifugo.
  *
  * Skipped unless `CHANNEL_TEST_DATABASE_URL` points at local PostgreSQL and `REDIS_URL` (read by
  * the route's request records) at a local Redis.
@@ -37,6 +39,10 @@ async function withChannel(
     agentId: string;
     memberId: string;
     channelName: string;
+    /** On a Computer. */
+    listener: { id: string; name: string; computerId: string };
+    /** On no Computer. */
+    offline: { id: string; name: string };
   }) => Promise<void>,
 ) {
   const centrifugo = Bun.serve({ port: 0, fetch: () => Response.json({ result: {} }) });
@@ -55,9 +61,15 @@ async function withChannel(
       members: { create: { userId: owner.id, role: "owner" } },
     },
   });
+  const computer = await db.computer.create({
+    data: { ownerId: owner.id, machineId: crypto.randomUUID() },
+  });
   try {
-    const [sender, listener] = await Promise.all(
-      ["sender", "listener"].map((name) =>
+    await db.workspaceComputer.create({
+      data: { workspaceId: workspace.id, computerId: computer.id },
+    });
+    const [sender, listener, offline] = await Promise.all(
+      ["sender", "listener", "offline"].map((name) =>
         db.agent.create({
           data: {
             workspaceId: workspace.id,
@@ -65,6 +77,7 @@ async function withChannel(
             name: `${name}-${suffix}`,
             displayName: name,
             runtimeConfig: {},
+            computerId: name === "listener" ? computer.id : null,
           },
         }),
       ),
@@ -75,7 +88,12 @@ async function withChannel(
         workspaceId: workspace.id,
         channelName,
         members: {
-          create: [{ userId: owner.id }, { agentId: sender!.id }, { agentId: listener!.id }],
+          create: [
+            { userId: owner.id },
+            { agentId: sender!.id },
+            { agentId: listener!.id },
+            { agentId: offline!.id },
+          ],
         },
       },
       include: { members: true },
@@ -85,6 +103,8 @@ async function withChannel(
       agentId: sender!.id,
       memberId: channel.members.find((member) => member.agentId === sender!.id)!.id,
       channelName,
+      listener: { id: listener!.id, name: listener!.name, computerId: computer.id },
+      offline: { id: offline!.id, name: offline!.name },
     });
   } finally {
     restoreEnv("COFORGE_CENTRIFUGO_API_URL", env.url);
@@ -93,6 +113,7 @@ async function withChannel(
     await db.agentMessageDelivery.deleteMany({ where: { workspaceId: workspace.id } });
     await db.message.deleteMany({ where: { workspaceId: workspace.id } });
     await db.workspace.delete({ where: { id: workspace.id } });
+    await db.computer.delete({ where: { id: computer.id } });
     await db.user.delete({ where: { id: owner.id } });
   }
 }
@@ -143,6 +164,71 @@ test.skipIf(!runnable)(
         new AgentSendRejectedError(403, "agent is not a conversation member"),
       );
       expect(await db.message.count({ where: { workspaceId } })).toBe(0);
+    });
+  },
+);
+
+test.skipIf(!runnable)(
+  "an Agent's channel send writes its message, mentions and deliveries without reading them back",
+  async () => {
+    await withChannel(async ({ workspaceId, agentId, channelName, listener, offline }) => {
+      const { repository } = agentMessagesPostDependencies(db);
+      const channel = await repository.getAgentChannel(workspaceId, agentId, `#${channelName}`);
+      queries.length = 0;
+      const sent = await repository.sendAgentMessage(
+        channel.id,
+        agentId,
+        `@${offline.name} and @${listener.name}, over to you`,
+      );
+
+      // Each delivery names its Agent's Computer, in the order the body mentions them.
+      const stored = await db.agentMessageDelivery.findMany({
+        where: { messageId: sent.id },
+        select: { deliveryId: true, agentId: true, sequence: true },
+      });
+      expect(sent.deliveries).toEqual([
+        {
+          deliveryId: stored.find((row) => row.agentId === offline.id)!.deliveryId,
+          agentId: offline.id,
+          computerId: null,
+        },
+        {
+          deliveryId: stored.find((row) => row.agentId === listener.id)!.deliveryId,
+          agentId: listener.id,
+          computerId: listener.computerId,
+        },
+      ]);
+      expect(stored.map((row) => row.sequence)).toEqual([sent.sequence, sent.sequence]);
+      const mentions = await db.messageMention.findMany({
+        where: { messageId: sent.id },
+        select: { kind: true, actorId: true, handle: true },
+      });
+      // What the send reports is what it stored.
+      const byActor = (left: { actorId: string }, right: { actorId: string }) =>
+        left.actorId.localeCompare(right.actorId);
+      expect([...sent.mentions].sort(byActor)).toEqual(
+        [...mentions].sort(byActor) as typeof sent.mentions,
+      );
+      expect(sent.mentions).toEqual([
+        { kind: "agent", actorId: offline.id, handle: offline.name },
+        { kind: "agent", actorId: listener.id, handle: listener.name },
+      ]);
+
+      // Between taking the lock and committing, nothing the send wrote is read back.
+      const locked = queries.findIndex((query) => /FOR UPDATE/.test(query));
+      const committed = queries.findIndex((query, index) => index > locked && query === "COMMIT");
+      expect(locked).toBeGreaterThan(-1);
+      const underLock = queries.slice(locked, committed);
+      expect(
+        underLock.filter(
+          (query) =>
+            /^SELECT/.test(query.trim()) &&
+            /FROM "public"\."(messages|message_mentions|agent_message_deliveries)" WHERE/.test(
+              query,
+            ) &&
+            /"(id|messageId)" (=|IN) /.test(query),
+        ),
+      ).toEqual([]);
     });
   },
 );
