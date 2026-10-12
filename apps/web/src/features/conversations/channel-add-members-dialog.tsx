@@ -7,7 +7,7 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import {
   buildChannelCandidates,
@@ -134,7 +134,7 @@ export function ChannelAddMembersDialog({
       onOpenChange(false);
     } catch (cause) {
       setError(
-        isAppError(cause) && cause.code === "ACCESS_DENIED"
+        isAppErrorCode(cause, "ACCESS_DENIED")
           ? m.channel_members_access_denied()
           : m.channel_members_add_error(),
       );

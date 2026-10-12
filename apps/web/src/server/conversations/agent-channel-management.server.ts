@@ -1,6 +1,6 @@
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 import type { Conversation, PrismaClient } from "#src/generated/prisma/client";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
@@ -278,9 +278,8 @@ export class AgentChannelManagement {
         description: patch.description,
       });
     } catch (error) {
-      if (isAppError(error) && error.code === "ACCESS_DENIED")
-        throw channelAuthorityDeniedError("update");
-      if (isAppError(error) && error.code === "CONFLICT")
+      if (isAppErrorCode(error, "ACCESS_DENIED")) throw channelAuthorityDeniedError("update");
+      if (isAppErrorCode(error, "CONFLICT"))
         throw new AgentChannelManagementError(409, "channel name is already in use");
       throw error;
     }
@@ -299,8 +298,7 @@ export class AgentChannelManagement {
     try {
       await this.channels.setArchived(workspaceId, { agentId }, channel.id, archived);
     } catch (error) {
-      if (isAppError(error) && error.code === "ACCESS_DENIED")
-        throw channelAuthorityDeniedError(operation);
+      if (isAppErrorCode(error, "ACCESS_DENIED")) throw channelAuthorityDeniedError(operation);
       throw error;
     }
     return { target: `#${channel.channelName}`, archived };
@@ -375,14 +373,13 @@ export class AgentChannelManagement {
         ? result.alreadyMemberUserIds.includes(userId)
         : result.alreadyMemberAgentIds.includes(resolvedAgentId!);
     } catch (error) {
-      if (isAppError(error) && error.code === "ACCESS_DENIED")
+      if (isAppErrorCode(error, "ACCESS_DENIED"))
         throw new AgentChannelManagementError(
           403,
           `this Agent must be a member of #${channel.channelName} to add members to it`,
         );
-      if (isAppError(error) && (error.code === "INVALID_INPUT" || error.code === "NOT_FOUND"))
-        throw memberNotFound(handle);
-      if (isAppError(error) && error.code === "CONFLICT")
+      if (isAppErrorCode(error, "INVALID_INPUT", "NOT_FOUND")) throw memberNotFound(handle);
+      if (isAppErrorCode(error, "CONFLICT"))
         throw new AgentChannelManagementError(409, "channel is archived");
       throw error;
     }

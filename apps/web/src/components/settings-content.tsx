@@ -69,7 +69,7 @@ import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { formatCalendarDate } from "#src/lib/dates";
 import { isTimeFormat, localeTimeFormat, type TimeFormat } from "#src/lib/time-format";
 import { cn } from "#src/lib/utils";
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 
 type Locale = "en" | "zh-CN";
@@ -1246,7 +1246,7 @@ function WorkspaceProfileSettings({
       } catch (cause) {
         setSaveError(
           saveErrorFrom(
-            isAppError(cause) && cause.code === "ACCESS_DENIED"
+            isAppErrorCode(cause, "ACCESS_DENIED")
               ? m.settings_workspace_profile_access_denied()
               : m.settings_workspace_profile_save_error(),
             cause,

@@ -35,7 +35,7 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { useAppToast } from "#src/components/ui/toast";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
 import type { AgentProfileTab as AgentProfileTabId } from "#src/features/agents/profile-panel/profile-panel-search";
 import { m } from "#src/paraglide/messages";
@@ -963,9 +963,8 @@ function ChannelActionConfirmDialog({
       await onDone();
     } catch (cause) {
       // Already gone (deleted or hidden by someone else): finishing leaves for Chat all the same.
-      if (isAppError(cause) && cause.code === "NOT_FOUND") await onDone();
-      else if (isAppError(cause) && cause.code === "ACCESS_DENIED" && copy.denied)
-        setError(copy.denied());
+      if (isAppErrorCode(cause, "NOT_FOUND")) await onDone();
+      else if (isAppErrorCode(cause, "ACCESS_DENIED") && copy.denied) setError(copy.denied());
       else setError(copy.error());
     } finally {
       setBusy(false);

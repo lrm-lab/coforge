@@ -9,7 +9,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { mergeMessages } from "./conversation-messages";
 import {
   createConversationReconciler,
@@ -239,7 +239,7 @@ export async function ensureConversationWindow<
 /** The conversation no longer exists for this viewer, such as a channel hidden from the
  * Workspace: its page leaves for Chat instead of showing a load failure. */
 export function isConversationGone(error: unknown) {
-  return isAppError(error) && error.code === "NOT_FOUND";
+  return isAppErrorCode(error, "NOT_FOUND");
 }
 
 /**

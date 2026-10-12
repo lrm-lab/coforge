@@ -27,7 +27,7 @@ import {
   listComputers,
 } from "#src/features/computers/computers.functions";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
@@ -623,7 +623,7 @@ function AddMembersView({
       onDone();
     } catch (cause) {
       setError(
-        isAppError(cause) && cause.code === "ACCESS_DENIED"
+        isAppErrorCode(cause, "ACCESS_DENIED")
           ? m.channel_members_access_denied()
           : m.channel_members_add_error(),
       );
@@ -730,9 +730,9 @@ type CreatedAgentJoin = ReturnType<typeof useCreatedAgentJoin>;
 
 /** Why a created Agent did not join, and whether trying again can help. */
 function joinFailure(cause: unknown) {
-  if (isAppError(cause) && cause.code === "ACCESS_DENIED")
+  if (isAppErrorCode(cause, "ACCESS_DENIED"))
     return { reason: m.channel_members_access_denied(), retryable: false };
-  if (isAppError(cause) && cause.code === "CONFLICT")
+  if (isAppErrorCode(cause, "CONFLICT"))
     return { reason: m.channel_archived_notice(), retryable: false };
   return { reason: m.channel_members_create_agent_join_failed_hint(), retryable: true };
 }

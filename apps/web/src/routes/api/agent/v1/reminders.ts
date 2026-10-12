@@ -4,7 +4,7 @@ import {
   type AgentReminderOperationResponse,
   validateAgentReminderOperationRequest,
 } from "@lrm/coforge-sdk/internal";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { createAgentReminderService } from "#src/server/agents/agent-api-http.server";
 import { ReminderRefusal } from "#src/server/reminders/reminders.server";
@@ -41,7 +41,7 @@ function refusalResponse(error: unknown): Response | undefined {
       ? Response.json({ error: "reminder access denied", code: "ACCESS_DENIED" }, { status: 403 })
       : Response.json({ error: "invalid reminder request", code: error.code }, { status: 400 });
   // An `AppError` access denial is the same refusal from a path that still answers in `AppError`.
-  if (isAppError(error) && error.code === "ACCESS_DENIED")
+  if (isAppErrorCode(error, "ACCESS_DENIED"))
     return Response.json(
       { error: "reminder access denied", code: "ACCESS_DENIED" },
       { status: 403 },

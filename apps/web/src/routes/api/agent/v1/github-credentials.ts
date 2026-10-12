@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { configuredGitHub } from "#src/server/integrations/github-config.server";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 
 const requestSchema = z.object({}).strict();
 
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/api/agent/v1/github-credentials")({
           const credential = await github.connection.credential(principal.userId);
           return Response.json(credential, { headers: { "cache-control": "no-store" } });
         } catch (error) {
-          if (isAppError(error) && error.code === "ACCESS_DENIED")
+          if (isAppErrorCode(error, "ACCESS_DENIED"))
             return new Response("GitHub connection is not authorized", { status: 403 });
           return new Response("GitHub credential request failed", { status: 503 });
         }

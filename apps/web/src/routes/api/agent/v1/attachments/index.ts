@@ -4,7 +4,7 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import { storeAgentAttachment } from "#src/server/attachments/attachment.server";
 import { isFile } from "#src/server/attachments/upload-file.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import {
   dmPeerNotInWorkspaceResponse,
   targetNotAccessibleResponse,
@@ -79,7 +79,7 @@ export async function handleAgentAttachmentUpload(
     });
     return Response.json(stored);
   } catch (error) {
-    if (isAppError(error) && error.code === "INVALID_INPUT")
+    if (isAppErrorCode(error, "INVALID_INPUT"))
       return Response.json(
         {
           error:

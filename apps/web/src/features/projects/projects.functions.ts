@@ -5,7 +5,7 @@ import { configuredGitHub } from "#src/server/integrations/github-config.server"
 import type { RepositorySelection } from "#src/server/integrations/github-connection.server";
 import { gitObjectIdSchema } from "#src/lib/git-object-id";
 import { linkedRepositoryOf } from "#src/server/projects/project-files.server";
-import { AppError, isAppError } from "#src/lib/app-error";
+import { AppError, isAppErrorCode } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { ProjectSettings } from "#src/server/projects/project-settings.server";
 import { z } from "zod";
@@ -47,7 +47,7 @@ export const getProjectRepository = createServerFn({ method: "GET" })
       });
       return { status: "ready" as const, fullName: project.githubFullName, ...overview };
     } catch (error) {
-      if (isAppError(error) && error.code === "ACCESS_DENIED") return { status: "denied" as const };
+      if (isAppErrorCode(error, "ACCESS_DENIED")) return { status: "denied" as const };
       return { status: "unavailable" as const };
     }
   });
@@ -76,8 +76,8 @@ async function readLinkedRepository<T>(
     const result = await read(github.connection, repository);
     return { status: "ready" as const, fullName: repository.fullName, ...result };
   } catch (error) {
-    if (isAppError(error) && error.code === "ACCESS_DENIED") return { status: "denied" as const };
-    if (isAppError(error) && error.code === "NOT_FOUND") return { status: "not_found" as const };
+    if (isAppErrorCode(error, "ACCESS_DENIED")) return { status: "denied" as const };
+    if (isAppErrorCode(error, "NOT_FOUND")) return { status: "not_found" as const };
     return { status: "unavailable" as const };
   }
 }

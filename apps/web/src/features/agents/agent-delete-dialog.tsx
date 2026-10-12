@@ -8,7 +8,7 @@ import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { m } from "#src/paraglide/messages";
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 
 /**
@@ -43,7 +43,7 @@ export function AgentDeleteDialog({
         await onDelete(confirmation.trim());
       } catch (cause) {
         setError(
-          isAppError(cause) && cause.code === "ACCESS_DENIED"
+          isAppErrorCode(cause, "ACCESS_DENIED")
             ? m.agent_delete_access_denied()
             : isAppError(cause) && cause.errorId === "agent-delete-protected"
               ? m.agent_delete_protected()

@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 
 export type AgentControlRequest = {
@@ -88,7 +88,7 @@ export function useAgentRuntimeControls({
       ...(destructive && { confirmed: true }),
     }).catch((cause: unknown) => {
       setRestartSubmitError(
-        isAppError(cause) && cause.code === "ACCESS_DENIED"
+        isAppErrorCode(cause, "ACCESS_DENIED")
           ? m.agent_control_access_denied()
           : m.agent_control_submit_error(),
       );
@@ -103,7 +103,7 @@ export function useAgentRuntimeControls({
   const startStopBusy = startPending || stopPending;
 
   function startStopFailureMessage(cause: unknown) {
-    return isAppError(cause) && cause.code === "ACCESS_DENIED"
+    return isAppErrorCode(cause, "ACCESS_DENIED")
       ? m.agent_control_access_denied()
       : m.agent_control_submit_error();
   }

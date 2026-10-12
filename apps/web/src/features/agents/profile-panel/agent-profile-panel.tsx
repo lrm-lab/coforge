@@ -5,7 +5,7 @@ import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Edit01 as Pencil, UserX01, XClose as X } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { Skeleton } from "#src/components/ui/skeleton";
 import {
   Empty,
@@ -282,7 +282,7 @@ export function AgentProfilePanel({
   if (query.isError) {
     // An Agent that exists but is private to someone else answers a distinct, detail-
     // free state — no "you may not have access, or it was removed" guess, just the one fact.
-    const notVisible = isAppError(query.error) && query.error.code === "AGENT_NOT_VISIBLE";
+    const notVisible = isAppErrorCode(query.error, "AGENT_NOT_VISIBLE");
     return (
       <div className="flex h-full min-h-0 flex-col">
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-secondary px-2">

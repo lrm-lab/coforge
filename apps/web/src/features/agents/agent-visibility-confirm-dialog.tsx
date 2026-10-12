@@ -8,7 +8,7 @@ import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import type { AgentVisibilityChangePreview } from "#src/server/agents/change-agent-visibility.server";
 import type { AgentVisibility } from "./agent-visibility";
@@ -82,7 +82,7 @@ export function AgentVisibilityConfirmDialog({
         onOpenChange(false);
       } catch (cause) {
         setError(
-          isAppError(cause) && cause.code === "ACCESS_DENIED"
+          isAppErrorCode(cause, "ACCESS_DENIED")
             ? m.agent_visibility_change_access_denied()
             : m.agent_visibility_change_error(),
         );

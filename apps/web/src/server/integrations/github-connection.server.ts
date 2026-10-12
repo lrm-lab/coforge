@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import { AppError, isAppError } from "#src/lib/app-error";
+import { AppError, isAppErrorCode } from "#src/lib/app-error";
 import { gitObjectIdSchema } from "#src/lib/git-object-id";
 
 import { utf8Encoder, utf8Decoder } from "@lrm/coforge-sdk/internal";
@@ -1066,7 +1066,7 @@ export class GitHubConnection {
         );
       } catch (error) {
         // The repository itself was just read with this token, so a 404 here is the path.
-        if (isAppError(error) && error.code === "ACCESS_DENIED") throw new AppError("NOT_FOUND");
+        if (isAppErrorCode(error, "ACCESS_DENIED")) throw new AppError("NOT_FOUND");
         throw error;
       }
     });

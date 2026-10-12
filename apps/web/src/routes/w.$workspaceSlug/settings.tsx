@@ -42,7 +42,7 @@ import {
   conversationOpenMode,
   type ConversationOpenMode,
 } from "#src/features/settings/conversation-open-mode";
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import type { TimeFormat } from "#src/lib/time-format";
 import { m } from "#src/paraglide/messages";
 import {
@@ -276,7 +276,7 @@ function SettingsPage() {
     } catch (cause) {
       // The server could not reach this browser's push service: notifications still
       // arrive while CoForge is open, so the test shows one from the page itself.
-      if (isAppError(cause) && cause.code === "PUSH_SERVICE_UNREACHABLE") {
+      if (isAppErrorCode(cause, "PUSH_SERVICE_UNREACHABLE")) {
         try {
           await showPageNotification({
             title: m.preferences_browser_notifications_test_title(),

@@ -36,7 +36,7 @@ import {
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
 import { postingTargetRefusalResponse } from "#src/server/agents/agent-target-status.server";
 import { applyIncomingWeeklyReportBodyEdit } from "#src/server/records/weekly-report-body-restore.server";
@@ -325,12 +325,12 @@ export async function handleAgentMessagesPost(
     // An archived channel refuses posting (AppError("CONFLICT") from PublicChannels.send /
     // sendAgentMessage); reported the same way the rest of this route family reports a plain
     // text failure.
-    if (isAppError(error) && error.code === "CONFLICT")
+    if (isAppErrorCode(error, "CONFLICT"))
       return new Response("channel is archived", { status: 409 });
     // A private Agent's direct conversation stays scoped to its own creator: a stable
     // code with an explanation, the same rule this route already follows for the other named
     // failures above, rather than a bare 500.
-    if (isAppError(error) && error.code === "AGENT_DM_RESTRICTED")
+    if (isAppErrorCode(error, "AGENT_DM_RESTRICTED"))
       return errorResponse(
         error.code,
         "this direct message is private and read-only for this Agent",
@@ -373,8 +373,7 @@ export function agentMessagesPostDependencies(db: PrismaClient) {
             directory.isDesignated(currentWorkspaceId, currentAgentId),
         );
       } catch (error) {
-        if (isAppError(error) && (error.code === "ACCESS_DENIED" || error.code === "INVALID_INPUT"))
-          return false;
+        if (isAppErrorCode(error, "ACCESS_DENIED", "INVALID_INPUT")) return false;
         throw error;
       }
     },

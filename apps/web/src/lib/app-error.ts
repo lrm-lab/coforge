@@ -33,6 +33,19 @@ export class AppError extends Error {
   }
 }
 
+/**
+ * Whether `error` is an `AppError` carrying one of `codes`: `isAppError(error) && error.code === …`
+ * in one call, for a `catch` that answers a few codes and rethrows the rest. It narrows to an
+ * `AppError` with exactly those codes, so a `false` still leaves room for an `AppError` with
+ * another code (a plain `error is AppError` would rule every `AppError` out).
+ */
+export function isAppErrorCode<const Code extends AppErrorCode>(
+  error: unknown,
+  ...codes: readonly [Code, ...Code[]]
+): error is AppError & { readonly code: Code } {
+  return isAppError(error) && (codes as readonly AppErrorCode[]).includes(error.code);
+}
+
 export function isAppError(error: unknown): error is AppError {
   if (!(error instanceof Error)) return false;
   if (error.name === "AppError") {
