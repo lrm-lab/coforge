@@ -13,7 +13,8 @@ import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
-import { Checkbox } from "#src/components/base/checkbox/checkbox";
+import { Checkbox as AriaCheckbox } from "react-aria-components";
+import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { useAppToast } from "#src/components/ui/toast";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
@@ -754,44 +755,68 @@ function AgentRoster({
         )}
         {agents.length ? (
           <ul className="divide-y divide-secondary">
-            {agents.map((agent) => (
-              <li
-                key={agent.id}
-                className="flex min-w-0 items-center justify-between gap-4 py-3 text-sm"
-              >
-                <span className="flex min-w-0 items-center gap-3">
-                  {selecting && (
-                    <Checkbox
+            {agents.map((agent) => {
+              const handle = (
+                <span className="ml-auto shrink-0 text-xs text-tertiary">@{agent.name}</span>
+              );
+              const toggle = (selected: boolean) =>
+                setSelectedIds((current) => {
+                  const next = new Set(current);
+                  if (selected) next.add(agent.id);
+                  else next.delete(agent.id);
+                  return next;
+                });
+              return (
+                <li key={agent.id}>
+                  {selecting ? (
+                    // While selecting, the whole row is the checkbox's own label: one control, so a
+                    // click anywhere toggles selection and nothing interactive nests inside
+                    // anything else interactive. Same shape as the channel member picker.
+                    <AriaCheckbox
                       aria-label={m.computer_agent_select_named({ name: agent.displayName })}
                       isDisabled={locked}
                       isSelected={selectedIds.has(agent.id)}
-                      onChange={(selected) =>
-                        setSelectedIds((current) => {
-                          const next = new Set(current);
-                          if (selected) next.add(agent.id);
-                          else next.delete(agent.id);
-                          return next;
-                        })
-                      }
-                    />
-                  )}
-                  <AgentRosterIdentity agent={agent} />
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs text-tertiary">@{agent.name}</span>
-                  {onSelectAgent && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      color="tertiary"
-                      onPress={() => onSelectAgent(agent.id)}
+                      onChange={toggle}
+                      className="flex w-full cursor-pointer items-center gap-3 py-3 text-sm hover:bg-primary_hover disabled:cursor-not-allowed"
                     >
-                      {m.computer_agent_open()}
+                      {({ isSelected, isDisabled, isFocusVisible }) => (
+                        <>
+                          <CheckboxBase
+                            isSelected={isSelected}
+                            isDisabled={isDisabled}
+                            isFocusVisible={isFocusVisible}
+                          />
+                          <AgentRosterIdentity agent={agent} />
+                          {handle}
+                        </>
+                      )}
+                    </AriaCheckbox>
+                  ) : onSelectAgent ? (
+                    // Otherwise the row itself opens the Agent — no trailing "Open" button to aim
+                    // at. Its accessible name is its own content (name, runtime, handle). The
+                    // official Button carries the row: `h-auto`/`py-3` keep the list's rhythm,
+                    // `rounded-none px-0` let the hover fill the row, and `font-normal` leaves the
+                    // runtime line at its own weight instead of the Button's semibold.
+                    <Button
+                      color="tertiary"
+                      size="sm"
+                      onPress={() => onSelectAgent(agent.id)}
+                      className="h-auto w-full justify-start rounded-none px-0 py-3 text-left font-normal *:data-text:w-full *:data-text:min-w-0"
+                    >
+                      <span className="flex w-full min-w-0 items-center gap-3">
+                        <AgentRosterIdentity agent={agent} />
+                        {handle}
+                      </span>
                     </Button>
+                  ) : (
+                    <span className="flex w-full items-center gap-3 py-3 text-sm">
+                      <AgentRosterIdentity agent={agent} />
+                      {handle}
+                    </span>
                   )}
-                </span>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="py-6 text-center text-sm text-tertiary">
@@ -809,7 +834,7 @@ function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][nu
   return (
     <>
       <AgentDisplayAvatar name={agent.displayName} src={agent.avatarUrl} display={display} />
-      <span className="min-w-0">
+      <span className="min-w-0 flex-1">
         <span className="block truncate font-medium text-primary">{agent.displayName}</span>
         <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-tertiary">
           <RuntimeProviderMark provider={agent.provider} className="size-3.5" />

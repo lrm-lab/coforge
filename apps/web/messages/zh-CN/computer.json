@@ -58,7 +58,6 @@
   "computer_agents_on_computer": "此电脑上的 Agent",
   "computer_agent_select": "选择",
   "computer_agent_create": "创建 Agent",
-  "computer_agent_open": "打开",
   "computer_agents_select_all": "全选",
   "computer_agents_clear_all": "清空选择",
   "computer_agents_selected": "已选择 {count} 个",
