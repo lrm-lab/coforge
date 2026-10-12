@@ -63,11 +63,23 @@ Use `coforge-computer logs` to print existing Computer log files and follow
 new log records in real time. Press `Ctrl-C` to exit.
 
 `coforge-computer install` and `upgrade` select `latest` or one exact version;
-`coforge-installer` runs the transaction, and `upgrade --version <older>` moves
-to an older version. `coforge-computer recover` finishes an upgrade that did not
-complete. All
+`coforge-installer` runs the transaction. Moving to an older version needs
+`upgrade --version <older> --allow-downgrade`: without the flag the installer
+refuses it (`UPGRADE_DOWNGRADE_REFUSED`, exit 1) and changes nothing, and it refuses
+a version that is not SemVer the same way. `upgrade --dry-run` (with the same
+`--version` and `--allow-downgrade`) reports the installed and target versions and
+whether the installer would refuse the move, then stops without a prompt, a
+download, or any change; it exits 1 when the move would be refused. See
+[`docs/release/upgrade-operations.md`](../../docs/release/upgrade-operations.md).
+`coforge-computer recover` finishes an upgrade that did not complete. All
 versions and the sole Computer shim are installed for the current user; Daemon
 is never exposed as a separate installed command.
+
+Use `coforge-computer status` (or `status --json`) to see the install, the
+supervisor, each Workspace binding, its Agents, and the locks in one place. It is
+read-only. A Workspace that needs attention shows a detail line under it (a cloud
+connection error, a pending or unsettled upgrade, a failed start or restart with the
+command that retries it, or a degraded or parked state with how to recover).
 
 The executable runs on Bun and uses [Commander.js](https://github.com/tj/commander.js)
 for commands, arguments, validation, generated help, suggestions, and version
