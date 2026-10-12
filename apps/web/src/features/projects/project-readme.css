@@ -1,0 +1,55 @@
+/*
+ * The repository README, rendered by the same read-only rich-text view the weekly reports use.
+ *
+ * That view's prose is tuned for a report *page*, where an `h1` is the page's own title and so
+ * carries the display scale. A README lives inside one card of the project page, under a "Files"
+ * section and next to the repository panels, and its first line is almost always the project's
+ * name — at display size it dwarfs the page's real heading. These rules re-scale the headings for
+ * that context and let a Markdown table use the width it has; everything else (body size, spacing,
+ * code, lists) stays the shared prose.
+ */
+
+/* Headings step down from the card's own title (`text-md`) instead of the page-title display
+   scale, and the first one sits flush with the top of the card. */
+.project-readme .rich-text-editor h1,
+.project-readme .rich-text-editor h2,
+.project-readme .rich-text-editor h3 {
+  letter-spacing: -0.01em;
+}
+
+.project-readme .rich-text-editor h1 {
+  font-size: var(--text-xl);
+  line-height: var(--text-xl--line-height);
+  margin-top: 1.5rem;
+}
+
+.project-readme .rich-text-editor h2 {
+  font-size: var(--text-lg);
+  line-height: var(--text-lg--line-height);
+}
+
+.project-readme .rich-text-editor h3 {
+  font-size: var(--text-md);
+  line-height: var(--text-md--line-height);
+}
+
+.project-readme .rich-text-editor > :first-child {
+  margin-top: 0;
+}
+
+/*
+ * Markdown has no column widths, so TipTap gives every column the same minimum and the editor's
+ * `table-layout: fixed` keeps them there: a two-column table wraps one word per line while the
+ * card has width to spare. A README is read-only — there is no column resizing to protect — so
+ * the table lays itself out from its content. Both `!important`s override the inline `width` TipTap
+ * writes onto the table and onto each `<col>` (a two-column table comes out 256px wide); a
+ * selector cannot outrank an inline style.
+ */
+.project-readme .rich-text-editor table {
+  width: 100% !important;
+  table-layout: auto;
+}
+
+.project-readme .rich-text-editor col {
+  width: auto !important;
+}
