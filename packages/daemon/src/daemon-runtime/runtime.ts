@@ -1,7 +1,6 @@
 import {
   AGENT_RUNTIME_EVENT_TYPE,
   AgentProcessCleanupError,
-  AgentContextReportTimeoutError,
   type AgentRuntimeConfig,
   type AgentRuntimeEvent,
   type CodeAgentProvider,
@@ -107,11 +106,16 @@ import {
   type AgentContextScanResponse,
   AGENT_CONTEXT_SCAN_STATUS,
   UUID_LIKE_SOURCE,
-  utf8Encoder,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
+import {
+  agentContextReportOutcome,
+  agentContextScanFailure,
+  agentContextScanResponse,
+  type AgentContextScanOutcome,
+} from "./agent-context-scan-response";
 import { memoryIndexReminder } from "#src/agent-runtime/agent-memory-seed";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
@@ -749,49 +753,43 @@ export class DaemonRuntime {
   async scanAgentContext(request: AgentContextScanRequest): Promise<AgentContextScanResponse> {
     this.#assertRunning();
     this.#assertOwnIntent(request);
-    const base = {
-      protocolMajor: request.protocolMajor,
-      requestId: request.requestId,
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
-      agentId: request.agentId,
-      provider: request.provider,
-    };
-    const result = (
-      launchId: string,
-      sessionId: string,
-      status: AgentContextScanResponse["status"],
-      reportJson?: Uint8Array,
-      message?: string,
-    ): AgentContextScanResponse => ({
-      ...base,
-      launchId,
-      sessionId,
-      accepted: Boolean(reportJson),
-      status,
-      ...(reportJson ? { reportJson } : {}),
-      ...(message ? { message } : {}),
-    });
+    const answer = (outcome: AgentContextScanOutcome) =>
+      agentContextScanResponse(request, this.#connection, outcome);
     const launch = this.#currentActivityLaunches.get(request.agentId);
     if (!launch)
-      return result(request.launchId, request.sessionId, AGENT_CONTEXT_SCAN_STATUS.NO_SESSION);
+      return answer({
+        launchId: request.launchId,
+        sessionId: request.sessionId,
+        status: AGENT_CONTEXT_SCAN_STATUS.NO_SESSION,
+      });
     if (request.launchId && launch.launchId !== request.launchId)
-      return result(
-        launch.launchId,
-        request.sessionId,
-        AGENT_CONTEXT_SCAN_STATUS.ERROR,
-        undefined,
-        "Agent context scan targets a superseded launch",
-      );
+      return answer({
+        launchId: launch.launchId,
+        sessionId: request.sessionId,
+        status: AGENT_CONTEXT_SCAN_STATUS.ERROR,
+        message: "Agent context scan targets a superseded launch",
+      });
     const config = this.#agentProcessManager.runtime(request.agentId)?.config;
     if (!config)
-      return result(launch.launchId, request.sessionId, AGENT_CONTEXT_SCAN_STATUS.NO_SESSION);
+      return answer({
+        launchId: launch.launchId,
+        sessionId: request.sessionId,
+        status: AGENT_CONTEXT_SCAN_STATUS.NO_SESSION,
+      });
     const codeAgentProvider = this.#createProvider(config.provider);
     if (!codeAgentProvider.readContextReport)
-      return result(launch.launchId, request.sessionId, AGENT_CONTEXT_SCAN_STATUS.UNSUPPORTED);
+      return answer({
+        launchId: launch.launchId,
+        sessionId: request.sessionId,
+        status: AGENT_CONTEXT_SCAN_STATUS.UNSUPPORTED,
+      });
     const sessionId = this.#sessionReferences.get(request.agentId)?.sessionId;
     if (!sessionId)
-      return result(launch.launchId, request.sessionId, AGENT_CONTEXT_SCAN_STATUS.NO_SESSION);
+      return answer({
+        launchId: launch.launchId,
+        sessionId: request.sessionId,
+        status: AGENT_CONTEXT_SCAN_STATUS.NO_SESSION,
+      });
     try {
       const report = await codeAgentProvider.readContextReport({
         workingDirectory: agentWorkspaceDirectory(
@@ -802,24 +800,9 @@ export class DaemonRuntime {
         sessionId,
         timeoutMs: 20_000,
       });
-      return report
-        ? result(
-            launch.launchId,
-            sessionId,
-            AGENT_CONTEXT_SCAN_STATUS.AVAILABLE,
-            utf8Encoder.encode(JSON.stringify(report)),
-          )
-        : result(launch.launchId, sessionId, AGENT_CONTEXT_SCAN_STATUS.UNPARSED);
+      return answer(agentContextReportOutcome(launch.launchId, sessionId, report));
     } catch (error) {
-      return error instanceof AgentContextReportTimeoutError
-        ? result(launch.launchId, sessionId, AGENT_CONTEXT_SCAN_STATUS.TIMEOUT)
-        : result(
-            launch.launchId,
-            sessionId,
-            AGENT_CONTEXT_SCAN_STATUS.ERROR,
-            undefined,
-            "Context scan failed",
-          );
+      return answer(agentContextScanFailure(launch.launchId, sessionId, error));
     }
   }
 
