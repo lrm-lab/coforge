@@ -1,7 +1,8 @@
 # coforge-production: cloud production environment
 
-Status: **Compose environment and manual deploy path ready; the production
-host, managed datastores, and secrets are provisioned by the operator.**
+Status: **Compose environment ready; deploys run through the
+`Deploy Web (production)` GitHub workflow. The host, managed datastores, and
+secrets are provisioned by the operator.**
 
 The production environment runs as the `coforge-production` Compose project on
 a single ECS host (`infra/production/`). It mirrors `coforge-staging` except for
@@ -50,7 +51,12 @@ and Server-Timing.
    file mode 600.
 5. Point DNS for `coforge.cn` at the ECS public address. TLS uses an ACME
    certificate over 443 (TLS-ALPN); there is no HTTP-01 path by design.
-6. Run the first deployment by hand (below).
+6. Back up the secrets directory to the `coforge` 1Password vault (item
+   "CoForge production host secrets"). Losing
+   `coforge_agent_credential_encryption_key` makes stored Agent credentials
+   unreadable.
+7. Set up the GitHub `production` Environment (below) and deploy through the
+   workflow.
 
 ### Secrets directory
 
@@ -81,32 +87,39 @@ Managed Redis instances authenticate with an account name. A password-only URL
 not exist or may hold other permissions. Use the instance-scoped username
 (the instance id) in the URL: `redis://<instance-id>:<password>@<host>:6379`.
 
-## Manual deploy
+## Deploy
 
-Run from the operator workstation with the release image digest. This mirrors
-staging's bootstrap step; the script is the same, with the production project,
-paths, and public health URL:
+Run **Deploy Web (production)** (`.github/workflows/deploy-production.yml`)
+with the full digest of a Web image that is already healthy in staging:
 
 ```
-ssh deploy@production-host 'bash -s' < scripts/deploy/remote-deploy.sh -- \
-  --image ghcr.io/lrm-lab/coforge/coforge-web@sha256:... \
-  --project coforge-production \
-  --compose-file ~/coforge-production/infra/production/docker-compose.yml \
-  --secrets-dir ~/coforge-production/infra/production/secrets \
-  --state-file ~/coforge-production/state.env \
-  --web-health-url http://127.0.0.1:18080/health \
-  --public-health-url https://coforge.cn/health
+gh workflow run deploy-production.yml -f image=ghcr.io/lrm-lab/coforge/coforge-web@sha256:...
 ```
 
-The script validates the Compose file, the Centrifugo config, and the Caddyfile
-with their pinned images before recreating anything, runs the Prisma migration,
-and rolls back to the last healthy release on failure. Its report contains no
-secret values.
+The first job finds a successful staging deployment record of that exact
+digest and fails otherwise. The deploy job waits for a required reviewer of
+the `production` Environment to approve, then ships the Compose assets, logs
+the host in to GHCR with the run's short-lived token, runs
+`scripts/deploy/remote-deploy.sh --project coforge-production`, logs out, and
+checks `https://coforge.cn/health`, the WebSocket endpoint, and that port 80
+stays closed. The script validates the Compose file, the Centrifugo config,
+and the Caddyfile with their pinned images before recreating anything, runs
+the Prisma migration, and rolls back to the last healthy release on failure.
+
+The workflow never syncs secrets: the host's secrets directory is the source
+of truth, backed up in 1Password.
+
+### GitHub `production` Environment
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Protection | Required reviewers | Frank |
+| Variable | `DEPLOY_SSH_HOST` | Production ECS public address |
+| Variable | `DEPLOY_SSH_USER` | `deploy` |
+| Secret | `DEPLOY_SSH_KEY` | Private half of an ed25519 key used only for this deploy; its public half is in `~deploy/.ssh/authorized_keys` |
+| Secret | `DEPLOY_SSH_HOST_KEY` | The host's ed25519 public host key (`<type> <key>`) |
 
 ## Not yet covered
 
-- Promotion through a GitHub `production` Environment, with the same
-  exact-artifact gate as staging, is follow-up work. Until then every production
-  deploy is a manual run of the command above.
 - Production CDN and OSS provisioning details are in
   [`docs/operations/aliyun-oss-cdn/`](../aliyun-oss-cdn/README.md).
