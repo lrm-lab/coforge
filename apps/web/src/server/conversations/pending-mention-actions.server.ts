@@ -264,6 +264,46 @@ export type ClaimedMentionAction = {
 
 type MentionActor = { userId: string } | { agentId: string };
 
+type MentionTarget = {
+  conversationId: string;
+  targetUserId: string | null;
+  targetAgentId: string | null;
+};
+
+/** Which of these mentions' targets are already active members of the mention's conversation:
+ * ask `has(conversationId, targetId)`. One query for all of them, none when there are none. */
+async function targetMembership(
+  db: Pick<PrismaClient, "conversationMember">,
+  rows: readonly MentionTarget[],
+) {
+  const members = rows.length
+    ? await db.conversationMember.findMany({
+        where: {
+          conversationId: { in: [...new Set(rows.map((row) => row.conversationId))] },
+          ...ACTIVE_MEMBER_WHERE,
+          OR: [
+            { userId: { in: rows.flatMap((row) => (row.targetUserId ? [row.targetUserId] : [])) } },
+            {
+              agentId: {
+                in: rows.flatMap((row) => (row.targetAgentId ? [row.targetAgentId] : [])),
+              },
+            },
+          ],
+        },
+        select: { conversationId: true, userId: true, agentId: true },
+      })
+    : [];
+  const keys = new Set(
+    members.map((member) => `${member.conversationId}:${member.userId ?? member.agentId}`),
+  );
+  return {
+    has: (conversationId: string, targetId: string | null) =>
+      targetId !== null && keys.has(`${conversationId}:${targetId}`),
+  };
+}
+
+type TargetMembership = Awaited<ReturnType<typeof targetMembership>>;
+
 /** Each requested row the sender owns, with what deciding and carrying out an action needs. */
 async function loadActionRows(
   db: Pick<PrismaClient, "pendingMentionAction" | "conversationMember">,
@@ -293,26 +333,15 @@ async function loadActionRows(
       targetUser: { select: { memberships: { where: { workspaceId }, select: { userId: true } } } },
     },
   });
-  const members = await db.conversationMember.findMany({
-    where: {
-      conversationId: { in: [...new Set(rows.map((row) => row.conversationId))] },
-      ...ACTIVE_MEMBER_WHERE,
-      OR: [
-        { userId: { in: rows.flatMap((row) => (row.targetUserId ? [row.targetUserId] : [])) } },
-        { agentId: { in: rows.flatMap((row) => (row.targetAgentId ? [row.targetAgentId] : [])) } },
-      ],
-    },
-    select: { conversationId: true, userId: true, agentId: true },
-  });
-  const memberKeys = new Set(
-    members.map((member) => `${member.conversationId}:${member.userId ?? member.agentId}`),
-  );
-  return { byId: new Map(rows.map((row) => [row.id, row])), memberKeys };
+  return {
+    byId: new Map(rows.map((row) => [row.id, row])),
+    membership: await targetMembership(db, rows),
+  };
 }
 
 type ActionRow = NonNullable<ReturnType<Awaited<ReturnType<typeof loadActionRows>>["byId"]["get"]>>;
 
-function actionTarget(row: ActionRow) {
+function actionTarget(row: Pick<ActionRow, "targetAgentId" | "targetUserId" | "targetHandle">) {
   return {
     targetType: row.targetAgentId ? ("agent" as const) : ("user" as const),
     targetId: (row.targetAgentId ?? row.targetUserId)!,
@@ -324,7 +353,7 @@ function actionTarget(row: ActionRow) {
  * Notify and Add. */
 function actionRefusal(
   row: ActionRow,
-  memberKeys: ReadonlySet<string>,
+  membership: TargetMembership,
   now: Date,
 ): Pick<MentionActionResult, "status" | "reason"> | undefined {
   if (row.resolvedAt) return { status: "stale", reason: "no_longer_pending" };
@@ -333,7 +362,7 @@ function actionRefusal(
   if (row.message.conversation.archivedAt)
     return { status: "no_permission", reason: "channel_archived" };
   if (!canJoinChannel(row)) return { status: "stale", reason: "target_unavailable" };
-  if (memberKeys.has(`${row.conversationId}:${actionTarget(row).targetId}`))
+  if (membership.has(row.conversationId, actionTarget(row).targetId))
     return { status: "stale", reason: "target_already_member" };
   return undefined;
 }
@@ -352,7 +381,7 @@ export async function claimMentionActions(
   now: Date = new Date(),
 ): Promise<{ refused: MentionActionResult[]; claimed: ClaimedMentionAction[] }> {
   const ids = [...new Set(resolutionIds)];
-  const { byId, memberKeys } = await loadActionRows(db, workspaceId, sender, ids);
+  const { byId, membership } = await loadActionRows(db, workspaceId, sender, ids);
   const refused: MentionActionResult[] = [];
   const claimed: ClaimedMentionAction[] = [];
   for (const id of ids) {
@@ -362,7 +391,7 @@ export async function claimMentionActions(
       continue;
     }
     const target = actionTarget(row);
-    const refusal = actionRefusal(row, memberKeys, now);
+    const refusal = actionRefusal(row, membership, now);
     if (refusal) {
       refused.push({ resolutionId: id, ...refusal, ...target });
       continue;
@@ -402,7 +431,7 @@ export async function notifyMentionTargets(
   notifiedUserIds: string[];
 }> {
   const ids = [...new Set(resolutionIds)];
-  const { byId, memberKeys } = await loadActionRows(db, workspaceId, sender, ids);
+  const { byId, membership } = await loadActionRows(db, workspaceId, sender, ids);
   const results: MentionActionResult[] = [];
   const deliveries: NonMemberDelivery[] = [];
   const notifiedUserIds = new Set<string>();
@@ -413,7 +442,7 @@ export async function notifyMentionTargets(
       continue;
     }
     const target = actionTarget(row);
-    const refusal = actionRefusal(row, memberKeys, now);
+    const refusal = actionRefusal(row, membership, now);
     if (refusal) {
       results.push({ resolutionId: id, ...refusal, ...target });
       continue;
@@ -489,26 +518,7 @@ export async function pendingMentionActionsForAgent(
     },
     orderBy: { createdAt: "asc" },
   });
-  const members = rows.length
-    ? await db.conversationMember.findMany({
-        where: {
-          conversationId: { in: [...new Set(rows.map((row) => row.conversationId))] },
-          ...ACTIVE_MEMBER_WHERE,
-          OR: [
-            { userId: { in: rows.flatMap((row) => (row.targetUserId ? [row.targetUserId] : [])) } },
-            {
-              agentId: {
-                in: rows.flatMap((row) => (row.targetAgentId ? [row.targetAgentId] : [])),
-              },
-            },
-          ],
-        },
-        select: { conversationId: true, userId: true, agentId: true },
-      })
-    : [];
-  const memberKeys = new Set(
-    members.map((member) => `${member.conversationId}:${member.userId ?? member.agentId}`),
-  );
+  const membership = await targetMembership(db, rows);
   const orderInBody = (row: (typeof rows)[number]) =>
     leftoverMentionHandles(row.message.body).indexOf(row.targetHandle);
   return rows
@@ -527,7 +537,7 @@ export async function pendingMentionActionsForAgent(
         },
         new Set(
           [row.targetUserId ?? row.targetAgentId].filter((targetId) =>
-            memberKeys.has(`${row.conversationId}:${targetId}`),
+            membership.has(row.conversationId, targetId),
           ),
         ),
       ),
@@ -558,9 +568,7 @@ export async function refuseAgentMentionAdds(
       resolutionId: id,
       status: "no_permission",
       reason: "add_requires_human_member_authority",
-      targetType: row.targetAgentId ? "agent" : "user",
-      targetId: (row.targetAgentId ?? row.targetUserId)!,
-      targetHandle: row.targetHandle,
+      ...actionTarget(row),
     };
   });
 }
