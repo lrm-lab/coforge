@@ -69,6 +69,38 @@ export const agentStatusChannelFor = (workspaceId: string, agentId: string, visi
  */
 export type AgentVisibilityChangedEvent = { type: "agent:visibility_changed"; agentId: string };
 
+/** An Agent's directory identity or visibility changed. The browser refetches its authorized
+ * roster rather than trusting an event payload, so private profile fields never cross this
+ * shared Workspace channel. */
+export type AgentDirectoryChangedEvent = {
+  type: "agent.changed.v1";
+  agentId: string;
+  kind: "created" | "updated" | "deleted";
+};
+
+export function isAgentDirectoryChangedEvent(value: unknown): value is AgentDirectoryChangedEvent {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Reflect.get(value as object, "type") === "agent.changed.v1" &&
+    typeof Reflect.get(value as object, "agentId") === "string" &&
+    (Reflect.get(value as object, "kind") === "created" ||
+      Reflect.get(value as object, "kind") === "updated" ||
+      Reflect.get(value as object, "kind") === "deleted")
+  );
+}
+
+/** The first status subscription has no retained history by design; its roster read already
+ * covers the page-load gap. Directory projections need the extra invalidation only after a
+ * later reconnect could have missed an Agent lifecycle event. */
+export function shouldRefreshAgentDirectoryOnGap(
+  hasSubscribed: boolean,
+  gap: "none" | "recovered" | "unrecovered" | "lost",
+) {
+  return hasSubscribed && gap !== "none";
+}
+
 export function isAgentVisibilityChangedEvent(
   value: unknown,
 ): value is AgentVisibilityChangedEvent {
@@ -279,6 +311,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
   getConnectionToken,
   extraAgents = [],
   onVisibilityChangedEvent,
+  onDirectoryChangedEvent,
   getPrivateAgentStatusToken,
 }: {
   agents: T[];
@@ -294,6 +327,9 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
   /** Called whenever this hook observes `agent:visibility_changed`, so a caller
    * tracking a separate id list (e.g. the `extraAgents` source query) can refetch it too. */
   onVisibilityChangedEvent?: () => void;
+  /** Called whenever an Agent directory event arrives. The caller can invalidate other
+   * Workspace-scoped projections (for example channel mention directories). */
+  onDirectoryChangedEvent?: () => void;
   /** A private Agent's `agent:display` snapshot no longer arrives on the shared status
    * channel, so this hook derives which of its own current Agents need a per-Agent subscription
    * from their `visibility` field itself — no lag from an external, previous-render list. */
@@ -303,6 +339,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
     expireAgentStatuses(mergeExtraAgents(agents, extraAgents), Date.now()),
   );
   const mounted = useRef(true);
+  const hasSubscribed = useRef(false);
   const currentWorkspaceId = useRef(workspaceId);
   const visibleWorkspaceId = useRef(workspaceId);
   currentWorkspaceId.current = workspaceId;
@@ -396,6 +433,16 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
         // the same signal to refetch that list too.
         void refreshSnapshot().catch(() => {});
         onVisibilityChangedEvent?.();
+        onDirectoryChangedEvent?.();
+      } else if (isAgentDirectoryChangedEvent(value)) {
+        // The event carries only an id and change kind. Re-read the caller's authorized roster
+        // so create/delete/rename changes also update the status-dot store and private visibility
+        // subscriptions without exposing directory data on the shared status channel.
+        void refreshSnapshot().catch(() => {});
+        // A created/deleted private Agent may change the viewer's separately authorized id list,
+        // so reuse the same reconciliation hook as the visibility event.
+        onVisibilityChangedEvent?.();
+        onDirectoryChangedEvent?.();
       } else if (Reflect.get(value as object, "type") === "agent:display") {
         const snapshot = parseAgentDisplaySnapshot(value);
         setVisibleAgents((current) => applyAgentDisplaySnapshot(current, snapshot, workspaceId));
@@ -415,7 +462,18 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
     // (`infra/centrifugo/config.yaml`), so every subscribe — the first and each one after a
     // reconnect — is unrecovered and reads once.
     onSubscribed: (recovery) => {
-      if (subscriptionGap(recovery) !== "none") void refreshSnapshot().catch(() => {});
+      const gap = subscriptionGap(recovery);
+      const refreshDirectories = shouldRefreshAgentDirectoryOnGap(hasSubscribed.current, gap);
+      hasSubscribed.current = true;
+      if (gap !== "none") {
+        void refreshSnapshot().catch(() => {});
+        // A missed directory publication can affect every open channel's mention queries, not
+        // only the Agent roster that this subscription owns.
+        if (refreshDirectories) {
+          onVisibilityChangedEvent?.();
+          onDirectoryChangedEvent?.();
+        }
+      }
     },
     onPublication: (publication) => handleStatusPublication(publication.data),
   });
