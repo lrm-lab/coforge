@@ -259,12 +259,19 @@ export function SettingsContent(props: SettingsContentProps) {
         <div>
           <PageHeader
             icon={sectionIcons[section]}
-            heading={sectionLabel}
+            heading={
+              section === "account" && props.avatarPicker
+                ? m.settings_avatar_choose()
+                : sectionLabel
+            }
             breadcrumb={
               section === "account" && props.avatarPicker ? (
-                /* Settings → Account → Change avatar: the trail lives in the page's title row,
-                   so the picker's own body starts straight with its content. */
-                <nav aria-label={sectionLabel} className="flex min-w-0 items-center gap-2 text-sm">
+                /* Settings → Account › Change avatar: the Account crumb is the only one before
+                   the heading, so narrow screens drop the whole nav (project-tree's pattern). */
+                <nav
+                  aria-label={m.settings_breadcrumb()}
+                  className="hidden min-w-0 items-center gap-1 text-sm text-tertiary sm:flex"
+                >
                   <Button
                     type="button"
                     color="link-gray"
@@ -273,19 +280,7 @@ export function SettingsContent(props: SettingsContentProps) {
                   >
                     {sectionLabel}
                   </Button>
-                  <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-                  <Button
-                    type="button"
-                    color="link-gray"
-                    size="sm"
-                    onPress={() => props.onAvatarPickerChange(false)}
-                  >
-                    {m.settings_profile()}
-                  </Button>
-                  <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-                  <h1 aria-current="page" className="truncate font-semibold text-brand-secondary">
-                    {m.settings_avatar_choose()}
-                  </h1>
+                  <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-quaternary" />
                 </nav>
               ) : undefined
             }
