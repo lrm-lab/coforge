@@ -63,7 +63,11 @@ import {
   releaseMentionActions,
   type MentionActionResult,
 } from "./pending-mention-actions.server";
-import { deliveryMentionsAgent, mentionAffinityScores } from "./mentions.server";
+import {
+  deliveryMentionsAgent,
+  mentionAffinityScores,
+  type RecentMentionRow,
+} from "./mentions.server";
 import { toggleUserMessageReaction } from "./user-message-reactions.server";
 import {
   announceChannelTasksDeleted,
@@ -1064,16 +1068,26 @@ export class PublicChannels {
    * message, so message order is mention order. `memberId` is the viewer's member row, left or
    * not (someone who left still ranks by what they wrote); a reader with no member row has
    * mentioned no one here.
+   *
+   * Each message's mentions are a LATERAL read by its key, so the walk stops at the 50th mention.
+   * A relation filter (`mentions: { some: {} }`) let the planner hash every `message_mentions`
+   * row in the database to semi-join the viewer's messages against them.
    */
-  private async viewerRecentMentions(memberId: string | undefined) {
+  private async viewerRecentMentions(memberId: string | undefined): Promise<RecentMentionRow[]> {
     if (!memberId) return [];
-    const messages = await this.db.message.findMany({
-      where: { senderMemberId: memberId, mentions: { some: {} } },
-      orderBy: { sequence: "desc" },
-      take: 50,
-      select: { mentions: { select: { kind: true, actorId: true, createdAt: true } } },
-    });
-    return messages.flatMap((message) => message.mentions).slice(0, 50);
+    return this.db.$queryRaw<RecentMentionRow[]>`
+      SELECT mm."kind", mm."actorId"::text AS "actorId", mm."createdAt"
+      FROM "messages" m
+      CROSS JOIN LATERAL (
+        SELECT mm."kind", mm."actorId", mm."createdAt" FROM "message_mentions" mm
+        WHERE mm."messageId" = m."id" AND mm."conversationId" = m."conversationId"
+        -- No message contributes more than the outer LIMIT anyway; this one keeps PostgreSQL
+        -- from pulling the subquery up into the hash join the relation filter got.
+        LIMIT 50
+      ) mm
+      WHERE m."senderMemberId" = ${memberId}::uuid
+      ORDER BY m."sequence" DESC
+      LIMIT 50`;
   }
 
   /**
