@@ -365,3 +365,37 @@ test("a configure that failed after it answered is retried with start, since the
   expect(text).toContain("last setup failed: Workspace ws-1 failed process readiness");
   expect(text).toContain("retry: coforge-computer start --workspace ws-1");
 });
+
+test("each Workspace's detail lines stay under its own summary line", () => {
+  const workspace = (workspaceId: string, operation: "start" | "restart") => ({
+    workspaceId,
+    workspaceSlug: null,
+    serverHttpUrl: "https://coforge.cn",
+    enabled: true,
+    running: false,
+    pid: null,
+    pidSource: null,
+    pending: [],
+    unsettledUpgrades: [],
+    health: { status: "ok" } as const,
+    cloudConnection: null,
+    lastFailure: { operation, message: `${workspaceId} failed`, at: "2026-01-01T00:00:00.000Z" },
+  });
+  const lines = renderStatusHuman({
+    ...REPORT,
+    workspaces: {
+      readable: true,
+      workspaces: [workspace("ws-1", "start"), workspace("ws-2", "restart")],
+    },
+  });
+  const section = lines.slice(lines.indexOf("Workspaces (2)"));
+  expect(section.slice(0, 7)).toEqual([
+    "Workspaces (2)",
+    expect.stringMatching(/^ {2}ws-1 {2}server=/),
+    "    last start failed: ws-1 failed  at=2026-01-01T00:00:00.000Z",
+    "      retry: coforge-computer start --workspace ws-1",
+    expect.stringMatching(/^ {2}ws-2 {2}server=/),
+    "    last restart failed: ws-2 failed  at=2026-01-01T00:00:00.000Z",
+    "      retry: coforge-computer restart --workspace ws-2",
+  ]);
+});

@@ -7,6 +7,7 @@ import type {
   UnsettledUpgradeOperation,
   WorkspaceCloudStatus,
   WorkspaceHealth,
+  WorkspaceStatus,
 } from "./types";
 
 /** One stable JSON object with the full report, matching `--json` conventions used by
@@ -78,33 +79,45 @@ function renderWorkspaces(report: ComputerStatusReport): string[] {
     return ["Workspaces", `  Error:                 ${terminalText(workspaces.error)}`];
   if (workspaces.workspaces.length === 0)
     return ["Workspaces", "  No workspace bindings configured."];
-  const lines = [`Workspaces (${workspaces.workspaces.length})`];
-  for (const workspace of workspaces.workspaces) {
-    const pid = workspace.pid === null ? "-" : `${workspace.pid} (${workspace.pidSource})`;
-    lines.push(
-      `  ${terminalText(workspace.workspaceId)}  server=${workspace.serverHttpUrl ? terminalText(workspace.serverHttpUrl) : "-"}  enabled=${workspace.enabled ? "yes" : "no"}  running=${workspace.running ? "yes" : "no"}  pid=${pid}  cloud=${workspace.cloudConnection?.state ?? "-"}`,
-    );
-    const cloudDetail = renderCloudConnection(workspace.cloudConnection);
-    if (cloudDetail) lines.push(`    cloud: ${cloudDetail}`);
-    for (const pending of workspace.pending) lines.push(`    pending: ${renderPending(pending)}`);
-    for (const unsettled of workspace.unsettledUpgrades)
-      lines.push(`    unsettled upgrade: ${renderUnsettledUpgrade(unsettled)}`);
-    if (workspace.underWay)
-      lines.push("    under way: a start, restart, or setup is still running");
-    if (workspace.lastFailure) {
-      const { operation, message, at } = workspace.lastFailure;
-      // A setup's configuration was already taken, so what is left to retry is its start.
-      const [label, retry] =
-        operation === "configure" ? ["setup", "start"] : [operation, operation];
-      lines.push(
-        `    last ${label} failed: ${terminalText(message)}  at=${terminalText(at)}`,
-        `      retry: coforge-computer ${retry} --workspace ${terminalText(workspace.workspaceId)}`,
-      );
-    }
-    if (workspace.health.status === "degraded") lines.push(...renderDegradedHealth(workspace));
-    if (workspace.health.status === "parked") lines.push(...renderParkedHealth(workspace));
-  }
+  return [
+    `Workspaces (${workspaces.workspaces.length})`,
+    ...workspaces.workspaces.flatMap(renderWorkspace),
+  ];
+}
+
+/** One Workspace binding: its summary line, then a detail line for each thing that needs
+ * attention (cloud reason, pending or unsettled work, a failure to retry, degraded or parked). */
+function renderWorkspace(workspace: WorkspaceStatus): string[] {
+  const lines: string[] = [];
+  const pid = workspace.pid === null ? "-" : `${workspace.pid} (${workspace.pidSource})`;
+  lines.push(
+    `  ${terminalText(workspace.workspaceId)}  server=${workspace.serverHttpUrl ? terminalText(workspace.serverHttpUrl) : "-"}  enabled=${workspace.enabled ? "yes" : "no"}  running=${workspace.running ? "yes" : "no"}  pid=${pid}  cloud=${workspace.cloudConnection?.state ?? "-"}`,
+  );
+  const cloudDetail = renderCloudConnection(workspace.cloudConnection);
+  if (cloudDetail) lines.push(`    cloud: ${cloudDetail}`);
+  for (const pending of workspace.pending) lines.push(`    pending: ${renderPending(pending)}`);
+  for (const unsettled of workspace.unsettledUpgrades)
+    lines.push(`    unsettled upgrade: ${renderUnsettledUpgrade(unsettled)}`);
+  if (workspace.underWay) lines.push("    under way: a start, restart, or setup is still running");
+  if (workspace.lastFailure)
+    lines.push(...renderLastFailure(workspace.workspaceId, workspace.lastFailure));
+  if (workspace.health.status === "degraded") lines.push(...renderDegradedHealth(workspace));
+  if (workspace.health.status === "parked") lines.push(...renderParkedHealth(workspace));
   return lines;
+}
+
+/** The last start, restart or setup that failed, and the command that retries it. */
+function renderLastFailure(
+  workspaceId: string,
+  failure: NonNullable<WorkspaceStatus["lastFailure"]>,
+): string[] {
+  const { operation, message, at } = failure;
+  // A setup's configuration was already taken, so what is left to retry is its start.
+  const [label, retry] = operation === "configure" ? ["setup", "start"] : [operation, operation];
+  return [
+    `    last ${label} failed: ${terminalText(message)}  at=${terminalText(at)}`,
+    `      retry: coforge-computer ${retry} --workspace ${terminalText(workspaceId)}`,
+  ];
 }
 
 /** Why a Workspace's cloud connection is not up, when its handshake said so. The error is remote
