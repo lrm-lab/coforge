@@ -21,6 +21,7 @@ import {
 } from "./weekly-report-assistant-subject-launch.server";
 import {
   buildWeeklyReportAssistantRequestBody,
+  isWeeklyReportMemoryPlatformTurn,
   isWeeklyReportPlatformTurn,
   weeklyReportAssistantDisplayBody,
   weeklyReportAssistantSessionFromBody,
@@ -61,11 +62,13 @@ export function selectWeeklyReportAssistantMessages(
   const subjectKey = `${subjectType}:${subjectId}`;
   let activeSubject: string | null = null;
   let activeSession: string | null = null;
+  let hideAssistantReply = false;
   const selected: WeeklyReportAssistantChatMessage[] = [];
   for (const message of messages) {
     if (message.senderKind === "user") {
       activeSubject = weeklyReportAssistantSubjectFromBody(message.body);
       activeSession = weeklyReportAssistantSessionFromBody(message.body);
+      hideAssistantReply = isWeeklyReportMemoryPlatformTurn(message.body);
     }
     if (activeSubject !== subjectKey) continue;
     if (sessionId) {
@@ -76,6 +79,7 @@ export function selectWeeklyReportAssistantMessages(
     if (message.senderKind !== "user" && message.senderKind !== "agent") continue;
     // Platform synthesizer wakes still bind subject/session above, but stay out of the UI.
     if (message.senderKind === "user" && isWeeklyReportPlatformTurn(message.body)) continue;
+    if (hideAssistantReply && message.senderKind === "agent") continue;
     const isAssistant = message.senderKind === "agent";
     selected.push({
       id: message.id,

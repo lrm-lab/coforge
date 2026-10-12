@@ -5,9 +5,12 @@ import {
   reportContentToMarkdown,
 } from "#src/features/records/records-content";
 import {
-  applyMemorySettlement,
   buildWeeklyReportMemoryWakeText,
+  memoryForPrompt,
   parseStoredWeeklyReportMemory,
+  replaceWeeklyReportMemoryWeek,
+  WEEKLY_REPORT_MEMORY_SETTLED_NOTE,
+  WEEKLY_REPORT_MEMORY_SETTLING_NOTE,
   type MemorySettlement,
 } from "#src/server/records/weekly-report-memory.server";
 
@@ -37,7 +40,7 @@ export async function startWeeklyReportMemorySettlement(
     where: {
       workspaceId_userId: { workspaceId: input.workspaceId, userId: report.authorId },
     },
-    select: { agentId: true },
+    select: { agentId: true, memory: true },
   });
   if (!assistant) return { started: false };
 
@@ -60,6 +63,7 @@ export async function startWeeklyReportMemorySettlement(
       : "",
     finalMarkdown: reportContentToMarkdown(content),
     userLines,
+    writingHabits: memoryForPrompt(parseStoredWeeklyReportMemory(assistant.memory)).writingHabits,
   });
   if (input.wake) {
     await input.wake(body);
@@ -72,6 +76,11 @@ export async function startWeeklyReportMemorySettlement(
       userId: report.authorId,
       subjectType: "report",
       subjectId: report.id,
+    });
+    await recordWeeklyReportMemorySettlementNote(db, {
+      workspaceId: input.workspaceId,
+      reportId: report.id,
+      assistantSessionId: ensured.activeSessionId,
     });
     await openWeeklyReportAssistantChat(db).postRequest({
       workspaceId: input.workspaceId,
@@ -139,7 +148,7 @@ export async function applyWeeklyReportMemoryWriteBack(
     select: { id: true, memory: true },
   });
   if (!assistant) throw new AppError("ACCESS_DENIED");
-  const next = applyMemorySettlement(
+  const next = replaceWeeklyReportMemoryWeek(
     parseStoredWeeklyReportMemory(assistant.memory),
     input.settlement,
   );
@@ -147,5 +156,47 @@ export async function applyWeeklyReportMemoryWriteBack(
     where: { id: assistant.id },
     data: { memory: next },
   });
+  await finishWeeklyReportMemorySettlementNote(db, {
+    workspaceId: input.workspaceId,
+    reportId: input.reportId,
+  });
   return { reportId: input.reportId, status: "saved" };
+}
+
+export async function recordWeeklyReportMemorySettlementNote(
+  db: PrismaClient,
+  input: { workspaceId: string; reportId: string; assistantSessionId: string },
+): Promise<void> {
+  await db.recordComment.create({
+    data: {
+      workspaceId: input.workspaceId,
+      subjectType: "report",
+      authorType: "assistant",
+      authorUserId: null,
+      body: WEEKLY_REPORT_MEMORY_SETTLING_NOTE,
+      assistantSessionId: input.assistantSessionId,
+      reportId: input.reportId,
+    },
+  });
+}
+
+export async function finishWeeklyReportMemorySettlementNote(
+  db: PrismaClient,
+  input: { workspaceId: string; reportId: string },
+): Promise<void> {
+  const pending = await db.recordComment.findFirst({
+    where: {
+      workspaceId: input.workspaceId,
+      reportId: input.reportId,
+      authorType: "assistant",
+      body: WEEKLY_REPORT_MEMORY_SETTLING_NOTE,
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (!pending) return;
+  await db.recordComment.update({
+    where: { id: pending.id },
+    data: { body: WEEKLY_REPORT_MEMORY_SETTLED_NOTE },
+  });
 }

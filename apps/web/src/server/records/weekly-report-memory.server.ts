@@ -1,3 +1,6 @@
+export const WEEKLY_REPORT_MEMORY_SETTLING_NOTE = "正在记录本周写作习惯，请稍候。";
+export const WEEKLY_REPORT_MEMORY_SETTLED_NOTE = "已记录本周写作习惯。";
+
 export type MemoryWeek = { year: number; week: number };
 
 export type WeeklyReportMemory = {
@@ -12,6 +15,8 @@ export type WeeklyReportMemory = {
     /** A just-finished thread stays through the next settlement before quiet starts. */
     carry: boolean;
   }>;
+  /** One raw settlement per week. A later write for that week replaces it, then the weeks are folded again. */
+  settlements: MemorySettlement[];
 };
 
 export type MemorySettlement = {
@@ -30,8 +35,12 @@ export function buildWeeklyReportMemoryWakeText(input: {
   draftMarkdown: string;
   finalMarkdown: string;
   userLines: readonly string[];
+  writingHabits?: readonly string[];
 }): string {
   const lines = input.userLines.map((line) => line.trim()).filter((line) => line.length > 0);
+  const habits = (input.writingHabits ?? [])
+    .map((habit) => habit.trim())
+    .filter((habit) => habit.length > 0);
   return [
     "[weekly-report-memory]",
     `reportId: ${input.reportId}`,
@@ -41,6 +50,8 @@ export function buildWeeklyReportMemoryWakeText(input: {
     "事实纠正只属于本周，不要写成以后的习惯。",
     "用户说出「以后都这样写」时，explicitRules.effect 用 adopt；说出「不要再这样写」时用 retire。",
     "没有助手原稿时，preferences 和 explicitRules 留空，只根据最终正文填写 threads。",
+    "已有写作习惯请沿用原句，不要再写一条相同的习惯：",
+    ...(habits.length > 0 ? habits.map((habit) => `- ${habit}`) : ["(无)"]),
     "然后用下面的命令提交 JSON 文件，不要用 body-edit Confirm：",
     "",
     `coforge weekly-report-memory submit --report-id ${input.reportId} --idempotency-key <uuid> --file <json>`,
@@ -68,11 +79,12 @@ export function parseStoredWeeklyReportMemory(value: unknown): WeeklyReportMemor
     habits: Array.isArray(record.habits) ? record.habits : [],
     observations: Array.isArray(record.observations) ? record.observations : [],
     threads: Array.isArray(record.threads) ? record.threads : [],
+    settlements: Array.isArray(record.settlements) ? record.settlements : [],
   };
 }
 
 export function emptyWeeklyReportMemory(): WeeklyReportMemory {
-  return { version: 1, habits: [], observations: [], threads: [] };
+  return { version: 1, habits: [], observations: [], threads: [], settlements: [] };
 }
 
 export function formatMemoryPromptSection(prompt: {
@@ -147,7 +159,7 @@ export function applyMemorySettlement(
 
   for (const preference of settlement.preferences) {
     const statement = memoryText(preference);
-    if (!statement) continue;
+    if (!statement || habits.some((habit) => habit.statement === statement)) continue;
     const observation = observations.find((item) => item.statement === statement);
     if (!observation) {
       observations.push({ statement, weeks: [week] });
@@ -195,5 +207,29 @@ export function applyMemorySettlement(
     });
   }
 
-  return { version: 1, habits, observations, threads };
+  return {
+    version: 1,
+    habits,
+    observations: observations.filter(
+      (observation) => !habits.some((habit) => habit.statement === observation.statement),
+    ),
+    threads,
+    settlements: memory.settlements,
+  };
+}
+
+export function replaceWeeklyReportMemoryWeek(
+  memory: WeeklyReportMemory,
+  settlement: MemorySettlement,
+): WeeklyReportMemory {
+  const week = { year: settlement.year, week: settlement.week };
+  const settlements = [
+    ...memory.settlements.filter((item) => !sameWeek(item, week)),
+    settlement,
+  ].sort((left, right) => left.year - right.year || left.week - right.week);
+  let folded = emptyWeeklyReportMemory();
+  for (const item of settlements) {
+    folded = applyMemorySettlement(folded, item);
+  }
+  return { ...folded, settlements };
 }

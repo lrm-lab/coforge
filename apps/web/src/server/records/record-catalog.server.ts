@@ -2203,14 +2203,12 @@ export class RecordCatalog {
       }
     }
 
+    const publishingMember =
+      report.kind === "member" && (input.status === "submitted" || input.status === "shared");
+    const firstMemberPublish =
+      publishingMember && report.status !== "submitted" && report.status !== "shared";
     // Member first submit/share → Leader personal key-point extraction (LLM).
-    if (
-      report.kind === "member" &&
-      input.status &&
-      (input.status === "submitted" || input.status === "shared") &&
-      report.status !== "submitted" &&
-      report.status !== "shared"
-    ) {
+    if (firstMemberPublish) {
       try {
         const { startPersonalKeyPointExtraction } =
           await import("./weekly-report-key-points.server");
@@ -2221,6 +2219,8 @@ export class RecordCatalog {
       } catch {
         // Extraction is best-effort; member submit must still succeed.
       }
+    }
+    if (publishingMember) {
       try {
         const { startWeeklyReportMemorySettlement } =
           await import("./weekly-report-memory-settlement.server");
