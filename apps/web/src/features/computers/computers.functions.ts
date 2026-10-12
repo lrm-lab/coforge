@@ -15,6 +15,7 @@ import {
   readUsageInputSchema,
   restartComputerInputSchema,
   scanAgentWorkspacesInputSchema,
+  deleteAgentWorkspaceInputSchema,
   scanUsageInputSchema,
   setRuntimeVisibilityInputSchema,
   updateComputerDisplayNameInputSchema,
@@ -28,6 +29,7 @@ import {
   createCentrifugoServerApi,
   createUsageScan,
   daemonControlChannel,
+  reconnectDaemon,
 } from "#src/server/centrifugo/server-api.server";
 import { getUsageCache } from "#src/server/centrifugo/usage-cache.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
@@ -44,8 +46,14 @@ import {
   AgentWorkspaceFilesQuery,
   type WorkspaceFilesAssignment,
 } from "#src/server/agents/agent-workspace-files.server";
-import { encodeAgentWorkspaceFilesListRequest } from "@lrm/coforge-sdk/internal";
-import { getAgentWorkspaceFilesListResults } from "#src/server/centrifugo/agent-workspace-files-cache.server";
+import {
+  encodeAgentWorkspaceFilesListRequest,
+  encodeAgentWorkspaceDeleteRequest,
+} from "@lrm/coforge-sdk/internal";
+import {
+  getAgentWorkspaceFilesListResults,
+  getAgentWorkspaceDeleteResults,
+} from "#src/server/centrifugo/agent-workspace-files-cache.server";
 import { scanComputerAgentWorkspaces as scanWorkspaceInventory } from "#src/server/computers/computer-agent-workspaces.server";
 import {
   parseAgentRuntimeConfig,
@@ -58,6 +66,7 @@ import {
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
 
 export const restartComputer = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -291,6 +300,12 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
         read: async () => undefined,
         clear: async () => {},
       },
+      publishDelete: (request) =>
+        createCentrifugoServerApi().publish(
+          daemonControlChannel(request.workspaceId, request.computerId),
+          encodeAgentWorkspaceDeleteRequest(request),
+        ),
+      deleteResults: getAgentWorkspaceDeleteResults(),
     });
     const inventory = await scanWorkspaceInventory(agents, async (request) => {
       const response = await query.list(
@@ -308,6 +323,69 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
       return response.result;
     });
     return inventory;
+  });
+
+/** Computer owners may remove an Agent workspace's local contents. The Agent row is retained;
+ * deleted Agents remain eligible so their retained workspaces can be cleaned up. */
+export const deleteAgentWorkspace = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(deleteAgentWorkspaceInputSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    declareNoStore();
+    const computer = await db.computer.findFirst({
+      where: {
+        id: data.computerId,
+        ownerId: user.id,
+        workspaces: { some: { workspaceId } },
+      },
+      select: { id: true },
+    });
+    if (!computer) throw new Error("Computer is not available");
+    const query = new AgentWorkspaceFilesQuery({
+      findOwned: async (viewer, agentId): Promise<WorkspaceFilesAssignment | undefined> => {
+        const assignment = await db.agent.findFirst({
+          where: {
+            id: agentId,
+            workspaceId: viewer.workspaceId,
+            computerId: computer.id,
+            computer: {
+              ownerId: viewer.userId,
+              workspaces: { some: { workspaceId: viewer.workspaceId } },
+            },
+          },
+          select: { computerId: true, runtimeConfig: true },
+        });
+        if (!assignment?.computerId) return undefined;
+        return {
+          computerId: assignment.computerId,
+          revision: new Bun.CryptoHasher("sha256")
+            .update(JSON.stringify(assignment.runtimeConfig))
+            .digest("hex"),
+        };
+      },
+      online: (scope) => getComputerStatusCache().get(scope),
+      publishList: async () => {},
+      publishRead: async () => {},
+      listResults: {
+        begin: async () => {},
+        read: async () => undefined,
+        clear: async () => {},
+      },
+      readResults: {
+        begin: async () => {},
+        read: async () => undefined,
+        clear: async () => {},
+      },
+      publishDelete: (request) =>
+        createCentrifugoServerApi().publish(
+          daemonControlChannel(request.workspaceId, request.computerId),
+          encodeAgentWorkspaceDeleteRequest(request),
+        ),
+      deleteResults: getAgentWorkspaceDeleteResults(),
+    });
+    const response = await query.delete({ userId: user.id, workspaceId }, data.agentId);
+    if (response.status !== "ready") return response;
+    return response.result;
   });
 
 export const readComputerUpgradeStatus = createServerFn({ method: "GET" })
@@ -490,6 +568,43 @@ export const updateComputerDisplayName = createServerFn({ method: "POST" })
     });
     if (result.count !== 1) throw new Error("Computer is not available");
     return { displayName: data.displayName };
+  });
+
+/** Permanently removes an owner's Computer record after all of its Agents are soft-deleted. */
+export const deleteComputer = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(computerIdInputSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    const computer = await db.computer.findFirst({
+      where: {
+        id: data.computerId,
+        ownerId: user.id,
+        workspaces: { some: { workspaceId } },
+      },
+      select: {
+        id: true,
+        agents: { where: { deletedAt: null }, select: { id: true }, take: 1 },
+        workspaces: { select: { workspaceId: true } },
+      },
+    });
+    if (!computer) throw new Error("Computer is not available");
+    if (computer.agents.length > 0)
+      throw new Error("Delete all Agents on this Computer before deleting the Computer");
+    await db.$transaction(async (tx) => {
+      for (const binding of computer.workspaces)
+        await DaemonCredentialRevocations.recordForComputer(tx, {
+          workspaceId: binding.workspaceId,
+          computerId: computer.id,
+        });
+      await tx.computer.delete({ where: { id: computer.id } });
+    });
+    const api = createCentrifugoServerApi();
+    await Promise.all(
+      computer.workspaces.map(({ workspaceId: boundWorkspaceId }) =>
+        reconnectDaemon(api, boundWorkspaceId, computer.id),
+      ),
+    );
+    return { deleted: true as const };
   });
 
 function modelMetadata(value: unknown): CodeAgentModelMetadata[] | undefined {

@@ -61,6 +61,9 @@ export const readRestartStatusInputSchema = restartComputerInputSchema;
 export const scanUsageInputSchema = runtimeInput;
 export const readUsageInputSchema = runtimeInput;
 export const scanAgentWorkspacesInputSchema = computerIdInputSchema;
+export const deleteAgentWorkspaceInputSchema = computerIdInputSchema.extend({
+  agentId: z.string().min(1),
+});
 export const setRuntimeVisibilityInputSchema = z.object({
   runtimeId: z.string().min(1),
   isPublic: z.boolean(),

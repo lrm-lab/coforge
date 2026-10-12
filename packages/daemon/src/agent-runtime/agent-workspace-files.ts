@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
-import { lstat, open, readdir, realpath } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { lstat, open, readdir, realpath, rm } from "node:fs/promises";
+import { dirname, join, resolve, sep } from "node:path";
 import { getCoforgeAgentDir, getCoforgeSessionDir } from "@coforge/agent";
 import { RPC_PAYLOAD_MAX_BYTES } from "@lrm/coforge-sdk/internal";
 
@@ -27,6 +27,10 @@ export type AgentWorkspaceFileReadOutcome = {
   contentType: string;
   /** Standard base64 of a previewable image's bytes, or `""` for a text read. */
   contentBase64: string;
+};
+
+export type AgentWorkspaceFilesDeleteOutcome = {
+  status: "ok" | "missing" | "unreadable" | "error";
 };
 
 // Must stay under Centrifugo's websocket.message_size_limit (infra/*/centrifugo/config.yaml),
@@ -130,6 +134,49 @@ async function resolveWorkspaceDirectory(
   if (realTarget !== realRoot && !realTarget.startsWith(realRoot + sep))
     return { ok: false, reason: "unreadable" };
   return { ok: true, absolutePath: realTarget, realRoot };
+}
+
+async function noLinkedAncestors(path: string): Promise<void> {
+  let current = resolve(path);
+  for (;;) {
+    try {
+      if ((await lstat(current)).isSymbolicLink())
+        throw new Error("Agent workspace path contains a symbolic link");
+    } catch (error) {
+      if (!isENOENT(error)) throw error;
+    }
+    const parent = dirname(current);
+    if (parent === current) return;
+    current = parent;
+  }
+}
+
+/** Destructive workspace operation. Removes entries below the root, never the root itself, and
+ * unlinks symlinks without following their targets. The caller stops any Agent runtime first. */
+export async function deleteAgentWorkspaceFiles(params: {
+  agentWorkspaceDirectory: string;
+}): Promise<AgentWorkspaceFilesDeleteOutcome> {
+  try {
+    const root = resolve(params.agentWorkspaceDirectory);
+    await noLinkedAncestors(root);
+    let entries: string[];
+    try {
+      entries = await readdir(root);
+    } catch (error) {
+      return { status: isENOENT(error) ? "missing" : "unreadable" };
+    }
+    let firstError: unknown;
+    for (const entry of entries) {
+      try {
+        await rm(join(root, entry), { recursive: true, force: true });
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    return { status: firstError === undefined ? "ok" : "error" };
+  } catch {
+    return { status: "unreadable" };
+  }
 }
 
 /** Directory observation only. Never opens, follows a symlink target, or executes anything. */

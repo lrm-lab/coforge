@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
 import {
+  decodeAgentWorkspaceDeleteRequest,
+  decodeAgentWorkspaceDeleteResult,
+  encodeAgentWorkspaceDeleteRequest,
+  encodeAgentWorkspaceDeleteResult,
   encodeAgentWorkspaceFilesListRequest,
   decodeAgentWorkspaceFilesListRequest,
   encodeAgentWorkspaceFilesListResult,
@@ -61,6 +65,27 @@ const readRequest = {
   agentId: "agent-1",
   path: "src/lib/index.ts",
 };
+
+const deleteRequest = {
+  protocolMajor: 1,
+  requestId: "request-3",
+  workspaceId: "workspace-1",
+  computerId: "computer-1",
+  agentId: "agent-1",
+};
+
+test("Workspace Files deletion keeps scope and terminal status on the wire", () => {
+  expect(
+    decodeAgentWorkspaceDeleteRequest(encodeAgentWorkspaceDeleteRequest(deleteRequest)),
+  ).toEqual(deleteRequest);
+  const result = { ...deleteRequest, status: "ok" as const };
+  expect(decodeAgentWorkspaceDeleteResult(encodeAgentWorkspaceDeleteResult(result))).toEqual(
+    result,
+  );
+  expect(() =>
+    encodeAgentWorkspaceDeleteRequest({ ...deleteRequest, agentId: "../other" }),
+  ).toThrow();
+});
 
 test("Workspace File read keeps request scope and text on the wire", () => {
   expect(

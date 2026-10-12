@@ -69,6 +69,11 @@ import {
   AGENT_WORKSPACE_FILE_READ_RESULT_METHOD,
   type AgentWorkspaceFileReadRequest,
   type AgentWorkspaceFileReadResult,
+  decodeAgentWorkspaceDeleteRequest,
+  encodeAgentWorkspaceDeleteResult,
+  AGENT_WORKSPACE_DELETE_RESULT_METHOD,
+  type AgentWorkspaceDeleteRequest,
+  type AgentWorkspaceDeleteResult,
   type ComputerUpgradeResult,
   decodeDaemonRuntimeUsageScanRequest,
   encodeDaemonRuntimeUsageScanResponse,
@@ -327,6 +332,8 @@ export interface DaemonConnectionClient {
     callback: (request: AgentWorkspaceFileReadRequest) => Promise<void>,
   ): () => void;
   sendWorkspaceFileReadResult?(result: AgentWorkspaceFileReadResult): Promise<void>;
+  onWorkspaceDelete?(callback: (request: AgentWorkspaceDeleteRequest) => Promise<void>): () => void;
+  sendWorkspaceDeleteResult?(result: AgentWorkspaceDeleteResult): Promise<void>;
   onUsageScan?(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void;
   sendUsageScanResult?(response: DaemonRuntimeUsageScanResponse): Promise<void>;
   onProviderModelRefresh?(
@@ -505,6 +512,9 @@ export class DaemonConnection implements DaemonConnectionClient {
   >();
   readonly #workspaceFileRead = new ListenerSlot<
     (request: AgentWorkspaceFileReadRequest) => Promise<void>
+  >();
+  readonly #workspaceDelete = new ListenerSlot<
+    (request: AgentWorkspaceDeleteRequest) => Promise<void>
   >();
   readonly #usageScan = new ListenerSlot<
     (request: DaemonRuntimeUsageScanRequest) => Promise<void>
@@ -822,6 +832,10 @@ export class DaemonConnection implements DaemonConnectionClient {
     callback: (request: AgentWorkspaceFileReadRequest) => Promise<void>,
   ): () => void {
     return this.#workspaceFileRead.set(callback);
+  }
+
+  onWorkspaceDelete(callback: (request: AgentWorkspaceDeleteRequest) => Promise<void>): () => void {
+    return this.#workspaceDelete.set(callback);
   }
 
   onUsageScan(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void {
@@ -1862,6 +1876,11 @@ export class DaemonConnection implements DaemonConnectionClient {
           void this.#workspaceFileRead.current?.(request).catch(() => {});
         return true;
       }) ||
+      this.#route(data, decodeAgentWorkspaceDeleteRequest, (request) => {
+        if (request.workspaceId === workspaceId)
+          void this.#workspaceDelete.current?.(request).catch(() => {});
+        return true;
+      }) ||
       this.#route(data, decodeDaemonRuntimeUsageScanRequest, (usage) => {
         if (usage.protocolMajor !== 1 || usage.workspaceId !== workspaceId || !usage.computerId)
           return false;
@@ -1979,6 +1998,10 @@ export class DaemonConnection implements DaemonConnectionClient {
       AGENT_WORKSPACE_FILE_READ_RESULT_METHOD,
       encodeAgentWorkspaceFileReadResult(result),
     );
+  }
+
+  async sendWorkspaceDeleteResult(result: AgentWorkspaceDeleteResult): Promise<void> {
+    await this.#rpc(AGENT_WORKSPACE_DELETE_RESULT_METHOD, encodeAgentWorkspaceDeleteResult(result));
   }
 
   /**

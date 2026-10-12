@@ -102,6 +102,8 @@ import {
   type AgentWorkspaceFilesListResult,
   type AgentWorkspaceFileReadRequest,
   type AgentWorkspaceFileReadResult,
+  type AgentWorkspaceDeleteRequest,
+  type AgentWorkspaceDeleteResult,
   type AgentContextScanRequest,
   type AgentContextScanResponse,
   AGENT_CONTEXT_SCAN_STATUS,
@@ -127,6 +129,7 @@ import {
 import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
 import { listAgentSkills } from "#src/code-agent/agent-skills";
 import {
+  deleteAgentWorkspaceFiles,
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
 } from "#src/agent-runtime/agent-workspace-files";
@@ -963,6 +966,19 @@ export class DaemonRuntime {
         }),
       );
       this.#subscribe(
+        transport.onWorkspaceDelete?.(async (request) => {
+          if (
+            this.#stopping ||
+            request.workspaceId !== connection.workspaceId ||
+            request.computerId !== connection.computerId
+          )
+            return;
+          const result = await this.#deleteWorkspace(connection, request);
+          if (!this.#stopping && this.#transport === transport)
+            await transport.sendWorkspaceDeleteResult?.({ ...request, ...result });
+        }),
+      );
+      this.#subscribe(
         this.#transport.onUsageScan?.(async (request) => {
           if (request.computerId !== connection.computerId) return;
           const result = await this.scanUsage(request.provider);
@@ -1324,6 +1340,28 @@ export class DaemonRuntime {
       return unavailable;
     } finally {
       this.#workspaceFilesScanning = false;
+    }
+  }
+
+  async #deleteWorkspace(
+    connection: DaemonConfig,
+    request: Pick<AgentWorkspaceDeleteRequest, "agentId">,
+  ): Promise<Pick<AgentWorkspaceDeleteResult, "status">> {
+    try {
+      if (
+        this.#agentProcessManager.runtime(request.agentId) ||
+        this.#agentProcessManager.isStopping(request.agentId)
+      )
+        await this.stopAgent(request.agentId);
+      return await deleteAgentWorkspaceFiles({
+        agentWorkspaceDirectory: agentWorkspaceDirectory(
+          connection.workspaceRoot,
+          connection.workspaceId,
+          request.agentId,
+        ),
+      });
+    } catch {
+      return { status: "error" };
     }
   }
 

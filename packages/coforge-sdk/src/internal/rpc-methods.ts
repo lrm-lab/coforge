@@ -66,6 +66,8 @@ export const RPC_METHODS = {
   agentWorkspaceFilesListResult: "agent:v1:workspace_files:list_result",
   agentWorkspaceFileRead: "agent:v1:workspace_files:read",
   agentWorkspaceFileReadResult: "agent:v1:workspace_files:read_result",
+  agentWorkspaceDelete: "agent:v1:workspace_files:delete",
+  agentWorkspaceDeleteResult: "agent:v1:workspace_files:delete_result",
   agentReminder: "agent:v1:reminder:deliver",
   reminderFire: "agent:v1:reminder:fire",
   reminderSnapshot: "agent:v1:reminder:snapshot",

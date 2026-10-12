@@ -7,17 +7,23 @@ import {
   AgentWorkspaceFilesListResultSchema,
   AgentWorkspaceFileReadRequestSchema,
   AgentWorkspaceFileReadResultSchema,
+  AgentWorkspaceDeleteRequestSchema,
+  AgentWorkspaceDeleteResultSchema,
 } from "#src/internal/gen/coforge/rpc/v1/agent_workspace_files_pb";
 
 export const AGENT_WORKSPACE_FILES_LIST_METHOD = RPC_METHODS.agentWorkspaceFilesList;
 export const AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD = RPC_METHODS.agentWorkspaceFilesListResult;
 export const AGENT_WORKSPACE_FILE_READ_METHOD = RPC_METHODS.agentWorkspaceFileRead;
 export const AGENT_WORKSPACE_FILE_READ_RESULT_METHOD = RPC_METHODS.agentWorkspaceFileReadResult;
+export const AGENT_WORKSPACE_DELETE_METHOD = RPC_METHODS.agentWorkspaceDelete;
+export const AGENT_WORKSPACE_DELETE_RESULT_METHOD = RPC_METHODS.agentWorkspaceDeleteResult;
 
 const LIST_REQUEST_TYPE = "coforge.rpc.v1.AgentWorkspaceFilesListRequest";
 const LIST_RESULT_TYPE = "coforge.rpc.v1.AgentWorkspaceFilesListResult";
 const READ_REQUEST_TYPE = "coforge.rpc.v1.AgentWorkspaceFileReadRequest";
 const READ_RESULT_TYPE = "coforge.rpc.v1.AgentWorkspaceFileReadResult";
+const DELETE_REQUEST_TYPE = "coforge.rpc.v1.AgentWorkspaceDeleteRequest";
+const DELETE_RESULT_TYPE = "coforge.rpc.v1.AgentWorkspaceDeleteResult";
 const MAX_TEXT_BYTES = 512 * 1024;
 /** The image payload one read result may carry. The whole message travels in a single Centrifugo
  * publish — the limit it has to fit is `RPC_PAYLOAD_MAX_BYTES` — so this is the bound that keeps a
@@ -72,6 +78,16 @@ export type AgentWorkspaceFileReadResult = AgentWorkspaceFileReadRequest & {
    * these bytes as protobuf `bytes`; base64 is the spelling every in-process consumer sees because
    * a read result also crosses a JSON boundary on its way to the browser. */
   contentBase64: string;
+};
+export type AgentWorkspaceDeleteRequest = {
+  protocolMajor: number;
+  requestId: string;
+  workspaceId: string;
+  computerId: string;
+  agentId: string;
+};
+export type AgentWorkspaceDeleteResult = AgentWorkspaceDeleteRequest & {
+  status: "ok" | "missing" | "unreadable" | "error";
 };
 
 function scopeIds(value: {
@@ -293,6 +309,61 @@ function readRequest(value: {
     agentId: value.agentId,
     path: relativePath(value.path),
   };
+}
+
+function deleteRequest(value: AgentWorkspaceDeleteRequest): AgentWorkspaceDeleteRequest {
+  if (value.protocolMajor !== 1) throw new Error("Invalid Workspace Files delete request");
+  scopeIds(value);
+  return {
+    protocolMajor: 1,
+    requestId: value.requestId,
+    workspaceId: value.workspaceId,
+    computerId: value.computerId,
+    agentId: value.agentId,
+  };
+}
+
+function deleteStatus(value: string): AgentWorkspaceDeleteResult["status"] {
+  if (!["ok", "missing", "unreadable", "error"].includes(value))
+    throw new Error("Invalid Workspace Files delete result");
+  return value as AgentWorkspaceDeleteResult["status"];
+}
+
+export function encodeAgentWorkspaceDeleteRequest(value: AgentWorkspaceDeleteRequest): Uint8Array {
+  return toBinary(
+    AgentWorkspaceDeleteRequestSchema,
+    create(AgentWorkspaceDeleteRequestSchema, {
+      ...deleteRequest(value),
+      messageType: DELETE_REQUEST_TYPE,
+    }),
+  );
+}
+
+export function decodeAgentWorkspaceDeleteRequest(bytes: Uint8Array): AgentWorkspaceDeleteRequest {
+  const value = fromBinary(AgentWorkspaceDeleteRequestSchema, bounded(bytes));
+  if (value.messageType !== DELETE_REQUEST_TYPE)
+    throw new Error("Invalid Workspace Files delete request type");
+  return deleteRequest(value);
+}
+
+export function encodeAgentWorkspaceDeleteResult(value: AgentWorkspaceDeleteResult): Uint8Array {
+  return bounded(
+    toBinary(
+      AgentWorkspaceDeleteResultSchema,
+      create(AgentWorkspaceDeleteResultSchema, {
+        ...deleteRequest(value),
+        messageType: DELETE_RESULT_TYPE,
+        status: deleteStatus(value.status),
+      }),
+    ),
+  );
+}
+
+export function decodeAgentWorkspaceDeleteResult(bytes: Uint8Array): AgentWorkspaceDeleteResult {
+  const value = fromBinary(AgentWorkspaceDeleteResultSchema, bounded(bytes));
+  if (value.messageType !== DELETE_RESULT_TYPE)
+    throw new Error("Invalid Workspace Files delete result type");
+  return { ...deleteRequest(value), status: deleteStatus(value.status) };
 }
 export function encodeAgentWorkspaceFileReadRequest(
   value: AgentWorkspaceFileReadRequest,

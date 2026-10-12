@@ -4,6 +4,8 @@ import {
   encodeAgentWorkspaceFilesListResult,
   type AgentWorkspaceFileReadRequest,
   type AgentWorkspaceFileReadResult,
+  type AgentWorkspaceDeleteResult,
+  type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceFilesListRequest,
   type AgentWorkspaceFilesListResult,
 } from "@lrm/coforge-sdk/internal";
@@ -21,8 +23,10 @@ function query(overrides: {
   online?: () => Promise<boolean>;
   publishList?: (request: AgentWorkspaceFilesListRequest) => Promise<void>;
   publishRead?: (request: AgentWorkspaceFileReadRequest) => Promise<void>;
+  publishDelete?: (request: AgentWorkspaceDeleteRequest) => Promise<void>;
   listRead: () => Promise<AgentWorkspaceFilesListResult | undefined>;
   readRead?: () => Promise<AgentWorkspaceFileReadResult | undefined>;
+  deleteRead?: () => Promise<AgentWorkspaceDeleteResult | undefined>;
   cleared?: () => void;
   timing?: { now: () => number; wait: (ms: number) => Promise<void>; timeoutMs: number };
 }) {
@@ -40,6 +44,12 @@ function query(overrides: {
       readResults: {
         begin: async () => {},
         read: overrides.readRead ?? (async () => undefined),
+        clear: async () => overrides.cleared?.(),
+      },
+      publishDelete: overrides.publishDelete ?? (async () => {}),
+      deleteResults: {
+        begin: async () => {},
+        read: overrides.deleteRead ?? (async () => undefined),
         clear: async () => overrides.cleared?.(),
       },
     },
@@ -160,6 +170,22 @@ test("Workspace file read binds the owner's assignment and rechecks it before re
   });
   expect(await q.read({ userId: "owner", workspaceId: "workspace" }, "agent", "a.txt")).toEqual({
     status: "unavailable",
+  });
+});
+
+test("Workspace deletion binds the owner's assignment and returns the daemon terminal result", async () => {
+  let request: AgentWorkspaceDeleteRequest | undefined;
+  const q = query({
+    findOwned: async () => ({ computerId: "computer", revision: "one" }),
+    listRead: async () => undefined,
+    publishDelete: async (value) => {
+      request = value;
+    },
+    deleteRead: async () => ({ ...request!, status: "ok" }),
+  });
+  expect(await q.delete({ userId: "owner", workspaceId: "workspace" }, "agent")).toEqual({
+    status: "ready",
+    result: { ...request!, status: "ok" },
   });
 });
 

@@ -18,6 +18,8 @@ import {
   readComputerUpgradeStatus,
   restartComputer,
   scanAgentWorkspaces,
+  deleteAgentWorkspace,
+  deleteComputer,
   setRuntimeVisibility,
   updateComputerDisplayName,
   upgradeComputer,
@@ -58,6 +60,8 @@ function ComputerDetailPage() {
   const requestUpgrade = useServerFn(upgradeComputer);
   const readUpgrade = useServerFn(readComputerUpgradeStatus);
   const scanWorkspaces = useServerFn(scanAgentWorkspaces);
+  const deleteWorkspace = useServerFn(deleteAgentWorkspace);
+  const removeComputer = useServerFn(deleteComputer);
   const create = useServerFn(createAgent);
   const executeControl = useServerFn(executeAgentControl);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
@@ -71,6 +75,22 @@ function ComputerDetailPage() {
       onReadRestartStatus={(requestId) => readRestart({ data: { computerId, requestId } })}
       onScanAgentWorkspaces={
         computer.ownedByCurrentUser ? () => scanWorkspaces({ data: { computerId } }) : undefined
+      }
+      onDeleteAgentWorkspace={
+        computer.ownedByCurrentUser
+          ? (agentId) => deleteWorkspace({ data: { computerId, agentId } })
+          : undefined
+      }
+      onDeleteComputer={
+        computer.ownedByCurrentUser
+          ? async () => {
+              await removeComputer({ data: { computerId } });
+              await router.navigate({
+                to: "/w/$workspaceSlug/computers",
+                params: { workspaceSlug },
+              });
+            }
+          : undefined
       }
       onCreateAgent={
         computer.canManageAgents

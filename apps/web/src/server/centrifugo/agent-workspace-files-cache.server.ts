@@ -3,18 +3,24 @@ import { redisUrlFor } from "#src/server/redis-url.server";
 import {
   decodeAgentWorkspaceFileReadResult,
   decodeAgentWorkspaceFilesListResult,
+  decodeAgentWorkspaceDeleteResult,
   encodeAgentWorkspaceFileReadResult,
   encodeAgentWorkspaceFilesListResult,
+  encodeAgentWorkspaceDeleteResult,
   type AgentWorkspaceFileReadResult,
   type AgentWorkspaceFilesListResult,
+  type AgentWorkspaceDeleteResult,
 } from "@lrm/coforge-sdk/internal";
 import {
   sameWorkspaceFileReadScope,
   sameWorkspaceFilesListScope,
+  sameWorkspaceDeleteScope,
   type AgentWorkspaceFileReadResults,
   type AgentWorkspaceFilesListResults,
   type PendingWorkspaceFileRead,
   type PendingWorkspaceFilesList,
+  type AgentWorkspaceDeleteResults,
+  type PendingWorkspaceDelete,
 } from "#src/server/agents/agent-workspace-files.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 
@@ -97,8 +103,45 @@ export class RedisAgentWorkspaceFileReadResults implements AgentWorkspaceFileRea
   }
 }
 
+export class RedisAgentWorkspaceDeleteResults implements AgentWorkspaceDeleteResults {
+  constructor(private readonly redis: Pick<RedisClient, "get" | "set" | "send">) {}
+  private keys(id: string) {
+    return [`${PREFIX}:delete:${id}:pending`, `${PREFIX}:delete:${id}:result`];
+  }
+  async begin(pending: PendingWorkspaceDelete) {
+    await this.redis.set(
+      this.keys(pending.request.requestId)[0]!,
+      JSON.stringify(pending),
+      "EX",
+      "30",
+    );
+  }
+  async read(requestId: string) {
+    const value = await this.redis.get(this.keys(requestId)[1]!);
+    return value ? decodeAgentWorkspaceDeleteResult(Buffer.from(value, "base64")) : undefined;
+  }
+  async clear(requestId: string) {
+    await this.redis.send("DEL", this.keys(requestId));
+  }
+  async accept(result: AgentWorkspaceDeleteResult) {
+    const keys = this.keys(result.requestId);
+    const value = await this.redis.get(keys[0]!);
+    if (!value) return;
+    const pending = JSON.parse(value) as PendingWorkspaceDelete;
+    if (!sameWorkspaceDeleteScope(pending.request, result)) return;
+    await this.redis.send("EVAL", [
+      ACCEPT,
+      "2",
+      ...keys,
+      value,
+      Buffer.from(encodeAgentWorkspaceDeleteResult(result)).toString("base64"),
+    ]);
+  }
+}
+
 let listSingleton: RedisAgentWorkspaceFilesListResults | undefined;
 let readSingleton: RedisAgentWorkspaceFileReadResults | undefined;
+let deleteSingleton: RedisAgentWorkspaceDeleteResults | undefined;
 
 export function getAgentWorkspaceFilesListResults() {
   if (!listSingleton)
@@ -114,6 +157,14 @@ export function getAgentWorkspaceFileReadResults() {
       new RedisClient(redisUrlFor("Workspace Files queries")),
     );
   return readSingleton;
+}
+
+export function getAgentWorkspaceDeleteResults() {
+  if (!deleteSingleton)
+    deleteSingleton = new RedisAgentWorkspaceDeleteResults(
+      new RedisClient(redisUrlFor("Workspace Files queries")),
+    );
+  return deleteSingleton;
 }
 
 export function createAgentWorkspaceFilesListResultMethod(
@@ -146,6 +197,23 @@ export function createAgentWorkspaceFileReadResultMethod(
     )
       return { code: 403, message: "Workspace file read result scope is not authorized" };
     await (results ?? getAgentWorkspaceFileReadResults()).accept(result);
+    return new Uint8Array();
+  };
+}
+
+export function createAgentWorkspaceDeleteResultMethod(
+  results?: Pick<RedisAgentWorkspaceDeleteResults, "accept">,
+): CentrifugoRpcMethod {
+  return async (payload, { principal }) => {
+    const result = decodeAgentWorkspaceDeleteResult(payload);
+    if (
+      !principal.userId ||
+      principal.agentId ||
+      principal.workspaceId !== result.workspaceId ||
+      principal.computerId !== result.computerId
+    )
+      return { code: 403, message: "Workspace delete result scope is not authorized" };
+    await (results ?? getAgentWorkspaceDeleteResults()).accept(result);
     return new Uint8Array();
   };
 }

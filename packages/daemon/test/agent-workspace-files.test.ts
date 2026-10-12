@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  deleteAgentWorkspaceFiles,
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
 } from "#src/agent-runtime/agent-workspace-files";
@@ -127,6 +128,26 @@ test("Workspace Files listing and reading refuse a symlink that escapes the Agen
     );
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Workspace Files deletion clears contents, preserves the workspace root, and does not follow symlinks", async () => {
+  const root = await mkdtemp(join(tempRoot, "workspace-files-delete-"));
+  const outside = await mkdtemp(join(tempRoot, "workspace-files-delete-outside-"));
+  try {
+    await mkdir(join(root, "nested"));
+    await Bun.write(join(root, "notes.txt"), "remove me");
+    await Bun.write(join(outside, "keep.txt"), "keep me");
+    await symlink(join(outside, "keep.txt"), join(root, "escape.txt"));
+
+    const result = await deleteAgentWorkspaceFiles({ agentWorkspaceDirectory: root });
+    expect(result.status).toBe("ok");
+    expect(await readdir(root)).toEqual([]);
+    expect(await Bun.file(join(outside, "keep.txt")).text()).toBe("keep me");
+    expect((await readdir(root)).length).toBe(0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
   }
 });
 

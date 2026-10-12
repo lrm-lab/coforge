@@ -1,6 +1,8 @@
 import type {
   AgentWorkspaceFileReadRequest,
   AgentWorkspaceFileReadResult,
+  AgentWorkspaceDeleteRequest,
+  AgentWorkspaceDeleteResult,
   AgentWorkspaceFilesListRequest,
   AgentWorkspaceFilesListResult,
 } from "@lrm/coforge-sdk/internal";
@@ -20,6 +22,11 @@ export type PendingWorkspaceFileRead = {
   userId: string;
   revision: string;
 };
+export type PendingWorkspaceDelete = {
+  request: AgentWorkspaceDeleteRequest;
+  userId: string;
+  revision: string;
+};
 
 export interface AgentWorkspaceFilesListResults {
   begin(pending: PendingWorkspaceFilesList): Promise<void>;
@@ -31,12 +38,20 @@ export interface AgentWorkspaceFileReadResults {
   read(requestId: string): Promise<AgentWorkspaceFileReadResult | undefined>;
   clear(requestId: string): Promise<void>;
 }
+export interface AgentWorkspaceDeleteResults {
+  begin(pending: PendingWorkspaceDelete): Promise<void>;
+  read(requestId: string): Promise<AgentWorkspaceDeleteResult | undefined>;
+  clear(requestId: string): Promise<void>;
+}
 
 type WorkspaceFilesListResponse =
   | { status: "ready"; result: AgentWorkspaceFilesListResult }
   | { status: "offline" | "timeout" | "unavailable" };
 type WorkspaceFileReadResponse =
   | { status: "ready"; result: AgentWorkspaceFileReadResult }
+  | { status: "offline" | "timeout" | "unavailable" };
+type WorkspaceDeleteResponse =
+  | { status: "ready"; result: AgentWorkspaceDeleteResult }
   | { status: "offline" | "timeout" | "unavailable" };
 
 /**
@@ -65,6 +80,8 @@ export class AgentWorkspaceFilesQuery {
       publishRead(request: AgentWorkspaceFileReadRequest): Promise<void>;
       listResults: AgentWorkspaceFilesListResults;
       readResults: AgentWorkspaceFileReadResults;
+      publishDelete: (request: AgentWorkspaceDeleteRequest) => Promise<void>;
+      deleteResults: AgentWorkspaceDeleteResults;
     },
     private readonly timing: {
       now: () => number;
@@ -164,6 +181,46 @@ export class AgentWorkspaceFilesQuery {
       await readResults.clear(request.requestId).catch(() => {});
     }
   }
+
+  async delete(viewer: WorkspaceFilesViewer, agentId: string): Promise<WorkspaceDeleteResponse> {
+    const { findOwned, online, publishDelete, deleteResults } = this.dependencies;
+    const assignment = await findOwned(viewer, agentId);
+    if (!assignment) return { status: "unavailable" };
+    const request: AgentWorkspaceDeleteRequest = {
+      protocolMajor: 1,
+      requestId: crypto.randomUUID(),
+      workspaceId: viewer.workspaceId,
+      computerId: assignment.computerId,
+      agentId,
+    };
+    try {
+      if (!(await online(request))) return { status: "offline" };
+      await deleteResults.begin({ request, userId: viewer.userId, revision: assignment.revision });
+      await publishDelete(request);
+      const deadline = this.timing.now() + this.timing.timeoutMs;
+      let attempt = 0;
+      do {
+        const result = await deleteResults.read(request.requestId);
+        if (result) {
+          const current = await findOwned(viewer, agentId);
+          if (
+            !current ||
+            current.computerId !== assignment.computerId ||
+            current.revision !== assignment.revision ||
+            !sameWorkspaceDeleteScope(request, result)
+          )
+            return { status: "unavailable" };
+          return { status: "ready", result };
+        }
+        await this.timing.wait(pollDelayMs(attempt++));
+      } while (this.timing.now() < deadline);
+      return { status: "timeout" };
+    } catch {
+      return { status: "unavailable" };
+    } finally {
+      await deleteResults.clear(request.requestId).catch(() => {});
+    }
+  }
 }
 
 export function sameWorkspaceFilesListScope(
@@ -192,6 +249,19 @@ export function sameWorkspaceFileReadScope(
     a.computerId === b.computerId &&
     a.agentId === b.agentId &&
     a.path === b.path
+  );
+}
+
+export function sameWorkspaceDeleteScope(
+  a: AgentWorkspaceDeleteRequest,
+  b: AgentWorkspaceDeleteResult,
+) {
+  return (
+    a.protocolMajor === b.protocolMajor &&
+    a.requestId === b.requestId &&
+    a.workspaceId === b.workspaceId &&
+    a.computerId === b.computerId &&
+    a.agentId === b.agentId
   );
 }
 

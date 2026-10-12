@@ -6,6 +6,7 @@ import {
   Plus,
   SearchLg as Scan,
   RefreshCw01 as RotateCw,
+  Trash01 as Trash,
 } from "@untitledui/icons";
 import type { RuntimeProvider, AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
@@ -143,6 +144,8 @@ export function ComputerDetail({
   upgradePollIntervalMs = UPGRADE_POLL_INTERVAL_MS,
   upgradeMaxPolls = UPGRADE_MAX_POLLS,
   onScanAgentWorkspaces,
+  onDeleteAgentWorkspace,
+  onDeleteComputer,
   onCreateAgent,
   onLoadRuntimeCatalog,
   onSelectAgent,
@@ -157,6 +160,8 @@ export function ComputerDetail({
   onUpgrade?: (requestId: string) => Promise<ComputerUpgradeStatus>;
   onReadUpgradeStatus?: (requestId: string) => Promise<ComputerUpgradeStatus>;
   onScanAgentWorkspaces?: () => Promise<ComputerAgentWorkspaceScan[]>;
+  onDeleteAgentWorkspace?: (agentId: string) => Promise<{ status: string }>;
+  onDeleteComputer?: () => Promise<void>;
   onCreateAgent?: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
   onLoadRuntimeCatalog?: (computerId: string) => Promise<RuntimeCatalog[]>;
   onSelectAgent?: (agentId: string) => void;
@@ -317,6 +322,24 @@ export function ComputerDetail({
     <>
       <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 sm:px-6">
         <BackToComputers />
+        {onDeleteComputer && (
+          <Button
+            type="button"
+            size="sm"
+            color="secondary-destructive"
+            iconLeading={Trash}
+            onPress={() => {
+              if (
+                window.confirm(
+                  `${m.computer_delete_action()} ${computerLabel(computer)}? ${m.computer_delete_description()}`,
+                )
+              )
+                void onDeleteComputer().catch(() => toast.error(m.computer_delete_error()));
+            }}
+          >
+            {m.computer_delete_action()}
+          </Button>
+        )}
         {onRestart && (
           <Button
             type="button"
@@ -534,6 +557,14 @@ export function ComputerDetail({
             scan={workspaceScan}
             canScan={Boolean(onScanAgentWorkspaces)}
             onScan={() => void scanWorkspaces()}
+            canDelete={Boolean(onDeleteAgentWorkspace)}
+            onDelete={async (agentId) => {
+              if (!onDeleteAgentWorkspace) return;
+              const result = await onDeleteAgentWorkspace(agentId);
+              if (result.status !== "ok" && result.status !== "missing")
+                throw new Error("Workspace could not be deleted");
+              await scanWorkspaces();
+            }}
           />
 
           <section aria-labelledby="computer-code-agents">
@@ -852,6 +883,8 @@ function WorkspaceInventory({
   scan,
   canScan,
   onScan,
+  canDelete,
+  onDelete,
 }: {
   scan:
     | { state: "idle" }
@@ -860,7 +893,30 @@ function WorkspaceInventory({
     | { state: "error" };
   canScan: boolean;
   onScan: () => void;
+  canDelete: boolean;
+  onDelete: (agentId: string) => Promise<void>;
 }) {
+  const [deletingAgentId, setDeletingAgentId] = useState<string | undefined>();
+  const [deleteError, setDeleteError] = useState(false);
+  const deleteWorkspace = async (workspace: ComputerAgentWorkspaceScan) => {
+    if (
+      !window.confirm(
+        `Delete all files in ${workspace.displayName}'s workspace? This cannot be undone.`,
+      )
+    )
+      return;
+    setDeletingAgentId(workspace.agentId);
+    setDeleteError(false);
+    try {
+      await onDelete(workspace.agentId);
+    } catch {
+      setDeleteError(true);
+    } finally {
+      setDeletingAgentId(undefined);
+    }
+  };
+  const deletedCount =
+    scan.state === "ready" ? scan.workspaces.filter((item) => item.state === "deleted").length : 0;
   return (
     <DetailGroup
       heading={m.computer_agent_workspaces()}
@@ -892,40 +948,73 @@ function WorkspaceInventory({
       ) : scan.state === "scanning" ? (
         <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_scanning()}</p>
       ) : scan.workspaces.length ? (
-        <ul className="divide-y divide-secondary">
-          {scan.workspaces.map((workspace) => (
-            <li
-              key={workspace.agentId}
-              className="flex min-w-0 items-start justify-between gap-4 py-3 text-sm"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-medium text-primary">{workspace.displayName}</span>
-                  <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-tertiary">
-                    {workspace.state === "deleted"
-                      ? m.computer_agent_workspace_deleted()
-                      : m.computer_agent_workspace_active()}
-                  </span>
+        <>
+          {deletedCount > 0 && (
+            <p className="py-3 text-sm text-tertiary">
+              {m.computer_agent_workspaces_deleted_summary({ count: String(deletedCount) })}
+            </p>
+          )}
+          {deleteError && (
+            <p role="alert" className="py-2 text-sm text-error-primary">
+              {m.computer_agent_workspace_delete_error()}
+            </p>
+          )}
+          <ul className="divide-y divide-secondary">
+            {scan.workspaces.map((workspace) => (
+              <li
+                key={workspace.agentId}
+                className="flex min-w-0 items-start justify-between gap-4 py-3 text-sm"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium text-primary">
+                      {workspace.displayName}
+                    </span>
+                    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-tertiary">
+                      {workspace.state === "deleted"
+                        ? m.computer_agent_workspace_deleted()
+                        : m.computer_agent_workspace_active()}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate font-mono text-xs text-tertiary">
+                    {workspace.rootPath}
+                  </p>
+                  <p className="mt-1 text-xs text-tertiary">
+                    {workspace.status === "present"
+                      ? m.computer_agent_workspace_stats({
+                          files: String(workspace.fileCount),
+                          size: formatWorkspaceSize(workspace.totalSizeBytes),
+                        })
+                      : workspace.status === "missing"
+                        ? m.computer_agent_workspace_missing()
+                        : workspace.status === "partial"
+                          ? m.computer_agent_workspace_partial()
+                          : m.computer_agent_workspace_unavailable()}
+                  </p>
+                  {workspace.modifiedAtMs > 0 && (
+                    <p className="mt-1 text-xs text-tertiary">
+                      {m.computer_agent_workspace_modified({
+                        date: new Date(workspace.modifiedAtMs).toLocaleString(),
+                      })}
+                    </p>
+                  )}
                 </div>
-                <p className="mt-1 truncate font-mono text-xs text-tertiary">
-                  {workspace.rootPath}
-                </p>
-                <p className="mt-1 text-xs text-tertiary">
-                  {workspace.status === "present"
-                    ? m.computer_agent_workspace_stats({
-                        files: String(workspace.fileCount),
-                        size: formatWorkspaceSize(workspace.totalSizeBytes),
-                      })
-                    : workspace.status === "missing"
-                      ? m.computer_agent_workspace_missing()
-                      : workspace.status === "partial"
-                        ? m.computer_agent_workspace_partial()
-                        : m.computer_agent_workspace_unavailable()}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
+                {canDelete && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    color="tertiary"
+                    isLoading={deletingAgentId === workspace.agentId}
+                    isDisabled={deletingAgentId !== undefined}
+                    onPress={() => void deleteWorkspace(workspace)}
+                  >
+                    {m.computer_agent_workspace_delete()}
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
       ) : (
         <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_none()}</p>
       )}
