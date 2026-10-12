@@ -3,6 +3,7 @@ import {
   normalizeDeliveryBaseUrl,
   type DeliveryUrlRule,
 } from "./delivery-base-url.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /**
  * Public CDN delivery for profile images — user avatars, project icons, and Workspace icons.
@@ -141,9 +142,9 @@ function resolve() {
     const delivery = createPublicImageDelivery(readPublicImageDeliveryConfig(process.env));
     current = { delivery, status: { state: delivery ? "configured" : "disabled" } };
   } catch (error) {
-    const errorType = error instanceof Error ? error.name : typeof error;
-    console.error(JSON.stringify({ event: "public_image_delivery_unavailable", errorType }));
-    current = { delivery: null, status: { state: "error", errorType } };
+    const type = errorType(error);
+    console.error(JSON.stringify({ event: "public_image_delivery_unavailable", errorType: type }));
+    current = { delivery: null, status: { state: "error", errorType: type } };
   }
   return current;
 }

@@ -31,6 +31,7 @@ import type {
   TrackedMentionState,
 } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { publishPendingDelivery } from "./agent-delivery.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /** A pushed delivery as the issuer needs it. */
 export type MentionDeliveryCandidate = {
@@ -68,8 +69,6 @@ function envelopeFor(messageId: string, identity: MentionIdentity): MentionDeliv
     computerId: identity.computerId,
   };
 }
-
-const errorType = (error: unknown) => (error instanceof Error ? error.name : typeof error);
 
 /** Issues tracked mentions as a send pushes them. */
 export class MentionDeliveryIssuer {

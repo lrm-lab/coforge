@@ -1,5 +1,6 @@
 import { getFileDelivery, type FileDelivery } from "#src/server/files/file-delivery.server";
 import { isDeliveryInlinePreview, isInlineImage } from "./attachment-response.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 export type AttachmentView = {
   id: string;
@@ -33,7 +34,7 @@ function signPreviewUrl(delivery: FileDelivery, objectKey: string): string | und
       console.error(
         JSON.stringify({
           event: "file_delivery_signing_failed",
-          errorType: error instanceof Error ? error.name : typeof error,
+          errorType: errorType(error),
         }),
       );
     }

@@ -1,5 +1,6 @@
 import { ATTACHMENT_SESSION_SECONDS } from "#src/server/attachments/attachment.server";
 import type { BulkFileRemoval } from "#src/server/files/file-storage.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /** The stored files a deleted Workspace leaves, by bucket. */
 export type WorkspaceFileKeys = { files: readonly string[]; images: readonly string[] };
@@ -69,7 +70,7 @@ function logFailure(bucket: string, step: string, workspaceId: string, error: un
       bucket,
       step,
       workspace_id: workspaceId,
-      error_type: error instanceof Error ? error.name : typeof error,
+      error_type: errorType(error),
       error_code:
         typeof error === "object" && error && "code" in error ? String(error.code) : undefined,
     }),

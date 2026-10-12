@@ -75,6 +75,7 @@ import {
   type ComputerObservation,
 } from "#src/server/computers/computer-metadata.server";
 import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
+import { errorType } from "#src/server/errors/error-type.server";
 export {
   createAgentSessionMethod,
   createAgentSessionInvalidateMethod,
@@ -440,7 +441,7 @@ export const createDaemonRuntimeReadyMethod =
               request_id: request.requestId,
               workspace_id: request.workspaceId,
               computer_id: request.computerId,
-              error_type: error instanceof Error ? error.name : typeof error,
+              error_type: errorType(error),
             }),
           ),
         );
@@ -453,7 +454,7 @@ export const createDaemonRuntimeReadyMethod =
           request_id: request.requestId,
           workspace_id: request.workspaceId,
           computer_id: request.computerId,
-          error_type: error instanceof Error ? error.name : typeof error,
+          error_type: errorType(error),
         }),
       );
       // The stage travels in the error, not only in this server's console: the Daemon logs what it
@@ -525,7 +526,7 @@ export function createDaemonRuntimeShutdownMethod(
           request_id: notice.requestId,
           workspace_id: notice.workspaceId,
           computer_id: notice.computerId,
-          error_type: error instanceof Error ? error.name : typeof error,
+          error_type: errorType(error),
         }),
       );
       return { code: 503, message: "daemon shutdown notice was not recorded" };

@@ -14,6 +14,7 @@ import {
   announceMemberChanged,
   type ConversationRealtime,
 } from "#src/server/conversations/conversation-realtime.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /** What one delete changed. */
 export type AgentDeletionEffects = {
@@ -115,7 +116,7 @@ export class AgentDeletion {
           agent_id: agent.id,
           workspace_id: agent.workspaceId,
           computer_id: agent.computerId,
-          error_type: error instanceof Error ? error.name : typeof error,
+          error_type: errorType(error),
         }),
       );
     }

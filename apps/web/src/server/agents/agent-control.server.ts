@@ -24,6 +24,7 @@ import {
   type AgentControlCapability,
   type WorkspaceMemberRole,
 } from "#src/server/workspaces/member-role.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /** Only the recovery fields a Start intent may carry; a full `AgentStartIntent` (e.g.
  * `recover()`'s) structurally satisfies this too. */
@@ -480,7 +481,7 @@ export class AgentControl {
             action,
             agent_id: agentId,
             workspace_id: input.workspaceId,
-            error_type: error instanceof Error ? error.name : typeof error,
+            error_type: errorType(error),
           }),
         );
         return { agentId, done: false };
@@ -559,7 +560,7 @@ export class AgentControl {
           event: "agent_control:stopped_mentions_failed",
           agent_id: agent.id,
           workspace_id: agent.workspaceId,
-          error_type: error instanceof Error ? error.name : typeof error,
+          error_type: errorType(error),
         }),
       );
     }
@@ -702,7 +703,7 @@ export class AgentControl {
           event: "agent_control:recovery_read_failed",
           workspace_id: workspaceId,
           agent_id: agentId,
-          error_type: error instanceof Error ? error.name : typeof error,
+          error_type: errorType(error),
         }),
       );
       return undefined;

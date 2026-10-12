@@ -18,6 +18,7 @@ import {
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 export type ConversationRealtimeMessage = {
   conversationId: string;
@@ -335,7 +336,7 @@ async function announceBestEffort<Port>(
       JSON.stringify({
         event: `conversation_realtime:${name}_failed`,
         ...fields,
-        error_type: error instanceof Error ? error.name : typeof error,
+        error_type: errorType(error),
       }),
     );
   }
