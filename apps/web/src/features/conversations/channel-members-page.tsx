@@ -1,9 +1,8 @@
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Button as AriaButton,
-  Checkbox as AriaCheckbox,
   Disclosure,
   DisclosurePanel,
   Heading,
@@ -14,9 +13,8 @@ import { ChevronDown, Plus, SearchLg } from "@untitledui/icons";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Avatar } from "#src/components/base/avatar/avatar";
-import { Badge, BadgeWithButton } from "#src/components/base/badges/badges";
+import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
-import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import { createAgent } from "#src/features/agents/agents.functions";
@@ -34,15 +32,23 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
   addPublicChannelMembers,
-  loadPublicChannelMembers,
   removePublicChannelMember,
   setPublicChannelMemberRole,
 } from "./channels.functions";
-import { memberMatchesSearch, type SearchableMember } from "./channel-member-search";
+import { memberMatchesSearch } from "./channel-member-search";
+import {
+  buildChannelCandidates,
+  candidateSearchTerm,
+  ChannelCandidateChips,
+  ChannelCandidateGroups,
+  filterChannelCandidates,
+  pickedMemberIds,
+  type ChannelCandidate,
+} from "./channel-member-picker";
+import { useChannelMembers, type ChannelMembers } from "./channel-members-query";
 import { channelMembersQueryKey } from "./conversation-query-keys";
 import { mentionKey } from "./mention-text";
 
-type ChannelMembers = Awaited<ReturnType<typeof loadPublicChannelMembers>>;
 type Member = { kind: "user" | "agent" } & (
   | ChannelMembers["humans"][number]
   | ChannelMembers["agents"][number]
@@ -50,16 +56,6 @@ type Member = { kind: "user" | "agent" } & (
 
 /** The two views of the members page: the roster, and adding people to it. */
 export type ChannelMembersView = "members" | "add";
-
-/** The members roster the panel's Members strip also reads: one query per channel. */
-export function useChannelMembers(channelId: string) {
-  const load = useServerFn(loadPublicChannelMembers);
-  return useQuery({
-    queryKey: channelMembersQueryKey(channelId),
-    queryFn: () => load({ data: { channelId } }),
-    refetchOnWindowFocus: true,
-  });
-}
 
 /** A Workspace owner or admin administers every channel, whatever their role in it. */
 function isServerAdmin(member: { serverRole?: string | null }) {
@@ -560,17 +556,6 @@ function RemoveMemberDialog({
   );
 }
 
-type Candidate = {
-  key: string;
-  kind: "user" | "agent";
-  id: string;
-  displayName: string;
-  /** What the search reads: a person's display name, an Agent's name and handle. */
-  search: SearchableMember;
-  description?: string;
-  avatarUrl?: string | null;
-};
-
 function AddMembersView({
   channelId,
   channelName,
@@ -592,38 +577,13 @@ function AddMembersView({
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const candidates = useMemo<Candidate[]>(
-    () => [
-      ...data.candidates.agents.map((agent) => ({
-        key: `agent:${agent.id}`,
-        kind: "agent" as const,
-        id: agent.id,
-        displayName: agent.displayName,
-        search: { kind: "agent" as const, displayName: agent.displayName, name: agent.name },
-        description: agent.description,
-        avatarUrl: agent.avatarUrl,
-      })),
-      ...data.candidates.humans.map((human) => ({
-        key: `user:${human.id}`,
-        kind: "user" as const,
-        id: human.id,
-        displayName: human.displayName,
-        search: { kind: "user" as const, displayName: human.displayName },
-        avatarUrl: human.avatarUrl,
-      })),
-    ],
+  const candidates = useMemo<ChannelCandidate[]>(
+    () => buildChannelCandidates(data.candidates),
     [data.candidates],
   );
   const byKey = useMemo(() => new Map(candidates.map((entry) => [entry.key, entry])), [candidates]);
-  // A leading @ is how people write a handle; it is not part of the name.
-  const term = search.trim().replace(/^@/, "");
-  const query = term.toLowerCase();
-  const shown = useMemo(
-    () => candidates.filter((entry) => memberMatchesSearch(query, entry.search)),
-    [candidates, query],
-  );
-  const shownAgents = shown.filter((entry) => entry.kind === "agent");
-  const shownHumans = shown.filter((entry) => entry.kind === "user");
+  const term = candidateSearchTerm(search);
+  const shown = useMemo(() => filterChannelCandidates(candidates, term), [candidates, term]);
   const { joining, failure, notStarted } = createdAgentJoin;
   // Joined some other way meanwhile (a refetch, another member): nothing left to retry.
   const unjoined =
@@ -654,15 +614,9 @@ function AddMembersView({
     if (selected.size === 0) return;
     setBusy(true);
     setError("");
-    // A candidate a refetch no longer lists (added meanwhile) drops out of the selection.
-    const picked = [...selected].flatMap((key) => byKey.get(key) ?? []);
     try {
       const fresh = await add({
-        data: {
-          channelId,
-          userIds: picked.filter((entry) => entry.kind === "user").map((entry) => entry.id),
-          agentIds: picked.filter((entry) => entry.kind === "agent").map((entry) => entry.id),
-        },
+        data: { channelId, ...pickedMemberIds(selected, byKey) },
       });
       queryClient.setQueryData(channelMembersQueryKey(channelId), fresh);
       onDone();
@@ -675,48 +629,6 @@ function AddMembersView({
     } finally {
       setBusy(false);
     }
-  }
-
-  function candidateRow(entry: Candidate) {
-    const description = entry.description?.trim();
-    // React Aria's checkbox around the official box, so the row can hold an avatar: the official
-    // `Checkbox` puts its label in a `<p>`, which cannot contain the avatar's `<div>`.
-    return (
-      <li key={entry.key}>
-        <AriaCheckbox
-          isSelected={selected.has(entry.key)}
-          isDisabled={busy}
-          onChange={(on) => toggle(entry.key, on)}
-          aria-label={entry.displayName}
-          className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 hover:bg-primary_hover disabled:cursor-not-allowed md:px-6"
-        >
-          {({ isSelected, isDisabled, isFocusVisible }) => (
-            <>
-              <CheckboxBase
-                isSelected={isSelected}
-                isDisabled={isDisabled}
-                isFocusVisible={isFocusVisible}
-              />
-              <Avatar
-                size="xs"
-                alt=""
-                src={entry.avatarUrl ?? undefined}
-                initials={avatarInitial(entry.displayName)}
-                contentClassName={avatarToneClassName(entry.displayName)}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-primary">
-                  {entry.displayName}
-                </span>
-                {description && (
-                  <span className="block truncate text-xs text-tertiary">{description}</span>
-                )}
-              </span>
-            </>
-          )}
-        </AriaCheckbox>
-      </li>
-    );
   }
 
   return (
@@ -754,25 +666,12 @@ function AddMembersView({
             {m.agent_deferred_start_notice()}
           </p>
         )}
-        {selected.size > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {[...selected].map((key) => {
-              const entry = byKey.get(key);
-              if (!entry) return null;
-              return (
-                <BadgeWithButton
-                  key={key}
-                  size="sm"
-                  color={entry.kind === "agent" ? "brand" : "gray"}
-                  buttonLabel={m.channel_members_deselect({ name: entry.displayName })}
-                  onButtonClick={() => toggle(key, false)}
-                >
-                  {entry.displayName}
-                </BadgeWithButton>
-              );
-            })}
-          </div>
-        )}
+        <ChannelCandidateChips
+          keys={[...selected]}
+          byKey={byKey}
+          disabled={busy}
+          onRemove={(key) => toggle(key, false)}
+        />
         <Input
           size="sm"
           label={m.channel_members_search()}
@@ -784,32 +683,14 @@ function AddMembersView({
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto py-2">
-        {shownAgents.length > 0 && (
-          <>
-            <h3 className="px-4 py-2 text-xs font-semibold text-tertiary md:px-6">
-              {m.channel_members_agents()}
-            </h3>
-            <ul>{shownAgents.map(candidateRow)}</ul>
-          </>
-        )}
-        {shownHumans.length > 0 && (
-          <>
-            <h3 className="px-4 py-2 text-xs font-semibold text-tertiary md:px-6">
-              {m.channel_members_humans()}
-            </h3>
-            <ul>{shownHumans.map(candidateRow)}</ul>
-          </>
-        )}
-        {candidates.length === 0 && (
-          <p className="px-4 py-4 text-center text-sm text-tertiary md:px-6">
-            {m.channel_members_all_added()}
-          </p>
-        )}
-        {candidates.length > 0 && shown.length === 0 && (
-          <p className="px-4 py-4 text-center text-sm text-tertiary md:px-6">
-            {m.channel_members_no_matches({ query: term })}
-          </p>
-        )}
+        <ChannelCandidateGroups
+          candidates={candidates}
+          shown={shown}
+          term={term}
+          selected={selected}
+          disabled={busy}
+          onToggle={toggle}
+        />
       </div>
       <CreateAgentEntry
         channelName={channelName}
