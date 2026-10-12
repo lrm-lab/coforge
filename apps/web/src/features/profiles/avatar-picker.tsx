@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Radio, RadioGroup } from "react-aria-components";
-import { ChevronRight } from "@untitledui/icons";
 
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
@@ -47,17 +46,7 @@ export function AvatarPicker({
   }
 
   return (
-    <div className="w-full px-4 pb-8 sm:px-8">
-      <nav aria-label={m.settings_avatar_choose()} className="flex items-center gap-2 py-4 text-sm">
-        <Button type="button" color="link-gray" size="sm" onPress={onClose}>
-          {m.settings_profile()}
-        </Button>
-        <ChevronRight aria-hidden="true" className="size-4 text-fg-quaternary" />
-        <span aria-current="page" className="font-semibold text-brand-secondary">
-          {m.settings_avatar_choose()}
-        </span>
-      </nav>
-
+    <div className="w-full px-4 pt-4 pb-8 sm:px-8">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <section className="h-fit rounded-xl border border-secondary p-6">
           <div className="flex items-center justify-between text-sm">

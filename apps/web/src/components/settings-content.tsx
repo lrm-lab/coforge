@@ -9,6 +9,7 @@ import {
   Camera01,
   Check,
   ChevronLeft,
+  ChevronRight,
   Clock as Clock3,
   Translate01 as Languages,
   LayoutLeft,
@@ -259,6 +260,35 @@ export function SettingsContent(props: SettingsContentProps) {
           <PageHeader
             icon={sectionIcons[section]}
             heading={sectionLabel}
+            breadcrumb={
+              section === "account" && props.avatarPicker ? (
+                /* Settings → Account → Change avatar: the trail lives in the page's title row,
+                   so the picker's own body starts straight with its content. */
+                <nav aria-label={sectionLabel} className="flex min-w-0 items-center gap-2 text-sm">
+                  <Button
+                    type="button"
+                    color="link-gray"
+                    size="sm"
+                    onPress={() => props.onAvatarPickerChange(false)}
+                  >
+                    {sectionLabel}
+                  </Button>
+                  <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+                  <Button
+                    type="button"
+                    color="link-gray"
+                    size="sm"
+                    onPress={() => props.onAvatarPickerChange(false)}
+                  >
+                    {m.settings_profile()}
+                  </Button>
+                  <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+                  <h1 aria-current="page" className="truncate font-semibold text-brand-secondary">
+                    {m.settings_avatar_choose()}
+                  </h1>
+                </nav>
+              ) : undefined
+            }
             leading={
               <ButtonUtility
                 icon={ChevronLeft}
