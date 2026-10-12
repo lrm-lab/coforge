@@ -53,6 +53,7 @@ CDN_DOMAINS=(
 	"images-staging.coforge.cn"
 	"files.coforge.cn"
 	"images.coforge.cn"
+	"releases.coforge.cn"
 )
 
 ACME_HOME="${ACME_HOME:-$HOME/.acme.sh}"

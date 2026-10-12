@@ -11,7 +11,8 @@
 | `images-staging.coforge.cn` | 2026-09-20 新建，HTTPS 已启用但**无证书** | 无 |
 | `files.coforge.cn` | 2026-10-12 新建，生产附件 | 无 |
 | `images.coforge.cn` | 2026-10-12 新建，生产头像与图标 | 无 |
+| `releases.coforge.cn` | 2026-10-12 新建，生产 Computer 与 installer 发行 feed | 无 |
 
-新增 CDN 域名（例如生产的 `releases.coforge.cn`）时，在脚本的 `CDN_DOMAINS`
+新增 CDN 域名时，在脚本的 `CDN_DOMAINS`
 数组里加一行，在这张表里同步加一行，并把该域名的 ARN 加进
 [第 4 节](ram-permissions.md)的策略。

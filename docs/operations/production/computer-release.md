@@ -21,13 +21,14 @@ Do these once, in the Alibaba Cloud console of account `1085194890307801`.
    Standard, 同城冗余, ACL `private`, Block Public Access on, OSS-managed
    encryption (AES256), **transfer acceleration** on: the workflows upload
    through `oss-accelerate.aliyuncs.com`.
-2. **CDN domain** (created; configuration pending). `releases.coforge.cn`
+2. **CDN domain** (done 2026-10-12: private-bucket access, cache rules, both
+   cookie header rules). `releases.coforge.cn`
    (「大文件下载」, 「仅中国内地」), origin the OSS bucket `coforge-releases`,
    回源 HOST the bucket domain, no path rewrite, no second origin. Enable Alibaba Cloud OSS Private
    Bucket Access (same account, STS). **No URL signing**: installers and updaters
    fetch anonymously. Add the global `Delete Cookie` request header and
    `Delete Set-Cookie` response header rules.
-3. **Cache rules**, exactly the staging set plus the installer pointer
+3. **Cache rules** (done), exactly the staging set plus the installer pointer
    ([cdn-domains §5.3](../aliyun-oss-cdn/cdn-domains.md#53-url-signingcache-与-headers)):
 
    | Match               | Type      | Expiry | Force revalidation | Weight | Client `Cache-Control`                |
@@ -37,8 +38,8 @@ Do these once, in the Alibaba Cloud console of account `1085194890307801`.
    | `/installer/latest` | directory | 0 s    | on                 | 99     | `no-cache, must-revalidate`           |
    | `/`                 | directory | 365 d  | off                | 80     | `public, max-age=31536000, immutable` |
 
-4. **DNS and certificate.** CNAME `releases` in the `coforge.cn` zone to the CDN
-   domain's `*.kunlunaq.com` target. Add `releases.coforge.cn` to
+4. **DNS and certificate.** CNAME `releases` in the `coforge.cn` zone to
+   `releases.coforge.cn.w.kunlunaq.com` (done 2026-10-12). Add `releases.coforge.cn` to
    `CDN_DOMAINS` in `scripts/ops/renew-cdn-certificates.sh`,
    [`cdn-certificates/domains.md`](../cdn-certificates/domains.md), and the CDN
    ARNs of [its RAM policy](../cdn-certificates/ram-permissions.md), then run the
