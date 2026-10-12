@@ -40,11 +40,8 @@ import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-prof
 import type { AgentProfileTab as AgentProfileTabId } from "#src/features/agents/profile-panel/profile-panel-search";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
-import {
-  ChannelMembersPage,
-  useChannelMembers,
-  type ChannelMembersView,
-} from "./channel-members-page";
+import { ChannelMembersPage, type ChannelMembersView } from "./channel-members-page";
+import { useChannelMembers } from "./channel-members-query";
 import {
   deletePublicChannel,
   leavePublicChannel,

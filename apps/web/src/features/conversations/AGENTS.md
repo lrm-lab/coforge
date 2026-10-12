@@ -199,7 +199,13 @@ These rules apply to `src/features/conversations/`.
 - Leaving a channel reuses the never-joined read-only conversation state and
   `joined: false` in the channel list. Do not add a separate "left" state.
 - A human commits an action card through `CreateChannelDialog`, `AgentCreateDialog`, or
-  `ChannelMembersDialog` with their preselect/commit props; the sidebar "+" is the dialog's
-  `memberPicker` mode (public Agents only). Do not build card-specific creation forms.
+  `ChannelAddMembersDialog` with their preselect/commit props; the sidebar "+" is the create
+  dialog's `memberPicker` mode (public Agents only). Do not build card-specific creation forms.
+  `ChannelAddMembersDialog` answers one question — who joins this channel now: the card's
+  proposal arrives picked and individually removable, with the same search over the Workspace's
+  people and Agents outside the channel. It does not show the roster; that is the settings
+  panel's members page. Both pickers compose `channel-member-picker.tsx` (the candidate model,
+  the picked chips and the ticked rows) and read the one `channelMembersQueryKey` query through
+  `channel-members-query.ts`, so neither grows its own candidate list.
 - The browser refreshes only the pending action cards it shows, through
   `loadActionCardStates` on the `messageAvailable` signal and on window focus.

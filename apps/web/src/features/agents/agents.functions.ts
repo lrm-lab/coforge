@@ -14,7 +14,10 @@ import {
   updateAgentRoleInputSchema,
 } from "./agent.schemas";
 import { AGENT_VISIBILITY } from "./agent-visibility";
-import { publishAgentVisibilityChanged } from "#src/server/agents/agent-visibility-realtime.server";
+import {
+  publishAgentDirectoryChanged,
+  publishAgentVisibilityChanged,
+} from "#src/server/agents/agent-visibility-realtime.server";
 import { ChangeAgentVisibility } from "#src/server/agents/change-agent-visibility.server";
 import { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-purge.server";
 import { PrismaChangeAgentVisibilityStore } from "#src/server/db/repositories/agent-visibility-change.repositories.server";
@@ -397,6 +400,11 @@ export const createAgent = createServerFn({ method: "POST" })
         data.computerId,
       );
     const created = await manageAgents(db).create({ userId: user.id, workspaceId, role }, data);
+    try {
+      await publishAgentDirectoryChanged(workspaceId, created.agent.id, "created");
+    } catch {
+      // The Agent is already committed; a missed directory signal is repaired by reconnect/focus.
+    }
     if (data.actionCardMessageId)
       await actionCards.completeAgentCreate(
         workspaceId,
@@ -415,13 +423,19 @@ export const updateAgent = createServerFn({ method: "POST" })
       where: { agentId: data.agentId, workspaceId, userId: user.id },
       select: { agentId: true },
     });
-    return manageAgents(db).update(
+    const updated = await manageAgents(db).update(
       { userId: user.id, workspaceId },
       // The weekly-report assistant's display label (周报助手) is server-owned; drop any
       // client-supplied value so `ManageAgents.update` falls back to the existing displayName.
       // Its username (`name`) is fixed at creation and is never part of an update.
       assistant ? { ...data, displayName: undefined } : data,
     );
+    try {
+      await publishAgentDirectoryChanged(workspaceId, updated.agent.id, "updated");
+    } catch {
+      // The Agent is already committed; a missed directory signal is repaired by reconnect/focus.
+    }
+    return updated;
   });
 
 /** Lets a Workspace owner/admin grant or revoke an Agent's own management (channel admin)
@@ -429,14 +443,20 @@ export const updateAgent = createServerFn({ method: "POST" })
 export const updateAgentRole = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(updateAgentRoleInputSchema)
-  .handler(async ({ data, context: { user, db, workspaceId } }) =>
-    setAgentRole(db, {
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    const result = await setAgentRole(db, {
       workspaceId,
       actorUserId: user.id,
       agentId: data.agentId,
       role: data.role,
-    }),
-  );
+    });
+    try {
+      await publishAgentDirectoryChanged(workspaceId, result.agentId, "updated");
+    } catch {
+      // The role write is already committed; a missed directory signal is repaired by reconnect/focus.
+    }
+    return result;
+  });
 
 /**
  * Changes one Agent's visibility: the creator or a human Workspace owner/admin only.
@@ -645,7 +665,13 @@ export const uploadAgentAvatar = createServerFn({ method: "POST" })
     return { agentId: agentId.data, file: file.data };
   })
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return new AgentAvatars(db).store(workspaceId, user.id, data.agentId, data.file);
+    const result = await new AgentAvatars(db).store(workspaceId, user.id, data.agentId, data.file);
+    try {
+      await publishAgentDirectoryChanged(workspaceId, data.agentId, "updated");
+    } catch {
+      // The avatar write is already committed; a missed directory signal is repaired by reconnect/focus.
+    }
+    return result;
   });
 
 export const removeAgentAvatar = createServerFn({ method: "POST" })
@@ -653,6 +679,11 @@ export const removeAgentAvatar = createServerFn({ method: "POST" })
   .validator(agentIdInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     await new AgentAvatars(db).remove(workspaceId, user.id, data.agentId);
+    try {
+      await publishAgentDirectoryChanged(workspaceId, data.agentId, "updated");
+    } catch {
+      // The avatar write is already committed; a missed directory signal is repaired by reconnect/focus.
+    }
   });
 
 export const getAgentProfile = createServerFn({ method: "GET" })
@@ -710,6 +741,13 @@ export const deleteAgent = createServerFn({ method: "POST" })
     // rather than the generic failure, so surface it as a distinguishable error.
     if (result.outcome === "protected")
       throw new AppError("CONFLICT", { errorId: "agent-delete-protected" });
+    if (result.outcome === "deleted") {
+      try {
+        await publishAgentDirectoryChanged(workspaceId, data.agentId, "deleted");
+      } catch {
+        // The Agent is already committed; a missed directory signal is repaired by reconnect/focus.
+      }
+    }
     return result;
   });
 

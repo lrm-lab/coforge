@@ -1,0 +1,225 @@
+# Cloud production environment for the approved cloud application track.
+#
+# Project: coforge-production (every invocation must pass -p coforge-production).
+# Caddy owns the only public entry (443); application ports stay private and
+# reach the host only through loopback diagnostics. Images resolve by immutable
+# digest: the deploy script writes COFORGE_WEB_IMAGE into .env.
+# PostgreSQL and Redis are managed Alibaba Cloud services reached over the VPC;
+# their connection URLs come from secret files, so this file defines no database
+# or cache containers.
+name: coforge-production
+
+# Container output goes to the deploy user's persistent systemd journal, so it survives the
+# container recreation every deploy performs (the default json-file log is deleted with the
+# container). Read it with `journalctl --user -t <container name>`; `docker logs` still works
+# for a running container.
+x-journald-logging: &journald-logging
+  driver: journald
+  options:
+    tag: "{{.Name}}"
+
+services:
+  caddy:
+    logging: *journald-logging
+    image: caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+    command:
+      - caddy
+      - run
+      - --config
+      - /etc/caddy/Caddyfile
+      - --adapter
+      - caddyfile
+    environment:
+      # Bind-mount contents are not part of Compose's service change detection.
+      # The deploy script refreshes this value from the Caddyfile so only a
+      # Caddyfile change recreates this container (admin is off: no reload).
+      COFORGE_CADDYFILE_SHA256: ${COFORGE_CADDYFILE_SHA256:?deploy script writes .env}
+    ports:
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - coforge
+    depends_on:
+      web:
+        condition: service_healthy
+      centrifugo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    logging: *journald-logging
+    image: ${COFORGE_WEB_IMAGE:?COFORGE_WEB_IMAGE must resolve to an immutable digest}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?deploy script writes .env}
+      REDIS_URL: ${REDIS_URL:?deploy script writes .env}
+      AUTHING_APP_ID_FILE: /run/secrets/authing_app_id
+      AUTHING_APP_SECRET_FILE: /run/secrets/authing_app_secret
+      AUTHING_ISSUER: https://coforge-cn.authing.cn/oidc
+      AUTHING_REDIRECT_URI: https://coforge.cn/auth/callback
+      COFORGE_SESSION_SECRET_FILE: /run/secrets/coforge_session_secret
+      COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE: /run/secrets/coforge_agent_credential_encryption_key
+      COFORGE_CENTRIFUGO_API_URL: http://centrifugo:8000/api
+      COFORGE_CENTRIFUGO_API_KEY: ${COFORGE_CENTRIFUGO_API_KEY:?deploy script writes .env}
+      COFORGE_CENTRIFUGO_PROXY_SECRET: ${COFORGE_CENTRIFUGO_PROXY_SECRET:?deploy script writes .env}
+      COFORGE_WORKER_JWT_KEY_ID: ${COFORGE_WORKER_JWT_KEY_ID:?deploy script writes .env}
+      COFORGE_WORKER_JWT_PRIVATE_JWK: ${COFORGE_WORKER_JWT_PRIVATE_JWK:?deploy script writes .env}
+      COFORGE_WEB_PUSH_PUBLIC_KEY: ${COFORGE_WEB_PUSH_PUBLIC_KEY:?deploy script loads production variable}
+      COFORGE_WEB_PUSH_PRIVATE_KEY_FILE: /run/secrets/coforge_web_push_private_key
+      COFORGE_WEB_PUSH_SUBJECT: https://coforge.cn
+      # In-process weekly-report schedule clock (ADR 0011). Production has no separate
+      # cron sidecar; one minute matches the local/dev default. Deployments that
+      # later add an external HTTP cron should unset this to avoid double ticks
+      # (idempotent, but wasteful).
+      COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS: "60000"
+      OTEL_SERVICE_NAME: coforge-web
+      OTEL_DEPLOYMENT_ENVIRONMENT: production
+      # Which release feed this deployment's `curl .../computer/install.sh | sh` installs
+      # from. Not a secret, and deployment-specific by design:
+      # docs/release/local-feed-hosting.md requires a production entry point to install the
+      # production build, never the staging one.
+      COFORGE_RELEASE_FEED_URL: https://releases.coforge.cn
+      # Private user files (chat attachments, avatars) live in the production OSS bucket; see
+      # docs/operations/aliyun-oss-cdn/. No AccessKey pair: the ECS instance carries the
+      # `coforge-production-web` RAM role and the SDK reads its STS token from the instance
+      # metadata service (100.100.100.200), so the credential never exists as a file or
+      # environment value. The internal endpoint keeps uploads off the public bandwidth.
+      COFORGE_FILE_STORAGE: oss
+      COFORGE_OSS_BUCKET: coforge-files-prod
+      COFORGE_OSS_REGION: cn-beijing
+      COFORGE_OSS_INTERNAL: "1"
+      ALIBABA_CLOUD_ECS_METADATA: coforge-production-web
+      ALIBABA_CLOUD_IMDSV1_DISABLED: "true"
+      # Chat images load straight from the private CDN domain: message payloads carry a
+      # Type A signed URL and /api/attachments/:id redirects to a fresh one when it expires
+      # (docs/operations/aliyun-oss-cdn/cdn-domains.md §5.3). The signing key is the CDN URL-auth
+      # primary key, mounted as a secret; it is not an OSS credential.
+      COFORGE_FILE_DELIVERY_URL: https://files.coforge.cn
+      COFORGE_FILE_DELIVERY_KEY_FILE: /run/secrets/coforge_file_delivery_key
+      # Avatars and project icons are published as anonymous, never-expiring URLs on their own
+      # domain and bucket, so a browser caches one copy of each. Both settings go live
+      # together: the URL without the bucket refuses to boot. The Web role reads that bucket
+      # through its own grant, so losing the grant fails an avatar upload loudly instead of
+      # writing somewhere unintended.
+      COFORGE_IMAGE_OSS_BUCKET: coforge-images-prod
+      COFORGE_IMAGE_DELIVERY_URL: https://images.coforge.cn
+    secrets:
+      - source: authing_app_id
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: authing_app_secret
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: coforge_session_secret
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: coforge_agent_credential_encryption_key
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: coforge_web_push_private_key
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: coforge_file_delivery_key
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+    ports:
+      # loopback diagnostics only; never public
+      - "127.0.0.1:18080:3000"
+    depends_on:
+      centrifugo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - coforge
+    restart: unless-stopped
+
+  migrate:
+    logging: *journald-logging
+    image: ${COFORGE_WEB_IMAGE:?COFORGE_WEB_IMAGE must resolve to an immutable digest}
+    profiles: [tools]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?deploy script writes .env}
+    networks:
+      - coforge
+
+  centrifugo:
+    logging: *journald-logging
+    image: centrifugo/centrifugo:v6.9.2@sha256:f89352e38ef8043aaaa9045dec41cc8f2d35075b86ff553d4091ac19b547a3a6
+    environment:
+      # Bind-mount contents are not part of Compose's service change detection.
+      # The deploy script refreshes this value from config.yaml so only a
+      # Centrifugo config change recreates this container.
+      COFORGE_CENTRIFUGO_CONFIG_SHA256: ${COFORGE_CENTRIFUGO_CONFIG_SHA256:?deploy script writes .env}
+    command:
+      - sh
+      - -c
+      - >-
+        export CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY="$$(cat /run/secrets/centrifugo_token_hmac_secret_key)";
+        export CENTRIFUGO_HTTP_API_KEY="$$(cat /run/secrets/centrifugo_http_api_key)";
+        export CENTRIFUGO_VAR_RPC_PROXY_SECRET="$$(cat /run/secrets/centrifugo_proxy_secret)";
+        export CENTRIFUGO_ENGINE_REDIS_ADDRESS="$$(cat /run/secrets/redis_url)";
+        exec centrifugo -c /centrifugo/config.yaml
+    ports:
+      - "127.0.0.1:18000:8000"
+    volumes:
+      - ./centrifugo:/centrifugo:ro
+    secrets:
+      - centrifugo_token_hmac_secret_key
+      - centrifugo_http_api_key
+      - centrifugo_proxy_secret
+      - redis_url
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - coforge
+    restart: unless-stopped
+
+networks:
+  coforge: {}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+
+secrets:
+  authing_app_id:
+    environment: AUTHING_APP_ID
+  authing_app_secret:
+    environment: AUTHING_APP_SECRET
+  coforge_session_secret:
+    environment: COFORGE_SESSION_SECRET
+  coforge_agent_credential_encryption_key:
+    environment: COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY
+  coforge_web_push_private_key:
+    environment: COFORGE_WEB_PUSH_PRIVATE_KEY
+  # `environment:` like every other secret the Web container reads: Compose writes the value to
+  # a file it owns with the uid/mode above. A `file:` source would bind-mount the deploy user's
+  # 600 file, which the rootless daemon maps to root, so the `bun` user could not read it.
+  coforge_file_delivery_key:
+    environment: COFORGE_FILE_DELIVERY_KEY
+  # The full Redis URL, including the instance username, read by Centrifugo at start.
+  redis_url:
+    file: ./secrets/redis_url
+  centrifugo_token_hmac_secret_key:
+    file: ./secrets/centrifugo_token_hmac_secret_key
+  centrifugo_http_api_key:
+    file: ./secrets/centrifugo_http_api_key
+  centrifugo_proxy_secret:
+    file: ./secrets/centrifugo_proxy_secret

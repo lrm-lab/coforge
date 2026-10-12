@@ -1,0 +1,103 @@
+# Non-secret Centrifugo configuration for the coforge-production Compose project.
+# Secret values are supplied by Compose secrets; the RPC proxy secret reaches
+# the process through the CENTRIFUGO_VAR_RPC_PROXY_SECRET env export.
+# Endpoints point at the in-network web backend instead of the host.
+engine:
+  type: redis
+  redis:
+    # Placeholder only: the managed Redis address (with its username and password) comes from
+    # CENTRIFUGO_ENGINE_REDIS_ADDRESS, exported from the redis_url secret in docker-compose.yml.
+    address: "redis:6379"
+
+health:
+  enabled: true
+
+admin:
+  enabled: false
+
+log:
+  level: info
+
+# Largest single message received from a client (websocket.message_size_limit, default 64 KiB).
+# Two RPC replies from the Computer exceed the default: a Workspace File read (up to 1 MiB of
+# text, packages/daemon/src/agent-runtime/agent-workspace-files.ts) and the Code Agent inventory
+# (every runtime's model catalog, ~145 KB with six runtimes). Over the limit Centrifugo closes
+# the socket with "message too big", which the client treats as final and never reconnects, so
+# the Computer silently stops receiving Agent control. 2 MiB leaves room for the envelope.
+# Keep this the only `websocket:` key: a duplicate top-level key is a YAML error and Centrifugo
+# exits at start.
+websocket:
+  message_size_limit: 2097152
+
+client:
+  allowed_origins:
+    - https://coforge.cn
+  token:
+    jwks_public_endpoint: http://web:3000/api/jwks
+    audience: coforge-centrifugo
+    issuer: coforge
+  proxy:
+    connect:
+      enabled: true
+      endpoint: http://web:3000/api/internal/centrifugo-connect
+      timeout: 5s
+      http:
+        static_headers:
+          X-CoForge-Centrifugo-Proxy-Secret: ${CENTRIFUGO_VAR_RPC_PROXY_SECRET}
+
+channel:
+  proxy:
+    publish:
+      endpoint: http://web:3000/api/internal/centrifugo-agent-activity
+      timeout: 1s
+      binary_encoding: true
+      include_connection_meta: true
+      http:
+        static_headers:
+          X-CoForge-Centrifugo-Proxy-Secret: ${CENTRIFUGO_VAR_RPC_PROXY_SECRET}
+  namespaces:
+    - name: workspace
+    # `daemon:<workspace_id>:<computer_id>`: one Computer's control channel, subscribed server side
+    # by the connect proxy. Presence lists its connection, so deleting the Workspace disconnects
+    # exactly that client (apps/web/src/server/workspaces/deletion.server.ts). No join/leave.
+    - name: daemon
+      presence: true
+    - name: chat
+      history_size: 200
+      history_ttl: 5m
+      force_recovery: true
+    - name: agent
+      publish_proxy_enabled: true
+      publication_data_format: binary
+    # `presence:workspace:<workspace_id>`: who has a CoForge tab open in the Workspace
+    # (apps/web/src/features/workspaces/presence-channel.ts). Nothing is published here.
+    - name: presence
+      presence: true
+      join_leave: true
+      force_push_join_leave: true
+      allow_presence_for_subscriber: true
+
+rpc:
+  proxy:
+    endpoint: http://web:3000/api/internal/centrifugo
+    timeout: 5s
+    binary_encoding: true
+    include_connection_meta: true
+    http:
+      static_headers:
+        X-CoForge-Centrifugo-Proxy-Secret: ${CENTRIFUGO_VAR_RPC_PROXY_SECRET}
+  without_namespace:
+    proxy_enabled: true
+  namespaces:
+    # The namespace before the first colon in an RPC method name must be enabled here, or
+    # Centrifugo answers `104 method not found` itself and never proxies the call: the backend's
+    # own refusal is `404 unknown RPC method`, so the two are distinguishable in a log.
+    # `rpc-method-namespace.test.ts` keeps this list in step with the method vocabulary.
+    - name: agent
+      proxy_enabled: true
+    - name: computer
+      proxy_enabled: true
+    - name: workspace
+      proxy_enabled: true
+    - name: daemon
+      proxy_enabled: true

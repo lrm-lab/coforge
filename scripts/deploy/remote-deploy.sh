@@ -197,8 +197,18 @@ write_deploy_env() {
 	env_file_tmp="$(mktemp "${env_file}.XXXXXX")"
 	{
 			printf 'COFORGE_WEB_IMAGE=%s\n' "$web_image"
-		printf 'DATABASE_URL=postgresql://coforge:%s@postgres:5432/coforge\n' "$(cat "$secrets_dir/postgres_password")"
-		printf 'REDIS_URL=redis://:%s@redis:6379\n' "$(cat "$secrets_dir/redis_password")"
+		# A managed datastore supplies its whole URL as a secret file; the bundled
+		# postgres and redis services build it from their password files.
+		if [ -f "$secrets_dir/database_url" ]; then
+			printf 'DATABASE_URL=%s\n' "$(cat "$secrets_dir/database_url")"
+		else
+			printf 'DATABASE_URL=postgresql://coforge:%s@postgres:5432/coforge\n' "$(cat "$secrets_dir/postgres_password")"
+		fi
+		if [ -f "$secrets_dir/redis_url" ]; then
+			printf 'REDIS_URL=%s\n' "$(cat "$secrets_dir/redis_url")"
+		else
+			printf 'REDIS_URL=redis://:%s@redis:6379\n' "$(cat "$secrets_dir/redis_password")"
+		fi
 		printf 'COFORGE_CENTRIFUGO_API_URL=http://centrifugo:8000/api\n'
 		printf 'COFORGE_CENTRIFUGO_API_KEY=%s\n' "$(cat "$secrets_dir/centrifugo_http_api_key")"
 		printf 'COFORGE_CENTRIFUGO_PROXY_SECRET=%s\n' "$(cat "$secrets_dir/centrifugo_proxy_secret")"
@@ -252,8 +262,11 @@ restore_release_snapshot() {
 }
 
 compose_all_healthy() {
-	local service container
+	local service container services
+	services="$(compose config --services)" || return 1
 	for service in web centrifugo redis postgres; do
+		# Managed datastores (production) have no Compose service to check.
+		grep -qx "$service" <<<"$services" || continue
 		container="$(compose ps -q "$service")"
 		[ -n "$container" ] || return 1
 		[ "$(docker inspect --format '{{.State.Health.Status}}' "$container")" = healthy ] || return 1

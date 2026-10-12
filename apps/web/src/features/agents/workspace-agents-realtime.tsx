@@ -54,6 +54,37 @@ const WorkspaceIdContext = createContext<string | undefined>(undefined);
 const visiblePrivateAgentIdsKey = (workspaceId: string | undefined) =>
   ["agent-visibility", "visible-private-ids", workspaceId ?? null] as const;
 
+type TimeoutScheduler = {
+  set(callback: () => void, delayMs: number): number;
+  clear(timer: number): void;
+};
+
+/** Coalesces a burst of Agent writes into one active-query invalidation. The scheduler is injected
+ * so the debounce contract can be tested without mounting the app shell or a browser timer. */
+export function createAgentDirectoryInvalidator(
+  invalidate: () => void,
+  scheduler: TimeoutScheduler = {
+    set: (callback, delayMs) => window.setTimeout(callback, delayMs),
+    clear: (timer) => window.clearTimeout(timer),
+  },
+  delayMs = 500,
+) {
+  let timer: number | undefined;
+  return {
+    schedule() {
+      if (timer !== undefined) scheduler.clear(timer);
+      timer = scheduler.set(() => {
+        timer = undefined;
+        invalidate();
+      }, delayMs);
+    },
+    cancel() {
+      if (timer !== undefined) scheduler.clear(timer);
+      timer = undefined;
+    },
+  };
+}
+
 /** Realtime gap: a placeholder `LiveAgent` for an Agent visible to the viewer but
  * outside their own `listAgents` roster (e.g. an owner/admin viewing another member's private
  * Agent) — "inactive" until a live per-Agent publication says otherwise, matching `listAgents`'s
@@ -92,6 +123,17 @@ export function WorkspaceAgentsProvider({
   const getPrivateStatusToken = useServerFn(getAgentStatusSubscriptionTokenForAgent);
   const getVisiblePrivateIds = useServerFn(listVisiblePrivateAgentIds);
   const queryClient = useQueryClient();
+  const directoryInvalidator = useMemo(
+    () =>
+      createAgentDirectoryInvalidator(() => {
+        void queryClient.invalidateQueries({
+          queryKey: ["conversation", "mentionables"],
+          refetchType: "active",
+        });
+      }),
+    [queryClient],
+  );
+  useEffect(() => () => directoryInvalidator.cancel(), [directoryInvalidator]);
 
   // Realtime gap: ids of private Agents visible to this viewer beyond their own
   // `listAgents` roster (an owner/admin, or a private Agent's creator viewing it from outside
@@ -130,6 +172,7 @@ export function WorkspaceAgentsProvider({
           void queryClient.invalidateQueries({ queryKey: agentModelsQueryKey(workspaceId) });
         }
       : undefined,
+    onDirectoryChangedEvent: directoryInvalidator.schedule,
     getPrivateAgentStatusToken: workspaceId
       ? (agentId) => getPrivateStatusToken({ data: { agentId } })
       : undefined,

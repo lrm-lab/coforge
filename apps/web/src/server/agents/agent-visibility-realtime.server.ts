@@ -4,6 +4,27 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import { agentStatusChannel } from "#src/features/agents/agent-status-realtime";
 
+export type AgentDirectoryChange = "created" | "updated" | "deleted";
+
+/** Publishes an id-only Agent directory change on the existing Workspace status channel. */
+export function createAgentDirectoryChangedPublisher(
+  api: Pick<CentrifugoServerApi, "publishJson">,
+): (workspaceId: string, agentId: string, change: AgentDirectoryChange) => Promise<void> {
+  return (workspaceId, agentId, change) =>
+    api.publishJson(agentStatusChannel(workspaceId), {
+      type: "agent.changed.v1",
+      agentId,
+      kind: change,
+    });
+}
+
+export const publishAgentDirectoryChanged: (
+  workspaceId: string,
+  agentId: string,
+  change: AgentDirectoryChange,
+) => Promise<void> = (workspaceId, agentId, change) =>
+  createAgentDirectoryChangedPublisher(createCentrifugoServerApi())(workspaceId, agentId, change);
+
 /**
  * The `agent:visibility_changed` publisher. After a visibility change commits, every
  * already-connected browser needs to know: refetch its Agent list, drop the Agent if it can no

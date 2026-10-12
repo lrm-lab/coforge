@@ -4,6 +4,7 @@ import {
   resolveAgentProfileShow,
   resolveAgentProfileUpdate,
 } from "#src/server/agents/agent-profile.server";
+import { publishAgentDirectoryChanged } from "#src/server/agents/agent-visibility-realtime.server";
 
 /** `GET /api/agent/v1/profile[?target=<name>]` — `coforge profile show [<target>]`; defaults to
  * the calling Agent's own profile. `POST /api/agent/v1/profile` — `coforge profile update`,
@@ -23,6 +24,14 @@ export const Route = createFileRoute("/api/agent/v1/profile")({
           | { displayName?: unknown; description?: unknown }
           | undefined;
         const outcome = await resolveAgentProfileUpdate(db, principal, body ?? {});
+        if (outcome.status === 200) {
+          try {
+            await publishAgentDirectoryChanged(principal.workspaceId, principal.agentId, "updated");
+          } catch {
+            // The profile write is already committed; a missed directory signal is repaired by
+            // the next status-channel resubscribe or window-focus refresh.
+          }
+        }
         return Response.json(outcome.body, { status: outcome.status });
       },
     },

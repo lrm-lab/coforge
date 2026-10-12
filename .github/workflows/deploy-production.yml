@@ -1,0 +1,190 @@
+name: Deploy Web (production)
+
+# Promotes one Web image digest that is already healthy in staging. The
+# `production` GitHub Environment carries the required human reviewer, so the
+# deploy job waits for an approval of this exact digest
+# (docs/release/staging-to-production.md). Runtime secrets live on the host
+# under infra/production/secrets; this workflow ships only the Compose assets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Staging-healthy image, ghcr.io/lrm-lab/coforge/coforge-web@sha256:..."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPOSITORY: lrm-lab/coforge/coforge-web
+  REMOTE_ROOT: /home/deploy/coforge-production
+  IMAGE: ${{ inputs.image }}
+
+jobs:
+  candidate:
+    name: Verify the staging-healthy candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require an immutable digest of the Web image
+        run: |
+          if ! printf '%s' "$IMAGE" | grep -Eq "^ghcr\.io/${IMAGE_REPOSITORY}@sha256:[0-9a-f]{64}$"; then
+            echo "image must be ghcr.io/${IMAGE_REPOSITORY}@sha256:<64 hex>; got: $IMAGE" >&2
+            exit 1
+          fi
+
+      - name: Find a healthy staging deployment of this digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          records="$(mktemp -d)"
+          for run in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-staging.yml \
+            --status success --limit 50 --json databaseId --jq '.[].databaseId'); do
+            dir="$records/$run"
+            gh run download "$run" --repo "$GITHUB_REPOSITORY" --name deployment-records --dir "$dir" >/dev/null 2>&1 || continue
+            if jq -e --arg image "$IMAGE" \
+              'select(.artifact_identity == $image and .outcome == "healthy")' \
+              "$dir/deployment-records.jsonl" >/dev/null 2>&1; then
+              echo "healthy in staging: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/$run" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          done
+          echo "no healthy staging deployment of $IMAGE among the last 50 successful staging runs" >&2
+          exit 1
+
+  deploy:
+    name: Deploy and verify Web
+    needs: candidate
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+      DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+      REMOTE_ASSETS: ${{ github.workspace }}/assets.tgz
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          install_args: bun
+
+      - name: Prepare the SSH identity
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
+        run: |
+          if [ "$DEPLOY_SSH_USER" != "deploy" ]; then
+            echo "DEPLOY_SSH_USER must be the non-root deploy identity" >&2
+            exit 1
+          fi
+          ssh_dir="$(mktemp -d)"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
+          printf '%s %s\n' "$DEPLOY_SSH_HOST" "$DEPLOY_HOST_KEY" > "$ssh_dir/known_hosts"
+          chmod 700 "$ssh_dir" "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key"
+          echo "SSH_DIR=$ssh_dir" >> "$GITHUB_ENV"
+
+      - name: Log in to the image registry
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | \
+            ssh -i "$SSH_DIR/key" \
+              -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+              -o BatchMode=yes \
+              "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+              "docker login ghcr.io --username '${{ github.actor }}' --password-stdin"
+
+      - name: Copy deployment assets
+        run: |
+          tar -czf "$REMOTE_ASSETS" \
+            infra/production/docker-compose.yml \
+            infra/production/caddy/Caddyfile \
+            infra/production/centrifugo/config.yaml \
+            scripts/deploy/remote-deploy.sh
+          ssh -i "$SSH_DIR/key" \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "mkdir -p $REMOTE_ROOT && tar -xzf - -C $REMOTE_ROOT" < "$REMOTE_ASSETS"
+
+      - name: Deploy image and check health
+        run: |
+          ssh -i "$SSH_DIR/key" \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "bash -s -- \
+              --project coforge-production \
+              --image '$IMAGE' \
+              --compose-file '$REMOTE_ROOT/infra/production/docker-compose.yml' \
+              --secrets-dir '$REMOTE_ROOT/infra/production/secrets' \
+              --state-file '$REMOTE_ROOT/state.env' \
+              --web-health-url http://127.0.0.1:18080/health \
+              --public-health-url https://coforge.cn/health" \
+            < scripts/deploy/remote-deploy.sh > remote-report.env
+
+      - name: Log out of the image registry
+        if: always()
+        run: |
+          [ -n "${SSH_DIR:-}" ] || exit 0
+          ssh -i "$SSH_DIR/key" \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "docker logout ghcr.io" || true
+
+      - name: Check the remote outcome
+        run: |
+          cat remote-report.env >> "$GITHUB_STEP_SUMMARY"
+          outcome="$(sed -n 's/^outcome=//p' remote-report.env)"
+          if [ "$outcome" != "healthy" ]; then
+            echo "deployment outcome: ${outcome:-missing}" >&2
+            exit 1
+          fi
+
+      - name: Verify public readiness
+        run: curl --fail --silent --show-error --max-time 10 https://coforge.cn/health >/dev/null
+
+      - name: Verify port 80 stays unreachable
+        run: |
+          if curl --silent --max-time 10 "http://coforge.cn/" >/dev/null 2>&1; then
+            echo "port 80 answered; public plaintext must stay unreachable" >&2
+            exit 1
+          fi
+
+      - name: Check realtime endpoint responds
+        env:
+          REALTIME_URL: wss://coforge.cn/connection/websocket
+        run: |
+          bun -e '
+            const socket = new WebSocket(Bun.env.REALTIME_URL);
+            const fail = () => {
+              console.error("Realtime WebSocket handshake failed");
+              process.exit(1);
+            };
+            setTimeout(fail, 10000);
+            socket.onerror = fail;
+            socket.onclose = fail;
+            socket.onopen = () => {
+              console.log("Realtime WebSocket handshake succeeded");
+              socket.close();
+              process.exit(0);
+            };
+          '

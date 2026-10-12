@@ -22,7 +22,8 @@
 - `acs:alidns:*:${ACCOUNT_ID}:domain/coforge.cn`
 - `acs:cdn:*:${ACCOUNT_ID}:domain/files-staging.coforge.cn`、
   `.../domain/releases-staging.coforge.cn`、
-  `.../domain/images-staging.coforge.cn`（生产域名上线后各加一条）
+  `.../domain/images-staging.coforge.cn`、`.../domain/files.coforge.cn`、
+  `.../domain/images.coforge.cn`（每新增一个 CDN 域名加一条）
 
 不要附加 `oss:*`、`ram:*` 或其他 bucket/CDN 域名以外的权限；这个 AccessKey 与
 [`aliyun-oss-cdn/`](../aliyun-oss-cdn/README.md) 里 provisioning 用的 `${OPERATOR}` 是两个独立身份，互不

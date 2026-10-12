@@ -13,7 +13,7 @@ import {
   loadActionCardStates,
 } from "./action-cards.functions";
 import { CreateChannelDialog } from "./create-channel-dialog";
-import { ChannelMembersDialog } from "./channel-members-dialog";
+import { ChannelAddMembersDialog } from "./channel-add-members-dialog";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import { createAgent } from "#src/features/agents/agents.functions";
 import {
@@ -284,16 +284,13 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         />
       )}
       {dialogOpen && view.kind === "channel:add_member" && (
-        <ChannelMembersDialog
+        <ChannelAddMembersDialog
           channelId={view.channel.id}
+          channelName={view.channel.displayName}
           open
           onOpenChange={setDialogOpen}
-          preselected={{
-            userIds: view.humans.map((human) => human.id),
-            agentIds: view.agents.map((agent) => agent.id),
-          }}
+          proposed={{ humans: view.humans, agents: view.agents }}
           commit={{
-            messageId: view.messageId,
             submit: (input) =>
               commitAddMember({
                 data: { messageId: view.messageId, channelId: view.channel.id, ...input },
