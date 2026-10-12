@@ -65,6 +65,11 @@ export type AgentRequestForwarderPorts = Readonly<{
   authorizedAgent(context: string, agentApiKey: string | undefined): string;
 }>;
 
+type ForwardingTransport = AgentRequestForwarderPorts["transport"];
+
+/** The refusal of a forwarded request whose transport is not connected. */
+const NOT_CONNECTED = "daemon connection is not connected";
+
 /**
  * The Agent's local requests that the daemon only authorizes and forwards over the Agent HTTPS
  * transport, keeping no state of its own: Workspace and user info, GitHub credentials, the
@@ -78,14 +83,29 @@ export class AgentRequestForwarder {
     this.#ports = ports;
   }
 
+  /**
+   * The current transport's `name` call, bound to that transport, or `refusal` when it cannot make
+   * that call. The transport is read once, here: a restart replaces it between requests.
+   */
+  #transportCall<K extends keyof ForwardingTransport>(
+    name: K,
+    refusal: string,
+  ): NonNullable<ForwardingTransport[K]> {
+    const transport = this.#ports.transport;
+    const call = transport[name];
+    if (!call) throw new Error(refusal);
+    return (call as (...args: never[]) => unknown).bind(transport) as NonNullable<
+      ForwardingTransport[K]
+    >;
+  }
+
   async workspaceInfo(
     context: string,
     request: WorkspaceInfoRequest,
     agentApiKey: string,
   ): Promise<WorkspaceInfoResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.workspaceInfo) throw new Error("daemon connection is not connected");
-    return this.#ports.transport.workspaceInfo(request, agentApiKey);
+    return this.#transportCall("workspaceInfo", NOT_CONNECTED)(request, agentApiKey);
   }
 
   async githubCredential(
@@ -94,9 +114,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<GitHubCredentialResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.githubCredential)
-      throw new Error("GitHub credential endpoint is not configured");
-    return this.#ports.transport.githubCredential(request, agentApiKey);
+    return this.#transportCall("githubCredential", "GitHub credential endpoint is not configured")(
+      request,
+      agentApiKey,
+    );
   }
 
   async githubCommitTrailers(
@@ -105,9 +126,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<GitHubCommitTrailersResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.githubCommitTrailers)
-      throw new Error("GitHub commit trailers endpoint is not configured");
-    return this.#ports.transport.githubCommitTrailers(request, agentApiKey);
+    return this.#transportCall(
+      "githubCommitTrailers",
+      "GitHub commit trailers endpoint is not configured",
+    )(request, agentApiKey);
   }
 
   async manualGet(
@@ -116,9 +138,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<AgentManualGetResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.manualGet)
-      throw new Error("Agent Manual endpoint is not configured");
-    return this.#ports.transport.manualGet(request, agentApiKey);
+    return this.#transportCall("manualGet", "Agent Manual endpoint is not configured")(
+      request,
+      agentApiKey,
+    );
   }
 
   async manualSearch(
@@ -127,9 +150,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<AgentManualSearchResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.manualSearch)
-      throw new Error("Agent Manual endpoint is not configured");
-    return this.#ports.transport.manualSearch(request, agentApiKey);
+    return this.#transportCall("manualSearch", "Agent Manual endpoint is not configured")(
+      request,
+      agentApiKey,
+    );
   }
 
   async userInfo(
@@ -138,9 +162,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<AgentUserInfoResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.userInfo)
-      throw new Error("Agent user info endpoint is not configured");
-    return this.#ports.transport.userInfo(request, agentApiKey);
+    return this.#transportCall("userInfo", "Agent user info endpoint is not configured")(
+      request,
+      agentApiKey,
+    );
   }
 
   async profileShow(
@@ -149,9 +174,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<AgentProfileShowResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.profileShow)
-      throw new Error("Agent profile endpoint is not configured");
-    return this.#ports.transport.profileShow(request, agentApiKey);
+    return this.#transportCall("profileShow", "Agent profile endpoint is not configured")(
+      request,
+      agentApiKey,
+    );
   }
 
   async profileUpdate(
@@ -160,9 +186,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<AgentProfileUpdateResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.profileUpdate)
-      throw new Error("Agent profile endpoint is not configured");
-    return this.#ports.transport.profileUpdate(request, agentApiKey);
+    return this.#transportCall("profileUpdate", "Agent profile endpoint is not configured")(
+      request,
+      agentApiKey,
+    );
   }
 
   async agentOpenviking(
@@ -171,9 +198,7 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<unknown> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentOpenviking)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentOpenviking(command, agentApiKey);
+    return this.#transportCall("agentOpenviking", NOT_CONNECTED)(command, agentApiKey);
   }
 
   async mentionPending(
@@ -182,9 +207,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<AgentMentionPendingResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.mentionPending)
-      throw new Error("Agent mention actions endpoint is not configured");
-    return this.#ports.transport.mentionPending(agentApiKey);
+    return this.#transportCall(
+      "mentionPending",
+      "Agent mention actions endpoint is not configured",
+    )(agentApiKey);
   }
 
   async mentionExecute(
@@ -193,9 +219,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<AgentMentionExecuteResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.mentionExecute)
-      throw new Error("Agent mention actions endpoint is not configured");
-    return this.#ports.transport.mentionExecute(request, agentApiKey);
+    return this.#transportCall(
+      "mentionExecute",
+      "Agent mention actions endpoint is not configured",
+    )(request, agentApiKey);
   }
 
   async mentionDelivery(
@@ -204,9 +231,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<AgentMentionDeliveryResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.mentionDelivery)
-      throw new Error("Agent mention delivery endpoint is not configured");
-    return this.#ports.transport.mentionDelivery(request, agentApiKey);
+    return this.#transportCall(
+      "mentionDelivery",
+      "Agent mention delivery endpoint is not configured",
+    )(request, agentApiKey);
   }
 
   /** Dispatches a channel lifecycle/roster command to the cloud route `agentChannel` maps it
@@ -217,8 +245,7 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<Record<string, unknown>> {
     const agentId = this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentChannel) throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentChannel(
+    return this.#transportCall("agentChannel", NOT_CONNECTED)(
       {
         ...command,
         workspaceId: this.#ports.connection.workspaceId,
@@ -239,9 +266,7 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<AgentActionPrepareResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentActionPrepare)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentActionPrepare(request, agentApiKey);
+    return this.#transportCall("agentActionPrepare", NOT_CONNECTED)(request, agentApiKey);
   }
 
   async agentWeeklyReport(
@@ -250,9 +275,7 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<WeeklyReportResponse> {
     const agentId = this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentWeeklyReport)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentWeeklyReport(
+    return this.#transportCall("agentWeeklyReport", NOT_CONNECTED)(
       {
         ...command,
         idempotencyKey: crypto.randomUUID(),
@@ -272,9 +295,7 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<import("#src/connection/weekly-report-collect").WeeklyReportCollectResult> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentWeeklyReportCollect)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentWeeklyReportCollect(command, agentApiKey);
+    return this.#transportCall("agentWeeklyReportCollect", NOT_CONNECTED)(command, agentApiKey);
   }
 
   /** Forwards personal key-point extraction write-back over Agent HTTPS. */
@@ -284,9 +305,7 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<import("#src/connection/weekly-report-key-points").WeeklyReportKeyPointsResult> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentWeeklyReportKeyPoints)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentWeeklyReportKeyPoints(command, agentApiKey);
+    return this.#transportCall("agentWeeklyReportKeyPoints", NOT_CONNECTED)(command, agentApiKey);
   }
 
   async agentAttachment(
@@ -295,9 +314,7 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentAttachment)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentAttachment(attachmentId, agentApiKey);
+    return this.#transportCall("agentAttachment", NOT_CONNECTED)(attachmentId, agentApiKey);
   }
 
   async agentAttachmentUpload(
@@ -306,9 +323,7 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentAttachmentUpload)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentAttachmentUpload(request, agentApiKey);
+    return this.#transportCall("agentAttachmentUpload", NOT_CONNECTED)(request, agentApiKey);
   }
 
   async agentAttachmentUploadSessionCreate(
@@ -317,9 +332,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentAttachmentUploadSessionCreate)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentAttachmentUploadSessionCreate(body, agentApiKey);
+    return this.#transportCall("agentAttachmentUploadSessionCreate", NOT_CONNECTED)(
+      body,
+      agentApiKey,
+    );
   }
 
   async agentAttachmentUploadSessionComplete(
@@ -328,9 +344,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentAttachmentUploadSessionComplete)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentAttachmentUploadSessionComplete(uploadId, agentApiKey);
+    return this.#transportCall("agentAttachmentUploadSessionComplete", NOT_CONNECTED)(
+      uploadId,
+      agentApiKey,
+    );
   }
 
   async agentAttachmentUploadSessionCancel(
@@ -339,9 +356,10 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentAttachmentUploadSessionCancel)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentAttachmentUploadSessionCancel(uploadId, agentApiKey);
+    return this.#transportCall("agentAttachmentUploadSessionCancel", NOT_CONNECTED)(
+      uploadId,
+      agentApiKey,
+    );
   }
 
   async agentAttachmentUploadSessionGet(
@@ -350,8 +368,9 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);
-    if (!this.#ports.transport.agentAttachmentUploadSessionGet)
-      throw new Error("daemon connection is not connected");
-    return this.#ports.transport.agentAttachmentUploadSessionGet(uploadId, agentApiKey);
+    return this.#transportCall("agentAttachmentUploadSessionGet", NOT_CONNECTED)(
+      uploadId,
+      agentApiKey,
+    );
   }
 }
