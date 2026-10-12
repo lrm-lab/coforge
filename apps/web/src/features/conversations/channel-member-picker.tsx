@@ -24,13 +24,19 @@ export type ChannelCandidate = {
   avatarUrl?: string | null;
 };
 
+/** The one place the two id spaces are flattened into a candidate key; every producer and every
+ * reader of a selection goes through it, so a chip, its row and `pickedMemberIds` cannot drift. */
+export function candidateKey(kind: "user" | "agent", id: string) {
+  return `${kind}:${id}`;
+}
+
 /** Agents first: adding an Agent to a channel is the common case, people the occasional one. */
 export function buildChannelCandidates(
   candidates: ChannelMembers["candidates"],
 ): ChannelCandidate[] {
   return [
     ...candidates.agents.map((agent) => ({
-      key: `agent:${agent.id}`,
+      key: candidateKey("agent", agent.id),
       kind: "agent" as const,
       id: agent.id,
       displayName: agent.displayName,
@@ -39,7 +45,7 @@ export function buildChannelCandidates(
       avatarUrl: agent.avatarUrl,
     })),
     ...candidates.humans.map((human) => ({
-      key: `user:${human.id}`,
+      key: candidateKey("user", human.id),
       kind: "user" as const,
       id: human.id,
       displayName: human.displayName,

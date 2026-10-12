@@ -11,6 +11,7 @@ import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import {
   buildChannelCandidates,
+  candidateKey,
   candidateSearchTerm,
   ChannelCandidateChips,
   ChannelCandidateGroups,
@@ -26,8 +27,8 @@ type ProposedMember = { id: string; displayName: string };
 
 function proposedKeys(proposed: { humans: ProposedMember[]; agents: ProposedMember[] }) {
   return [
-    ...proposed.agents.map((agent) => `agent:${agent.id}`),
-    ...proposed.humans.map((human) => `user:${human.id}`),
+    ...proposed.agents.map((agent) => candidateKey("agent", agent.id)),
+    ...proposed.humans.map((human) => candidateKey("user", human.id)),
   ];
 }
 
@@ -39,14 +40,14 @@ function proposedCandidates(proposed: {
 }): ChannelCandidate[] {
   return [
     ...proposed.agents.map((agent) => ({
-      key: `agent:${agent.id}`,
+      key: candidateKey("agent", agent.id),
       kind: "agent" as const,
       id: agent.id,
       displayName: agent.displayName,
       search: { kind: "agent" as const, displayName: agent.displayName, name: agent.displayName },
     })),
     ...proposed.humans.map((human) => ({
-      key: `user:${human.id}`,
+      key: candidateKey("user", human.id),
       kind: "user" as const,
       id: human.id,
       displayName: human.displayName,
@@ -204,33 +205,66 @@ export function ChannelAddMembersDialog({
                   />
                 </div>
               )}
-              <div className="flex shrink-0 flex-col gap-3 border-t border-secondary px-6 py-4">
-                {error && (
-                  <p role="alert" className="text-sm text-error-primary">
-                    {error}
-                  </p>
-                )}
-                <div className="flex justify-end gap-3">
-                  <Button color="secondary" isDisabled={submitting} onPress={close}>
-                    {m.channel_members_cancel()}
-                  </Button>
-                  <Button
-                    iconLeading={Plus}
-                    isDisabled={submitting || selected.size === 0}
-                    isLoading={submitting}
-                    showTextWhileLoading
-                    onPress={() => void submit()}
-                  >
-                    {submitting
-                      ? m.channel_members_adding()
-                      : m.channel_members_add_selected({ count: selected.size })}
-                  </Button>
-                </div>
-              </div>
+              <ChannelAddMembersActions
+                canAdd={canAdd}
+                submitting={submitting}
+                count={selected.size}
+                error={error}
+                onCancel={close}
+                onSubmit={() => void submit()}
+              />
             </>
           )}
         </Dialog>
       </Modal>
     </ModalOverlay>
+  );
+}
+
+/**
+ * The dialog's actions. Exported so a test can pin the rule the server also enforces: without the
+ * `add_member` capability there is no Add button at all — the explanation above it is the whole
+ * answer, and a button that can only earn an `ACCESS_DENIED` is not an offer. Cancel stays, so a
+ * viewer who cannot add is not trapped in the dialog.
+ */
+export function ChannelAddMembersActions({
+  canAdd,
+  submitting,
+  count,
+  error,
+  onCancel,
+  onSubmit,
+}: {
+  canAdd: boolean;
+  submitting: boolean;
+  count: number;
+  error: string;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 flex-col gap-3 border-t border-secondary px-6 py-4">
+      {error && (
+        <p role="alert" className="text-sm text-error-primary">
+          {error}
+        </p>
+      )}
+      <div className="flex justify-end gap-3">
+        <Button color="secondary" isDisabled={submitting} onPress={onCancel}>
+          {m.channel_members_cancel()}
+        </Button>
+        {canAdd && (
+          <Button
+            iconLeading={Plus}
+            isDisabled={submitting || count === 0}
+            isLoading={submitting}
+            showTextWhileLoading
+            onPress={onSubmit}
+          >
+            {submitting ? m.channel_members_adding() : m.channel_members_add_selected({ count })}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
