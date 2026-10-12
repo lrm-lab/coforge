@@ -22,12 +22,16 @@
 set -euo pipefail
 
 usage() {
-	printf 'usage: %s --image IMAGE --compose-file FILE --secrets-dir DIR --state-file FILE --web-health-url URL --public-health-url URL [--project NAME] [--timeout SECONDS]\n' "$0" >&2
+	printf 'usage: %s --image IMAGE --compose-file FILE --secrets-dir DIR --state-file FILE --web-health-url URL --public-health-url URL [--project NAME] [--timeout SECONDS] [--public-health-timeout SECONDS]\n' "$0" >&2
 	exit 2
 }
 
 project=coforge-staging
 timeout=120
+# How long the public HTTPS check keeps trying once the stack is healthy. A first deployment has
+# no certificate when Caddy starts: it obtains one after it is up, and until then a TLS handshake
+# fails with an internal-error alert, so one attempt reads as a broken release.
+public_health_timeout=180
 image=
 compose_file=
 secrets_dir=
@@ -43,6 +47,10 @@ while [ "$#" -gt 0 ]; do
 		;;
 	--timeout)
 		timeout="${2:?}"
+		shift 2
+		;;
+	--public-health-timeout)
+		public_health_timeout="${2:?}"
 		shift 2
 		;;
 	--image)
@@ -291,6 +299,21 @@ public_health() {
 	curl --fail --silent --show-error --max-time 10 "$public_health_url" >/dev/null
 }
 
+# The public check after a candidate starts: retried until `public_health_timeout`, because Caddy
+# may still be obtaining the certificate (always so on a first deployment). Only the last
+# attempt's error is shown.
+wait_for_public_health() {
+	local deadline=$((SECONDS + public_health_timeout))
+	until curl --fail --silent --max-time 10 "$public_health_url" >/dev/null 2>&1; do
+		if [ "$SECONDS" -ge "$deadline" ]; then
+			public_health
+			return
+		fi
+		sleep 3
+	done
+	return 0
+}
+
 verify_running_digest() {
 	local web_container
 	web_container="$(compose ps -q web)"
@@ -471,7 +494,7 @@ if ! verify_running_digest; then
 	fail_deployment "failed: running container digest mismatch"
 fi
 
-if ! public_health; then
+if ! wait_for_public_health; then
 	fail_deployment "failed: public readiness failed"
 fi
 

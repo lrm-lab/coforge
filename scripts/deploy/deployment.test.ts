@@ -980,6 +980,132 @@ exit 0
   });
 });
 
+describe("public readiness after the candidate starts", () => {
+  // A first deployment has no certificate when Caddy starts: until it obtains one, the public
+  // HTTPS check fails its TLS handshake (`curl: (35) ... tlsv1 alert internal error`). Production's
+  // first deployment was rolled back for exactly that while every container was healthy.
+  async function deployWithPublicCurl(curlScript: string, extraArgs: string[] = []) {
+    const root = await mkdtemp(join(tmpdir(), "coforge-deploy-public-health-"));
+    try {
+      await mkdir(join(root, "bin"));
+      await mkdir(join(root, "secrets"));
+      await mkdir(join(root, "centrifugo"));
+      await Bun.write(join(root, "centrifugo/config.yaml"), "client: {}\n");
+      await mkdir(join(root, "caddy"));
+      await Bun.write(join(root, "caddy/Caddyfile"), "staging.example.test {\n}\n");
+      await Bun.write(join(root, "docker-compose.yml"), "services: {}\n");
+      for (const name of requiredSecretNames) {
+        await Bun.write(join(root, "secrets", name), "fixture-private-value");
+      }
+      const previous = `coforge/web@sha256:${"c".repeat(64)}`;
+      await Bun.write(
+        join(root, "state.env"),
+        `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`,
+      );
+      await writeFile(
+        join(root, "bin/docker"),
+        `#!/bin/bash
+if [[ "$1" = compose ]]; then
+  shift 5
+  case "$1" in
+    ps) echo "container-$3" ;;
+  esac
+  exit 0
+elif [[ "$1" = inspect ]]; then
+  if [[ "$*" == *Config.Image* ]]; then
+    echo "$IMAGE_REF"
+  elif [[ "$*" == *Health.Status* ]]; then
+    echo healthy
+  fi
+fi
+exit 0
+`,
+        { mode: 0o700 },
+      );
+      await writeFile(join(root, "bin/curl"), curlScript, { mode: 0o700 });
+      const proc = Bun.spawn(
+        [
+          "bash",
+          new URL("./remote-deploy.sh", import.meta.url).pathname,
+          "--image",
+          registryImage,
+          "--compose-file",
+          join(root, "docker-compose.yml"),
+          "--secrets-dir",
+          join(root, "secrets"),
+          "--state-file",
+          join(root, "state.env"),
+          "--web-health-url",
+          "http://127.0.0.1/health",
+          "--public-health-url",
+          "https://example.test/health",
+          ...extraArgs,
+        ],
+        {
+          env: {
+            ...Bun.env,
+            PATH: `${join(root, "bin")}:${Bun.env.PATH}`,
+            FIXTURE_ROOT: root,
+            IMAGE_REF: registryImage,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      const publicCalls = (await Bun.file(join(root, "public-calls")).exists())
+        ? (await Bun.file(join(root, "public-calls")).text()).trim().split("\n").length
+        : 0;
+      return { stdout, stderr, code, publicCalls };
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+
+  test("a public check that fails while Caddy obtains its certificate is retried until it passes", async () => {
+    const { stdout, stderr, code, publicCalls } = await deployWithPublicCurl(`#!/bin/bash
+if [[ "$*" = *https://example.test/health* ]]; then
+  echo call >> "$FIXTURE_ROOT/public-calls"
+  if [[ $(wc -l < "$FIXTURE_ROOT/public-calls") -le 2 ]]; then
+    echo "curl: (35) TLS connect error: error:0A000438:SSL routines::tlsv1 alert internal error" >&2
+    exit 35
+  fi
+fi
+exit 0
+`);
+    expect(code, stderr).toBe(0);
+    expect(parseRemoteOutputs(stdout).outcome).toBe("healthy");
+    expect(publicCalls).toBe(3);
+    // Two failed attempts, 3 s apart each.
+  }, 20_000);
+
+  test("a public check that never passes still rolls the candidate back once its wait runs out", async () => {
+    const { stdout, stderr, code, publicCalls } = await deployWithPublicCurl(
+      `#!/bin/bash
+if [[ "$*" = *http_code* ]]; then echo 200; exit 0; fi
+if [[ "$*" = *https://example.test/health* ]]; then
+  echo call >> "$FIXTURE_ROOT/public-calls"
+  echo "curl: (35) TLS connect error" >&2
+  exit 35
+fi
+exit 0
+`,
+      ["--public-health-timeout", "1"],
+    );
+    expect(code, stderr).toBe(0);
+    const outputs = parseRemoteOutputs(stdout);
+    expect(outputs.outcome).toBe("rolled_back");
+    expect(outputs.reason ?? stdout).toContain("public readiness failed");
+    expect(publicCalls).toBeGreaterThan(1);
+    // The last attempt's own error is what the log shows.
+    expect(stderr).toContain("curl: (35) TLS connect error");
+  });
+});
+
 test("Caddy and Centrifugo are recreated when their bind-mounted configuration changes", async () => {
   // Compose does not track bind-mount contents; each service reads the hash
   // remote-deploy.sh writes, so a changed file changes the service definition.
