@@ -276,6 +276,89 @@ test("prepare rejects an unknown handle with a field-scoped INVALID_HANDLE error
   }
 });
 
+test("prepare resolves every handle kind by UUID as well as by name, and names the kind it could not find", async () => {
+  const ctx = await setup();
+  try {
+    const added = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}`,
+      action: {
+        type: "channel:add_member",
+        channel: ctx.hub.id,
+        humans: [ctx.bob.id],
+        agents: [ctx.existingAgent.id],
+      },
+    });
+    expect(
+      (await ctx.db.actionCard.findUniqueOrThrow({ where: { messageId: added.messageId } }))
+        .payload,
+    ).toEqual({
+      type: "channel:add_member",
+      channelId: ctx.hub.id,
+      humanIds: [ctx.bob.id],
+      agentIds: [ctx.existingAgent.id],
+    });
+    const placed = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}`,
+      action: {
+        type: "agent:create",
+        name: `uuidbot-${ctx.suffix}`,
+        description: "placed by id",
+        requiredComputer: ctx.computer.id,
+      },
+    });
+    expect(
+      (await ctx.db.actionCard.findUniqueOrThrow({ where: { messageId: placed.messageId } }))
+        .payload,
+    ).toMatchObject({ requiredComputerId: ctx.computer.id });
+
+    const missingChannel = crypto.randomUUID();
+    await expectActionCardError(
+      ctx.actionCards.prepare(ctx.principal, {
+        target: `#${ctx.hub.channelName}`,
+        action: { type: "channel:add_member", channel: missingChannel, humans: [ctx.bob.id] },
+      }),
+      {
+        code: "INVALID_HANDLE",
+        field: "action.channel",
+        message: `unknown channel handle: ${missingChannel}`,
+      },
+    );
+    await expectActionCardError(
+      ctx.actionCards.prepare(ctx.principal, {
+        target: `#${ctx.hub.channelName}`,
+        action: {
+          type: "channel:add_member",
+          channel: ctx.hub.channelName!,
+          agents: ["@no-such-agent"],
+        },
+      }),
+      {
+        code: "INVALID_HANDLE",
+        field: "action.agents[0]",
+        message: "unknown agent handle: @no-such-agent",
+      },
+    );
+    await expectActionCardError(
+      ctx.actionCards.prepare(ctx.principal, {
+        target: `#${ctx.hub.channelName}`,
+        action: {
+          type: "agent:create",
+          name: `nowhere-${ctx.suffix}`,
+          description: "no such machine",
+          requiredComputer: "no-such-computer",
+        },
+      }),
+      {
+        code: "INVALID_HANDLE",
+        field: "action.requiredComputer",
+        message: "unknown computer handle: no-such-computer",
+      },
+    );
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("prepare answers a private Agent as channel management does: not visible, or private", async () => {
   const ctx = await setup();
   try {

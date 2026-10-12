@@ -103,6 +103,15 @@ function bareHandle(value: string): string {
   return value.startsWith("@") || value.startsWith("#") ? value.slice(1) : value;
 }
 
+/** A handle an action names that resolves to nothing in the Workspace (422, `INVALID_HANDLE`). */
+function unknownHandle(
+  kind: "human" | "agent" | "channel" | "computer",
+  value: string,
+  field: string,
+) {
+  return new ActionCardError(422, "INVALID_HANDLE", `unknown ${kind} handle: ${value}`, { field });
+}
+
 function ensureAt(value: string): string {
   return value.startsWith("@") ? value : `@${value}`;
 }
@@ -534,12 +543,8 @@ export class ActionCards {
     messageId: string,
     computerId: string,
   ): Promise<void> {
-    await this.loadPendingCard(workspaceId, actorUserId, messageId, "agent:create");
+    const card = await this.loadPendingCard(workspaceId, actorUserId, messageId, "agent:create");
     // `requiredComputer` is a placement contract, not a UI hint: never fall back to another Computer.
-    const card = await this.db.actionCard.findUniqueOrThrow({
-      where: { messageId },
-      select: { payload: true },
-    });
     const required = (card.payload as { requiredComputerId?: string }).requiredComputerId;
     if (required && required !== computerId) throw new AppError("INVALID_INPUT");
   }
@@ -714,17 +719,14 @@ export class ActionCards {
 
   private async resolveHuman(workspaceId: string, value: string, field: string): Promise<string> {
     const bare = bareHandle(value);
-    const user = UUID_PATTERN.test(bare)
-      ? await this.db.user.findFirst({
-          where: { id: bare, memberships: { some: { workspaceId } } },
-          select: { id: true },
-        })
-      : await this.db.user.findFirst({
-          where: { username: bare, memberships: { some: { workspaceId } } },
-          select: { id: true },
-        });
-    if (!user)
-      throw new ActionCardError(422, "INVALID_HANDLE", `unknown human handle: ${value}`, { field });
+    const user = await this.db.user.findFirst({
+      where: {
+        ...(UUID_PATTERN.test(bare) ? { id: bare } : { username: bare }),
+        memberships: { some: { workspaceId } },
+      },
+      select: { id: true },
+    });
+    if (!user) throw unknownHandle("human", value, field);
     return user.id;
   }
 
@@ -735,17 +737,15 @@ export class ActionCards {
     field: string,
   ): Promise<string> {
     const bare = bareHandle(value);
-    const agent = UUID_PATTERN.test(bare)
-      ? await this.db.agent.findFirst({
-          where: { id: bare, workspaceId, ...ACTIVE_AGENT_WHERE },
-          select: { id: true, ownerId: true, visibility: true },
-        })
-      : await this.db.agent.findFirst({
-          where: { name: bare, workspaceId, ...ACTIVE_AGENT_WHERE },
-          select: { id: true, ownerId: true, visibility: true },
-        });
-    if (!agent)
-      throw new ActionCardError(422, "INVALID_HANDLE", `unknown agent handle: ${value}`, { field });
+    const agent = await this.db.agent.findFirst({
+      where: {
+        ...(UUID_PATTERN.test(bare) ? { id: bare } : { name: bare }),
+        workspaceId,
+        ...ACTIVE_AGENT_WHERE,
+      },
+      select: { id: true, ownerId: true, visibility: true },
+    });
+    if (!agent) throw unknownHandle("agent", value, field);
     // Every Agent an action card names becomes a channel member, and a private Agent never is one.
     // As in channel management (and `user info`/`profile show`), a private Agent the caller cannot
     // see is "not visible", and one it can see is refused with the reason; either way its display
@@ -766,24 +766,18 @@ export class ActionCards {
 
   private async resolveChannel(workspaceId: string, value: string, field: string): Promise<string> {
     const bare = bareHandle(value);
-    const channel = UUID_PATTERN.test(bare)
-      ? await this.db.conversation.findFirst({
-          where: {
-            id: bare,
-            workspaceId,
-            channelName: { not: null },
-            ...VISIBLE_CONVERSATION_WHERE,
-          },
-          select: { id: true },
-        })
-      : await this.db.conversation.findFirst({
-          where: { workspaceId, channelName: bare, ...VISIBLE_CONVERSATION_WHERE },
-          select: { id: true },
-        });
-    if (!channel)
-      throw new ActionCardError(422, "INVALID_HANDLE", `unknown channel handle: ${value}`, {
-        field,
-      });
+    const channel = await this.db.conversation.findFirst({
+      where: {
+        // By id it must still be a channel; by name `channelName` says so itself.
+        ...(UUID_PATTERN.test(bare)
+          ? { id: bare, channelName: { not: null } }
+          : { channelName: bare }),
+        workspaceId,
+        ...VISIBLE_CONVERSATION_WHERE,
+      },
+      select: { id: true },
+    });
+    if (!channel) throw unknownHandle("channel", value, field);
     return channel.id;
   }
 
@@ -793,22 +787,16 @@ export class ActionCards {
     field: string,
   ): Promise<string> {
     const bare = bareHandle(value);
-    const link = UUID_PATTERN.test(bare)
-      ? await this.db.workspaceComputer.findFirst({
-          where: { workspaceId, computerId: bare },
-          select: { computerId: true },
-        })
-      : await this.db.workspaceComputer.findFirst({
-          where: {
-            workspaceId,
-            computer: { OR: [{ name: bare }, { displayName: bare }] },
-          },
-          select: { computerId: true },
-        });
-    if (!link)
-      throw new ActionCardError(422, "INVALID_HANDLE", `unknown computer handle: ${value}`, {
-        field,
-      });
+    const link = await this.db.workspaceComputer.findFirst({
+      where: {
+        workspaceId,
+        ...(UUID_PATTERN.test(bare)
+          ? { computerId: bare }
+          : { computer: { OR: [{ name: bare }, { displayName: bare }] } }),
+      },
+      select: { computerId: true },
+    });
+    if (!link) throw unknownHandle("computer", value, field);
     return link.computerId;
   }
 }
