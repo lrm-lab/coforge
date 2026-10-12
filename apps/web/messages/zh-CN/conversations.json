@@ -2,7 +2,7 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "conversation_back_to_list": "返回会话列表",
   "conversation_loading": "正在加载消息…",
-  "channels_title": "频道",
+  "channels_title": "群聊",
   "channel_create": "创建频道",
   "channel_start_group": "发起群聊",
   "channel_group_selected_count": "已选 {count} 人",
@@ -477,7 +477,7 @@
   "conversation_unsave": "从收藏中移除",
   "conversation_saved_nav": "已保存",
   "conversation_pinned_section": "已置顶",
-  "conversation_pinned_empty_hint": "将频道或私信拖到这里置顶",
+  "conversation_pinned_empty_hint": "将群聊或私聊拖到这里置顶",
   "conversation_saved_count": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],
