@@ -28,6 +28,7 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import AnimatedGradient from "#src/components/spell/animated-gradient";
 import { heroGradient, useWebGl2 } from "#src/features/landing/landing-brand-panel";
+import { AvatarPicker } from "#src/features/profiles/avatar-picker";
 import profileBanner from "#src/features/profiles/profile-banner.webp?inline";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -127,6 +128,9 @@ interface SettingsContentProps {
   onProfileSave: (profile: { displayName: string; description: string }) => Promise<void>;
   onAvatarUpload: (file: File) => Promise<void>;
   onAvatarRemove: () => Promise<void>;
+  /** Whether Settings → Account shows the platform avatar picker instead of the profile. */
+  avatarPicker: boolean;
+  onAvatarPickerChange: (open: boolean) => void;
   onLocaleChange: (locale: Locale) => void;
   onThemeChange: (theme: Theme) => void;
   onRailLabelsChange: (show: boolean) => void;
@@ -355,6 +359,8 @@ function AccountSettings({
   onProfileSave,
   onAvatarUpload,
   onAvatarRemove,
+  avatarPicker,
+  onAvatarPickerChange,
 }: SettingsContentProps) {
   const hydrated = useHydrated();
   const gradientReady = useWebGl2();
@@ -457,6 +463,20 @@ function AccountSettings({
       : (pendingAvatarPreview ?? profile.avatarUrl)
     : profile.avatarUrl;
 
+  if (avatarPicker) {
+    return (
+      <AvatarPicker
+        name={profile.name}
+        currentAvatarUrl={profile.avatarUrl}
+        onSave={async (file) => {
+          await onAvatarUpload(file);
+          setSaveSuccess(true);
+        }}
+        onClose={() => onAvatarPickerChange(false)}
+      />
+    );
+  }
+
   return (
     <div className="w-full pb-8">
       <section>
@@ -493,6 +513,15 @@ function AccountSettings({
                 <Button
                   type="button"
                   color="link-color"
+                  size="sm"
+                  isDisabled={saving}
+                  onPress={() => onAvatarPickerChange(true)}
+                >
+                  {m.settings_avatar_choose()}
+                </Button>
+                <Button
+                  type="button"
+                  color="link-gray"
                   size="sm"
                   isDisabled={saving}
                   onPress={() => avatarInputRef.current?.click()}
