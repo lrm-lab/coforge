@@ -1,6 +1,7 @@
 import handler from "@tanstack/react-start/server-entry";
 
 import { paraglideMiddleware } from "#src/paraglide/server";
+import { publicOrigin } from "#src/server/http/public-origin.server";
 import { assertStartupConfig } from "#src/server/startup-config.server";
 import { ensureWorkspaceMemoryLifecycle } from "#src/server/workspace-memory/lifecycle.server";
 import { startWeeklyReportScheduleTickFromEnv } from "#src/server/records/weekly-report-schedule-tick.server";
@@ -33,10 +34,24 @@ export function isNonLocalizedRequest(request: Request): boolean {
   );
 }
 
+/** The request as the browser addressed it, for Paraglide's locale decision. Its redirect is an
+ * absolute URL built from `request.url`, which behind the TLS-terminating proxy is `http://`;
+ * production serves no plaintext, so the redirect has to carry the public origin. Only the URL and
+ * headers matter to that decision: the body stays with the original request the handler gets. */
+function asAddressed(request: Request): Request {
+  const url = new URL(request.url);
+  const origin = publicOrigin(request);
+  if (url.origin === origin) return request;
+  return new Request(new URL(`${url.pathname}${url.search}`, origin), {
+    method: request.method,
+    headers: request.headers,
+  });
+}
+
 export default {
   async fetch(request: Request): Promise<Response> {
     return isNonLocalizedRequest(request)
       ? handler.fetch(request)
-      : paraglideMiddleware(request, () => handler.fetch(request));
+      : paraglideMiddleware(asAddressed(request), () => handler.fetch(request));
   },
 };
