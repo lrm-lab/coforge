@@ -877,7 +877,10 @@ export const MessageRow = memo(function MessageRow({
             // screen readers, and the tap action sheet shows it too.
             <time
               dateTime={new Date(message.createdAt).toISOString()}
-              className="message-text text-[length:0.75rem] leading-[var(--text-md--line-height)] whitespace-nowrap text-quaternary tabular-nums opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100"
+              // `text-xs` is the scale's 0.75rem; the explicit `leading-` keeps the message line
+              // height, which `text-xs` would otherwise pair with its own (measured: both spell
+              // 12px/24px here).
+              className="message-text text-xs leading-[var(--text-md--line-height)] whitespace-nowrap text-quaternary tabular-nums opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100"
             >
               <span aria-hidden="true">
                 {gutterClockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
