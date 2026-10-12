@@ -56,6 +56,22 @@ const PENDING_WINDOW_LIMIT = HELD_CONTEXT_LIMIT;
 const INBOX_DRAIN_HINT =
   "Drain each listed target with `coforge message check --target <target>`, or inspect with `coforge message read --target <target>`. Either may return nothing, because a message can already have been read.";
 
+/**
+ * The text of one inbox notice: a headline counting what is delivered or held, one row per target,
+ * and how to drain them. `occasion` names why it was sent when that is not a plain delivery
+ * (`restart recovery`). Never a message body: the Agent reads those through `check`.
+ */
+export function inboxNoticeText(
+  occasion: string | undefined,
+  totalCount: number,
+  rows: readonly string[],
+): string {
+  return `[CoForge inbox notice${occasion ? ` (${occasion})` : ""}:
+Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
+${rows.join("\n")}
+${INBOX_DRAIN_HINT}]`;
+}
+
 /** One unreviewed delivery plus the moment this daemon learned about it. Deliveries carry no
  * message timestamp of their own (only the server knows when a message was written), so the
  * arrival time is what a locally built preview can honestly show. */
@@ -493,10 +509,7 @@ export class AgentMessageAttentionIndex {
       recoveredMessages.length + summaryOnly.reduce((sum, [, count]) => sum + count, 0);
     const notice = this.#withMemoryReminder(
       agentId,
-      `[CoForge inbox notice (restart recovery):
-Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
-${rows.join("\n")}
-${INBOX_DRAIN_HINT}]`,
+      inboxNoticeText("restart recovery", totalCount, rows),
     );
     // Same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
     this.hold.busy(agentId);
@@ -632,10 +645,7 @@ ${INBOX_DRAIN_HINT}]`,
     const totalCount = countDistinctMessages([...announced, ...queued]);
     const notice = this.#withMemoryReminder(
       message.agentId,
-      `[CoForge inbox notice:
-Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
-${rows.join("\n")}
-${INBOX_DRAIN_HINT}]`,
+      inboxNoticeText(undefined, totalCount, rows),
     );
     // The session names these back if the notice never reaches the model (`notice-undelivered`).
     const trackedIds = announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId);
