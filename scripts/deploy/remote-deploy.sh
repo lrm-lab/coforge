@@ -102,6 +102,7 @@ load_compose_secrets() {
 	COFORGE_WEB_PUSH_PUBLIC_KEY="$(cat "$secrets_dir/coforge_web_push_public_key")"
 	COFORGE_WEB_PUSH_PRIVATE_KEY="$(cat "$secrets_dir/coforge_web_push_private_key")"
 	COFORGE_FILE_DELIVERY_KEY="$(cat "$secrets_dir/coforge_file_delivery_key")"
+	COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY="$(cat "$secrets_dir/centrifugo_token_hmac_secret_key")"
 	# Optional until the staging GitHub App has been configured.
 	COFORGE_GITHUB_CLIENT_SECRET=""
 	COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY=""
@@ -113,7 +114,7 @@ load_compose_secrets() {
 			printf -v "$name" '%s' "$(cat "$secrets_dir/${name,,}")"
 		fi
 	done
-	for name in AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY; do
+	for name in AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY; do
 		[ -n "${!name}" ] || {
 			printf '%s secret file is empty\n' "$name" >&2
 			exit 1
@@ -129,6 +130,7 @@ compose() {
 		COFORGE_WEB_PUSH_PUBLIC_KEY="$COFORGE_WEB_PUSH_PUBLIC_KEY" \
 		COFORGE_WEB_PUSH_PRIVATE_KEY="$COFORGE_WEB_PUSH_PRIVATE_KEY" \
 		COFORGE_FILE_DELIVERY_KEY="$COFORGE_FILE_DELIVERY_KEY" \
+		COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY="$COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY" \
 		COFORGE_GITHUB_CLIENT_SECRET="$COFORGE_GITHUB_CLIENT_SECRET" \
 		COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY="$COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY" \
 		COFORGE_GITHUB_APP_SLUG="$COFORGE_GITHUB_APP_SLUG" \
@@ -424,8 +426,12 @@ if ! compose pull --quiet centrifugo >/dev/null; then
 fi
 # shellcheck disable=SC2016 # single-quoted on purpose: the $(...) below must
 # expand inside the centrifugo container's shell, not this host shell.
+# It reads every secret the service reads, as the image's own user, and fails on
+# one it cannot read or that is empty: on 2026-10-12 an unreadable secret came
+# through as an empty value, checkconfig still passed, and the first production
+# deploy migrated the database before Centrifugo failed to start.
 if ! compose run --rm --no-deps --entrypoint sh centrifugo \
-	-c 'export CENTRIFUGO_VAR_RPC_PROXY_SECRET="$(cat /run/secrets/centrifugo_proxy_secret)"; exec centrifugo checkconfig -c /centrifugo/config.yaml' \
+	-c 'set -e; secret() { value="$(cat "/run/secrets/$1")"; [ -n "$value" ] || { echo "centrifugo: secret $1 is unreadable or empty" >&2; return 1; }; printf "%s" "$value"; }; CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY="$(secret centrifugo_token_hmac_secret_key)"; CENTRIFUGO_HTTP_API_KEY="$(secret centrifugo_http_api_key)"; CENTRIFUGO_VAR_RPC_PROXY_SECRET="$(secret centrifugo_proxy_secret)"; CENTRIFUGO_ENGINE_REDIS_ADDRESS="$(secret redis_url)"; export CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY CENTRIFUGO_HTTP_API_KEY CENTRIFUGO_VAR_RPC_PROXY_SECRET CENTRIFUGO_ENGINE_REDIS_ADDRESS; exec centrifugo checkconfig -c /centrifugo/config.yaml' \
 	</dev/null 1>&2; then
 	discard_candidate_configuration
 	report "$current_image" "failed: Centrifugo configuration validation failed" "failed" ""

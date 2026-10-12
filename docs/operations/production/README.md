@@ -48,7 +48,10 @@ and Server-Timing.
 4. Write the secret files listed below into
    `~/coforge-production/infra/production/secrets/`. Generate them on the host;
    never paste secret values into chat, issues, tickets, or CI logs. Keep every
-   file mode 600.
+   file mode 600: no container bind-mounts them. `remote-deploy.sh` reads them
+   and passes each value to Compose, which creates the container's copy owned by
+   the image's own user (the rootless daemon would show a bind-mounted 600 file
+   as root-owned, unreadable to Web's and Centrifugo's non-root users).
 5. Point DNS for `coforge.cn` at the ECS public address. TLS uses an ACME
    certificate over 443 (TLS-ALPN); there is no HTTP-01 path by design.
 6. Back up the secrets directory to the `coforge` 1Password vault (item

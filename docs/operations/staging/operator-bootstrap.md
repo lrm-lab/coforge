@@ -28,9 +28,13 @@
    [staging GitHub Environment values](github-environment.md), and back it up in the
    approved secret store. A deploy synchronizes the public and private halves;
    the repository and this runbook intentionally contain no real key.
-   Compose file-type secrets keep their source permissions, so the rootless
-   daemon user must be able to read them inside the container; keep them
-   owner-readable (600) at minimum and never group/world writable.
+   Compose file-type secrets (`postgres_password`, `redis_password`,
+   `otel_traces_endpoint`) are bind mounts that keep their source permissions;
+   keep them owner-readable (600) and never group/world writable. Under the
+   rootless daemon a non-root container user cannot read such a 600 file, so
+   every secret a non-root image reads (Web, Centrifugo) is instead passed to
+   Compose by `remote-deploy.sh` and created with that user's uid
+   (`environment:` sources in the Compose file).
 4. Copy the tracked assets from [`infra/staging/`](../../../infra/staging) (`docker-compose.yml`,
    `caddy/Caddyfile`, `centrifugo/config.yaml`) to
    `~/coforge-staging/infra/staging/` preserving layout.

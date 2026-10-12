@@ -31,6 +31,7 @@ test("optional GitHub deployment credentials reach Compose without entering stdo
       "coforge_web_push_public_key",
       "coforge_web_push_private_key",
       "coforge_file_delivery_key",
+      "centrifugo_token_hmac_secret_key",
     ])
       await writeFile(join(directory, name), "fixture");
     for (const configured of [false, true]) {
@@ -410,6 +411,7 @@ describe("candidate failure diagnostics", () => {
           "redis_password",
           "centrifugo_http_api_key",
           "centrifugo_proxy_secret",
+          "centrifugo_token_hmac_secret_key",
           "worker_jwt_key_id",
           "worker_jwt_private_jwk",
         ])
@@ -544,6 +546,7 @@ const requiredSecretNames = [
   "redis_password",
   "centrifugo_http_api_key",
   "centrifugo_proxy_secret",
+  "centrifugo_token_hmac_secret_key",
   "worker_jwt_key_id",
   "worker_jwt_private_jwk",
 ];
@@ -995,6 +998,191 @@ test("Caddy and Centrifugo are recreated when their bind-mounted configuration c
   expect(service("centrifugo")).toMatch(
     /^ {6}COFORGE_CENTRIFUGO_CONFIG_SHA256: \$\{COFORGE_CENTRIFUGO_CONFIG_SHA256:\?[^}]*\}$/m,
   );
+});
+
+// Centrifugo's image runs as `centrifugo` (uid 1000). Under the rootless Docker daemon both
+// hosts run, a `file:` secret is a bind mount of the deploy user's 600 file, which the
+// container sees as root-owned 600, so uid 1000 cannot read it. On 2026-10-12 the first
+// production deploy failed exactly so: `cat: can't open '/run/secrets/centrifugo_proxy_secret':
+// Permission denied`, an empty-secret checkconfig that still passed, and a Centrifugo that never
+// became healthy.
+const centrifugoSecretNames = [
+  "centrifugo_http_api_key",
+  "centrifugo_proxy_secret",
+  "centrifugo_token_hmac_secret_key",
+  "redis_url",
+] as const;
+
+type ComposeSecretGrant = string | { source: string; uid?: string; gid?: string; mode?: number };
+type ComposeFile = {
+  services: Record<string, { command?: string[]; secrets?: ComposeSecretGrant[] }>;
+  secrets: Record<string, { file?: string; environment?: string }>;
+};
+
+const readCompose = async (environment: string) =>
+  Bun.YAML.parse(
+    await Bun.file(
+      new URL(`../../infra/${environment}/docker-compose.yml`, import.meta.url),
+    ).text(),
+  ) as ComposeFile;
+
+// Runs a Centrifugo launch snippet with `cat` and `centrifugo` replaced, so a secret can be made
+// unreadable (or empty) without a container. Returns the exit code and whether centrifugo ran.
+const runCentrifugoLaunch = async (snippet: string, unreadable: string, emptied: string) => {
+  const root = await mkdtemp(join(tmpdir(), "coforge-centrifugo-launch-"));
+  try {
+    await mkdir(join(root, "bin"));
+    await writeFile(
+      join(root, "bin/cat"),
+      `#!/bin/sh
+case "$1" in
+  "$UNREADABLE") printf "cat: can't open '%s': Permission denied\\n" "$1" >&2; exit 1 ;;
+  "$EMPTIED") exit 0 ;;
+esac
+printf 'fixture-%s' "\${1##*/}"
+`,
+      { mode: 0o700 },
+    );
+    await writeFile(join(root, "bin/centrifugo"), `#!/bin/sh\necho "$@" > "$MARKER"\n`, {
+      mode: 0o700,
+    });
+    const proc = Bun.spawn(["sh", "-c", snippet], {
+      env: {
+        PATH: `${join(root, "bin")}:/usr/bin:/bin`,
+        MARKER: join(root, "ran"),
+        UNREADABLE: unreadable,
+        EMPTIED: emptied,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const code = await proc.exited;
+    return { code, ran: await Bun.file(join(root, "ran")).exists() };
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+};
+
+describe("Centrifugo secrets under a rootless Docker daemon", () => {
+  for (const environment of ["staging", "production"]) {
+    test(`${environment}: Compose creates every Centrifugo secret for the image's non-root user`, async () => {
+      const compose = await readCompose(environment);
+      const grants = compose.services.centrifugo?.secrets ?? [];
+      expect(
+        grants.map((grant) => (typeof grant === "string" ? grant : grant.source)).sort(),
+      ).toEqual([...centrifugoSecretNames]);
+      for (const grant of grants) {
+        expect(grant).toEqual({ source: expect.any(String), uid: "1000", gid: "1000", mode: 400 });
+        const source = typeof grant === "string" ? grant : grant.source;
+        expect(compose.secrets[source]).toEqual({ environment: expect.any(String) });
+      }
+    });
+
+    test(`${environment}: every environment-sourced secret resolves when remote-deploy.sh runs Compose`, async () => {
+      const compose = await readCompose(environment);
+      const names = Object.values(compose.secrets).flatMap((secret) =>
+        secret.environment ? [secret.environment] : [],
+      );
+      const script = await readFile(new URL("./remote-deploy.sh", import.meta.url), "utf8");
+      const loaders = script.slice(
+        script.indexOf("load_compose_secrets()"),
+        script.indexOf("# Fail closed on a mutable"),
+      );
+      const writerStart = script.indexOf("write_deploy_env() {");
+      const writer = script.slice(writerStart, script.indexOf("\n}\n", writerStart) + 2);
+      const root = await mkdtemp(join(tmpdir(), "coforge-compose-secret-sources-"));
+      try {
+        await mkdir(join(root, "secrets"));
+        await mkdir(join(root, "centrifugo"));
+        await writeFile(join(root, "centrifugo/config.yaml"), "client: {}\n");
+        await mkdir(join(root, "caddy"));
+        await writeFile(join(root, "caddy/Caddyfile"), "example.test {\n}\n");
+        await writeFile(join(root, "docker-compose.yml"), "services: {}\n");
+        const datastore =
+          environment === "production"
+            ? ["database_url", "redis_url"]
+            : ["postgres_password", "redis_password"];
+        // The optional GitHub App values are configured here, so every source must resolve.
+        const optional = [
+          "coforge_github_client_secret",
+          "coforge_github_credential_encryption_key",
+          "coforge_github_webhook_secret",
+        ];
+        for (const name of [...requiredSecretNames, ...datastore, ...optional])
+          await writeFile(join(root, "secrets", name), `fixture-${name}`, { mode: 0o600 });
+        const proc = Bun.spawn(
+          [
+            "bash",
+            "-euc",
+            `${loaders}
+${writer}
+secrets_dir="$1/secrets"
+compose_file="$1/docker-compose.yml"
+env_file="$1/.env"
+COMPOSE_ARGS=()
+docker() {
+  shift
+  for name in "$@"; do
+    [ -n "\${!name:-}" ] || grep -Eq "^$name=.+" "$env_file" || echo "unresolved $name"
+  done
+}
+load_compose_secrets
+write_deploy_env coforge/web@${digest}
+compose "\${@:2}"
+`,
+            "test",
+            root,
+            ...names,
+          ],
+          { stdout: "pipe", stderr: "pipe" },
+        );
+        const [stdout, stderr, code] = await Promise.all([
+          new Response(proc.stdout).text(),
+          new Response(proc.stderr).text(),
+          proc.exited,
+        ]);
+        expect(code, stderr).toBe(0);
+        expect(stdout).toBe("");
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+
+    test(`${environment}: Centrifugo refuses to start on an unreadable or empty secret`, async () => {
+      const command = (await readCompose(environment)).services.centrifugo?.command ?? [];
+      expect(command.slice(0, 2)).toEqual(["sh", "-c"]);
+      // Compose unescapes `$$` to `$` before the container's shell sees the command.
+      const snippet = (command[2] ?? "").replaceAll("$$", "$");
+      expect(await runCentrifugoLaunch(snippet, "", "")).toEqual({ code: 0, ran: true });
+      for (const name of centrifugoSecretNames) {
+        for (const [unreadable, emptied] of [
+          [`/run/secrets/${name}`, ""],
+          ["", `/run/secrets/${name}`],
+        ]) {
+          const result = await runCentrifugoLaunch(snippet, unreadable, emptied);
+          expect(result.ran, `${name} unreadable=${unreadable} emptied=${emptied}`).toBe(false);
+          expect(result.code).not.toBe(0);
+        }
+      }
+    });
+  }
+
+  test("the pre-deploy checkconfig fails on any unreadable or empty Centrifugo secret", async () => {
+    const script = await readFile(new URL("./remote-deploy.sh", import.meta.url), "utf8");
+    const snippet = script.match(/--entrypoint sh centrifugo \\\n\t-c '([^']*)'/)?.[1];
+    expect(snippet).toContain("checkconfig");
+    expect(await runCentrifugoLaunch(snippet ?? "", "", "")).toEqual({ code: 0, ran: true });
+    for (const name of centrifugoSecretNames) {
+      for (const [unreadable, emptied] of [
+        [`/run/secrets/${name}`, ""],
+        ["", `/run/secrets/${name}`],
+      ]) {
+        const result = await runCentrifugoLaunch(snippet ?? "", unreadable, emptied);
+        expect(result.ran, `${name} unreadable=${unreadable} emptied=${emptied}`).toBe(false);
+        expect(result.code).not.toBe(0);
+      }
+    }
+  });
 });
 
 describe("check-centrifugo-config.sh", () => {
