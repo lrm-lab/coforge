@@ -323,6 +323,67 @@ describe("remote-deploy.sh compose invocation shape", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  test("takes DATABASE_URL and REDIS_URL verbatim from secret files when no bundled datastore password exists", async () => {
+    const root = await mkdtemp(join(tmpdir(), "coforge-write-deploy-env-external-"));
+    try {
+      const secretsDir = join(root, "secrets");
+      await mkdir(secretsDir, { mode: 0o700 });
+      await writeFile(join(root, "docker-compose.yml"), "name: coforge-production\n");
+      await mkdir(join(root, "centrifugo"));
+      await writeFile(join(root, "centrifugo/config.yaml"), "client:\n  allowed_origins: []\n");
+      await mkdir(join(root, "caddy"));
+      await writeFile(join(root, "caddy/Caddyfile"), "coforge.example.test {\n}\n");
+      const databaseUrl =
+        "postgresql://coforge:db-pass@pg.example.test:5432/coforge?sslmode=require";
+      const redisUrl = "redis://fixture-instance:redis-pass@redis.example.test:6379";
+      const files: Record<string, string> = {
+        database_url: databaseUrl,
+        redis_url: redisUrl,
+        centrifugo_http_api_key: "centrifugo-api",
+        centrifugo_proxy_secret: "centrifugo-proxy",
+        worker_jwt_key_id: "coforge-production",
+        worker_jwt_private_jwk: '{"kty":"OKP"}',
+      };
+      for (const [name, value] of Object.entries(files)) {
+        await writeFile(join(secretsDir, name), value, { mode: 0o600 });
+      }
+
+      const script = await Bun.file(new URL("./remote-deploy.sh", import.meta.url)).text();
+      const start = script.indexOf("write_deploy_env() {");
+      const end = script.indexOf("\n}\n", start);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThan(start);
+      const fn = script.slice(start, end + 2);
+
+      const proc = Bun.spawn(
+        [
+          "bash",
+          "-c",
+          [
+            "set -euo pipefail",
+            `compose_file=${JSON.stringify(join(root, "docker-compose.yml"))}`,
+            `secrets_dir=${JSON.stringify(secretsDir)}`,
+            fn,
+            `write_deploy_env ${JSON.stringify(registryImage)}`,
+          ].join("\n"),
+        ],
+        { stdout: "pipe", stderr: "pipe" },
+      );
+      const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+      expect(exitCode, stderr).toBe(0);
+
+      const envLines = (await readFile(join(root, ".env"), "utf8")).split("\n");
+      expect(envLines.filter((line) => line.startsWith("DATABASE_URL="))).toEqual([
+        `DATABASE_URL=${databaseUrl}`,
+      ]);
+      expect(envLines.filter((line) => line.startsWith("REDIS_URL="))).toEqual([
+        `REDIS_URL=${redisUrl}`,
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("candidate failure diagnostics", () => {
