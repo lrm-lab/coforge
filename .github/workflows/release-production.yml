@@ -138,7 +138,7 @@ jobs:
             --version "$INPUT_VERSION" \
             --commit "$INPUT_COMMIT" \
             --feed-url "https://releases.coforge.cn" \
-            --bucket coforge-releases-prod \
+            --bucket coforge-releases \
             --endpoint oss-accelerate.aliyuncs.com \
             --region oss-cn-beijing
 

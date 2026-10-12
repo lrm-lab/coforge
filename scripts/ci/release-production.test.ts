@@ -37,7 +37,7 @@ const installer = await load("release-installer-production.yml");
 const workflows = { computer, installer };
 
 const PRODUCTION_ROLE = "acs:ram::1085194890307801:role/coforge-release-publisher-production";
-const PRODUCTION_BUCKET = "coforge-releases-prod";
+const PRODUCTION_BUCKET = "coforge-releases";
 const PRODUCTION_FEED = "https://releases.coforge.cn";
 const OIDC_STEP = "Request an OIDC token for Alibaba Cloud";
 
@@ -88,7 +88,9 @@ test("every bucket call names the production bucket, and every build compiles in
     );
     expect(calls.length, name).toBeGreaterThan(0);
     for (const { name: jobName, step } of calls) {
-      expect(step.run, `${name}.${jobName}`).toContain(`--bucket ${PRODUCTION_BUCKET}`);
+      expect(step.run, `${name}.${jobName}`).toMatch(
+        new RegExp(`--bucket ${PRODUCTION_BUCKET}\\s`),
+      );
     }
   }
   const publish = computer.jobs.publish!.steps!.find((step) => step.run?.includes("publish.ts"))!;

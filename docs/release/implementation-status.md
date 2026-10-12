@@ -10,7 +10,7 @@ than reconstruct or invoke the removed gateway workflow.
 
 Production local publication is implemented by `release-production.yml` and
 `release-installer-production.yml` (`environment: production`, RAM role
-`coforge-release-publisher-production`, bucket `coforge-releases-prod`, feed
+`coforge-release-publisher-production`, bucket `coforge-releases`, feed
 `https://releases.coforge.cn`). Each rebuilds a commit staging already published;
 see [the production release runbook](../operations/production/computer-release.md)
 for the operator-provisioned bucket, CDN domain, and role they need.

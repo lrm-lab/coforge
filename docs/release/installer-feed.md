@@ -156,7 +156,7 @@ gh workflow run release-installer-staging.yml --repo lrm-lab/coforge -f pointer_
   ([Staging to production](staging-to-production.md)).
   `release-installer-production.yml` is this workflow with a `candidate` job in
   place of `gates` (staging must have published that version from that commit),
-  the production role and bucket `coforge-releases-prod`, and the group
+  the production role and bucket `coforge-releases`, and the group
   `release-installer-production`.
 
 ## Product gate

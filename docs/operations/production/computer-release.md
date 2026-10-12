@@ -1,12 +1,14 @@
 # Production Computer release: feed, publisher, and promotion
 
 Status: **workflows implemented; the feed's Alibaba Cloud resources are
-provisioned by the operator.** Until every item below is done and verified,
+partly provisioned.** Bucket `coforge-releases` (transfer acceleration on) and
+CDN domain `releases.coforge.cn` (origin that bucket) were created on
+2026-10-12. Until the remaining items below are done and verified,
 `releases.coforge.cn` does not resolve and the production workflows fail at
 their first bucket call.
 
 The production feed is `https://releases.coforge.cn`, served by Alibaba Cloud
-CDN from the private bucket `coforge-releases-prod`. It mirrors staging's
+CDN from the private bucket `coforge-releases`. It mirrors staging's
 `releases-staging.coforge.cn` / `coforge-releases-staging`
 ([staging record](../aliyun-oss-cdn/staging-record.md)); the general provisioning
 rules are in [`aliyun-oss-cdn/`](../aliyun-oss-cdn/README.md).
@@ -15,13 +17,13 @@ rules are in [`aliyun-oss-cdn/`](../aliyun-oss-cdn/README.md).
 
 Do these once, in the Alibaba Cloud console of account `1085194890307801`.
 
-1. **Bucket.** Create `coforge-releases-prod` in 华北 2（北京）
-   (`oss-cn-beijing`): Standard, 同城冗余, ACL `private`, Block Public Access on,
-   OSS-managed encryption (AES256). Enable **transfer acceleration** on it: the
-   workflows upload through `oss-accelerate.aliyuncs.com`.
-2. **CDN domain.** Add `releases.coforge.cn` (业务类型「大文件下载」, 加速区域
-   「仅中国内地」), origin the OSS bucket `coforge-releases-prod`, 回源 HOST the bucket
-   domain, no path rewrite, no second origin. Enable Alibaba Cloud OSS Private
+1. **Bucket** (created, transfer acceleration on). `coforge-releases` in 华北 2（北京）(`oss-cn-beijing`):
+   Standard, 同城冗余, ACL `private`, Block Public Access on, OSS-managed
+   encryption (AES256), **transfer acceleration** on: the workflows upload
+   through `oss-accelerate.aliyuncs.com`.
+2. **CDN domain** (created; configuration pending). `releases.coforge.cn`
+   (「大文件下载」, 「仅中国内地」), origin the OSS bucket `coforge-releases`,
+   回源 HOST the bucket domain, no path rewrite, no second origin. Enable Alibaba Cloud OSS Private
    Bucket Access (same account, STS). **No URL signing**: installers and updaters
    fetch anonymously. Add the global `Delete Cookie` request header and
    `Delete Set-Cookie` response header rules.
@@ -68,8 +70,8 @@ Do these once, in the Alibaba Cloud console of account `1085194890307801`.
    Attach one custom policy that allows `oss:GetObject` (which also covers the
    publishers' `HEAD` probes), `oss:PutObject`, and `oss:DeleteObject` (restoring
    or removing `latest` when activation fails) on
-   `acs:oss:*:1085194890307801:coforge-releases-prod` and
-   `acs:oss:*:1085194890307801:coforge-releases-prod/*`, and nothing else.
+   `acs:oss:*:1085194890307801:coforge-releases` and
+   `acs:oss:*:1085194890307801:coforge-releases/*`, and nothing else.
    No AccessKey is created for it.
 
 Verify before the first publication:

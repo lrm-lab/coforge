@@ -151,7 +151,7 @@ jobs:
         # endpoint is global, so the bucket's region is passed for V4 signing.
         run: |
           bun scripts/release/publish-installer.ts plan \
-            --bucket coforge-releases-prod \
+            --bucket coforge-releases \
             --endpoint oss-accelerate.aliyuncs.com \
             --region oss-cn-beijing
 
@@ -364,7 +364,7 @@ jobs:
             --commit "$RELEASE_COMMIT" \
             --binaries installer-bin \
             --out installer-out \
-            --bucket coforge-releases-prod \
+            --bucket coforge-releases \
             --endpoint oss-accelerate.aliyuncs.com \
             --region oss-cn-beijing
 
@@ -438,7 +438,7 @@ jobs:
         run: |
           bun scripts/release/publish-installer.ts pointer \
             --version "$INPUT_POINTER_ONLY" \
-            --bucket coforge-releases-prod \
+            --bucket coforge-releases \
             --endpoint oss-accelerate.aliyuncs.com \
             --region oss-cn-beijing
 

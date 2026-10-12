@@ -25,7 +25,7 @@ over the VPC, so the Compose project defines no database or cache containers.
 - **CDN:** `files.coforge.cn` (signed attachment URLs; signing key is the
   secret `coforge_file_delivery_key`) and `images.coforge.cn` (public avatars
   and project icons, bucket `coforge-images-prod`).
-- **Release feed:** `https://releases.coforge.cn`, bucket `coforge-releases-prod`,
+- **Release feed:** `https://releases.coforge.cn`, bucket `coforge-releases`,
   published by `release-production.yml` and `release-installer-production.yml`
   ([runbook](computer-release.md)).
 
