@@ -1,8 +1,6 @@
 import {
   AGENT_RUNTIME_EVENT_TYPE,
   AgentProcessCleanupError,
-  UsageUnavailableError,
-  UsageUnsupportedError,
   AgentContextReportTimeoutError,
   type AgentRuntimeConfig,
   type AgentRuntimeEvent,
@@ -113,6 +111,7 @@ import {
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
+import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
 import { memoryIndexReminder } from "#src/agent-runtime/agent-memory-seed";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
@@ -717,46 +716,22 @@ export class DaemonRuntime {
 
   async scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse> {
     this.#assertRunning();
-    const result = (
-      status: UsageScanResponse["status"],
-      snapshot?: UsageSnapshot,
-      message?: string,
-    ): UsageScanResponse => ({
-      protocolMajor: 1,
-      requestId: "",
-      accepted: Boolean(snapshot),
-      status,
-      ...(snapshot ? { snapshotJson: utf8Encoder.encode(JSON.stringify(snapshot)) } : {}),
-      ...(message ? { message } : {}),
-    });
-    // The one place a scan result gets its `collectedAt`: a fresh reading is stamped "now"; an
-    // observed snapshot reused from `#currentObservedUsage` already carries the time it was
-    // observed (`#rememberUsage` stamps that), which this must not overwrite.
-    const stamp = (snapshot: UsageSnapshot): UsageSnapshot =>
-      snapshot.collectedAt ? snapshot : { ...snapshot, collectedAt: new Date().toISOString() };
+    const now = () => new Date();
     if (!RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider])
-      return result("unsupported", undefined, "Pi usage scanning is unsupported");
+      return usageScanResult("unsupported", undefined, "Pi usage scanning is unsupported");
     const codeAgentProvider = this.#createProvider(provider);
-    if (!codeAgentProvider.readUsage) return result("unsupported");
+    if (!codeAgentProvider.readUsage) return usageScanResult("unsupported");
     try {
+      // An observed snapshot (`#rememberUsage` stamps when it was observed) is the fallback for a
+      // provider with no reading of its own.
       const snapshot =
         (await codeAgentProvider.readUsage({
           workingDirectory: this.#connection.workspaceRoot,
           timeoutMs: 10_000,
         })) ?? this.#currentObservedUsage(provider);
-      return snapshot
-        ? result("available", stamp(snapshot))
-        : result("reauth", undefined, "Provider usage is unavailable");
+      return usageScanReading(snapshot, now);
     } catch (error) {
-      // A non-subscription account has no plan usage at all — answering `unsupported` wins
-      // over a stale observed snapshot, which a reading like this can never have produced.
-      if (error instanceof UsageUnsupportedError)
-        return result("unsupported", undefined, "Usage scanning is unsupported for this account");
-      const snapshot = this.#currentObservedUsage(provider);
-      if (snapshot) return result("available", stamp(snapshot));
-      return error instanceof UsageUnavailableError
-        ? result("unavailable", undefined, "Provider usage is unavailable")
-        : result("error", undefined, "Usage scan failed");
+      return usageScanFailure(error, () => this.#currentObservedUsage(provider), now);
     }
   }
 
