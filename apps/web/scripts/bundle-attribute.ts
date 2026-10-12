@@ -25,7 +25,7 @@
 // The figure is proportional, not exact: a span's bytes depend on the minified text under it. It
 // ranks and attributes; it does not audit.
 
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /** One decoded mapping segment: where it starts in the generated file, and the source it came from. */
@@ -209,7 +209,9 @@ function readChunk(assets: string, name: string | undefined) {
   const files = readdirSync(assets)
     .filter((file) => file.endsWith(".js"))
     .map((file) => join(assets, file));
-  const chunk = pickChunk(files, name, (file) => readFileSync(file).byteLength);
+  // `statSync().size` is already bytes, so ranking costs one stat per chunk rather than reading
+  // every chunk into memory.
+  const chunk = pickChunk(files, name, (file) => statSync(file).size);
   const generated = readFileSync(chunk, "utf8");
   let map: BundleMap;
   try {
@@ -237,11 +239,7 @@ function main(argv: readonly string[]) {
   const { chunk, generated, map } = readChunk(assets, name);
   // The size is the file's bytes, not the text's length: a chunk with CJK text would otherwise be
   // understated, since a span counts UTF-16 code units and a byte count is what ships.
-  const attribution = summarizeChunk(
-    chunk,
-    readFileSync(chunk).byteLength,
-    attributeChunk(generated, map),
-  );
+  const attribution = summarizeChunk(chunk, statSync(chunk).size, attributeChunk(generated, map));
   if (json) console.log(JSON.stringify(attribution, null, 2));
   else console.log(formatAttribution(attribution, top));
 }
