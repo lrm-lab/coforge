@@ -48,9 +48,16 @@ These rules also cover `src/server/records/`.
 - A confirmed assistant insert keeps its tabs in `content.assistantDraft`.
   Later author saves keep that original. Author and recipient views omit it.
 - `WeeklyReportAssistant.memory` stores one member's versioned writing habits,
-  observations, and threads. The first submit or share wakes settlement through
-  `coforge weekly-report-memory submit`. A later send does not settle again.
-  The next personal report injects active habits and remaining threads only.
+  observations, threads, and one raw settlement per week. Submit, share, and a
+  later send each wake settlement through `coforge weekly-report-memory submit`.
+  The later send replaces that week's settlement. A preference that matches an
+  existing habit is not stored again, and a retired habit stays retired until
+  an explicit adopt. The next personal report injects active habits and
+  remaining threads only. The settlement wake lists those habits so the
+  assistant reuses their sentences. While that settlement runs, the side chat
+  shows 「正在记录本周写作习惯，请稍候。」 and the same sentence on the progress
+  bar; write-back changes it to 「已记录本周写作习惯。」 The model's own reply
+  to that wake stays hidden.
 
 - `server/records/weekly-report-workflow.server.ts` owns owner-scoped DM actions
   (discover, configure, send, save, submit, summarize); `weekly-report-distribution.server.ts`

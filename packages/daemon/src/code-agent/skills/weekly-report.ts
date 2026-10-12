@@ -193,8 +193,10 @@ coforge weekly-report-key-points submit --report-id <uuid> --idempotency-key <uu
 \`\`\`
 
 A [weekly-report-memory] wake compares the assistant original with the submitted
-body. Submit one JSON file with preferences, explicitRules, factCorrections and
-threads. Do not store habits in this skill.
+body. Reuse a listed habit's sentence instead of writing the same habit again.
+Submit one JSON file with preferences, explicitRules, factCorrections and
+threads. Do not store habits in this skill. A later send replaces that week's
+settlement.
 
 \`\`\`
 coforge weekly-report-memory submit --report-id <uuid> --idempotency-key <uuid> --file <json>
