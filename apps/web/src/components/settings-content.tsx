@@ -1,7 +1,6 @@
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { useHydrated } from "@tanstack/react-router";
-import { useReducedMotion } from "motion/react";
 import { Button as AriaButton, FileTrigger } from "react-aria-components";
 import {
   BellRinging01 as BellRing,
@@ -26,8 +25,7 @@ import {
 
 import { PageHeader } from "#src/components/layout/page-header";
 import { Avatar } from "#src/components/base/avatar/avatar";
-import AnimatedGradient from "#src/components/spell/animated-gradient";
-import { heroGradient, useWebGl2 } from "#src/features/landing/landing-brand-panel";
+import profileBanner from "#src/features/profiles/profile-banner.webp?inline";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
@@ -241,8 +239,7 @@ export function SettingsContent(props: SettingsContentProps) {
           showList ? "hidden" : "flex",
         )}
       >
-        {/* The account banner is the top of the card on a desktop, so its heading steps aside. */}
-        <div className={section === "account" ? "md:hidden" : undefined}>
+        <div>
           <PageHeader
             heading={sectionLabel}
             leading={
@@ -347,9 +344,6 @@ function AccountSettings({
   onAvatarRemove,
 }: SettingsContentProps) {
   const hydrated = useHydrated();
-  // The banner is the homepage's gradient, which exists only where WebGL2 can draw it.
-  const gradientReady = useWebGl2();
-  const reducedMotion = useReducedMotion() ?? false;
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(profile.displayName ?? "");
   const [description, setDescription] = useState(profile.description);
@@ -451,17 +445,8 @@ function AccountSettings({
   return (
     <div className="w-full pb-8">
       <section>
-        <div
-          aria-hidden="true"
-          className="relative isolate h-32 overflow-hidden bg-primary-solid sm:h-44"
-        >
-          {/* The banner is dark until the gradient is drawn, which then fades in over it, so the
-              page never flashes a different colour first. */}
-          {gradientReady && (
-            <div className="absolute inset-0 animate-in duration-1000 fade-in">
-              <AnimatedGradient config={heroGradient} theme="dark" paused={reducedMotion} />
-            </div>
-          )}
+        <div aria-hidden="true" className="h-32 overflow-hidden bg-primary-solid sm:h-44">
+          <img src={profileBanner} alt="" className="size-full object-cover" />
         </div>
         <header className="flex min-w-0 items-start gap-4 px-4 sm:gap-6 sm:px-8">
           <div className="-mt-12 shrink-0 rounded-2xl bg-primary p-1 shadow-lg">
