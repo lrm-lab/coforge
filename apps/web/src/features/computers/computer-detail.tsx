@@ -3,6 +3,7 @@ import {
   Check,
   Copy01 as Copy,
   Edit01 as Pencil,
+  SearchLg as Scan,
   RefreshCw01 as RotateCw,
 } from "@untitledui/icons";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
@@ -12,6 +13,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Toggle } from "#src/components/base/toggle/toggle";
+import { StatusDot } from "#src/components/ui/status-dot";
 import { useAppToast } from "#src/components/ui/toast";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
@@ -34,7 +36,13 @@ import {
 } from "./upgrade-failure";
 import { ComputerTile } from "./computer-tile";
 import { RuntimeIdentity, RuntimeUsage } from "./runtime-usage";
-import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
+import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
+import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
+import type {
+  ComputerAgentWorkspaceScan,
+  ComputerRestartStatus,
+  ComputerUpgradeStatus,
+} from "./computer.schemas";
 
 export const RESTART_POLL_INTERVAL_MS = 2_000;
 export const RESTART_MAX_POLLS = 31;
@@ -69,6 +77,15 @@ export type ComputerDetailView = ComputerIdentity & {
     version: string;
     displayName: string;
     isPublic: boolean;
+  }[];
+  agents: {
+    id: string;
+    name: string;
+    displayName: string;
+    avatarUrl: string | null;
+    provider: RuntimeProvider;
+    runtimeConfig: { model?: string; modelProvider?: string };
+    online: boolean;
   }[];
 };
 
@@ -112,6 +129,7 @@ export function ComputerDetail({
   restartMaxPolls = RESTART_MAX_POLLS,
   upgradePollIntervalMs = UPGRADE_POLL_INTERVAL_MS,
   upgradeMaxPolls = UPGRADE_MAX_POLLS,
+  onScanAgentWorkspaces,
 }: {
   computer: ComputerDetailView;
   timeZone?: string | null;
@@ -121,6 +139,7 @@ export function ComputerDetail({
   onReadRestartStatus?: (requestId: string) => Promise<ComputerRestartStatus>;
   onUpgrade?: (requestId: string) => Promise<ComputerUpgradeStatus>;
   onReadUpgradeStatus?: (requestId: string) => Promise<ComputerUpgradeStatus>;
+  onScanAgentWorkspaces?: () => Promise<ComputerAgentWorkspaceScan[]>;
   latestComputerVersion?: string | null;
   restartPollIntervalMs?: number;
   restartMaxPolls?: number;
@@ -136,6 +155,12 @@ export function ComputerDetail({
   const [displayNameDraft, setDisplayNameDraft] = useState(computer.displayName);
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [displayNameError, setDisplayNameError] = useState(false);
+  const [workspaceScan, setWorkspaceScan] = useState<
+    | { state: "idle" }
+    | { state: "scanning" }
+    | { state: "ready"; workspaces: ComputerAgentWorkspaceScan[] }
+    | { state: "error" }
+  >({ state: "idle" });
   const toast = useAppToast();
   const creatorName = computer.creator ? humanLabel(computer.creator) : "";
   const mountedRef = useRef(true);
@@ -236,6 +261,16 @@ export function ComputerDetail({
         next.delete(runtimeId);
         return next;
       });
+    }
+  };
+
+  const scanWorkspaces = async () => {
+    if (!onScanAgentWorkspaces) return;
+    setWorkspaceScan({ state: "scanning" });
+    try {
+      setWorkspaceScan({ state: "ready", workspaces: await onScanAgentWorkspaces() });
+    } catch {
+      setWorkspaceScan({ state: "error" });
     }
   };
 
@@ -462,6 +497,13 @@ export function ComputerDetail({
             </dl>
           </DetailGroup>
 
+          <AgentRoster agents={computer.agents} />
+          <WorkspaceInventory
+            scan={workspaceScan}
+            canScan={Boolean(onScanAgentWorkspaces)}
+            onScan={() => void scanWorkspaces()}
+          />
+
           <section aria-labelledby="computer-code-agents">
             <DetailGroup heading={m.computer_code_agents()} headingId="computer-code-agents">
               {computer.runtimes.length ? (
@@ -514,6 +556,152 @@ export function ComputerDetail({
   );
 }
 
+function AgentRoster({ agents }: { agents: ComputerDetailView["agents"] }) {
+  return (
+    <DetailGroup
+      heading={`${m.computer_agents_on_computer()} (${agents.length})`}
+      headingId="computer-agents-on-computer"
+    >
+      {agents.length ? (
+        <ul className="divide-y divide-secondary">
+          {agents.map((agent) => (
+            <li
+              key={agent.id}
+              className="flex min-w-0 items-center justify-between gap-4 py-3 text-sm"
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                <Avatar
+                  size="sm"
+                  src={agent.avatarUrl ?? undefined}
+                  alt=""
+                  initials={avatarInitial(agent.displayName)}
+                  contentClassName={avatarToneClassName(agent.displayName)}
+                />
+                <span className="min-w-0">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium text-primary">{agent.displayName}</span>
+                    <StatusDot
+                      tone={agent.online ? "online" : "offline"}
+                      label={
+                        agent.online ? m.computer_status_online() : m.computer_status_offline()
+                      }
+                      className="size-2"
+                    />
+                  </span>
+                  <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-tertiary">
+                    <RuntimeProviderMark provider={agent.provider} className="size-3.5" />
+                    <span className="truncate">
+                      {runtimeProviderLabel(agent.provider)}
+                      {agent.runtimeConfig.model ? ` · ${agent.runtimeConfig.model}` : ""}
+                    </span>
+                  </span>
+                </span>
+              </span>
+              <span className="shrink-0 text-xs text-tertiary">@{agent.name}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="py-6 text-center text-sm text-tertiary">
+          {m.computer_no_agents_on_computer()}
+        </p>
+      )}
+    </DetailGroup>
+  );
+}
+
+function WorkspaceInventory({
+  scan,
+  canScan,
+  onScan,
+}: {
+  scan:
+    | { state: "idle" }
+    | { state: "scanning" }
+    | { state: "ready"; workspaces: ComputerAgentWorkspaceScan[] }
+    | { state: "error" };
+  canScan: boolean;
+  onScan: () => void;
+}) {
+  return (
+    <DetailGroup
+      heading={m.computer_agent_workspaces()}
+      headingId="computer-agent-workspaces"
+      action={
+        canScan ? (
+          <Button
+            type="button"
+            size="sm"
+            color="secondary"
+            iconLeading={Scan}
+            isLoading={scan.state === "scanning"}
+            showTextWhileLoading
+            onPress={onScan}
+          >
+            {scan.state === "scanning"
+              ? m.computer_agent_workspaces_scanning()
+              : m.computer_agent_workspaces_scan()}
+          </Button>
+        ) : undefined
+      }
+    >
+      {scan.state === "idle" ? (
+        <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_prompt()}</p>
+      ) : scan.state === "error" ? (
+        <p role="alert" className="py-4 text-sm text-error-primary">
+          {m.computer_agent_workspaces_error()}
+        </p>
+      ) : scan.state === "scanning" ? (
+        <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_scanning()}</p>
+      ) : scan.workspaces.length ? (
+        <ul className="divide-y divide-secondary">
+          {scan.workspaces.map((workspace) => (
+            <li
+              key={workspace.agentId}
+              className="flex min-w-0 items-start justify-between gap-4 py-3 text-sm"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="truncate font-medium text-primary">{workspace.displayName}</span>
+                  <span className="rounded-full bg-secondary px-2 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-tertiary">
+                    {workspace.state === "deleted"
+                      ? m.computer_agent_workspace_deleted()
+                      : m.computer_agent_workspace_active()}
+                  </span>
+                </div>
+                <p className="mt-1 truncate font-mono text-xs text-tertiary">
+                  {workspace.rootPath}
+                </p>
+                <p className="mt-1 text-xs text-tertiary">
+                  {workspace.status === "present"
+                    ? m.computer_agent_workspace_stats({
+                        files: String(workspace.fileCount),
+                        size: formatWorkspaceSize(workspace.totalSizeBytes),
+                      })
+                    : workspace.status === "missing"
+                      ? m.computer_agent_workspace_missing()
+                      : workspace.status === "partial"
+                        ? m.computer_agent_workspace_partial()
+                        : m.computer_agent_workspace_unavailable()}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_none()}</p>
+      )}
+    </DetailGroup>
+  );
+}
+
+function formatWorkspaceSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
 /**
  * The subtle-fill container shared by both detail groups: no border, no
  * shadow, an optional heading inset to the row text, dividers between rows
@@ -522,18 +710,25 @@ export function ComputerDetail({
 function DetailGroup({
   heading,
   headingId,
+  action,
   children,
 }: {
   heading?: string;
   headingId?: string;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div>
-      {heading && (
-        <h2 id={headingId} className="mb-2 px-4 text-sm font-semibold text-primary">
-          {heading}
-        </h2>
+      {(heading || action) && (
+        <div className="mb-2 flex items-center justify-between gap-3 px-4">
+          {heading && (
+            <h2 id={headingId} className="text-sm font-semibold text-primary">
+              {heading}
+            </h2>
+          )}
+          {action}
+        </div>
       )}
       <div className="rounded-xl bg-secondary px-4">{children}</div>
     </div>

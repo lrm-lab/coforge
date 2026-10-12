@@ -35,6 +35,18 @@ export type ComputerUpgradeStatus =
     }
   | { requestId: string; status: "unknown"; reason: "corrupt" };
 
+export type ComputerAgentWorkspaceScan = {
+  agentId: string;
+  name: string;
+  displayName: string;
+  state: "active" | "deleted";
+  status: "present" | "missing" | "unavailable" | "partial";
+  rootPath: string;
+  fileCount: number;
+  totalSizeBytes: number;
+  modifiedAtMs: number;
+};
+
 const runtimeInput = z.object({
   computerId: z.string().min(1),
   provider: z.enum(RUNTIME_PROVIDER),
@@ -48,6 +60,7 @@ export const restartComputerInputSchema = z.object({
 export const readRestartStatusInputSchema = restartComputerInputSchema;
 export const scanUsageInputSchema = runtimeInput;
 export const readUsageInputSchema = runtimeInput;
+export const scanAgentWorkspacesInputSchema = computerIdInputSchema;
 export const setRuntimeVisibilityInputSchema = z.object({
   runtimeId: z.string().min(1),
   isPublic: z.boolean(),

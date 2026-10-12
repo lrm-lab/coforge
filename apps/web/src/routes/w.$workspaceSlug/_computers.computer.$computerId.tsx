@@ -12,6 +12,7 @@ import {
   readComputerRestartStatus,
   readComputerUpgradeStatus,
   restartComputer,
+  scanAgentWorkspaces,
   setRuntimeVisibility,
   updateComputerDisplayName,
   upgradeComputer,
@@ -50,6 +51,7 @@ function ComputerDetailPage() {
   const readRestart = useServerFn(readComputerRestartStatus);
   const requestUpgrade = useServerFn(upgradeComputer);
   const readUpgrade = useServerFn(readComputerUpgradeStatus);
+  const scanWorkspaces = useServerFn(scanAgentWorkspaces);
 
   return (
     <ComputerDetail
@@ -58,6 +60,9 @@ function ComputerDetailPage() {
       timeZone={timeZone}
       onRestart={(requestId) => requestRestart({ data: { computerId, requestId } })}
       onReadRestartStatus={(requestId) => readRestart({ data: { computerId, requestId } })}
+      onScanAgentWorkspaces={
+        computer.ownedByCurrentUser ? () => scanWorkspaces({ data: { computerId } }) : undefined
+      }
       latestComputerVersion={latestComputerVersion}
       onUpgrade={(requestId) => requestUpgrade({ data: { computerId, requestId } })}
       onReadUpgradeStatus={async (requestId) => {

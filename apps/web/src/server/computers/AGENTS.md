@@ -23,3 +23,6 @@ These rules apply to `src/server/computers/`.
   when such a delete path is built.
 - `computer-lifecycle-memory.server.ts` is the only store of a shutdown
   reason and of the last daemon instance whose return was announced.
+- `computer-agent-workspaces.server.ts` summarizes the Daemon's existing
+  workspace-directory observations for the Computer detail inventory; it does
+  not expose absolute filesystem paths.

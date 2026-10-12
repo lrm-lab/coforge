@@ -14,10 +14,12 @@ import {
   readRestartStatusInputSchema,
   readUsageInputSchema,
   restartComputerInputSchema,
+  scanAgentWorkspacesInputSchema,
   scanUsageInputSchema,
   setRuntimeVisibilityInputSchema,
   updateComputerDisplayNameInputSchema,
 } from "./computer.schemas";
+import { declareNoStore } from "#src/features/no-store-response.server";
 import {
   workspaceUserMiddleware,
   type WorkspaceUserContext,
@@ -38,6 +40,24 @@ import { getComputerRestartStore } from "#src/server/computers/computer-restart-
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { UpgradeComputer } from "#src/server/computers/upgrade-computer.server";
 import { resolveReleaseFeedUrl } from "#src/server/install/install-script.server";
+import {
+  AgentWorkspaceFilesQuery,
+  type WorkspaceFilesAssignment,
+} from "#src/server/agents/agent-workspace-files.server";
+import { encodeAgentWorkspaceFilesListRequest } from "@lrm/coforge-sdk/internal";
+import { getAgentWorkspaceFilesListResults } from "#src/server/centrifugo/agent-workspace-files-cache.server";
+import { scanComputerAgentWorkspaces as scanWorkspaceInventory } from "#src/server/computers/computer-agent-workspaces.server";
+import {
+  parseAgentRuntimeConfig,
+  publicAgentRuntimeConfig,
+} from "#src/server/agents/agent-runtime-config.server";
+import {
+  agentVisibilityViewerForUser,
+  visibleAgentWhere,
+} from "#src/server/agents/agent-visibility.server";
+import { getAgentStatusCache } from "#src/server/agents/agent-status.server";
+import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 
 export const restartComputer = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -123,6 +143,7 @@ export const listComputers = createServerFn({ method: "GET" })
     const { user, db, workspaceId } = context;
     const visibility = runtimeVisibility(db);
     const computerStatus = getComputerStatusCache();
+    const agentViewer = await agentVisibilityViewerForUser(db, workspaceId, user.id);
     const [connections, runtimes] = await Promise.all([
       db.workspaceComputer.findMany({
         where: { workspaceId },
@@ -145,6 +166,17 @@ export const listComputers = createServerFn({ method: "GET" })
                   avatarObjectKey: true,
                 },
               },
+              agents: {
+                where: { workspaceId, ...ACTIVE_AGENT_WHERE, ...visibleAgentWhere(agentViewer) },
+                select: {
+                  id: true,
+                  name: true,
+                  displayName: true,
+                  avatarObjectKey: true,
+                  runtimeConfig: true,
+                },
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+              },
             },
           },
         },
@@ -155,6 +187,13 @@ export const listComputers = createServerFn({ method: "GET" })
     // One round trip for every Computer's online lease, not one per Computer.
     const statuses = await computerStatus.getMany(
       connections.map(({ computer }) => ({ workspaceId, computerId: computer.id })),
+    );
+    const agentScopes = connections.flatMap(({ computer }) =>
+      computer.agents.map((agent) => ({ workspaceId, computerId: computer.id, agentId: agent.id })),
+    );
+    const agentStatuses = await getAgentStatusCache().snapshotMany(agentScopes);
+    const agentStatusById = new Map(
+      agentScopes.map((scope, index) => [scope.agentId, agentStatuses[index]] as const),
     );
     return Promise.all(
       connections.map(async ({ computer, createdAt }, index) => {
@@ -179,10 +218,95 @@ export const listComputers = createServerFn({ method: "GET" })
           connectedAt: createdAt,
           ownedByCurrentUser: computer.ownerId === user.id,
           online: statuses[index] ?? false,
+          agents: computer.agents.map((agent) => ({
+            id: agent.id,
+            name: agent.name,
+            displayName: agent.displayName,
+            avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+            provider: parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
+            runtimeConfig: publicAgentRuntimeConfig(parseAgentRuntimeConfig(agent.runtimeConfig)),
+            online: agentStatusById.get(agent.id)?.status === "active",
+          })),
           runtimes: computerRuntimes.map(({ ownerId: _ownerId, ...runtime }) => runtime),
         };
       }),
     );
+  });
+
+/** A Computer owner can ask the connected Daemon for a fresh local workspace inventory. */
+export const scanAgentWorkspaces = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(scanAgentWorkspacesInputSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    declareNoStore();
+    const computer = await db.computer.findFirst({
+      where: {
+        id: data.computerId,
+        ownerId: user.id,
+        workspaces: { some: { workspaceId } },
+      },
+      select: { id: true },
+    });
+    if (!computer) throw new Error("Computer is not available");
+
+    const agents = await db.agent.findMany({
+      where: { workspaceId, computerId: computer.id },
+      select: { id: true, name: true, displayName: true, deletedAt: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const listResults = getAgentWorkspaceFilesListResults();
+    const query = new AgentWorkspaceFilesQuery({
+      findOwned: async (viewer, agentId): Promise<WorkspaceFilesAssignment | undefined> => {
+        const assignment = await db.agent.findFirst({
+          where: {
+            id: agentId,
+            workspaceId: viewer.workspaceId,
+            computerId: computer.id,
+            computer: {
+              ownerId: viewer.userId,
+              workspaces: { some: { workspaceId: viewer.workspaceId } },
+            },
+          },
+          select: { computerId: true, runtimeConfig: true },
+        });
+        if (!assignment?.computerId) return undefined;
+        return {
+          computerId: assignment.computerId,
+          revision: new Bun.CryptoHasher("sha256")
+            .update(JSON.stringify(assignment.runtimeConfig))
+            .digest("hex"),
+        };
+      },
+      online: (scope) => getComputerStatusCache().get(scope),
+      publishList: (request) =>
+        createCentrifugoServerApi().publish(
+          daemonControlChannel(request.workspaceId, request.computerId),
+          encodeAgentWorkspaceFilesListRequest(request),
+        ),
+      publishRead: async () => {},
+      listResults,
+      readResults: {
+        begin: async () => {},
+        read: async () => undefined,
+        clear: async () => {},
+      },
+    });
+    const inventory = await scanWorkspaceInventory(agents, async (request) => {
+      const response = await query.list(
+        { userId: user.id, workspaceId },
+        request.agentId,
+        request.dirPath,
+        request.includeHidden,
+      );
+      if (response.status !== "ready")
+        return {
+          status: response.status === "offline" ? "unreadable" : "error",
+          rootPath: "",
+          entries: [],
+        };
+      return response.result;
+    });
+    return inventory;
   });
 
 export const readComputerUpgradeStatus = createServerFn({ method: "GET" })
