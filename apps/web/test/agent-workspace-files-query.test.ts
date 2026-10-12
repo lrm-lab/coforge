@@ -24,7 +24,7 @@ function query(overrides: {
   listRead: () => Promise<AgentWorkspaceFilesListResult | undefined>;
   readRead?: () => Promise<AgentWorkspaceFileReadResult | undefined>;
   cleared?: () => void;
-  timing?: { now: () => number; wait: () => Promise<void>; timeoutMs: number };
+  timing?: { now: () => number; wait: (ms: number) => Promise<void>; timeoutMs: number };
 }) {
   return new AgentWorkspaceFilesQuery(
     {
@@ -233,4 +233,54 @@ test("Workspace file read result RPC trusts daemon claims rather than claimed pa
     }),
   ).toBeInstanceOf(Uint8Array);
   expect(accepted).toBe(1);
+});
+
+test("a listing that arrives within tens of milliseconds is read within 20 ms of arriving, not after a flat 100 ms poll", async () => {
+  // The Daemon answered 30 ms after the request; the old flat 100 ms poll only saw it at 100 ms,
+  // which the Computer page's workspace scan then paid once per directory.
+  let now = 0;
+  let request: AgentWorkspaceFilesListRequest | undefined;
+  const q = query({
+    findOwned: async () => ({ computerId: "computer", revision: "one" }),
+    publishList: async (published) => {
+      request = published;
+    },
+    listRead: async () =>
+      now >= 30 ? { ...request!, status: "ok", rootPath: "/home/agent", entries: [] } : undefined,
+    timing: {
+      now: () => now,
+      wait: async (ms) => {
+        now += ms;
+      },
+      timeoutMs: 5_000,
+    },
+  });
+  const response = await q.list({ userId: "owner", workspaceId: "workspace" }, "agent", "", false);
+  expect(response.status).toBe("ready");
+  expect(now).toBeGreaterThanOrEqual(30);
+  expect(now).toBeLessThan(50);
+});
+
+test("a listing that never arrives still waits out the same 5 s timeout, with few extra reads", async () => {
+  let now = 0;
+  let reads = 0;
+  const q = query({
+    findOwned: async () => ({ computerId: "computer", revision: "one" }),
+    listRead: async () => {
+      reads++;
+      return undefined;
+    },
+    timing: {
+      now: () => now,
+      wait: async (ms) => {
+        now += ms;
+      },
+      timeoutMs: 5_000,
+    },
+  });
+  const response = await q.list({ userId: "owner", workspaceId: "workspace" }, "agent", "", false);
+  expect(response.status).toBe("timeout");
+  expect(now).toBeGreaterThanOrEqual(5_000);
+  // A flat 100 ms poll read 50 times; the first half second at 20 ms adds 20 more.
+  expect(reads).toBeLessThanOrEqual(71);
 });

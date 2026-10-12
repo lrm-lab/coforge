@@ -39,6 +39,18 @@ type WorkspaceFileReadResponse =
   | { status: "ready"; result: AgentWorkspaceFileReadResult }
   | { status: "offline" | "timeout" | "unavailable" };
 
+/**
+ * How long to wait before reading a pending result again. A Daemon usually answers within tens of
+ * milliseconds, so a flat 100 ms poll made every observation cost at least 100 ms, and the Computer
+ * page's workspace scan pays it once per directory, one directory at a time (the Daemon serves one
+ * listing at a time). For the first half second the result is read every 20 ms, so an answer is seen
+ * within 20 ms of arriving; after that the old 100 ms interval returns, so a slow or missing answer
+ * costs only 20 extra reads over its 5 s timeout.
+ */
+export function pollDelayMs(attempt: number) {
+  return attempt < 25 ? 20 : 100;
+}
+
 /** Authorizes a fresh directory/file observation, not Computer inventory or session state. Same
  * publish/poll/timeout shape as `AgentSkillsQuery`, with two operations instead of one. */
 export class AgentWorkspaceFilesQuery {
@@ -54,7 +66,11 @@ export class AgentWorkspaceFilesQuery {
       listResults: AgentWorkspaceFilesListResults;
       readResults: AgentWorkspaceFileReadResults;
     },
-    private readonly timing = { now: Date.now, wait: () => Bun.sleep(100), timeoutMs: 5_000 },
+    private readonly timing: {
+      now: () => number;
+      wait: (ms: number) => Promise<void>;
+      timeoutMs: number;
+    } = { now: Date.now, wait: (ms) => Bun.sleep(ms), timeoutMs: 5_000 },
   ) {}
 
   async list(
@@ -80,6 +96,7 @@ export class AgentWorkspaceFilesQuery {
       await listResults.begin({ request, userId: viewer.userId, revision: assignment.revision });
       await publishList(request);
       const deadline = this.timing.now() + this.timing.timeoutMs;
+      let attempt = 0;
       do {
         const result = await listResults.read(request.requestId);
         if (result) {
@@ -93,7 +110,7 @@ export class AgentWorkspaceFilesQuery {
             return { status: "unavailable" };
           return { status: "ready", result };
         }
-        await this.timing.wait();
+        await this.timing.wait(pollDelayMs(attempt++));
       } while (this.timing.now() < deadline);
       return { status: "timeout" };
     } catch {
@@ -124,6 +141,7 @@ export class AgentWorkspaceFilesQuery {
       await readResults.begin({ request, userId: viewer.userId, revision: assignment.revision });
       await publishRead(request);
       const deadline = this.timing.now() + this.timing.timeoutMs;
+      let attempt = 0;
       do {
         const result = await readResults.read(request.requestId);
         if (result) {
@@ -137,7 +155,7 @@ export class AgentWorkspaceFilesQuery {
             return { status: "unavailable" };
           return { status: "ready", result };
         }
-        await this.timing.wait();
+        await this.timing.wait(pollDelayMs(attempt++));
       } while (this.timing.now() < deadline);
       return { status: "timeout" };
     } catch {

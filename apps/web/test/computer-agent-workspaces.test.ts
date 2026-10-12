@@ -113,4 +113,28 @@ describe("scanComputerAgentWorkspaces", () => {
       totalSizeBytes: 0,
     });
   });
+
+  test("past its time budget the scan stops descending and gives each remaining Agent only its root", async () => {
+    // Each listing costs 100 ms of a 1 s budget. Every directory holds two more directories, so an
+    // unbounded scan would walk 128 directories per Agent (12.8 s each) one after another.
+    let now = 0;
+    const calls: string[] = [];
+    const result = await scanComputerAgentWorkspaces(
+      [agent(), agent({ id: "agent-2" }), agent({ id: "agent-3" })],
+      async ({ agentId, dirPath }) => {
+        calls.push(`${agentId}:${dirPath}`);
+        now += 100;
+        return listing(agentId, dirPath, [
+          { name: "a", type: "dir", sizeBytes: 0, modifiedAtMs: 1 },
+          { name: "b", type: "dir", sizeBytes: 0, modifiedAtMs: 1 },
+        ]);
+      },
+      { budgetMs: 1_000, now: () => now },
+    );
+
+    expect(result.map((workspace) => workspace.status)).toEqual(["partial", "partial", "partial"]);
+    // The first Agent spends the budget; the other two are listed at their root and nothing more.
+    expect(calls.filter((call) => call.startsWith("agent-1:"))).toHaveLength(10);
+    expect(calls.filter((call) => !call.startsWith("agent-1:"))).toEqual(["agent-2:", "agent-3:"]);
+  });
 });

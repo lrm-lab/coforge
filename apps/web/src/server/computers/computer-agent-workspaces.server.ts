@@ -22,6 +22,12 @@ type ListWorkspaceDirectory = (input: {
 
 const MAX_DIRECTORIES = 128;
 const MAX_FILES = 10_000;
+/**
+ * The whole scan's time budget. The Daemon serves one listing at a time, so the scan walks every
+ * Agent's directories one after another; past this budget it stops descending and every Agent left
+ * gets its root listing only, reported `partial`, rather than holding the request for minutes.
+ */
+export const SCAN_BUDGET_MS = 20_000;
 
 /**
  * Builds the Computer page's local workspace inventory from the existing directory-list seam.
@@ -32,15 +38,19 @@ const MAX_FILES = 10_000;
 export async function scanComputerAgentWorkspaces(
   agents: readonly ComputerWorkspaceAgent[],
   listDirectory: ListWorkspaceDirectory,
+  { budgetMs = SCAN_BUDGET_MS, now = Date.now }: { budgetMs?: number; now?: () => number } = {},
 ): Promise<ComputerAgentWorkspaceScan[]> {
+  const deadline = now() + budgetMs;
+  const overBudget = () => now() >= deadline;
   const inventory: ComputerAgentWorkspaceScan[] = [];
-  for (const agent of agents) inventory.push(await scanOne(agent, listDirectory));
+  for (const agent of agents) inventory.push(await scanOne(agent, listDirectory, overBudget));
   return inventory;
 }
 
 async function scanOne(
   agent: ComputerWorkspaceAgent,
   listDirectory: ListWorkspaceDirectory,
+  overBudget: () => boolean,
 ): Promise<ComputerAgentWorkspaceScan> {
   const base = {
     agentId: agent.id,
@@ -72,7 +82,7 @@ async function scanOne(
     for (const entry of current.entries) {
       observeEntry(base, entry);
       if (entry.type !== "dir") continue;
-      if (directoryCount >= MAX_DIRECTORIES || base.fileCount >= MAX_FILES) {
+      if (directoryCount >= MAX_DIRECTORIES || base.fileCount >= MAX_FILES || overBudget()) {
         partial = true;
         continue;
       }
