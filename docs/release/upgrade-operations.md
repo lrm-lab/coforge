@@ -67,6 +67,12 @@ else); 3 unresolved, which needs `coforge-computer recover`.
 There is no `rollback` command. Moving to an older version is
 `coforge-computer upgrade --version <older> --allow-downgrade`.
 
+`coforge-computer upgrade --dry-run` (with the same `--version` and `--allow-downgrade`) resolves
+the target from the feed and reports what an upgrade would do under the rules below, then stops: no
+prompt, no download, no installer run, no Workspace stopped. It exits 1 when the installer would
+refuse the move and 0 otherwise, and it names the exact `--version` to apply, so a later `latest`
+cannot change what was checked.
+
 The installer decides this before anything changes. A target older than the active
 version (SemVer precedence, so `0.1.0-e2e.2` is older than `0.1.0-e2e.10`) is refused
 without the flag: the receipt is failed with `UPGRADE_DOWNGRADE_REFUSED`, the exit

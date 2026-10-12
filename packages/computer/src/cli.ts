@@ -48,6 +48,7 @@ import { isValidComputerWorkspaceSlug } from "#src/workspace/workspace-slug";
 import { registrationIdempotencyKey } from "#src/registration/idempotency-key";
 import { writeSetupResult } from "#src/cli/setup-output";
 import { writeCliFailure } from "#src/cli/failure-output";
+import { describeUpgradePlan, planUpgrade } from "#src/cli/upgrade-plan";
 import { createCommand as createClientCommand } from "./daemon-client";
 import { configureComputerLogger } from "#src/logging/computer-logger";
 import { followComputerLogs } from "#src/logging/computer-logs";
@@ -178,10 +179,22 @@ export async function runCli(
     )
     .option("--version <selector>", "latest|<version>", "latest")
     .option("--allow-downgrade", "Allow --version to be older than the installed Computer")
-    .action(async (options: { version: string; allowDowngrade?: boolean }) => {
+    .option(
+      "--dry-run",
+      "Show the version this would move to, and whether it would be refused, without changing anything",
+    )
+    .action(async (options: { version: string; allowDowngrade?: boolean; dryRun?: boolean }) => {
       const allowDowngrade = options.allowDowngrade === true;
       const updater = requireUpdater(dependencies);
       const target = await updater.resolveVersion(options.version);
+      if (options.dryRun) {
+        const report = describeUpgradePlan(
+          planUpgrade(await updater.getCurrentVersion(), target, allowDowngrade),
+        );
+        for (const line of report.lines) io.stdout(line);
+        exitCode = report.exitCode;
+        return;
+      }
       if ((await updater.getCurrentVersion()) === target) {
         io.stdout(`Already up to date: ${target}`);
         return;
