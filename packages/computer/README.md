@@ -80,6 +80,10 @@ supervisor, each Workspace binding, its Agents, and the locks in one place. It i
 read-only. A Workspace that needs attention shows a detail line under it (a cloud
 connection error, a pending or unsettled upgrade, a failed start or restart with the
 command that retries it, or a degraded or parked state with how to recover).
+`status --json` prints the same report as a single JSON object. An unhealthy
+machine still exits 0; the one exception is an unreadable or corrupt
+`~/.coforge/computer/install/active.json`, which exits 1 with
+`STATUS_INSTALL_UNREADABLE`.
 
 The executable runs on Bun and uses [Commander.js](https://github.com/tj/commander.js)
 for commands, arguments, validation, generated help, suggestions, and version
