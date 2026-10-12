@@ -152,6 +152,7 @@ import { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import { AgentMessageDraftStore } from "#src/persistence/agent-message-draft-store";
 import { AgentAppInbox, type MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
+import { reminderDueItemId } from "#src/agent-app-inbox/registry";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
@@ -3585,19 +3586,20 @@ export class DaemonRuntime {
   async reminder(context: string, request: LocalReminderRequest, agentApiKey: string) {
     const agentId = this.#authorizedAgent(context, agentApiKey);
     if (request.operation === "ack" || request.operation === "dismiss") {
-      const itemId = `reminder:${request.reminderId}:${request.revision}`;
       const accepted = await this.#reminders.acknowledge(
         agentId,
         request.reminderId!,
         request.revision!,
       );
-      const inbox = await this.#appInbox(agentId);
+      const removed = await (
+        await this.#appInbox(agentId)
+      ).remove(reminderDueItemId(request.reminderId!, request.revision!));
       if (!accepted) {
         // Neither the receipt file nor this daemon knows the receipt (the file was lost or is
         // unreadable, and the daemon has restarted since), but the Agent was shown this exact
         // revision: its inbox item proves the delivery. Clear it rather than leave an item nothing
         // can ever acknowledge; the cloud already refuses to fire this revision again.
-        if (!(await inbox.remove(itemId)))
+        if (!removed)
           return { accepted: false, reason: "reminder receipt not found for exact revision" };
         logger.info("Reminder acknowledged from its inbox item without a local receipt", {
           event: "reminder.ack_without_receipt",
@@ -3606,9 +3608,7 @@ export class DaemonRuntime {
           reminder_id: request.reminderId,
           reminder_version: request.revision,
         });
-        return { accepted: true, reminderId: request.reminderId, revision: request.revision };
       }
-      await inbox.remove(itemId);
       return { accepted: true, reminderId: request.reminderId, revision: request.revision };
     }
     if (!this.#transport.agentReminder) throw new Error("Agent reminder transport is unavailable");
