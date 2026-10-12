@@ -5,13 +5,18 @@ import {
   applyKeyPointPromptText,
   clearReportContent,
   emptyReportContent,
+  insertAssistantReportBody,
   isAutoSendCancelled,
   memberReportTitle,
   formatWeeklyReportCompletedAt,
   normalizeReportContent,
   removeKeyPointPromptHistoryEntry,
+  reportBodyRestoreView,
+  reportContentForAuthor,
+  reportContentForRecipient,
   reportContentToMarkdown,
   reportTabsEqual,
+  switchReportBodyVersion,
   withAssignmentUnread,
   withAutoSendCancelled,
   withWeekSendDismissed,
@@ -269,4 +274,92 @@ test("a captured key-point history entry resolves to its position in the latest 
   expect(keyPointHistoryIndexOf([inserted, newer, older], older)).toBe(2);
   expect(keyPointHistoryIndexOf([newer], older)).toBe(-1);
   expect(keyPointHistoryIndexOf([{ ...older, text: "edited prompt" }], older)).toBe(-1);
+});
+
+const messageId = "33333333-3333-4333-8333-333333333333";
+
+test("an assistant insert keeps the previous body and shows the new one", () => {
+  const stored = { tabs: { Progress: { markdown: "上一版" } } };
+  const inserted = insertAssistantReportBody(
+    stored,
+    { tabs: { Progress: { markdown: "最新版" } } },
+    messageId,
+  );
+  expect(inserted.tabs).toEqual({ Progress: { markdown: "最新版" } });
+  expect(inserted.bodyRestore).toEqual({
+    sourceMessageId: messageId,
+    revision: 1,
+    showing: "latest",
+    previous: { tabs: { Progress: { markdown: "上一版" } } },
+    latest: { tabs: { Progress: { markdown: "最新版" } } },
+  });
+  expect(inserted.assistantDraft).toEqual({
+    tabs: { Progress: { markdown: "最新版" } },
+  });
+  expect(reportBodyRestoreView(inserted)).toEqual({
+    sourceMessageId: messageId,
+    revision: 1,
+    showing: "latest",
+  });
+  expect(reportContentForAuthor(inserted).bodyRestore).toBeUndefined();
+  expect(reportContentForRecipient(inserted).bodyRestore).toBeUndefined();
+});
+
+test("the same assistant message does not replace the stored pair", () => {
+  const first = insertAssistantReportBody(
+    { tabs: { Progress: { markdown: "上一版" } } },
+    { tabs: { Progress: { markdown: "最新版" } } },
+    messageId,
+  );
+  const again = insertAssistantReportBody(
+    first,
+    { tabs: { Progress: { markdown: "另一份" } } },
+    messageId,
+  );
+  expect(again).toEqual(first);
+});
+
+test("switching versions keeps edits on the side you leave", () => {
+  const inserted = insertAssistantReportBody(
+    { tabs: { Progress: { markdown: "上一版" } } },
+    { tabs: { Progress: { markdown: "最新版" } } },
+    messageId,
+  );
+  const editedLatest = {
+    ...inserted,
+    tabs: { Progress: { markdown: "最新版改过" } },
+  };
+  const previous = switchReportBodyVersion(editedLatest);
+  expect(previous.tabs).toEqual({ Progress: { markdown: "上一版" } });
+  expect(previous.bodyRestore?.showing).toBe("previous");
+  expect(previous.bodyRestore?.latest.tabs).toEqual({ Progress: { markdown: "最新版改过" } });
+  expect(previous.assistantDraft).toEqual(inserted.assistantDraft);
+
+  const editedPrevious = {
+    ...previous,
+    tabs: { Progress: { markdown: "上一版改过" } },
+  };
+  const restored = switchReportBodyVersion(editedPrevious);
+  expect(restored.tabs).toEqual({ Progress: { markdown: "最新版改过" } });
+  expect(restored.bodyRestore?.showing).toBe("latest");
+  expect(restored.bodyRestore?.previous.tabs).toEqual({ Progress: { markdown: "上一版改过" } });
+  expect(restored.bodyRestore?.revision).toBe(3);
+});
+
+test("a later assistant insert replaces the pair with the body on screen", () => {
+  const first = insertAssistantReportBody(
+    { tabs: { Progress: { markdown: "最初" } } },
+    { tabs: { Progress: { markdown: "第一次整理" } } },
+    messageId,
+  );
+  const next = insertAssistantReportBody(
+    { ...first, tabs: { Progress: { markdown: "手改后" } } },
+    { tabs: { Progress: { markdown: "第二次整理" } } },
+    "44444444-4444-4444-8444-444444444444",
+  );
+  expect(next.tabs).toEqual({ Progress: { markdown: "第二次整理" } });
+  expect(next.bodyRestore?.previous.tabs).toEqual({ Progress: { markdown: "手改后" } });
+  expect(next.bodyRestore?.latest.tabs).toEqual({ Progress: { markdown: "第二次整理" } });
+  expect(next.bodyRestore?.showing).toBe("latest");
+  expect(next.bodyRestore?.revision).toBe(2);
 });

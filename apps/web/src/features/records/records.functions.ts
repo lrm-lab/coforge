@@ -344,6 +344,7 @@ export const applyConfirmedWeeklyReportBody = createServerFn({ method: "POST" })
     z.object({
       reportId: z.uuid(),
       content: reportContentSchema,
+      sourceMessageId: z.uuid().optional(),
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
@@ -352,6 +353,18 @@ export const applyConfirmedWeeklyReportBody = createServerFn({ method: "POST" })
       userId: user.id,
       reportId: data.reportId,
       content: normalizeReportContent(data.content),
+      sourceMessageId: data.sourceMessageId,
+    });
+  });
+
+export const switchWeeklyReportBodyVersion = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ reportId: z.uuid() }))
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    return recordCatalog(db).switchWeeklyReportBodyVersion({
+      workspaceId,
+      userId: user.id,
+      reportId: data.reportId,
     });
   });
 

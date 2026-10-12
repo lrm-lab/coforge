@@ -148,6 +148,8 @@
   "records_assistant_confirm_generate": "确认生成",
   "records_assistant_confirm_send": "发送",
   "records_assistant_confirm_write": "插入到周报",
+  "records_body_restore_previous": "回到上一版",
+  "records_body_restore_latest": "恢复最新版",
   "records_assistant_ignore_suggestion": "忽略",
   "records_assistant_suggestion_ignored": "已忽略此预览",
   "records_assistant_suggestion_inserted": "已插入",

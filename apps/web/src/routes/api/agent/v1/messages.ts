@@ -38,6 +38,7 @@ import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-co
 import { isAppError } from "#src/lib/app-error";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
 import { postingTargetRefusalResponse } from "#src/server/agents/agent-target-status.server";
+import { applyIncomingWeeklyReportBodyEdit } from "#src/server/records/weekly-report-body-restore.server";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
 
 export type AgentMessagesGetPrincipal = { workspaceId: string; agentId: string };
@@ -230,6 +231,8 @@ export async function handleAgentMessagesPost(
       agentId: string;
       target: string;
     }) => Promise<boolean>;
+    /** After a stored agent message: weekly-report body edits write the report. */
+    onMessageSent?: (input: { messageId: string; target: string; body: string }) => Promise<void>;
   },
 ): Promise<Response> {
   const body = await request.json().catch(() => undefined);
@@ -298,6 +301,17 @@ export async function handleAgentMessagesPost(
         : undefined,
       mentions: body.mentions as AgentMentionSelector[] | undefined,
     });
+    if (result.state === "sent" && result.messageId && dependencies.onMessageSent) {
+      try {
+        await dependencies.onMessageSent({
+          messageId: result.messageId,
+          target: body.target,
+          body: body.content,
+        });
+      } catch {
+        // The message is already stored. A body-edit that did not write still shows Insert.
+      }
+    }
     return Response.json(mapSendResult(idempotencyKey, result));
   } catch (error) {
     // The send-specific rejections and the named AppError codes below are mapped here; anything
@@ -360,6 +374,14 @@ export const Route = createFileRoute("/api/agent/v1/messages")({
               throw error;
             }
           },
+          onMessageSent: ({ messageId, target, body: messageBody }) =>
+            applyIncomingWeeklyReportBodyEdit(db, {
+              workspaceId: principal.workspaceId,
+              agentId: principal.agentId,
+              target,
+              messageId,
+              body: messageBody,
+            }),
           sender: new SendDirectMessage(
             repository,
             requestRecords,
