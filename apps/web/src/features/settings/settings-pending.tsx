@@ -1,3 +1,4 @@
+import { UserCircle } from "@untitledui/icons";
 import { PageHeader } from "#src/components/layout/page-header";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
@@ -43,7 +44,7 @@ export function SettingsPending() {
         </div>
       </nav>
       <section className="@container/settings hidden min-w-0 flex-1 flex-col overflow-hidden bg-primary md:flex lg:rounded-xl">
-        <PageHeader heading={m.settings_account()} />
+        <PageHeader icon={UserCircle} heading={m.settings_account()} />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pb-8 sm:px-6">
           <section>
             <header className="flex min-h-12 items-center pb-4">

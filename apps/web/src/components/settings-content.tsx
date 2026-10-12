@@ -170,6 +170,15 @@ export function SettingsContent(props: SettingsContentProps) {
     integrations: m.settings_integrations(),
   };
   const sectionLabel = sectionLabels[section];
+  const sectionIcons: Record<SettingsSection, typeof UserRound> = {
+    account: UserRound,
+    "language-region": Languages,
+    "workspace-profile": Building,
+    members: Users,
+    preferences: SlidersHorizontal,
+    notifications: BellRing,
+    integrations: Share01,
+  };
 
   function selectSection(next: SettingsSection) {
     setInternalSection(next);
@@ -244,6 +253,7 @@ export function SettingsContent(props: SettingsContentProps) {
       >
         <div>
           <PageHeader
+            icon={sectionIcons[section]}
             heading={sectionLabel}
             leading={
               <ButtonUtility

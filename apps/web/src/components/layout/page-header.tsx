@@ -1,3 +1,5 @@
+import type { FC } from "react";
+
 import { MobileNavigationButton } from "#src/components/layout/sidebar/mobile-header";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
 
@@ -9,6 +11,7 @@ import { TabbedHeader } from "#src/components/layout/tabbed-header";
  */
 export function PageHeader({
   leading,
+  icon: Icon,
   heading,
   meta,
   actions,
@@ -16,6 +19,8 @@ export function PageHeader({
 }: {
   /** A control that belongs before the title, such as a panel's way back. */
   leading?: React.ReactNode;
+  /** The icon that goes with the heading, shown before it. */
+  icon?: FC<{ className?: string }>;
   heading: string;
   meta?: React.ReactNode;
   actions?: React.ReactNode;
@@ -25,6 +30,7 @@ export function PageHeader({
   const title = (
     <>
       {leading ?? <MobileNavigationButton />}
+      {Icon && <Icon aria-hidden="true" className="size-5 shrink-0 text-fg-secondary" />}
       <h1 className="truncate text-lg font-semibold text-primary">{heading}</h1>
       {meta}
     </>
