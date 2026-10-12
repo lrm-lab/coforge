@@ -25,76 +25,65 @@ type Fetch = (
   init?: Parameters<typeof fetch>[1],
 ) => ReturnType<typeof fetch>;
 
-async function callHttpRpc(
-  fetchImplementation: Fetch,
-  serverUrl: string,
-  path: string,
-  token: string,
-  method: string,
-  requestId: string,
-  payload: Uint8Array,
-): Promise<Uint8Array> {
+/** One HTTP RPC call to the CoForge server: the RPC `method` sent as base64 `payload` to `path`. */
+type HttpRpcCall = {
+  serverUrl: string;
+  path: string;
+  token: string;
+  method: string;
+  requestId: string;
+  payload: Uint8Array;
+};
+
+async function callHttpRpc(fetchImplementation: Fetch, call: HttpRpcCall): Promise<Uint8Array> {
+  const { method, requestId } = call;
+  // Every failure names the call it belongs to: its method and request id. A caught error is
+  // its cause, even an `undefined` one, exactly as each throw site passed it before.
+  const failure = (code: number | undefined, message: string, ...cause: [unknown?]) =>
+    new RemoteRpcError(
+      method,
+      code,
+      requestId,
+      message,
+      cause.length ? { cause: cause[0] } : undefined,
+    );
+  const loginExpired = () => loginError("AUTH_LOGIN_EXPIRED", "Your CoForge login has expired.");
+  const rejected = (code: number) => failure(code, `The CoForge RPC service rejected '${method}'.`);
+
   let response: Response;
   try {
-    response = await fetchImplementation(new URL(path, serverUrl), {
+    response = await fetchImplementation(new URL(call.path, call.serverUrl), {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${call.token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ b64data: payload.toBase64() }),
+      body: JSON.stringify({ b64data: call.payload.toBase64() }),
       redirect: "error",
     });
   } catch (error) {
-    throw new RemoteRpcError(method, undefined, requestId, "The CoForge RPC request failed.", {
-      cause: error,
-    });
+    throw failure(undefined, "The CoForge RPC request failed.", error);
   }
 
-  if (response.status === 401)
-    throw loginError("AUTH_LOGIN_EXPIRED", "Your CoForge login has expired.");
+  if (response.status === 401) throw loginExpired();
 
   let envelope: z.infer<typeof rpcEnvelopeSchema>;
   try {
     envelope = rpcEnvelopeSchema.parse(await response.json());
   } catch (error) {
-    throw new RemoteRpcError(
-      method,
-      response.status,
-      requestId,
-      "The CoForge RPC service returned an invalid response.",
-      { cause: error },
-    );
+    throw failure(response.status, "The CoForge RPC service returned an invalid response.", error);
   }
 
   if ("error" in envelope) {
-    if (envelope.error.code === 401)
-      throw loginError("AUTH_LOGIN_EXPIRED", "Your CoForge login has expired.");
-    throw new RemoteRpcError(
-      method,
-      envelope.error.code,
-      requestId,
-      `The CoForge RPC service rejected '${method}'.`,
-    );
+    if (envelope.error.code === 401) throw loginExpired();
+    throw rejected(envelope.error.code);
   }
-  if (!response.ok)
-    throw new RemoteRpcError(
-      method,
-      response.status,
-      requestId,
-      `The CoForge RPC service rejected '${method}'.`,
-    );
+  if (!response.ok) throw rejected(response.status);
 
   try {
     return Uint8Array.fromBase64(envelope.result.b64data);
   } catch (error) {
-    throw new RemoteRpcError(
-      method,
-      response.status,
-      requestId,
-      "The CoForge RPC service returned invalid data.",
-      { cause: error },
-    );
+    throw failure(response.status, "The CoForge RPC service returned invalid data.", error);
   }
 }
 
@@ -109,15 +98,14 @@ export class HttpComputerRegisterTransport implements ComputerRegisterTransport 
     method: typeof import("@lrm/coforge-sdk/internal").COMPUTER_REGISTER_METHOD,
     payload: ComputerRegisterRequest,
   ): Promise<ComputerRegisterResponse> {
-    const bytes = await callHttpRpc(
-      this.fetchImplementation,
-      this.serverUrl,
-      "/api/computer/attach",
-      this.token,
+    const bytes = await callHttpRpc(this.fetchImplementation, {
+      serverUrl: this.serverUrl,
+      path: "/api/computer/attach",
+      token: this.token,
       method,
-      payload.requestId,
-      encodeComputerRegisterRequest(payload),
-    );
+      requestId: payload.requestId,
+      payload: encodeComputerRegisterRequest(payload),
+    });
     try {
       const response = decodeComputerRegisterResponse(bytes);
       if (response.requestId !== payload.requestId) throw new Error("request ID mismatch");
@@ -145,19 +133,18 @@ export class HttpWorkspaceRpcTransport implements ComputerWorkspaceRpcTransport 
     slug: string,
   ): Promise<AccessibleWorkspace> {
     const requestId = crypto.randomUUID();
-    const bytes = await callHttpRpc(
-      this.fetchImplementation,
+    const bytes = await callHttpRpc(this.fetchImplementation, {
       serverUrl,
-      "/api/computer/workspace",
-      credential.accessToken,
-      WORKSPACE_GET_METHOD,
+      path: "/api/computer/workspace",
+      token: credential.accessToken,
+      method: WORKSPACE_GET_METHOD,
       requestId,
-      encodeWorkspaceGetRequest({
+      payload: encodeWorkspaceGetRequest({
         protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
         requestId,
         workspaceSlug: slug,
       }),
-    );
+    });
     try {
       const response = decodeWorkspaceGetResponse(bytes);
       if (response.protocolMajor !== WORKSPACE_PROTOCOL_MAJOR || response.requestId !== requestId)
