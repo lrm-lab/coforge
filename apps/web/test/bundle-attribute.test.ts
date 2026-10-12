@@ -25,8 +25,8 @@ test("decodeVlq reads the magnitudes, signs and continuation groups a map uses",
 test("segmentsOf keeps generated order and tracks the delta fields", () => {
   // Two segments on one line: column 0 from source 0, then column 5 from source 1.
   expect(segmentsOf("AAAA,KCAA", ["a.ts", "b.ts"])).toEqual([
-    { generatedColumn: 0, source: "a.ts" },
-    { generatedColumn: 5, source: "b.ts" },
+    { generatedLine: 0, generatedColumn: 0, source: "a.ts" },
+    { generatedLine: 0, generatedColumn: 5, source: "b.ts" },
   ]);
 });
 
@@ -34,8 +34,8 @@ test("segmentsOf carries the source delta across lines, as the format does", () 
   // `AAAA;ACAA` — the second line starts a new generated column run but keeps the source
   // accumulator, so `ACAA` (source delta 1) is the second source, not the first.
   expect(segmentsOf("AAAA;ACAA", ["a.ts", "b.ts"])).toEqual([
-    { generatedColumn: 0, source: "a.ts" },
-    { generatedColumn: 0, source: "b.ts" },
+    { generatedLine: 0, generatedColumn: 0, source: "a.ts" },
+    { generatedLine: 1, generatedColumn: 0, source: "b.ts" },
   ]);
 });
 
@@ -53,6 +53,21 @@ test("attributeChunk credits each module the characters up to the next segment",
   expect([...byModule]).toEqual([
     ["a.ts", 5],
     ["b.ts", 5],
+  ]);
+});
+
+test("attributeChunk keeps the source index across lines, as the map format defines it", () => {
+  // Regression: decoding each line on its own restarted the source accumulator, so every line after
+  // the first was credited to the previous module. Two lines, each naming the next source, must come
+  // out as one span per module — and the wrong answer here is a single module holding both spans.
+  const { characters, byModule } = attributeChunk("1234567890\n1234567890", {
+    sources: ["apps/web/src/a.ts", "apps/web/src/b.ts", "apps/web/src/c.ts"],
+    mappings: "ACAA;ACAA",
+  });
+  expect(characters).toBe(20);
+  expect([...byModule]).toEqual([
+    ["apps/web/src/b.ts", 10],
+    ["apps/web/src/c.ts", 10],
   ]);
 });
 
@@ -112,6 +127,15 @@ test("pickChunk takes the largest chunk by size, or the one named", () => {
   expect(pickChunk(files, undefined, sizeOf)).toBe("/a/short-name.js");
   expect(pickChunk(files, "long-chunk-name", sizeOf)).toBe(files[1]);
   expect(() => pickChunk([], undefined, sizeOf)).toThrow("no client chunk found");
+});
+
+test("pickChunk refuses a name that matches nothing instead of attributing another chunk", () => {
+  const files = ["/a/vendor-initial.js", "/a/vendor-tanstack.js"];
+  // A typo in --chunk must not silently fall back to the largest chunk: the table would name one
+  // chunk and measure another.
+  expect(() => pickChunk(files, "vendor-records", () => 1)).toThrow(
+    'no chunk matching "vendor-records"',
+  );
 });
 
 test("formatAttribution shows the share, the bytes and where the list was cut", () => {

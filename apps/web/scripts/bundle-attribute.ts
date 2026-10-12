@@ -14,15 +14,22 @@
 // `sourcesContent` instead would blame a package for code the bundler removed — the mistake that
 // once made deleting the SDK barrel's re-exports look promising and save 0.7 KB.
 //
-// The figure is proportional, not exact: a span's bytes depend on the minified text under it, so
-// each module's share of the chunk's traced characters is scaled by the chunk's file size. It ranks
-// and attributes; it does not audit.
+// Two things the format makes easy to get wrong, both guarded by tests below:
+//  - The `sources` index and its file/line/column are deltas across the whole map; only the
+//    generated column resets on each `;`. So the segments are decoded once per map, never per line,
+//    or every line after the first is credited to the wrong module.
+//  - A chunk's size is bytes, while a span is measured in UTF-16 code units. The share is computed
+//    from characters and scaled by the chunk's byte size, which is why a chunk is mostly ASCII in
+//    practice but a chunk with CJK text would otherwise be overstated.
+//
+// The figure is proportional, not exact: a span's bytes depend on the minified text under it. It
+// ranks and attributes; it does not audit.
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** One decoded mapping segment: a column in the generated file and the source it came from. */
-type Segment = Readonly<{ generatedColumn: number; source: string }>;
+/** One decoded mapping segment: where it starts in the generated file, and the source it came from. */
+type Segment = Readonly<{ generatedLine: number; generatedColumn: number; source: string }>;
 
 /** A module's share of one chunk: traced characters, that share, and the same share of the bytes. */
 export type ModuleShare = Readonly<{
@@ -44,7 +51,8 @@ export type BundleMap = Readonly<{ sources: readonly string[]; mappings: string 
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /** Decodes one base64 VLQ value at `index`. Five bits per character with a continuation bit (32);
- * the first bit of the final group is the sign, so `result >> 1` carries the magnitude. */
+ * the first bit of the final group is the sign, so `result >> 1` carries the magnitude, and one
+ * character can hold magnitudes up to 15. */
 export function decodeVlq(text: string, index: number): { value: number; next: number } {
   let result = 0;
   let shift = 0;
@@ -61,15 +69,15 @@ export function decodeVlq(text: string, index: number): { value: number; next: n
   return { value: (result & 1) === 1 ? -magnitude : magnitude, next: cursor };
 }
 
-/** Every segment of a map in generated order. A segment is `[generatedColumn]`,
- * `[generatedColumn, source, line, column]`, or those four plus a name index. Sources are deltas
- * across the whole map; the generated column is a delta that resets on every `;`. Segments without
- * a source (generated code the compiler owns) are kept, with an empty source, so the spans between
- * them stay attached to the right module. */
+/** Every segment of a map, in generated order, tagged with its generated line. A segment is
+ * `[generatedColumn]`, `[generatedColumn, source, line, column]`, or those four plus a name index.
+ * Decode the whole map at once: the source index accumulates across `;`, so decoding line by line
+ * would restart it and mis-attribute every line but the first. Segments without a source (generated
+ * code the compiler owns) are kept, with an empty source, so the spans between them stay anchored. */
 export function segmentsOf(mappings: string, sources: readonly string[]): Segment[] {
   const segments: Segment[] = [];
   let sourceIndex = 0;
-  for (const line of mappings.split(";")) {
+  mappings.split(";").forEach((line, generatedLine) => {
     let generatedColumn = 0;
     for (const field of line.split(",")) {
       if (field === "") continue;
@@ -83,12 +91,16 @@ export function segmentsOf(mappings: string, sources: readonly string[]): Segmen
       generatedColumn += parts[0] ?? 0;
       if (parts.length > 3) {
         sourceIndex += parts[1] ?? 0;
-        segments.push({ generatedColumn, source: sources[sourceIndex] ?? "<unknown>" });
+        segments.push({
+          generatedLine,
+          generatedColumn,
+          source: sources[sourceIndex] ?? "<unknown>",
+        });
       } else {
-        segments.push({ generatedColumn, source: "" });
+        segments.push({ generatedLine, generatedColumn, source: "" });
       }
     }
-  }
+  });
   return segments;
 }
 
@@ -115,27 +127,26 @@ export function attributeChunk(
   map: BundleMap,
 ): Readonly<{ characters: number; byModule: ReadonlyMap<string, number> }> {
   const lineLengths = generated.split("\n").map((line) => line.length);
+  const segments = segmentsOf(map.mappings, map.sources);
   const byModule = new Map<string, number>();
   let characters = 0;
-  let line = 0;
-  for (const fields of map.mappings.split(";")) {
-    const lineLength = lineLengths[line] ?? 0;
-    line += 1;
-    const segments = segmentsOf(fields, map.sources);
-    segments.forEach((segment, index) => {
-      const next = segments[index + 1]?.generatedColumn ?? lineLength;
-      const span = next - segment.generatedColumn;
-      if (span <= 0 || segment.source === "") return;
-      const module = moduleOf(segment.source);
-      byModule.set(module, (byModule.get(module) ?? 0) + span);
-      characters += span;
-    });
-  }
+  segments.forEach((segment, index) => {
+    const next = segments[index + 1];
+    const end =
+      next && next.generatedLine === segment.generatedLine
+        ? next.generatedColumn
+        : (lineLengths[segment.generatedLine] ?? 0);
+    const span = end - segment.generatedColumn;
+    if (span <= 0 || segment.source === "") return;
+    const module = moduleOf(segment.source);
+    byModule.set(module, (byModule.get(module) ?? 0) + span);
+    characters += span;
+  });
   return { characters, byModule };
 }
 
 /** Ranks a chunk's modules, scaling each module's share of the traced characters by the chunk's
- * size: the spans measure structure, the file size measures bytes. */
+ * size in bytes: the spans measure structure, the file size measures bytes. */
 export function summarizeChunk(
   chunk: string,
   bytes: number,
@@ -172,18 +183,23 @@ export function formatAttribution(attribution: ChunkAttribution, top: number): s
   return lines.join("\n");
 }
 
-/** The chunk to attribute: the named one, or the largest client chunk, which is where a bundle
- * question usually starts. */
+/** The chunk to attribute: the named one, or the largest client chunk by size, which is where a
+ * bundle question usually starts. A name that matches nothing is an error: falling back to the
+ * largest chunk would silently attribute a chunk the caller did not ask about. The size comes from
+ * `sizeOf`, not the file name, because the longest names belong to the chunks with the most routes
+ * in them, not to the chunks with the most bytes. */
 export function pickChunk(
   files: readonly string[],
   name: string | undefined,
   sizeOf: (file: string) => number,
 ): string {
-  const match = name ? files.filter((file) => file.includes(name)) : files;
-  const candidates = match.length > 0 ? match : files;
-  // The size comes from `sizeOf`, not the file name: the longest names belong to the chunks with
-  // the most routes in them, not to the chunks with the most bytes.
-  const chosen = [...candidates].sort((left, right) => sizeOf(right) - sizeOf(left))[0];
+  if (name) {
+    const matches = files.filter((file) => file.includes(name));
+    const chosen = [...matches].sort((left, right) => sizeOf(right) - sizeOf(left))[0];
+    if (!chosen) throw new Error(`no chunk matching "${name}"`);
+    return chosen;
+  }
+  const chosen = [...files].sort((left, right) => sizeOf(right) - sizeOf(left))[0];
   if (!chosen)
     throw new Error("no client chunk found; run `bun --bun vite build --sourcemap` first");
   return chosen;
@@ -193,7 +209,7 @@ function readChunk(assets: string, name: string | undefined) {
   const files = readdirSync(assets)
     .filter((file) => file.endsWith(".js"))
     .map((file) => join(assets, file));
-  const chunk = pickChunk(files, name, (file) => statSync(file).size);
+  const chunk = pickChunk(files, name, (file) => readFileSync(file).byteLength);
   const generated = readFileSync(chunk, "utf8");
   let map: BundleMap;
   try {
@@ -219,7 +235,13 @@ function main(argv: readonly string[]) {
     else if (flag === "--json") json = true;
   }
   const { chunk, generated, map } = readChunk(assets, name);
-  const attribution = summarizeChunk(chunk, generated.length, attributeChunk(generated, map));
+  // The size is the file's bytes, not the text's length: a chunk with CJK text would otherwise be
+  // understated, since a span counts UTF-16 code units and a byte count is what ships.
+  const attribution = summarizeChunk(
+    chunk,
+    readFileSync(chunk).byteLength,
+    attributeChunk(generated, map),
+  );
   if (json) console.log(JSON.stringify(attribution, null, 2));
   else console.log(formatAttribution(attribution, top));
 }
