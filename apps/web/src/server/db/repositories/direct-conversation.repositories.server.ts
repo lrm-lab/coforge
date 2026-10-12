@@ -586,7 +586,21 @@ type ResolvedAgentTarget = {
 };
 
 export class PrismaDirectConversationRepository implements DirectConversationRepository {
-  constructor(private readonly db: PrismaClient) {}
+  /** Channel lookups this instance has made, kept only when it serves a single request. */
+  readonly #agentChannels?: Map<string, Promise<{ id: string }>>;
+
+  /**
+   * `oneRequest` keeps each Agent channel lookup for the instance's life, so the steps of one
+   * Agent send (its Memory Offer check, freshness and the send itself) resolve the channel once.
+   * Only for an instance created per request: a longer-lived one would keep a membership the
+   * Agent has since lost. The send re-reads the sender's membership when it writes the message.
+   */
+  constructor(
+    private readonly db: PrismaClient,
+    { oneRequest = false }: { oneRequest?: boolean } = {},
+  ) {
+    if (oneRequest) this.#agentChannels = new Map();
+  }
 
   async userIdForUsername(target: string) {
     const [parentTarget, root, extra] = target.split(":");
@@ -633,7 +647,15 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   getAgentChannel(workspaceId: string, agentId: string, target: string) {
-    return getAgentChannel(this.db, workspaceId, agentId, target);
+    const lookups = this.#agentChannels;
+    if (!lookups) return getAgentChannel(this.db, workspaceId, agentId, target);
+    const key = `${workspaceId}:${agentId}:${target}`;
+    let lookup = lookups.get(key);
+    if (!lookup) {
+      lookup = getAgentChannel(this.db, workspaceId, agentId, target);
+      lookups.set(key, lookup);
+    }
+    return lookup;
   }
 
   setAgentChannelMuted(workspaceId: string, agentId: string, target: string, muted: boolean) {

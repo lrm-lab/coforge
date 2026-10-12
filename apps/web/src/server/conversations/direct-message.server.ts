@@ -136,24 +136,32 @@ export class SendDirectMessage {
         return persisted;
       },
     );
-    // A channel message fans out to the Workspace; a DM goes only to its human viewer, naming
-    // the sending Agent's badge so the browser needs no conversation alias.
-    await this.publishBrowserEvent(
-      message,
-      conversation.id,
-      isChannel
-        ? { workspaceId: input.workspaceId }
-        : { userId: dmUserId!, agentId: input.agentId },
-    );
-    await this.notifications?.notifyMessage(message.id);
-    await this.publishAgentMentionDeliveries(input.idempotencyKey, conversation.id, message);
+    const publications = (async () => {
+      // A channel message fans out to the Workspace; a DM goes only to its human viewer, naming
+      // the sending Agent's badge so the browser needs no conversation alias.
+      await this.publishBrowserEvent(
+        message,
+        conversation.id,
+        isChannel
+          ? { workspaceId: input.workspaceId }
+          : { userId: dmUserId!, agentId: input.agentId },
+      );
+      await this.notifications?.notifyMessage(message.id);
+      await this.publishAgentMentionDeliveries(input.idempotencyKey, conversation.id, message);
+    })();
     // What the message did not reach, read from the stored message so a replay reports the same.
-    const report = (await this.conversations.agentMentionReport?.(
-      input.workspaceId,
-      input.agentId,
-      { id: message.id, conversationId: conversation.id, body: message.body },
-    )) ?? { pendingMentionActions: [], unresolvedMentionHandles: [] };
-    return { ...message, ...report };
+    // It reads only what the send committed, so it runs alongside the publications; both settle
+    // before the send answers, as when they ran one after the other.
+    const reading = (async () =>
+      (await this.conversations.agentMentionReport?.(input.workspaceId, input.agentId, {
+        id: message.id,
+        conversationId: conversation.id,
+        body: message.body,
+      })) ?? { pendingMentionActions: [], unresolvedMentionHandles: [] })();
+    const [published, report] = await Promise.allSettled([publications, reading]);
+    if (published.status === "rejected") throw published.reason;
+    if (report.status === "rejected") throw report.reason;
+    return { ...message, ...report.value };
   }
 
   /**

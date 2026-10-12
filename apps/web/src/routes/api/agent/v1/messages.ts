@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
   AgentHistoryResponse,
   AgentMessage,
@@ -328,48 +329,60 @@ export async function handleAgentMessagesPost(
   }
 }
 
+/**
+ * What one Agent send runs on, built per request. Its repository keeps the channel it resolves, so
+ * the Memory Offer check, the freshness check and the send itself look the channel up once.
+ */
+export function agentMessagesPostDependencies(db: PrismaClient) {
+  const repository = new PrismaDirectConversationRepository(db, { oneRequest: true });
+  const centrifugo = createCentrifugoServerApi();
+  const requestRecords = getMessageRequestIdempotency();
+  const directory = createPrismaMemoryAgentDirectory(db);
+  return {
+    repository,
+    requestRecords,
+    memoryOfferRequired: async ({
+      workspaceId,
+      agentId,
+      target,
+    }: {
+      workspaceId: string;
+      agentId: string;
+      target: string;
+    }) => {
+      try {
+        const conversation = await repository.getAgentChannel(workspaceId, agentId, target);
+        return explicitMemoryQuestionRequiresOffer(
+          db,
+          { workspaceId, agentId, conversationId: conversation.id },
+          (currentWorkspaceId, currentAgentId) =>
+            directory.isDesignated(currentWorkspaceId, currentAgentId),
+        );
+      } catch (error) {
+        if (isAppError(error) && (error.code === "ACCESS_DENIED" || error.code === "INVALID_INPUT"))
+          return false;
+        throw error;
+      }
+    },
+    sender: new SendDirectMessage(
+      repository,
+      requestRecords,
+      centrifugo,
+      new CentrifugoConversationRealtime(centrifugo),
+      bestEffortMessageNotifier(db),
+      new MentionDeliveryIssuer(new PrismaMentionDeliveryRepository(db)),
+    ),
+  };
+}
+
 export const Route = createFileRoute("/api/agent/v1/messages")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
       GET: ({ request, context: { principal, db } }) =>
         handleAgentMessagesGet(request, principal, new PrismaDirectConversationRepository(db)),
-      POST: ({ request, context: { principal, db } }) => {
-        const repository = new PrismaDirectConversationRepository(db);
-        const centrifugo = createCentrifugoServerApi();
-        const requestRecords = getMessageRequestIdempotency();
-        const directory = createPrismaMemoryAgentDirectory(db);
-        return handleAgentMessagesPost(request, principal, {
-          repository,
-          requestRecords,
-          memoryOfferRequired: async ({ workspaceId, agentId, target }) => {
-            try {
-              const conversation = await repository.getAgentChannel(workspaceId, agentId, target);
-              return explicitMemoryQuestionRequiresOffer(
-                db,
-                { workspaceId, agentId, conversationId: conversation.id },
-                (currentWorkspaceId, currentAgentId) =>
-                  directory.isDesignated(currentWorkspaceId, currentAgentId),
-              );
-            } catch (error) {
-              if (
-                isAppError(error) &&
-                (error.code === "ACCESS_DENIED" || error.code === "INVALID_INPUT")
-              )
-                return false;
-              throw error;
-            }
-          },
-          sender: new SendDirectMessage(
-            repository,
-            requestRecords,
-            centrifugo,
-            new CentrifugoConversationRealtime(centrifugo),
-            bestEffortMessageNotifier(db),
-            new MentionDeliveryIssuer(new PrismaMentionDeliveryRepository(db)),
-          ),
-        });
-      },
+      POST: ({ request, context: { principal, db } }) =>
+        handleAgentMessagesPost(request, principal, agentMessagesPostDependencies(db)),
     },
   },
 });
