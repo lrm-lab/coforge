@@ -24,7 +24,7 @@ const railProps = { activeUrl: "/chat", items, footer };
 test("Rail: the resting icon carries the nav-icon token and a 2px stroke", () => {
   const markup = renderToStaticMarkup(<SidebarRail {...railProps} />);
   expect(markup).toContain("text-nav-icon");
-  expect(markup).toContain("stroke-[2px]");
+  expect(markup).toContain("stroke-[2.4]");
 });
 
 test("Sidebar (expanded, and the mobile drawer): same token and 2px stroke on its icon", () => {
@@ -42,8 +42,8 @@ test("The current item keeps the brand accent; the resting icon never uses the o
   const resting = iconClasses.find((cls) => cls.includes("text-nav-icon"));
   expect(current).toBeTruthy();
   expect(resting).toBeTruthy();
-  expect(current).toContain("stroke-[2px]");
-  expect(resting).toContain("stroke-[2px]");
+  expect(current).toContain("stroke-[2.4]");
+  expect(resting).toContain("stroke-[2.4]");
   expect(resting).not.toContain("text-tertiary");
 });
 

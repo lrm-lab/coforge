@@ -35,7 +35,7 @@ function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
         <Icon
           aria-hidden="true"
           className={cx(
-            "size-5 stroke-[2px] transition-colors duration-100 ease-linear",
+            "size-5 stroke-[2.4] transition-colors duration-100 ease-linear",
             current ? "text-brand-secondary" : "text-nav-icon group-hover:text-secondary",
           )}
         />
