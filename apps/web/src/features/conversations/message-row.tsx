@@ -17,6 +17,7 @@ import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria
 
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Avatar } from "#src/components/base/avatar/avatar";
+import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useAppToast } from "#src/components/ui/toast";
@@ -1058,6 +1059,17 @@ export const MessageRow = memo(function MessageRow({
                   </Tooltip>
                 );
               })}
+            </div>
+          )}
+          {/* Saved is a per-viewer state, so this marker is only ever the viewer's own: it says
+              "this one is in your Saved" without opening the hover bar to check its bookmark. The
+              Saved page itself does not repeat it — that list has its own row (see
+              `saved-messages-view.tsx`), where every entry is saved by definition. */}
+          {saveSaved && (
+            <div className="flex pt-0.5">
+              <BadgeWithIcon type="color" color="warning" size="sm" iconLeading={Bookmark}>
+                {m.conversation_saved_marker()}
+              </BadgeWithIcon>
             </div>
           )}
           {showsTask && <MessageTask messageId={message.id} />}
