@@ -3,17 +3,18 @@ import {
   Check,
   Copy01 as Copy,
   Edit01 as Pencil,
+  Plus,
   SearchLg as Scan,
   RefreshCw01 as RotateCw,
 } from "@untitledui/icons";
-import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import type { RuntimeProvider, AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
+import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Toggle } from "#src/components/base/toggle/toggle";
-import { StatusDot } from "#src/components/ui/status-dot";
 import { useAppToast } from "#src/components/ui/toast";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
@@ -38,6 +39,16 @@ import { ComputerTile } from "./computer-tile";
 import { RuntimeIdentity, RuntimeUsage } from "./runtime-usage";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
+import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
+import type { CreateAgentInput } from "#src/features/agents/agent.schemas";
+import type { RuntimeCatalog } from "#src/features/agents/agent-runtime-fields";
+import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
+import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
+import { AgentControlDialogs } from "#src/features/agents/agent-control-dialogs";
+import {
+  useAgentRuntimeControls,
+  type AgentControlExecute,
+} from "#src/features/agents/agent-runtime-controls";
 import type {
   ComputerAgentWorkspaceScan,
   ComputerRestartStatus,
@@ -61,6 +72,7 @@ export const UPGRADE_MAX_POLLS = 60;
 export type ComputerDetailView = ComputerIdentity & {
   id: string;
   ownedByCurrentUser: boolean;
+  canManageAgents: boolean;
   online: boolean;
   connectedAt: Date | string;
   computerVersion?: string | null;
@@ -85,7 +97,7 @@ export type ComputerDetailView = ComputerIdentity & {
     avatarUrl: string | null;
     provider: RuntimeProvider;
     runtimeConfig: { model?: string; modelProvider?: string };
-    online: boolean;
+    display?: AgentDisplaySnapshot;
   }[];
 };
 
@@ -130,6 +142,10 @@ export function ComputerDetail({
   upgradePollIntervalMs = UPGRADE_POLL_INTERVAL_MS,
   upgradeMaxPolls = UPGRADE_MAX_POLLS,
   onScanAgentWorkspaces,
+  onCreateAgent,
+  onLoadRuntimeCatalog,
+  onSelectAgent,
+  onExecuteAgentControl,
 }: {
   computer: ComputerDetailView;
   timeZone?: string | null;
@@ -140,6 +156,10 @@ export function ComputerDetail({
   onUpgrade?: (requestId: string) => Promise<ComputerUpgradeStatus>;
   onReadUpgradeStatus?: (requestId: string) => Promise<ComputerUpgradeStatus>;
   onScanAgentWorkspaces?: () => Promise<ComputerAgentWorkspaceScan[]>;
+  onCreateAgent?: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
+  onLoadRuntimeCatalog?: (computerId: string) => Promise<RuntimeCatalog[]>;
+  onSelectAgent?: (agentId: string) => void;
+  onExecuteAgentControl?: AgentControlExecute;
   latestComputerVersion?: string | null;
   restartPollIntervalMs?: number;
   restartMaxPolls?: number;
@@ -161,6 +181,7 @@ export function ComputerDetail({
     | { state: "ready"; workspaces: ComputerAgentWorkspaceScan[] }
     | { state: "error" }
   >({ state: "idle" });
+  const [createAgentOpen, setCreateAgentOpen] = useState(false);
   const toast = useAppToast();
   const creatorName = computer.creator ? humanLabel(computer.creator) : "";
   const mountedRef = useRef(true);
@@ -497,7 +518,17 @@ export function ComputerDetail({
             </dl>
           </DetailGroup>
 
-          <AgentRoster agents={computer.agents} />
+          <AgentRoster
+            agents={computer.agents}
+            onCreateAgent={
+              onCreateAgent && onLoadRuntimeCatalog ? () => setCreateAgentOpen(true) : undefined
+            }
+            onSelectAgent={onSelectAgent}
+            onExecute={onExecuteAgentControl}
+            canFullReset={computer.canManageAgents}
+            computerOnline={computer.online}
+            computerName={computerLabel(computer)}
+          />
           <WorkspaceInventory
             scan={workspaceScan}
             canScan={Boolean(onScanAgentWorkspaces)}
@@ -552,61 +583,243 @@ export function ComputerDetail({
           </section>
         </div>
       </div>
+      {onCreateAgent && onLoadRuntimeCatalog && (
+        <AgentCreateDialog
+          open={createAgentOpen}
+          onOpenChange={setCreateAgentOpen}
+          computers={[
+            {
+              id: computer.id,
+              name: computer.name,
+              displayName: computer.displayName,
+              online: computer.online,
+              runtimes: computer.runtimes.map((runtime) => ({ provider: runtime.provider })),
+            },
+          ]}
+          defaults={{ computerId: computer.id }}
+          computerLocked
+          onCreate={onCreateAgent}
+          onLoadRuntimeCatalog={onLoadRuntimeCatalog}
+        />
+      )}
     </>
   );
 }
 
-function AgentRoster({ agents }: { agents: ComputerDetailView["agents"] }) {
+function AgentRoster({
+  agents,
+  onCreateAgent,
+  onSelectAgent,
+  onExecute,
+  canFullReset,
+  computerOnline,
+  computerName,
+}: {
+  agents: ComputerDetailView["agents"];
+  onCreateAgent?: () => void;
+  onSelectAgent?: (agentId: string) => void;
+  onExecute?: AgentControlExecute;
+  canFullReset: boolean;
+  computerOnline: boolean;
+  computerName: string;
+}) {
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [failedNames, setFailedNames] = useState<string[]>([]);
+  const selectedAgents = agents.filter((agent) => selectedIds.has(agent.id));
+  const selectionName = selectedAgents.map((agent) => agent.displayName).join(", ");
+  const control = useAgentRuntimeControls({
+    agentId: selectedAgents[0]?.id ?? "",
+    agentName: selectionName,
+    canFullReset,
+    computerOnline,
+    computerLabel: computerName,
+    onExecute: async (request) => {
+      if (!onExecute || !selectedAgents.length || busy) return;
+      setBusy(true);
+      setFailedNames([]);
+      try {
+        const results = await Promise.allSettled(
+          selectedAgents.map((agent) =>
+            onExecute({ ...request, agentId: agent.id, requestId: crypto.randomUUID() }),
+          ),
+        );
+        const failed = selectedAgents.filter(
+          (_agent, index) => results[index]?.status === "rejected",
+        );
+        setFailedNames(failed.map((agent) => agent.displayName));
+        if (failed.length) throw new Error("Some Agent control requests failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+  });
+  const locked = busy || control.stopConfirmOpen || control.restartOpen;
   return (
-    <DetailGroup
-      heading={`${m.computer_agents_on_computer()} (${agents.length})`}
-      headingId="computer-agents-on-computer"
-    >
-      {agents.length ? (
-        <ul className="divide-y divide-secondary">
-          {agents.map((agent) => (
-            <li
-              key={agent.id}
-              className="flex min-w-0 items-center justify-between gap-4 py-3 text-sm"
-            >
-              <span className="flex min-w-0 items-center gap-3">
-                <Avatar
+    <>
+      <DetailGroup
+        heading={`${m.computer_agents_on_computer()} (${agents.length})`}
+        headingId="computer-agents-on-computer"
+        action={
+          <div className="flex flex-wrap justify-end gap-2">
+            {selecting ? (
+              <>
+                <Button
                   size="sm"
-                  src={agent.avatarUrl ?? undefined}
-                  alt=""
-                  initials={avatarInitial(agent.displayName)}
-                  contentClassName={avatarToneClassName(agent.displayName)}
-                />
-                <span className="min-w-0">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate font-medium text-primary">{agent.displayName}</span>
-                    <StatusDot
-                      tone={agent.online ? "online" : "offline"}
-                      label={
-                        agent.online ? m.computer_status_online() : m.computer_status_offline()
+                  color="secondary"
+                  isDisabled={locked}
+                  onPress={() =>
+                    setSelectedIds(
+                      selectedAgents.length === agents.length
+                        ? new Set()
+                        : new Set(agents.map((agent) => agent.id)),
+                    )
+                  }
+                >
+                  {selectedAgents.length === agents.length
+                    ? m.computer_agents_clear_all()
+                    : m.computer_agents_select_all()}
+                </Button>
+                <Button
+                  size="sm"
+                  color="tertiary"
+                  isDisabled={locked}
+                  onPress={() => {
+                    setSelecting(false);
+                    setSelectedIds(new Set());
+                    setFailedNames([]);
+                  }}
+                >
+                  {m.controls_cancel()}
+                </Button>
+              </>
+            ) : (
+              <>
+                {onExecute && agents.length > 0 && (
+                  <Button size="sm" color="secondary" onPress={() => setSelecting(true)}>
+                    {m.computer_agent_select()}
+                  </Button>
+                )}
+                {onCreateAgent && (
+                  <Button size="sm" color="secondary" iconLeading={Plus} onPress={onCreateAgent}>
+                    {m.computer_agent_create()}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        }
+      >
+        {selecting && selectedAgents.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 py-3">
+            <span className="mr-auto text-sm text-tertiary">
+              {m.computer_agents_selected({ count: String(selectedAgents.length) })}
+            </span>
+            <Button
+              size="sm"
+              color="secondary"
+              isDisabled={locked}
+              onPress={control.pressStartOrStop}
+            >
+              {m.agent_control_start()}
+            </Button>
+            <Button
+              size="sm"
+              color="secondary"
+              isDisabled={locked}
+              onPress={() => control.setStopConfirmOpen(true)}
+            >
+              {m.agent_control_stop()}
+            </Button>
+            <Button
+              size="sm"
+              color="secondary"
+              isDisabled={locked}
+              onPress={() => control.openRestart()}
+            >
+              {m.agent_control_restart_reset_tooltip()}
+            </Button>
+          </div>
+        )}
+        {failedNames.length > 0 && (
+          <p role="alert" className="py-2 text-sm text-error-primary">
+            {m.computer_agents_control_failed({ names: failedNames.join(", ") })}
+          </p>
+        )}
+        {control.startDeferred && (
+          <p className="py-2 text-sm text-tertiary">
+            {m.agent_control_start_deferred_notice({ computer: computerName })}
+          </p>
+        )}
+        {agents.length ? (
+          <ul className="divide-y divide-secondary">
+            {agents.map((agent) => (
+              <li
+                key={agent.id}
+                className="flex min-w-0 items-center justify-between gap-4 py-3 text-sm"
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  {selecting && (
+                    <Checkbox
+                      aria-label={m.computer_agent_select_named({ name: agent.displayName })}
+                      isDisabled={locked}
+                      isSelected={selectedIds.has(agent.id)}
+                      onChange={(selected) =>
+                        setSelectedIds((current) => {
+                          const next = new Set(current);
+                          if (selected) next.add(agent.id);
+                          else next.delete(agent.id);
+                          return next;
+                        })
                       }
-                      className="size-2"
                     />
-                  </span>
-                  <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-tertiary">
-                    <RuntimeProviderMark provider={agent.provider} className="size-3.5" />
-                    <span className="truncate">
-                      {runtimeProviderLabel(agent.provider)}
-                      {agent.runtimeConfig.model ? ` · ${agent.runtimeConfig.model}` : ""}
-                    </span>
-                  </span>
+                  )}
+                  <AgentRosterIdentity agent={agent} />
                 </span>
-              </span>
-              <span className="shrink-0 text-xs text-tertiary">@{agent.name}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="py-6 text-center text-sm text-tertiary">
-          {m.computer_no_agents_on_computer()}
-        </p>
-      )}
-    </DetailGroup>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="text-xs text-tertiary">@{agent.name}</span>
+                  {onSelectAgent && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      color="tertiary"
+                      onPress={() => onSelectAgent(agent.id)}
+                    >
+                      {m.computer_agent_open()}
+                    </Button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="py-6 text-center text-sm text-tertiary">
+            {m.computer_no_agents_on_computer()}
+          </p>
+        )}
+      </DetailGroup>
+      <AgentControlDialogs agentName={selectionName} control={control} />
+    </>
+  );
+}
+
+function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][number] }) {
+  const display = useLiveAgentDisplay(agent.id) ?? agent.display;
+  return (
+    <>
+      <AgentDisplayAvatar name={agent.displayName} src={agent.avatarUrl} display={display} />
+      <span className="min-w-0">
+        <span className="block truncate font-medium text-primary">{agent.displayName}</span>
+        <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-tertiary">
+          <RuntimeProviderMark provider={agent.provider} className="size-3.5" />
+          <span className="truncate">
+            {runtimeProviderLabel(agent.provider)}
+            {agent.runtimeConfig.model ? ` · ${agent.runtimeConfig.model}` : ""}
+          </span>
+        </span>
+      </span>
+    </>
   );
 }
 

@@ -55,7 +55,7 @@ import {
   agentVisibilityViewerForUser,
   visibleAgentWhere,
 } from "#src/server/agents/agent-visibility.server";
-import { getAgentStatusCache } from "#src/server/agents/agent-status.server";
+import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 
@@ -191,9 +191,9 @@ export const listComputers = createServerFn({ method: "GET" })
     const agentScopes = connections.flatMap(({ computer }) =>
       computer.agents.map((agent) => ({ workspaceId, computerId: computer.id, agentId: agent.id })),
     );
-    const agentStatuses = await getAgentStatusCache().snapshotMany(agentScopes);
-    const agentStatusById = new Map(
-      agentScopes.map((scope, index) => [scope.agentId, agentStatuses[index]] as const),
+    const agentDisplays = await getAgentDisplay().snapshotMany(agentScopes);
+    const agentDisplayById = new Map(
+      agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
     );
     return Promise.all(
       connections.map(async ({ computer, createdAt }, index) => {
@@ -217,6 +217,7 @@ export const listComputers = createServerFn({ method: "GET" })
           },
           connectedAt: createdAt,
           ownedByCurrentUser: computer.ownerId === user.id,
+          canManageAgents: agentViewer.role === "owner" || agentViewer.role === "admin",
           online: statuses[index] ?? false,
           agents: computer.agents.map((agent) => ({
             id: agent.id,
@@ -225,7 +226,7 @@ export const listComputers = createServerFn({ method: "GET" })
             avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
             provider: parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
             runtimeConfig: publicAgentRuntimeConfig(parseAgentRuntimeConfig(agent.runtimeConfig)),
-            online: agentStatusById.get(agent.id)?.status === "active",
+            display: agentDisplayById.get(agent.id),
           })),
           runtimes: computerRuntimes.map(({ ownerId: _ownerId, ...runtime }) => runtime),
         };

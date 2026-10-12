@@ -25,15 +25,17 @@ const MAX_FILES = 10_000;
 
 /**
  * Builds the Computer page's local workspace inventory from the existing directory-list seam.
- * The daemon owns filesystem access; this module only traverses returned metadata and keeps the
- * absolute root path out of the browser response. A deleted Agent remains in the inventory so an
+ * The daemon owns filesystem access; this module only traverses returned metadata. A deleted
+ * Agent remains in the owner-only inventory so an
  * owner can identify files that outlived the cloud Agent row's live view.
  */
 export async function scanComputerAgentWorkspaces(
   agents: readonly ComputerWorkspaceAgent[],
   listDirectory: ListWorkspaceDirectory,
 ): Promise<ComputerAgentWorkspaceScan[]> {
-  return Promise.all(agents.map((agent) => scanOne(agent, listDirectory)));
+  const inventory: ComputerAgentWorkspaceScan[] = [];
+  for (const agent of agents) inventory.push(await scanOne(agent, listDirectory));
+  return inventory;
 }
 
 async function scanOne(
@@ -45,7 +47,7 @@ async function scanOne(
     name: agent.name,
     displayName: agent.displayName,
     state: agent.deletedAt ? ("deleted" as const) : ("active" as const),
-    rootPath: `~/agents/${agent.id}/`,
+    rootPath: "",
     fileCount: 0,
     totalSizeBytes: 0,
     modifiedAtMs: 0,
@@ -59,6 +61,7 @@ async function scanOne(
   }
   if (root.status !== "ok")
     return { ...base, status: root.status === "missing" ? "missing" : "unavailable" };
+  base.rootPath = root.rootPath;
 
   const pending = [{ path: "", entries: root.entries }];
   let directoryCount = 1;

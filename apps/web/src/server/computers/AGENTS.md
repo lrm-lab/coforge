@@ -24,5 +24,4 @@ These rules apply to `src/server/computers/`.
 - `computer-lifecycle-memory.server.ts` is the only store of a shutdown
   reason and of the last daemon instance whose return was announced.
 - `computer-agent-workspaces.server.ts` summarizes the Daemon's existing
-  workspace-directory observations for the Computer detail inventory; it does
-  not expose absolute filesystem paths.
+  workspace-directory observations for the Computer owner's detail inventory.

@@ -23,6 +23,20 @@ function listing(
 }
 
 describe("scanComputerAgentWorkspaces", () => {
+  test("scans Agents sequentially because the Daemon accepts one directory observation at a time", async () => {
+    let pending = false;
+    const result = await scanComputerAgentWorkspaces(
+      [agent(), agent({ id: "agent-2" })],
+      async () => {
+        if (pending) return { status: "error", rootPath: "", entries: [] };
+        pending = true;
+        await Promise.resolve();
+        pending = false;
+        return { status: "ok", rootPath: "", entries: [] };
+      },
+    );
+    expect(result.map((workspace) => workspace.status)).toEqual(["present", "present"]);
+  });
   test("summarizes active and deleted Agent workspaces recursively", async () => {
     const directories = new Map<string, WorkspaceDirectoryListing>([
       [
@@ -66,7 +80,7 @@ describe("scanComputerAgentWorkspaces", () => {
         displayName: "Alice",
         state: "active",
         status: "present",
-        rootPath: "~/agents/agent-1/",
+        rootPath: "/var/coforge/agent-1",
         fileCount: 2,
         totalSizeBytes: 20,
         modifiedAtMs: 30,
@@ -77,7 +91,7 @@ describe("scanComputerAgentWorkspaces", () => {
         displayName: "Old Alice",
         state: "deleted",
         status: "present",
-        rootPath: "~/agents/agent-2/",
+        rootPath: "/var/coforge/agent-2",
         fileCount: 0,
         totalSizeBytes: 0,
         modifiedAtMs: 0,

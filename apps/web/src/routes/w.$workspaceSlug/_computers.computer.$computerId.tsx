@@ -3,6 +3,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 
 import { ComputerDetail } from "#src/features/computers/computer-detail";
+import { createAgent } from "#src/features/agents/agents.functions";
+import { executeAgentControl } from "#src/features/agents/agent-control.functions";
+import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
+import { getComputerRuntimeCatalog } from "#src/features/computers/computers.functions";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { ComputerNotFound } from "#src/features/computers/computer-not-found";
 import {
   ComputerDetailLoadError,
@@ -45,6 +50,7 @@ function ComputerDetailPage() {
   // than carried in the loader (see `latest-version.query.ts`).
   const { data: latestComputerVersion } = useQuery(latestComputerVersionQuery());
   const router = useRouter();
+  const workspaceSlug = useWorkspaceSlug();
   const setVisibility = useServerFn(setRuntimeVisibility);
   const updateDisplayName = useServerFn(updateComputerDisplayName);
   const requestRestart = useServerFn(restartComputer);
@@ -52,6 +58,9 @@ function ComputerDetailPage() {
   const requestUpgrade = useServerFn(upgradeComputer);
   const readUpgrade = useServerFn(readComputerUpgradeStatus);
   const scanWorkspaces = useServerFn(scanAgentWorkspaces);
+  const create = useServerFn(createAgent);
+  const executeControl = useServerFn(executeAgentControl);
+  const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
 
   return (
     <ComputerDetail
@@ -62,6 +71,28 @@ function ComputerDetailPage() {
       onReadRestartStatus={(requestId) => readRestart({ data: { computerId, requestId } })}
       onScanAgentWorkspaces={
         computer.ownedByCurrentUser ? () => scanWorkspaces({ data: { computerId } }) : undefined
+      }
+      onCreateAgent={
+        computer.canManageAgents
+          ? (data) =>
+              create({ data }).then(async (result) => {
+                await router.invalidate({ sync: true });
+                return result;
+              })
+          : undefined
+      }
+      onExecuteAgentControl={(data) => executeControl({ data })}
+      onLoadRuntimeCatalog={(id) => loadRuntimeCatalog({ data: { computerId: id } })}
+      onSelectAgent={(agentId) =>
+        void router.navigate({
+          to: "/w/$workspaceSlug/members",
+          params: { workspaceSlug },
+          search: {
+            memberType: "agent",
+            owner: "all",
+            profile: formatAgentProfileParam(agentId),
+          },
+        })
       }
       latestComputerVersion={latestComputerVersion}
       onUpgrade={(requestId) => requestUpgrade({ data: { computerId, requestId } })}
