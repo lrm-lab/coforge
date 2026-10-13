@@ -11,12 +11,16 @@ These rules apply to `src/server/db/`.
   unique `id`, `.withPages({ limit, page })` for page numbers. Its cursors are
   our UUID ids. A page after a cursor costs two queries (the extension also
   reads `hasPreviousPage`).
-- Never give Prisma a compound unique cursor (`conversationId_sequence`, …):
-  Prisma 7 then drops the LIMIT and reads every row before the cursor. A
-  sequence window (`sequence < x` / `> x`, `around`) and a raw-SQL page stay
-  hand-written range queries; so does a keyset whose cursor encodes the sort
-  values themselves (`updatedAt` + id), which a changed or deleted cursor row
-  must not move.
+- A cursor page (`withCursor`, or any `findMany({ cursor })`) must end its
+  `orderBy` with every field of the cursor's unique key (for `id`:
+  `orderBy: [{ name: "asc" }, { id: "asc" }]`). Otherwise Prisma 7 sends no
+  LIMIT and reads every row before the cursor (prisma/prisma#15710).
+- Don't use a compound unique cursor (`conversationId_sequence`, …) for
+  sequence paging: even with a covering orderBy, Prisma's cursor SQL is an OR
+  plus subqueries, slower on deep pages than a plain range. A sequence window
+  (`sequence < x` / `> x`, `around`) and a raw-SQL page stay hand-written range
+  queries; so does a keyset whose cursor encodes the sort values themselves
+  (`updatedAt` + id), which a changed or deleted cursor row must not move.
 - `clampPageLimit(requested, max)` (`page-limit.server.ts`) bounds every
   requested page size.
 - Agent repositories persist only the completed runtime configuration;

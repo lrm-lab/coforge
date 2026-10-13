@@ -5,9 +5,10 @@ import type { PrismaClient } from "#src/generated/prisma/client";
  * `prisma-extension-pagination`, configured for our ids. They are UUID strings, which the
  * extension's default cursor (numeric ids only) refuses to serialize.
  *
- * Use it only for a cursor on a single unique column (`id`): with a compound unique cursor
- * (`conversationId_sequence`, …) Prisma 7 leaves the query without a LIMIT and reads every row
- * before the cursor, so a sequence window stays a plain range query (`sequence < …`).
+ * Use it only for a cursor on a single unique column (`id`), and end `orderBy` with `id`: an
+ * orderBy that does not cover the cursor's unique key leaves Prisma 7's query without a LIMIT, so
+ * it reads every row before the cursor (prisma/prisma#15710). A sequence window stays a plain
+ * range query (`sequence < …`); see `AGENTS.md` here.
  */
 export const PAGINATION_OPTIONS = {
   cursor: {
