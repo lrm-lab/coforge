@@ -130,7 +130,7 @@ export function handleCurrentUser(input: { request: Request; sessionSecret: stri
   return Response.json({ user }, { headers: noStore() });
 }
 
-export function readRequestUser(request: Request, sessionSecret: string): BrowserUser | null {
+function readRequestUser(request: Request, sessionSecret: string): BrowserUser | null {
   return readBrowserSession({
     sessionSecret,
     cookieHeader: request.headers.get("cookie") ?? "",

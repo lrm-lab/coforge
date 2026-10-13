@@ -86,7 +86,7 @@ export function isJoinLinkActive(
 }
 
 /** 32 random bytes, base64url: the only thing a visitor needs to join. */
-export function generateJoinLinkToken(): string {
+function generateJoinLinkToken(): string {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 }
 

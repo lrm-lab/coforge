@@ -90,7 +90,7 @@ export class WorkspaceEnrollment {
   }
 }
 
-export function workspaceDisplayName(displayName: string, acceptLanguage: string): string {
+function workspaceDisplayName(displayName: string, acceptLanguage: string): string {
   const name = displayName.trim() || "User";
   return prefersChinese(acceptLanguage) ? `${name}的工作区` : `${name}'s Workspace`;
 }
@@ -111,10 +111,6 @@ export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore 
     const row = await createOwnedWorkspace(this.db, input, { id: true });
     return row.id;
   }
-}
-
-export function findWorkspaceIdForUser(db: PrismaClient, userId: string): Promise<string | null> {
-  return new PrismaWorkspaceEnrollmentStore(db).findMembership(userId);
 }
 
 export async function requireExistingWorkspaceId(

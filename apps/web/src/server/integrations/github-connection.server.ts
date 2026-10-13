@@ -468,7 +468,7 @@ function rememberRepositoryTree(
 }
 
 /** `a/b c.ts` → `a/b%20c.ts`: each segment encoded, the separators kept. */
-export function encodeRepositoryPath(path: string) {
+function encodeRepositoryPath(path: string) {
   return path.split("/").map(encodeURIComponent).join("/");
 }
 

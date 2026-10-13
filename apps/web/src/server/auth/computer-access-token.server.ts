@@ -61,7 +61,7 @@ export async function signComputerAccessToken(
  * HTTP endpoint that has to do its own checking - and it must never trust a `sub` it has not
  * verified. The public half is derived from the private JWK the same way /api/jwks does it.
  */
-export async function verifyComputerAccessToken(
+async function verifyComputerAccessToken(
   token: string,
   environment: Record<string, string | undefined> = process.env,
 ): Promise<{ userId: string } | null> {

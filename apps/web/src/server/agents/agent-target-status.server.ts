@@ -10,10 +10,11 @@ import { errorResponse } from "./agent-http-error.server";
  * not exist or belongs to no member this Agent can reach (`"target user not found"`, and
  * `"conversation scope is not authorized"` for an Agent outside the Workspace).
  *
- * Shared by the attachment upload and attachment-upload-session routes, so the contract is stated
- * once instead of a copy mirrored between them.
+ * The attachment upload and attachment-upload-session routes reach it through
+ * `resolveAttachmentConversation`, so the contract is stated once instead of a copy mirrored
+ * between them.
  */
-export function targetResolutionStatus(error: unknown): number {
+function targetResolutionStatus(error: unknown): number {
   if (isAppError(error)) return error.code === "ACCESS_DENIED" ? 403 : 400;
   if (error instanceof Error && error.message === "invalid message target") return 400;
   // "target user not found" / "conversation scope is not authorized": an unknown target or one
@@ -25,7 +26,7 @@ export function targetResolutionStatus(error: unknown): number {
  * `target is not accessible`: the one answer to a target this Agent cannot use, the same for a
  * username that does not exist and for someone outside the Workspace, so it reveals neither.
  */
-export function targetNotAccessibleResponse(status: number) {
+function targetNotAccessibleResponse(status: number) {
   return errorResponse("TARGET_NOT_ACCESSIBLE", "target is not accessible", status, false);
 }
 
@@ -44,7 +45,7 @@ function unknownTargetUserResponse(error: unknown) {
  * not a member of the Workspace: `resolveAgentSendTarget` refuses it with
  * `DM_PEER_NOT_IN_WORKSPACE`. Undefined for any other error.
  */
-export function dmPeerNotInWorkspaceResponse(error: unknown, target: string) {
+function dmPeerNotInWorkspaceResponse(error: unknown, target: string) {
   if (!isAppError(error) || error.code !== "DM_PEER_NOT_IN_WORKSPACE") return undefined;
   return errorResponse(
     error.code,

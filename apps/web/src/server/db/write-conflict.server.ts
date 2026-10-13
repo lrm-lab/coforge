@@ -4,7 +4,7 @@
  * Prisma reports it as P2034, or, from a raw query through the driver adapter, as P2010 carrying
  * the adapter's `TransactionWriteConflict`.
  */
-export function isWriteConflict(error: unknown): boolean {
+function isWriteConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const { code, meta } = error as { code?: unknown; meta?: unknown };
   if (code === "P2034") return true;

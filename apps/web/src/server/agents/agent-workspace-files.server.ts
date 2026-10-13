@@ -62,7 +62,7 @@ type WorkspaceDeleteResponse =
  * within 20 ms of arriving; after that the old 100 ms interval returns, so a slow or missing answer
  * costs only 20 extra reads over its 5 s timeout.
  */
-export function pollDelayMs(attempt: number) {
+function pollDelayMs(attempt: number) {
   return attempt < 25 ? 20 : 100;
 }
 
