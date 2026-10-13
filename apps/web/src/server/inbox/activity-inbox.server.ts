@@ -34,6 +34,7 @@ import {
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { storedTaskStatus } from "#src/server/tasks/task-view.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
+import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 
 /**
  * A person's Activity inbox: every joined channel, every direct message of theirs (with their own
@@ -293,12 +294,8 @@ export class ActivityInbox {
     await this.announceMarked(workspaceId, userId, moved);
   }
 
-  private async authorize(workspaceId: string, userId: string) {
-    const membership = await this.db.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { userId: true },
-    });
-    if (!membership) throw new AppError("ACCESS_DENIED");
+  private authorize(workspaceId: string, userId: string) {
+    return requireWorkspaceMember(this.db, workspaceId, userId);
   }
 
   /**

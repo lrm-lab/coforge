@@ -53,7 +53,7 @@ import {
   visiblePrivateAgentWhere,
   type AgentVisibilityViewer,
 } from "#src/server/agents/agent-visibility.server";
-import { workspaceMemberRole } from "#src/server/workspaces/members.server";
+import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";

@@ -2,7 +2,6 @@ import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
-import type { WorkspaceMemberRole } from "./member-role.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import {
@@ -12,20 +11,6 @@ import {
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { CREATED_AGENT_FACES, MEMBER_PAGE_MAX } from "#src/features/workspaces/member-directory";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
-
-/** The actor's Workspace role; ACCESS_DENIED when the user is not a member. */
-export async function workspaceMemberRole(
-  db: Pick<PrismaClient, "workspaceMembership">,
-  workspaceId: string,
-  userId: string,
-): Promise<WorkspaceMemberRole> {
-  const membership = await db.workspaceMembership.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId } },
-    select: { role: true },
-  });
-  if (!membership) throw new AppError("ACCESS_DENIED");
-  return membership.role as WorkspaceMemberRole;
-}
 
 export type AgentOwnerFilter = "all" | "mine";
 

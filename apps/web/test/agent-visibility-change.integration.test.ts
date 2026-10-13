@@ -12,7 +12,7 @@ import {
   enrollGeneralChannel,
   PublicChannels,
 } from "#src/server/conversations/public-channels.server";
-import { workspaceMemberRole } from "#src/server/workspaces/members.server";
+import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 
 /**
  * End-to-end visibility change against local PostgreSQL. Drives the real

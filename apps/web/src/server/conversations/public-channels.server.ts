@@ -89,6 +89,7 @@ import {
   visibleAgentWhere,
 } from "#src/server/agents/agent-visibility.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 
 /** A channel actor is either a human (by Workspace `userId`) or an Agent (by `agentId`); the
  * human/Web UI and the Agent CLI share `PublicChannels.members`/`addMembers` through this. */
@@ -776,11 +777,8 @@ export class PublicChannels {
     return resolveChannelThreadRoot(this.db, conversationId, anchor);
   }
 
-  private async authorize(workspaceId: string, userId: string) {
-    const membership = await this.db.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-    });
-    if (!membership) throw new AppError("ACCESS_DENIED");
+  private authorize(workspaceId: string, userId: string) {
+    return requireWorkspaceMember(this.db, workspaceId, userId);
   }
 
   /** The `ChannelActor` equivalent of `authorize`: a human must be a Workspace member, an Agent

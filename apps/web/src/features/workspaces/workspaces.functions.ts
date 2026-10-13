@@ -30,7 +30,8 @@ import {
   WorkspaceDeletion,
   workspaceMemoryRemoval,
 } from "#src/server/workspaces/deletion.server";
-import { WorkspaceMembers, workspaceMemberRole } from "#src/server/workspaces/members.server";
+import { WorkspaceMembers } from "#src/server/workspaces/members.server";
+import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 import { WorkspaceImages } from "#src/server/workspaces/workspace-images.server";
 import { MEMBER_PAGE_MAX } from "./member-directory";
 

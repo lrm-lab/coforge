@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { AppError } from "#src/lib/app-error";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { workspaceMemberDirectory } from "#src/server/workspaces/member-directory-store.server";
 import {
@@ -10,6 +9,7 @@ import {
 } from "#src/server/workspaces/catalog.server";
 import { WorkspaceDeparture } from "#src/server/workspaces/departure.server";
 import { rememberedWorkspaceCookie } from "#src/server/workspaces/selection.server";
+import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 
 const updateRoleInputSchema = z.object({
   userId: z.uuid(),
@@ -22,16 +22,12 @@ export const loadWorkspaceMembers = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
     const members = workspaceMemberDirectory(db);
-    const actor = await db.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId: user.id } },
-      select: { role: true },
-    });
-    if (!actor) throw new AppError("ACCESS_DENIED");
+    const actorRole = await workspaceMemberRole(db, workspaceId, user.id);
     const list = await members.listMembers({ workspaceId, actorUserId: user.id });
     return {
       workspaceId,
       actorUserId: user.id,
-      actorRole: actor.role,
+      actorRole,
       members: list,
     };
   });

@@ -23,7 +23,7 @@ import {
 } from "#src/server/workspace-memory/cleanup-remotes.server";
 import type { WorkspaceFileCleanup } from "./file-cleanup.server";
 import { assertCanDeleteWorkspace } from "./member-role.server";
-import { workspaceMemberRole } from "./members.server";
+import { workspaceMemberRole } from "./workspace-membership.server";
 import { errorType } from "#src/server/errors/error-type.server";
 
 /** Who hears that a Workspace is gone, after the delete commits. */

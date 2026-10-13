@@ -28,7 +28,7 @@ import { ConversationHistory } from "./conversation-history.server";
 import { allocateSequence } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { messageSignalScope, type ConversationRealtime } from "./conversation-realtime.server";
 import { isAdminLike } from "#src/server/workspaces/member-role.server";
-import { workspaceMemberRole } from "#src/server/workspaces/members.server";
+import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 
 const UUID_PATTERN = UUID_LIKE_PATTERN;
 

@@ -9,7 +9,8 @@ import {
   enrollGeneralChannel,
   PublicChannels,
 } from "#src/server/conversations/public-channels.server";
-import { WorkspaceMembers, workspaceMemberRole } from "#src/server/workspaces/members.server";
+import { WorkspaceMembers } from "#src/server/workspaces/members.server";
+import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 import { findWorkspaceUser } from "#src/server/agents/agent-user-info.server";
 import type { AgentVisibilityViewer } from "#src/server/agents/agent-visibility.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";

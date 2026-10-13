@@ -1,6 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
-import { AppError } from "#src/lib/app-error";
 import { searchTerms } from "#src/lib/search-terms";
 import {
   findMessageSearchIds,
@@ -8,6 +7,7 @@ import {
 } from "#src/server/db/repositories/message-search.repositories.server";
 import { browserMessageFields, mapBrowserMessage } from "./conversation-history.server";
 import { browserSenderName } from "./sender-display.server";
+import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 
 export type MessageSearchInput = {
   workspaceId: string;
@@ -82,11 +82,7 @@ export async function searchMessages(
   db: PrismaClient,
   input: MessageSearchInput,
 ): Promise<MessageSearchPage> {
-  const membership = await db.workspaceMembership.findUnique({
-    where: { workspaceId_userId: { workspaceId: input.workspaceId, userId: input.userId } },
-    select: { userId: true },
-  });
-  if (!membership) throw new AppError("ACCESS_DENIED");
+  await requireWorkspaceMember(db, input.workspaceId, input.userId);
 
   const query = input.query?.trim() ?? "";
   const searchedAt = input.before ?? new Date();
