@@ -14,7 +14,9 @@ import type {
   WorkspaceMemoryAdmissionPort,
 } from "./dispatch";
 import type { WorkspaceMemoryProfileReconciler } from "./reconciler";
-import type { WorkspaceMemoryProfileStore } from "./stores";
+import { saveProfileTransition, type WorkspaceMemoryProfileStore } from "./stores";
+import { retriedOpenVikingProfile } from "./default-memory-agent";
+import type { PrototypeGate } from "./profile";
 
 export const WORKSPACE_MEMORY_QUIET_WINDOW_MS = 15 * 60 * 1000;
 export const WORKSPACE_MEMORY_PENDING_REDRAIN_AFTER_MS = 10 * 60 * 1000;
@@ -39,6 +41,10 @@ export function createWorkspaceMemoryAdmissionSweep(deps: {
   pendingRedrainAfterMs?: number;
   instanceId?: string;
   onError?: (event: string, extra: Record<string, unknown>) => void;
+  /** Binds an unbound Memory Agent once its owner has a Computer in the Workspace. */
+  bindUnboundComputer?: (workspaceId: string) => Promise<void>;
+  /** When the prototype gate is open, retry a recorded `prototype_disabled` switch. */
+  openVikingGate?: PrototypeGate;
 }): WorkspaceMemoryAdmissionSweep {
   const now = deps.now ?? (() => new Date());
   const quietAfterMs = deps.quietAfterMs ?? WORKSPACE_MEMORY_QUIET_WINDOW_MS;
@@ -60,6 +66,21 @@ export function createWorkspaceMemoryAdmissionSweep(deps: {
         const workspaceIds = await deps.catalog.listKnownWorkspaceIds();
         for (const workspaceId of workspaceIds) {
           try {
+            if (deps.bindUnboundComputer) await deps.bindUnboundComputer(workspaceId);
+          } catch (error) {
+            onError("workspace_memory_sweep.bind_computer_failed", {
+              workspaceId,
+              error: error instanceof Error ? error.message : "unknown",
+            });
+          }
+          try {
+            if (deps.openVikingGate?.prototypeEnabled) {
+              const profile = await deps.profiles.get(workspaceId);
+              if (profile) {
+                const retried = retriedOpenVikingProfile(profile, now(), deps.openVikingGate);
+                if (retried) await saveProfileTransition(deps.profiles, profile, retried);
+              }
+            }
             await deps.reconciler.reconcile(workspaceId);
           } catch (error) {
             onError("workspace_memory_sweep.reconcile_failed", {

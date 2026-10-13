@@ -13,6 +13,8 @@ import {
   channelAuthorityDeniedError,
 } from "./agent-channel-management-error.server";
 import { PublicChannels } from "./public-channels.server";
+import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-memory-agent.server";
+import { isOpenVikingPrototypeEnabled } from "#src/server/workspace-memory/prototype-gate";
 import {
   announceChannelCreated,
   channelInfoOf,
@@ -210,7 +212,7 @@ export class AgentChannelManagement {
     // channel, the same as `PublicChannels.create` for humans — no admin gate.
     const agent = await this.db.agent.findFirst({
       where: { id: agentId, workspaceId },
-      select: { id: true },
+      select: { id: true, ownerId: true },
     });
     if (!agent)
       throw new AgentChannelManagementError(403, "this Agent does not belong to the Workspace");
@@ -238,6 +240,13 @@ export class AgentChannelManagement {
         throw new AgentChannelManagementError(409, "channel name is already in use");
       throw error;
     }
+    await attachDefaultMemoryAgent(this.db, {
+      workspaceId,
+      conversationId: channel.id,
+      actorUserId: agent.ownerId,
+      now: new Date(),
+      gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
+    });
     await announceChannelCreated(this.realtime, {
       workspaceId,
       conversationId: channel.id,

@@ -101,6 +101,7 @@ async function registerExistingComputer(computer: {
       },
     },
     workspaceComputer: { upsert: async () => undefined },
+    workspaceMemoryAgent: { findUnique: async () => null },
     daemonApiKey: {
       updateMany: async () => undefined,
       create: async () => undefined,

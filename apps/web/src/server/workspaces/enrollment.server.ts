@@ -1,6 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { generalChannelForCreator } from "#src/server/conversations/public-channels.server";
+import { attachDefaultMemoryAgentToGeneral } from "#src/server/workspace-memory/default-memory-agent.server";
 import { WorkspaceCatalog, PrismaWorkspaceCatalogStore } from "./catalog.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import {
@@ -110,6 +111,7 @@ export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore 
       },
       select: { id: true },
     });
+    await attachDefaultMemoryAgentToGeneral(this.db, row.id, input.userId);
     return row.id;
   }
 }

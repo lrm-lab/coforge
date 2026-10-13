@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { AppError } from "#src/lib/app-error";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
@@ -34,6 +35,13 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
     visibility: string;
   }): Promise<{ changed: boolean; leftChannelIds: string[]; joinedChannelIds: string[] }> {
     return this.db.$transaction(async (tx) => {
+      if (input.visibility === AGENT_VISIBILITY.PRIVATE) {
+        const memoryAgent = await tx.workspaceMemoryAgent.findUnique({
+          where: { workspaceId: input.workspaceId },
+          select: { agentId: true },
+        });
+        if (memoryAgent?.agentId === input.agentId) throw new AppError("CONFLICT");
+      }
       const updated = await tx.agent.updateMany({
         where: {
           id: input.agentId,

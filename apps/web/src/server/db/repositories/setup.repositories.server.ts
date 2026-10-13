@@ -6,6 +6,7 @@ import type {
   WorkspaceAccess,
 } from "#src/server/computers/registration.server";
 import { prepareDaemonApiKey } from "#src/server/auth/daemon-api-key.server";
+import { bindUnboundMemoryAgentComputer } from "#src/server/workspace-memory/default-memory-agent.server";
 import type { WorkspaceAccess as QueryWorkspaceAccess } from "#src/server/workspaces/query.server";
 
 const workspaceShape = { id: true, slug: true, name: true } as const;
@@ -95,6 +96,7 @@ export class PrismaComputerRegistrationRepository implements ComputerRegistratio
         data: { revokedAt: new Date() },
       });
       await tx.daemonApiKey.create({ data: daemonApiKey.record });
+      await bindUnboundMemoryAgentComputer(tx, workspace.id);
       return {
         computerId: computer.id,
         workspaceId: workspace.id,

@@ -33,6 +33,8 @@ import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-purge.server";
 import { channelThreadRootWhere } from "#src/server/db/message-anchor.server";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-memory-agent.server";
+import { isOpenVikingPrototypeEnabled } from "#src/server/workspace-memory/prototype-gate";
 import { agentMessageSender } from "./sender-display.server";
 import { channelListPreviews } from "./channel-list-preview.server";
 import {
@@ -176,10 +178,16 @@ export async function enrollGeneralChannel(db: Prisma.TransactionClient, workspa
   });
   // A private Agent is never an active channel member, #general included; making it public
   // enrolls it again (see `PrismaChangeAgentVisibilityStore`).
-  const agents = await db.agent.findMany({
-    where: { workspaceId, visibility: AGENT_VISIBILITY.PUBLIC, ...ACTIVE_AGENT_WHERE },
-    select: { id: true },
+  const memoryAgent = await db.workspaceMemoryAgent.findUnique({
+    where: { workspaceId },
+    select: { agentId: true },
   });
+  const agents = (
+    await db.agent.findMany({
+      where: { workspaceId, visibility: AGENT_VISIBILITY.PUBLIC, ...ACTIVE_AGENT_WHERE },
+      select: { id: true },
+    })
+  ).filter((agent) => agent.id !== memoryAgent?.agentId);
   await db.conversationMember.createMany({
     data: agents.map(({ id: agentId }) => ({
       workspaceId,
@@ -973,6 +981,13 @@ export class PublicChannels {
       if (isUniqueViolation(error)) throw new AppError("CONFLICT");
       throw error;
     }
+    await attachDefaultMemoryAgent(this.db, {
+      workspaceId,
+      conversationId: created.id,
+      actorUserId: userId,
+      now: new Date(),
+      gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
+    });
     await Promise.all([
       announceChannelCreated(this.realtime, {
         workspaceId,

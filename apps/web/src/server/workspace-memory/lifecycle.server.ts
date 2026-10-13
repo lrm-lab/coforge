@@ -14,6 +14,7 @@ import { createWorkspaceMemoryProfileReconciler } from "./reconciler";
 import { createWorkspaceMemoryProfiles } from "./profiles";
 import { createWorkspaceMemorySwitching } from "./switching";
 import { isOpenVikingPrototypeEnabled } from "./prototype-gate";
+import { bindUnboundMemoryAgentComputer } from "./default-memory-agent.server";
 import {
   createProductionMemoryRuntimeProvisioner,
   createPrototypeMemoryRuntimeReadiness,
@@ -131,6 +132,9 @@ export function composeWorkspaceMemoryLifecycle(input: {
       lock: input.lock,
       now: input.now,
       quietAfterMs: WORKSPACE_MEMORY_QUIET_WINDOW_MS,
+      openVikingGate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
+      bindUnboundComputer: (workspaceId) =>
+        bindUnboundMemoryAgentComputer(input.db, workspaceId),
     }),
     switching,
   );

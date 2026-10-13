@@ -57,6 +57,7 @@ model Workspace {
   memoryOffers           MemoryOfferRecord[]
   memoryOfferCitations   MemoryOfferCitation[]
   memoryCleanupWork      WorkspaceMemoryCleanupWork[]
+  workspaceMemoryAgent   WorkspaceMemoryAgent?
 
   @@map("workspaces")
 }
@@ -278,6 +279,7 @@ model Agent {
   weeklyReportCollectorBinding  WeeklyReportCollectorBinding?
   attachments               Attachment[]
   attachmentUploadSessions  AttachmentUploadSession[]
+  workspaceMemoryAgent      WorkspaceMemoryAgent?
 
   @@unique([workspaceId, name])
   @@unique([id, workspaceId])
@@ -1455,6 +1457,19 @@ model RecordComment {
   @@index([cycleId])
   @@index([assistantSessionId])
   @@map("record_comments")
+}
+
+/// The one live Memory Agent for a Workspace. The row is removed when that Agent is
+/// soft-deleted, so the next new public channel can provision a new identity. Rename does
+/// not change this row. Existing channels are never backfilled from it.
+model WorkspaceMemoryAgent {
+  workspaceId String    @id @map("workspace_id") @db.Uuid
+  agentId     String    @unique @map("agent_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_memory_agents")
 }
 
 /// Workspace-wide desired/observed memory profile. One row per Workspace.
