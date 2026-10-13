@@ -25,6 +25,7 @@ import {
   upgradeComputer,
 } from "#src/features/computers/computers.functions";
 import { latestComputerVersionQuery } from "#src/features/computers/latest-version.query";
+import { storeQueryNow } from "#src/features/cache-persistence/browser-query-cache";
 import {
   agentWorkspaceScanQuery,
   type AgentWorkspaceScanSnapshot,
@@ -97,6 +98,9 @@ function ComputerDetailPage() {
                 workspaces: await scanWorkspaces({ data: { computerId } }),
               };
               queryClient.setQueryData(workspaceScanQuery.queryKey, snapshot);
+              // Stored before the scan reads as done, so a reload right after it keeps the result
+              // (a page write otherwise waits a second, and `pagehide` is best effort).
+              await storeQueryNow(queryClient, workspaceScanQuery.queryKey);
             }
           : undefined
       }

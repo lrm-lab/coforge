@@ -55,6 +55,12 @@ export function adoptReadThrough(queryClient: QueryClient, queryKey: readonly un
   installed.get(queryClient)?.adoptReadThrough(queryKey);
 }
 
+/** Stores the kept query `queryKey` now, not after the page-write delay (`store`). Resolves at
+ * once where nothing is kept. */
+export async function storeQueryNow(queryClient: QueryClient, queryKey: readonly unknown[]) {
+  await installed.get(queryClient)?.store(queryKey);
+}
+
 /** The page is up: stores the kept queries it already holds, and sweeps what has aged out. */
 export async function rememberQueryCache(queryClient: QueryClient) {
   const persistence = installed.get(queryClient);
