@@ -69,26 +69,7 @@ export function AgentContextPopoverContent({
 }: {
   /** The trigger badge's own tooltip line; shown as the popover's header. */
   header?: string;
-  data?: {
-    state: "fresh" | "stale" | "missing";
-    result?: {
-      scanId: string;
-      status: string;
-      message?: string;
-      report?: {
-        provider: RuntimeProvider;
-        model?: string;
-        usedTokens: number;
-        windowTokens: number;
-        observedAt: string;
-        categories: { name: string; tokens: number; approximate?: boolean }[];
-        memoryFiles?: { kind: string; path: string; tokens: number; approximate?: boolean }[];
-        skills?: { name: string; source: string; tokens: number; approximate?: boolean }[];
-      };
-      collectedAt: string;
-    };
-    pendingScanId?: string;
-  };
+  data?: AgentContextPopoverData;
   scanning: boolean;
   scanFailed?: boolean;
   computerOnline?: boolean;

@@ -2,10 +2,11 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 
-import { AgentContextPopoverContent } from "#src/features/agents/agent-context-popover";
+import {
+  AgentContextPopoverContent,
+  type AgentContextPopoverData as PopoverData,
+} from "#src/features/agents/agent-context-popover";
 import { m } from "#src/paraglide/messages";
-
-type PopoverData = NonNullable<Parameters<typeof AgentContextPopoverContent>[0]["data"]>;
 
 const report = {
   provider: "claude-code" as RuntimeProvider,
@@ -26,7 +27,7 @@ const report = {
   ],
 };
 
-const fresh = (overrides: Partial<NonNullable<PopoverData>["result"]> = {}): PopoverData => ({
+const fresh = (overrides: Partial<PopoverData["result"]> = {}): PopoverData => ({
   state: "fresh",
   result: {
     scanId: "scan-1",
