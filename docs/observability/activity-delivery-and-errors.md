@@ -22,6 +22,19 @@ provider 初始化/认证失败、模型或 reasoning 配置不支持、Agent ca
 网络退避、上下文接近上限和可选能力不可用。归类到这些稳定类别是 Daemon 核心的职责（见下），
 原始错误只作为本地诊断；stderr 不能直接作为发给服务端和前端的 `message`。
 
+## 启动首轮与就绪
+
+新会话没有真实恢复输入时发送 `Start.`；恢复空会话时发送明确的无工作首轮。
+`resumePrompt` 或真实消息恢复优先，同一启动中的后续真实输入会取代尚未发送的空首轮。
+已经开启初始化轮的 provider 不再收到额外首轮。仅有未读摘要时，启动输入要求每个
+目标读取一次；只有明确交给该 Agent 的工作才继续处理。
+
+会话创建后，Daemon 发布 `starting`，并启动 120 秒的首次模型就绪计时。
+Session、usage 和传输 progress 不能证明模型已就绪；真实 turn Activity 或 turn outcome
+结束该计时。首轮完成发布普通 `idle`，因此 Activity 历史也能结束 Starting。
+超时或首轮输入在就绪前被拒绝时，报告 `runtime_error` 并释放本次会话。
+Stop、进程退出和 Daemon shutdown 撤销计时；就绪后的长任务不受这个启动时限影响。
+
 ## 错误与重连的单一转换点
 
 `AgentRuntimeEvent`（`packages/agent/src/contract.ts`）的 `error` 成员

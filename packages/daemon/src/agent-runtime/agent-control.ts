@@ -481,8 +481,8 @@ export class AgentControl {
               ? "provider_replay_rejected"
               : undefined;
         if (reason) this.runtime.invalidateSession?.(intent, launchId, replaced, reason);
-        // The retry creates a new native session; standing instructions are already on
-        // that session, so it waits for a real message instead of a synthetic first turn.
+        // The shared launch chooses the fresh session's first input: real recovery content
+        // first, otherwise the neutral startup turn.
         identity = await this.runtime.launch(
           { ...fresh, sessionMode: "create" },
           launchId,

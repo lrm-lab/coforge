@@ -110,7 +110,9 @@ async function handle(request: Message) {
       }
       const profile = await Bun.file(join(process.cwd(), ".kiro/agents", `${agent}.json`)).json();
       if (
-        profile.prompt !== "Keep the asymmetric marker 719 in the system prompt." ||
+        (process.argv.includes("--complete-startup")
+          ? !profile.prompt.includes("coforge message")
+          : profile.prompt !== "Keep the asymmetric marker 719 in the system prompt.") ||
         profile.permissions.rules[0].effect !== "allow" ||
         !process.argv.includes("v3") ||
         !process.argv.includes("--auth-method")
@@ -360,6 +362,10 @@ async function handle(request: Message) {
           kiro: { kind: "user_message_id_assigned", userMessageId: `message-${++admissions}` },
         },
       });
+      if (process.argv.includes("--complete-startup")) {
+        result(request, { stopReason: "end_turn" });
+        active = undefined;
+      }
       break;
     // Measured against real kiro-cli 2.22.0, 2026-09-18: `queued: true` plus a
     // `steering_queued` update on success, prefixed `steer-<uuid>`; `queued: false` with

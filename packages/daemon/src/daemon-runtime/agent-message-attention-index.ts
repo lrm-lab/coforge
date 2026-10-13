@@ -16,6 +16,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
+import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import type {
   AgentConsumedSeqEntry,
@@ -509,7 +510,9 @@ export class AgentMessageAttentionIndex {
       recoveredMessages.length + summaryOnly.reduce((sum, [, count]) => sum + count, 0);
     const notice = this.#withMemoryReminder(
       agentId,
-      inboxNoticeText("restart recovery", totalCount, rows),
+      recoveredMessages.length
+        ? inboxNoticeText("restart recovery", totalCount, rows)
+        : agentStartupCatchupInput(totalCount, rows),
     );
     // Same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
     this.hold.busy(agentId);

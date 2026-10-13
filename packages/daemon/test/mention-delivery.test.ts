@@ -92,7 +92,10 @@ async function harness(
         }
         if (options.reportSession !== false) await sessionOptions.onSessionId?.("native-1");
         return {
-          async sendMessage() {},
+          async sendMessage() {
+            // Mention delivery starts from a ready Agent, after its startup turn has ended.
+            for (const listener of listeners) listener({ type: "completed", status: "completed" });
+          },
           async notify(notice: string, noticeOptions?: { deliveryIds?: readonly string[] }) {
             if (options.refuseNotice) throw new Error("the session refused the notice");
             notices.push(notice);

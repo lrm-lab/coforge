@@ -41,6 +41,11 @@ import {
   launchFailureLogFields,
 } from "#src/agent-runtime/launch-failure";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
+import {
+  AgentStartup,
+  AGENT_STARTUP_TIMEOUT_MS,
+  agentStartupInput,
+} from "#src/agent-runtime/agent-startup";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
 import { toolActivity } from "#src/code-agent/tool-activity";
 export type DaemonConfig = {
@@ -271,6 +276,7 @@ function recoveryHasContent(context: AgentRecoveryContext | undefined): boolean 
 type AgentInput =
   | { kind: "recovery"; context: AgentRecoveryContext; completion: AgentInputCompletion }
   | { kind: "delivery"; message: AgentMessageDelivery; completion: AgentInputCompletion }
+  | { kind: "startup"; text: string; completion: AgentInputCompletion }
   | { kind: "prompt"; text: string; completion: AgentInputCompletion };
 
 type AgentInputQueue = {
@@ -280,6 +286,7 @@ type AgentInputQueue = {
 };
 
 type ActivityLaunch = PublishedActivityLaunch & {
+  startup?: AgentStartup;
   trajectory?: ActivityTrajectory;
   // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
   // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
@@ -1638,6 +1645,15 @@ export class DaemonRuntime {
     const { resumePrompt } = request;
     const existingLaunch = this.#agentLaunches.get(agentId);
     if (existingLaunch) {
+      if (recoveryHasContent(recovery) || resumePrompt !== undefined) {
+        const queue = this.#agentInputQueues.get(agentId);
+        if (queue)
+          queue.items = queue.items.filter((item) => {
+            if (item.kind !== "startup") return true;
+            item.completion.resolve();
+            return false;
+          });
+      }
       // A launch in progress presents this start's recovery and resume prompt too.
       const inputs = [
         ...(recovery ? [enqueueRecovery(recovery)] : []),
@@ -1685,6 +1701,18 @@ export class DaemonRuntime {
     // process is still starting queues behind it.
     const promptCompletion = resumePrompt === undefined ? undefined : enqueueTurn(resumePrompt);
     void promptCompletion?.catch(() => {});
+    const startupCompletion =
+      resumePrompt === undefined && !recoveryHasContent(recovery)
+        ? this.#enqueueAgentInput(agentId, (completion) => ({
+            kind: "startup",
+            text: agentStartupInput(
+              request.sessionMode !== "create" &&
+                Boolean(request.sessionId ?? this.#sessionReferences.get(agentId)?.sessionId),
+            ),
+            completion,
+          }))
+        : undefined;
+    void startupCompletion?.catch(() => {});
     const launching = this.#launchAgent(agentId, config, request);
     const launch = launching
       .then(
@@ -1696,12 +1724,13 @@ export class DaemonRuntime {
           // No recovery item was enqueued for this launch at all (so
           // `#recoverAttention` never ran), yet the session is ready — flush anything
           // AgentDeliveryQueue held across an unexpected exit now. Do not open a
-          // synthetic first turn: standing instructions are already on the session.
+          // second recovery notice: the queued startup input opens the initial turn if needed.
           else {
             this.#flushSurvivingDeliveryQueue(agentId);
             this.#releaseHeldAppItems(agentId);
             this.#releaseFallbackNotices(agentId);
           }
+          if (startupCompletion) await startupCompletion;
           return runtime;
         },
         (error: unknown) => {
@@ -1759,6 +1788,20 @@ export class DaemonRuntime {
       const item = queue.items.shift();
       if (!item) return;
       try {
+        if (
+          item.kind === "startup" &&
+          (queue.items.some(
+            (pending) =>
+              pending.kind === "delivery" ||
+              pending.kind === "prompt" ||
+              (pending.kind === "recovery" && recoveryHasContent(pending.context)),
+          ) ||
+            this.#deliveryQueue.hasQueued(agentId) ||
+            this.#agentProcessManager.session(agentId)?.hasLiveTurn === true)
+        ) {
+          item.completion.resolve();
+          continue;
+        }
         if (item.kind === "delivery") {
           await (isTrackedMention(item.message)
             ? this.#mentionDeliveries.deliver(item.message)
@@ -1771,11 +1814,36 @@ export class DaemonRuntime {
             target: item.message.target,
             sequence: item.message.sequence,
           });
+        } else if (item.kind === "startup") {
+          const session = this.#agentProcessManager.session(agentId);
+          const launch = this.#currentActivityLaunches.get(agentId);
+          // Preserve typed input rejection for AgentControl's session recovery, but release
+          // the queue at real readiness if this provider awaits the whole turn.
+          if (session && launch) await launch.startup?.run(session.sendMessage(item.text));
         } else if (item.kind === "prompt") {
           await this.#runPromptTurn(agentId, item.text);
         } else await this.#recoverAttention(agentId, item.context);
       } catch (error) {
-        if (item.kind === "recovery" && this.#agentLaunches.has(agentId)) {
+        if (
+          (item.kind === "recovery" || item.kind === "startup") &&
+          this.#agentLaunches.has(agentId)
+        ) {
+          if (this.#stoppingAgents.has(agentId)) {
+            item.completion.reject(error);
+            return;
+          }
+          const launch = this.#currentActivityLaunches.get(agentId);
+          if (item.kind === "startup" && launch && !launch.startup?.failureObserved)
+            this.#activityPublisher.publish(
+              agentId,
+              launch,
+              this.#runtimeErrorActivity(
+                agentId,
+                scrubRuntimeErrorText(
+                  error instanceof Error ? error.message : "Agent startup input was rejected",
+                ),
+              ),
+            );
           item.completion.reject(await this.#abandonLaunch(agentId, error));
           return;
         }
@@ -1794,6 +1862,13 @@ export class DaemonRuntime {
           continue;
         }
       }
+      const launch = this.#currentActivityLaunches.get(agentId);
+      const hasInput =
+        item.kind === "delivery" ||
+        item.kind === "prompt" ||
+        (item.kind === "recovery" && recoveryHasContent(item.context));
+      if (hasInput && launch?.startup?.admitted())
+        this.#scheduleStartupFailure(agentId, launch, new Error("Agent startup turn failed"));
       item.completion.resolve();
     }
   }
@@ -1917,6 +1992,7 @@ export class DaemonRuntime {
     this.#stoppingAgents.add(agentId);
     this.#closeAgentInputQueue(agentId, error);
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
+    activityLaunch?.startup?.dispose();
     if (activityLaunch) activityLaunch.stopping = true;
     this.#interruptIfBusy(agentId, activityLaunch);
     this.#activityPublisher.forgetBusy(agentId);
@@ -2179,19 +2255,34 @@ export class DaemonRuntime {
         await this.#agentProcessManager.stop(agentId);
         throw new Error(`Agent runtime is stopping: ${agentId}`);
       }
+      this.#sendAgentStatus(agentId, "active");
+      this.#activityPublisher.publish(agentId, launch, {
+        ...this.#activity(
+          agentId,
+          AGENT_ACTIVITY_DETAIL_KIND.STARTING,
+          "info",
+          "Agent runtime is starting.",
+        ),
+        requestId,
+      });
+      launch.startup = new AgentStartup(() => this.#scheduleStartupFailure(agentId, launch));
       const trajectory = new ActivityTrajectory((event) =>
         this.#observeRuntimeEvent(agentId, launch, config, runtime, Boolean(control), event),
       );
       launch.trajectory = trajectory;
       const unsubscribe = runtime.session.subscribe((event) => {
+        const startupFailed = current() && launch.startup?.observe(event);
         const turnActivity =
           event.type === "activity"
             ? isBusyActivityDetailKind(event.activity.detailKind)
             : TURN_ACTIVITY_EVENT_TYPES.has(event.type);
         if (turnActivity && this.#reconcileIdleTurn(agentId, launch)) return;
         trajectory.accept(event);
+        if (startupFailed)
+          this.#scheduleStartupFailure(agentId, launch, new Error("Agent startup turn failed"));
       });
       runtime.session.onExit(() => {
+        launch.startup?.dispose();
         trajectory.dispose();
         // No leaked watchdog timer, and a later launch for this Agent starts clean.
         this.#compactionTracker.dispose(agentId);
@@ -2255,19 +2346,10 @@ export class DaemonRuntime {
           void this.#agentControl.wake(agentId, launch.launchId).catch(() => {});
         }
       }
-      this.#sendAgentStatus(agentId, "active");
-      this.#activityPublisher.publish(agentId, launch, {
-        ...this.#activity(
-          agentId,
-          AGENT_ACTIVITY_DETAIL_KIND.STARTING,
-          "info",
-          "Agent runtime is starting.",
-        ),
-        requestId,
-      });
       void this.drainAppInboxNotices(agentId).catch(() => {});
       return runtime;
     } catch (error) {
+      launch.startup?.dispose();
       this.#revokeLocalLaunch(agentId);
       if (agentApiKey) {
         try {
@@ -2302,6 +2384,42 @@ export class DaemonRuntime {
       }
       throw error;
     }
+  }
+
+  async #failAgentStartup(agentId: string, launch: ActivityLaunch, cause?: unknown): Promise<void> {
+    if (this.#stopping || launch.stopping || this.#currentActivityLaunches.get(agentId) !== launch)
+      return;
+    const detail =
+      cause === undefined
+        ? `Agent runtime did not become ready within ${AGENT_STARTUP_TIMEOUT_MS / 1000} seconds. Check the provider on this Computer, then start the Agent again.`
+        : `Agent runtime rejected its startup input. ${scrubRuntimeErrorText(cause instanceof Error ? cause.message : "Check the provider on this Computer, then start the Agent again.")}`;
+    const error = new Error(detail);
+    if (!launch.startup?.fail(error)) return;
+    logger.warning("Agent runtime startup failed", {
+      event:
+        cause === undefined
+          ? "agent_runtime:startup_timed_out"
+          : "agent_runtime:startup_input_rejected",
+      agent_id: agentId,
+      launch_id: launch.launchId,
+      timeout_ms: AGENT_STARTUP_TIMEOUT_MS,
+      outcome: "failed",
+    });
+    if (!launch.startup.failureObserved)
+      this.#activityPublisher.publish(agentId, launch, this.#runtimeErrorActivity(agentId, detail));
+    const outcome = await this.#abandonLaunch(agentId, error);
+    if (outcome !== error) throw outcome;
+    await this.#agentControl.stopped(agentId, launch.launchId);
+  }
+
+  #scheduleStartupFailure(agentId: string, launch: ActivityLaunch, cause?: unknown): void {
+    void this.#failAgentStartup(agentId, launch, cause).catch((error: unknown) => {
+      logger.error("Agent startup cleanup did not confirm process exit", {
+        event: "agent_runtime:startup_cleanup_failed",
+        agent_id: agentId,
+        error_code: diagnosticErrorCode(error),
+      });
+    });
   }
 
   /**
@@ -2796,6 +2914,18 @@ export class DaemonRuntime {
       return;
     }
     const remembered = this.#activityPublisher.lastBusy(probe.agentId);
+    if (launch.startup?.waiting) {
+      this.#activityPublisher.publish(probe.agentId, launch, {
+        ...this.#activity(
+          probe.agentId,
+          AGENT_ACTIVITY_DETAIL_KIND.STARTING,
+          "info",
+          "Agent runtime is starting.",
+        ),
+        probeId: probe.probeId,
+      });
+      return;
+    }
     if (remembered && remembered.launch === launch) {
       this.#activityPublisher.publish(probe.agentId, launch, {
         ...remembered.activity,
@@ -3075,6 +3205,7 @@ export class DaemonRuntime {
     this.#sessionReferences.delete(agentId);
     this.#closeAgentInputQueue(agentId, new Error(`Agent runtime is stopping: ${agentId}`));
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
+    activityLaunch?.startup?.dispose();
     if (activityLaunch) activityLaunch.stopping = true;
     this.#interruptIfBusy(agentId, activityLaunch);
     this.#activityPublisher.forgetBusy(agentId);
@@ -3115,6 +3246,7 @@ export class DaemonRuntime {
    */
   async #releaseAgentRuntime(agentId: string, publishStopped = false): Promise<void> {
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
+    activityLaunch?.startup?.dispose();
     void this.#revokeAgentApiKey(agentId, this.#agentApiKeys.get(agentId)).catch((error) => {
       this.#logAgentApiKeyRevokeFailed(agentId, error);
     });
@@ -3907,6 +4039,7 @@ export class DaemonRuntime {
     this.#stopping = true;
     this.#started = false;
     this.#activityPublisher.disable();
+    for (const launch of this.#currentActivityLaunches.values()) launch.startup?.dispose();
     this.#compactionTracker.disposeAll();
     this.#runtimeErrorHold.disposeAll();
     this.#runtimeProgress.disposeAll();
