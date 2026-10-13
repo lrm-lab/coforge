@@ -74,6 +74,36 @@ function spawnRuntime<T>(
   }
 }
 
+/** The `OwnedChildProcess` view of a piped `Bun.spawn` child; both launch paths share it and
+ * differ only in the `exited` promise they hand out. */
+function ownedChildProcess(
+  spawned: Bun.Subprocess<"pipe", "pipe", "pipe">,
+  exited: Promise<number>,
+): OwnedChildProcess {
+  return {
+    get pid() {
+      return spawned.pid;
+    },
+    exited,
+    get exitCode() {
+      return spawned.exitCode;
+    },
+    stdin: {
+      write: (value) => {
+        spawned.stdin.write(value);
+        return true;
+      },
+      end: () => spawned.stdin.end(),
+      flush: async () => {
+        await spawned.stdin.flush();
+      },
+    },
+    stdout: spawned.stdout,
+    stderr: spawned.stderr,
+    kill: (signal) => void spawned.kill(signal),
+  };
+}
+
 /** Owns the platform-specific process tree while exposing one lifecycle seam. */
 export class ProcessTreeOwner implements ProcessTreeSpawner {
   constructor(
@@ -110,28 +140,7 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
         windowsHide: true,
       }),
     );
-    const child: OwnedChildProcess = {
-      get pid() {
-        return spawned.pid;
-      },
-      exited: spawned.exited,
-      get exitCode() {
-        return spawned.exitCode;
-      },
-      stdin: {
-        write: (value) => {
-          spawned.stdin.write(value);
-          return true;
-        },
-        end: () => spawned.stdin.end(),
-        flush: async () => {
-          await spawned.stdin.flush();
-        },
-      },
-      stdout: spawned.stdout,
-      stderr: spawned.stderr,
-      kill: (signal) => void spawned.kill(signal),
-    };
+    const child = ownedChildProcess(spawned, spawned.exited);
     return {
       child,
       terminate: async (force) => {
@@ -203,30 +212,12 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
       throw error;
     }
 
-    const child: OwnedChildProcess = {
-      get pid() {
-        return spawned.pid;
-      },
-      exited: spawned.exited.finally(() => {
+    const child = ownedChildProcess(
+      spawned,
+      spawned.exited.finally(() => {
         // Keep the job handle until waitForExit/terminate can observe ActiveProcesses.
       }),
-      get exitCode() {
-        return spawned.exitCode;
-      },
-      stdin: {
-        write: (value) => {
-          spawned.stdin.write(value);
-          return true;
-        },
-        end: () => spawned.stdin.end(),
-        flush: async () => {
-          await spawned.stdin.flush();
-        },
-      },
-      stdout: spawned.stdout,
-      stderr: spawned.stderr,
-      kill: (signal) => void spawned.kill(signal),
-    };
+    );
 
     let closed = false;
     const closeJob = () => {
