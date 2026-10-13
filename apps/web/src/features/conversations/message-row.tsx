@@ -470,14 +470,11 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
 }
 
 /**
- * A divider row: one body line of spacing above and below its label (the message line height:
- * 18px at the 12px size, 20px at the default 14px size, 24px at the 16px size), less the 4px each
- * neighbouring row adds with its own `py-1`. `message-text` scopes
- * `--text-md--line-height` to Settings → Message font size, and the labels use that same `text-md`,
- * so a divider reads at the size of the message text around it.
+ * A divider row: 16px spacing above and below its label (py-4), matching the design spec distance
+ * between the divider and neighbouring content areas. Spans full width with 12px horizontal padding
+ * (px-3) aligned with the message row content.
  */
-const DIVIDER_ROW_CLASS =
-  "message-text flex items-center gap-3 px-4 py-[calc(var(--text-md--line-height)-0.25rem)] md:px-6";
+const DIVIDER_ROW_CLASS = "message-text flex items-center gap-3 px-3 py-4";
 
 /** The "new messages" divider (Slack-style): a brand rule naming where unread begins. */
 export function UnreadDivider() {
@@ -503,11 +500,11 @@ export function DayDivider({ value, locale }: { value: Date | string; locale?: s
   const timeZone = useTimeZone();
   return (
     <div className={DIVIDER_ROW_CLASS}>
-      <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
-      <span className="shrink-0 bg-primary px-2 text-md text-tertiary tabular-nums">
+      <span aria-hidden="true" className="h-px flex-1 bg-[#E0E5F1]" />
+      <span className="shrink-0 rounded-full border border-[#E0E5F1] bg-primary px-3 py-1 text-md text-tertiary tabular-nums">
         {dayLabel(value, locale, timeZone)}
       </span>
-      <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
+      <span aria-hidden="true" className="h-px flex-1 bg-[#E0E5F1]" />
     </div>
   );
 }
@@ -819,7 +816,7 @@ export const MessageRow = memo(function MessageRow({
           data-message="system"
           data-scroll-anchor
           className={cn(
-            "group/message flex scroll-m-6 items-baseline gap-2 px-4 py-1 text-xs text-tertiary transition-[background-color,box-shadow] duration-500 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:px-6",
+            "group/message flex scroll-m-6 items-baseline gap-2 px-3 py-1 text-xs text-tertiary transition-[background-color,box-shadow] duration-500 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary",
             highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
           )}
         >
@@ -851,10 +848,9 @@ export const MessageRow = memo(function MessageRow({
   // shell; the sheet therefore also opens for a message with no thread and no reactions.
   const copyable = Boolean(messagePlainText(message, channelNames).trim());
   return (
-    // A message that starts a new sender run sits 32px (4px row padding on each side + 24px
-    // margin) below the previous one; the margin is on the `li` so the hover background stays
-    // 4px around the content. A grouped continuation keeps only its 4px, and a message under a
-    // day or unread divider takes the divider's own spacing instead.
+    // A message row keeps 12px (p-3) padding around its content, so hover and focus-within
+    // backgrounds sit exactly 12px from content on all four sides. A new sender run keeps
+    // a 24px (mt-6) margin above it; grouped continuations share the row padding.
     <li
       data-message-id={message.id}
       className={cn(
@@ -873,10 +869,9 @@ export const MessageRow = memo(function MessageRow({
         data-message={own ? "own" : "other"}
         onClick={openActions}
         className={cn(
-          "group/message relative flex scroll-m-6 px-4 transition-[background-color,box-shadow] duration-500 hover:bg-secondary focus-within:bg-secondary target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:px-6",
+          "group/message relative flex scroll-m-6 p-3 transition-[background-color,box-shadow] duration-500 hover:bg-[#E0E5F1]/50 focus-within:bg-[#E0E5F1]/50 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary",
           highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
           "gap-3",
-          grouped ? "pt-0 pb-1" : "py-1",
         )}
       >
         <div className="flex w-9 shrink-0 items-start justify-center">
@@ -1097,7 +1092,7 @@ export const MessageRow = memo(function MessageRow({
              reactions, then whole-message copy last — the IM-standard order (#546). */
           <div
             className={cn(
-              "pointer-events-none absolute top-0.5 right-3 flex items-center gap-0.5 rounded-lg border border-secondary bg-primary p-0.5 opacity-0 shadow-lg transition-opacity",
+              "pointer-events-none absolute top-3 right-3 flex items-center gap-0.5 opacity-0 transition-opacity",
               "lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:opacity-100",
               "lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:opacity-100",
             )}
