@@ -305,26 +305,29 @@ export function ComputerDetail({
     }
   };
 
-  // Upgrade always sits beside Restart for the owner; it only acts when a newer release is known
-  // and the Computer is online to take it.
-  const upgradeButton = canUpgrade ? (
-    <Button
-      type="button"
-      size="sm"
-      color="secondary"
-      iconLeading={ArrowUp}
-      isLoading={upgrading}
-      showTextWhileLoading
-      isDisabled={upgrading || !upgradeAvailable || !computer.online}
-      onPress={() => void runUpgrade()}
-    >
-      {upgrading
-        ? m.computer_upgrade_in_progress()
-        : upgradeAvailable && latestComputerVersion
-          ? m.computer_upgrade_action({ version: shortReleaseVersion(latestComputerVersion) })
-          : m.computer_upgrade()}
-    </Button>
-  ) : undefined;
+  // Upgrade shows for the owner only while there is something to do: a newer release is known, or
+  // an upgrade is running. With no update the Version row is just the version (task #107). A
+  // failed upgrade keeps it, since the newer release is still known and the button is the retry.
+  // Offline with an update known, it stays visible but disabled.
+  const upgradeButton =
+    canUpgrade && (upgradeAvailable || upgrading) ? (
+      <Button
+        type="button"
+        size="sm"
+        color="secondary"
+        iconLeading={ArrowUp}
+        isLoading={upgrading}
+        showTextWhileLoading
+        isDisabled={upgrading || !upgradeAvailable || !computer.online}
+        onPress={() => void runUpgrade()}
+      >
+        {upgrading
+          ? m.computer_upgrade_in_progress()
+          : upgradeAvailable && latestComputerVersion
+            ? m.computer_upgrade_action({ version: shortReleaseVersion(latestComputerVersion) })
+            : m.computer_upgrade()}
+      </Button>
+    ) : undefined;
 
   const runRestart = () => {
     if (!onRestart) return;
