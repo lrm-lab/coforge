@@ -5,6 +5,8 @@ import { Hash01 as Hash, SearchLg, Settings01 as Settings } from "@untitledui/ic
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ChannelSettingsPanel } from "./channel-settings-panel";
+import { ChannelHeaderMemberCluster, ChannelProjectChip } from "./channel-header-people";
+import type { ChannelMembersView } from "./channel-members-page";
 import type { ChannelCapabilities } from "#src/server/conversations/channel-authority.server";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { ConversationListButton } from "./conversation-list-button";
@@ -72,19 +74,29 @@ export function ChannelConversationHeader({
   onSettingsOpenChange?: (open: boolean) => void;
 }) {
   const [ownSettingsOpen, setOwnSettingsOpen] = useState(false);
+  // Which members page the panel opens on. Null is the settings themselves.
+  const [membersStart, setMembersStart] = useState<ChannelMembersView | null>(null);
   const navigate = useNavigate();
   const workspaceSlug = useWorkspaceSlug();
   const settingsOpen = controlledSettingsOpen ?? ownSettingsOpen;
   const setSettingsOpen = onSettingsOpenChange ?? setOwnSettingsOpen;
+  const canInvite = Boolean(conversation.senderMemberId) && !conversation.archived;
+  function openPanel(view: ChannelMembersView | null) {
+    setMembersStart(view);
+    setSettingsOpen(true);
+  }
   return (
     <>
       <TabbedHeader
         identity={
           <>
             <ConversationListButton />
-            <div className="flex min-w-0 flex-1 items-baseline gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <h1 className="min-w-0 truncate text-md font-semibold">#{conversation.name}</h1>
-              {conversation.description && (
+              {conversation.project && (
+                <ChannelProjectChip workspaceSlug={workspaceSlug} project={conversation.project} />
+              )}
+              {conversation.description && !conversation.project && (
                 <p className="hidden min-w-0 truncate text-sm text-tertiary sm:block">
                   {conversation.description}
                 </p>
@@ -109,12 +121,18 @@ export function ChannelConversationHeader({
                 })
               }
             />
+            <ChannelHeaderMemberCluster
+              channelId={conversation.conversationId}
+              canAdd={canInvite}
+              onOpenMembers={() => openPanel("members")}
+              onAddMembers={() => openPanel("add")}
+            />
             <ButtonUtility
               icon={Settings}
               size="sm"
               color="tertiary"
               tooltip={m.channel_settings_open()}
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => openPanel(null)}
             />
           </div>
         }
@@ -124,7 +142,11 @@ export function ChannelConversationHeader({
         <ChannelSettingsPanel
           conversation={conversation}
           open={settingsOpen}
-          onOpenChange={setSettingsOpen}
+          initialMembersView={membersStart}
+          onOpenChange={(open) => {
+            setSettingsOpen(open);
+            if (!open) setMembersStart(null);
+          }}
           onChanged={onChanged}
         />
       )}
