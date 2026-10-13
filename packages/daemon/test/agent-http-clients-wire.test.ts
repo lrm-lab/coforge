@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { AgentMessageRequest } from "@lrm/coforge-sdk/internal";
 import { createAgentMessageHttpClient } from "../src/connection/agent-http-clients";
 import { AgentTransportError } from "../src/connection/agent-transport-error";
+import { AgentManualRequestError } from "../src/connection/agent-manual-request-error";
 
 // Pins what the message client puts on the wire for the routes that share `sendAgentJson` /
 // `getAgentJson`: method, URL, headers, body and whether a deadline is attached.
@@ -165,4 +166,65 @@ test("a malformed 2xx body is a protocol mismatch on every one of these routes",
       upstreamStatus: 200,
     });
   }
+});
+
+test("manual get and search GET their query fields with the Agent headers", async () => {
+  const { client, calls } = recordingClient({ ok: true });
+  await client.requestManualGet!({
+    ...keys,
+    request: { topic: "tasks", intent: "claim", reason: "r" },
+  });
+  await client.requestManualSearch!({
+    ...keys,
+    request: { query: "task status", intent: "i", reason: "why" },
+  });
+  expect(calls).toEqual([
+    {
+      url: `${keys.url}?topic=tasks&intent=claim&reason=r`,
+      method: "GET",
+      headers: authHeaders,
+      body: undefined,
+      hasSignal: false,
+    },
+    {
+      url: `${keys.url}?query=task+status&intent=i&reason=why`,
+      method: "GET",
+      headers: authHeaders,
+      body: undefined,
+      hasSignal: false,
+    },
+  ]);
+});
+
+test("a manual error envelope becomes AgentManualRequestError; anything else is a transport error", async () => {
+  const respond = (body: string, status: number) =>
+    createAgentMessageHttpClient(async () => new Response(body, { status })).requestManualGet!({
+      ...keys,
+      request: { topic: "tasks", intent: "i", reason: "r" },
+    }).catch((thrown: unknown) => thrown);
+
+  const refused = await respond(
+    JSON.stringify({ ok: false, errorCode: "TOPIC_NOT_FOUND", error: "no such topic" }),
+    404,
+  );
+  expect(refused).toBeInstanceOf(AgentManualRequestError);
+  expect(refused).toMatchObject({
+    errorCode: "TOPIC_NOT_FOUND",
+    message: "no such topic",
+    status: 404,
+  });
+
+  expect(await respond(JSON.stringify({ error: "plain" }), 502)).toMatchObject({
+    failureClass: "upstream_http_response",
+    causeCode: "HTTP_502",
+    upstreamStatus: 502,
+  });
+  expect(await respond("not json", 500)).toMatchObject({
+    failureClass: "protocol_mismatch",
+    upstreamStatus: 500,
+  });
+  expect(await respond("not json", 200)).toMatchObject({
+    failureClass: "protocol_mismatch",
+    upstreamStatus: 200,
+  });
 });
