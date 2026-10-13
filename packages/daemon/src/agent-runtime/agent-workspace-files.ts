@@ -279,6 +279,15 @@ export async function readAgentWorkspaceFile(params: {
       if (!info.isFile()) return { status: "unreadable", ...empty };
       const sizeBytes = info.size;
       const modifiedAtMs = Math.round(info.mtimeMs);
+      /** This file's metadata with no content: a read that will not hand its bytes over. */
+      const withoutContent = (status: "binary" | "too_large") => ({
+        status,
+        sizeBytes,
+        modifiedAtMs,
+        text: "",
+        contentType: "",
+        contentBase64: "",
+      });
       const sniffLength = Math.min(SNIFF_BYTES, sizeBytes);
       let sniff = Buffer.alloc(0);
       if (sniffLength > 0) {
@@ -291,15 +300,7 @@ export async function readAgentWorkspaceFile(params: {
       // see the picture.
       const contentType = sniffImageContentType(sniff);
       if (contentType) {
-        if (sizeBytes > MAX_IMAGE_BYTES)
-          return {
-            status: "too_large",
-            sizeBytes,
-            modifiedAtMs,
-            text: "",
-            contentType: "",
-            contentBase64: "",
-          };
+        if (sizeBytes > MAX_IMAGE_BYTES) return withoutContent("too_large");
         const buffer = Buffer.alloc(sizeBytes);
         if (sizeBytes > 0) await file.read(buffer, 0, sizeBytes, 0);
         return {
@@ -311,24 +312,8 @@ export async function readAgentWorkspaceFile(params: {
           contentBase64: buffer.toString("base64"),
         };
       }
-      if (sniff.includes(0))
-        return {
-          status: "binary",
-          sizeBytes,
-          modifiedAtMs,
-          text: "",
-          contentType: "",
-          contentBase64: "",
-        };
-      if (sizeBytes > MAX_TEXT_BYTES)
-        return {
-          status: "too_large",
-          sizeBytes,
-          modifiedAtMs,
-          text: "",
-          contentType: "",
-          contentBase64: "",
-        };
+      if (sniff.includes(0)) return withoutContent("binary");
+      if (sizeBytes > MAX_TEXT_BYTES) return withoutContent("too_large");
       const buffer = Buffer.alloc(sizeBytes);
       if (sizeBytes > 0) await file.read(buffer, 0, sizeBytes, 0);
       return {
