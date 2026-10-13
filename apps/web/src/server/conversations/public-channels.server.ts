@@ -2204,7 +2204,10 @@ export class PublicChannels {
     });
     if (!member) throw new AppError("ACCESS_DENIED");
     const body = input.body.trim();
-    if (!body || body.length > 8_000) throw new AppError("INVALID_INPUT");
+    // Postgres `message.body` is unbounded text. The browser composer stays at 8_000
+    // (`sendConversationMessageInputSchema`); this path also accepts an eval prompt or an
+    // Agent channel reply past that, which otherwise throws and kills the eval runner.
+    if (!body || body.length > 64_000) throw new AppError("INVALID_INPUT");
     let created = false;
     const saved = await (this.idempotency ?? getMessageRequestIdempotency()).execute(
       { workspaceId, senderKind: "user", senderId: userId, idempotencyKey },

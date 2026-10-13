@@ -191,6 +191,15 @@ export async function startEvalDaemon(input: {
     workspaceRoot,
     serverHttpUrl: webUrl,
   };
+  console.error(
+    "[startEvalDaemon:config]",
+    JSON.stringify({
+      centrifugoWs,
+      webUrl,
+      workspaceId: input.workspace.workspaceId,
+      computerId: registration.computerId,
+    }),
+  );
   runtime = new DaemonRuntime(
     daemonConfig,
     providerFactory,
@@ -211,6 +220,19 @@ export async function startEvalDaemon(input: {
   try {
     await runtime.start(daemonConfig);
   } catch (error) {
+    const err = error as { stack?: unknown };
+    let serialized = "";
+    try {
+      serialized = JSON.stringify(error, Object.getOwnPropertyNames(error ?? {}));
+    } catch {
+      serialized = "";
+    }
+    if (serialized && serialized !== "{}" && serialized !== "null") {
+      console.error("[startEvalDaemon:real-error]", serialized, String(err.stack ?? ""));
+    } else {
+      const { inspect } = await import("node:util");
+      console.error("[startEvalDaemon:real-error]", inspect(error, { depth: 6 }));
+    }
     await runtime.stop().catch(() => undefined);
     throw new Error(error instanceof Error ? error.message : String(error));
   }
