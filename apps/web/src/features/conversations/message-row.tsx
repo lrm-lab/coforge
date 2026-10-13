@@ -963,10 +963,12 @@ export const MessageRow = memo(function MessageRow({
               onKeyUp={readQuoteSelection}
               className={cn(
                 "relative min-w-0 text-md text-primary [overflow-wrap:anywhere]",
-                // A grouped row has no sender header, so the touch-visible action strip would
-                // sit on its first text line; reserve the strip's width (thread + reaction +
-                // copy buttons) up front instead.
-                grouped && "pr-20",
+                // A grouped row has no sender header, so the hover action strip would sit on its
+                // first text line; reserve the strip's width (thread + reaction + save + copy)
+                // there. Only where that strip can appear — the same gate as the strip below: a
+                // touch screen opens the action sheet instead, and the reserve was 80px of blank
+                // on every continuation line on a phone.
+                grouped && "lg:[@media(hover:hover)_and_(pointer:fine)]:pr-20",
               )}
             >
               <CollapsibleMessageBody
