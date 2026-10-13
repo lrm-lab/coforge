@@ -14,24 +14,25 @@ import { cx } from "#src/utils/cx";
 // props. The rail is the collapsed desktop sidebar; the expanded one is `sidebar-expanded.tsx`.
 
 /**
- * 5rem (80px at the default 16px root). The collapsed rail is icons only.
- * The name is the link's accessible name and a tooltip to the right of the
- * icon. 6.75rem existed only so the 14px "Conversations" caption fit.
+ * 3.5rem (56px at the default 16px root). The collapsed rail is icons only.
+ * The hit target is the 2.75rem icon button, and the name tooltip anchors to
+ * that button, not the rail edge. 5rem still left a gutter that pushed the
+ * tooltip away from the icon once the caption was gone.
  */
-export const SIDEBAR_RAIL_WIDTH = "5rem";
+export const SIDEBAR_RAIL_WIDTH = "3.5rem";
 
 type RailItemType = NavItemType & { icon: FC<{ className?: string }>; current?: boolean };
 
 /** Icon only. The caption used to live under the icon; the name is now the tooltip. */
 function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
   return (
-    <Tooltip title={label} placement="right">
+    <Tooltip title={label} placement="right" offset={4}>
       <Pressable>
         <a
           href={href}
           aria-label={label}
           aria-current={current ? "page" : undefined}
-          className="group flex h-11 w-full min-w-0 items-center justify-center rounded-lg px-0.5 outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="group mx-auto flex size-11 items-center justify-center rounded-lg outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           <span
             className={cx(
@@ -87,7 +88,7 @@ export const SidebarRail = ({ activeUrl, items, subheader, footer }: SidebarRail
         <div className="flex h-10 shrink-0 items-center justify-center">{subheader}</div>
         <ul className="flex w-full flex-col gap-1">
           {items.map((item) => (
-            <li key={item.label} className="w-full min-w-0">
+            <li key={item.label} className="flex w-full min-w-0 justify-center">
               <RailItem {...item} current={item.href === activeUrl} />
             </li>
           ))}
