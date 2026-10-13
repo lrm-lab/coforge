@@ -14,12 +14,14 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
+import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { HoverPopover } from "#src/components/ui/hover-popover";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { useRuntimeUsage } from "./use-runtime-usage";
 import type { UsageReadResult, UsageResultRecord } from "#src/server/centrifugo/usage-cache.server";
@@ -370,20 +372,24 @@ function UsageWindow({
   creditUsage?: NonNullable<UsageResultRecord["snapshot"]>["creditUsage"];
   timeZone: string | null;
 }) {
-  const value = creditUsage
-    ? m.computer_usage_credit_amounts({ used: creditUsage.used, limit: creditUsage.limit })
-    : window.usedPercent === undefined
-      ? window.status === "parse_unavailable"
-        ? m.computer_usage_badge_unavailable()
-        : window.status === "limit_reached"
-          ? m.computer_usage_limit_reached()
-          : m.computer_usage_available()
-      : `${window.usedPercent}%`;
+  // The header line is label + a short value + reset, kept on one line: a credit plan's amounts
+  // ("7,517.29 / 10,000 credits used") would squeeze the label onto two lines in the popover, so
+  // they move under the bar and the header shows the percentage, like a session window (task #109).
+  const value =
+    window.usedPercent !== undefined
+      ? `${window.usedPercent}%`
+      : creditUsage
+        ? creditAmounts(creditUsage)
+        : window.status === "parse_unavailable"
+          ? m.computer_usage_badge_unavailable()
+          : window.status === "limit_reached"
+            ? m.computer_usage_limit_reached()
+            : m.computer_usage_available();
 
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3 text-xs">
-        <p className="font-medium text-secondary">{label}</p>
+        <p className="min-w-0 truncate font-medium text-secondary">{label}</p>
         <p className="shrink-0 text-tertiary tabular-nums">
           <span className="font-medium text-primary">{value}</span>
           {window.resetsAt !== undefined && (
@@ -395,32 +401,41 @@ function UsageWindow({
         </p>
       </div>
       {window.usedPercent !== undefined && (
-        <div
-          role="progressbar"
-          aria-label={label}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={window.usedPercent}
-          className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-quaternary"
-        >
-          <div
-            className={cn(
-              "h-full rounded-full",
+        // Untitled's own ProgressBarBase draws the bar (task #109); it takes no accessible name,
+        // so the group around it carries the window's label for screen readers.
+        <div role="group" aria-label={label} className="mt-1.5">
+          <ProgressBarBase
+            value={Math.min(100, Math.max(0, window.usedPercent))}
+            className="h-1.5 rounded-full"
+            progressClassName={cn(
+              "rounded-full",
               window.status === "limit_reached" ? "bg-warning-solid" : "bg-brand-solid",
             )}
-            style={{
-              width: `${Math.min(100, Math.max(0, window.usedPercent))}%`,
-            }}
           />
         </div>
       )}
-      {creditUsage && creditUsage.overage > 0 && (
+      {creditUsage && (window.usedPercent !== undefined || creditUsage.overage > 0) && (
         <p className="mt-1 text-xs tabular-nums text-tertiary">
-          {m.computer_usage_credit_overage({ overage: creditUsage.overage })}
+          {window.usedPercent !== undefined && creditAmounts(creditUsage)}
+          {window.usedPercent !== undefined && creditUsage.overage > 0 && " · "}
+          {creditUsage.overage > 0 &&
+            m.computer_usage_credit_overage({ overage: formatCredits(creditUsage.overage) })}
         </p>
       )}
     </div>
   );
+}
+
+/** Credits as the locale writes numbers: grouped, at most two decimals ("7,517.29"). */
+function formatCredits(value: number) {
+  return new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 2 }).format(value);
+}
+
+function creditAmounts(creditUsage: { used: number; limit: number }) {
+  return m.computer_usage_credit_amounts({
+    used: formatCredits(creditUsage.used),
+    limit: formatCredits(creditUsage.limit),
+  });
 }
 
 function formatPlan(plan: string) {
