@@ -30,7 +30,7 @@ test("The header keeps four faces and folds the rest into +N", () => {
   expect(markup).toContain("Person 3");
   expect(markup).not.toContain("Person 4");
   expect(markup).toContain("+2");
-  expect(markup).toContain("flex items-center -space-x-2");
+  expect(markup).toContain("hidden items-center -space-x-2 md:flex");
   expect(markup).toContain("size-6");
   expect(markup).not.toContain("size-8");
   expect(markup).toContain("bg-brand-primary text-brand-secondary *:text-brand-secondary");

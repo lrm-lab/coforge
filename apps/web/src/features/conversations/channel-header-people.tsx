@@ -59,7 +59,10 @@ export function ChannelHeaderFaces({
   return (
     <div className="flex shrink-0 items-center">
       {shown.length > 0 && (
-        <div className="flex items-center -space-x-2" aria-label={m.channel_settings_members()}>
+        <div
+          className="hidden items-center -space-x-2 md:flex"
+          aria-label={m.channel_settings_members()}
+        >
           {shown.map((entry) => (
             <Tooltip key={entry.key} title={entry.displayName}>
               <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
@@ -94,7 +97,7 @@ export function ChannelHeaderFaces({
       {canAdd && (
         <AvatarAddButton
           size="xs"
-          className={shown.length > 0 ? "ml-2" : undefined}
+          className={shown.length > 0 ? "md:ml-2" : undefined}
           title={m.channel_settings_add_members()}
           onPress={onAddMembers}
         />
@@ -121,7 +124,7 @@ export function ChannelHeaderMemberCluster({
       <div
         aria-busy="true"
         aria-label={m.channel_members_loading()}
-        className="flex shrink-0 -space-x-2"
+        className="hidden shrink-0 -space-x-2 md:flex"
       >
         {Array.from({ length: 3 }, (_, index) => (
           <Skeleton key={index} className="size-6 rounded-full" />
