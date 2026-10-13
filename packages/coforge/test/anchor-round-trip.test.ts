@@ -39,6 +39,14 @@ describe("the short thread form the CLI prints round-trips through its own gramm
     });
   });
 
+  test(`reminder schedule's messageId check accepts the same forms`, async () => {
+    const { isReminderMessageAnchor } = await import("@lrm/coforge-sdk/internal");
+    expect(isReminderMessageAnchor("01a1332b-2592")).toBe(true);
+    expect(isReminderMessageAnchor("01a1332b")).toBe(true);
+    expect(isReminderMessageAnchor("01a1332b-2592-4789-8abc-def012345678")).toBe(true);
+    expect(isReminderMessageAnchor("abcdef123")).toBe(false);
+  });
+
   test(`a nine-plus-hex undashed anchor stays refused as a send target`, () => {
     expect(isChannelMessageTarget("#coforge:abcdef123")).toBe(false);
     expect(() => parseArgs(["thread", "unfollow", "--target", "#coforge:abcdef123"])).toThrow(

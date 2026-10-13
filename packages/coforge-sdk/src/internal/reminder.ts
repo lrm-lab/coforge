@@ -24,7 +24,8 @@ export const REMINDER_CAPABILITY = "reminder:v1" as const;
 export const REMINDER_PROTOCOL_MAJOR = 1 as const;
 
 const MAX_BYTES = 65_536;
-const PREFIX = /^[0-9a-f]{8}$/i;
+/** The messageId short forms reminder schedules accept: the same rule the CLI prints. */
+const PREFIX = new RegExp(`^${MESSAGE_ANCHOR_SOURCE}$`, "i");
 const USERNAME = "[a-z0-9](?:[a-z0-9_-]{1,30}[a-z0-9])?";
 const HEX = "[0-9a-fA-F]";
 const UUID_BODY = `${HEX}{8}-${HEX}{4}-[1-8]${HEX}{3}-[89abAB]${HEX}{3}-${HEX}{12}`;

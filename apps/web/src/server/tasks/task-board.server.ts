@@ -16,16 +16,15 @@ import {
   UUID_LIKE_SOURCE,
   utf8Encoder,
 } from "@lrm/coforge-sdk/internal";
-
-/** The short forms a message id may be written in (the CLI prints `xxxxxxxx-xxxx`), which address
- * a Message by anchor rather than by the whole id. */
-const MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE})$`, "i");
-
 import { AgentDeliveryPublisher } from "#src/server/conversations/agent-delivery.server";
 import { MentionDeliveryIssuer } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { channelThreadRootWhere } from "#src/server/db/message-anchor.server";
+
+/** The short forms a message id may be written in (the CLI prints `xxxxxxxx-xxxx`), which address
+ * a Message by anchor rather than by the whole id. */
+const MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE})$`, "i");
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import type { HumanNames } from "#src/lib/human-label";
