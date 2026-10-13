@@ -5,6 +5,8 @@ import { Route as WorkspaceIconRoute } from "#src/routes/api/workspaces/$workspa
 import { Route as ProjectIconRoute } from "#src/routes/api/projects.$projectId.icon";
 import { Route as ProjectRawRoute } from "#src/routes/api/projects.$projectId.raw.$";
 import { handleWorkspaceUserAvatar } from "#src/server/profiles/workspace-user-avatar.server";
+import { privateResourceRefusal } from "#src/server/http/private-resource-refusal.server";
+import { AppError } from "#src/lib/app-error";
 
 // The private image and file routes answer a refusal the same way: `{ code }` as JSON, never
 // cached, 401 for a missing session, 404 for anything that is not there or not visible, 503
@@ -89,4 +91,18 @@ test("workspace user avatar: 401 without a viewer, 404 when not visible, 503 wit
       }),
     ),
   ).toEqual({ status: 503, cacheControl: "no-store", body: { code: "TEMPORARILY_UNAVAILABLE" } });
+});
+
+test("privateResourceRefusal rethrows anything that is not an AppError, unchanged", () => {
+  const failure = new Error("database exploded");
+  expect(() => privateResourceRefusal(failure)).toThrow(failure);
+  expect(() => privateResourceRefusal("not an error")).toThrow();
+});
+
+test("privateResourceRefusal maps any other AppError code to 503", async () => {
+  expect(await refusal(privateResourceRefusal(new AppError("TEMPORARILY_UNAVAILABLE")))).toEqual({
+    status: 503,
+    cacheControl: "no-store",
+    body: { code: "TEMPORARILY_UNAVAILABLE" },
+  });
 });
