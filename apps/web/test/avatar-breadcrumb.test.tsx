@@ -76,6 +76,7 @@ const settingsProps = {
   showAddToHomeScreenGuide: false,
   onProfileSave: async () => {},
   onAvatarUpload: async () => {},
+  onAvatarPresetChoose: async () => {},
   onAvatarRemove: async () => {},
   avatarPicker: false,
   onAvatarPickerChange: () => {},

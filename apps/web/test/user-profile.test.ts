@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import { saveUserProfileInputSchema } from "#src/features/profiles/profile.schemas";
 import { AppError } from "#src/lib/app-error";
-import { PROFILE_IMAGE_MAX_BYTES, storeUserAvatar } from "#src/server/profiles/user-avatar.server";
+import {
+  chooseUserAvatarPreset,
+  PROFILE_IMAGE_MAX_BYTES,
+  removeUserAvatar,
+  storeUserAvatar,
+} from "#src/server/profiles/user-avatar.server";
 import {
   handleAvatarDelete,
   handleAvatarDownload,
@@ -208,6 +213,49 @@ test("profile image upload rejects unsupported and oversized files before persis
   ).rejects.toEqual(new AppError("INVALID_INPUT"));
 });
 
+test("choosing a preset stores its reference, uploads nothing, and drops the replaced upload", async () => {
+  const { db, writes } = userAvatarStore("users/user-1/avatars/old/original");
+  const storage = recordingStorage();
+
+  const result = await chooseUserAvatarPreset(
+    db,
+    { userId: "user-1", presetId: "portrait-07" },
+    async () => storage.files,
+  );
+
+  expect(result).toEqual({ avatarUrl: "/avatars/portrait-07.webp" });
+  expect(writes).toEqual([{ avatarObjectKey: "preset:portrait-07", avatarContentType: null }]);
+  expect(storage.put).toEqual([]);
+  expect(storage.removed).toEqual(["users/user-1/avatars/old/original"]);
+});
+
+test("choosing a picture that is not a preset changes nothing", async () => {
+  await expect(
+    chooseUserAvatarPreset(persistenceMustNotBeTouched(), {
+      userId: "user-1",
+      presetId: "portrait-99",
+    }),
+  ).rejects.toEqual(new AppError("INVALID_INPUT"));
+});
+
+test("replacing or removing a preset deletes no stored object", async () => {
+  const replaced = userAvatarStore("preset:portrait-99");
+  const replacedStorage = recordingStorage();
+  await storeUserAvatar(
+    replaced.db,
+    { userId: "user-1", file: new File([pngBytes()], "a.png", { type: "image/png" }) },
+    async () => replacedStorage.files,
+  );
+  expect(replacedStorage.put).toHaveLength(1);
+  expect(replacedStorage.removed).toEqual([]);
+
+  const removed = userAvatarStore("preset:portrait-07");
+  const removedStorage = recordingStorage();
+  await removeUserAvatar(removed.db, "user-1", async () => removedStorage.files);
+  expect(removed.writes).toEqual([{ avatarObjectKey: null, avatarContentType: null }]);
+  expect(removedStorage.removed).toEqual([]);
+});
+
 test("profile image HTTP boundary uploads, serves inline, and removes the current user's image", async () => {
   const stored = {
     avatarUrl: "/api/me/avatar?v=avatar-version",
@@ -326,4 +374,36 @@ function avatarUploadRequest() {
     method: "POST",
     body: form,
   });
+}
+
+function userAvatarStore(avatarObjectKey: string | null) {
+  const writes: unknown[] = [];
+  const db = {
+    user: {
+      findUnique: async () => ({ avatarObjectKey }),
+      update: async ({ data }: { data: unknown }) => {
+        writes.push(data);
+      },
+    },
+  } as never;
+  return { db, writes };
+}
+
+function recordingStorage() {
+  const put: string[] = [];
+  const removed: string[] = [];
+  const files = {
+    put: async (key: string) => {
+      put.push(key);
+    },
+    remove: async (key: string) => {
+      removed.push(key);
+    },
+    open: async () => null,
+  } as never;
+  return { files, put, removed };
+}
+
+function pngBytes() {
+  return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 }

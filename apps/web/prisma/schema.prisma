@@ -110,6 +110,7 @@ model User {
   /// has none until it is asked, and is then labelled by `username`.
   displayName                 String?
   description                 String                          @default("")
+  /// An image object key, or `preset:<id>` for a platform picture the app serves itself.
   avatarObjectKey             String?
   avatarContentType           String?
   createdAt                   DateTime                        @default(now())

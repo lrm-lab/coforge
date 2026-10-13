@@ -131,6 +131,7 @@ interface SettingsContentProps {
   showAddToHomeScreenGuide: boolean;
   onProfileSave: (profile: { displayName: string; description: string }) => Promise<void>;
   onAvatarUpload: (file: File) => Promise<void>;
+  onAvatarPresetChoose: (presetId: string) => Promise<void>;
   onAvatarRemove: () => Promise<void>;
   /** Whether Settings → Account shows the platform avatar picker instead of the profile. */
   avatarPicker: boolean;
@@ -389,6 +390,7 @@ function AccountSettings({
   timeZone,
   onProfileSave,
   onAvatarUpload,
+  onAvatarPresetChoose,
   onAvatarRemove,
   avatarPicker,
   onAvatarPickerChange,
@@ -499,8 +501,8 @@ function AccountSettings({
       <AvatarPicker
         name={profile.name}
         currentAvatarUrl={profile.avatarUrl}
-        onSave={async (file) => {
-          await onAvatarUpload(file);
+        onSave={async (presetId) => {
+          await onAvatarPresetChoose(presetId);
           setSaveSuccess(true);
         }}
         onClose={() => onAvatarPickerChange(false)}

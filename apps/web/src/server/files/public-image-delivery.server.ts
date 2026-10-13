@@ -3,6 +3,7 @@ import {
   normalizeDeliveryBaseUrl,
   type DeliveryUrlRule,
 } from "./delivery-base-url.server";
+import { avatarPresetUrl, isAvatarPresetReference } from "#src/features/profiles/avatar-presets";
 import { errorType } from "#src/server/errors/error-type.server";
 
 /**
@@ -199,7 +200,8 @@ export type PublicImageUrlResolver = (objectKey: string, style: ProfileImageStyl
  *
  * `fallback` is a function because the route is built from the object key (it carries the object
  * id as `?v=`), so it must not be built when there is no key to build it from. Every avatar and icon
- * URL goes through this rule instead of restating it.
+ * URL goes through this rule instead of restating it. A stored preset reference is not an object
+ * key at all: it resolves to the picture the app itself serves, never to the CDN or the route.
  */
 export function publicImageUrlOrFallback(
   objectKey: string | null,
@@ -208,6 +210,7 @@ export function publicImageUrlOrFallback(
   publicUrl: PublicImageUrlResolver = publicImageUrl,
 ): string | null {
   if (!objectKey) return null;
+  if (isAvatarPresetReference(objectKey)) return avatarPresetUrl(objectKey);
   return publicUrl(objectKey, style) ?? fallback(objectKey);
 }
 

@@ -8,7 +8,7 @@ import { SettingsContent } from "#src/components/settings-content";
 import { useAppToast } from "#src/components/ui/toast";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { SettingsPending } from "#src/features/settings/settings-pending";
-import { saveUserProfile } from "#src/features/profiles/profile.functions";
+import { chooseAvatarPreset, saveUserProfile } from "#src/features/profiles/profile.functions";
 import {
   browserNotificationPermission,
   showPageNotification,
@@ -138,6 +138,7 @@ function SettingsPage() {
   const subscribePush = useServerFn(subscribeBrowserPush);
   const sendTestNotification = useServerFn(sendTestBrowserNotification);
   const saveProfile = useServerFn(saveUserProfile);
+  const saveAvatarPreset = useServerFn(chooseAvatarPreset);
   const saveGeneralChannelHidden = useServerFn(setGeneralChannelHidden);
   const saveWorkspaceName = useServerFn(renameWorkspace);
   const saveWorkspaceIcon = useServerFn(uploadWorkspaceIcon);
@@ -334,6 +335,12 @@ function SettingsPage() {
     await queryClient.invalidateQueries({ queryKey: ["conversation"] });
   }
 
+  async function choosePresetAvatar(presetId: string) {
+    await saveAvatarPreset({ data: { presetId } });
+    await router.invalidate({ sync: true });
+    await queryClient.invalidateQueries({ queryKey: ["conversation"] });
+  }
+
   async function removeAvatar() {
     const response = await fetch("/api/me/avatar", { method: "DELETE" });
     if (!response.ok) throw new Error("Profile image removal failed");
@@ -360,6 +367,7 @@ function SettingsPage() {
       showAddToHomeScreenGuide={showAddToHomeScreenGuide}
       onProfileSave={changeProfile}
       onAvatarUpload={uploadAvatar}
+      onAvatarPresetChoose={choosePresetAvatar}
       onAvatarRemove={removeAvatar}
       avatarPicker={avatar === "choose"}
       onAvatarPickerChange={(open) =>

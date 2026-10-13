@@ -1,7 +1,17 @@
 import { existsSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
-import { avatarPresetFile, avatarPresets } from "#src/features/profiles/avatar-presets";
+import {
+  avatarPresetReference,
+  avatarPresets,
+  avatarPresetUrl,
+  isAvatarPresetId,
+  isAvatarPresetReference,
+} from "#src/features/profiles/avatar-presets";
+import {
+  avatarUrl,
+  workspaceUserAvatarUrl,
+} from "#src/server/db/repositories/user-profile.repositories.server";
 
 describe("platform avatar presets", () => {
   test("offers thirty distinct pictures, each served from public/avatars", () => {
@@ -13,23 +23,33 @@ describe("platform avatar presets", () => {
     }
   });
 
-  test("choosing one makes the file the avatar upload takes", async () => {
-    const preset = avatarPresets[0]!;
-    const requested: string[] = [];
-    const file = await avatarPresetFile(preset, async (url) => {
-      requested.push(String(url));
-      return new Response(new Blob(["image-bytes"], { type: "image/webp" }));
-    });
-    expect(requested).toEqual([preset.url]);
-    expect(file.name).toBe("portrait-01.webp");
-    expect(file.type).toBe("image/webp");
-    expect(await file.text()).toBe("image-bytes");
+  test("a chosen preset is stored as a reference and drawn from public/avatars", () => {
+    const reference = avatarPresetReference("portrait-07");
+
+    expect(reference).toBe("preset:portrait-07");
+    expect(avatarPresetUrl(reference)).toBe("/avatars/portrait-07.webp");
   });
 
-  test("a picture that cannot be read is an error, not an empty avatar", async () => {
-    const preset = avatarPresets[0]!;
-    await expect(
-      avatarPresetFile(preset, async () => new Response(null, { status: 404 })),
-    ).rejects.toThrow();
+  test("only the platform's own pictures are presets", () => {
+    expect(isAvatarPresetId("portrait-30")).toBeTrue();
+    expect(isAvatarPresetId("portrait-31")).toBeFalse();
+    expect(isAvatarPresetId("../portrait-01")).toBeFalse();
+    expect(avatarPresetUrl("users/u/avatars/a/original")).toBeNull();
+    expect(avatarPresetUrl("preset:portrait-99")).toBeNull();
+    expect(isAvatarPresetReference("preset:portrait-99")).toBeTrue();
+    expect(isAvatarPresetReference("users/u/avatars/a/original")).toBeFalse();
+  });
+
+  // The image CDN addresses objects in the image bucket; a preset is not one, so it must never be
+  // sent there (that is the request that broke every preset avatar when a bucket lacked its style).
+  test("an avatar URL for a preset never goes through the image CDN", () => {
+    const cdn = () => "https://images.example/never";
+
+    expect(avatarUrl("preset:portrait-07", cdn)).toBe("/avatars/portrait-07.webp");
+    expect(workspaceUserAvatarUrl("workspace-1", "user-1", "preset:portrait-07", cdn)).toBe(
+      "/avatars/portrait-07.webp",
+    );
+    // A reference to a picture the app no longer ships draws the initials, not a CDN request.
+    expect(avatarUrl("preset:portrait-99", cdn)).toBeNull();
   });
 });

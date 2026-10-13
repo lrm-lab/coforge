@@ -63,8 +63,11 @@ worded inline where it is typed.
 `avatarObjectKey` and `avatarContentType` identify the user's current private
 avatar in the shared user-files store; image bytes and delivery URLs are never
 stored in PostgreSQL. Replacing an avatar writes a new immutable object before
-the row points to it, then removes the previous object. `Agent` uses the same
-two columns for its own picture, in the same image store.
+the row points to it, then removes the previous object. A user who picks one of
+the platform's preset pictures stores `preset:<id>` in `avatarObjectKey` with a
+null `avatarContentType`: it names no object and resolves to the app's own
+`/avatars/<id>.webp`. `Agent` uses the same two columns for its own picture, in
+the same image store, and never holds a preset reference.
 
 Setup persistence consists of `User`, `UserIdentity`, `Workspace`,
 `WorkspaceMembership`, `Computer`, and `WorkspaceComputer`.

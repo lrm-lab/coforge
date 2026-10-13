@@ -6,11 +6,11 @@ import { Button } from "#src/components/base/buttons/button";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
-import { avatarPresetFile, avatarPresets } from "./avatar-presets";
+import { avatarPresets } from "./avatar-presets";
 
 /**
  * Settings → Account → Change avatar: the platform's pictures beside a live preview of the one
- * chosen. Saving hands the picture to the same upload an own picture takes.
+ * chosen. Saving stores the chosen preset by id; the picture itself already ships with the app.
  */
 export function AvatarPicker({
   name,
@@ -21,8 +21,8 @@ export function AvatarPicker({
   /** The name teammates see, shown beside the preview. */
   name: string;
   currentAvatarUrl: string | null;
-  /** Saves the chosen picture as the avatar; rejects when it cannot. */
-  onSave: (file: File) => Promise<void>;
+  /** Saves the chosen preset as the avatar; rejects when it cannot. */
+  onSave: (presetId: string) => Promise<void>;
   /** Back to the profile, saved or not. */
   onClose: () => void;
 }) {
@@ -37,7 +37,7 @@ export function AvatarPicker({
     setSaving(true);
     setFailed(false);
     try {
-      await onSave(await avatarPresetFile(selected));
+      await onSave(selected.id);
       onClose();
     } catch {
       setFailed(true);
