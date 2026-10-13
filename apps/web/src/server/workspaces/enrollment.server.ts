@@ -85,7 +85,7 @@ export class WorkspaceEnrollment {
 
 export function workspaceDisplayName(displayName: string, acceptLanguage: string): string {
   const name = displayName.trim() || "User";
-  return prefersChinese(acceptLanguage) ? `${name}的工作空间` : `${name}'s Workspace`;
+  return prefersChinese(acceptLanguage) ? `${name}的工作区` : `${name}'s Workspace`;
 }
 
 export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore {

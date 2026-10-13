@@ -52,7 +52,7 @@
   "computer_display_name_cancel": "取消",
   "computer_display_name_error": "无法保存显示名称，请重试。",
   "computer_delete_action": "删除 Computer",
-  "computer_delete_description": "请先删除所有 Agent。此操作会永久从 Workspace 移除 Computer。",
+  "computer_delete_description": "请先删除所有 Agent。此操作会永久从工作区移除 Computer。",
   "computer_delete_error": "Computer 删除失败。请先删除所有 Agent，然后重试。",
   "computer_hostname": "主机名",
   "computer_connected_at": "添加于",

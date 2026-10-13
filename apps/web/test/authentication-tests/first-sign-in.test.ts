@@ -70,7 +70,7 @@ test("the Workspace title follows the language the person reads", async () => {
 
   await firstSignIn.complete({ user: ada, displayName: "安栋", acceptLanguage: "zh-CN,zh;q=0.9" });
 
-  expect(created.map((workspace) => workspace.name)).toEqual(["安栋的工作空间"]);
+  expect(created.map((workspace) => workspace.name)).toEqual(["安栋的工作区"]);
 });
 
 test("a name that is not accepted saves nothing and makes no Workspace", async () => {
