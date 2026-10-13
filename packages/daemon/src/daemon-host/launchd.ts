@@ -1,7 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
 import { nativeCommandDiagnostic, type NativeCommandResult } from "#src/platform/native-command";
+import { writePrivateFile } from "#src/platform/private-file";
 import { escapeXmlText } from "#src/platform/xml-escape";
 import { LocalDaemonLauncher } from "./launcher";
 import type {
@@ -73,12 +73,7 @@ export class LaunchdDaemonHost implements DaemonLauncher {
     );
     this.#target = `gui/${options.uid}/${options.label}`;
     this.#run = options.run ?? runCommand;
-    this.#writeFile =
-      options.writeFile ??
-      (async (path, content) => {
-        await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-        await writeFile(path, content, { encoding: "utf8", mode: 0o600 });
-      });
+    this.#writeFile = options.writeFile ?? writePrivateFile;
     this.#sleep = options.sleep ?? Bun.sleep;
     this.#stopTimeoutMilliseconds = options.stopTimeoutMilliseconds ?? 15_000;
     this.#local = new LocalDaemonLauncher({

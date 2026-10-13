@@ -1,5 +1,6 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { writePrivateFile } from "#src/platform/private-file";
 
 import { validateWorkspaceEndpoint, type WorkspaceInstanceConfig } from "./workspace-instance";
 export type { WorkspaceInstanceConfig } from "./workspace-instance";
@@ -15,13 +16,7 @@ export class SystemdWorkspaceInstance {
   constructor(
     private readonly config: WorkspaceInstanceConfig,
     private readonly run: SystemdUserCommand,
-    private readonly write: (path: string, content: string) => Promise<void> = async (
-      path,
-      content,
-    ) => {
-      await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-      await writeFile(path, content, { encoding: "utf8", mode: 0o600 });
-    },
+    private readonly write: (path: string, content: string) => Promise<void> = writePrivateFile,
     private readonly capture: SystemdUserCapture = async (args) => {
       const process = Bun.spawn(["systemctl", "--user", ...args], {
         stdin: "ignore",
