@@ -1,7 +1,7 @@
 import { RPC_METHODS } from "./rpc-methods";
 import { isScopeId } from "./scope-id";
 import { boundedPayload } from "./codec";
-import { RFC_UUID_PATTERN } from "./uuid";
+import { MESSAGE_ANCHOR_SOURCE, RFC_UUID_PATTERN } from "./uuid";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
@@ -29,7 +29,7 @@ const USERNAME = "[a-z0-9](?:[a-z0-9_-]{1,30}[a-z0-9])?";
 const HEX = "[0-9a-fA-F]";
 const UUID_BODY = `${HEX}{8}-${HEX}{4}-[1-8]${HEX}{3}-[89abAB]${HEX}{3}-${HEX}{12}`;
 const TARGET = new RegExp(
-  `^(?:#[a-z0-9][a-z0-9_-]{0,31}|@${USERNAME}(?::(?:${HEX}{8}|${UUID_BODY}))?)$`,
+  `^(?:#[a-z0-9][a-z0-9_-]{0,31}|@${USERNAME}(?::(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_BODY}))?)$`,
 );
 const CANONICAL_TARGET = new RegExp(
   `^(?:#[a-z0-9][a-z0-9_-]{0,31}|@${USERNAME}(?::${UUID_BODY})?)$`,

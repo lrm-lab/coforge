@@ -13,6 +13,7 @@
 import type { AgentMentionDelivery } from "@lrm/coforge-sdk/agent";
 import {
   MENTION_DELIVERY_TERMINAL_CODES,
+  MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
   type AgentMentionDeliveryTerminalError,
   type AgentMentionDeliveryTransition,
@@ -455,7 +456,7 @@ export class MentionDeliveryReports {
 
 /** A message the sending Agent names by its full id or the eight-hex prefix `message read`
  * shows. */
-const SENDER_MESSAGE_ANCHOR = new RegExp(`^(?:[0-9a-f]{8}|${UUID_LIKE_SOURCE})$`, "i");
+const SENDER_MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
 
 export type SenderMentionDeliveries =
   | { state: "found"; messageId: string; deliveries: AgentMentionDelivery[] }

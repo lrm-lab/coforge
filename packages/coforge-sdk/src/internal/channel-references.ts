@@ -32,7 +32,7 @@ export const CHANNEL_REFERENCE_PATTERN = /#([\p{L}\p{N}_-]+)/gu;
  * channel exists and the id is one of that channel's top-level messages, unambiguously.
  */
 export const THREAD_REFERENCE_PATTERN = new RegExp(
-  `#([\\p{L}\\p{N}_-]+):(${UUID}|[0-9a-f]{6,12}|[0-9a-f]{8}-[0-9a-f]{4})(?![0-9a-z-])`,
+  `#([\\p{L}\\p{N}_-]+):(${UUID}|[0-9a-f]{6,8}|[0-9a-f]{8}-[0-9a-f]{4})(?![0-9a-z-])`,
   "giu",
 );
 

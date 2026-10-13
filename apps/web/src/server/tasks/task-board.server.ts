@@ -12,9 +12,15 @@ import {
   type TaskPrincipal,
   type TaskResult,
   type TaskView,
+  MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
   utf8Encoder,
 } from "@lrm/coforge-sdk/internal";
+
+/** The short forms a message id may be written in (the CLI prints `xxxxxxxx-xxxx`), which address
+ * a Message by anchor rather than by the whole id. */
+const MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE})$`, "i");
+
 import { AgentDeliveryPublisher } from "#src/server/conversations/agent-delivery.server";
 import { MentionDeliveryIssuer } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
@@ -1296,13 +1302,14 @@ export class TaskBoard {
   }
 
   private async findMessage(tx: Transaction, conversationId: string, messageId: string) {
-    // An eight-character id is the uuid range it names, so the lookup stays an index range on the
-    // message id instead of reading every top-level message in the conversation.
+    // A short anchor (eight hex, or the dashed twelve-hex display form from #88) is the uuid range
+    // it names, so the lookup stays an index range on the message id instead of reading every
+    // top-level message in the conversation.
+    const anchor = MESSAGE_ANCHOR.test(messageId) ? messageId : undefined;
     const messages = await tx.message.findMany({
-      where:
-        messageId.length === 8 && /^[0-9a-f]{8}$/i.test(messageId)
-          ? channelThreadRootWhere(conversationId, messageId)
-          : { conversationId, threadRootId: null, id: messageId },
+      where: anchor
+        ? channelThreadRootWhere(conversationId, anchor)
+        : { conversationId, threadRootId: null, id: messageId },
       take: 2,
       select: { id: true, body: true },
     });

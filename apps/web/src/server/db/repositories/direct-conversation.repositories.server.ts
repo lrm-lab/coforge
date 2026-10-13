@@ -7,6 +7,7 @@ import { lockConversation } from "#src/server/conversations/conversation-lock.se
 import { agentDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import {
   HELD_CONTEXT_LIMIT,
+  MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
   type AgentMessageValidationMessage,
   type MessageSenderKind,
@@ -171,8 +172,9 @@ type AgentFacing<T extends { body: string }> = Omit<T, "body"> & { body: AgentRe
 
 const AGENT_RECOVERY_MESSAGE_LIMIT = 100;
 const PUBLIC_USERNAME_TARGET = new RegExp(`^@${STORED_USERNAME_SOURCE}$`);
-/** Eight-hex-character prefix or a full UUID; both address a Message. */
-const MESSAGE_ANCHOR = new RegExp(`^(?:[0-9a-f]{8}|${UUID_LIKE_SOURCE})$`);
+/** The message-id short forms (eight hex, dashed twelve hex) or a full UUID; both address a
+ * Message. */
+const MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`);
 
 const TASK_METADATA_SELECT = {
   select: {

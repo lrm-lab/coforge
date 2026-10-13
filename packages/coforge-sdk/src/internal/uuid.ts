@@ -30,3 +30,11 @@ export const UUID_LIKE_SOURCE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}
  * `new RegExp("^${UUID_LIKE_SOURCE}$", "i")` identically; sites needing another anchoring, casing
  * or embedding use `UUID_LIKE_SOURCE` and build their own. */
 export const UUID_LIKE_PATTERN = new RegExp(`^${UUID_LIKE_SOURCE}$`, "i");
+
+/** The short forms a message id is read and printed in, besides the whole uuid: eight hex
+ * characters, or the first twelve hex with the uuid's first dash kept (`xxxxxxxx-xxxx`) — the
+ * display form `message-format`, thread references and reminder targets print. Since the v7
+ * switch they carry the full millisecond timestamp; eight hex alone repeats for every id minted
+ * within the same ~65 seconds, which is why the display moved (earendil-works/pi#6242).
+ * Anchoring and casing stay the caller's. */
+export const MESSAGE_ANCHOR_SOURCE = "[0-9a-f]{8}(?:-[0-9a-f]{4})?";

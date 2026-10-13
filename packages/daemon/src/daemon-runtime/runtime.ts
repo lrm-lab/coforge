@@ -107,6 +107,7 @@ import {
   type AgentContextScanRequest,
   type AgentContextScanResponse,
   AGENT_CONTEXT_SCAN_STATUS,
+  MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
@@ -212,7 +213,9 @@ export type RecoveredUpgradeResult = {
 const FULL_THREAD_TARGET = new RegExp(
   `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):(${UUID_LIKE_SOURCE})$`,
 );
-const SHORT_THREAD_TARGET = /^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):([0-9a-f]{8})$/;
+const SHORT_THREAD_TARGET = new RegExp(
+  `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):(${MESSAGE_ANCHOR_SOURCE})$`,
+);
 const NOT_RUNNING = "daemon runtime is not running";
 const CLEANUP_UNCONFIRMED =
   "Agent process cleanup could not be confirmed. Replacement launch is blocked.";

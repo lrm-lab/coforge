@@ -1,5 +1,6 @@
 import type { MemoryAgentToolProfile } from "../agent/memory-tool-fences";
 import { RPC_METHODS } from "./rpc-methods";
+import { MESSAGE_ANCHOR_SOURCE, UUID_LIKE_SOURCE } from "./uuid";
 /** TypeScript boundary; codec/transport remains an adapter concern. */
 export const COMPUTER_REGISTER_METHOD = RPC_METHODS.computerRegister;
 export const COMPUTER_REGISTER_PROTOCOL_MAJOR = 1 as const;
@@ -67,9 +68,9 @@ export const AGENT_THREAD_UNFOLLOW_METHOD = RPC_METHODS.agentThreadUnfollow;
 export const isChannelTarget = (target: string): boolean =>
   /^#[a-z0-9][a-z0-9_-]{0,31}$/.test(target);
 export const isChannelMessageTarget = (target: string): boolean =>
-  /^#[a-z0-9][a-z0-9_-]{0,31}(?::(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?$/.test(
-    target,
-  );
+  new RegExp(
+    `^#[a-z0-9][a-z0-9_-]{0,31}(?::(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE}))?$`,
+  ).test(target);
 /** A thread target split at its first `:` into parent and root, or `undefined` for a top-level
  * target. */
 const splitThreadTarget = (target: string): [parent: string, root: string] | undefined => {
