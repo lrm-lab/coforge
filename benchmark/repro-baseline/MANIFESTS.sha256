@@ -1,0 +1,20 @@
+# 基线线复现：manifest 与关键输入 sha256（2026-09-28/29 跑批所用）
+# 生成：2026-09-29T02:21:39Z  sha256sum 输出，路径相对 /home/zhoujie22/river2_0
+c70629b1a8294ecd636a0a68037c5d405c0eefd5bf33298bfdc33c2de293d8e8  .worktrees/cursor-ov-cm-impl/benchmark/evolbench-collab/data/skillflow.jsonl
+b893198057f9ea3dd8a3342995662c246982d6723f2b66802085f695d7dbd22c  evol_bench/SkillLearnBench/data/slb-full.jsonl
+f5015bfa0ca7ca03f99ae3b2b7308a918aca7c639dd1831c40a14ec88c29f42e  evol_bench/EvoAgentBench/data/evo-code-implementation.jsonl
+79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4  evol_bench/LoCoMo/data/locomo/locomo10.json
+9bd09591336b11ee37febb5a9a10fc589fe390ea823c42c0c96cf786c2c73a5c  evol_bench/AgentStream/data/agentstream-sequential-seed1.jsonl
+cf9856e36dab50ff96f2c8eddb0c7680312feb1ec83d46b5c7d72b3df48a8afe  evol_bench/AgentStream/data/agentstream-interleaved-seed1.jsonl
+ed2468ebce34e5ba263a31e8fa2023cc938da1d9bd23a10ab753ad8795ec2aaf  evol_bench/AgentStream/data/agentstream-isolated-seed1.jsonl
+751bbdd6d7eefa095a87b2acbc1befaf76c5ecddadd6073ade81450e2bd130eb  evol_bench/PAST-Bench/data/past-notes-memory.jsonl
+# 基础设施输入
+80bb3d9514accf5697b760b2b9168ff75fa493ed2fc6bce9345705b073a30f4a  .worktrees/cursor-ov-cm-impl/infra/compose.openviking-prototype.yml
+# runner/manifest 代码（决定 episodesForArm / resume / 输出布局）
+61331dfba0d46e91434ac41ce3e383ea9fb099c25f0c2e156c5907368364c3da  .worktrees/cursor-ov-cm-impl/benchmark/evolbench-collab/src/manifest.ts
+312e8cf30b9ad81a508b51a6297dec68b88d95a9fbca7b1db6f7ae5d3bf723f0  .worktrees/cursor-ov-cm-impl/benchmark/evolbench-collab/src/report.ts
+9cd05baa14b87c3fac97e6c7388437aac34a0ab978e5853dd3936195898e8cca  .worktrees/cursor-ov-cm-impl/benchmark/evolbench-collab/src/run.ts
+# 官方判分器（未改动，只引用）
+693980de775c6b8298870ac5ca020ed23e9fa5274738862dd4398138ea10e3d8  evol_bench/AgentStream/code/agentstream_grading.py
+3b449c414568e22a5c23f79682cd17d7f794a2b3024455deb8d3646a7cca1fcd  evol_bench/PAST-Bench/code/past_grading.py
+0c02d0dfed6baae4f62cc07cab7bfb267a8a6d7e35d405aa8017f56e2dca7c24  evol_bench/SkillsBench/code/skillsbench_env_server.py

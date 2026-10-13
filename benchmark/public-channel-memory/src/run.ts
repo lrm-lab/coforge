@@ -1,5 +1,4 @@
 import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
-import { startCausalHost, type CausalHost } from "./causal-host";
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
 import { startEvalDaemon, startMemoryAgent, type EvalDaemon } from "./eval-daemon";
 import { evaluateQuestion } from "./eval-qa";
@@ -43,8 +42,6 @@ console.log(
 );
 Bun.env.OPENVIKING_PROTOTYPE_ENABLED = "1";
 Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE ??= "/tmp/pcm-eval-ov-keys.json";
-Bun.env.COFORGE_CAUSAL_MEMORY_URL ??= "http://127.0.0.1:9938";
-Bun.env.COFORGE_CAUSAL_MEMORY_TENANT_TOKENS_FILE ??= "/tmp/pcm-eval-causal/tenant-tokens.json";
 
 const sample = await loadLocomoSample(env.locomoPath, env.sampleId, env.qaLimit);
 const runtime = createEvalRuntime(env.ovUrl);
@@ -58,7 +55,6 @@ async function runArm(arm: (typeof env.arms)[number]) {
   let accountId = `pcm-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
   let workspace: EvalWorkspace | undefined;
   let provisioned = false;
-  let causal: CausalHost | undefined;
   let daemon: EvalDaemon | undefined;
   try {
     const health = await fetch(new URL("/health", env.ovUrl));
@@ -84,13 +80,6 @@ async function runArm(arm: (typeof env.arms)[number]) {
         `${arm} workspace=${workspace.workspaceId} channel=${workspace.channelId} memoryAgent=${workspace.memoryAgentId} recipient=${workspace.recipientAgentId}`,
       ),
     );
-    if (arm === "causal_openviking") {
-      causal = await startCausalHost({
-        workspaceId: workspace.workspaceId,
-        url: Bun.env.COFORGE_CAUSAL_MEMORY_URL ?? "http://127.0.0.1:9938",
-      });
-      console.log(sanitizeDiagnostic(`${arm} causal-memory ${causal.url}`));
-    }
     const dispatcher = createEvalDispatcher({
       workspace,
       runtime,
@@ -141,7 +130,6 @@ async function runArm(arm: (typeof env.arms)[number]) {
     summaries.push(summarizeArm(arm, workspace.workspaceId, sample.sampleId, ingested, armAttempts));
   } finally {
     if (daemon) await daemon.stop().catch(() => undefined);
-    if (causal) await causal.stop().catch(() => undefined);
     if (workspace) await destroyEvalWorkspace(workspace);
     if (provisioned) {
       await forgetEvalAccountKey(accountId).catch(() => undefined);

@@ -1,6 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../../../apps/web/generated/client";
-import { PrismaCausalMemoryRepository } from "../../../apps/web/src/server/db/repositories/causal-memory.repositories.server";
+import { PrismaClient } from "../../../apps/web/src/generated/prisma/client";
 import { PrismaOpenVikingBindingStore } from "../../../apps/web/src/server/db/repositories/openviking-binding.repositories.server";
 import { PrismaWorkspaceMemoryProfileStore } from "../../../apps/web/src/server/db/repositories/workspace-memory-profile.repositories.server";
 import {
@@ -150,12 +149,19 @@ export async function provisionEvalWorkspace(input: {
     throw new Error("openviking binding was not saved");
   }
 
-  const causal = new PrismaCausalMemoryRepository(input.db);
-  await causal.putTenant({
-    workspaceId: workspace.id,
-    tenantId: workspace.id,
-    enabled: true,
-    memoryAgentId: memoryAgent.id,
+  // OpenViking-only designation (ADR 0062): the Memory Agent route authorizes
+  // through a memory_agent mapped identity, mirroring mapMemoryActor().
+  await input.db.openVikingMappedIdentity.create({
+    data: {
+      id: crypto.randomUUID(),
+      workspaceId: workspace.id,
+      actorKind: "memory_agent",
+      actorSubject: memoryAgent.id,
+      openvikingUserId: `memory-agent:${memoryAgent.id}`,
+      role: "user",
+      access: "readonly_shared",
+      generation: ready.profile.generation,
+    },
   });
 
   return {

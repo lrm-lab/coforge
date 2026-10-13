@@ -608,6 +608,7 @@ function parseMessageRequest(
     operation: payload.operation as LocalAgentMessageRequest["operation"],
     target: typeof payload.target === "string" ? payload.target : undefined,
     content: typeof payload.content === "string" ? payload.content : undefined,
+    ...(typeof payload.message === "string" ? { message: payload.message } : {}),
     continueAnyway: payload.continueAnyway === true || undefined,
     sendDraft: payload.sendDraft === true || undefined,
     expectedDraftKey:

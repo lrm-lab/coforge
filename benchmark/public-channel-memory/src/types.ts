@@ -1,4 +1,4 @@
-export const EVAL_ARMS = ["openviking", "causal_openviking"] as const;
+export const EVAL_ARMS = ["openviking"] as const;
 export type EvalArm = (typeof EVAL_ARMS)[number];
 
 export const HEADLINE_CATEGORIES = [1, 2, 3, 4] as const;

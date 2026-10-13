@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto";
-import { HEADLINE_CATEGORIES, type LocomoQuestion, type LocomoSample } from "./types";
+import { type LocomoQuestion, type LocomoSample } from "./types";
 import { parseLocomoDateTime, turnBody } from "./locomo-time";
+
+// Eval-side knob: which QA categories to enumerate (default keeps the original
+// headline scope 1-4; set COFORGE_EVAL_LOCOMO_CATEGORIES=5 for adversarial-only).
+const QUESTION_CATEGORIES: readonly number[] = (process.env.COFORGE_EVAL_LOCOMO_CATEGORIES ?? "1,2,3,4")
+  .split(",")
+  .map((value) => Number(value.trim()))
+  .filter((value) => Number.isFinite(value));
 
 export const LOCOMO10_SHA256 =
   "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4";
@@ -74,7 +81,7 @@ export async function loadLocomoSample(
     if (!item || typeof item !== "object") continue;
     const qa = item as Record<string, unknown>;
     const category = Number(qa.category);
-    if (!(HEADLINE_CATEGORIES as readonly number[]).includes(category)) continue;
+    if (!QUESTION_CATEGORIES.includes(category)) continue;
     const answer = qa.answer;
     questions.push({
       sampleId,

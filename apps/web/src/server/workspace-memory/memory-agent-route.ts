@@ -95,13 +95,23 @@ export function createMemoryAgentCommands(deps: {
         return failure(403, command.operationId, "unauthorized");
       }
       try {
-        deps.budgets
-          .forTrigger({
-            workspaceId: input.workspaceId,
-            agentId: input.agentId,
-            triggerMessageId: input.triggerMessageId,
-          })
-          .consume(command);
+        // An operationId that already published an offer is an idempotent
+        // replay; it must not touch the per-trigger budget. The model invents
+        // topic-derived operationIds and re-answers answered questions — a
+        // replay hitting the budget instead of the duplicate path stalls the
+        // whole turn (client slot burns, the pending question goes unanswered).
+        const replay =
+          command.op === "offer" &&
+          (await deps.offers.isReplay(input.workspaceId, command.operationId));
+        if (!replay) {
+          deps.budgets
+            .forTrigger({
+              workspaceId: input.workspaceId,
+              agentId: input.agentId,
+              triggerMessageId: input.triggerMessageId,
+            })
+            .consume(command);
+        }
         return { ok: true, response: await handleOpenViking(deps, input, command) };
       } catch (error) {
         return translateError(command, error);

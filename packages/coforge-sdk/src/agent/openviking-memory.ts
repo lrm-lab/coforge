@@ -139,6 +139,32 @@ export type OpenVikingAgentResponse =
 /** Client-invented idempotency handle. Same pattern the server rejects with 400. */
 export const OPENVIKING_OPERATION_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$";
 
+/** Copyable rule for models that echo prompt text instead of reading JSON Schema. */
+export const OPENVIKING_OPERATION_ID_RULE =
+  "operationId is a client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$ (starts with a letter or digit, may contain hyphens and underscores, at most 128 characters). Use a new id on every call.";
+
+/** One complete arguments object per operation. Placeholders are meant to be copied. */
+export const OPENVIKING_ARGUMENT_EXAMPLES: Record<OpenVikingAgentOperation, string> = {
+  find: '{"operationId": "find-1", "query": "<检索词>", "limit": 10}',
+  search_context: '{"operationId": "search-1", "query": "<检索词>", "limit": 10}',
+  read: '{"operationId": "read-1", "uri": "<document uri>"}',
+  offer:
+    '{"operationId": "offer-1", "citationRefs": ["<ov_find 返回的 citation id>"], "body": "<给 @task 的正文>"}',
+};
+
+/** Channel fence tools. Not OpenViking commands; kept beside the examples models copy. */
+export const CHANNEL_ARGUMENT_EXAMPLES = {
+  message_read: '{"target": "#<频道名>"}',
+  send_channel_message: '{"target": "#<频道名>", "content": "<正文>"}',
+} as const;
+
+export const OPENVIKING_REQUIRED_FIELDS: Record<OpenVikingAgentOperation, readonly string[]> = {
+  find: ["operationId", "query"],
+  search_context: ["operationId", "query"],
+  read: ["operationId", "uri"],
+  offer: ["operationId", "citationRefs", "body"],
+};
+
 export function isOpenVikingOperationId(value: unknown): value is string {
   return typeof value === "string" && new RegExp(OPENVIKING_OPERATION_ID_PATTERN).test(value);
 }
@@ -205,14 +231,73 @@ function optionalTokenBudget(value: unknown, label: string): number | undefined 
   return numeric as number;
 }
 
+function isMissingText(value: unknown): boolean {
+  return typeof value !== "string" || value.trim() === "";
+}
+
+function isMissingCitationRefs(value: unknown): boolean {
+  const refs = coerceCitationRefs(value);
+  return (
+    !Array.isArray(refs) ||
+    refs.length === 0 ||
+    refs.some((id) => typeof id !== "string" || id.length === 0)
+  );
+}
+
+/** Required arguments that are absent or blank. Present-but-malformed operationId is not "missing". */
+export function listMissingOpenVikingFields(
+  command: Partial<OpenVikingAgentCommand> & { query?: unknown; uri?: unknown },
+): string[] {
+  if (!isOpenVikingAgentOperation(command.op)) return [];
+  const raw = command as {
+    operationId?: unknown;
+    query?: unknown;
+    uri?: unknown;
+    body?: unknown;
+    citationRefs?: unknown;
+  };
+  const missing: string[] = [];
+  for (const field of OPENVIKING_REQUIRED_FIELDS[command.op]) {
+    if (field === "operationId") {
+      if (typeof raw.operationId !== "string" || raw.operationId.trim() === "") missing.push(field);
+    } else if (field === "uri") {
+      if (typeof raw.uri !== "string" || raw.uri.length === 0) missing.push(field);
+    } else if (field === "citationRefs") {
+      if (isMissingCitationRefs(raw.citationRefs)) missing.push(field);
+    } else if (field === "query" || field === "body") {
+      if (isMissingText(field === "query" ? raw.query : raw.body)) missing.push(field);
+    }
+  }
+  return missing;
+}
+
+export function formatOpenVikingMissingArgumentsError(
+  op: OpenVikingAgentOperation,
+  missing: readonly string[],
+  operationId?: unknown,
+): string {
+  const invalidId =
+    typeof operationId === "string" &&
+    operationId.trim() !== "" &&
+    !isOpenVikingOperationId(operationId)
+      ? " operationId is present but does not match the rule."
+      : "";
+  return `invalid openviking ${op}: missing ${missing.join(", ")}.${invalidId} Example: ${OPENVIKING_ARGUMENT_EXAMPLES[op]}. ${OPENVIKING_OPERATION_ID_RULE}`;
+}
+
 export function decodeOpenVikingAgentCommand(value: unknown): OpenVikingAgentCommand {
   if (!value || typeof value !== "object") throw new Error("invalid openviking command");
   const command = value as Partial<OpenVikingAgentCommand> & { query?: unknown; uri?: unknown };
   if (command.protocol !== OPENVIKING_AGENT_PROTOCOL)
     throw new Error("invalid openviking protocol");
   if (!isOpenVikingAgentOperation(command.op)) throw new Error("invalid openviking operation");
+  const missing = listMissingOpenVikingFields(command);
+  if (missing.length > 0)
+    throw new Error(
+      formatOpenVikingMissingArgumentsError(command.op, missing, command.operationId),
+    );
   if (!isOpenVikingOperationId(command.operationId))
-    throw new Error("invalid openviking operationId");
+    throw new Error(`invalid openviking operationId. ${OPENVIKING_OPERATION_ID_RULE}`);
   const operationId = command.operationId;
 
   if (command.op === "find") {

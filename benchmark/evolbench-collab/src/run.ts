@@ -17,6 +17,8 @@ import {
   readSecretRootKey,
   rememberEvalAccountKey,
   rootIdentity,
+  rotateEvalAdminKey,
+  type OvUsers,
 } from "../../public-channel-memory/src/ov";
 import {
   connectEvalDb,
@@ -114,15 +116,67 @@ type FamilyWorkspace = {
   dispatcher: ReturnType<typeof createEvalDispatcher>;
 };
 
+// Crash-resume continuity for the warm arm: drained episode memory lives in the
+// OV account, not the workspace, so a resume must rebind to the previous
+// segment's account instead of minting a fresh one. The account id is recorded
+// per evaluation; COFORGE_EVAL_WARM_REUSE_ACCOUNT_ID overrides it explicitly.
+const warmReuseStatePath = join(env.resultDir, `${env.evaluationId}-warm-account.txt`);
+
+async function warmReuseAccountId(): Promise<string> {
+  const explicit = (Bun.env.COFORGE_EVAL_WARM_REUSE_ACCOUNT_ID ?? "").trim();
+  if (explicit.length > 0) return explicit;
+  try {
+    return (await Bun.file(warmReuseStatePath).text()).trim();
+  } catch {
+    return "";
+  }
+}
+
 async function provisionFamily(
   arm: "warm" | "cold",
   family: EpisodeFamily,
 ): Promise<FamilyWorkspace> {
   const health = await fetch(new URL("/health", env.ovUrl));
   if (health.status !== 200) throw new Error(`openviking /health ${health.status}`);
-  const accountId = `evol-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
-  const users = await provisionDisposableAccount(runtime, root, accountId);
+  const reuseId = arm === "warm" ? await warmReuseAccountId() : "";
+  let accountId: string;
+  let users: OvUsers;
+  if (reuseId.length > 0) {
+    try {
+      users = await rotateEvalAdminKey(runtime, root, reuseId);
+      accountId = reuseId;
+      console.log(sanitizeDiagnostic(`warm arm reusing ov account ${accountId} across resume`));
+      // A crash skips releaseFamily, so the previous segment's workspace still
+      // holds this account's binding, and the binding store rejects
+      // cross-workspace references. Free the account by deleting the stale
+      // workspace rows (bindings and mapped identities cascade; OV-side memory
+      // is account-scoped and untouched).
+      const staleBindings = await db.openVikingBinding.findMany({
+        where: { accountId },
+        select: { workspaceId: true },
+      });
+      for (const row of staleBindings) {
+        await db.workspace.delete({ where: { id: row.workspaceId } }).catch(() => undefined);
+      }
+      if (staleBindings.length > 0) {
+        console.log(
+          sanitizeDiagnostic(`freed ${staleBindings.length} stale workspace(s) bound to ${accountId}`),
+        );
+      }
+    } catch (error) {
+      // Account deleted server-side: its memory is unrecoverable, so a fresh
+      // provision is the only option — but say so loudly, it silently breaks
+      // warm comparability.
+      console.warn(sanitizeDiagnostic(`warm account reuse failed: ${String(error)}; provisioning fresh account`));
+      accountId = `evol-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+      users = await provisionDisposableAccount(runtime, root, accountId);
+    }
+  } else {
+    accountId = `evol-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    users = await provisionDisposableAccount(runtime, root, accountId);
+  }
   await rememberEvalAccountKey(accountId, users.adminKey);
+  if (arm === "warm") await Bun.write(warmReuseStatePath, accountId);
   const workspace = await provisionEvalWorkspace({
     db,
     arm,
@@ -148,9 +202,15 @@ async function provisionFamily(
   };
 }
 
-async function releaseFamily(provisioned: FamilyWorkspace): Promise<void> {
+async function releaseFamily(arm: "warm" | "cold", provisioned: FamilyWorkspace): Promise<void> {
   await provisioned.daemon.stop().catch(() => undefined);
   await destroyEvalWorkspace(provisioned.workspace);
+  if (arm === "warm") {
+    // The warm account carries drained memory; it must outlive this process so
+    // a crash-resume can rebind to it. Clean it up manually once the
+    // evaluation finishes.
+    return;
+  }
   await forgetEvalAccountKey(provisioned.accountId).catch(() => undefined);
   await deleteDisposableAccount(runtime, root, provisioned.accountId).catch((error) => {
     console.warn(sanitizeDiagnostic(`ov account cleanup failed: ${String(error)}`));
@@ -278,7 +338,7 @@ try {
             armRows.push(await executeEpisode(arm, family, episode, provisioned));
           }
         } finally {
-          await releaseFamily(provisioned);
+          await releaseFamily(arm, provisioned);
         }
       } else {
         for (const episode of episodes) {
@@ -287,7 +347,7 @@ try {
           try {
             armRows.push(await executeEpisode(arm, family, episode, provisioned));
           } finally {
-            await releaseFamily(provisioned);
+            await releaseFamily(arm, provisioned);
           }
         }
       }

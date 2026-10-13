@@ -38,6 +38,8 @@ export type MemoryOffers = {
     body: string;
     memoryAgentId: string;
   }): Promise<MemoryOfferResult>;
+  /** True when this operationId already published an offer (idempotent replay). */
+  isReplay(workspaceId: string, operationId: string): Promise<boolean>;
 };
 
 export function createMemoryOffers(deps: {
@@ -47,6 +49,9 @@ export function createMemoryOffers(deps: {
   channels: MemoryOfferChannel;
 }): MemoryOffers {
   return {
+    async isReplay(workspaceId, operationId) {
+      return (await deps.offers.getOffer(workspaceId, operationId)) !== null;
+    },
     async publish(input) {
       const citations = await deps.citations.resolveOfferCitations(
         input.workspaceId,

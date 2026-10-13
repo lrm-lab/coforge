@@ -1,5 +1,8 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "../db/repositories/direct-conversation.repositories.server";
+import { createCentrifugoServerApi, daemonControlChannel } from "../centrifugo/server-api.server";
+import { encodeAgentDelivery } from "../conversations/agent-delivery.server";
+import { deliveryMentionsAgent } from "../conversations/mentions.server";
 
 export type MemoryOfferPublisher = {
   publish(input: {
@@ -30,6 +33,37 @@ export function createPrismaMemoryOfferPublisher(db: PrismaClient): MemoryOfferP
         undefined,
         undefined,
         [{ type: "agent", id: input.recipientAgentId, name: recipient.name }],
+      );
+      // Push the recipient's delivery the way the send path does. Without this the
+      // delivery row sits unreceived: agents are instructed never to poll, so the
+      // recipient Agent is never woken and the offer dies unread.
+      const publisher = createCentrifugoServerApi();
+      await Promise.allSettled(
+        saved.deliveries.flatMap((delivery) =>
+          delivery.computerId
+            ? [
+                publisher.publish(
+                  daemonControlChannel(input.workspaceId, delivery.computerId),
+                  encodeAgentDelivery({
+                    requestId: input.requestId,
+                    workspaceId: input.workspaceId,
+                    conversationId: input.conversationId,
+                    agentId: delivery.agentId,
+                    messageId: saved.id,
+                    deliveryId: delivery.deliveryId,
+                    sequence: saved.sequence,
+                    body: saved.body,
+                    mentions: saved.mentions ?? [],
+                    target: saved.target,
+                    latestSenderKind: saved.latestSenderKind,
+                    latestSenderHandle: saved.latestSenderHandle,
+                    latestSenderDescription: saved.latestSenderDescription,
+                    mentionsAgent: deliveryMentionsAgent(saved.mentions ?? [], delivery.agentId),
+                  }),
+                ),
+              ]
+            : [],
+        ),
       );
       return { messageId: saved.id };
     },

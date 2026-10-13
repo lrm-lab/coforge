@@ -95,7 +95,7 @@ export class PrismaWorkspaceMemoryAdmissionStore implements WorkspaceMemoryAdmis
           segmentId: decoded.segmentId,
         },
       },
-      include: { sourceMessages: { orderBy: { createdAt: "asc" } } },
+      include: { sourceMessages: { orderBy: [{ createdAt: "asc" }, { messageId: "asc" }] } },
     });
     if (existing) {
       if (!sameAdmittedSegmentLineage(toSegment(existing), decoded)) {
@@ -121,7 +121,7 @@ export class PrismaWorkspaceMemoryAdmissionStore implements WorkspaceMemoryAdmis
             })),
           },
         },
-        include: { sourceMessages: { orderBy: { createdAt: "asc" } } },
+        include: { sourceMessages: { orderBy: [{ createdAt: "asc" }, { messageId: "asc" }] } },
       });
       return { outcome: "saved", segment: toSegment(row) };
     } catch (error) {
@@ -141,7 +141,7 @@ export class PrismaWorkspaceMemoryAdmissionStore implements WorkspaceMemoryAdmis
   ): Promise<AdmittedPublicChannelSegment | null> {
     const row = await this.db.admittedPublicChannelSegment.findUnique({
       where: { workspaceId_segmentId: { workspaceId, segmentId } },
-      include: { sourceMessages: { orderBy: { createdAt: "asc" } } },
+      include: { sourceMessages: { orderBy: [{ createdAt: "asc" }, { messageId: "asc" }] } },
     });
     return row ? toSegment(row) : null;
   }
