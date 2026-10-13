@@ -3,13 +3,13 @@ import {
   parseAgentDisplaySnapshot,
   type AgentDisplaySnapshot,
   utf8Encoder,
-  utf8Decoder,
 } from "@lrm/coforge-sdk/internal";
 
 import {
   useRealtimeSubscription,
   useRealtimeSubscriptions,
 } from "#src/features/realtime/browser-realtime";
+import { publicationData } from "#src/features/realtime/publication-data";
 import { subscriptionGap } from "#src/features/realtime/subscription-gap";
 import { AGENT_VISIBILITY } from "./agent-visibility";
 import { ACTIVITY_PROBE_TIMEOUT_MS } from "./activity-probe-timeout";
@@ -118,8 +118,7 @@ export function encodeAgentStatusEvent(event: AgentStatusEvent): Uint8Array {
 }
 
 export function decodeAgentStatusEvent(data: unknown): AgentStatusEvent {
-  const value =
-    data instanceof Uint8Array ? (JSON.parse(utf8Decoder.decode(data)) as unknown) : data;
+  const value = publicationData(data);
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("invalid Agent status event");
   const agentId = Reflect.get(value, "agentId");
@@ -422,8 +421,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
 
   const handleStatusPublication = (data: unknown) => {
     try {
-      const value =
-        data instanceof Uint8Array ? (JSON.parse(utf8Decoder.decode(data)) as unknown) : data;
+      const value = publicationData(data);
       if (isAgentVisibilityChangedEvent(value)) {
         // Refetch immediately rather than waiting for the next scheduled refresh —
         // `mergeAgentStatusSnapshot` already drops any Agent absent from the fresh list, and

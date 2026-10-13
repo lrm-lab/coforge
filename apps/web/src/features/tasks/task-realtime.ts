@@ -1,4 +1,5 @@
-import { TASK_STATUSES, type TaskView, utf8Decoder } from "@lrm/coforge-sdk/internal";
+import { TASK_STATUSES, type TaskView } from "@lrm/coforge-sdk/internal";
+import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
 import { z } from "zod";
 
 /**
@@ -57,14 +58,7 @@ const taskChangedEvent = z.object({
 
 /** The event, or undefined for any other publication on the channel (most are messages). */
 export function decodeTaskChangedEvent(value: unknown): TaskChangedEvent | undefined {
-  let data = value;
-  if (value instanceof Uint8Array) {
-    try {
-      data = JSON.parse(utf8Decoder.decode(value)) as unknown;
-    } catch {
-      return undefined;
-    }
-  }
+  const data = publicationDataOrUndefined(value);
   // The channels carry every message signal: anything else leaves before the full parse.
   if (!data || typeof data !== "object" || Reflect.get(data, "type") !== "task.changed.v1")
     return undefined;
