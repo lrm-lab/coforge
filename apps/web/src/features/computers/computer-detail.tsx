@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  AlertCircle,
   Check,
   Copy01 as Copy,
   Edit01 as Pencil,
   Plus,
   SearchLg as Scan,
   RefreshCw01 as RotateCw,
+  Terminal,
   Trash01 as Trash,
+  XClose as X,
 } from "@untitledui/icons";
+import { useHydrated } from "@tanstack/react-router";
+import { Heading, Text } from "react-aria-components";
 import type { RuntimeProvider, AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { Avatar } from "#src/components/base/avatar/avatar";
@@ -17,6 +22,14 @@ import { Input } from "#src/components/base/input/input";
 import { Checkbox as AriaCheckbox } from "react-aria-components";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { Toggle } from "#src/components/base/toggle/toggle";
+import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
+import { StatusDot } from "#src/components/ui/status-dot";
+import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { formatCalendarDate } from "#src/lib/dates";
+import { cn } from "#src/lib/utils";
+import { getLocale } from "#src/paraglide/runtime";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useAppToast } from "#src/components/ui/toast";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
@@ -38,7 +51,13 @@ import {
   type UpgradeFailureView,
 } from "./upgrade-failure";
 import { ComputerTile } from "./computer-tile";
-import { RuntimeIdentity, RuntimeUsage } from "./runtime-usage";
+import {
+  RuntimeIdentity,
+  RuntimeUsage,
+  UsageHealthDot,
+  type Runtime,
+  type UsageHealth,
+} from "./runtime-usage";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
@@ -188,6 +207,8 @@ export function ComputerDetail({
     | { state: "error" }
   >({ state: "idle" });
   const [createAgentOpen, setCreateAgentOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const workspaceSlug = useWorkspaceSlug();
   const toast = useAppToast();
   const creatorName = computer.creator ? humanLabel(computer.creator) : "";
   const mountedRef = useRef(true);
@@ -318,303 +339,398 @@ export function ComputerDetail({
       </Button>
     ) : undefined;
 
+  const runRestart = () => {
+    if (!onRestart) return;
+    setRestartState("pending");
+    const requestId = crypto.randomUUID();
+    // The restart poll outlives navigation; only touch state while still mounted.
+    const settle = (update: () => void) => {
+      if (mountedRef.current) update();
+    };
+    void onRestart(requestId)
+      .then(async (initial) => {
+        if (initial.status !== "accepted") return initial;
+        settle(() => {
+          setRestartState("accepted");
+          toast.success(m.computer_restart_accepted());
+        });
+        if (!onReadRestartStatus) return initial;
+        for (let poll = 0; poll < restartMaxPolls; poll += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, restartPollIntervalMs));
+          const result = await onReadRestartStatus(requestId);
+          if (result.status !== "accepted") return result;
+        }
+        return { requestId, status: "failed" as const, reason: "timeout" as const };
+      })
+      .then(
+        (result) =>
+          settle(() => {
+            if (result.status === "completed") {
+              setRestartState("completed");
+              toast.success(m.computer_restart_completed());
+            } else if (result.status === "accepted") {
+              setRestartState("accepted");
+            } else {
+              setRestartState("error");
+              toast.error(m.computer_restart_error());
+            }
+          }),
+        () =>
+          settle(() => {
+            setRestartState("error");
+            toast.error(m.computer_restart_error());
+          }),
+      );
+  };
+
+  const label = computerLabel(computer);
+  const updateAvailable = isComputerUpdateAvailable(
+    computer.computerVersion,
+    latestComputerVersion,
+  );
+  const versionState = !computer.computerVersion
+    ? undefined
+    : updateAvailable && latestComputerVersion
+      ? m.computer_new_version({ version: latestComputerVersion })
+      : latestComputerVersion
+        ? m.computer_up_to_date()
+        : undefined;
+
   return (
     <>
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 sm:px-6">
+      <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 sm:px-8">
         <BackToComputers />
-        {onDeleteComputer && (
-          <Button
-            type="button"
-            size="sm"
-            color="secondary-destructive"
-            iconLeading={Trash}
-            onPress={() => {
-              if (
-                window.confirm(
-                  `${m.computer_delete_action()} ${computerLabel(computer)}? ${m.computer_delete_description()}`,
-                )
-              )
-                void onDeleteComputer().catch(() => toast.error(m.computer_delete_error()));
-            }}
-          >
-            {m.computer_delete_action()}
-          </Button>
-        )}
-        {onRestart && (
-          <Button
-            type="button"
-            size="sm"
-            color="secondary"
-            className="ml-auto"
-            iconLeading={RotateCw}
-            isDisabled={upgrading || restartState === "pending" || restartState === "accepted"}
-            onPress={() => {
-              setRestartState("pending");
-              const requestId = crypto.randomUUID();
-              // The restart poll outlives navigation; only touch state while still mounted.
-              const settle = (update: () => void) => {
-                if (mountedRef.current) update();
-              };
-              void onRestart(requestId)
-                .then(async (initial) => {
-                  if (initial.status !== "accepted") return initial;
-                  settle(() => {
-                    setRestartState("accepted");
-                    toast.success(m.computer_restart_accepted());
-                  });
-                  if (!onReadRestartStatus) return initial;
-                  for (let poll = 0; poll < restartMaxPolls; poll += 1) {
-                    await new Promise((resolve) =>
-                      window.setTimeout(resolve, restartPollIntervalMs),
-                    );
-                    const result = await onReadRestartStatus(requestId);
-                    if (result.status !== "accepted") return result;
-                  }
-                  return { requestId, status: "failed" as const, reason: "timeout" as const };
-                })
-                .then(
-                  (result) =>
-                    settle(() => {
-                      if (result.status === "completed") {
-                        setRestartState("completed");
-                        toast.success(m.computer_restart_completed());
-                      } else if (result.status === "accepted") {
-                        setRestartState("accepted");
-                      } else {
-                        setRestartState("error");
-                        toast.error(m.computer_restart_error());
-                      }
-                    }),
-                  () =>
-                    settle(() => {
-                      setRestartState("error");
-                      toast.error(m.computer_restart_error());
-                    }),
-                );
-            }}
-          >
-            {restartState === "pending"
-              ? m.computer_restart_requesting()
-              : m.computer_restart_action()}
-          </Button>
-        )}
+        <ComputerTile computer={computer} />
+        <h1 className="min-w-0 truncate text-md font-semibold text-primary">{label}</h1>
       </div>
 
-      <div className="@container min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto flex w-full max-w-[40rem] flex-col gap-8">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <ComputerTile computer={computer} online={computer.online} size="xl" />
-            {editingDisplayName ? (
-              <form
-                className="w-full max-w-sm"
-                onSubmit={async (event) => {
-                  event.preventDefault();
-                  if (!onUpdateDisplayName) return;
-                  setSavingDisplayName(true);
+      <div className="min-h-0 flex-1 divide-y divide-secondary overflow-y-auto">
+        <div className="flex items-center gap-4 px-4 py-6 sm:px-8">
+          <ComputerTile computer={computer} size="xl" />
+          <div className="min-w-0">
+            <p className="truncate text-lg font-semibold text-primary">{label}</p>
+            <p className="mt-1 flex items-center gap-2 text-sm text-secondary">
+              <StatusDot tone={computer.online ? "online" : "offline"} className="size-2" />
+              {computer.online ? m.computer_status_online() : m.computer_status_offline()}
+            </p>
+            {computer.name && computer.name !== label && (
+              <p className="mt-1 truncate font-mono text-sm text-tertiary">{computer.name}</p>
+            )}
+          </div>
+        </div>
+
+        <DetailGroup
+          heading={m.computer_display_name()}
+          headingId="computer-display-name"
+          action={
+            canEditDisplayName && !editingDisplayName ? (
+              <ButtonUtility
+                type="button"
+                size="xs"
+                color="tertiary"
+                icon={Pencil}
+                aria-label={m.computer_display_name_edit()}
+                onClick={() => {
+                  setDisplayNameDraft(computer.displayName);
                   setDisplayNameError(false);
-                  try {
-                    await onUpdateDisplayName(displayNameDraft);
-                    setEditingDisplayName(false);
-                  } catch {
-                    setDisplayNameError(true);
-                  } finally {
-                    setSavingDisplayName(false);
-                  }
+                  setEditingDisplayName(true);
                 }}
-              >
-                <Input
-                  aria-label={m.computer_display_name()}
+              />
+            ) : undefined
+          }
+          plain
+        >
+          {editingDisplayName ? (
+            <form
+              className="max-w-sm"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (!onUpdateDisplayName) return;
+                setSavingDisplayName(true);
+                setDisplayNameError(false);
+                try {
+                  await onUpdateDisplayName(displayNameDraft);
+                  setEditingDisplayName(false);
+                } catch {
+                  setDisplayNameError(true);
+                } finally {
+                  setSavingDisplayName(false);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape" || savingDisplayName) return;
+                setDisplayNameDraft(computer.displayName);
+                setDisplayNameError(false);
+                setEditingDisplayName(false);
+              }}
+            >
+              <Input
+                aria-label={m.computer_display_name()}
+                size="sm"
+                autoFocus
+                isRequired
+                maxLength={200}
+                value={displayNameDraft}
+                isDisabled={savingDisplayName}
+                onChange={setDisplayNameDraft}
+              />
+              <div className="mt-2 flex gap-2">
+                <Button type="submit" size="sm" isDisabled={savingDisplayName}>
+                  {savingDisplayName
+                    ? m.computer_display_name_saving()
+                    : m.computer_display_name_save()}
+                </Button>
+                <Button
+                  type="button"
                   size="sm"
-                  autoFocus
-                  isRequired
-                  maxLength={200}
-                  value={displayNameDraft}
+                  color="secondary"
                   isDisabled={savingDisplayName}
-                  onChange={setDisplayNameDraft}
-                />
-                <div className="mt-2 flex justify-center gap-2">
-                  <Button type="submit" size="sm" isDisabled={savingDisplayName}>
-                    {savingDisplayName
-                      ? m.computer_display_name_saving()
-                      : m.computer_display_name_save()}
-                  </Button>
+                  onPress={() => {
+                    setDisplayNameDraft(computer.displayName);
+                    setDisplayNameError(false);
+                    setEditingDisplayName(false);
+                  }}
+                >
+                  {m.computer_display_name_cancel()}
+                </Button>
+              </div>
+              {displayNameError && (
+                <p role="alert" className="mt-2 text-sm text-error-primary">
+                  {m.computer_display_name_error()}
+                </p>
+              )}
+            </form>
+          ) : (
+            <p className="truncate text-sm font-medium text-primary">{label}</p>
+          )}
+        </DetailGroup>
+
+        <DetailGroup heading={m.computer_info()} headingId="computer-info" plain>
+          <dl className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-3">
+            <Field label={m.computer_os()} value={operatingSystemLabel(computer)} mono />
+            <Field
+              label={m.computer_version()}
+              value={
+                <>
+                  <span className="font-mono">{computerVersionLabel(computer)}</span>
+                  {versionState && (
+                    <span className="font-normal text-tertiary"> · {versionState}</span>
+                  )}
+                </>
+              }
+            />
+            <Field
+              label={m.computer_connected_at()}
+              value={<ComputerDate value={computer.connectedAt} timeZone={timeZone} />}
+            />
+            {computer.creator && (
+              <Field
+                label={m.computer_added_by()}
+                value={
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Avatar
+                      size="xs"
+                      src={computer.creator.avatarUrl}
+                      alt=""
+                      initials={avatarInitial(creatorName)}
+                      contentClassName={avatarToneClassName(creatorName)}
+                    />
+                    <span className="truncate">{creatorName}</span>
+                  </span>
+                }
+              />
+            )}
+            <Field
+              wide
+              label={m.computer_code_agents()}
+              value={
+                computer.runtimes.length ? (
+                  <ul className="flex flex-wrap gap-2">
+                    {computer.runtimes.map((runtime) => (
+                      <li key={runtime.provider}>
+                        {computer.ownedByCurrentUser ? (
+                          <RuntimeUsage
+                            computerId={computer.id}
+                            runtime={runtime}
+                            computerOnline={computer.online}
+                            timeZone={timeZone}
+                            triggerClassName={RUNTIME_CHIP_TRIGGER_CLASS_NAME}
+                            trigger={(health) => <RuntimeChip runtime={runtime} health={health} />}
+                          />
+                        ) : (
+                          <RuntimeChip runtime={runtime} />
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="font-normal text-tertiary">{m.computer_no_code_agents()}</span>
+                )
+              }
+            />
+          </dl>
+        </DetailGroup>
+
+        <AgentRoster
+          agents={computer.agents}
+          onCreateAgent={
+            onCreateAgent && onLoadRuntimeCatalog ? () => setCreateAgentOpen(true) : undefined
+          }
+          onSelectAgent={onSelectAgent}
+          onExecute={onExecuteAgentControl}
+          canFullReset={computer.canManageAgents}
+          computerOnline={computer.online}
+          computerName={label}
+        />
+        <WorkspaceInventory
+          scan={workspaceScan}
+          canScan={Boolean(onScanAgentWorkspaces)}
+          onScan={() => void scanWorkspaces()}
+          canDelete={Boolean(onDeleteAgentWorkspace)}
+          onDelete={async (agentId) => {
+            if (!onDeleteAgentWorkspace) return;
+            const result = await onDeleteAgentWorkspace(agentId);
+            if (result.status !== "ok" && result.status !== "missing")
+              throw new Error("Workspace could not be deleted");
+            await scanWorkspaces();
+          }}
+        />
+
+        {computer.ownedByCurrentUser && computer.runtimes.length > 0 && (
+          <DetailGroup heading={m.computer_runtime_visibility()} headingId="computer-runtimes">
+            <ul className="divide-y divide-secondary">
+              {computer.runtimes.map((runtime) => (
+                <li
+                  key={runtime.provider}
+                  className="flex min-w-0 flex-wrap items-center justify-between gap-4 py-3 text-sm"
+                >
+                  <RuntimeIdentity runtime={runtime} />
+                  <Toggle
+                    className="shrink-0"
+                    label={m.computer_runtime_public()}
+                    aria-label={m.computer_runtime_public_label({
+                      runtime: runtime.displayName,
+                    })}
+                    isSelected={runtime.isPublic}
+                    isDisabled={updatingRuntimeIdsState.has(runtime.id)}
+                    onChange={(isPublic) => void setRuntimePublic(runtime.id, isPublic)}
+                  />
+                  {runtimeVisibilityErrorIds.has(runtime.id) && (
+                    <p role="alert" className="basis-full text-xs text-error-primary">
+                      {m.computer_runtime_visibility_error()}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </DetailGroup>
+        )}
+
+        <DetailGroup heading={m.computer_actions()} headingId="computer-actions">
+          <div className="py-4">
+            <h3 className="text-sm font-semibold text-primary">{m.computer_actions_computer()}</h3>
+            {(!computer.online || versionState) && (
+              <p className="mt-1 text-sm text-tertiary">
+                {computer.online ? versionState : m.computer_status_offline()}
+              </p>
+            )}
+            {(onRestart || upgradeButton) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {onRestart && (
                   <Button
                     type="button"
                     size="sm"
                     color="secondary"
-                    isDisabled={savingDisplayName}
-                    onPress={() => {
-                      setDisplayNameDraft(computer.displayName);
-                      setDisplayNameError(false);
-                      setEditingDisplayName(false);
-                    }}
+                    iconLeading={RotateCw}
+                    isDisabled={
+                      upgrading || restartState === "pending" || restartState === "accepted"
+                    }
+                    onPress={runRestart}
                   >
-                    {m.computer_display_name_cancel()}
+                    {restartState === "pending"
+                      ? m.computer_restart_requesting()
+                      : m.computer_restart_action()}
                   </Button>
-                </div>
-                {displayNameError && (
-                  <p role="alert" className="mt-2 text-sm text-error-primary">
-                    {m.computer_display_name_error()}
-                  </p>
                 )}
-              </form>
-            ) : (
-              // The pencil hangs off the name's right edge so the name itself stays centred.
-              <div className="relative max-w-[calc(100%-5rem)]">
-                <h1 className="truncate text-display-sm font-semibold text-primary">
-                  {computerLabel(computer)}
-                </h1>
-                {canEditDisplayName && (
-                  <ButtonUtility
-                    type="button"
-                    size="sm"
-                    color="tertiary"
-                    icon={Pencil}
-                    className="absolute top-1/2 left-full ml-1 -translate-y-1/2"
-                    aria-label={m.computer_display_name_edit()}
-                    onClick={() => {
-                      setDisplayNameDraft(computer.displayName);
-                      setDisplayNameError(false);
-                      setEditingDisplayName(true);
-                    }}
-                  />
+                {upgradeButton}
+              </div>
+            )}
+            {upgrade.state === "failed" && (
+              <div role="alert" className="mt-3 text-sm text-error-primary">
+                <p>{upgrade.headline}</p>
+                {upgrade.steps.length > 0 && (
+                  <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-sm text-tertiary">
+                    {upgrade.steps.map((step, index) => (
+                      <li key={index}>
+                        {step.text}
+                        {step.command && (
+                          <>
+                            {" "}
+                            <UpgradeCommand command={step.command} />
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                {upgrade.errorId && (
+                  <p className="mt-1.5 text-xs text-tertiary">
+                    {m.error_reference({ errorId: upgrade.errorId })}
+                  </p>
                 )}
               </div>
             )}
           </div>
-
-          <DetailGroup>
-            <dl className="divide-y divide-secondary">
-              <DetailRow
-                label={m.computer_hostname()}
-                value={<span className="font-mono">{computer.name}</span>}
-              />
-              <DetailRow label={m.computer_system()} value={operatingSystemLabel(computer)} />
-              <DetailRow
-                label={m.computer_version()}
-                value={<span className="font-mono">{computerVersionLabel(computer)}</span>}
-                action={upgradeButton}
-                footer={
-                  upgrade.state === "failed" ? (
-                    <div role="alert" className="mt-1.5 text-sm text-error-primary">
-                      <p>{upgrade.headline}</p>
-                      {upgrade.steps.length > 0 && (
-                        <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-sm text-tertiary">
-                          {upgrade.steps.map((step, index) => (
-                            <li key={index}>
-                              {step.text}
-                              {step.command && (
-                                <>
-                                  {" "}
-                                  <UpgradeCommand command={step.command} />
-                                </>
-                              )}
-                            </li>
-                          ))}
-                        </ol>
-                      )}
-                      {upgrade.errorId && (
-                        <p className="mt-1.5 text-xs text-tertiary">
-                          {m.error_reference({ errorId: upgrade.errorId })}
-                        </p>
-                      )}
-                    </div>
-                  ) : undefined
-                }
-              />
-              {computer.creator && (
-                <DetailRow
-                  label={m.computer_added_by()}
-                  value={
-                    <span className="flex min-w-0 items-center justify-end gap-2">
-                      <Avatar
-                        size="xs"
-                        src={computer.creator.avatarUrl}
-                        alt=""
-                        initials={avatarInitial(creatorName)}
-                        contentClassName={avatarToneClassName(creatorName)}
-                      />
-                      <span className="truncate">{creatorName}</span>
-                    </span>
-                  }
+          {computer.ownedByCurrentUser && (
+            <div className="border-t border-secondary py-4">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-primary">
+                <Terminal aria-hidden="true" className="size-4 text-fg-quaternary" />
+                {m.computer_verify_terminal()}
+              </h3>
+              <p className="mt-1 text-sm text-tertiary">
+                {m.computer_verify_terminal_description()}
+              </p>
+              <div className="mt-3 space-y-2">
+                <TerminalCommand command="coforge-computer status" />
+                <TerminalCommand command="coforge-computer logs" />
+              </div>
+              <p className="mt-4 text-sm text-tertiary">{m.computer_restart_from_terminal()}</p>
+              <div className="mt-2">
+                <TerminalCommand
+                  command={`coforge-computer restart --workspace ${workspaceSlug}`}
                 />
-              )}
-            </dl>
-          </DetailGroup>
+              </div>
+            </div>
+          )}
+        </DetailGroup>
 
-          <AgentRoster
-            agents={computer.agents}
-            onCreateAgent={
-              onCreateAgent && onLoadRuntimeCatalog ? () => setCreateAgentOpen(true) : undefined
-            }
-            onSelectAgent={onSelectAgent}
-            onExecute={onExecuteAgentControl}
-            canFullReset={computer.canManageAgents}
-            computerOnline={computer.online}
-            computerName={computerLabel(computer)}
-          />
-          <WorkspaceInventory
-            scan={workspaceScan}
-            canScan={Boolean(onScanAgentWorkspaces)}
-            onScan={() => void scanWorkspaces()}
-            canDelete={Boolean(onDeleteAgentWorkspace)}
-            onDelete={async (agentId) => {
-              if (!onDeleteAgentWorkspace) return;
-              const result = await onDeleteAgentWorkspace(agentId);
-              if (result.status !== "ok" && result.status !== "missing")
-                throw new Error("Workspace could not be deleted");
-              await scanWorkspaces();
-            }}
-          />
-
-          <section aria-labelledby="computer-code-agents">
-            <DetailGroup heading={m.computer_code_agents()} headingId="computer-code-agents">
-              {computer.runtimes.length ? (
-                <ul className="divide-y divide-secondary">
-                  {computer.runtimes.map((runtime) => (
-                    <li
-                      key={runtime.provider}
-                      className="flex min-w-0 flex-wrap items-center justify-between gap-4 py-3 text-sm"
-                    >
-                      {computer.ownedByCurrentUser ? (
-                        <RuntimeUsage
-                          computerId={computer.id}
-                          runtime={runtime}
-                          computerOnline={computer.online}
-                          timeZone={timeZone}
-                        />
-                      ) : (
-                        <RuntimeIdentity runtime={runtime} />
-                      )}
-                      {computer.ownedByCurrentUser && (
-                        <Toggle
-                          className="shrink-0"
-                          label={m.computer_runtime_public()}
-                          aria-label={m.computer_runtime_public_label({
-                            runtime: runtime.displayName,
-                          })}
-                          isSelected={runtime.isPublic}
-                          isDisabled={updatingRuntimeIdsState.has(runtime.id)}
-                          onChange={(isPublic) => void setRuntimePublic(runtime.id, isPublic)}
-                        />
-                      )}
-                      {computer.ownedByCurrentUser && runtimeVisibilityErrorIds.has(runtime.id) && (
-                        <p role="alert" className="basis-full text-xs text-error-primary">
-                          {m.computer_runtime_visibility_error()}
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="py-6 text-center text-sm text-tertiary">
-                  {m.computer_no_code_agents()}
-                </p>
-              )}
-            </DetailGroup>
-          </section>
-        </div>
+        {onDeleteComputer && (
+          <div className="flex flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-primary">{m.computer_delete_action()}</h2>
+              <p className="mt-1 text-sm text-tertiary">{m.computer_delete_description()}</p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              color="secondary-destructive"
+              iconLeading={Trash}
+              className="shrink-0 self-start sm:self-auto"
+              onPress={() => setDeleteOpen(true)}
+            >
+              {m.computer_delete_action()}
+            </Button>
+          </div>
+        )}
       </div>
+      {onDeleteComputer && (
+        <ComputerDeleteDialog
+          computerName={label}
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          onDelete={onDeleteComputer}
+        />
+      )}
       {onCreateAgent && onLoadRuntimeCatalog && (
         <AgentCreateDialog
           open={createAgentOpen}
@@ -1030,64 +1146,185 @@ function formatWorkspaceSize(bytes: number): string {
 }
 
 /**
- * The subtle-fill container shared by both detail groups: no border, no
- * shadow, an optional heading inset to the row text, dividers between rows
- * supplied by the child list itself (`dl`/`ul` with `divide-y`).
+ * One section of the detail panel. Sections run full width and are separated by the panel's own
+ * dividers; the heading row carries the section's one action. Rows that form a list sit on the
+ * subtle fill, while `plain` content (a single value, a field grid) sits on the panel itself.
  */
 function DetailGroup({
   heading,
   headingId,
   action,
+  plain = false,
   children,
 }: {
-  heading?: string;
-  headingId?: string;
+  heading: string;
+  headingId: string;
   action?: ReactNode;
+  plain?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div>
-      {(heading || action) && (
-        <div className="mb-2 flex items-center justify-between gap-3 px-4">
-          {heading && (
-            <h2 id={headingId} className="text-sm font-semibold text-primary">
-              {heading}
-            </h2>
-          )}
-          {action}
-        </div>
-      )}
-      <div className="rounded-xl bg-secondary px-4">{children}</div>
+    <section aria-labelledby={headingId} className="px-4 py-6 sm:px-8">
+      <div className="mb-3 flex min-h-9 items-center justify-between gap-3">
+        <h2 id={headingId} className="text-sm font-semibold text-primary">
+          {heading}
+        </h2>
+        {action}
+      </div>
+      {plain ? children : <div className="rounded-xl bg-secondary px-4">{children}</div>}
+    </section>
+  );
+}
+
+/** One fact in the Info grid: label above, value below. `wide` takes the whole row. */
+function Field({
+  label,
+  value,
+  mono = false,
+  wide = false,
+}: {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+  wide?: boolean;
+}) {
+  return (
+    <div className={cn("min-w-0", wide && "md:col-span-2 xl:col-span-3")}>
+      <dt className="text-sm text-tertiary">{label}</dt>
+      <dd className={cn("mt-1 min-w-0 text-sm font-medium text-primary", mono && "font-mono")}>
+        {value}
+      </dd>
     </div>
   );
 }
 
-/**
- * One label—value row: label left, value (and an optional action that acts
- * on it) right, on a single line that never wraps. `footer` is an optional
- * full-width block below that line, such as an upgrade failure explanation.
- */
-function DetailRow({
-  label,
-  value,
-  action,
-  footer,
-}: {
-  label: string;
-  value: ReactNode;
-  action?: ReactNode;
-  footer?: ReactNode;
-}) {
+const RUNTIME_CHIP_TRIGGER_CLASS_NAME =
+  "rounded-full outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
+
+/** A detected runtime as a compact chip, with its usage health when the viewer may see it. */
+function RuntimeChip({ runtime, health }: { runtime: Runtime; health?: UsageHealth }) {
   return (
-    <div className="grid min-h-11 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 py-3 @max-md:items-start">
-      <dt className="text-sm font-medium whitespace-nowrap text-primary">{label}</dt>
-      {/* When the value and its action do not fit beside the label, the action drops below. */}
-      <dd className="flex min-h-6 min-w-0 flex-wrap items-center justify-end gap-2 text-sm text-tertiary">
-        <span className="min-w-0 truncate">{value}</span>
-        {action && <span className="shrink-0">{action}</span>}
-      </dd>
-      {footer && <dd className="col-span-2">{footer}</dd>}
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-secondary bg-primary py-1 pr-2.5 pl-1.5 text-xs font-medium text-secondary">
+      <RuntimeProviderMark provider={runtime.provider} className="size-4" />
+      {runtime.displayName}
+      <UsageHealthDot health={health} />
+    </span>
+  );
+}
+
+/** The day this Computer joined the Workspace, in the viewer's zone once the page is hydrated. */
+function ComputerDate({ value, timeZone }: { value: Date | string; timeZone: string | null }) {
+  const hydrated = useHydrated();
+  const instant = new Date(value).toISOString();
+  return (
+    <time dateTime={instant}>
+      {hydrated ? formatCalendarDate(value, timeZone, getLocale()) : " "}
+    </time>
+  );
+}
+
+/** A command to run on the Computer itself, in a mono block with a copy control. */
+function TerminalCommand({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-lg bg-primary py-2 pr-2 pl-3 ring-1 ring-secondary ring-inset">
+      <code className="min-w-0 flex-1 truncate font-mono text-sm text-secondary">{command}</code>
+      <ButtonUtility
+        icon={copied ? Check : Copy}
+        size="xs"
+        color="tertiary"
+        aria-label={m.computer_copy_terminal_command()}
+        onClick={() => {
+          void navigator.clipboard.writeText(command);
+          setCopied(true);
+        }}
+      />
     </div>
+  );
+}
+
+/** Confirms deleting the Computer from the Workspace; a refusal stays in the dialog. */
+function ComputerDeleteDialog({
+  computerName,
+  open,
+  onOpenChange,
+  onDelete,
+}: {
+  computerName: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDelete: () => Promise<void>;
+}) {
+  const [error, setError] = useState(false);
+  const [deleting, guard] = useSubmitGuard();
+  return (
+    <ModalOverlay
+      isOpen={open}
+      onOpenChange={(nextOpen: boolean) => {
+        if (deleting) return;
+        setError(false);
+        onOpenChange(nextOpen);
+      }}
+    >
+      <Modal className="w-[calc(100vw-2rem)] max-w-lg">
+        <Dialog className="overflow-hidden text-left">
+          {({ close }) => (
+            <>
+              <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
+                <Heading
+                  slot="title"
+                  className="min-w-0 text-xl font-semibold text-primary wrap-anywhere sm:text-display-xs"
+                >
+                  {m.computer_delete_dialog_title({ name: computerName })}
+                </Heading>
+                <ButtonUtility
+                  aria-label={m.controls_close()}
+                  icon={X}
+                  size="sm"
+                  color="tertiary"
+                  isDisabled={deleting}
+                  onClick={close}
+                />
+              </div>
+              <div className="mx-6 mt-4 flex items-start gap-3">
+                <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
+                <Text slot="description" className="text-sm text-secondary">
+                  {m.computer_delete_description()}
+                </Text>
+              </div>
+              {error && (
+                <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
+                  {m.computer_delete_error()}
+                </p>
+              )}
+              <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
+                <Button color="secondary" isDisabled={deleting} onPress={close}>
+                  {m.controls_cancel()}
+                </Button>
+                <Button
+                  color="primary-destructive"
+                  isLoading={deleting}
+                  showTextWhileLoading
+                  onPress={() => {
+                    if (deleting) return;
+                    setError(false);
+                    void guard(async () => {
+                      try {
+                        await onDelete();
+                      } catch {
+                        setError(true);
+                      }
+                    });
+                  }}
+                >
+                  {m.computer_delete_action()}
+                </Button>
+              </div>
+            </>
+          )}
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }
 
