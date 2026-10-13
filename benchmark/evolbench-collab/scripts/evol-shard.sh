@@ -35,11 +35,11 @@ while true; do
     if [ "$NEW" -gt "$LINES" ]; then
       LINES=$NEW; LASTGROW=$(date +%s)
     fi
-    # Provisioning (OV account + workspace + daemon + agent start) has quiet
-    # phases well over a minute under load; only a 15-minute silence counts
-    # as a real stall.
-    if [ $(( $(date +%s) - ${LASTGROW:-$(date +%s)} )) -gt 900 ]; then
-      echo "[shard-$NAME] silent for >15min, killing for resume" >> "$LOG"
+    # SWE episodes stay quiet in this log while the image loads and the model
+    # works. The in-process episode deadline is the stall bound (often 45 min);
+    # a 15-minute log silence was killing healthy runs.
+    if [ $(( $(date +%s) - ${LASTGROW:-$(date +%s)} )) -gt 3600 ]; then
+      echo "[shard-$NAME] silent for >60min, killing for resume" >> "$LOG"
       kill -9 -- -$RUNNER 2>/dev/null
       break
     fi
