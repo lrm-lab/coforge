@@ -760,4 +760,57 @@ describe("ManageAgents", () => {
     expect(result.agent.visibility).toBe("private");
     expect(records[0]?.visibility).toBe("private");
   });
+
+  test("a refused save carries the rule it broke, so the dialog need not fall back to 'try again'", async () => {
+    const { agentManagement, records } = fixture();
+    const admin = { userId: "user-1", workspaceId: "workspace-1", role: "admin" as const };
+
+    // Each of these used to be a plain `Error`, which reached the client with no rule to name and
+    // so rendered the generic retry copy (`agent-form.ts`).
+    await expect(
+      agentManagement.create(admin, {
+        name: "builder",
+        description: "",
+        provider: "nope" as unknown as typeof RUNTIME_PROVIDER.CODEX,
+        computerId: "computer-1",
+      }),
+    ).rejects.toMatchObject({ name: "AppError", errorId: "agent-provider-unsupported" });
+
+    await expect(
+      agentManagement.create(admin, {
+        name: "   ",
+        description: "",
+        provider: RUNTIME_PROVIDER.CODEX,
+        computerId: "computer-1",
+      }),
+    ).rejects.toMatchObject({ name: "AppError", errorId: "agent-name-required" });
+    expect(records).toEqual([]);
+
+    records.push({
+      id: "assistant-agent",
+      workspaceId: "workspace-1",
+      ownerId: "user-1",
+      name: "assistant",
+      displayName: "assistant",
+      computerId: "computer-1",
+      runtimeConfig: {
+        runtime: RUNTIME_PROVIDER.CODEX,
+        provider: { kind: "default" },
+        model: "",
+        modelProvider: "",
+        reasoning: "",
+      },
+      createdAt: new Date(),
+    });
+    await expect(
+      agentManagement.update(
+        { userId: "user-2", workspaceId: "workspace-1" },
+        { agentId: "assistant-agent", description: "", provider: RUNTIME_PROVIDER.CODEX },
+      ),
+    ).rejects.toMatchObject({
+      name: "AppError",
+      code: "ACCESS_DENIED",
+      errorId: "agent-not-authorized",
+    });
+  });
 });

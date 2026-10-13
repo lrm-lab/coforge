@@ -91,10 +91,12 @@ export class ManageAgents {
     if (!principal.role) throw new AppError("ACCESS_DENIED");
     assertCanCreateAgents(principal.role);
     const name = input.name.trim().toLowerCase();
-    if (!name) throw new Error("name is required");
+    if (!name) throw new AppError("INVALID_INPUT", { errorId: "agent-name-required" });
     const description = input.description.trim();
-    if (!providers.has(input.provider)) throw new Error("provider is not supported");
-    if (!input.computerId) throw new Error("computer is required");
+    if (!providers.has(input.provider))
+      throw new AppError("INVALID_INPUT", { errorId: "agent-provider-unsupported" });
+    if (!input.computerId)
+      throw new AppError("INVALID_INPUT", { errorId: "agent-computer-required" });
     const apiKeyInput = input.apiKey?.trim();
     const selection = {
       provider: input.provider,
@@ -160,13 +162,14 @@ export class ManageAgents {
         current.workspaceId !== principal.workspaceId ||
         current.ownerId !== principal.userId
       )
-        throw new Error("Agent is not authorized");
+        throw new AppError("ACCESS_DENIED", { errorId: "agent-not-authorized" });
       // A deleted Agent has no editable configuration. Refused here rather than only by
       // the restart below, so a stopped/deleted Agent cannot be silently rewritten either.
       assertAgentLive(current);
       const computerId = input.computerId ?? current.computerId;
       if (!computerId) throw new AppError("INVALID_INPUT", { errorId: "agent-computer-required" });
-      if (!providers.has(input.provider)) throw new Error("provider is not supported");
+      if (!providers.has(input.provider))
+        throw new AppError("INVALID_INPUT", { errorId: "agent-provider-unsupported" });
       const apiKeyInput = input.apiKey?.trim();
       const selection = {
         provider: input.provider,
@@ -254,8 +257,10 @@ export class ManageAgents {
   }
 
   async #encrypt(agentId: string, providerId: string, apiKey: string) {
-    if (!providerId) throw new Error("model provider is required for an API key");
-    if (!this.credentials) throw new Error("Agent runtime credential encryption is unavailable");
+    if (!providerId)
+      throw new AppError("INVALID_INPUT", { errorId: "agent-model-provider-required" });
+    if (!this.credentials)
+      throw new AppError("INTERNAL_ERROR", { errorId: "agent-credential-unavailable" });
     return (await this.credentials()).encrypt(agentId, providerId, apiKey);
   }
 }
