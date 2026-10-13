@@ -32,7 +32,7 @@ export function ChannelProjectChip({
       to="/w/$workspaceSlug/projects/$projectSlug"
       params={{ workspaceSlug, projectSlug: project.slug }}
       aria-label={`${m.channel_settings_project()}: ${project.name}`}
-      className="inline-flex h-7 min-w-0 max-w-40 shrink items-center gap-1.5 rounded-lg border border-secondary bg-primary px-2 text-sm font-medium text-secondary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
+      className="inline-flex h-7 min-w-8 max-w-40 shrink-[999] items-center gap-1.5 rounded-lg border border-secondary bg-primary px-2 text-sm font-medium text-secondary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
     >
       <Folder aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
       <span className="truncate">{project.name}</span>
@@ -60,7 +60,7 @@ export function ChannelHeaderFaces({
     <div className="flex shrink-0 items-center">
       {shown.length > 0 && (
         <div
-          className="hidden items-center -space-x-2 md:flex"
+          className="hidden items-center -space-x-1 md:flex"
           aria-label={m.channel_settings_members()}
         >
           {shown.map((entry) => (
@@ -72,7 +72,7 @@ export function ChannelHeaderFaces({
                   src={entry.avatarUrl ?? undefined}
                   initials={avatarInitial(entry.displayName)}
                   contentClassName={avatarToneClassName(entry.displayName)}
-                  className="ring-2 ring-bg-primary"
+                  className="ring-[1.5px] ring-bg-primary"
                 />
                 <span className="sr-only">{entry.displayName}</span>
               </TooltipTrigger>
@@ -86,7 +86,7 @@ export function ChannelHeaderFaces({
                   alt=""
                   initials={`+${more}`}
                   contentClassName="bg-brand-primary text-brand-secondary *:text-brand-secondary"
-                  className="ring-2 ring-bg-primary"
+                  className="ring-[1.5px] ring-bg-primary"
                 />
                 <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
               </TooltipTrigger>
@@ -124,7 +124,7 @@ export function ChannelHeaderMemberCluster({
       <div
         aria-busy="true"
         aria-label={m.channel_members_loading()}
-        className="hidden shrink-0 -space-x-2 md:flex"
+        className="hidden shrink-0 -space-x-1 md:flex"
       >
         {Array.from({ length: 3 }, (_, index) => (
           <Skeleton key={index} className="size-6 rounded-full" />

@@ -92,7 +92,9 @@ export function ChannelConversationHeader({
           <>
             <ConversationListButton />
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              <h1 className="min-w-0 truncate text-md font-semibold">#{conversation.name}</h1>
+              <h1 className="min-w-0 shrink truncate text-md font-semibold">
+                #{conversation.name}
+              </h1>
               {conversation.project && (
                 <ChannelProjectChip workspaceSlug={workspaceSlug} project={conversation.project} />
               )}
