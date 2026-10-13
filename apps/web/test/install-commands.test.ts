@@ -27,3 +27,40 @@ test("carries no fixed host, since the setup command runs against whatever serve
   expect(setupCommand("acme-inc")).not.toContain("coforge.cn");
   expect(setupCommand("acme-inc")).not.toContain("http");
 });
+
+test.each(["absolute", "relative", "unset"])(
+  "connects without PATH with %s XDG_BIN_HOME",
+  async (kind) => {
+    const { connectionCommands } = await import("#src/features/install/install-commands");
+    const { mkdtemp, mkdir, chmod, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const directory = await mkdtemp(join(tmpdir(), "coforge-connect-command-"));
+    try {
+      const bin =
+        kind === "absolute" ? join(directory, "custom bin") : join(directory, ".local/bin");
+      await mkdir(bin, { recursive: true });
+      const executable = join(bin, "coforge-computer");
+      await Bun.write(executable, '#!/bin/sh\nprintf "%s\\n" "$@"\n');
+      await chmod(executable, 0o755);
+      const command = connectionCommands("https://coforge.example", "acme-inc").posix;
+      const setup = command.split("\n")[1]!;
+      const result = Bun.spawnSync(["/bin/sh", "-c", setup], {
+        env: {
+          PATH: "/usr/bin:/bin",
+          HOME: directory,
+          ...(kind === "unset" ? {} : { XDG_BIN_HOME: kind === "absolute" ? bin : "relative" }),
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toString()).toBe("setup\n--workspace\nacme-inc\n");
+      expect(command.split("\n")[0]).toBe(
+        "curl -fsSL https://coforge.example/computer/install.sh | sh",
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);

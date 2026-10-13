@@ -10,16 +10,22 @@ export function installCommands(origin: string): {
   };
 }
 
-/** The second step: sign the installed Computer in to this deployment. `setup` cannot run before
- * it, because registering a Computer needs a credential to register as - so the sequence is
- * stated here rather than left for the user to discover from a failure. */
+/** Explicit sign-in for users who want to authorize separately from setup. */
 export function loginCommand(): string {
   return `coforge-computer login`;
 }
 
-/** The explicit third step of the install flow: join the signed-in Computer to one Workspace by
- * slug. Kept beside installCommands so the full sequence has one source of truth, even though
- * this half doesn't depend on the deployment origin. */
+/** Join one Workspace; setup requests device-code authorization when credentials are missing. */
 export function setupCommand(workspaceSlug: string): string {
   return `coforge-computer setup --workspace ${workspaceSlug}`;
+}
+
+/** Bootstrap and attach without relying on PATH changes made by the installer child shell. */
+export function connectionCommands(origin: string, workspaceSlug: string | null) {
+  const commands = installCommands(origin);
+  if (!workspaceSlug) return commands;
+  return {
+    posix: `${commands.posix}\nsh -c 'case "$XDG_BIN_HOME" in /*) bin="$XDG_BIN_HOME";; *) bin="$HOME/.local/bin";; esac; exec "$bin/coforge-computer" setup --workspace "$1"' sh ${workspaceSlug}`,
+    windows: `${commands.windows}\n${setupCommand(workspaceSlug)}`,
+  };
 }
