@@ -28,7 +28,6 @@ import {
 import { loadWorkspaceMembers } from "#src/features/workspaces/members.functions";
 import { MEMBER_PAGE_SIZE } from "#src/features/workspaces/member-directory";
 import { getLocale, setLocale } from "#src/paraglide/runtime";
-import { readRailLabels, writeRailLabels } from "#src/features/settings/rail-labels";
 import {
   readHideEmptySidebarSections,
   writeHideEmptySidebarSections,
@@ -112,7 +111,6 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
 
 function SettingsPage() {
   const [theme, setTheme] = useState<Theme>("system");
-  const [railLabels, setRailLabels] = useState(true);
   const [hideEmptySidebarSections, setHideEmptySidebarSections] = useState(false);
   const [messageFullWidth, setMessageFullWidth] = useState(false);
   const { section, github, avatar } = Route.useSearch();
@@ -157,7 +155,6 @@ function SettingsPage() {
         : "light";
     setTheme(initialTheme);
     applyTheme(initialTheme);
-    setRailLabels(readRailLabels());
     setHideEmptySidebarSections(readHideEmptySidebarSections());
     setMessageFullWidth(readMessageFullWidth());
   }, []);
@@ -185,11 +182,6 @@ function SettingsPage() {
       nextTheme === "dark" ||
       (nextTheme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.classList.toggle("dark-mode", dark);
-  }
-
-  function changeRailLabels(show: boolean) {
-    setRailLabels(show);
-    writeRailLabels(show);
   }
 
   function changeHideEmptySidebarSections(hide: boolean) {
@@ -377,8 +369,6 @@ function SettingsPage() {
       }
       onLocaleChange={setLocale}
       onThemeChange={changeTheme}
-      railLabels={railLabels}
-      onRailLabelsChange={changeRailLabels}
       hideEmptySidebarSections={hideEmptySidebarSections}
       onHideEmptySidebarSectionsChange={changeHideEmptySidebarSections}
       messageFullWidth={messageFullWidth}

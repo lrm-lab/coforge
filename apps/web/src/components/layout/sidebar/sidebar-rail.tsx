@@ -1,7 +1,9 @@
 import type { FC, ReactNode } from "react";
 import { LayoutLeft } from "@untitledui/icons";
+import { Pressable } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { UnreadDot } from "#src/components/ui/unread-marker";
 import { writeSidebarExpanded } from "#src/features/settings/sidebar-expanded";
 import { m } from "#src/paraglide/messages";
@@ -12,51 +14,43 @@ import { cx } from "#src/utils/cx";
 // props. The rail is the collapsed desktop sidebar; the expanded one is `sidebar-expanded.tsx`.
 
 /**
- * 6.75rem (108px at the default 16px root). The longest English label,
- * "Conversations", is 98px at 14px semibold (Inter wght 600). An 80px rail
- * centered that word and pushed the capital C off the left edge of the screen.
- * Rem so the rail grows with the browser's font size, in step with `text-sm`.
+ * 5rem (80px at the default 16px root). The collapsed rail is icons only.
+ * The name is the link's accessible name and a tooltip to the right of the
+ * icon. 6.75rem existed only so the 14px "Conversations" caption fit.
  */
-export const SIDEBAR_RAIL_WIDTH = "6.75rem";
+export const SIDEBAR_RAIL_WIDTH = "5rem";
 
 type RailItemType = NavItemType & { icon: FC<{ className?: string }>; current?: boolean };
 
-/** Without its caption (Settings → Show labels in the sidebar off) an item is just its icon box,
- * so the icons sit close together instead of keeping the captioned spacing. */
+/** Icon only. The caption used to live under the icon; the name is now the tooltip. */
 function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
   return (
-    <a
-      href={href}
-      aria-label={label}
-      aria-current={current ? "page" : undefined}
-      className="group flex h-18 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 [.rail-labels-hidden_&]:h-11 outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
-    >
-      <span
-        className={cx(
-          "relative flex size-10 items-center justify-center rounded-lg transition-colors duration-100 ease-linear",
-          current ? "bg-sidebar-accent" : "group-hover:bg-sidebar-accent",
-        )}
-      >
-        <Icon
-          aria-hidden="true"
-          className={cx(
-            "size-5 stroke-[2.4] transition-colors duration-100 ease-linear",
-            current ? "text-brand-secondary" : "text-nav-icon group-hover:text-secondary",
-          )}
-        />
-        {badge ? <UnreadDot className="absolute top-1.5 right-1.5" /> : null}
-      </span>
-      <span
-        className={cx(
-          "max-w-full truncate text-center text-sm font-medium tracking-normal transition-colors duration-100 ease-linear [.rail-labels-hidden_&]:hidden",
-          current
-            ? "font-semibold text-brand-secondary"
-            : "text-tertiary group-hover:text-secondary",
-        )}
-      >
-        {label}
-      </span>
-    </a>
+    <Tooltip title={label} placement="right">
+      <Pressable>
+        <a
+          href={href}
+          aria-label={label}
+          aria-current={current ? "page" : undefined}
+          className="group flex h-11 w-full min-w-0 items-center justify-center rounded-lg px-0.5 outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
+          <span
+            className={cx(
+              "relative flex size-10 items-center justify-center rounded-lg transition-colors duration-100 ease-linear",
+              current ? "bg-sidebar-accent" : "group-hover:bg-sidebar-accent",
+            )}
+          >
+            <Icon
+              aria-hidden="true"
+              className={cx(
+                "size-5 stroke-[2.4] transition-colors duration-100 ease-linear",
+                current ? "text-brand-secondary" : "text-nav-icon group-hover:text-secondary",
+              )}
+            />
+            {badge ? <UnreadDot className="absolute top-1.5 right-1.5" /> : null}
+          </span>
+        </a>
+      </Pressable>
+    </Tooltip>
   );
 }
 
@@ -84,6 +78,8 @@ export const SidebarRail = ({ activeUrl, items, subheader, footer }: SidebarRail
             icon={LayoutLeft}
             size="sm"
             color="tertiary"
+            tooltip={m.navigation_expand_sidebar()}
+            tooltipPlacement="right"
             aria-label={m.navigation_expand_sidebar()}
             onClick={() => writeSidebarExpanded(true)}
           />

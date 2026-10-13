@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Clock as Clock3,
   Translate01 as Languages,
-  LayoutLeft,
   Mail01,
   MessageSquare01 as MessagesSquare,
   Moon01 as Moon,
@@ -120,7 +119,6 @@ interface SettingsContentProps {
   };
   locale: Locale;
   theme: Theme;
-  railLabels: boolean;
   hideEmptySidebarSections: boolean;
   messageFullWidth: boolean;
   timeZone: string | null;
@@ -138,7 +136,6 @@ interface SettingsContentProps {
   onAvatarPickerChange: (open: boolean) => void;
   onLocaleChange: (locale: Locale) => void;
   onThemeChange: (theme: Theme) => void;
-  onRailLabelsChange: (show: boolean) => void;
   onMessageFullWidthChange: (full: boolean) => void;
   onHideEmptySidebarSectionsChange: (hide: boolean) => void;
   onDateTimeSave: (input: {
@@ -714,8 +711,6 @@ function Preferences({
   profile,
   theme,
   onThemeChange,
-  railLabels,
-  onRailLabelsChange,
   hideEmptySidebarSections,
   onHideEmptySidebarSectionsChange,
   messageFullWidth,
@@ -859,24 +854,6 @@ function Preferences({
               <SelectItem id="first-unread" label={m.preferences_open_first_unread()} />
               <SelectItem id="newest-unread" label={m.preferences_open_newest_unread()} />
             </Select>
-          </SettingsField>
-        </SettingsCard>
-      </SettingsGroup>
-
-      <SettingsGroup icon={LayoutLeft} label={m.preferences_sidebar()}>
-        <SettingsCard>
-          <SettingsField
-            inline
-            label={m.preferences_rail_labels()}
-            description={m.preferences_rail_labels_description()}
-            note={savedOnDevice}
-          >
-            <Toggle
-              size="md"
-              aria-label={m.preferences_rail_labels()}
-              isSelected={railLabels}
-              onChange={onRailLabelsChange}
-            />
           </SettingsField>
         </SettingsCard>
       </SettingsGroup>

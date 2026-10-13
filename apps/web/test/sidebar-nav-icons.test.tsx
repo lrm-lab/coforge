@@ -47,14 +47,33 @@ test("The current item keeps the brand accent; the resting icon never uses the o
   expect(resting).not.toContain("text-tertiary");
 });
 
-test("The collapsed rail is wide enough for Conversations and keeps the caption inside the column", () => {
-  // 6.75rem fits "Conversations" at 14px semibold (~98px) plus the item's horizontal padding.
-  // 5rem centered that word and clipped the capital C off the left edge of the screen.
-  expect(SIDEBAR_RAIL_WIDTH).toBe("6.75rem");
+test("The collapsed rail is an icon column and each item keeps its name", () => {
+  // Captions are gone, so the rail is the icon column again. 6.75rem only existed to fit
+  // "Conversations" under the icon. The name is the link's accessible name; RailItem also
+  // passes it to Tooltip with placement "right". A closed tooltip is not in the static tree.
+  expect(SIDEBAR_RAIL_WIDTH).toBe("5rem");
   const markup = renderToStaticMarkup(<SidebarRail {...railProps} />);
   expect(markup).toContain("overflow-x-hidden");
-  expect(markup).toContain("max-w-full truncate text-center");
-  expect(markup).toContain(m.navigation_chat());
+  expect(markup).not.toContain("truncate text-center");
+  expect(markup).not.toContain("h-18");
+  expect(markup).toContain("h-11");
+  expect(markup).toContain(`aria-label="${m.navigation_chat()}"`);
+  expect(markup).toContain('aria-current="page"');
+  expect(markup).toContain('data-react-aria-pressable="true"');
+  expect(markup).not.toContain("rail-labels-hidden");
+  const chat = m.navigation_chat();
+  const visible = markup.replace(/aria-label="[^"]*"/g, "");
+  expect(visible).not.toContain(`>${chat}<`);
+});
+
+test("A rail icon's name is the official tooltip, placed to the right", async () => {
+  // A closed tooltip is portaled and absent from static markup, so this locks the wiring
+  // the hover actually uses: the same label, on the official Tooltip, to the right of the icon.
+  const source = await Bun.file(
+    new URL("../src/components/layout/sidebar/sidebar-rail.tsx", import.meta.url),
+  ).text();
+  expect(source).toContain('<Tooltip title={label} placement="right">');
+  expect(source).toContain('tooltipPlacement="right"');
 });
 
 test("The token carries the spec's value in light, and a lighter one for the dark column", async () => {

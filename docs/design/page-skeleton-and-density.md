@@ -2,7 +2,7 @@
 
 参照 Linear、Notion 和 Untitled UI 自带的 sidebar-navigation。
 
-- 应用侧栏有两种形态：展开（220px，顶部 Logo 加名称和收起按钮，下面是工作区行、图标加文字的导航行、无边框用户卡；手机抽屉用同一套）和收缩的窄栏（6.75rem / 108px，图标下面是 14px 文字，顶部是展开按钮）。窄栏宽度按最长的英文标签「Conversations」定：14px semibold 约 98px，80px 会把单词居中后把首字母裁出屏幕左缘；标签限制在栏宽内，更长的译文以省略号收住，不再溢出到视口外。桌面默认展开，收起状态记在本机（`features/settings/sidebar-expanded.ts`）。展开形态按设计稿，是 `sidebar-simple.tsx` 复制后的 CoForge 自有组件，窄栏同理。侧栏底色用 CoForge 的 `--color-sidebar`（亮 `#f8f7fe`，暗色为紫黑渐变），右侧一条 `border-secondary`。这是唯一有意偏离官方（官方侧栏是 `bg-primary`）的地方，目的是品牌辨识。
+- 应用侧栏有两种形态：展开（220px，顶部 Logo 加名称和收起按钮，下面是工作区行、图标加文字的导航行、无边框用户卡；手机抽屉用同一套）和收缩的窄栏（5rem / 80px，只有图标，顶部是展开按钮）。窄栏不画图标下的文字，设置里也没有「侧栏显示文字」开关。悬停或键盘聚焦时，名字出现在图标右侧的提示里；链接本身带 `aria-label`，当前页用 `aria-current="page"`。6.75rem 那一档只为放下 14px 的英文「Conversations」，文字去掉后回到 5rem 的图标列。桌面默认展开，收起状态记在本机（`features/settings/sidebar-expanded.ts`）。展开形态按设计稿，是 `sidebar-simple.tsx` 复制后的 CoForge 自有组件，窄栏同理。侧栏底色用 CoForge 的 `--color-sidebar`（亮 `#f8f7fe`，暗色为紫黑渐变），右侧一条 `border-secondary`。这是唯一有意偏离官方（官方侧栏是 `bg-primary`）的地方，目的是品牌辨识。
 - 桌面端内容区是一张 `bg-primary` 的圆角（`rounded-xl`）整卡，上、右、下各与侧栏背景留 8px，左边紧贴侧栏；侧栏和这圈留白共用一层渐变背景（`--sidebar-gradient`），侧栏本身没有边线。页面根元素用 `h-full` 填满这张卡，不用 `h-svh`。由多个面板组成的页面（目前只有对话页：列表和对话）在根元素上标 `data-panel-cards`，整卡随之变透明，每个面板各自是一张圆角卡，卡间距 8px。页面内的多个面板（列表 + 详情、对话 + thread）之间只用 1px `border-secondary` 分隔。
 - 整卡之内**不用**卡片岛屿：页面级面板没有 `rounded`、没有 `border` 包边、没有 gutter、没有阴影。卡片只用于内容里真正独立的对象（一个附件、一条运行时），以及[第 9 节](field-display.md)的事实列表分组。设置页（语言和地区、偏好设置）按设计稿例外：每组一个图标加大写小标题，组内每个设置或每个保存单元一张卡片（`rounded-xl border border-secondary shadow-xs`），开关放行尾，存在本设备的设置在卡片里注明「仅保存在此设备上」。成员页的「系统频道」分区（仅所有者/管理员）不用卡片：分区标题同「待处理邀请」，「隐藏 #general 频道」要按「保存」才生效，用勾选框放行尾，下方放「保存」。
 - 侧栏可拖拽：默认 280，范围 240 到 360。手柄不可见，热区 6 到 8px 压在分隔线上，hover 或拖拽时显示 2px 品牌色线。
