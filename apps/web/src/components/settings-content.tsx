@@ -121,7 +121,6 @@ interface SettingsContentProps {
   locale: Locale;
   theme: Theme;
   railLabels: boolean;
-  liveAgentActivity: boolean;
   hideEmptySidebarSections: boolean;
   messageFullWidth: boolean;
   timeZone: string | null;
@@ -140,7 +139,6 @@ interface SettingsContentProps {
   onThemeChange: (theme: Theme) => void;
   onRailLabelsChange: (show: boolean) => void;
   onMessageFullWidthChange: (full: boolean) => void;
-  onLiveAgentActivityChange: (show: boolean) => void;
   onHideEmptySidebarSectionsChange: (hide: boolean) => void;
   onDateTimeSave: (input: {
     timeZone: string | null;
@@ -716,8 +714,6 @@ function Preferences({
   onThemeChange,
   railLabels,
   onRailLabelsChange,
-  liveAgentActivity,
-  onLiveAgentActivityChange,
   hideEmptySidebarSections,
   onHideEmptySidebarSectionsChange,
   messageFullWidth,
@@ -794,21 +790,6 @@ function Preferences({
             </p>
             <MessageFontSizePreview senderName={profile.name} senderAvatarUrl={profile.avatarUrl} />
           </div>
-        </SettingsCard>
-        <SettingsCard>
-          <SettingsField
-            inline
-            label={m.preferences_live_agent_activity()}
-            description={m.preferences_live_agent_activity_hint()}
-            note={savedOnDevice}
-          >
-            <Toggle
-              size="md"
-              aria-label={m.preferences_live_agent_activity()}
-              isSelected={liveAgentActivity}
-              onChange={onLiveAgentActivityChange}
-            />
-          </SettingsField>
         </SettingsCard>
         <SettingsCard>
           <SettingsField

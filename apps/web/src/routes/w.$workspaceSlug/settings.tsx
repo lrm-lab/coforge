@@ -35,10 +35,6 @@ import {
 } from "#src/features/settings/hide-empty-sidebar-sections";
 import { readMessageFullWidth, writeMessageFullWidth } from "#src/features/settings/message-width";
 import {
-  readLiveAgentActivity,
-  writeLiveAgentActivity,
-} from "#src/features/settings/live-agent-activity";
-import {
   conversationOpenMode,
   type ConversationOpenMode,
 } from "#src/features/settings/conversation-open-mode";
@@ -117,7 +113,6 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
 function SettingsPage() {
   const [theme, setTheme] = useState<Theme>("system");
   const [railLabels, setRailLabels] = useState(true);
-  const [liveAgentActivity, setLiveAgentActivity] = useState(true);
   const [hideEmptySidebarSections, setHideEmptySidebarSections] = useState(false);
   const [messageFullWidth, setMessageFullWidth] = useState(false);
   const { section, github, avatar } = Route.useSearch();
@@ -162,7 +157,6 @@ function SettingsPage() {
     setTheme(initialTheme);
     applyTheme(initialTheme);
     setRailLabels(readRailLabels());
-    setLiveAgentActivity(readLiveAgentActivity());
     setHideEmptySidebarSections(readHideEmptySidebarSections());
     setMessageFullWidth(readMessageFullWidth());
   }, []);
@@ -200,11 +194,6 @@ function SettingsPage() {
   function changeHideEmptySidebarSections(hide: boolean) {
     setHideEmptySidebarSections(hide);
     writeHideEmptySidebarSections(hide);
-  }
-
-  function changeLiveAgentActivity(show: boolean) {
-    setLiveAgentActivity(show);
-    writeLiveAgentActivity(show);
   }
 
   function changeMessageFullWidth(full: boolean) {
@@ -382,8 +371,6 @@ function SettingsPage() {
       onThemeChange={changeTheme}
       railLabels={railLabels}
       onRailLabelsChange={changeRailLabels}
-      liveAgentActivity={liveAgentActivity}
-      onLiveAgentActivityChange={changeLiveAgentActivity}
       hideEmptySidebarSections={hideEmptySidebarSections}
       onHideEmptySidebarSectionsChange={changeHideEmptySidebarSections}
       messageFullWidth={messageFullWidth}
