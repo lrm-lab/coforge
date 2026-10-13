@@ -28,7 +28,7 @@ import { Toggle } from "#src/components/base/toggle/toggle";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
-import { formatCalendarDate } from "#src/lib/dates";
+import { formatCalendarDate, formatDateForDisplay } from "#src/lib/dates";
 import { getLocale } from "#src/paraglide/runtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useAppToast } from "#src/components/ui/toast";
@@ -613,6 +613,7 @@ export function ComputerDetail({
           <WorkspaceInventory
             snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}
             status={workspaceScanStatus}
+            timeZone={timeZone}
             canScan={Boolean(onScanAgentWorkspaces)}
             onScan={() => void scanWorkspaces()}
             canDelete={Boolean(onDeleteAgentWorkspace)}
@@ -945,6 +946,7 @@ function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][nu
 function WorkspaceInventory({
   snapshot,
   status,
+  timeZone,
   canScan,
   onScan,
   canDelete,
@@ -952,12 +954,14 @@ function WorkspaceInventory({
 }: {
   snapshot: AgentWorkspaceScanSnapshot | null;
   status: "idle" | "scanning" | "error";
+  timeZone: string | null;
   canScan: boolean;
   onScan: () => void;
   canDelete: boolean;
   onDelete: (agentId: string) => Promise<void>;
 }) {
   const [deleteTarget, setDeleteTarget] = useState<ComputerAgentWorkspaceScan | undefined>();
+  const hydrated = useHydrated();
   const deletedCount = snapshot
     ? snapshot.workspaces.filter((item) => item.state === "deleted").length
     : 0;
@@ -990,9 +994,15 @@ function WorkspaceInventory({
       )}
       {snapshot && (
         <p className="pt-3 text-xs text-tertiary">
-          {m.computer_agent_workspaces_scanned_at({
-            date: new Date(snapshot.scannedAt).toLocaleString(),
-          })}
+          <time dateTime={new Date(snapshot.scannedAt).toISOString()}>
+            {m.computer_agent_workspaces_scanned_at({
+              // The viewer's saved zone and the UI language (`lib/AGENTS.md`); the server render
+              // knows neither, so the time appears once the page is hydrated.
+              date: hydrated
+                ? formatDateForDisplay(new Date(snapshot.scannedAt), timeZone, getLocale())
+                : "",
+            })}
+          </time>
         </p>
       )}
       {!snapshot ? (

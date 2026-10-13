@@ -456,6 +456,16 @@ export function installQueryCachePersistence(
       const moved = withReadThrough(queryKey, current, cursor);
       if (moved !== current) queryClient.setQueryData(queryKey, moved);
     },
+    /**
+     * Stores the kept query `queryKey` as the cache holds it now, without waiting out
+     * `PAGE_WRITE_DELAY_MS`: for a write the page must not lose to a reload right after it (a
+     * Computer's Agent workspace scan, which took seconds of the Computer's disk). Resolves once
+     * stored, or once storage declined it by the usual rules (a failing store is a miss).
+     */
+    async store(queryKey: QueryKey) {
+      if (!persistsQuery(queryKey)) return;
+      await storePageWrite(hashKey(queryKey));
+    },
     /** Stores the page's own writes still waiting for their burst to end: the page is going away. */
     async flush() {
       await Promise.all([...pageWrites.keys()].map((queryHash) => storePageWrite(queryHash)));

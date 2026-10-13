@@ -974,9 +974,10 @@ describe("a Computer's Agent workspace scan", () => {
   test("is kept once Scan wrote it, and opens the next page load without being read again", async () => {
     const disk = memoryStore();
     const before = pageLoad(disk.store);
-    // Scan writes its result into the query (`setQueryData`), as the Computer page does.
-    before.queryClient.setQueryData(agentWorkspaceScanQuery("w1", "computer-1").queryKey, snapshot);
-    await before.persistence.flush();
+    // Scan writes its result into the query and stores it, as the Computer page does.
+    const key = agentWorkspaceScanQuery("w1", "computer-1").queryKey;
+    before.queryClient.setQueryData(key, snapshot);
+    await before.persistence.store(key);
     expect(disk.writes()).toBe(1);
 
     const after = pageLoad(disk.store);
@@ -994,6 +995,30 @@ describe("a Computer's Agent workspace scan", () => {
     ).toEqual(snapshot);
     expect(after.queryClient.getQueryState(options.queryKey)?.isInvalidated).toBe(false);
     expect(reads()).toBe(0);
+  });
+
+  test("is stored before the scan counts as done, not a page-write delay later", async () => {
+    const disk = memoryStore();
+    // Storage that takes the row only when the test lets it: the scan is done once it has.
+    let commit: () => void = () => {};
+    const committed = new Promise<void>((resolve) => (commit = resolve));
+    const set = disk.store.set;
+    const page = pageLoad({
+      ...disk.store,
+      set: async (key, value) => {
+        if (key.includes("tanstack-query-")) await committed;
+        return set(key, value);
+      },
+    });
+    const key = agentWorkspaceScanQuery("w1", "computer-1").queryKey;
+    page.queryClient.setQueryData(key, snapshot);
+    let stored = false;
+    const storing = page.persistence.store(key).then(() => (stored = true));
+    await settle();
+    expect({ stored, rows: queryRows(disk.rows).length }).toEqual({ stored: false, rows: 0 });
+    commit();
+    await storing;
+    expect(queryRows(disk.rows)).toHaveLength(1);
   });
 
   test("is nothing until the first scan, and nothing is stored for it", async () => {
