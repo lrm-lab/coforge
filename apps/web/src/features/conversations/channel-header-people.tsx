@@ -32,7 +32,7 @@ export function ChannelProjectChip({
       to="/w/$workspaceSlug/projects/$projectSlug"
       params={{ workspaceSlug, projectSlug: project.slug }}
       aria-label={`${m.channel_settings_project()}: ${project.name}`}
-      className="inline-flex h-7 min-w-0 max-w-40 shrink items-center gap-1.5 rounded-lg bg-secondary px-2 text-sm font-medium text-primary outline-focus-ring hover:bg-secondary_hover focus-visible:outline-2"
+      className="inline-flex h-7 min-w-0 max-w-40 shrink items-center gap-1.5 rounded-lg border border-secondary bg-primary px-2 text-sm font-medium text-secondary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
     >
       <Folder aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
       <span className="truncate">{project.name}</span>
@@ -59,7 +59,10 @@ export function ChannelHeaderFaces({
   return (
     <div className="flex shrink-0 items-center">
       {shown.length > 0 && (
-        <div className="flex items-center -space-x-2" aria-label={m.channel_settings_members()}>
+        <div
+          className="hidden items-center -space-x-2 md:flex"
+          aria-label={m.channel_settings_members()}
+        >
           {shown.map((entry) => (
             <Tooltip key={entry.key} title={entry.displayName}>
               <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
@@ -82,7 +85,7 @@ export function ChannelHeaderFaces({
                   size="sm"
                   alt=""
                   initials={`+${more}`}
-                  contentClassName="bg-brand-primary text-brand-secondary"
+                  contentClassName="bg-brand-primary text-brand-secondary *:text-brand-secondary"
                   className="ring-2 ring-bg-primary"
                 />
                 <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
@@ -94,7 +97,7 @@ export function ChannelHeaderFaces({
       {canAdd && (
         <AvatarAddButton
           size="sm"
-          className={shown.length > 0 ? "ml-2" : undefined}
+          className={shown.length > 0 ? "md:ml-2" : undefined}
           title={m.channel_settings_add_members()}
           onPress={onAddMembers}
         />
@@ -121,7 +124,7 @@ export function ChannelHeaderMemberCluster({
       <div
         aria-busy="true"
         aria-label={m.channel_members_loading()}
-        className="flex shrink-0 -space-x-2"
+        className="hidden shrink-0 -space-x-2 md:flex"
       >
         {Array.from({ length: 3 }, (_, index) => (
           <Skeleton key={index} className="size-8 rounded-full" />
