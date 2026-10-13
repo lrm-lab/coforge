@@ -120,6 +120,8 @@
   "computer_usage_monthly_credits": "每月额度",
   "computer_usage_credit_amounts": "已用 {used} / 共 {limit} credits",
   "computer_usage_credit_overage": "超额使用：{overage} credits",
+  "computer_usage_credits_unlimited": "额度不限",
+  "computer_usage_credits_available": "有可用额度",
   "computer_usage_weekly": "本周",
   "computer_usage_monthly": "本月",
   "computer_usage_pay_as_you_go": "按量付费",

@@ -12,7 +12,6 @@ import {
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import { Badge } from "#src/components/base/badges/badges";
-import { Button } from "#src/components/base/buttons/button";
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -257,9 +256,16 @@ export function RuntimeUsagePopoverContent({
         : usageFailureDescription(data?.result?.status);
   const reading =
     !reason && (!data || (data.state === "missing" && (scanning || data.pendingScanId)));
-  const account = [snapshot?.planType && formatPlan(snapshot.planType), snapshot?.accountLabel]
-    .filter(Boolean)
-    .join(" · ");
+  const plan = snapshot?.planType ? formatPlan(snapshot.planType) : undefined;
+  const accountLabel = snapshot?.accountLabel;
+  // Codex reports only whether the account has credits and whether they are unlimited, no
+  // amounts, so that is a note on the account line rather than a bar. No credits says nothing.
+  const credits = snapshot?.credits?.unlimited
+    ? m.computer_usage_credits_unlimited()
+    : snapshot?.credits?.hasCredits
+      ? m.computer_usage_credits_available()
+      : undefined;
+  const accountNote = [plan && accountLabel, credits].filter(Boolean).join(" · ");
   const windows = snapshot
     ? (["primary", "secondary"] as const).flatMap((key) => {
         const window = snapshot[key];
@@ -269,43 +275,41 @@ export function RuntimeUsagePopoverContent({
 
   return (
     <div className="divide-y divide-secondary">
-      <div className="flex items-start gap-3 px-4 py-3">
-        <RuntimeProviderMark provider={runtime.provider} className="mt-0.5 size-6 shrink-0" />
+      {/* Identity row (task #109): mark, name over "version · read time", then the icon actions,
+          all centred on the two text lines so Refresh no longer hangs off the second one. Refresh
+          is an icon button with a tooltip, the same shape as the runtime field's refresh. */}
+      <div className="flex items-center gap-3 px-4 py-3">
+        <RuntimeProviderMark provider={runtime.provider} className="size-8 shrink-0" />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-semibold text-primary">{runtime.displayName}</h2>
-          <div className="flex min-w-0 items-center justify-between gap-2">
-            <p className="truncate text-xs text-tertiary">
-              {runtime.version}
-              {showUsage && data?.result && (
-                <>
-                  {runtime.version ? " · " : ""}
-                  <RelativeTime value={data.result.collectedAt} timeZone={timeZone} />
-                </>
-              )}
-            </p>
-            {showUsage && (
-              <Button
-                size="xs"
-                color="link-gray"
-                iconLeading={RefreshCw}
-                isLoading={scanning}
-                showTextWhileLoading
-                isDisabled={scanning || computerOnline === false}
-                className="shrink-0"
-                onPress={onRefresh}
-              >
-                {scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh()}
-              </Button>
+          <p className="truncate text-xs text-tertiary">
+            {runtime.version}
+            {showUsage && data?.result && (
+              <>
+                {runtime.version ? " · " : ""}
+                <RelativeTime value={data.result.collectedAt} timeZone={timeZone} />
+              </>
             )}
-          </div>
+          </p>
         </div>
+        {showUsage && (
+          <ButtonUtility
+            size="xs"
+            color="tertiary"
+            icon={RefreshCw}
+            tooltip={scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh()}
+            isDisabled={scanning || computerOnline === false}
+            className={cn("shrink-0", scanning && "*:data-icon:motion-safe:animate-spin")}
+            onClick={onRefresh}
+          />
+        )}
         {onClose && (
           <ButtonUtility
             size="xs"
             color="tertiary"
             icon={XClose}
             aria-label={m.controls_close()}
-            className="-mt-1 -mr-1 shrink-0"
+            className="-mr-1 shrink-0"
             onClick={onClose}
           />
         )}
@@ -313,12 +317,19 @@ export function RuntimeUsagePopoverContent({
 
       {showUsage && (
         <section className="px-4 py-3">
+          {/* The account band leads with what the account is (its plan, then the signed-in
+              account) rather than a "Runtime account" heading over it; the heading only stands in
+              when the runtime names neither. The badge speaks only when something needs the
+              reader — reauth, an error, a limit — since "OK" repeats the health dot that opened
+              this popover. */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="font-medium text-primary">{m.computer_usage_account()}</h3>
-              {account && <p className="mt-0.5 truncate text-xs text-tertiary">{account}</p>}
+              <h3 className="truncate text-sm font-medium text-primary">
+                {plan || accountLabel || m.computer_usage_account()}
+              </h3>
+              {accountNote && <p className="truncate text-xs text-tertiary">{accountNote}</p>}
             </div>
-            {badge && (
+            {badge && badge.color !== "success" && (
               <Badge color={badge.color} size="sm" className="shrink-0">
                 {badge.label}
               </Badge>
@@ -371,7 +382,7 @@ function UsageWindow({
   // they move under the bar and the header shows the percentage, like a session window (task #109).
   const value =
     window.usedPercent !== undefined
-      ? `${window.usedPercent}%`
+      ? formatPercent(window.usedPercent)
       : creditUsage
         ? creditAmounts(creditUsage)
         : window.status === "parse_unavailable"
@@ -420,6 +431,14 @@ function UsageWindow({
   );
 }
 
+/** A window's share as a whole percentage ("76%"): the exact credit amounts, when there are
+ * any, sit under the bar, so the header does not need decimals. */
+function formatPercent(value: number) {
+  return new Intl.NumberFormat(getLocale(), { style: "percent", maximumFractionDigits: 0 }).format(
+    value / 100,
+  );
+}
+
 /** Credits as the locale writes numbers: grouped, at most two decimals ("7,517.29"). */
 function formatCredits(value: number) {
   return new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 2 }).format(value);
@@ -432,6 +451,11 @@ function creditAmounts(creditUsage: { used: number; limit: number }) {
   });
 }
 
+/** A plan as a name: "pro" → "Pro"; a shouted "KIRO POWER" → "Kiro Power". */
 function formatPlan(plan: string) {
-  return plan ? `${plan[0]!.toUpperCase()}${plan.slice(1)}` : plan;
+  const words = plan === plan.toUpperCase() ? plan.toLowerCase() : plan;
+  return words.replace(
+    /(^|\s)(\p{L})/gu,
+    (_, space: string, letter: string) => space + letter.toUpperCase(),
+  );
 }

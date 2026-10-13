@@ -119,6 +119,8 @@
   "computer_usage_monthly_credits": "Monthly credits",
   "computer_usage_credit_amounts": "{used} / {limit} credits used",
   "computer_usage_credit_overage": "Overage: {overage} credits",
+  "computer_usage_credits_unlimited": "Unlimited credits",
+  "computer_usage_credits_available": "Credits available",
   "computer_usage_weekly": "Weekly",
   "computer_usage_monthly": "Monthly",
   "computer_usage_pay_as_you_go": "Pay-as-you-go",

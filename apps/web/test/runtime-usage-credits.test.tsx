@@ -19,9 +19,9 @@ function kiroUsage(creditUsage: { used: number; limit: number; overage: number }
       collectedAt: new Date().toISOString(),
       snapshot: {
         provider: RUNTIME_PROVIDER.KIRO,
-        planType: "power",
+        planType: "KIRO POWER",
         primary: {
-          usedPercent: Math.round((creditUsage.used / creditUsage.limit) * 100),
+          usedPercent: Math.round((creditUsage.used / creditUsage.limit) * 10_000) / 100,
           status: "ok",
           windowDurationMinutes: 43_200,
         },
@@ -46,6 +46,7 @@ function render(data: UsageReadResult) {
 test("a credit plan's header line is the label and its percentage; the amounts sit under the bar", () => {
   const html = render(kiroUsage({ used: 7517.29, limit: 10_000, overage: 0 }));
   const header = html.indexOf("Monthly credits");
+  // 75.17% reads as a whole percentage; the exact amounts are under the bar.
   const percent = html.indexOf("75%");
   const bar = html.indexOf('role="progressbar"');
   const amounts = html.indexOf("7,517.29 / 10,000 credits used");
@@ -86,4 +87,52 @@ test("each runtime names its usage windows the way that runtime reports them", (
   expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "primary", session)).toBe("Session");
   expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "primary", week)).toBe("Weekly");
   expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "secondary", week)).toBe("Weekly");
+});
+
+test("the popover's head: Refresh is an icon button, the plan is named, and OK says nothing", () => {
+  const html = render(kiroUsage({ used: 7517.29, limit: 10_000, overage: 0 }));
+  expect(html).toContain('aria-label="Refresh"');
+  expect(html).not.toContain(">Refresh<");
+  expect(html).toContain(">Kiro Power<");
+  expect(html).not.toContain("Runtime account");
+  expect(html).not.toContain(">OK<");
+});
+
+test("Codex's credits flag is a note on the account line when it says something", () => {
+  const codex = (credits: { hasCredits: boolean; unlimited: boolean }) =>
+    renderToStaticMarkup(
+      <RuntimeUsagePopoverContent
+        runtime={{ provider: RUNTIME_PROVIDER.CODEX, displayName: "Codex", version: "1.0.0" }}
+        data={{
+          state: "fresh",
+          result: {
+            workspaceId: "workspace-1",
+            computerId: "computer-1",
+            provider: RUNTIME_PROVIDER.CODEX,
+            scanId: "scan-1",
+            status: "available",
+            collectedAt: new Date().toISOString(),
+            snapshot: {
+              provider: RUNTIME_PROVIDER.CODEX,
+              planType: "pro",
+              accountLabel: "f***@example.com",
+              credits,
+              primary: { usedPercent: 12, status: "ok", windowDurationMinutes: 300 },
+            },
+          },
+        }}
+        scanning={false}
+        computerOnline
+        onRefresh={() => {}}
+      />,
+    );
+  expect(codex({ hasCredits: true, unlimited: true })).toContain(
+    "f***@example.com · Unlimited credits",
+  );
+  expect(codex({ hasCredits: true, unlimited: false })).toContain(
+    "f***@example.com · Credits available",
+  );
+  const none = codex({ hasCredits: false, unlimited: false });
+  expect(none).toContain(">f***@example.com<");
+  expect(none).not.toContain("credits");
 });
