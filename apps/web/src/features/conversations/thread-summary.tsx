@@ -7,6 +7,7 @@ import { RelativeTime } from "#src/components/ui/relative-time";
 import { UnreadDot } from "#src/components/ui/unread-marker";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import { DELETED_AGENT_AVATAR_CLASS } from "#src/features/agents/deleted-agent";
 import { replyCountLabel, withUnreadCount } from "./conversation-labels";
 import { useThreadBodyFormat, useThreadSummary, useThreadUnread } from "./thread-store";
@@ -84,10 +85,23 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
       size="sm"
       noTextPadding
       onPress={() => onOpen(rootId)}
-      className="mt-1.5 block h-auto w-full rounded-lg bg-secondary p-2 text-left font-normal hover:bg-secondary_hover"
+      // Design spec: 8px above and below the content, 16px on each side.
+      className="mt-1.5 block h-auto w-full rounded-lg bg-secondary px-4 py-2 text-left font-normal hover:bg-secondary_hover"
+      data-thread-preview=""
     >
-      <span className="message-text flex items-center gap-0.5 text-md font-medium text-brand-secondary">
-        {withUnreadCount(label, unread)}
+      {/* The reply count reads in the spec's text grey; only the viewer's unread count (and the
+          chevron after it) keeps the brand accent, so "something new" is the one coloured part. */}
+      <span
+        className={cx(
+          "message-text flex items-center gap-0.5 text-md font-medium",
+          unread > 0 ? "text-brand-secondary" : "text-thread-reply-count",
+        )}
+      >
+        <span className="text-thread-reply-count">
+          {label}
+          {unread > 0 && " · "}
+        </span>
+        {unread > 0 && m.conversation_thread_unread({ count: unread })}
         <ChevronRight aria-hidden="true" className="size-4" />
       </span>
       <span className="mt-1 flex flex-col gap-1.5">

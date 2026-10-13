@@ -857,7 +857,14 @@ export const MessageRow = memo(function MessageRow({
     // day or unread divider takes the divider's own spacing instead.
     <li
       data-message-id={message.id}
-      className={cn(ROW_CLASS, !grouped && !dayChanged && !unreadStartsHere && "mt-6 first:mt-0")}
+      className={cn(
+        ROW_CLASS,
+        !grouped && !dayChanged && !unreadStartsHere && "mt-6 first:mt-0",
+        // A continuation under a thread preview card starts 16px below the card (design spec):
+        // 12px here plus the card row's own 4px bottom padding. A new sender run already sits
+        // further down through its own margin.
+        grouped && "[li:has([data-thread-preview])+&]:mt-3",
+      )}
     >
       {unreadStartsHere && <UnreadDivider />}
       {dayChanged && <DayDivider value={message.createdAt} locale={dateLocale} />}

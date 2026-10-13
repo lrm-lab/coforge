@@ -47,6 +47,9 @@
      in the row component. Re-pointed under `.dark-mode` below. */
   --color-chat-selected-bg: #f4f6fa;
   --color-chat-selected-border: #e0e5f1;
+  /* The reply count on a thread preview card ("3 replies"), from the design spec's text grey;
+     the unread count after it stays the brand accent. Re-pointed under `.dark-mode` below. */
+  --color-thread-reply-count: #777d8d;
   /* Terminal / command blocks stay dark in both themes. */
   --color-terminal: #171b23;
   --color-terminal-fg: #f4f6fb;
@@ -178,6 +181,9 @@
        and near-white, which on the dark list rendered as a white card under light-grey text. */
     --color-chat-selected-bg: var(--color-sidebar-accent);
     --color-chat-selected-border: #4c4081;
+
+    /* Untitled's own dark tertiary text: the light value is a mid grey tuned for white. */
+    --color-thread-reply-count: var(--color-text-tertiary);
 
     --color-online: #42c83f;
     --color-offline: #778393;
