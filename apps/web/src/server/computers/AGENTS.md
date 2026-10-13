@@ -25,3 +25,6 @@ These rules apply to `src/server/computers/`.
   reason and of the last daemon instance whose return was announced.
 - `computer-agent-workspaces.server.ts` summarizes the Daemon's existing
   workspace-directory observations for the Computer owner's detail inventory.
+- `computer-workspace-files.server.ts` is the owner scope for that inventory's
+  scan and for workspace delete: the owned-Computer lookup, the Agent
+  assignment rule, and the Workspace Files query both server functions use.

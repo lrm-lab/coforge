@@ -43,17 +43,9 @@ import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-
 import { UpgradeComputer } from "#src/server/computers/upgrade-computer.server";
 import { resolveReleaseFeedUrl } from "#src/server/install/install-script.server";
 import {
-  AgentWorkspaceFilesQuery,
-  type WorkspaceFilesAssignment,
-} from "#src/server/agents/agent-workspace-files.server";
-import {
-  encodeAgentWorkspaceFilesListRequest,
-  encodeAgentWorkspaceDeleteRequest,
-} from "@lrm/coforge-sdk/internal";
-import {
-  getAgentWorkspaceFilesListResults,
-  getAgentWorkspaceDeleteResults,
-} from "#src/server/centrifugo/agent-workspace-files-cache.server";
+  computerWorkspaceFilesQuery,
+  findOwnedWorkspaceComputer,
+} from "#src/server/computers/computer-workspace-files.server";
 import { scanComputerAgentWorkspaces as scanWorkspaceInventory } from "#src/server/computers/computer-agent-workspaces.server";
 import {
   parseAgentRuntimeConfig,
@@ -249,64 +241,18 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
   .validator(scanAgentWorkspacesInputSchema)
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
     declareNoStore();
-    const computer = await db.computer.findFirst({
-      where: {
-        id: data.computerId,
-        ownerId: user.id,
-        workspaces: { some: { workspaceId } },
-      },
-      select: { id: true },
+    const computer = await findOwnedWorkspaceComputer(db, {
+      userId: user.id,
+      workspaceId,
+      computerId: data.computerId,
     });
-    if (!computer) throw new Error("Computer is not available");
 
     const agents = await db.agent.findMany({
       where: { workspaceId, computerId: computer.id },
       select: { id: true, name: true, displayName: true, deletedAt: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
-    const listResults = getAgentWorkspaceFilesListResults();
-    const query = new AgentWorkspaceFilesQuery({
-      findOwned: async (viewer, agentId): Promise<WorkspaceFilesAssignment | undefined> => {
-        const assignment = await db.agent.findFirst({
-          where: {
-            id: agentId,
-            workspaceId: viewer.workspaceId,
-            computerId: computer.id,
-            computer: {
-              ownerId: viewer.userId,
-              workspaces: { some: { workspaceId: viewer.workspaceId } },
-            },
-          },
-          select: { computerId: true, runtimeConfig: true },
-        });
-        if (!assignment?.computerId) return undefined;
-        return {
-          computerId: assignment.computerId,
-          revision: new Bun.CryptoHasher("sha256")
-            .update(JSON.stringify(assignment.runtimeConfig))
-            .digest("hex"),
-        };
-      },
-      online: (scope) => getComputerStatusCache().get(scope),
-      publishList: (request) =>
-        createCentrifugoServerApi().publish(
-          daemonControlChannel(request.workspaceId, request.computerId),
-          encodeAgentWorkspaceFilesListRequest(request),
-        ),
-      publishRead: async () => {},
-      listResults,
-      readResults: {
-        begin: async () => {},
-        read: async () => undefined,
-        clear: async () => {},
-      },
-      publishDelete: (request) =>
-        createCentrifugoServerApi().publish(
-          daemonControlChannel(request.workspaceId, request.computerId),
-          encodeAgentWorkspaceDeleteRequest(request),
-        ),
-      deleteResults: getAgentWorkspaceDeleteResults(),
-    });
+    const query = computerWorkspaceFilesQuery(db, computer.id, { list: true });
     const inventory = await scanWorkspaceInventory(agents, async (request) => {
       const response = await query.list(
         { userId: user.id, workspaceId },
@@ -332,57 +278,12 @@ export const deleteAgentWorkspace = createServerFn({ method: "POST" })
   .validator(deleteAgentWorkspaceInputSchema)
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
     declareNoStore();
-    const computer = await db.computer.findFirst({
-      where: {
-        id: data.computerId,
-        ownerId: user.id,
-        workspaces: { some: { workspaceId } },
-      },
-      select: { id: true },
+    const computer = await findOwnedWorkspaceComputer(db, {
+      userId: user.id,
+      workspaceId,
+      computerId: data.computerId,
     });
-    if (!computer) throw new Error("Computer is not available");
-    const query = new AgentWorkspaceFilesQuery({
-      findOwned: async (viewer, agentId): Promise<WorkspaceFilesAssignment | undefined> => {
-        const assignment = await db.agent.findFirst({
-          where: {
-            id: agentId,
-            workspaceId: viewer.workspaceId,
-            computerId: computer.id,
-            computer: {
-              ownerId: viewer.userId,
-              workspaces: { some: { workspaceId: viewer.workspaceId } },
-            },
-          },
-          select: { computerId: true, runtimeConfig: true },
-        });
-        if (!assignment?.computerId) return undefined;
-        return {
-          computerId: assignment.computerId,
-          revision: new Bun.CryptoHasher("sha256")
-            .update(JSON.stringify(assignment.runtimeConfig))
-            .digest("hex"),
-        };
-      },
-      online: (scope) => getComputerStatusCache().get(scope),
-      publishList: async () => {},
-      publishRead: async () => {},
-      listResults: {
-        begin: async () => {},
-        read: async () => undefined,
-        clear: async () => {},
-      },
-      readResults: {
-        begin: async () => {},
-        read: async () => undefined,
-        clear: async () => {},
-      },
-      publishDelete: (request) =>
-        createCentrifugoServerApi().publish(
-          daemonControlChannel(request.workspaceId, request.computerId),
-          encodeAgentWorkspaceDeleteRequest(request),
-        ),
-      deleteResults: getAgentWorkspaceDeleteResults(),
-    });
+    const query = computerWorkspaceFilesQuery(db, computer.id, { list: false });
     const response = await query.delete({ userId: user.id, workspaceId }, data.agentId);
     if (response.status !== "ready") return response;
     return response.result;
