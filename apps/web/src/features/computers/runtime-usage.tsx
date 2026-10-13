@@ -8,7 +8,6 @@ import {
 import type { ReactNode } from "react";
 
 import {
-  RUNTIME_PROVIDER,
   RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
@@ -24,6 +23,7 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { useRuntimeUsage } from "./use-runtime-usage";
+import { usageWindowLabel } from "./runtime-usage-windows";
 import type { UsageReadResult, UsageResultRecord } from "#src/server/centrifugo/usage-cache.server";
 
 export type Runtime = {
@@ -337,13 +337,7 @@ export function RuntimeUsagePopoverContent({
                   {windows.map(({ key, window }) => (
                     <UsageWindow
                       key={key}
-                      label={
-                        key === "primary"
-                          ? runtime.provider === RUNTIME_PROVIDER.KIRO
-                            ? m.computer_usage_monthly_credits()
-                            : m.computer_usage_session()
-                          : m.computer_usage_weekly()
-                      }
+                      label={usageWindowLabel(runtime.provider, key, window)}
                       window={window}
                       creditUsage={key === "primary" ? snapshot?.creditUsage : undefined}
                       timeZone={timeZone}

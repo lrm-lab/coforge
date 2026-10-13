@@ -120,6 +120,8 @@
   "computer_usage_credit_amounts": "已用 {used} / 共 {limit} credits",
   "computer_usage_credit_overage": "超额使用：{overage} credits",
   "computer_usage_weekly": "本周",
+  "computer_usage_monthly": "本月",
+  "computer_usage_pay_as_you_go": "按量付费",
   "computer_usage_status_unavailable": "无法获取用量",
   "computer_usage_status_reauth": "请重新登录该 Code Agent",
   "computer_usage_status_error": "用量扫描失败",

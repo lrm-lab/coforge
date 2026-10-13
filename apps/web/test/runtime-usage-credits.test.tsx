@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 import { RuntimeUsagePopoverContent } from "#src/features/computers/runtime-usage";
+import { usageWindowLabel } from "#src/features/computers/runtime-usage-windows";
 import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
 
 function kiroUsage(creditUsage: { used: number; limit: number; overage: number }): UsageReadResult {
@@ -59,4 +60,30 @@ test("a credit plan's header line is the label and its percentage; the amounts s
 test("an overage follows the amounts on the same line, in the locale's number format", () => {
   const html = render(kiroUsage({ used: 10_250, limit: 10_000, overage: 250 }));
   expect(html).toContain("10,250 / 10,000 credits used · Overage: 250 credits");
+});
+
+test("each runtime names its usage windows the way that runtime reports them", () => {
+  const session = { windowDurationMinutes: 300 };
+  const week = { windowDurationMinutes: 10_080 };
+  const month = { windowDurationMinutes: 43_200 };
+  // Claude Code's duration is "time until reset", so a session window can look long: the slot decides.
+  expect(usageWindowLabel(RUNTIME_PROVIDER.CLAUDE_CODE, "primary", month)).toBe("Session");
+  expect(usageWindowLabel(RUNTIME_PROVIDER.CLAUDE_CODE, "secondary", session)).toBe("Weekly");
+  expect(usageWindowLabel(RUNTIME_PROVIDER.ANTIGRAVITY, "primary", session)).toBe("Session");
+  expect(usageWindowLabel(RUNTIME_PROVIDER.ANTIGRAVITY, "secondary", week)).toBe("Weekly");
+  expect(usageWindowLabel(RUNTIME_PROVIDER.KIRO, "primary", month)).toBe("Monthly credits");
+  // Grok: the billing period, then pay-as-you-go — never "Session" / "Weekly" by slot.
+  expect(usageWindowLabel(RUNTIME_PROVIDER.GROK, "primary", { id: "grok-monthly", ...month })).toBe(
+    "Monthly",
+  );
+  expect(usageWindowLabel(RUNTIME_PROVIDER.GROK, "primary", { id: "grok-weekly", ...week })).toBe(
+    "Weekly",
+  );
+  expect(
+    usageWindowLabel(RUNTIME_PROVIDER.GROK, "secondary", { id: "grok-pay-as-you-go", ...month }),
+  ).toBe("Pay-as-you-go");
+  // Codex reports each window's real length.
+  expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "primary", session)).toBe("Session");
+  expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "primary", week)).toBe("Weekly");
+  expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "secondary", week)).toBe("Weekly");
 });
