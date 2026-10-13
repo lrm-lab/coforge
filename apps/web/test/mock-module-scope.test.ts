@@ -14,10 +14,11 @@ const rawCall = /\bmock\.module\s*\(/;
 // The web package's own `bun test` process. Other packages run their own, outside this helper's
 // reach (`packages/computer/test/installer-launch.test.ts` stubs `node:fs/promises` there, spread
 // over the real module so every unarmed call still reaches the real file system).
+const EXTENSIONS = "{ts,tsx,mts,cts,js,jsx,mjs,cjs}";
 const SCANNED = [
-  "apps/web/src/**/*.{ts,tsx}",
-  "apps/web/test/**/*.{ts,tsx}",
-  "apps/web/prisma/**/*.ts",
+  `apps/web/src/**/*.${EXTENSIONS}`,
+  `apps/web/test/**/*.${EXTENSIONS}`,
+  `apps/web/prisma/**/*.${EXTENSIONS}`,
 ];
 
 function filesCallingMockModule(): string[] {
@@ -28,9 +29,8 @@ function filesCallingMockModule(): string[] {
 }
 
 test("only mockModuleForFile calls mock.module directly", () => {
-  // This file names the call in its own pattern and comments, not as a call.
-  const self = "apps/web/test/mock-module-scope.test.ts";
-  expect(filesCallingMockModule().filter((file) => file !== HELPER && file !== self)).toEqual([]);
+  // No other exemption, this file included: its pattern and prose do not match `rawCall`.
+  expect(filesCallingMockModule().filter((file) => file !== HELPER)).toEqual([]);
 });
 
 test("the scan finds the helper, so an empty result above is not a broken glob", () => {
