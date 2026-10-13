@@ -1,4 +1,5 @@
 import { RefreshCw01 as RefreshCw, ChevronDown } from "@untitledui/icons";
+import { useHydrated } from "@tanstack/react-router";
 import { Disclosure, DisclosurePanel } from "react-aria-components";
 import { type RefObject } from "react";
 
@@ -80,50 +81,58 @@ export function AgentContextPopoverContent({
   const report = data?.result?.report;
   const reading = !data || (data.state === "missing" && (scanning || data.pendingScanId));
   const status = footerStatusText(data, scanning, computerOnline, scanFailed);
+  // RelativeTime is blank until hydration; the "updated" line waits with it, so the footer band
+  // never collapses to nothing (the runtime-usage twin's version line does the same).
+  const hydrated = useHydrated();
 
   return (
-    <div>
-      <div className="border-b border-secondary pb-3">
-        <h2 className="min-w-0 font-medium text-primary">{header}</h2>
-      </div>
-
-      {reading ? (
-        <p className="mt-3 text-tertiary">{m.agent_context_reading()}</p>
-      ) : (
-        <>
-          {data?.state === "stale" && (
-            <p className="mt-3 text-xs text-warning-primary">
-              {scanning ? m.agent_context_stale_refreshing() : m.agent_context_stale()}
-            </p>
-          )}
-          {report && <AgentContextReportBody report={report} />}
-          {/* A failed status's reason is stated once, in the footer, like the runtime-usage twin. */}
-        </>
-      )}
-
-      <div className="mt-3 flex items-center justify-between gap-3 border-t border-secondary pt-3">
-        <div className="min-w-0 text-xs text-tertiary">
-          {data?.result && (
-            <p>
-              {m.agent_context_updated()}{" "}
-              <RelativeTime value={data.result.collectedAt} timeZone={timeZone} />
-            </p>
-          )}
-          {status && <p className={data?.result ? "mt-1" : undefined}>{status}</p>}
-        </div>
+    <div className="text-sm divide-y divide-secondary">
+      {/* Identity row, the runtime-usage twin's shape: title over the read line at the left, and
+          an icon-only Refresh at the right. */}
+      <div className="flex items-center gap-3 px-4 py-3">
+        <h2 className="min-w-0 flex-1 font-semibold text-primary">{header}</h2>
         <span ref={refreshButtonWrapRef} className="shrink-0">
+          {/* React Aria's isPending keeps focus through a refresh, so the peek survives it;
+              isDisabled only for a Computer known offline. No Tooltip: PreviewTrigger shares the
+              one-open-tooltip-at-a-time state, and a tooltip inside the peek closes the peek. */}
           <Button
             type="button"
-            color="secondary"
-            size="sm"
-            onPress={onRefresh}
-            isDisabled={scanning || computerOnline === false}
+            size="xs"
+            color="tertiary"
+            aria-label={m.agent_context_refresh()}
             isLoading={scanning}
+            isDisabled={computerOnline === false}
             iconLeading={RefreshCw}
-          >
-            {m.agent_context_refresh()}
-          </Button>
+            className="shrink-0"
+            onPress={onRefresh}
+          />
         </span>
+      </div>
+
+      <section className="px-4 py-3">
+        {reading ? (
+          <p className="text-tertiary">{m.agent_context_reading()}</p>
+        ) : (
+          <>
+            {data?.state === "stale" && (
+              <p className="text-xs text-warning-primary">
+                {scanning ? m.agent_context_stale_refreshing() : m.agent_context_stale()}
+              </p>
+            )}
+            {report && <AgentContextReportBody report={report} />}
+            {/* A failed status's reason is stated once, in the footer, like the runtime-usage twin. */}
+          </>
+        )}
+      </section>
+
+      <div className="px-4 py-2 text-xs text-tertiary">
+        {data?.result && hydrated && (
+          <p>
+            {m.agent_context_updated()}{" "}
+            <RelativeTime value={data.result.collectedAt} timeZone={timeZone} plain />
+          </p>
+        )}
+        {status && <p className={data?.result ? "mt-1" : undefined}>{status}</p>}
       </div>
     </div>
   );

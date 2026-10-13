@@ -133,7 +133,7 @@ function ContextUsageBadge({
       })}
       trigger={badge}
       triggerClassName="-m-1 inline-flex rounded-lg p-1 outline-none hover:bg-primary_hover data-focus-visible:ring-2 data-focus-visible:ring-brand"
-      className="p-4 text-sm"
+      className="text-sm"
       working={context.scanning}
       onOpen={() => setOpenCount((count) => count + 1)}
     >
