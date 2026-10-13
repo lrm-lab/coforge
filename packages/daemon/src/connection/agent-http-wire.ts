@@ -77,7 +77,7 @@ export async function fetchAgentResponse(
 }
 
 /** Reads a response body as text, turning a stream failure into a typed mid-response failure. */
-export async function readAgentResponseText(response: Response, what: string): Promise<string> {
+async function readAgentResponseText(response: Response, what: string): Promise<string> {
   try {
     return await response.text();
   } catch (cause) {
@@ -113,7 +113,7 @@ export async function assertAgentResponseOk(response: Response, what: string): P
  * failure into a typed protocol-mismatch error — the response arrived, but the daemon could not
  * trust it. Never lets a missing required field reach the caller as a silent `undefined`.
  */
-export async function readAgentResponseJson<Result>(
+async function readAgentResponseJson<Result>(
   response: Response,
   what: string,
   validate?: (data: unknown) => string | undefined,
@@ -276,7 +276,7 @@ export async function postAgentEnvelopeJson<Result extends { ok: true }>(
   return decodeAgentEnvelopeJson<Result>(response, input.what, makeError);
 }
 
-export async function decodeAgentEnvelopeJson<Result extends { ok: true }>(
+async function decodeAgentEnvelopeJson<Result extends { ok: true }>(
   response: Response,
   what: string,
   makeError: (errorCode: string, message: string, status: number) => Error,

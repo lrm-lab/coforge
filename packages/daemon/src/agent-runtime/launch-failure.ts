@@ -91,7 +91,7 @@ export class AgentAuthorizationError extends Error {
 }
 
 /** The launch failure reason a typed error carries, or `runtime_spawn_failed`. */
-export function launchFailureReason(error: unknown): LaunchFailureReason {
+function launchFailureReason(error: unknown): LaunchFailureReason {
   return (
     TYPED_REASONS.find((reason) => hasErrorCode(error, reason)) ??
     LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED

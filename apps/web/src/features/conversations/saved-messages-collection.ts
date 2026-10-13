@@ -38,7 +38,7 @@ export const savedMessagesQueryKey = (workspaceId: string) =>
  * Functions, a failed write rolls the change back, and a successful one re-reads the list so the
  * server's rows (conversation labels, save time) replace the local guess.
  */
-export function savedMessagesCollection(
+function savedMessagesCollection(
   workspaceId: string,
   initial: SavedEntry[],
   api: SavedMessagesApi,

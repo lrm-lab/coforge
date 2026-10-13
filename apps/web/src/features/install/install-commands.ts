@@ -10,11 +10,6 @@ export function installCommands(origin: string): {
   };
 }
 
-/** Explicit sign-in for users who want to authorize separately from setup. */
-export function loginCommand(): string {
-  return `coforge-computer login`;
-}
-
 /** Join one Workspace; setup requests device-code authorization when credentials are missing. */
 export function setupCommand(workspaceSlug: string): string {
   return `coforge-computer setup --workspace ${workspaceSlug}`;

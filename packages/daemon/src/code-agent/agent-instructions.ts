@@ -129,7 +129,7 @@ ${formatMemoryAgentToolset(profile)}.
 export type CoforgeCliGuideOptions = Pick<CoforgeAgentPromptContext, "extraCriticalRules">;
 export type CoforgeCliGuideSections = ReturnType<typeof buildCoforgeCliGuideSections>;
 
-export function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
+function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
   return {
     communication: `## CoForge communication
 Use the shell tool to execute CoForge commands: text outside an executed \`coforge message send\` command is not delivered to chat. Reply to direct user messages; reply in channels when addressed or useful. Reuse the exact \`target=\`, including its thread suffix.

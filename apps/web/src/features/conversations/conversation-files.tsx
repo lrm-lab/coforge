@@ -32,7 +32,7 @@ export const conversationFilesQuery = (conversationId: string) =>
     staleTime: 0,
   });
 
-export function useConversationFiles(conversationId: string) {
+function useConversationFiles(conversationId: string) {
   return useQuery(conversationFilesQuery(conversationId));
 }
 

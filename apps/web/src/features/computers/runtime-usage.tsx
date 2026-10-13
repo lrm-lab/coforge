@@ -31,7 +31,7 @@ export type Runtime = {
 /** "ok" only when the last read is fresh, available, and no usage window is at its limit. */
 export type UsageHealth = "ok" | "attention";
 
-export function RuntimeIdentity({ runtime, health }: { runtime: Runtime; health?: UsageHealth }) {
+function RuntimeIdentity({ runtime, health }: { runtime: Runtime; health?: UsageHealth }) {
   return (
     <span className="flex min-w-0 items-center gap-3">
       <RuntimeProviderMark provider={runtime.provider} className="size-6" />

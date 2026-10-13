@@ -224,15 +224,6 @@ export async function launchWindowsComputerUpgrade(
   }
 }
 
-/** Builds the `/TR` string for schtasks: quoted executable, then unquoted argv words. */
-export function quoteWindowsTaskAction(action: string[]): string {
-  if (action.length === 0) throw new Error("Windows upgrade task action is empty");
-  const [executable, ...args] = action;
-  const quotedExe = `"${executable!.replaceAll('"', '""')}"`;
-  if (args.length === 0) return quotedExe;
-  return `${quotedExe} ${args.map((arg) => arg.replaceAll('"', '""')).join(" ")}`;
-}
-
 /**
  * Best-effort self-cleanup for the `__remote-upgrade` entry point, called once its upgrade result
  * file has been written. The job's plist already has no KeepAlive, so leaving this job in place

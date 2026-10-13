@@ -334,7 +334,7 @@ type AgentProxy = {
   revoke(token: string): void;
 };
 
-export function generateRuntimeInstanceId(): string {
+function generateRuntimeInstanceId(): string {
   return crypto.randomUUID();
 }
 
