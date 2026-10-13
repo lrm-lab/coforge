@@ -1014,9 +1014,13 @@ describe("a Computer's Agent workspace scan", () => {
     page.queryClient.setQueryData(key, snapshot);
     let stored = false;
     const storing = page.persistence.store(key).then(() => (stored = true));
-    await settle();
-    expect({ stored, rows: queryRows(disk.rows).length }).toEqual({ stored: false, rows: 0 });
-    commit();
+    try {
+      await settle();
+      expect({ stored, rows: queryRows(disk.rows).length }).toEqual({ stored: false, rows: 0 });
+    } finally {
+      // Released whatever the assertion said, so no write is left waiting on the gate.
+      commit();
+    }
     await storing;
     expect(queryRows(disk.rows)).toHaveLength(1);
   });
