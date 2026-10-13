@@ -173,3 +173,16 @@ test("the Computer page's chip passes no press-open flag", async () => {
   ).text();
   expect(detail).not.toContain("openOnPress");
 });
+
+test("the Public toggle stays live while its update is in flight so the peek survives", async () => {
+  // The update replaces the refresh bug's shape: a disabled Toggle would drop focus to the page
+  // and a hover peek closes with it (task #116). Edits repeat-guard in the handler instead.
+  const detail = await Bun.file(
+    new URL("../src/features/computers/computer-detail.tsx", import.meta.url).pathname,
+  ).text();
+  expect(detail).toMatch(/aria-busy=\{updatingRuntimeIds\.has\(runtime\.id\) \|\| undefined\}/);
+  expect(detail).toMatch(
+    /if \(!updatingRuntimeIds\.has\(runtime\.id\)\)\s*\n\s*void setRuntimePublic/,
+  );
+  expect(detail).not.toMatch(/isDisabled=\{updatingRuntimeIds\.has\(runtime\.id\)\}/);
+});

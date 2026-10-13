@@ -568,14 +568,19 @@ export function ComputerDetail({
                                 <span className="text-sm font-medium text-secondary">
                                   {m.computer_runtime_public()}
                                 </span>
+                                {/* A disabled toggle drops focus to the page mid-press and the
+                                    hover peek closes with it (task #116; the refresh bug #179 went
+                                    down this exact path). Repeat edits are ignored in the handler
+                                    instead; the error text below still reports a failed change. */}
                                 <Toggle
                                   size="sm"
                                   aria-label={m.computer_runtime_public()}
                                   isSelected={runtime.isPublic}
-                                  isDisabled={updatingRuntimeIds.has(runtime.id)}
-                                  onChange={(isPublic) =>
-                                    void setRuntimePublic(runtime.id, isPublic)
-                                  }
+                                  aria-busy={updatingRuntimeIds.has(runtime.id) || undefined}
+                                  onChange={(isPublic) => {
+                                    if (!updatingRuntimeIds.has(runtime.id))
+                                      void setRuntimePublic(runtime.id, isPublic);
+                                  }}
                                 />
                               </div>
                               {runtimeVisibilityErrorIds.has(runtime.id) && (
