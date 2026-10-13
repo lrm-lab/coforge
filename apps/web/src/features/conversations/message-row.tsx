@@ -853,8 +853,9 @@ export const MessageRow = memo(function MessageRow({
     // Spacing (design spec, docs/design/page-skeleton-and-density.md): a message with a sender
     // heading keeps 12px between its content and its hover background on all four sides; a
     // same-sender continuation keeps 12px at the sides only and sits 4px under the row above. Two
-    // sender runs are 32px apart content to content: 16px of margin after a continuation's 4px,
-    // 8px after a heading row's 12px. The row is inset 4px (24px column: 12px) so the content
+    // sender runs are 32px apart content to content from `md` up (16px of margin after a
+    // continuation's 4px, 8px after a heading row's 12px) and 24px on a phone (8px and 0), where
+    // 32px read as a blank band between short messages (task #118). The row is inset 4px (24px column: 12px) so the content
     // stays on the stream's column with the composer and the dividers.
     <li
       data-message-id={message.id}
@@ -864,7 +865,7 @@ export const MessageRow = memo(function MessageRow({
         !grouped &&
           !dayChanged &&
           !unreadStartsHere &&
-          "mt-4 first:mt-0 [[data-header-row]+&]:mt-2",
+          "mt-2 first:mt-0 md:mt-4 [[data-header-row]+&]:mt-0 md:[[data-header-row]+&]:mt-2",
         // A continuation under a thread preview card starts 16px below the card (design spec):
         // a heading row ends 12px under its card, a continuation row 4px.
         grouped &&
