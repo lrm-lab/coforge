@@ -102,6 +102,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Per-turn providers (Cursor, Grok, OpenCode, Antigravity)
 
+- Cursor's partial-output framing rules are in [`cursor/AGENTS.md`](cursor/AGENTS.md).
 - One child process per turn. `per-turn/session.ts` is their one `AgentSession` (state machine,
   input queue, interrupt, dispose, session identity and its reports, exit handling) and
   `per-turn/turn-process.ts` their one process wrapper. A provider adds `<provider>/turn-protocol.ts`

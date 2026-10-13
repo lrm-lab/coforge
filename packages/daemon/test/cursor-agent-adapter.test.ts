@@ -6,6 +6,8 @@ import { join } from "node:path";
 import type { AgentSession } from "@coforge/agent";
 import { CursorProvider } from "#src/code-agent/cursor/provider";
 import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import { withDeadline } from "#src/code-agent/deadline";
+import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
 
 const FIXTURE = new URL("./fixtures/cursor-agent-fixture.ts", import.meta.url).pathname;
 const INSTRUCTIONS = "Standing Cursor instructions.";
@@ -409,12 +411,14 @@ test.each([
       { id: "call-0-shell", name: "bash", isError: false },
       { id: "call-1-read", name: "read_file", isError: true },
     ],
+    2,
   ],
   [
     "a resumed turn that reconnects mid-turn",
     "cursor-turn-resume-reconnect.jsonl",
     "f8d5b6d7-6f40-4225-a31f-b9b441015f0b",
     [],
+    1,
   ],
   [
     "a resume of an unknown id that silently starts a fresh chat",
@@ -423,10 +427,11 @@ test.each([
     // unknown `--resume` id (see the third case below).
     "unknown-id-requested",
     [],
+    1,
   ],
 ] as const)(
   "measured real Cursor thinking and tool_call frames map to activity while unrelated frames stay ignored: %s",
-  async (_name, fixtureFile, startingSessionId, expectedTools) => {
+  async (_name, fixtureFile, startingSessionId, expectedTools, expectedTexts) => {
     const directory = await mkdtemp(join(tmpdir(), "cursor-replay-"));
     try {
       const session = await provider().createAgentSession({
@@ -450,7 +455,10 @@ test.each([
         expect(
           contentEvents.filter((event) => event.type === "thinking-delta").length,
         ).toBeGreaterThan(0);
-        expect(contentEvents.filter((event) => event.type === "text-delta")).toHaveLength(2);
+        // Buffered turns keep both segments; turns with native deltas suppress the final flush.
+        expect(contentEvents.filter((event) => event.type === "text-delta")).toHaveLength(
+          expectedTexts,
+        );
         const tools = contentEvents.flatMap((event) =>
           event.type === "tool-start" ? [{ id: event.id, name: event.name }] : [],
         );
@@ -761,42 +769,55 @@ test("a failed Cursor call's output is the message field its own kind's error ca
   ]);
 });
 
-test("interrupt() ends the running turn as interrupted and leaves the session usable", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "cursor-interrupt-"));
-  const log = join(directory, "launches.jsonl");
-  try {
-    const session = await provider().createAgentSession({
-      agentWorkspaceDirectory: directory,
-      instructions: INSTRUCTIONS,
-      sessionId: "existing-session",
-      environment: { COFORGE_CURSOR_MODE: "hang", COFORGE_CURSOR_LAUNCH_LOG: log },
-    });
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
+const CURSOR_FIXTURE_INIT_BUDGET_MS = 5_000;
+test(
+  "interrupt() ends the running turn as interrupted and leaves the session usable",
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cursor-interrupt-"));
+    const log = join(directory, "launches.jsonl");
     try {
-      const completed = nthCompleted(session, 1);
-      void session.sendMessage("go");
-      // Give the fixture a moment to actually start (write its init/user frames) before
-      // interrupting, matching a real in-flight turn rather than a not-yet-spawned one.
-      await Bun.sleep(50);
-      await session.interrupt();
-      await completed;
-      expect(events).toContainEqual({ type: "completed", status: "interrupted" });
-      // The session is idle again and accepts a new turn.
-      const second = nthCompleted(session, 1);
-      await session.sendMessage("go again");
-      await Bun.sleep(50);
-      await session.interrupt();
-      await second;
-      const launches = await readLaunches(log);
-      expect(launches).toHaveLength(2);
+      let initialized = Promise.withResolvers<void>();
+      const session = await provider().createAgentSession({
+        agentWorkspaceDirectory: directory,
+        instructions: INSTRUCTIONS,
+        sessionId: "existing-session",
+        environment: { COFORGE_CURSOR_MODE: "hang", COFORGE_CURSOR_LAUNCH_LOG: log },
+        onSessionId: async () => {
+          initialized.resolve();
+        },
+      });
+      const events: AgentRuntimeEvent[] = [];
+      session.subscribe((event) => events.push(event));
+      try {
+        const interruptTurn = async (prompt: string) => {
+          initialized = Promise.withResolvers<void>();
+          const completed = nthCompleted(session, 1);
+          await session.sendMessage(prompt);
+          // onSessionId reports native init; a generic session state event can fire at spawn,
+          // before the fixture initializes or writes its launch log.
+          await withDeadline(
+            initialized.promise,
+            CURSOR_FIXTURE_INIT_BUDGET_MS,
+            () => new Error("Cursor fixture did not initialize"),
+          );
+          await session.interrupt();
+          await completed;
+        };
+        await interruptTurn("go");
+        expect(events).toContainEqual({ type: "completed", status: "interrupted" });
+        // The session is idle again and accepts a new turn.
+        await interruptTurn("go again");
+        const launches = await readLaunches(log);
+        expect(launches).toHaveLength(2);
+      } finally {
+        await session.dispose();
+      }
     } finally {
-      await session.dispose();
+      await rm(directory, { recursive: true, force: true });
     }
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
+  },
+  2 * CURSOR_FIXTURE_INIT_BUDGET_MS + 6 * PROCESS_TREE_EXIT_GRACE_MS,
+);
 
 test("dispose kills a running turn and rejects queued input", async () => {
   const directory = await mkdtemp(join(tmpdir(), "cursor-dispose-"));
