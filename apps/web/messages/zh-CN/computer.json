@@ -85,6 +85,7 @@
   "computer_agent_workspaces_prompt": "扫描此电脑上的 Agent 工作目录。",
   "computer_agent_workspaces_error": "无法完成工作目录扫描，请重试。",
   "computer_agent_workspaces_none": "未找到 Agent 工作目录。",
+  "computer_agent_workspaces_scanned_at": "扫描于 {date}",
   "computer_agent_workspace_active": "活跃",
   "computer_agent_workspace_deleted": "已删除",
   "computer_agent_workspace_stats": "{size} · {files} 个文件",

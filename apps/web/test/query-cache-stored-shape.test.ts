@@ -19,6 +19,7 @@ import {
   sidebarChannelsQuery,
   sidebarDirectsQuery,
 } from "#src/features/conversations/sidebar-collections";
+import { agentWorkspaceScanQuery } from "#src/features/computers/agent-workspace-scan.query";
 
 /**
  * What the browser's copy of the Query cache holds is read back by later builds, so the shape of
@@ -248,6 +249,22 @@ const fixtures = [
       },
     ],
   }),
+  fixture("agent workspace scan", agentWorkspaceScanQuery("w1", "computer-1"), {
+    scannedAt: 1_790_000_000_000,
+    workspaces: [
+      {
+        agentId: "agent-1",
+        name: "ada",
+        displayName: "Ada",
+        state: "active",
+        status: "present",
+        rootPath: "/home/ada/.coforge/agents/agent-1",
+        fileCount: 12,
+        totalSizeBytes: 4096,
+        modifiedAtMs: 1_790_000_000_000,
+      },
+    ],
+  }),
 ];
 
 /** What a value is made of, not what it says: each field with the type of what it holds, an array
@@ -315,7 +332,7 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "channel names": "331d221481674004",
     "saved messages": "af3437c73adfddaa",
   },
-  // A person carries `displayName` only.
+  // A person carries `displayName` only. (A Computer's Agent workspace scan was added as a kind.)
   5: {
     "channel window": "e7aded67e38ffb44",
     "direct window with an Agent": "1e846d0c6032fceb",
@@ -324,6 +341,7 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "sidebar directs": "5205999212e744be",
     "channel names": "331d221481674004",
     "saved messages": "af3437c73adfddaa",
+    "agent workspace scan": "d45d053aa4368e73",
   },
 };
 

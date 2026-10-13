@@ -70,6 +70,7 @@ import type {
   ComputerRestartStatus,
   ComputerUpgradeStatus,
 } from "./computer.schemas";
+import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
 
 export const RESTART_POLL_INTERVAL_MS = 2_000;
 export const RESTART_MAX_POLLS = 31;
@@ -157,6 +158,7 @@ export function ComputerDetail({
   restartMaxPolls = RESTART_MAX_POLLS,
   upgradePollIntervalMs = UPGRADE_POLL_INTERVAL_MS,
   upgradeMaxPolls = UPGRADE_MAX_POLLS,
+  agentWorkspaceScan = null,
   onScanAgentWorkspaces,
   onDeleteAgentWorkspace,
   onDeleteComputer,
@@ -173,7 +175,10 @@ export function ComputerDetail({
   onReadRestartStatus?: (requestId: string) => Promise<ComputerRestartStatus>;
   onUpgrade?: (requestId: string) => Promise<ComputerUpgradeStatus>;
   onReadUpgradeStatus?: (requestId: string) => Promise<ComputerUpgradeStatus>;
-  onScanAgentWorkspaces?: () => Promise<ComputerAgentWorkspaceScan[]>;
+  /** The last Agent workspace scan the owner took (kept across reloads); `null` when none. */
+  agentWorkspaceScan?: AgentWorkspaceScanSnapshot | null;
+  /** Scans the Computer and records the result as `agentWorkspaceScan`. */
+  onScanAgentWorkspaces?: () => Promise<void>;
   onDeleteAgentWorkspace?: (agentId: string) => Promise<{ status: string }>;
   onDeleteComputer?: () => Promise<void>;
   onCreateAgent?: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
@@ -190,12 +195,11 @@ export function ComputerDetail({
   const [displayNameDraft, setDisplayNameDraft] = useState(computer.displayName);
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [displayNameError, setDisplayNameError] = useState(false);
-  const [workspaceScan, setWorkspaceScan] = useState<
-    | { state: "idle" }
-    | { state: "scanning" }
-    | { state: "ready"; workspaces: ComputerAgentWorkspaceScan[] }
-    | { state: "error" }
-  >({ state: "idle" });
+  // Only the scan in progress lives here; its result is `agentWorkspaceScan`, which outlives a
+  // reload. A failed scan leaves the last result on screen beside the error.
+  const [workspaceScanStatus, setWorkspaceScanStatus] = useState<"idle" | "scanning" | "error">(
+    "idle",
+  );
   const [createAgentOpen, setCreateAgentOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [updatingRuntimeIds, setUpdatingRuntimeIds] = useState<ReadonlySet<string>>(new Set());
@@ -297,11 +301,12 @@ export function ComputerDetail({
   };
   const scanWorkspaces = async () => {
     if (!onScanAgentWorkspaces) return;
-    setWorkspaceScan({ state: "scanning" });
+    setWorkspaceScanStatus("scanning");
     try {
-      setWorkspaceScan({ state: "ready", workspaces: await onScanAgentWorkspaces() });
+      await onScanAgentWorkspaces();
+      setWorkspaceScanStatus("idle");
     } catch {
-      setWorkspaceScan({ state: "error" });
+      setWorkspaceScanStatus("error");
     }
   };
 
@@ -603,7 +608,8 @@ export function ComputerDetail({
             computerName={label}
           />
           <WorkspaceInventory
-            scan={workspaceScan}
+            snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}
+            status={workspaceScanStatus}
             canScan={Boolean(onScanAgentWorkspaces)}
             onScan={() => void scanWorkspaces()}
             canDelete={Boolean(onDeleteAgentWorkspace)}
@@ -934,25 +940,24 @@ function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][nu
 }
 
 function WorkspaceInventory({
-  scan,
+  snapshot,
+  status,
   canScan,
   onScan,
   canDelete,
   onDelete,
 }: {
-  scan:
-    | { state: "idle" }
-    | { state: "scanning" }
-    | { state: "ready"; workspaces: ComputerAgentWorkspaceScan[] }
-    | { state: "error" };
+  snapshot: AgentWorkspaceScanSnapshot | null;
+  status: "idle" | "scanning" | "error";
   canScan: boolean;
   onScan: () => void;
   canDelete: boolean;
   onDelete: (agentId: string) => Promise<void>;
 }) {
   const [deleteTarget, setDeleteTarget] = useState<ComputerAgentWorkspaceScan | undefined>();
-  const deletedCount =
-    scan.state === "ready" ? scan.workspaces.filter((item) => item.state === "deleted").length : 0;
+  const deletedCount = snapshot
+    ? snapshot.workspaces.filter((item) => item.state === "deleted").length
+    : 0;
   return (
     <DetailGroup
       heading={m.computer_agent_workspaces()}
@@ -964,26 +969,36 @@ function WorkspaceInventory({
             size="sm"
             color="secondary"
             iconLeading={FolderSearch}
-            isLoading={scan.state === "scanning"}
+            isLoading={status === "scanning"}
             showTextWhileLoading
             onPress={onScan}
           >
-            {scan.state === "scanning"
+            {status === "scanning"
               ? m.computer_agent_workspaces_scanning()
               : m.computer_agent_workspaces_scan()}
           </Button>
         ) : undefined
       }
     >
-      {scan.state === "idle" ? (
-        <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_prompt()}</p>
-      ) : scan.state === "error" ? (
+      {status === "error" && (
         <p role="alert" className="py-4 text-sm text-error-primary">
           {m.computer_agent_workspaces_error()}
         </p>
-      ) : scan.state === "scanning" ? (
-        <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_scanning()}</p>
-      ) : scan.workspaces.length ? (
+      )}
+      {snapshot && (
+        <p className="pt-3 text-xs text-tertiary">
+          {m.computer_agent_workspaces_scanned_at({
+            date: new Date(snapshot.scannedAt).toLocaleString(),
+          })}
+        </p>
+      )}
+      {!snapshot ? (
+        status === "scanning" ? (
+          <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_scanning()}</p>
+        ) : status === "idle" ? (
+          <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_prompt()}</p>
+        ) : null
+      ) : snapshot.workspaces.length ? (
         <>
           {deletedCount > 0 && (
             <p className="py-3 text-sm text-tertiary">
@@ -991,7 +1006,7 @@ function WorkspaceInventory({
             </p>
           )}
           <ul className="divide-y divide-secondary">
-            {scan.workspaces.map((workspace) => (
+            {snapshot.workspaces.map((workspace) => (
               <li
                 key={workspace.agentId}
                 className="flex min-w-0 items-start justify-between gap-4 py-3 text-sm"

@@ -16,6 +16,7 @@ import { isAppError } from "#src/lib/app-error";
 import {
   isStoredData,
   persistsQuery,
+  readsAfterRestore,
   storedQueryData,
   storedShapeBuster,
   withReadThrough,
@@ -302,7 +303,7 @@ export function installQueryCachePersistence(
       query,
     );
     // After the query took the restored data as its result, which clears the flag.
-    if (restoring && !networkRead)
+    if (restoring && !networkRead && readsAfterRestore(query.queryKey))
       notifyManager.schedule(() => {
         awaitingRead.add(query.queryHash);
         void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true });

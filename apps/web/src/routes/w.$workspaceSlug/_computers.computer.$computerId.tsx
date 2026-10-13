@@ -1,6 +1,6 @@
-import { createFileRoute, notFound, useRouter } from "@tanstack/react-router";
+import { createFileRoute, getRouteApi, notFound, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ComputerDetail } from "#src/features/computers/computer-detail";
 import { createAgent } from "#src/features/agents/agents.functions";
@@ -25,6 +25,12 @@ import {
   upgradeComputer,
 } from "#src/features/computers/computers.functions";
 import { latestComputerVersionQuery } from "#src/features/computers/latest-version.query";
+import {
+  agentWorkspaceScanQuery,
+  type AgentWorkspaceScanSnapshot,
+} from "#src/features/computers/agent-workspace-scan.query";
+
+const workspaceRoute = getRouteApi("/w/$workspaceSlug");
 
 export const Route = createFileRoute("/w/$workspaceSlug/_computers/computer/$computerId")({
   // The list the parent already loaded is the whole truth about which
@@ -51,6 +57,15 @@ function ComputerDetailPage() {
   // The release-version check is a third-party request, so it is asked for after the render rather
   // than carried in the loader (see `latest-version.query.ts`).
   const { data: latestComputerVersion } = useQuery(latestComputerVersionQuery());
+  // The owner's last scan of this Computer's Agent workspaces, kept across reloads; only the
+  // Scan button scans (see `agent-workspace-scan.query.ts`).
+  const workspaceId = workspaceRoute.useLoaderData().currentWorkspace.id;
+  const workspaceScanQuery = agentWorkspaceScanQuery(workspaceId, computerId);
+  const { data: lastWorkspaceScan } = useQuery({
+    ...workspaceScanQuery,
+    enabled: computer.ownedByCurrentUser,
+  });
+  const queryClient = useQueryClient();
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
   const setVisibility = useServerFn(setRuntimeVisibility);
@@ -73,8 +88,17 @@ function ComputerDetailPage() {
       timeZone={timeZone}
       onRestart={(requestId) => requestRestart({ data: { computerId, requestId } })}
       onReadRestartStatus={(requestId) => readRestart({ data: { computerId, requestId } })}
+      agentWorkspaceScan={lastWorkspaceScan ?? null}
       onScanAgentWorkspaces={
-        computer.ownedByCurrentUser ? () => scanWorkspaces({ data: { computerId } }) : undefined
+        computer.ownedByCurrentUser
+          ? async () => {
+              const snapshot: AgentWorkspaceScanSnapshot = {
+                scannedAt: Date.now(),
+                workspaces: await scanWorkspaces({ data: { computerId } }),
+              };
+              queryClient.setQueryData(workspaceScanQuery.queryKey, snapshot);
+            }
+          : undefined
       }
       onDeleteAgentWorkspace={
         computer.ownedByCurrentUser

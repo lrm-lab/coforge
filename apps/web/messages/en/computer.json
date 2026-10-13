@@ -84,6 +84,7 @@
   "computer_agent_workspaces_prompt": "Scan this computer for Agent workspace directories.",
   "computer_agent_workspaces_error": "The workspace scan could not be completed. Try again.",
   "computer_agent_workspaces_none": "No Agent workspace directories found.",
+  "computer_agent_workspaces_scanned_at": "Scanned {date}",
   "computer_agent_workspace_active": "Active",
   "computer_agent_workspace_deleted": "Deleted",
   "computer_agent_workspace_stats": "{size} · {files} files",

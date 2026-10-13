@@ -42,7 +42,9 @@ because the API is experimental.
   `/auth/logout` directly.
 - A restored query is marked invalidated, and that is what makes the read follow it: any page that
   shows it reads it again (whatever `staleTime` says: the Chat lists use `Infinity`), and the Chat
-  loader's "marked stale" reads it. Do not set the persister's `refetchOnRestore`: it is a bare
+  loader's "marked stale" reads it. The one exception is `readsAfterRestore`: a Computer's Agent
+  workspace scan, whose read is a scan of the Computer's disk that only the Scan button starts, is
+  shown as kept (with when it was taken) and not read again. Do not set the persister's `refetchOnRestore`: it is a bare
   `query.fetch()` that a page unmounting meanwhile cancels for good. Loading older or newer pages
   cancels that read and clears the mark, so a restored query is marked again until a read of the
   query itself succeeds.
