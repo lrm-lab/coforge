@@ -247,13 +247,16 @@ export function AgentWorkspaceTab({
 
   return (
     <div ref={containerRef} className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-secondary px-5 py-3">
-        <span className="min-w-0 truncate font-mono text-xs text-tertiary">{rootPath ?? " "}</span>
+      {/* One line: the path truncates, so the copy button must not wrap below it. `flex-wrap`
+       * would send the button to a second line as soon as the path's full width exceeds the row. */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-secondary px-5 py-3">
+        <span className="min-w-0 truncate font-mono text-xs text-tertiary">{rootPath ?? " "}</span>
         {rootPath && (
           <ButtonUtility
             icon={Copy01}
             size="xs"
             color="tertiary"
+            className="shrink-0"
             tooltip={m.agent_workspace_copy_path()}
             onClick={() => void copyPath()}
           />
