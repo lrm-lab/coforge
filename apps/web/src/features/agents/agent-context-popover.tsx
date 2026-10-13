@@ -125,15 +125,17 @@ export function AgentContextPopoverContent({
         )}
       </section>
 
-      <div className="px-4 py-2 text-xs text-tertiary">
-        {data?.result && hydrated && (
-          <p>
-            {m.agent_context_updated()}{" "}
-            <RelativeTime value={data.result.collectedAt} timeZone={timeZone} plain />
-          </p>
-        )}
-        {status && <p className={data?.result ? "mt-1" : undefined}>{status}</p>}
-      </div>
+      {(status || (data?.result && hydrated)) && (
+        <div className="px-4 py-2 text-xs text-tertiary">
+          {data?.result && hydrated && (
+            <p>
+              {m.agent_context_updated()}{" "}
+              <RelativeTime value={data.result.collectedAt} timeZone={timeZone} plain />
+            </p>
+          )}
+          {status && <p className={data?.result ? "mt-1" : undefined}>{status}</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -149,7 +151,7 @@ function AgentContextReportBody({ report }: { report: PopoverReport; timeZone?: 
       ? Math.min(100, Math.max(0, Math.round((tokens / report.windowTokens) * 100)))
       : 0;
   return (
-    <div className="mt-3">
+    <div>
       <p className="font-medium text-primary">
         {m.agent_context_tokens_of({
           tokens: numberFormat.format(report.usedTokens),
