@@ -164,7 +164,7 @@ test("the Computer page's runtime usage opens the same peek the Profile badge op
   ).text();
   expect(content).not.toContain("openOnPress");
   expect(content).not.toContain("onClose");
-  expect(content).not.toContain("ReactAriaClose" ); // sanity: real marker replaced below
+  expect(content).not.toContain("ReactAriaClose"); // sanity: real marker replaced below
 });
 
 test("the Computer page's chip passes no press-open flag", async () => {
