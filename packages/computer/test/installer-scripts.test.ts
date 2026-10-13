@@ -83,7 +83,18 @@ function bootstrapRequests(target: string): string[] {
 /** The fake `coforge-installer`: it records its arguments, then (like the real installer) leaves an
  * executable shim where packages/computer/src/paths.ts resolves it. It refuses any invocation other
  * than `install --version <v>`, so a bootstrap that passes the wrong arguments fails loudly. */
-function fakeInstaller(log: string, options: { omitShim?: boolean; installerExitStatus?: number }) {
+function fakeInstaller(
+  log: string,
+  options: {
+    omitShim?: boolean;
+    installerExitStatus?: number;
+    shimArgumentLog?: string;
+    shimExitStatus?: number;
+  },
+) {
+  const shim =
+    (options.shimArgumentLog ? `printf '%s\\n' "$@" > '${options.shimArgumentLog}'\n` : "") +
+    `exit ${options.shimExitStatus ?? 0}\n`;
   return Buffer.from(
     `#!/bin/sh\n` +
       `[ "$#" -eq 3 ] && [ "$1" = install ] && [ "$2" = --version ] || exit 90\n` +
@@ -94,7 +105,7 @@ function fakeInstaller(log: string, options: { omitShim?: boolean; installerExit
         : `bin_directory=\${XDG_BIN_HOME:-}\n` +
           `case "$bin_directory" in\n  /*) ;;\n  *) bin_directory="$HOME/.local/bin" ;;\nesac\n` +
           `mkdir -p "$bin_directory"\n` +
-          `printf '#!/bin/sh\\nexit 0\\n' > "$bin_directory/coforge-computer"\n` +
+          `cat > "$bin_directory/coforge-computer" <<'SHIM'\n#!/bin/sh\n${shim}SHIM\n` +
           `chmod 755 "$bin_directory/coforge-computer"\n`),
   );
 }
@@ -117,6 +128,8 @@ async function serveFixture(
     tamperInstallerChecksum?: boolean;
     installerExitStatus?: number;
     omitShim?: boolean;
+    shimArgumentLog?: string;
+    shimExitStatus?: number;
     redirectPaths?: string[];
   } = {},
 ) {
@@ -1055,6 +1068,57 @@ test("install.sh follows an absolute XDG_BIN_HOME and ignores a relative one", a
   expect(await readFile(join(relative.home, ".zshrc"), "utf8")).toContain(
     'export PATH="$HOME/.local/bin:$PATH"',
   );
+});
+
+// The web's connect dialog is one pasted command. The installer's PATH edit only reaches shells
+// started later, so `--workspace` has to run setup through the shim's own path - when the
+// directory is already on PATH, when this run just added it, and when XDG_BIN_HOME relocates it -
+// and the script ends with setup's own status.
+for (const variant of [
+  { name: "its directory is on PATH", onPath: true },
+  { name: "its directory is not on PATH and setup fails", setupStatus: 7 },
+  { name: "XDG_BIN_HOME relocates it", relocated: true },
+]) {
+  test(`install.sh --workspace runs setup with the installed shim when ${variant.name}`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), "coforge-shim-log-"));
+    const home = await mkdtemp(join(tmpdir(), "coforge-installer-home-"));
+    temporaryDirectories.push(directory, home);
+    const shimLog = join(directory, "arguments");
+    const fixture = await serveFixture({
+      shimArgumentLog: shimLog,
+      shimExitStatus: variant.setupStatus,
+    });
+
+    const result = await run(
+      ["--version", fixture.version, "--workspace", "acme-inc"],
+      {
+        ...process.env,
+        PATH: variant.onPath
+          ? `${join(home, ".local/bin")}:${process.env.PATH ?? ""}`
+          : process.env.PATH,
+        SHELL: "/usr/bin/zsh",
+        XDG_BIN_HOME: variant.relocated ? join(directory, "bin") : undefined,
+        COFORGE_RELEASE_FEED_URL: fixture.baseUrl,
+        COFORGE_INSTALLER_TEST_MODE: "1",
+      },
+      home,
+    );
+
+    expect(result.exitCode).toBe(variant.setupStatus ?? 0);
+    expect(await readFile(shimLog, "utf8")).toBe("setup\n--workspace\nacme-inc\n");
+    expect(result.stderr).not.toContain("Next:");
+  });
+}
+
+test("install.sh refuses --workspace without a value before fetching", async () => {
+  const fixture = await serveFixture();
+  const result = await run(["--workspace"], {
+    ...process.env,
+    COFORGE_RELEASE_FEED_URL: fixture.baseUrl,
+    COFORGE_INSTALLER_TEST_MODE: "1",
+  });
+  expect(result.exitCode).toBe(2);
+  expect(fixture.requested).toEqual([]);
 });
 
 test("install.sh reports PATH persistence failure and does not claim install success", async () => {

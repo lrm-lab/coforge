@@ -19,6 +19,11 @@ be on PATH and therefore cannot live in a private directory nobody's PATH names:
   the versioned installation below `~/.coforge`, so upgrade and downgrade move the
   `active` link and never touch the user's PATH. Computer background startup is
   user-scoped; only Computer may register a per-user LaunchAgent on macOS.
+  `install.sh --workspace <slug>` (`curl ... | sh -s -- --workspace <slug>`, the
+  Add Computer dialog's command) then runs `setup` through the shim's full path,
+  because a PATH entry written to shell configuration reaches only later shells,
+  and gives setup the terminal as stdin, since under `curl | sh` stdin is the
+  script itself.
 - Windows has no comparable per-user PATH convention, so the shim - a `.cmd`
   launcher rather than a symlink - stays in `~/.coforge/computer/bin`, and
   `install.ps1` puts that directory on PATH instead. It prepends the directory to

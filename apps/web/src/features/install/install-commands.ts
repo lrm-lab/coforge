@@ -20,12 +20,14 @@ export function setupCommand(workspaceSlug: string): string {
   return `coforge-computer setup --workspace ${workspaceSlug}`;
 }
 
-/** Bootstrap and attach without relying on PATH changes made by the installer child shell. */
+/** Install and join in one paste. install.sh runs setup through the installed shim, so the POSIX
+ * command needs no PATH change; install.ps1 runs in-process and updates the session's PATH, so the
+ * Windows setup can follow as a plain second line. */
 export function connectionCommands(origin: string, workspaceSlug: string | null) {
   const commands = installCommands(origin);
   if (!workspaceSlug) return commands;
   return {
-    posix: `${commands.posix}\nsh -c 'case "$XDG_BIN_HOME" in /*) bin="$XDG_BIN_HOME";; *) bin="$HOME/.local/bin";; esac; exec "$bin/coforge-computer" setup --workspace "$1"' sh ${workspaceSlug}`,
+    posix: `${commands.posix} -s -- --workspace ${workspaceSlug}`,
     windows: `${commands.windows}\n${setupCommand(workspaceSlug)}`,
   };
 }

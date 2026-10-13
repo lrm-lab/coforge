@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 
-import { installCommands, setupCommand } from "#src/features/install/install-commands";
+import {
+  connectionCommands,
+  installCommands,
+  setupCommand,
+} from "#src/features/install/install-commands";
 
 /** Both the public landing page and the signed-in Add Computer dialog render from this, so a
  * host baked into either one would send half the users to the wrong deployment. */
@@ -28,39 +32,16 @@ test("carries no fixed host, since the setup command runs against whatever serve
   expect(setupCommand("acme-inc")).not.toContain("http");
 });
 
-test.each(["absolute", "relative", "unset"])(
-  "connects without PATH with %s XDG_BIN_HOME",
-  async (kind) => {
-    const { connectionCommands } = await import("#src/features/install/install-commands");
-    const { mkdtemp, mkdir, chmod, rm } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
-    const directory = await mkdtemp(join(tmpdir(), "coforge-connect-command-"));
-    try {
-      const bin =
-        kind === "absolute" ? join(directory, "custom bin") : join(directory, ".local/bin");
-      await mkdir(bin, { recursive: true });
-      const executable = join(bin, "coforge-computer");
-      await Bun.write(executable, '#!/bin/sh\nprintf "%s\\n" "$@"\n');
-      await chmod(executable, 0o755);
-      const command = connectionCommands("https://coforge.example", "acme-inc").posix;
-      const setup = command.split("\n")[1]!;
-      const result = Bun.spawnSync(["/bin/sh", "-c", setup], {
-        env: {
-          PATH: "/usr/bin:/bin",
-          HOME: directory,
-          ...(kind === "unset" ? {} : { XDG_BIN_HOME: kind === "absolute" ? bin : "relative" }),
-        },
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.toString()).toBe("setup\n--workspace\nacme-inc\n");
-      expect(command.split("\n")[0]).toBe(
-        "curl -fsSL https://coforge.example/computer/install.sh | sh",
-      );
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  },
-);
+/** One pasted command installs and joins: install.sh runs setup through the installed shim, so
+ * the command never depends on the PATH entry the installer adds for later shells. PowerShell runs
+ * install.ps1 in-process and gets the PATH entry at once, so its setup stays a second line. */
+test("joins the Workspace from the install command itself", () => {
+  const commands = connectionCommands("https://coforge.example", "acme-inc");
+
+  expect(commands.posix).toBe(
+    "curl -fsSL https://coforge.example/computer/install.sh | sh -s -- --workspace acme-inc",
+  );
+  expect(commands.windows).toBe(
+    "irm https://coforge.example/computer/install.ps1 | iex\ncoforge-computer setup --workspace acme-inc",
+  );
+});
