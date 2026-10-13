@@ -120,3 +120,62 @@ for (const route of routes) {
       expect({ status: response.status, body: await response.json() }).toEqual(expected);
     });
 }
+
+// `resolveTarget` is a method of the dependencies object; a caller may implement it with `this`.
+test("both routes call resolveTarget as a method of their dependencies", async () => {
+  const form = new FormData();
+  form.set("file", new Blob(["hello"], { type: "text/plain" }), "note.txt");
+  form.set("target", "#general");
+  const upload = await handleAgentAttachmentUpload(
+    new Request("https://coforge.test/api/agent/v1/attachments", { method: "POST", body: form }),
+    principal,
+    {
+      conversationId: "conversation-1",
+      async resolveTarget(this: { conversationId: string }) {
+        return { conversationId: this.conversationId };
+      },
+      async store(input: { conversationId: string }) {
+        expect(input.conversationId).toBe("conversation-1");
+        return {
+          id: "attachment-1",
+          fileName: "note.txt",
+          contentType: "text/plain",
+          sizeBytes: 5,
+        };
+      },
+    } as never,
+  );
+  expect(upload.status).toBe(200);
+
+  const session = await handleAttachmentUploadSessionCreate(
+    new Request("https://coforge.test/api/agent/v1/attachment-upload-sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        target: "#general",
+        fileName: "note.txt",
+        contentType: "text/plain",
+        sizeBytes: 5,
+        idempotencyKey: "11111111-1111-1111-1111-111111111111",
+      }),
+    }),
+    principal,
+    {
+      conversationId: "conversation-1",
+      async resolveTarget(this: { conversationId: string }) {
+        return { conversationId: this.conversationId };
+      },
+      async create(input: { conversationId: string }) {
+        expect(input.conversationId).toBe("conversation-1");
+        return {
+          uploadId: "upload-1",
+          attachmentId: "attachment-1",
+          state: "pending" as const,
+          expiresAt: "2026-01-01T00:15:00.000Z",
+          upload: { method: "PUT" as const, url: "https://oss.test/x", headers: {} },
+        };
+      },
+    } as never,
+  );
+  expect(session.status).toBe(201);
+});

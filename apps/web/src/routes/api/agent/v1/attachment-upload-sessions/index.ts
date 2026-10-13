@@ -76,7 +76,7 @@ export async function handleAttachmentUploadSessionCreate(
     return errorResponse("UPLOAD_INVALID_REQUEST", "idempotencyKey must be a UUID", 400, false);
 
   const resolved = await resolveAttachmentConversation(
-    dependencies.resolveTarget,
+    (workspaceId, agentId, parent) => dependencies.resolveTarget(workspaceId, agentId, parent),
     principal,
     target,
   );

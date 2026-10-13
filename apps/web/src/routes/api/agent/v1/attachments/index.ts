@@ -48,7 +48,7 @@ export async function handleAgentAttachmentUpload(
     return Response.json({ error: "mimeType is invalid" }, { status: 400 });
 
   const resolved = await resolveAttachmentConversation(
-    dependencies.resolveTarget,
+    (workspaceId, agentId, parent) => dependencies.resolveTarget(workspaceId, agentId, parent),
     principal,
     target,
   );
