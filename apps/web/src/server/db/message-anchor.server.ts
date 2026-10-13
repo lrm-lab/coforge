@@ -7,6 +7,7 @@ const MESSAGE_ANCHOR = new RegExp(
   `^(?:[0-9a-f]{6,12}|[0-9a-f]{8}-[0-9a-f]{4}|${UUID_LIKE_SOURCE})$`,
   "i",
 );
+const WHOLE_ID = new RegExp(`^${UUID_LIKE_SOURCE}$`);
 
 /**
  * How a Message is addressed by a short anchor. `Message.id` is a native `uuid` column, so a
@@ -28,7 +29,9 @@ const MESSAGE_ANCHOR = new RegExp(
 export function messageAnchorWhere(anchor: string): string | { gte: string; lte: string } {
   if (!MESSAGE_ANCHOR.test(anchor)) throw new AppError("INVALID_INPUT");
   const lower = anchor.toLowerCase();
-  if (lower.length > 12) return lower;
+  // A whole id names itself. Decided by shape, not length: the twelve-hex display form
+  // (`xxxxxxxx-xxxx`) is thirteen characters and is still a prefix.
+  if (WHOLE_ID.test(lower)) return lower;
   // The hex prefix, dashes dropped (the twelve-hex display form carries the first dash). Padded
   // with `0` / `f` to 32 hex characters and then dashed into uuid shape: for a prefix longer than
   // the first group this must re-insert the dashes, so plain concatenation would not produce a

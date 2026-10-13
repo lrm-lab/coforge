@@ -19,6 +19,13 @@ test("a six- to eight-hex prefix names the id range it starts, and a full id nam
     lte: "abcdef12-ffff-ffff-ffff-ffffffffffff",
   });
   expect(messageAnchorWhere(ROOT)).toBe(ROOT);
+  // The twelve-hex display form the CLI prints (thirteen characters with its dash) is a prefix,
+  // not a whole id: it must widen into a range, never be compared as an id.
+  expect(messageAnchorWhere("abcdef12-3456")).toEqual({
+    gte: "abcdef12-3456-0000-0000-000000000000",
+    lte: "abcdef12-3456-ffff-ffff-ffffffffffff",
+  });
+  expect(messageAnchorWhere("abcdef123456")).toEqual(messageAnchorWhere("abcdef12-3456"));
   // Hex is read in any case, as the reminder target grammar allows, and queried lower-case.
   expect(messageAnchorWhere("ABCDEF12")).toEqual(messageAnchorWhere("abcdef12"));
   expect(messageAnchorWhere(ROOT.toUpperCase())).toBe(ROOT);
