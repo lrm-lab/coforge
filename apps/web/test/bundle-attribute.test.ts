@@ -138,6 +138,19 @@ test("pickChunk refuses a name that matches nothing instead of attributing anoth
   );
 });
 
+test("pickChunk refuses an ambiguous name, and takes a full file name as the way out", () => {
+  const files = ["/a/vendor-react-aria-x.js", "/a/vendor-react-y.js", "/a/vendor-initial.js"];
+  const sizeOf = (file: string) => (file.includes("react-aria") ? 900 : 700);
+  // `vendor-react` is a prefix of `vendor-react-aria-x.js`, so picking the largest silently would
+  // report react-aria's bytes under a name a reader takes to mean vendor-react.
+  expect(() => pickChunk(files, "vendor-react", sizeOf)).toThrow(
+    '"vendor-react" matches 2 chunks: vendor-react-aria-x.js, vendor-react-y.js; pass the full file name',
+  );
+  // The exact name a previous report printed still resolves, ambiguity or not.
+  expect(pickChunk(files, "vendor-react-y.js", sizeOf)).toBe("/a/vendor-react-y.js");
+  expect(pickChunk(files, "vendor-initial.js", sizeOf)).toBe("/a/vendor-initial.js");
+});
+
 test("formatAttribution shows the share, the bytes and where the list was cut", () => {
   const summary = summarizeChunk("c.js", 200, {
     characters: 10,

@@ -26,7 +26,7 @@
 // ranks and attributes; it does not audit.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 /** One decoded mapping segment: where it starts in the generated file, and the source it came from. */
 type Segment = Readonly<{ generatedLine: number; generatedColumn: number; source: string }>;
@@ -195,6 +195,19 @@ export function pickChunk(
 ): string {
   if (name) {
     const matches = files.filter((file) => file.includes(name));
+    // An exact file name wins: it is what a reader copied out of an earlier report.
+    const exact = matches.find((file) => basename(file) === name);
+    if (exact) return exact;
+    // Otherwise a name matching several chunks is ambiguous - `vendor-react` is a prefix of
+    // `vendor-react-aria-*.js` too - and picking the largest would name one chunk while a reader
+    // who typed the shorter name reads the figure as another's.
+    if (matches.length > 1)
+      throw new Error(
+        `"${name}" matches ${matches.length} chunks: ${matches
+          .map((file) => basename(file))
+          .sort()
+          .join(", ")}; pass the full file name`,
+      );
     const chosen = [...matches].sort((left, right) => sizeOf(right) - sizeOf(left))[0];
     if (!chosen) throw new Error(`no chunk matching "${name}"`);
     return chosen;
