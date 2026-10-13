@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { AppError, isAppError } from "#src/lib/app-error";
+import { AppError } from "#src/lib/app-error";
+import { privateResourceRefusal } from "#src/server/http/private-resource-refusal.server";
 import { optionalBrowserUser } from "#src/server/auth/require-user.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { readUserAvatar } from "./user-avatar.server";
@@ -37,11 +38,6 @@ export async function handleWorkspaceUserAvatar(
       headers: privateImageHeaders(avatar.contentType),
     });
   } catch (error) {
-    if (!isAppError(error)) throw error;
-    const status = error.code === "ACCESS_DENIED" ? 401 : error.code === "NOT_FOUND" ? 404 : 503;
-    return Response.json(
-      { code: error.code },
-      { status, headers: { "cache-control": "no-store" } },
-    );
+    return privateResourceRefusal(error);
   }
 }
