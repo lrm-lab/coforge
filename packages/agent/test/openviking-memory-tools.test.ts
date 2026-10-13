@@ -202,6 +202,45 @@ test("openviking-memory search_context keeps the 3-read cap", () => {
   expect(() => budget.consume({ ...searchContext, operationId: "c4" })).toThrow("read budget");
 });
 
+test("empty ov_find arguments return an example error and do not spend the read budget", async () => {
+  const budget = new MemoryAgentTurnBudget();
+  const proxy = fakeProxy();
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
+  const find = tools.find((tool) => tool.name === OPENVIKING_TOOL_NAMES.find);
+  expect(typeof find?.prepareArguments).toBe("function");
+  expect(() => find?.prepareArguments?.({})).toThrow(/missing operationId, query/);
+  expect(() => find?.prepareArguments?.({})).toThrow(/\{"operationId": "find-1"/);
+  await expect(executeTool(tools, OPENVIKING_TOOL_NAMES.find, {})).rejects.toThrow(
+    /missing operationId, query/,
+  );
+  expect(budget.snapshot()).toEqual({ reads: 0, offers: 0 });
+  expect(proxy.calls).toEqual([]);
+  const described = find?.parameters as { properties?: Record<string, { description?: string }> };
+  expect(described.properties?.operationId?.description).toContain("find-1");
+  expect(find?.description).toContain("不能空对象");
+});
+
+test("send_channel_message accepts message only as an alias of a missing content", async () => {
+  const proxy = fakeProxy(() => ({ accepted: true }));
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  const send = tools.find((tool) => tool.name === "send_channel_message");
+  expect(send?.prepareArguments?.({ target: "#general", message: "hello" })).toEqual({
+    target: "#general",
+    content: "hello",
+  });
+  expect(
+    send?.prepareArguments?.({ target: "#general", content: "kept", message: "ignored" }),
+  ).toEqual({ target: "#general", content: "kept" });
+  expect(() => send?.prepareArguments?.({})).toThrow(/The body field name is content, not message/);
+  await executeTool(tools, "send_channel_message", { target: "#general", message: "from-alias" });
+  expect(proxy.calls[0]?.body).toMatchObject({
+    operation: "send",
+    target: "#general",
+    content: "from-alias",
+  });
+  expect(proxy.calls[0]?.body).not.toHaveProperty("message");
+});
+
 test("openviking-memory ov_search_context forwards the native tokenBudget unchanged", async () => {
   const proxy = fakeProxy();
   const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);

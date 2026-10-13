@@ -55,7 +55,9 @@ function memoryApiKey(provider: string): string {
 
 async function encryptApiKey(agentId: string, providerId: string, apiKeyInput: string) {
   const associatedData = new TextEncoder().encode(`${agentId}\0${providerId}`);
-  const encryptionKey = readAgentRuntimeCredentialEncryptionKey(process.env);
+  // The upstream merge made this async and hex-decoding; without await the
+  // Promise itself reaches importKey and crashes with ERR_INVALID_ARG_TYPE.
+  const encryptionKey = await readAgentRuntimeCredentialEncryptionKey(process.env);
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = new Uint8Array(
     await crypto.subtle.encrypt(

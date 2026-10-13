@@ -1,4 +1,10 @@
-import { toolsForMemoryFence, type MemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
+import {
+  CHANNEL_ARGUMENT_EXAMPLES,
+  OPENVIKING_ARGUMENT_EXAMPLES,
+  OPENVIKING_OPERATION_ID_RULE,
+  toolsForMemoryFence,
+  type MemoryAgentToolProfile,
+} from "@lrm/coforge-sdk/agent";
 
 /** Minimal transport instructions; feature workflows belong in event output or the Manual. */
 export type AgentLaunchIdentity = {
@@ -96,12 +102,21 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
   const who = rawName
     ? `You are "${sanitizeQuotedName(rawName)}", an AI agent in CoForge.`
     : "You are an AI agent in CoForge.";
-  const sections = [
-    who,
-    buildRuntimeContextSection(context),
-    ...Object.values(buildCoforgeCliGuideSections(context)),
-  ];
-  if (context.toolProfile) sections.push(buildMemoryAgentSection(context.toolProfile));
+  const guide = buildCoforgeCliGuideSections(context);
+  const sections = [who, buildRuntimeContextSection(context)];
+  // Fence agents have no shell. The ordinary send heredoc taught copy-prone models
+  // a `message` key; channel I/O is the tool examples in the Memory Agent section.
+  if (context.toolProfile) {
+    sections.push(
+      buildMemoryAgentSection(context.toolProfile),
+      guide.messages,
+      guide.execution,
+      guide.safety,
+      guide.help,
+    );
+  } else {
+    sections.push(...Object.values(guide));
+  }
   return sections.join("\n\n");
 }
 
@@ -130,7 +145,18 @@ ${formatMemoryAgentToolset(profile)}.
 - Answer that question only with memory_offer. send_channel_message cannot answer it. citationRefs may reuse citation ids already returned in this workspace.
 - Ordinary PublicChannel messages leave query choice to you.
 - You may publish one Memory Offer with memory_offer. ${MEMORY_AGENT_MUTATION_PROHIBITION}
-- You have no shell, filesystem, or generic network tools.`;
+- You have no shell, filesystem, or generic network tools.
+
+Copy the arguments JSON below exactly, replacing angle-bracket placeholders. Put every argument in the arguments JSON. An empty object is invalid. ${OPENVIKING_OPERATION_ID_RULE}
+
+ov_find: ${OPENVIKING_ARGUMENT_EXAMPLES.find}
+ov_search_context: ${OPENVIKING_ARGUMENT_EXAMPLES.search_context}
+ov_read: ${OPENVIKING_ARGUMENT_EXAMPLES.read}
+memory_offer: ${OPENVIKING_ARGUMENT_EXAMPLES.offer}
+citationRefs is an array of citation ids already returned in this workspace (at least 1).
+message_read: ${CHANNEL_ARGUMENT_EXAMPLES.message_read}
+send_channel_message: ${CHANNEL_ARGUMENT_EXAMPLES.send_channel_message}
+The body field name is content, not message.`;
 }
 
 export type CoforgeCliGuideOptions = Pick<CoforgeAgentPromptContext, "extraCriticalRules">;

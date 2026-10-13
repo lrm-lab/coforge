@@ -138,6 +138,7 @@ import {
 import { AgentAppInbox, type MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
+import { AGENT_MESSAGE_BODY_REQUIRED_MESSAGE, agentMessageBody } from "./agent-message-body";
 import { settleAgentSend } from "./agent-send-settlement";
 import {
   discoverCodeAgentRuntimes,
@@ -3490,10 +3491,10 @@ export class DaemonRuntime {
     // draft had reached) so the server can compute `continueAnywaySuggested`.
     const priorDraft = draft ?? (request.sendDraft ? undefined : await inbox.draft(target));
     const draftReholdCount = priorDraft?.reholdCount ?? 0;
-    const content = draft?.content ?? request.content;
+    const content = draft?.content ?? agentMessageBody(request.content, request.message);
     if (content === undefined)
       throw new AgentPreflightError(
-        "Agent message body is required",
+        AGENT_MESSAGE_BODY_REQUIRED_MESSAGE,
         "AGENT_MESSAGE_BODY_REQUIRED",
       );
     // Raft: the boundary a draft already accounted for travels with the next attempt — a

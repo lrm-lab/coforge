@@ -1,5 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../../../apps/web/generated/client";
+import { PrismaClient } from "../../../apps/web/src/generated/prisma/client";
 import { PrismaOpenVikingBindingStore } from "../../../apps/web/src/server/db/repositories/openviking-binding.repositories.server";
 import { PrismaWorkspaceMemoryProfileStore } from "../../../apps/web/src/server/db/repositories/workspace-memory-profile.repositories.server";
 import {

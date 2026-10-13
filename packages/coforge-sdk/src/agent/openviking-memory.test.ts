@@ -6,7 +6,9 @@ import {
   OPENVIKING_AGENT_ERROR_CODES,
   OPENVIKING_AGENT_OPERATIONS,
   OPENVIKING_AGENT_PROTOCOL,
+  OPENVIKING_ARGUMENT_EXAMPLES,
   OPENVIKING_CANDIDATE_LIMIT_MAX,
+  OPENVIKING_OPERATION_ID_RULE,
   OPENVIKING_TOOL_NAMES,
   OPENVIKING_TOOL_PROFILE,
   decodeOpenVikingAgentCommand,
@@ -168,6 +170,38 @@ test("an offer may omit the channel and recipient for the server to bind", () =>
     citationRefs: ["ov:wiki/deploy"],
     body: "the last skip-tests deploy rolled back",
   });
+});
+
+test("empty arguments name the missing fields, a copyable example, and the operationId rule", () => {
+  let message = "";
+  try {
+    decodeOpenVikingAgentCommand({ protocol: OPENVIKING_AGENT_PROTOCOL, op: "find" });
+  } catch (error) {
+    message = error instanceof Error ? error.message : "";
+  }
+  expect(message).toContain("missing operationId, query");
+  expect(message).toContain(OPENVIKING_ARGUMENT_EXAMPLES.find);
+  expect(message).toContain(OPENVIKING_OPERATION_ID_RULE);
+  expect(message).toContain("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$");
+});
+
+test("an offer missing citationRefs names that field and shows an example", () => {
+  let message = "";
+  try {
+    decodeOpenVikingAgentCommand({
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "offer",
+      operationId: "offer-1",
+      body: "the last deploy rolled back",
+    });
+  } catch (error) {
+    message = error instanceof Error ? error.message : "";
+  }
+  expect(message).toContain("missing citationRefs");
+  expect(message).not.toContain("missing body");
+  expect(message).not.toContain("missing operationId");
+  expect(message).toContain(OPENVIKING_ARGUMENT_EXAMPLES.offer);
+  expect(message).toContain(OPENVIKING_OPERATION_ID_RULE);
 });
 
 test("rejects a malformed command before it can cross the proxy", () => {

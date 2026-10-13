@@ -214,6 +214,8 @@ export type LocalAgentMessageRequest = {
     | "unreact";
   target?: string;
   content?: string;
+  /** Alias of `content`, used only when `content` is absent. Never forwarded upstream. */
+  message?: string;
   sendDraft?: boolean;
   /** `message send --send-draft` only: refuse, before any request, unless the saved draft still
    * belongs to the logical send with this idempotency key. */
