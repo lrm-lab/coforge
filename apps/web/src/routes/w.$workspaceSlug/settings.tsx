@@ -55,6 +55,7 @@ import { useRefreshSidebarChannels } from "#src/features/conversations/sidebar-l
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { WorkspaceDangerZone } from "#src/features/workspaces/workspace-danger-zone";
 import {
+  changeWorkspaceSlug,
   loadMemberAgentPage,
   renameWorkspace,
   uploadWorkspaceIcon,
@@ -145,6 +146,7 @@ function SettingsPage() {
   const saveGeneralChannelHidden = useServerFn(setGeneralChannelHidden);
   const saveWorkspaceName = useServerFn(renameWorkspace);
   const saveWorkspaceIcon = useServerFn(uploadWorkspaceIcon);
+  const saveWorkspaceSlug = useServerFn(changeWorkspaceSlug);
   const refreshSidebarChannels = useRefreshSidebarChannels();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -314,6 +316,16 @@ function SettingsPage() {
     await router.invalidate({ sync: true });
   }
 
+  // The page moves to the Workspace's new URL; the loaders for that URL then read it fresh.
+  async function changeWorkspaceUrl(slug: string) {
+    const workspace = await saveWorkspaceSlug({ data: { slug } });
+    await navigate({
+      to: "/w/$workspaceSlug/settings",
+      params: { workspaceSlug: workspace.slug },
+      search: { section: "workspace-profile" },
+    });
+  }
+
   async function changeWorkspaceIcon(file: File) {
     const form = new FormData();
     form.set("file", file);
@@ -386,6 +398,7 @@ function SettingsPage() {
       onGeneralChannelHiddenSave={changeGeneralChannelHidden}
       workspace={currentWorkspace}
       onWorkspaceRename={changeWorkspaceName}
+      onWorkspaceSlugChange={changeWorkspaceUrl}
       onWorkspaceIconUpload={changeWorkspaceIcon}
       archivedChannelsGroup={
         <ArchivedChannelsGroup channels={archivedChannels} timeZone={savedTimeZone} />

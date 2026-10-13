@@ -96,6 +96,7 @@ const settingsProps = {
   onGeneralChannelHiddenSave: async () => {},
   workspace: { id: "w-1", slug: "acme", name: "Acme", iconUrl: null },
   onWorkspaceRename: async () => {},
+  onWorkspaceSlugChange: async () => {},
   onWorkspaceIconUpload: async () => {},
 };
 

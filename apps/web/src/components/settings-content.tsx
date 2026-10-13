@@ -43,13 +43,17 @@ import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { WorkspaceMembersPanel } from "#src/features/workspaces/workspace-members-panel";
 import { WorkspaceIcon } from "#src/features/workspaces/workspace-icon";
-import { canManageWorkspaceSettings } from "#src/features/workspaces/workspace-roles";
+import {
+  canChangeWorkspaceSlug,
+  canManageWorkspaceSettings,
+} from "#src/features/workspaces/workspace-roles";
 import {
   checkPersonName,
   PERSON_NAME_MAX_LENGTH,
   type PersonNameProblem,
 } from "#src/features/profiles/person-name";
 import { WORKSPACE_NAME_MAX_LENGTH } from "#src/features/workspaces/workspace.schemas";
+import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
 import { IMAGE_MAX_BYTES, IMAGE_UPLOAD_TYPES } from "#src/lib/image-upload";
 import { GitHubSettings } from "#src/features/integrations/github-settings";
 import {
@@ -154,6 +158,8 @@ interface SettingsContentProps {
   /** The Workspace the page URL names. */
   workspace: { id: string; slug: string; name: string; iconUrl: string | null };
   onWorkspaceRename: (name: string) => Promise<void>;
+  /** Changes the Workspace URL; resolves once the page has moved to the new URL. */
+  onWorkspaceSlugChange: (slug: string) => Promise<void>;
   onWorkspaceIconUpload: (file: File) => Promise<void>;
   /** The Archived channels group Settings → Workspace profile shows under the profile. */
   archivedChannelsGroup?: React.ReactNode;
@@ -310,6 +316,8 @@ export function SettingsContent(props: SettingsContentProps) {
                 workspace={props.workspace}
                 canEdit={canManageWorkspaceSettings(props.members.actorRole)}
                 onRename={props.onWorkspaceRename}
+                canChangeSlug={canChangeWorkspaceSlug(props.members.actorRole)}
+                onSlugChange={props.onWorkspaceSlugChange}
                 onIconUpload={props.onWorkspaceIconUpload}
                 archivedChannelsGroup={props.archivedChannelsGroup}
                 dangerZone={props.dangerZone}
@@ -1186,6 +1194,20 @@ function SystemChannelsSettings({
   );
 }
 
+/** The sentence for a failed Workspace URL change, by what the server answered. */
+function workspaceSlugSaveError(cause: unknown): string {
+  switch (isAppError(cause) ? cause.code : undefined) {
+    case "CONFLICT":
+      return m.settings_workspace_url_taken();
+    case "ACCESS_DENIED":
+      return m.settings_workspace_url_owner_only();
+    case "INVALID_INPUT":
+      return m.settings_workspace_url_invalid();
+    default:
+      return m.settings_workspace_url_save_error();
+  }
+}
+
 /** The sentence for a failed Workspace icon upload, by what the server answered. */
 function workspaceIconUploadError(cause: unknown): string {
   switch (isAppError(cause) ? cause.code : undefined) {
@@ -1200,13 +1222,15 @@ function workspaceIconUploadError(cause: unknown): string {
   }
 }
 
-/** Settings → Workspace profile: the Workspace's icon and name, which its owner or an admin
- * change; everyone else sees the same card read-only. The slug is shown but never edited here,
- * because every link into the Workspace carries it. */
+/** Settings → Workspace profile: the Workspace's icon, name and URL. Its owner or an admin changes
+ * the name and icon, and only its owner changes the URL; everyone else sees the same card
+ * read-only. */
 function WorkspaceProfileSettings({
   workspace,
   canEdit,
   onRename,
+  canChangeSlug,
+  onSlugChange,
   onIconUpload,
   archivedChannelsGroup,
   dangerZone,
@@ -1214,6 +1238,8 @@ function WorkspaceProfileSettings({
   workspace: SettingsContentProps["workspace"];
   canEdit: boolean;
   onRename: (name: string) => Promise<void>;
+  canChangeSlug: boolean;
+  onSlugChange: (slug: string) => Promise<void>;
   onIconUpload: (file: File) => Promise<void>;
   /** The Archived channels group under the profile, when the viewer has one. */
   archivedChannelsGroup: React.ReactNode;
@@ -1226,6 +1252,9 @@ function WorkspaceProfileSettings({
   const [saveError, setSaveError] = useState<SaveError | null>(null);
   const [uploading, guardUpload] = useSubmitGuard();
   const [iconError, setIconError] = useState<SaveError | null>(null);
+  const [slug, setSlug] = useState(workspace.slug);
+  const [savingSlug, guardSlugSave] = useSubmitGuard();
+  const [slugError, setSlugError] = useState<SaveError | null>(null);
   useEffect(() => {
     if (!saved) return;
     const timer = setTimeout(() => setSaved(false), 2000);
@@ -1234,6 +1263,15 @@ function WorkspaceProfileSettings({
 
   const trimmed = name.trim();
   const changed = trimmed.length > 0 && trimmed !== workspace.name;
+  const trimmedSlug = slug.trim();
+  const slugValid = isValidWorkspaceSlug(trimmedSlug);
+  const slugChanged = trimmedSlug !== workspace.slug;
+  const slugInvalid = canChangeSlug && slugChanged && !slugValid;
+  const slugHint = !canChangeSlug ? (
+    m.settings_workspace_url_owner_only()
+  ) : slugInvalid ? (
+    <span role="alert">{m.settings_workspace_url_invalid()}</span>
+  ) : undefined;
 
   function save() {
     void guardSave(async () => {
@@ -1252,6 +1290,18 @@ function WorkspaceProfileSettings({
             cause,
           ),
         );
+      }
+    });
+  }
+
+  // On success the page moves to the new URL, which remounts this card, so nothing is reset here.
+  function saveSlug() {
+    void guardSlugSave(async () => {
+      setSlugError(null);
+      try {
+        await onSlugChange(trimmedSlug);
+      } catch (cause) {
+        setSlugError(saveErrorFrom(workspaceSlugSaveError(cause), cause));
       }
     });
   }
@@ -1332,14 +1382,6 @@ function WorkspaceProfileSettings({
                   setSaved(false);
                 }}
               />
-              <Input
-                label={m.settings_workspace_slug()}
-                value={workspace.slug}
-                icon={SlugPrefix}
-                inputClassName="font-mono"
-                isReadOnly
-                excludeFromTabOrder
-              />
             </div>
             {canEdit && (
               <div className="flex flex-col items-start gap-2">
@@ -1358,6 +1400,32 @@ function WorkspaceProfileSettings({
                 </Button>
               </div>
             )}
+            <div className="grid max-w-xl gap-6">
+              <Input
+                label={m.settings_workspace_url_label()}
+                value={slug}
+                icon={SlugPrefix}
+                inputClassName="font-mono"
+                hint={slugHint}
+                isInvalid={slugInvalid}
+                isReadOnly={!canChangeSlug}
+                isDisabled={savingSlug}
+                excludeFromTabOrder={!canChangeSlug}
+                onChange={setSlug}
+              />
+            </div>
+            {canChangeSlug && (
+              <div className="flex flex-col items-start gap-2">
+                {slugError && <SaveErrorMessage error={slugError} />}
+                <Button
+                  type="button"
+                  isDisabled={savingSlug || !slugValid || !slugChanged}
+                  onPress={saveSlug}
+                >
+                  {savingSlug ? m.settings_profile_saving() : m.settings_workspace_url_save()}
+                </Button>
+              </div>
+            )}
           </div>
         </SettingsCard>
       </SettingsGroup>
@@ -1370,10 +1438,10 @@ function WorkspaceProfileSettings({
 /** FileTrigger takes a mutable list; built once rather than on every render. */
 const WORKSPACE_ICON_TYPES = [...IMAGE_UPLOAD_TYPES];
 
-/** The `/` a Workspace slug follows in every URL, in the slug field's leading icon slot. */
+/** The `/w/` a Workspace slug follows in every URL, in the URL field's leading icon slot. */
 function SlugPrefix({ className }: { className?: string }) {
   return (
-    <span className={cn(className, "flex items-center justify-center font-mono text-md")}>/</span>
+    <span className={cn(className, "flex items-center justify-center font-mono text-md")}>/w/</span>
   );
 }
 

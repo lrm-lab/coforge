@@ -163,7 +163,7 @@ responsibility.
 - `server/records/` — Workspace Records (see the last section).
 - `server/reminders/` — cloud Agent Reminders.
 - `server/tasks/` — the message-backed TaskBoard, the shape a Task command must have, the Tasks page's overview reads, its Task view, history records, and notice wording.
-- `server/workspaces/` — Workspace catalog (name and icon), selection, enrollment, member roles, member directory, join links, admitting a member (`admitWorkspaceMember`, the one step a join link takes), deleting a Workspace, removing its memory first and its stored files after, and going out of a Workspace (leaving or deleting it) to the next one.
+- `server/workspaces/` — Workspace catalog (name, icon and URL, with the former slugs that keep naming a Workspace; their persistence is `db/repositories/workspace-slugs.repositories.server.ts`), selection, enrollment, member roles, member directory, join links, admitting a member (`admitWorkspaceMember`, the one step a join link takes), deleting a Workspace, removing its memory first and its stored files after, and going out of a Workspace (leaving or deleting it) to the next one.
 - `prisma/` (app root) — schema and migrations; `messages/` — UI translations.
 
 ## A changed file ends without a blank line

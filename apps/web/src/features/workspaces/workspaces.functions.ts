@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import {
+  changeWorkspaceSlugInputSchema,
   createWorkspaceInputSchema,
   deleteWorkspaceInputSchema,
   renameWorkspaceInputSchema,
@@ -40,10 +41,14 @@ function catalog() {
   return new WorkspaceCatalog(new PrismaWorkspaceCatalogStore(db));
 }
 
-/** Succeeds when the Workspace the page URL names is one of the User's; NOT_FOUND otherwise. */
+/** The current slug of the Workspace the page URL names, when it is one of the User's; NOT_FOUND
+ * otherwise. */
 export const openWorkspace = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
-  .handler(() => null);
+  .handler(async ({ context: { db, workspaceId } }) =>
+    // The URL may name the Workspace by a former slug; the page moves to the current one.
+    db.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { slug: true } }),
+  );
 
 /**
  * The User's Workspaces and the one the page URL names (NOT_FOUND when it is not theirs). Opening a
@@ -133,6 +138,24 @@ export const renameWorkspace = createServerFn({ method: "POST" })
       data.name,
     ),
   );
+
+/**
+ * Changes the URL of the Workspace the page URL names; its owner only. The old slug keeps naming
+ * this Workspace, so the caller moves the page to the returned slug.
+ */
+export const changeWorkspaceSlug = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(changeWorkspaceSlugInputSchema)
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    const workspace = await catalog().changeSlug(
+      workspaceId,
+      await workspaceMemberRole(db, workspaceId, user.id),
+      data.slug,
+    );
+    if (preferredWorkspaceSlugFromRequest() !== workspace.slug)
+      writePreferredWorkspaceSlug(workspace.slug);
+    return workspace;
+  });
 
 /** Replaces the icon of the Workspace the page URL names; its owner or an admin only. */
 export const uploadWorkspaceIcon = createServerFn({ method: "POST" })

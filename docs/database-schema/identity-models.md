@@ -67,7 +67,12 @@ two columns for its own picture, in the same image store.
 Setup persistence consists of `User`, `UserIdentity`, `Workspace`,
 `WorkspaceMembership`, `Computer`, and `WorkspaceComputer`.
 `WorkspaceMembership.role` is `owner`, `admin`, or `member`. The Workspace creator
-is the immutable owner. `WorkspaceComputer`
+is the immutable owner. Only the owner changes the Workspace's slug (its URL); the
+slug it had goes into `WorkspaceFormerSlug`, which keeps naming that Workspace for
+good: `/w/<former>` redirects to the current slug, `workspace:get` and
+`computer:register` resolve it, and no other Workspace can take it. One advisory
+lock per slug serializes creating a Workspace and moving one, since uniqueness
+spans both tables. `WorkspaceComputer`
 is the durable binding and contains the workspace/computer foreign keys. Its
 database `id` is an internal storage primary key; the business identity is the
 composite `(workspaceId, computerId)` key. That unique constraint makes

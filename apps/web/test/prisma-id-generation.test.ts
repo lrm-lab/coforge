@@ -26,8 +26,8 @@ describe("Prisma id generation uses time-ordered UUIDv7", () => {
     expect(schema).not.toContain("@default(uuid())");
   });
 
-  test("all 47 key tables generate uuid(7)", () => {
+  test("all 48 key tables generate uuid(7)", () => {
     const v7Count = schema.split("@default(uuid(7))").length - 1;
-    expect(v7Count).toBe(47);
+    expect(v7Count).toBe(48);
   });
 });

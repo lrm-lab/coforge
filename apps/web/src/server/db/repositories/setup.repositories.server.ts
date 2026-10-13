@@ -17,11 +17,16 @@ const mapWorkspace = (value: {
 
 export class PrismaWorkspaceAccess implements WorkspaceAccess, QueryWorkspaceAccess {
   constructor(private readonly db: PrismaClient) {}
+  /** By its current or a former slug; the answer always carries the current one. */
   async findAccessibleBySlug(slug: string, principal: AuthenticatedPrincipal) {
-    const row = await this.db.workspace.findFirst({
-      where: { slug, members: { some: { userId: principal.userId } } },
-      select: workspaceShape,
-    });
+    const member = { members: { some: { userId: principal.userId } } };
+    // Nearly every lookup names the current slug: try it alone before the former ones.
+    const row =
+      (await this.db.workspace.findFirst({ where: { slug, ...member }, select: workspaceShape })) ??
+      (await this.db.workspace.findFirst({
+        where: { formerSlugs: { some: { slug } }, ...member },
+        select: workspaceShape,
+      }));
     return row ? mapWorkspace(row) : undefined;
   }
   async getAccessibleBySlug(slug: string, principal: AuthenticatedPrincipal) {

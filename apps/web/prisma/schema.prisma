@@ -57,8 +57,22 @@ model Workspace {
   memoryOffers           MemoryOfferRecord[]
   memoryOfferCitations   MemoryOfferCitation[]
   memoryCleanupWork      WorkspaceMemoryCleanupWork[]
+  formerSlugs            WorkspaceFormerSlug[]
 
   @@map("workspaces")
+}
+
+/// A URL (slug) the Workspace had before its owner changed it. It keeps naming that Workspace, so
+/// old links and Computers set up with it still reach it, and no other Workspace can take it.
+model WorkspaceFormerSlug {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  slug        String    @unique
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("workspace_former_slugs")
 }
 
 model Project {

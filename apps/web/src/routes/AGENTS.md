@@ -9,7 +9,8 @@ These rules apply to `src/routes/`.
   `saved`, `activity`, `tasks`, `search`, `members`, `agent/$agentId`,
   `computers`, `computer/$computerId`, `settings`, plus `projects` and
   `records`; a direct message is `dm/$dmId`, by its conversation id. Pathless layouts (`_chat`, `_computers`) share chrome between
-  pages without adding a URL segment. Old URLs are not redirected.
+  pages without adding a URL segment. Old page names are not redirected; a Workspace's former
+  slug is: `/w/<former>/…` goes to the same page under its current slug.
 - Pages opened before someone is in a Workspace — `login`, `welcome`, `join/$token`,
   `oauth/verify`, `workspaces/new` — stay outside `/w/$workspaceSlug`; sign-in,
   the name step, invite links, and creating a first Workspace share

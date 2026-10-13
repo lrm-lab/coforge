@@ -1,8 +1,8 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { generalChannelForCreator } from "#src/server/conversations/public-channels.server";
 import { WorkspaceCatalog, PrismaWorkspaceCatalogStore } from "./catalog.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { createOwnedWorkspace } from "#src/server/db/repositories/workspace-slugs.repositories.server";
 import {
   isReservedWorkspaceSlug,
   isValidWorkspaceSlug,
@@ -101,15 +101,7 @@ export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore 
   }
 
   async createForUser(input: { slug: string; name: string; userId: string }) {
-    const row = await this.db.workspace.create({
-      data: {
-        slug: input.slug,
-        name: input.name,
-        members: { create: { userId: input.userId, role: "owner" } },
-        conversations: generalChannelForCreator(input.userId),
-      },
-      select: { id: true },
-    });
+    const row = await createOwnedWorkspace(this.db, input, { id: true });
     return row.id;
   }
 }
