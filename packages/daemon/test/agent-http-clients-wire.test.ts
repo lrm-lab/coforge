@@ -156,6 +156,13 @@ test("a malformed 2xx body is a protocol mismatch on every one of these routes",
     notJson.requestThreadUnfollow!({ ...keys, request: request({ operation: "thread-unfollow" }) }),
     notJson.requestReaction!({ ...keys, method: "POST", request: request({ operation: "react" }) }),
   ];
-  for (const attempt of attempts)
-    expect(await attempt.catch((error: unknown) => error)).toBeInstanceOf(AgentTransportError);
+  for (const attempt of attempts) {
+    const error = await attempt.catch((thrown: unknown) => thrown);
+    expect(error).toBeInstanceOf(AgentTransportError);
+    expect(error).toMatchObject({
+      failureClass: "protocol_mismatch",
+      causeCode: "AGENT_RESPONSE_SHAPE_INVALID",
+      upstreamStatus: 200,
+    });
+  }
 });
