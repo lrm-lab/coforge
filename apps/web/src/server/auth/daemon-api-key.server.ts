@@ -17,8 +17,12 @@ export type DaemonApiKeyRecord = {
   lastUsedAt?: Date | null;
 };
 
+/** What minting supplies for `replaceActive`: the id is left to the schema default
+ * (`uuid(7)`), because the database is the single id-generation path. */
+export type DaemonApiKeyMint = Omit<DaemonApiKeyRecord, "id">;
+
 export interface DaemonApiKeyRepository {
-  replaceActive(record: DaemonApiKeyRecord): Promise<void>;
+  replaceActive(record: DaemonApiKeyMint): Promise<void>;
   findByHash(hash: string): Promise<DaemonApiKeyRecord | undefined>;
   markUsed(id: string, at: Date): Promise<void>;
 }
@@ -61,16 +65,17 @@ export function prepareDaemonApiKey({
   computerId: string;
 }) {
   const apiKey = `dk_${randomBytes(32).toString("base64url")}`;
+  // No explicit id: the schema's uuid(7) default generates it — API keys keep the
+  // project's one id-generation path (and its v7 ordering) end to end.
   return {
     apiKey,
     record: {
-      id: crypto.randomUUID(),
       apiKeyHash: hashDaemonApiKey(apiKey),
       workspaceId,
       computerId,
       ownerId: principal.userId,
       revokedAt: null,
-    } satisfies DaemonApiKeyRecord,
+    } satisfies DaemonApiKeyMint,
   };
 }
 

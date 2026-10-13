@@ -13,8 +13,12 @@ export type AgentApiKeyRecord = {
 
 const AGENT_API_KEY = /^sk_agent_[A-Za-z0-9_-]{43}$/;
 
+/** What minting supplies for `replaceActive`: the id is left to the schema default
+ * (`uuid(7)`), because the database is the single id-generation path. */
+export type AgentApiKeyMintInput = Omit<AgentApiKeyRecord, "id">;
+
 export interface AgentApiKeyRepository {
-  replaceActive(record: AgentApiKeyRecord): Promise<void>;
+  replaceActive(record: AgentApiKeyMintInput): Promise<void>;
   findByHash(hash: string): Promise<AgentApiKeyRecord | undefined>;
   revoke(id: string): Promise<void>;
 }
@@ -38,9 +42,10 @@ export function createAgentApiKey(input: {
   repository: AgentApiKeyRepository;
 }): Promise<string> {
   const apiKey = `sk_agent_${randomBytes(32).toString("base64url")}`;
+  // No explicit id: the schema's uuid(7) default generates it — API keys keep the
+  // project's one id-generation path (and its v7 ordering) end to end.
   return input.repository
     .replaceActive({
-      id: crypto.randomUUID(),
       apiKeyHash: hashAgentApiKey(apiKey),
       agentId: input.agentId,
       workspaceId: input.workspaceId,

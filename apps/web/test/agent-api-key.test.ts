@@ -5,6 +5,7 @@ import {
   findAgentApiKey,
   hashAgentApiKey,
   isAgentApiKeyBoundToComputer,
+  type AgentApiKeyMintInput,
   type AgentApiKeyRecord,
   type AgentApiKeyRepository,
 } from "#src/server/agents/agent-api-key.server";
@@ -12,7 +13,10 @@ import {
 class MemoryAgentApiKeys implements AgentApiKeyRepository {
   records = new Map<string, AgentApiKeyRecord>();
 
-  async replaceActive(record: AgentApiKeyRecord) {
+  async replaceActive(record: AgentApiKeyMintInput) {
+    // The database fills the schema default (`uuid(7)`) when the mint path omits the id;
+    // this fake reproduces that so revoked-by-id lookups behave like the real rows.
+    const stored: AgentApiKeyRecord = { id: crypto.randomUUID(), ...record };
     for (const current of this.records.values())
       if (
         current.agentId === record.agentId &&
@@ -21,7 +25,7 @@ class MemoryAgentApiKeys implements AgentApiKeyRepository {
         !current.revokedAt
       )
         current.revokedAt = new Date();
-    this.records.set(record.apiKeyHash, record);
+    this.records.set(record.apiKeyHash, stored);
   }
 
   async findByHash(hash: string) {

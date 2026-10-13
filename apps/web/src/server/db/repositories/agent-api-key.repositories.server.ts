@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
+  AgentApiKeyMintInput,
   AgentApiKeyRecord,
   AgentApiKeyRepository,
 } from "#src/server/agents/agent-api-key.server";
@@ -7,7 +8,7 @@ import type {
 export class PrismaAgentApiKeyRepository implements AgentApiKeyRepository {
   constructor(private readonly db: PrismaClient) {}
 
-  async replaceActive(record: AgentApiKeyRecord): Promise<void> {
+  async replaceActive(record: AgentApiKeyMintInput): Promise<void> {
     await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "agents" WHERE "id" = ${record.agentId}::uuid FOR UPDATE`;
       await tx.agentApiKey.updateMany({
