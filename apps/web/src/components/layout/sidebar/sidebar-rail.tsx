@@ -11,8 +11,13 @@ import { cx } from "#src/utils/cx";
 // the demo hardcodes Untitled's own logo/account card with no override
 // props. The rail is the collapsed desktop sidebar; the expanded one is `sidebar-expanded.tsx`.
 
-/** 80px at the default text size; rem so the rail grows with the browser's font size. */
-export const SIDEBAR_RAIL_WIDTH = "5rem";
+/**
+ * 6.75rem (108px at the default 16px root). The longest English label,
+ * "Conversations", is 98px at 14px semibold (Inter wght 600). An 80px rail
+ * centered that word and pushed the capital C off the left edge of the screen.
+ * Rem so the rail grows with the browser's font size, in step with `text-sm`.
+ */
+export const SIDEBAR_RAIL_WIDTH = "6.75rem";
 
 type RailItemType = NavItemType & { icon: FC<{ className?: string }>; current?: boolean };
 
@@ -24,7 +29,7 @@ function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
       href={href}
       aria-label={label}
       aria-current={current ? "page" : undefined}
-      className="group flex h-18 flex-col items-center justify-center gap-1 rounded-lg px-0.5 [.rail-labels-hidden_&]:h-11 outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="group flex h-18 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 [.rail-labels-hidden_&]:h-11 outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       <span
         className={cx(
@@ -43,7 +48,7 @@ function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
       </span>
       <span
         className={cx(
-          "text-sm font-medium tracking-normal whitespace-nowrap transition-colors duration-100 ease-linear [.rail-labels-hidden_&]:hidden",
+          "max-w-full truncate text-center text-sm font-medium tracking-normal transition-colors duration-100 ease-linear [.rail-labels-hidden_&]:hidden",
           current
             ? "font-semibold text-brand-secondary"
             : "text-tertiary group-hover:text-secondary",
@@ -71,9 +76,9 @@ export const SidebarRail = ({ activeUrl, items, subheader, footer }: SidebarRail
     <aside
       data-sidebar
       style={{ width: SIDEBAR_RAIL_WIDTH }}
-      className="flex h-full max-h-full flex-col items-center justify-between overflow-y-auto pb-4"
+      className="flex h-full max-h-full w-full flex-col items-center justify-between overflow-x-hidden overflow-y-auto pb-4"
     >
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex w-full flex-col items-center gap-3">
         <div className="mt-2 flex h-12 shrink-0 items-center justify-center">
           <ButtonUtility
             icon={LayoutLeft}
@@ -84,9 +89,9 @@ export const SidebarRail = ({ activeUrl, items, subheader, footer }: SidebarRail
           />
         </div>
         <div className="flex h-10 shrink-0 items-center justify-center">{subheader}</div>
-        <ul className="flex flex-col gap-1">
+        <ul className="flex w-full flex-col gap-1">
           {items.map((item) => (
-            <li key={item.label}>
+            <li key={item.label} className="w-full min-w-0">
               <RailItem {...item} current={item.href === activeUrl} />
             </li>
           ))}

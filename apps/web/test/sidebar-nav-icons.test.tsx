@@ -6,7 +6,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
+import { SIDEBAR_RAIL_WIDTH, SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
 import { SidebarExpanded } from "#src/components/layout/sidebar/sidebar-expanded";
 import { m } from "#src/paraglide/messages";
 
@@ -45,6 +45,16 @@ test("The current item keeps the brand accent; the resting icon never uses the o
   expect(current).toContain("stroke-[2.4]");
   expect(resting).toContain("stroke-[2.4]");
   expect(resting).not.toContain("text-tertiary");
+});
+
+test("The collapsed rail is wide enough for Conversations and keeps the caption inside the column", () => {
+  // 6.75rem fits "Conversations" at 14px semibold (~98px) plus the item's horizontal padding.
+  // 5rem centered that word and clipped the capital C off the left edge of the screen.
+  expect(SIDEBAR_RAIL_WIDTH).toBe("6.75rem");
+  const markup = renderToStaticMarkup(<SidebarRail {...railProps} />);
+  expect(markup).toContain("overflow-x-hidden");
+  expect(markup).toContain("max-w-full truncate text-center");
+  expect(markup).toContain(m.navigation_chat());
 });
 
 test("The token carries the spec's value in light, and a lighter one for the dark column", async () => {
