@@ -58,6 +58,25 @@ test("a credit plan's header line is the label and its percentage; the amounts s
   expect(html).toContain('role="group" aria-label="Monthly credits"');
 });
 
+test("a running scan never disables the refresh button, so its focus stays in the popover", () => {
+  // The pointer that asked for the refresh is parked on the button; a disabled state drops the
+  // focus out of the popover (which reads as an outside-interaction close, task #116). The
+  // refresh runs as React Aria's isPending: presses ignored, focus kept, spinner shown; the
+  // label names the running scan.
+  const html = renderToStaticMarkup(
+    <RuntimeUsagePopoverContent
+      runtime={{ provider: RUNTIME_PROVIDER.GROK, displayName: "Grok Build", version: "1.0.52" }}
+      data={kiroUsage({ used: 700, limit: 10_000, overage: 0 })}
+      scanning
+      computerOnline
+      onRefresh={() => {}}
+    />,
+  );
+  expect(html).not.toMatch(/<button[^>]*\sdisabled(?=[\s>])/);
+  expect(html).toContain('aria-label="Refreshing…"');
+  expect(html).toContain("data-pending");
+});
+
 test("an overage follows the amounts on the same line, in the locale's number format", () => {
   const html = render(kiroUsage({ used: 10_250, limit: 10_000, overage: 250 }));
   expect(html).toContain("10,250 / 10,000 credits used · Overage: 250 credits");
@@ -135,4 +154,22 @@ test("Codex's credits flag is a note on the account line when it says something"
   const none = codex({ hasCredits: false, unlimited: false });
   expect(none).toContain(">f***@example.com<");
   expect(none).not.toContain("credits");
+});
+
+test("the Computer page's runtime usage opens the same peek the Profile badge opens", async () => {
+  // One hover-open peek serves both entry points (task #116): the Computer page chip no longer
+  // runs the press-open variant with its close button.
+  const content = await Bun.file(
+    new URL("../src/features/computers/runtime-usage.tsx", import.meta.url).pathname,
+  ).text();
+  expect(content).not.toContain("openOnPress");
+  expect(content).not.toContain("onClose");
+  expect(content).not.toContain("ReactAriaClose" ); // sanity: real marker replaced below
+});
+
+test("the Computer page's chip passes no press-open flag", async () => {
+  const detail = await Bun.file(
+    new URL("../src/features/computers/computer-detail.tsx", import.meta.url).pathname,
+  ).text();
+  expect(detail).not.toContain("openOnPress");
 });

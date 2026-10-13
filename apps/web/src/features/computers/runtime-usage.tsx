@@ -1,10 +1,4 @@
-import { RefreshCw01 as RefreshCw, XClose } from "@untitledui/icons";
-import {
-  Button as AriaButton,
-  Dialog as AriaDialog,
-  DialogTrigger as AriaDialogTrigger,
-  Popover as AriaPopover,
-} from "react-aria-components";
+import { RefreshCw01 as RefreshCw } from "@untitledui/icons";
 import type { ReactNode } from "react";
 import { useHydrated } from "@tanstack/react-router";
 
@@ -15,7 +9,6 @@ import {
 import { Badge } from "#src/components/base/badges/badges";
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { HoverPopover } from "#src/components/ui/hover-popover";
 import { RelativeTime } from "#src/components/ui/relative-time";
@@ -99,7 +92,6 @@ export function RuntimeUsage({
   trigger,
   triggerClassName,
   footer,
-  openOnPress = false,
 }: {
   computerId: string;
   runtime: Runtime;
@@ -111,9 +103,6 @@ export function RuntimeUsage({
   /** Controls for this runtime under its usage (the Computer page's Public switch). With a
    * footer, a runtime that reports no usage still opens a popover, holding only the footer. */
   footer?: ReactNode;
-  /** Open on a press, with a close button, instead of peeking on hover: for a popover holding
-   * controls the pointer must reach without the popover closing under it. */
-  openOnPress?: boolean;
 }) {
   const supportsUsage = RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime.provider];
   const usage = useRuntimeUsage(computerId, runtime.provider, {
@@ -130,7 +119,7 @@ export function RuntimeUsage({
 
   if (!supportsUsage && !footer) return resolvedTrigger;
 
-  const content = (close?: () => void) => (
+  const content = () => (
     <RuntimeUsagePopoverContent
       runtime={runtime}
       showUsage={supportsUsage}
@@ -140,35 +129,12 @@ export function RuntimeUsage({
       computerOnline={computerOnline}
       timeZone={timeZone}
       onRefresh={usage.refresh}
-      onClose={close}
       footer={footer}
     />
   );
   const label = supportsUsage
     ? `${runtime.displayName} · ${m.computer_usage_title()}`
     : runtime.displayName;
-
-  if (openOnPress)
-    return (
-      <AriaDialogTrigger>
-        <AriaButton aria-label={label} className={triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME}>
-          {resolvedTrigger}
-        </AriaButton>
-        <AriaPopover
-          placement="bottom start"
-          offset={8}
-          containerPadding={12}
-          className={cn(
-            "z-50 w-80 max-w-[calc(100vw-1.5rem)] origin-(--trigger-anchor-point) overflow-hidden rounded-xl border border-secondary bg-primary text-sm text-primary shadow-lg outline-none",
-            "motion-safe:data-[entering]:animate-in motion-safe:data-[entering]:fade-in motion-safe:data-[exiting]:animate-out motion-safe:data-[exiting]:fade-out",
-          )}
-        >
-          <AriaDialog aria-label={label} className="outline-hidden">
-            {({ close }) => content(close)}
-          </AriaDialog>
-        </AriaPopover>
-      </AriaDialogTrigger>
-    );
 
   return (
     <HoverPopover
@@ -232,7 +198,6 @@ export function RuntimeUsagePopoverContent({
   computerOnline,
   timeZone = null,
   onRefresh,
-  onClose,
   footer,
 }: {
   runtime: Pick<Runtime, "provider" | "displayName" | "version">;
@@ -245,7 +210,7 @@ export function RuntimeUsagePopoverContent({
   timeZone?: string | null;
   onRefresh: () => void;
   /** Present when the popover opened on a press: draws its close button. */
-  onClose?: () => void;
+
   footer?: ReactNode;
 }) {
   const hydrated = useHydrated();
@@ -311,16 +276,6 @@ export function RuntimeUsagePopoverContent({
             isDisabled={computerOnline === false}
             className="shrink-0"
             onPress={onRefresh}
-          />
-        )}
-        {onClose && (
-          <ButtonUtility
-            size="xs"
-            color="tertiary"
-            icon={XClose}
-            aria-label={m.controls_close()}
-            className="-mr-1 shrink-0"
-            onClick={onClose}
           />
         )}
       </div>

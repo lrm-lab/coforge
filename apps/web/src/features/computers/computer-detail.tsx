@@ -554,7 +554,6 @@ export function ComputerDetail({
                           runtime={runtime}
                           computerOnline={computer.online}
                           timeZone={timeZone}
-                          openOnPress
                           triggerClassName={RUNTIME_CHIP_TRIGGER_CLASS_NAME}
                           trigger={(health) => (
                             <RuntimeChip
