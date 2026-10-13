@@ -1077,7 +1077,7 @@ test("Task claim prints each selector's outcome, and fails typed with the rows w
       ]),
     ),
   ).toStartWith(
-    "Claim results (1 claimed, 1 failed):\n#4 (msg:4abcdef0): claimed\n#5: FAILED — task is done.",
+    "Claim results (1 claimed, 1 failed):\n#4 (msg:4abcdef0-0000): claimed\n#5: FAILED — task is done.",
   );
   const refused = await run(
     ["task", "claim", "--target", "#general", "--number", "5"],
@@ -1166,12 +1166,12 @@ test("Task create sends every title and prints each new Task with its thread", a
   expect(output).toBe(
     [
       "Created 2 task(s) in @ada:",
-      '#1 [todo] assignee=unassigned claimedAt=null msg=1abcdef0 "Draft"',
-      '#2 [todo] assignee=unassigned claimedAt=null msg=2abcdef0 "Review"',
+      '#1 [todo] assignee=unassigned claimedAt=null msg=1abcdef0-0000 "Draft"',
+      '#2 [todo] assignee=unassigned claimedAt=null msg=2abcdef0-0000 "Review"',
       "",
       "To follow up in each task's thread:",
-      '#1 → coforge message send --target "@ada:1abcdef0"',
-      '#2 → coforge message send --target "@ada:2abcdef0"',
+      '#1 → coforge message send --target "@ada:1abcdef0-0000"',
+      '#2 → coforge message send --target "@ada:2abcdef0-0000"',
     ].join("\n"),
   );
 });
@@ -1288,8 +1288,8 @@ test("Task receipt forwards all seven fields through the backend contract", asyn
   expect(output).toBe(
     [
       "Resource receipt recorded for task #7 in #general.",
-      "Expiry follow-up 0f1e2d3c owned by @ada fires 2030-03-04T05:06:00.000Z.",
-      "Follow-up anchor: msg=7abcdef0 conversation=5a5a5a5a-0000-0000-0000-000000000000.",
+      "Expiry follow-up 0f1e2d3c-0000 owned by @ada fires 2030-03-04T05:06:00.000Z.",
+      "Follow-up anchor: msg=7abcdef0-0000 conversation=5a5a5a5a-0000-0000-0000-000000000000.",
     ].join("\n"),
   );
   for (const omitted of flags)
@@ -1407,7 +1407,7 @@ test("Task list prints a conversation's board and an Agent's own list", async ()
   };
   expect(await run(["task", "list", "--target", "#general"], transport)).toBe(
     "## Task Board for #general (1 tasks)\n\n" +
-      "#46 [in_progress] Half-done work → @kiro [deleted] (by @ada) msg=46abcdef rev=3 created=2026-09-23 05:00:00Z updated=2026-09-23 06:00:00Z",
+      "#46 [in_progress] Half-done work → @kiro [deleted] (by @ada) msg=46abcdef-0000 rev=3 created=2026-09-23 05:00:00Z updated=2026-09-23 06:00:00Z",
   );
   expect(await run(["task", "list", "--mine", "--status", "all"], transport)).toBe(
     [
@@ -1417,7 +1417,7 @@ test("Task list prints a conversation's board and an Agent's own list", async ()
       "Output: showing 1 of 1 visible matches · mode=complete · truncated=false",
       "",
       "### in_progress (1)",
-      "- #general task #46 [in_progress] by=@ada msg=46abcdef created=2026-09-23 05:00:00Z updated=2026-09-23 06:00:00Z Half-done work",
+      "- #general task #46 [in_progress] by=@ada msg=46abcdef-0000 created=2026-09-23 05:00:00Z updated=2026-09-23 06:00:00Z Half-done work",
     ].join("\n"),
   );
   expect(calls[1]).toMatchObject({ operation: "list", mine: true, status: "all" });
@@ -1895,7 +1895,7 @@ test("message resolve looks up one message by id and formats it like message che
   });
   expect(calls).toEqual(["abcd1234"]);
   expect(output).toBe(
-    "[target=#general msg=abcd1234 time=2026-09-07 10:00:00Z type=human] @ada: release plan",
+    "[target=#general msg=abcd1234-0000 time=2026-09-07 10:00:00Z type=human] @ada: release plan",
   );
 });
 
@@ -2478,7 +2478,7 @@ test("message check hides server ordering fields", async () => {
   });
 
   expect(output).toBe(
-    "[target=@ada msg=message- time=2026-09-03 10:00:00Z type=human] @ada: Can you investigate?\n\nNo more new messages.",
+    "[target=@ada msg=message-7 time=2026-09-03 10:00:00Z type=human] @ada: Can you investigate?\n\nNo more new messages.",
   );
 });
 
@@ -2507,7 +2507,7 @@ test("message check tells the Agent to run check again when the server reports m
   });
 
   expect(output).toBe(
-    "[target=@ada msg=message- time=2026-09-03 10:00:00Z type=human] @ada: Can you investigate?\n\nMore messages are pending. Run `coforge message check` again.",
+    "[target=@ada msg=message-7 time=2026-09-03 10:00:00Z type=human] @ada: Can you investigate?\n\nMore messages are pending. Run `coforge message check` again.",
   );
 });
 
@@ -3025,7 +3025,7 @@ test("send results hide the internal model cursor from Agent output", async () =
   });
 
   expect(output).toBe(
-    'Message sent to @ada. Message ID: message-sent (to reply in this message\'s thread, use target "@ada:message-")',
+    'Message sent to @ada. Message ID: message-sent (to reply in this message\'s thread, use target "@ada:message-sent")',
   );
   expect(output).not.toContain("seenUpToSequence");
 });
@@ -3315,7 +3315,7 @@ test("message send prints the undelivered mentions and the queued line, then fai
       "  expires: n/a",
       "  recovery: if this was a literal name or prose, wrap it in inline/fenced code; otherwise verify the exact handle and send only a corrected follow-up mention; do not resend this message.",
       "",
-      'Message queued to #triage. Message ID: message-1 (to reply in this message\'s thread, use target "#triage:message-")',
+      'Message queued to #triage. Message ID: message-1 (to reply in this message\'s thread, use target "#triage:message-1")',
     ].join("\n"),
   );
   expect(failure.suggestedNextAction).toBe(

@@ -40,10 +40,10 @@ describe("fragmentHtmlToMarkdown", () => {
     expect(fragmentHtmlToMarkdown(`<p>hey ${chip}, look</p>`)).toBe("hey @alice, look");
   });
 
-  test("a thread chip copies as the #name:<8 hex> it reads, not as a link to the app", () => {
+  test("a thread chip copies as the #name:<12 hex + dash> it reads, not as a link to the app", () => {
     const chip =
-      '<a class="message-markdown-thread-reference" href="/en/messages/channels/c?threadRootId=r" data-thread-channel-id="c" data-thread-root-id="r">#product:abcdef12</a>';
-    expect(fragmentHtmlToMarkdown(`<p>see ${chip} now</p>`)).toBe("see #product:abcdef12 now");
+      '<a class="message-markdown-thread-reference" href="/en/messages/channels/c?threadRootId=r" data-thread-channel-id="c" data-thread-root-id="r">#product:abcdef12-3456</a>';
+    expect(fragmentHtmlToMarkdown(`<p>see ${chip} now</p>`)).toBe("see #product:abcdef12-3456 now");
   });
 
   test("drops the toolbar's own UI if it ever lands inside a fragment", () => {
@@ -78,13 +78,13 @@ describe("messagePlainText", () => {
     expect(messagePlainText({ body, mentions: [] })).toBe(body);
   });
 
-  test("a thread token copies as #name:<8 hex>, under the channel's current name when listed", () => {
+  test("a thread token copies as #name:<12 hex + dash>, under the channel's current name when listed", () => {
     const body =
       "see <@thread:33333333-3333-4333-8333-333333333333:abcdef12-3456-4789-8abc-def012345678:product>";
-    expect(messagePlainText({ body })).toBe("see #product:abcdef12");
+    expect(messagePlainText({ body })).toBe("see #product:abcdef12-3456");
     expect(
       messagePlainText({ body }, new Map([["33333333-3333-4333-8333-333333333333", "launch"]])),
-    ).toBe("see #launch:abcdef12");
+    ).toBe("see #launch:abcdef12-3456");
   });
 
   test("a body without tokens copies as written, markdown marks included", () => {

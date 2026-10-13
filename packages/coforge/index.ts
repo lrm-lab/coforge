@@ -1377,7 +1377,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
         message: "Prepare action response did not include a message id",
         retryable: false,
       });
-    const shortId = result.messageId.slice(0, 8);
+    const shortId = result.messageId.slice(0, 13);
     return `Action card posted to ${invocation.target} as message ${result.messageId} (short ${shortId}). The human can click the action verb to commit.`;
   }
   if (invocation.command === "mute" || invocation.command === "unmute") {
@@ -1781,7 +1781,7 @@ function formatMessageResolve(result: unknown): string {
 }
 
 function formatReaction(messageId: string, emoji: string, remove: boolean): string {
-  const shortId = messageId.slice(0, 8);
+  const shortId = messageId.slice(0, 13);
   return `Reaction ${emoji} ${remove ? "removed from" : "added to"} message ${shortId}.`;
 }
 

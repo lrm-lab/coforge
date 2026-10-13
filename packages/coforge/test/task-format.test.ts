@@ -75,10 +75,10 @@ test("A conversation's board lists each Task with its owner, creator, receipt an
     [
       "## Task Board for #general (2 tasks)",
       "",
-      "#3 [in_progress] Fix login → @kiro [deleted] (by @ada) msg=3abcdef0 rev=4 resource-receipt=pending created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z",
+      "#3 [in_progress] Fix login → @kiro [deleted] (by @ada) msg=3abcdef0-1111 rev=4 resource-receipt=pending created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z",
       "  details: Reproduce first.",
       "           Then patch.",
-      "#4 [todo] Task 4 (by @bob [left]) msg=4abcdef0 rev=1 resource-receipt=recorded created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z",
+      "#4 [todo] Task 4 (by @bob [left]) msg=4abcdef0-1111 rev=1 resource-receipt=recorded created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z",
     ].join("\n"),
   );
 });
@@ -120,10 +120,10 @@ test("An Agent's own list groups its Tasks by status and states the coverage it 
       "Output: showing 3 of 3 visible matches · mode=complete · truncated=false",
       "",
       "### todo (1)",
-      "- @ada task #2 [todo] by=@kiro creator=deleted msg=2abcdef0 resource-receipt=pending created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Task 2",
+      "- @ada task #2 [todo] by=@kiro creator=deleted msg=2abcdef0-1111 resource-receipt=pending created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Task 2",
       "### in_progress (2)",
-      "- #general task #7 [in_progress] by=@ada msg=7abcdef0 created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Ship the fix",
-      "- #ops task #9 [in_progress] by=@bob creator=left msg=9abcdef0 created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Task 9",
+      "- #general task #7 [in_progress] by=@ada msg=7abcdef0-1111 created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Ship the fix",
+      "- #ops task #9 [in_progress] by=@bob creator=left msg=9abcdef0-1111 created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Task 9",
     ].join("\n"),
   );
 });
@@ -178,15 +178,15 @@ test("A create receipt lists each new Task, the assignment receipt and each thre
   expect(text).toBe(
     [
       "Created 2 task(s) in #general:",
-      '#42 [in_progress] assignee=@kiro claimedAt=2026-09-23T05:00:01.000Z msg=42abcdef resource-receipt=pending "Ship it"',
-      '#43 [todo] assignee=unassigned claimedAt=null msg=43abcdef "Review it"',
+      '#42 [in_progress] assignee=@kiro claimedAt=2026-09-23T05:00:01.000Z msg=42abcdef0-111 resource-receipt=pending "Ship it"',
+      '#43 [todo] assignee=unassigned claimedAt=null msg=43abcdef0-111 "Review it"',
       "",
-      "Assignment receipt (msg=9abcdef0):",
+      "Assignment receipt (msg=9abcdef0-1111):",
       '📌 Assigned @kiro to task #42 "Ship it"',
       "",
       "To follow up in each task's thread:",
-      '#42 → coforge message send --target "#general:42abcdef"',
-      '#43 → coforge message send --target "#general:43abcdef"',
+      '#42 → coforge message send --target "#general:42abcdef0-111"',
+      '#43 → coforge message send --target "#general:43abcdef0-111"',
     ].join("\n"),
   );
 });
@@ -197,9 +197,9 @@ test("A duplicate create reports the existing Task instead of inviting duplicate
   ).toBe(
     [
       "Existing task found in #general; no duplicate was created:",
-      '#8 [todo] assignee=unassigned claimedAt=null msg=8abcdef0 "Fix login"',
+      '#8 [todo] assignee=unassigned claimedAt=null msg=8abcdef0-1111 "Fix login"',
       "Claim or coordinate in this task's thread before starting work:",
-      '#8 → coforge message send --target "#general:8abcdef0"',
+      '#8 → coforge message send --target "#general:8abcdef0-1111"',
     ].join("\n"),
   );
 });
@@ -207,15 +207,15 @@ test("A duplicate create reports the existing Task instead of inviting duplicate
 test("A converted message names its new Task and the thread to follow up in", () => {
   expect(formatTaskConverted("@ada", task(5, { title: "Fix login" }))).toBe(
     [
-      'Converted msg=5abcdef0 to task #5 [todo] assignee=unassigned "Fix login"',
+      'Converted msg=5abcdef0-1111 to task #5 [todo] assignee=unassigned "Fix login"',
       "",
       "To follow up in the task's thread:",
-      'coforge message send --target "@ada:5abcdef0"',
+      'coforge message send --target "@ada:5abcdef0-1111"',
     ].join("\n"),
   );
   expect(
     formatTaskConverted("#general", task(6, { owner: person("bob"), status: "in_progress" })),
-  ).toStartWith('Converted msg=6abcdef0 to task #6 [in_progress] assignee=@bob "Task 6"');
+  ).toStartWith('Converted msg=6abcdef0-1111 to task #6 [in_progress] assignee=@bob "Task 6"');
 });
 
 test("Single-Task writes confirm what the server now holds", () => {
@@ -271,8 +271,8 @@ test("A resource receipt names the expiry follow-up and where it is anchored", (
   ).toBe(
     [
       "Resource receipt recorded for task #7 in #general.",
-      "Expiry follow-up 0f1e2d3c owned by @kiro fires 2030-03-04T05:06:00.000Z.",
-      "Follow-up anchor: msg=7abcdef0 conversation=5a5a5a5a-1111-2222-3333-444444444444.",
+      "Expiry follow-up 0f1e2d3c-1111 owned by @kiro fires 2030-03-04T05:06:00.000Z.",
+      "Follow-up anchor: msg=7abcdef0-1111 conversation=5a5a5a5a-1111-2222-3333-444444444444.",
     ].join("\n"),
   );
 });
@@ -300,7 +300,7 @@ test("Claim results mark each selector claimed or refused, and name the holder o
   expect(formatClaimResults("#general", result)).toBe(
     [
       "Claim results (1 claimed, 2 failed):",
-      "#42 (msg:42abcdef): claimed",
+      "#42 (msg:42abcdef0-111): claimed",
       "#43: Claim failed — @kiro currently holds the implementation lock (assignment state as of 2026-09-23T06:00:00.000Z).",
       "  Blocked: starting conflicting implementation/change work.",
       "  Not blocked by this claim conflict (each still subject to its own authority/policy): reply in the task's thread · read the task's history.",
@@ -308,7 +308,7 @@ test("Claim results mark each selector claimed or refused, and name the holder o
       "msg:abcd1234: FAILED — message not found. Do not start conflicting execution on this task or take over its scope without a redirect; a failed claim is a concurrency lock, not a ruling on lane ownership.",
       "",
       "Follow up in each task's thread:",
-      '#42 → coforge message send --target "#general:42abcdef"',
+      '#42 → coforge message send --target "#general:42abcdef0-111"',
     ].join("\n"),
   );
   expect(claimRefusal("#general", result)).toBeUndefined();

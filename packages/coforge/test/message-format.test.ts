@@ -34,14 +34,14 @@ test("formatUtcTimestamp renders ISO input as UTC YYYY-MM-DD HH:MM:SSZ", () => {
 test("a message the Agent was notified of from outside the channel reads whole and says it cannot reply there", () => {
   const long = "x".repeat(250);
   expect(formatMessageLine(message({ body: long, nonMemberMention: true }))).toBe(
-    `[target=#general msg=aaaaaaaa time=2026-09-07 10:00:00Z type=human] @ada: ${long}\n` +
+    `[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: ${long}\n` +
       "[CoForge notice: You were notified as a non-member, so you cannot reply in that channel. If no reply is needed, no action is required. Otherwise, DM the person who mentioned you or join the channel to participate.]",
   );
 });
 
 test("formatMessageLine renders the shared bracket line with attachment and task suffixes", () => {
   expect(formatMessageLine(message())).toBe(
-    "[target=#general msg=aaaaaaaa time=2026-09-07 10:00:00Z type=human] @ada: hello there",
+    "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there",
   );
 
   const withOneAttachment = message({
@@ -55,7 +55,7 @@ test("formatMessageLine renders the shared bracket line with attachment and task
     ],
   });
   expect(formatMessageLine(withOneAttachment)).toBe(
-    "[target=#general msg=aaaaaaaa time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
+    "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
       " [1 attachment: log.txt (id:aaaa1111-0000-4000-8000-000000000001) —" +
       " use `coforge attachment view --id <attachmentId> --output <path>` to download]",
   );
@@ -77,7 +77,7 @@ test("formatMessageLine renders the shared bracket line with attachment and task
     ],
   });
   expect(formatMessageLine(withTwoAttachments)).toBe(
-    "[target=#general msg=aaaaaaaa time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
+    "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
       " [2 attachments: spec.md (id:aaaa1111-0000-4000-8000-000000000001)," +
       " diagram.png (id:bbbb2222-0000-4000-8000-000000000002) —" +
       " use `coforge attachment view --id <attachmentId> --output <path>` to download]",
@@ -87,7 +87,7 @@ test("formatMessageLine renders the shared bracket line with attachment and task
     task: { number: 12, status: "in_progress", owner: { displayName: "Ada", handle: "ada" } },
   });
   expect(formatMessageLine(withTask)).toBe(
-    "[target=#general msg=aaaaaaaa time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
+    "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
       " [task #12 status=in_progress owner=@ada]",
   );
 
@@ -99,13 +99,13 @@ test("formatMessageLine renders the shared bracket line with attachment and task
     },
   });
   expect(formatMessageLine(withDeletedOwner)).toBe(
-    "[target=#general msg=aaaaaaaa time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
+    "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
       " [task #46 status=in_progress owner=@kiro [deleted]]",
   );
 
   const withTaskNoOwner = message({ task: { number: 3, status: "todo" } });
   expect(formatMessageLine(withTaskNoOwner)).toBe(
-    "[target=#general msg=aaaaaaaa time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
+    "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
       " [task #3 status=todo]",
   );
 });
@@ -147,7 +147,7 @@ test("formatMessageLine renders an Agent sender with its description and a syste
     body: "deploy finished, all green",
   });
   expect(formatMessageLine(fromAgent)).toBe(
-    "[target=#general msg=aaaaaaaa time=2026-09-07 10:00:00Z type=agent] @scout — release bot: deploy finished, all green",
+    "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=agent] @scout — release bot: deploy finished, all green",
   );
 
   const fromAgentNoDescription = message({
@@ -156,7 +156,7 @@ test("formatMessageLine renders an Agent sender with its description and a syste
     senderDescription: "",
   });
   expect(formatMessageLine(fromAgentNoDescription)).toBe(
-    "[target=#general msg=aaaaaaaa time=2026-09-07 10:00:00Z type=agent] @scout: hello there",
+    "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=agent] @scout: hello there",
   );
 
   const fromSystem = message({
@@ -166,7 +166,7 @@ test("formatMessageLine renders an Agent sender with its description and a syste
     body: '📌 Assigned @scout to task #12 "Fix the login bug"',
   });
   expect(formatMessageLine(fromSystem)).toBe(
-    '[target=#general msg=aaaaaaaa time=2026-09-07 10:00:00Z type=system] system: 📌 Assigned @scout to task #12 "Fix the login bug"',
+    '[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=system] system: 📌 Assigned @scout to task #12 "Fix the login bug"',
   );
 });
 
@@ -180,15 +180,15 @@ test("formatReadWindow reports older/newer availability and includes an around l
   );
   const lines = output.split("\n");
   expect(lines[0]).toBe(
-    'Read window: 2 returned, oldest to newest. Older exist: coforge message read --target "#general" --before 11111111. Newer exist: coforge message read --target "#general" --after 22222222.',
+    'Read window: 2 returned, oldest to newest. Older exist: coforge message read --target "#general" --before 11111111-0000. Newer exist: coforge message read --target "#general" --after 22222222-0000.',
   );
   expect(lines[1]).toBe("Around: 22222222.");
   expect(lines[2]).toBe("");
   expect(lines[3]).toBe(
-    "[1/2 msg=11111111-0000-4000-8000-000000000001 time=2026-09-07 10:00:00Z type=human replyTarget=#general:11111111] @ada: first",
+    "[1/2 msg=11111111-0000-4000-8000-000000000001 time=2026-09-07 10:00:00Z type=human replyTarget=#general:11111111-0000] @ada: first",
   );
   expect(lines[4]).toBe(
-    "[2/2 msg=22222222-0000-4000-8000-000000000002 time=2026-09-07 10:00:00Z type=human replyTarget=#general:22222222] @ada: second",
+    "[2/2 msg=22222222-0000-4000-8000-000000000002 time=2026-09-07 10:00:00Z type=human replyTarget=#general:22222222-0000] @ada: second",
   );
   expect(lines.at(-2)).toBe("");
   expect(lines.at(-1)).toBe("End of window: 2/2 shown.");
@@ -297,7 +297,7 @@ test("formatSearchResults reports no results plainly", () => {
 
 test("formatSendSuccess adds a reply-thread hint only for a non-thread target", () => {
   expect(formatSendSuccess("@ada", { messageId: "aaaaaaaa-0000-4000-8000-000000000001" })).toBe(
-    'Message sent to @ada. Message ID: aaaaaaaa-0000-4000-8000-000000000001 (to reply in this message\'s thread, use target "@ada:aaaaaaaa")',
+    'Message sent to @ada. Message ID: aaaaaaaa-0000-4000-8000-000000000001 (to reply in this message\'s thread, use target "@ada:aaaaaaaa-0000")',
   );
   expect(
     formatSendSuccess("@ada:11111111", { messageId: "aaaaaaaa-0000-4000-8000-000000000001" }),

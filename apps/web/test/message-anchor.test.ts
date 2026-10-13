@@ -30,7 +30,7 @@ test("anything else is refused rather than widened into a range", () => {
     "a",
     "abc",
     "abcde",
-    "abcdef123",
+    "abcdef1234567",
     "abcdefgh",
     "not-a-uuid",
     `${ROOT}0`,

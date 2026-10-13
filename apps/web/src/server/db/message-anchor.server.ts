@@ -1,8 +1,12 @@
 import { UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 
-/** What an anchor may be: six to eight hex characters, or a whole UUID, in any case. */
-const MESSAGE_ANCHOR = new RegExp(`^(?:[0-9a-f]{6,8}|${UUID_LIKE_SOURCE})$`, "i");
+/** What an anchor may be: six to twelve hex characters (the twelve-hex display form carries the
+ * first dash: `xxxxxxxx-xxxx`), or a whole UUID, in any case. */
+const MESSAGE_ANCHOR = new RegExp(
+  `^(?:[0-9a-f]{6,12}|[0-9a-f]{8}-[0-9a-f]{4}|${UUID_LIKE_SOURCE})$`,
+  "i",
+);
 
 /**
  * How a Message is addressed by a short anchor. `Message.id` is a native `uuid` column, so a
@@ -10,19 +14,31 @@ const MESSAGE_ANCHOR = new RegExp(`^(?:[0-9a-f]{6,8}|${UUID_LIKE_SOURCE})$`, "i"
  * `LIKE`/`ILIKE` pattern) does not apply to a `uuid`. The only form that works is the id **range**
  * a hex prefix names, so every lookup by anchor shares this one.
  *
- * An anchor is a whole UUID, which is the id itself, or a prefix of six to eight hex characters.
- * Agent targets and reminder ids take eight; a thread reference written in a message takes six to
- * eight. Anything else is refused here (`INVALID_INPUT`) rather than widened into a range, so a
- * caller that forgets to check its own grammar can never resolve a message by a shorter prefix.
+ * An anchor is a whole UUID, which is the id itself, or a prefix of six to twelve hex characters.
+ * Since ids are UUIDv7 (#127), the first twelve hex characters are the millisecond timestamp, so
+ * an eight-character anchor (the old display width, still accepted) repeats for every id minted
+ * within the same ~65 seconds; twelve covers the full timestamp (the same truncation the pi
+ * project moved to after hitting the identical collision, earendil-works/pi#6242). Same-millisecond
+ * ids can still share twelve characters; the "at most one match" rule keeps such a rare anchor
+ * refusing loudly instead of guessing. Agent targets and reminder ids take twelve; a thread
+ * reference written in a message takes six to twelve. Anything else is refused here
+ * (`INVALID_INPUT`) rather than widened into a range, so a caller that forgets to check its own
+ * grammar can never resolve a message by a shorter prefix.
  */
 export function messageAnchorWhere(anchor: string): string | { gte: string; lte: string } {
   if (!MESSAGE_ANCHOR.test(anchor)) throw new AppError("INVALID_INPUT");
-  const hex = anchor.toLowerCase();
-  if (hex.length > 8) return hex;
-  const pad = 8 - hex.length;
+  const lower = anchor.toLowerCase();
+  if (lower.length > 12) return lower;
+  // The hex prefix, dashes dropped (the twelve-hex display form carries the first dash). Padded
+  // with `0` / `f` to 32 hex characters and then dashed into uuid shape: for a prefix longer than
+  // the first group this must re-insert the dashes, so plain concatenation would not produce a
+  // comparable uuid literal. The id column's index still applies.
+  const hex = lower.replace(/-/g, "");
+  const dashed = (hex32: string) =>
+    `${hex32.slice(0, 8)}-${hex32.slice(8, 12)}-${hex32.slice(12, 16)}-${hex32.slice(16, 20)}-${hex32.slice(20)}`;
   return {
-    gte: `${hex}${"0".repeat(pad)}-0000-0000-0000-000000000000`,
-    lte: `${hex}${"f".repeat(pad)}-ffff-ffff-ffff-ffffffffffff`,
+    gte: dashed(`${hex}${"0".repeat(32 - hex.length)}`),
+    lte: dashed(`${hex}${"f".repeat(32 - hex.length)}`),
   };
 }
 

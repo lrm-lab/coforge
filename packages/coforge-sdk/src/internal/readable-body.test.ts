@@ -17,11 +17,11 @@ test("every stored token reads back as the text a person writes", () => {
   expect(readableBody(body, { mention })).toBe("@ada see task #7 in #product");
 });
 
-test("a thread reference reads back as #name:<8 hex>, under the channel's current name when known", () => {
+test("a thread reference reads back as #name:<12 hex + dash>, under the channel's current name when known", () => {
   const body = `reply in ${threadReferenceToken(PRODUCT, ROOT, "product")}`;
-  expect(readableBody(body, { mention })).toBe("reply in #product:abcdef12");
+  expect(readableBody(body, { mention })).toBe("reply in #product:abcdef12-3456");
   expect(readableBody(body, { mention, channelName: () => "launch" })).toBe(
-    "reply in #launch:abcdef12",
+    "reply in #launch:abcdef12-3456",
   );
 });
 

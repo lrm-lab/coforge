@@ -13,8 +13,9 @@ import { formatUtcTimestamp } from "#src/message-format";
 /** The status filter a `task list` was given; `undefined` when none was passed. */
 export type TaskListStatus = TaskStatus | "all" | undefined;
 
+/** The same short form as message-format's `shortId`: first twelve hex characters with the dash. */
 function shortId(id: string): string {
-  return id.slice(0, 8);
+  return id.slice(0, 13);
 }
 
 /** Why a named member no longer acts in the conversation, if they do not. */
