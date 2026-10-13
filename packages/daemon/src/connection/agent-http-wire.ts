@@ -163,6 +163,34 @@ export async function getAgentJson<Result>(
   return readAgentResponseJson<Result>(response, input.what, input.validate);
 }
 
+/** `getAgentJson`'s counterpart for a route that takes a JSON body: same error contract, same
+ * optional shape `validate` and deadline. */
+export async function sendAgentJson<Result>(
+  fetcher: HttpFetch,
+  input: Omit<AgentHttpInput<never>, "request"> & {
+    method: "POST" | "DELETE";
+    body: unknown;
+    what: string;
+    validate?: (data: unknown) => string | undefined;
+    /** A deadline for the whole request; none when omitted. */
+    timeoutMs?: number;
+  },
+): Promise<Result> {
+  const response = await fetchAgentResponse(
+    fetcher,
+    input.url,
+    {
+      method: input.method,
+      headers: agentHeaders(input, true),
+      ...(input.timeoutMs !== undefined ? { signal: AbortSignal.timeout(input.timeoutMs) } : {}),
+      body: JSON.stringify(input.body),
+    },
+    input.what,
+  );
+  await assertAgentResponseOk(response, input.what);
+  return readAgentResponseJson<Result>(response, input.what, input.validate);
+}
+
 /**
  * GETs an Agent Manual route, whose JSON error body is always `{ ok: false, errorCode, error }`,
  * unlike the plain-text/allowlisted `messages` error contract `getAgentJson` assumes. A
