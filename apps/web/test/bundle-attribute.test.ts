@@ -151,6 +151,14 @@ test("pickChunk refuses an ambiguous name, and takes a full file name as the way
   expect(pickChunk(files, "vendor-initial.js", sizeOf)).toBe("/a/vendor-initial.js");
 });
 
+test("pickChunk prefers an exact file name over an ambiguous match, however big the other is", () => {
+  const files = ["/a/vendor-react.js", "/a/vendor-react.js.legacy.js"];
+  const sizeOf = (file: string) => (file.includes("legacy") ? 900 : 100);
+  // Both names contain `vendor-react.js`, so that name alone is ambiguous. The exact file wins,
+  // and it wins before the size ranking - the other chunk here is nine times larger.
+  expect(pickChunk(files, "vendor-react.js", sizeOf)).toBe("/a/vendor-react.js");
+});
+
 test("formatAttribution shows the share, the bytes and where the list was cut", () => {
   const summary = summarizeChunk("c.js", 200, {
     characters: 10,
