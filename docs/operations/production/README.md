@@ -11,8 +11,8 @@ over the VPC, so the Compose project defines no database or cache containers.
 
 ## What runs where
 
-- **Public entry:** Caddy on 443 only, trusted HTTPS for `coforge.cn`. Port 80
-  is intentionally unreachable: no plaintext, not even redirects.
+- **Public entry:** Caddy, trusted HTTPS for `coforge.cn` on 443 with HSTS.
+  Port 80 serves only the permanent redirect to the same URL over HTTPS.
 - **Loopback diagnostics:** web `127.0.0.1:18080`, Centrifugo `127.0.0.1:18000`.
 - **Web and Centrifugo:** containers in the `coforge` network, pinned by digest.
   Centrifugo's Redis engine is the managed Redis instance.
@@ -54,8 +54,9 @@ and Server-Timing.
    and passes each value to Compose, which creates the container's copy owned by
    the image's own user (the rootless daemon would show a bind-mounted 600 file
    as root-owned, unreadable to Web's and Centrifugo's non-root users).
-5. Point DNS for `coforge.cn` at the ECS public address. TLS uses an ACME
-   certificate over 443 (TLS-ALPN); there is no HTTP-01 path by design.
+5. Point DNS for `coforge.cn` at the ECS public address, and open inbound TCP
+   80 and 443 in its security group. TLS uses an ACME certificate; port 80
+   exists for the HTTPS redirect.
 6. Back up the secrets directory to the `coforge` 1Password vault (item
    "CoForge production host secrets"). Losing
    `coforge_agent_credential_encryption_key` makes stored Agent credentials
@@ -107,7 +108,7 @@ the `production` Environment to approve, then ships the Compose assets, logs
 the host in to GHCR with the run's short-lived token, runs
 `scripts/deploy/remote-deploy.sh --project coforge-production`, logs out, and
 checks `https://coforge.cn/health`, the WebSocket endpoint, and that port 80
-stays closed. The script validates the Compose file, the Centrifugo config,
+redirects to HTTPS and HTTPS sends HSTS. The script validates the Compose file, the Centrifugo config,
 and the Caddyfile with their pinned images before recreating anything, runs
 the Prisma migration, and rolls back to the last healthy release on failure.
 

@@ -170,12 +170,8 @@ jobs:
       - name: Verify public readiness
         run: curl --fail --silent --show-error --max-time 10 https://coforge.cn/health >/dev/null
 
-      - name: Verify port 80 stays unreachable
-        run: |
-          if curl --silent --max-time 10 "http://coforge.cn/" >/dev/null 2>&1; then
-            echo "port 80 answered; public plaintext must stay unreachable" >&2
-            exit 1
-          fi
+      - name: Verify HTTP redirects to HTTPS and HTTPS sends HSTS
+        run: bash scripts/deploy/check-https-entry.sh coforge.cn
 
       - name: Check realtime endpoint responds
         env:

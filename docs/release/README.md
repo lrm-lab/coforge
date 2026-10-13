@@ -36,9 +36,11 @@ implements this contract without duplicating it.
   a routine application release must not rewrite shared Caddy configuration.
   An approved Caddyfile change reaches staging through the same deploy
   pipeline, validated with `caddy validate` and covered by snapshot rollback.
-- Do not expose public plaintext HTTP for CoForge, including redirect-only
-  listeners. The staging deployment verifies that port 80 is unreachable while
-  trusted HTTPS/WSS on 443 remains healthy.
+- Serve no content over plaintext HTTP. Port 80 answers only with Caddy's
+  permanent redirect to the same URL over HTTPS, and every HTTPS response
+  carries `Strict-Transport-Security` (`includeSubDomains`, so every
+  `*.coforge.cn` host must serve HTTPS). Each deployment runs
+  `scripts/deploy/check-https-entry.sh` against its host to verify both.
 
 The `staging` name does not weaken security. Login, token, attachment, and WSS
 traffic still require valid HTTPS, least-privilege credentials, secret

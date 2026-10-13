@@ -32,6 +32,7 @@ services:
       # Caddyfile change recreates this container (admin is off: no reload).
       COFORGE_CADDYFILE_SHA256: ${COFORGE_CADDYFILE_SHA256:?deploy script writes .env}
     ports:
+      - "80:80"
       - "443:443"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro

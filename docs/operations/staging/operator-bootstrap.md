@@ -73,9 +73,9 @@
    the GitHub Environment secret to the new 主KEY, then clear 备KEY only after
    waiting at least 1800 seconds so no URL signed under the old key is still
    outstanding. Never paste the key into chat.
-7. Create the DNS record `staging.coforge.cn` → the ECS public address. TLS
-   uses an ACME certificate over 443 (TLS-ALPN); there is no HTTP-01 path by
-   design.
+7. Create the DNS record `staging.coforge.cn` → the ECS public address, and
+   open inbound TCP 80 and 443 in its security group. TLS uses an ACME
+   certificate; port 80 exists for the HTTPS redirect.
 8. Run the first bootstrap deployment by hand to provision PostgreSQL and
    Redis volumes and apply Prisma migrations:
    ```

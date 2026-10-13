@@ -1,11 +1,16 @@
-# Caddy owns the only public entry: trusted HTTPS on 443.
-# Port 80 is intentionally unreachable: no plaintext, not even redirects.
+# Caddy owns the only public entry: trusted HTTPS on 443. Port 80 serves
+# nothing but Caddy's automatic redirect to the same URL over HTTPS.
 {
 	admin off
-	auto_https disable_redirects
 }
 
 coforge.cn {
+	# HSTS rides only on HTTPS responses; the port-80 redirect is a separate
+	# server and never carries it. max-age ramps toward HSTS preload
+	# (https://hstspreload.org/#deployment-recommendations): 300, then
+	# 604800, then 2592000, waiting out each stage before the next.
+	header Strict-Transport-Security "max-age=300; includeSubDomains"
+
 	# Realtime transport stays standalone Centrifugo; everything else is the
 	# web application. Route order: explicit realtime prefixes first.
 	@realtime path /connection/*
