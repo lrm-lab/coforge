@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createAgentApiKey,
+  type AgentApiKeyMintInput,
   type AgentApiKeyRecord,
   type AgentApiKeyRepository,
 } from "#src/server/agents/agent-api-key.server";
@@ -9,8 +10,9 @@ import { authenticateAgentMessageRequest } from "#src/server/agents/agent-api-ht
 
 class MemoryAgentApiKeys implements AgentApiKeyRepository {
   record?: AgentApiKeyRecord;
-  async replaceActive(record: AgentApiKeyRecord) {
-    this.record = record;
+  async replaceActive(record: AgentApiKeyMintInput) {
+    // Emulate the Prisma client generating the uuid(7) default at create time.
+    this.record = { id: crypto.randomUUID(), ...record };
   }
   async findByHash(hash: string) {
     return this.record?.apiKeyHash === hash ? this.record : undefined;
