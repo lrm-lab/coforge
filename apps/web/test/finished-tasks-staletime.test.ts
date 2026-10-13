@@ -1,4 +1,5 @@
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
+import { mockModuleForFile } from "./helpers/file-module-mock";
 import { QueryClient } from "@tanstack/react-query";
 
 import {
@@ -10,7 +11,7 @@ import {
 let summaryReads = 0;
 let pageReads = 0;
 
-mock.module("#src/features/tasks/tasks.functions", () => ({
+await mockModuleForFile("#src/features/tasks/tasks.functions", () => ({
   loadFinishedTaskSummary: async () => {
     summaryReads += 1;
     return { groups: [] };

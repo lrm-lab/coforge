@@ -6,29 +6,21 @@ import {
   unsubscribeCurrentBrowserPush,
 } from "#src/features/notifications/browser-push";
 
-const originalNavigator = globalThis.navigator;
-const originalNotification = globalThis.Notification;
-const originalPushManager = globalThis.PushManager;
-const originalWindow = globalThis.window;
+// The tests replace these globals with `defineProperty({ configurable, value })`, which leaves
+// them non-writable. Restoring them the same way used to leave `window` read-only (and present)
+// for every later test file, so a later `Object.assign(globalThis, { window })` threw. Each
+// global's own descriptor, or its absence, is put back exactly.
+const STUBBED_GLOBALS = ["navigator", "Notification", "PushManager", "window"] as const;
+const originalDescriptors = new Map(
+  STUBBED_GLOBALS.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]),
+);
 
 afterEach(() => {
   jest.useRealTimers();
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: originalNavigator,
-  });
-  Object.defineProperty(globalThis, "Notification", {
-    configurable: true,
-    value: originalNotification,
-  });
-  Object.defineProperty(globalThis, "PushManager", {
-    configurable: true,
-    value: originalPushManager,
-  });
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: originalWindow,
-  });
+  for (const [name, descriptor] of originalDescriptors) {
+    if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+    else delete (globalThis as Record<string, unknown>)[name];
+  }
 });
 
 test("shows installation help only in iPhone and iPad Safari outside standalone mode", () => {

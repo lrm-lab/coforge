@@ -1,4 +1,5 @@
-import { beforeEach, expect, mock, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
+import { mockModuleForFile } from "./helpers/file-module-mock";
 import { isRedirect } from "@tanstack/react-router";
 
 // Where `/welcome` sends a person: on when they have a display name, back to sign-in when their
@@ -10,7 +11,7 @@ type NameStep =
   | { status: "account_gone" };
 let step: NameStep = { status: "ask", prefill: "", slugPrefill: "" };
 
-mock.module("#src/features/auth/first-sign-in.functions", () => ({
+await mockModuleForFile("#src/features/auth/first-sign-in.functions", () => ({
   getNameStep: async () => step,
   submitDisplayName: async () => ({ ok: true }),
   checkWorkspaceSlug: async () => ({ available: true }),
