@@ -55,6 +55,37 @@ export function dmPeerNotInWorkspaceResponse(error: unknown, target: string) {
 }
 
 /**
+ * The conversation an attachment upload belongs to, or the refusal to send instead. The
+ * attachment belongs to the conversation, not a message, so any `:thread` suffix is dropped
+ * rather than resolved, and uploading never depends on a thread anchor already existing. Shared
+ * by the multipart upload and upload-session routes.
+ */
+export async function resolveAttachmentConversation(
+  resolveTarget: (
+    workspaceId: string,
+    agentId: string,
+    target: string,
+  ) => Promise<{ conversationId: string }>,
+  principal: { workspaceId: string; agentId: string },
+  target: string,
+): Promise<{ conversationId: string } | Response> {
+  const parentTarget = target.split(":")[0]!;
+  try {
+    const { conversationId } = await resolveTarget(
+      principal.workspaceId,
+      principal.agentId,
+      parentTarget,
+    );
+    return { conversationId };
+  } catch (error) {
+    return (
+      dmPeerNotInWorkspaceResponse(error, parentTarget) ??
+      targetNotAccessibleResponse(targetResolutionStatus(error))
+    );
+  }
+}
+
+/**
  * The answer to an Agent posting a message or an action card to a target it cannot reach: a
  * person who left (`DM_PEER_NOT_IN_WORKSPACE`), or an unknown username and someone outside the
  * Workspace, which read alike (`target is not accessible`). Undefined for any other error.

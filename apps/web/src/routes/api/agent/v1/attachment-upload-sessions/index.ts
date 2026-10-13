@@ -9,11 +9,7 @@ import {
 } from "#src/server/attachments/attachment-upload-session.server";
 import { getFileStorage } from "#src/server/files/file-storage.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import {
-  dmPeerNotInWorkspaceResponse,
-  targetNotAccessibleResponse,
-  targetResolutionStatus,
-} from "#src/server/agents/agent-target-status.server";
+import { resolveAttachmentConversation } from "#src/server/agents/agent-target-status.server";
 
 const UUID_PATTERN = UUID_LIKE_PATTERN;
 
@@ -79,22 +75,13 @@ export async function handleAttachmentUploadSessionCreate(
   if (typeof idempotencyKey !== "string" || !UUID_PATTERN.test(idempotencyKey))
     return errorResponse("UPLOAD_INVALID_REQUEST", "idempotencyKey must be a UUID", 400, false);
 
-  // The attachment belongs to the conversation, not a message; strip any `:root` thread suffix
-  // rather than resolving it, exactly as the multipart upload route already does.
-  const parentTarget = target.split(":")[0]!;
-  let conversationId: string;
-  try {
-    const resolved = await dependencies.resolveTarget(
-      principal.workspaceId,
-      principal.agentId,
-      parentTarget,
-    );
-    conversationId = resolved.conversationId;
-  } catch (error) {
-    const refused = dmPeerNotInWorkspaceResponse(error, parentTarget);
-    if (refused) return refused;
-    return targetNotAccessibleResponse(targetResolutionStatus(error));
-  }
+  const resolved = await resolveAttachmentConversation(
+    dependencies.resolveTarget,
+    principal,
+    target,
+  );
+  if (resolved instanceof Response) return resolved;
+  const { conversationId } = resolved;
 
   try {
     const session = await dependencies.create({

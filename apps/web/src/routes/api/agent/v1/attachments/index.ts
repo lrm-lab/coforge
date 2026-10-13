@@ -5,11 +5,7 @@ import { storeAgentAttachment } from "#src/server/attachments/attachment.server"
 import { isFile } from "#src/server/attachments/upload-file.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { isAppErrorCode } from "#src/lib/app-error";
-import {
-  dmPeerNotInWorkspaceResponse,
-  targetNotAccessibleResponse,
-  targetResolutionStatus,
-} from "#src/server/agents/agent-target-status.server";
+import { resolveAttachmentConversation } from "#src/server/agents/agent-target-status.server";
 
 export type AgentAttachmentUploadPrincipal = { workspaceId: string; agentId: string };
 
@@ -51,22 +47,13 @@ export async function handleAgentAttachmentUpload(
   if (mimeTypeField && !MIME_TYPE_PATTERN.test(mimeTypeField))
     return Response.json({ error: "mimeType is invalid" }, { status: 400 });
 
-  // The attachment belongs to the conversation, not a message; strip any `:root` thread suffix
-  // rather than resolving it, so uploading never depends on a thread anchor already existing.
-  const parentTarget = target.split(":")[0]!;
-  let conversationId: string;
-  try {
-    const resolved = await dependencies.resolveTarget(
-      principal.workspaceId,
-      principal.agentId,
-      parentTarget,
-    );
-    conversationId = resolved.conversationId;
-  } catch (error) {
-    const refused = dmPeerNotInWorkspaceResponse(error, parentTarget);
-    if (refused) return refused;
-    return targetNotAccessibleResponse(targetResolutionStatus(error));
-  }
+  const resolved = await resolveAttachmentConversation(
+    dependencies.resolveTarget,
+    principal,
+    target,
+  );
+  if (resolved instanceof Response) return resolved;
+  const { conversationId } = resolved;
 
   const contentType = mimeTypeField || file.type || "application/octet-stream";
   try {
