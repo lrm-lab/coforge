@@ -3,6 +3,7 @@ import { redisUrlFor } from "#src/server/redis-url.server";
 import {
   decodeAgentSkillsListResult,
   encodeAgentSkillsListResult,
+  type AgentSkillsListRequest,
   type AgentSkillsListResult,
 } from "@lrm/coforge-sdk/internal";
 import {
@@ -11,45 +12,19 @@ import {
   type PendingSkills,
 } from "#src/server/agents/agent-skills.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
+import { RedisPendingResults } from "./redis-pending-results.server";
 
-// Compare the entire pending value atomically: expiry/cancellation cannot race
-// the result write. First valid result wins; duplicates do not extend its TTL.
-const ACCEPT = `if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
-return redis.call('SET', KEYS[2], ARGV[2], 'EX', 30, 'NX') and 1 or 0`;
-
-export class RedisAgentSkillsResults implements AgentSkillsResults {
-  constructor(private readonly redis: Pick<RedisClient, "get" | "set" | "send">) {}
-  private keys(id: string) {
-    return [`coforge:agent-skills:v1:${id}:pending`, `coforge:agent-skills:v1:${id}:result`];
-  }
-  async begin(pending: PendingSkills) {
-    await this.redis.set(
-      this.keys(pending.request.requestId)[0]!,
-      JSON.stringify(pending),
-      "EX",
-      "30",
-    );
-  }
-  async read(requestId: string) {
-    const value = await this.redis.get(this.keys(requestId)[1]!);
-    return value ? decodeAgentSkillsListResult(Buffer.from(value, "base64")) : undefined;
-  }
-  async clear(requestId: string) {
-    await this.redis.send("DEL", this.keys(requestId));
-  }
-  async accept(result: AgentSkillsListResult) {
-    const keys = this.keys(result.requestId);
-    const value = await this.redis.get(keys[0]!);
-    if (!value) return;
-    const pending = JSON.parse(value) as PendingSkills;
-    if (!sameSkillsScope(pending.request, result)) return;
-    await this.redis.send("EVAL", [
-      ACCEPT,
-      "2",
-      ...keys,
-      value,
-      Buffer.from(encodeAgentSkillsListResult(result)).toString("base64"),
-    ]);
+export class RedisAgentSkillsResults
+  extends RedisPendingResults<AgentSkillsListRequest, AgentSkillsListResult, PendingSkills>
+  implements AgentSkillsResults
+{
+  constructor(redis: Pick<RedisClient, "get" | "set" | "send">) {
+    super(redis, {
+      prefix: "coforge:agent-skills:v1",
+      encode: encodeAgentSkillsListResult,
+      decode: decodeAgentSkillsListResult,
+      sameScope: sameSkillsScope,
+    });
   }
 }
 

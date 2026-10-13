@@ -7,8 +7,11 @@ import {
   encodeAgentWorkspaceFileReadResult,
   encodeAgentWorkspaceFilesListResult,
   encodeAgentWorkspaceDeleteResult,
+  type AgentWorkspaceFileReadRequest,
   type AgentWorkspaceFileReadResult,
+  type AgentWorkspaceFilesListRequest,
   type AgentWorkspaceFilesListResult,
+  type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceDeleteResult,
 } from "@lrm/coforge-sdk/internal";
 import {
@@ -23,119 +26,62 @@ import {
   type PendingWorkspaceDelete,
 } from "#src/server/agents/agent-workspace-files.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
-
-// Same atomic-accept shape as Skills: compare the entire pending value so expiry/cancellation
-// cannot race the result write, and the first valid result wins.
-const ACCEPT = `if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
-return redis.call('SET', KEYS[2], ARGV[2], 'EX', 30, 'NX') and 1 or 0`;
+import { RedisPendingResults } from "./redis-pending-results.server";
 
 const PREFIX = "coforge:agent-workspace-files:v1";
+type ResultsRedis = Pick<RedisClient, "get" | "set" | "send">;
 
-export class RedisAgentWorkspaceFilesListResults implements AgentWorkspaceFilesListResults {
-  constructor(private readonly redis: Pick<RedisClient, "get" | "set" | "send">) {}
-  private keys(id: string) {
-    return [`${PREFIX}:list:${id}:pending`, `${PREFIX}:list:${id}:result`];
-  }
-  async begin(pending: PendingWorkspaceFilesList) {
-    await this.redis.set(
-      this.keys(pending.request.requestId)[0]!,
-      JSON.stringify(pending),
-      "EX",
-      "30",
-    );
-  }
-  async read(requestId: string) {
-    const value = await this.redis.get(this.keys(requestId)[1]!);
-    return value ? decodeAgentWorkspaceFilesListResult(Buffer.from(value, "base64")) : undefined;
-  }
-  async clear(requestId: string) {
-    await this.redis.send("DEL", this.keys(requestId));
-  }
-  async accept(result: AgentWorkspaceFilesListResult) {
-    const keys = this.keys(result.requestId);
-    const value = await this.redis.get(keys[0]!);
-    if (!value) return;
-    const pending = JSON.parse(value) as PendingWorkspaceFilesList;
-    if (!sameWorkspaceFilesListScope(pending.request, result)) return;
-    await this.redis.send("EVAL", [
-      ACCEPT,
-      "2",
-      ...keys,
-      value,
-      Buffer.from(encodeAgentWorkspaceFilesListResult(result)).toString("base64"),
-    ]);
+export class RedisAgentWorkspaceFilesListResults
+  extends RedisPendingResults<
+    AgentWorkspaceFilesListRequest,
+    AgentWorkspaceFilesListResult,
+    PendingWorkspaceFilesList
+  >
+  implements AgentWorkspaceFilesListResults
+{
+  constructor(redis: ResultsRedis) {
+    super(redis, {
+      prefix: `${PREFIX}:list`,
+      encode: encodeAgentWorkspaceFilesListResult,
+      decode: decodeAgentWorkspaceFilesListResult,
+      sameScope: sameWorkspaceFilesListScope,
+    });
   }
 }
 
-export class RedisAgentWorkspaceFileReadResults implements AgentWorkspaceFileReadResults {
-  constructor(private readonly redis: Pick<RedisClient, "get" | "set" | "send">) {}
-  private keys(id: string) {
-    return [`${PREFIX}:read:${id}:pending`, `${PREFIX}:read:${id}:result`];
-  }
-  async begin(pending: PendingWorkspaceFileRead) {
-    await this.redis.set(
-      this.keys(pending.request.requestId)[0]!,
-      JSON.stringify(pending),
-      "EX",
-      "30",
-    );
-  }
-  async read(requestId: string) {
-    const value = await this.redis.get(this.keys(requestId)[1]!);
-    return value ? decodeAgentWorkspaceFileReadResult(Buffer.from(value, "base64")) : undefined;
-  }
-  async clear(requestId: string) {
-    await this.redis.send("DEL", this.keys(requestId));
-  }
-  async accept(result: AgentWorkspaceFileReadResult) {
-    const keys = this.keys(result.requestId);
-    const value = await this.redis.get(keys[0]!);
-    if (!value) return;
-    const pending = JSON.parse(value) as PendingWorkspaceFileRead;
-    if (!sameWorkspaceFileReadScope(pending.request, result)) return;
-    await this.redis.send("EVAL", [
-      ACCEPT,
-      "2",
-      ...keys,
-      value,
-      Buffer.from(encodeAgentWorkspaceFileReadResult(result)).toString("base64"),
-    ]);
+export class RedisAgentWorkspaceFileReadResults
+  extends RedisPendingResults<
+    AgentWorkspaceFileReadRequest,
+    AgentWorkspaceFileReadResult,
+    PendingWorkspaceFileRead
+  >
+  implements AgentWorkspaceFileReadResults
+{
+  constructor(redis: ResultsRedis) {
+    super(redis, {
+      prefix: `${PREFIX}:read`,
+      encode: encodeAgentWorkspaceFileReadResult,
+      decode: decodeAgentWorkspaceFileReadResult,
+      sameScope: sameWorkspaceFileReadScope,
+    });
   }
 }
 
-export class RedisAgentWorkspaceDeleteResults implements AgentWorkspaceDeleteResults {
-  constructor(private readonly redis: Pick<RedisClient, "get" | "set" | "send">) {}
-  private keys(id: string) {
-    return [`${PREFIX}:delete:${id}:pending`, `${PREFIX}:delete:${id}:result`];
-  }
-  async begin(pending: PendingWorkspaceDelete) {
-    await this.redis.set(
-      this.keys(pending.request.requestId)[0]!,
-      JSON.stringify(pending),
-      "EX",
-      "30",
-    );
-  }
-  async read(requestId: string) {
-    const value = await this.redis.get(this.keys(requestId)[1]!);
-    return value ? decodeAgentWorkspaceDeleteResult(Buffer.from(value, "base64")) : undefined;
-  }
-  async clear(requestId: string) {
-    await this.redis.send("DEL", this.keys(requestId));
-  }
-  async accept(result: AgentWorkspaceDeleteResult) {
-    const keys = this.keys(result.requestId);
-    const value = await this.redis.get(keys[0]!);
-    if (!value) return;
-    const pending = JSON.parse(value) as PendingWorkspaceDelete;
-    if (!sameWorkspaceDeleteScope(pending.request, result)) return;
-    await this.redis.send("EVAL", [
-      ACCEPT,
-      "2",
-      ...keys,
-      value,
-      Buffer.from(encodeAgentWorkspaceDeleteResult(result)).toString("base64"),
-    ]);
+export class RedisAgentWorkspaceDeleteResults
+  extends RedisPendingResults<
+    AgentWorkspaceDeleteRequest,
+    AgentWorkspaceDeleteResult,
+    PendingWorkspaceDelete
+  >
+  implements AgentWorkspaceDeleteResults
+{
+  constructor(redis: ResultsRedis) {
+    super(redis, {
+      prefix: `${PREFIX}:delete`,
+      encode: encodeAgentWorkspaceDeleteResult,
+      decode: decodeAgentWorkspaceDeleteResult,
+      sameScope: sameWorkspaceDeleteScope,
+    });
   }
 }
 
