@@ -11,6 +11,7 @@ import {
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { CREATED_AGENT_FACES, MEMBER_PAGE_MAX } from "#src/features/workspaces/member-directory";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
+import { paginated } from "#src/server/db/pagination.server";
 
 export type AgentOwnerFilter = "all" | "mine";
 
@@ -70,58 +71,59 @@ export class WorkspaceMembers {
     const { visibleAgents } = await this.viewer(workspaceId, userId);
     const query = input.query.trim();
     const limit = clampPageLimit(input.limit, MEMBER_PAGE_MAX);
-    const agents = await this.db.agent.findMany({
-      where: {
-        AND: [
-          visibleAgents,
-          input.owner === "mine" ? { ownerId: userId } : {},
-          query
-            ? {
-                OR: [
-                  { name: contains(query) },
-                  { displayName: contains(query) },
-                  {
-                    computer: {
-                      workspaces: { some: { workspaceId } },
-                      OR: [{ name: contains(query) }, { displayName: contains(query) }],
+    const [agents, meta] = await paginated(this.db)
+      .agent.paginate({
+        where: {
+          AND: [
+            visibleAgents,
+            input.owner === "mine" ? { ownerId: userId } : {},
+            query
+              ? {
+                  OR: [
+                    { name: contains(query) },
+                    { displayName: contains(query) },
+                    {
+                      computer: {
+                        workspaces: { some: { workspaceId } },
+                        OR: [{ name: contains(query) }, { displayName: contains(query) }],
+                      },
                     },
-                  },
-                ],
-              }
-            : {},
-        ],
-      },
-      select: {
-        id: true,
-        name: true,
-        displayName: true,
-        description: true,
-        avatarObjectKey: true,
-        createdAt: true,
-        owner: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarObjectKey: true,
+                  ],
+                }
+              : {},
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          displayName: true,
+          description: true,
+          avatarObjectKey: true,
+          createdAt: true,
+          owner: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarObjectKey: true,
+            },
+          },
+          weeklyReportAssistant: { select: { id: true } },
+          computer: {
+            select: {
+              id: true,
+              name: true,
+              displayName: true,
+              workspaces: { where: { workspaceId }, select: { id: true }, take: 1 },
+            },
           },
         },
-        weeklyReportAssistant: { select: { id: true } },
-        computer: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            workspaces: { where: { workspaceId }, select: { id: true }, take: 1 },
-          },
-        },
-      },
-      orderBy: [{ name: "asc" }, { id: "asc" }],
-      ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
-      take: limit + 1,
-    });
-    return pageOf(
-      agents.map((agent) => ({
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+      })
+      // An empty cursor is the first page, as before (`after: ""` would be parsed as an id).
+      .withCursor({ limit, after: input.cursor || undefined });
+    return {
+      items: agents.map((agent) => ({
         id: agent.id,
         name: agent.name,
         displayName: agent.displayName.trim() || agent.name,
@@ -145,8 +147,8 @@ export class WorkspaceMembers {
         // directory never offers a Delete that is certain to fail.
         deletable: !agent.weeklyReportAssistant,
       })),
-      limit,
-    );
+      nextCursor: meta.hasNextPage ? meta.endCursor : null,
+    };
   }
 
   /**

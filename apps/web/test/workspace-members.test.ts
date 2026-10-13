@@ -2,15 +2,16 @@ import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { WorkspaceMembers } from "#src/server/workspaces/members.server";
+import { withFakePagination } from "./helpers/fake-paginated";
 
 describe("WorkspaceMembers", () => {
   test("denies a User who is not a member before reading the directory", async () => {
     let directoryRead = false;
-    const db = {
+    const db = withFakePagination({
       workspaceMembership: { findUnique: async () => null },
       user: { findMany: async () => ((directoryRead = true), []) },
       agent: { findMany: async () => ((directoryRead = true), []) },
-    } as unknown as PrismaClient;
+    }) as unknown as PrismaClient;
 
     await expect(
       new WorkspaceMembers(db).agentPage("workspace-1", "outsider", {
@@ -24,7 +25,7 @@ describe("WorkspaceMembers", () => {
 
   test("returns all humans and Agents in the Workspace with only public directory fields", async () => {
     const queries: { membership?: object; people?: object; agents?: object } = {};
-    const db = {
+    const db = withFakePagination({
       workspaceMembership: {
         findUnique: async (query: object) => {
           queries.membership = query;
@@ -94,7 +95,7 @@ describe("WorkspaceMembers", () => {
           ];
         },
       },
-    } as unknown as PrismaClient;
+    }) as unknown as PrismaClient;
 
     const members = new WorkspaceMembers(db);
     const [people, agents] = await Promise.all([
@@ -191,7 +192,7 @@ describe("WorkspaceMembers", () => {
 
   test("hides a private Agent owned by someone else from a plain member's directory", async () => {
     let agentQuery: object | undefined;
-    const db = {
+    const db = withFakePagination({
       workspaceMembership: {
         findUnique: async () => ({ userId: "viewer", role: "member" }),
       },
@@ -202,7 +203,7 @@ describe("WorkspaceMembers", () => {
           return [];
         },
       },
-    } as unknown as PrismaClient;
+    }) as unknown as PrismaClient;
 
     await new WorkspaceMembers(db).agentPage("workspace-1", "viewer", {
       owner: "all",
@@ -220,7 +221,7 @@ describe("WorkspaceMembers", () => {
 
   test("an owner/admin's directory query has nothing to hide", async () => {
     let agentQuery: object | undefined;
-    const db = {
+    const db = withFakePagination({
       workspaceMembership: {
         findUnique: async () => ({ userId: "viewer", role: "admin" }),
       },
@@ -231,7 +232,7 @@ describe("WorkspaceMembers", () => {
           return [];
         },
       },
-    } as unknown as PrismaClient;
+    }) as unknown as PrismaClient;
 
     await new WorkspaceMembers(db).agentPage("workspace-1", "viewer", {
       owner: "all",
