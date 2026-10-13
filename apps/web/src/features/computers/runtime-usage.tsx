@@ -6,6 +6,7 @@ import {
   Popover as AriaPopover,
 } from "react-aria-components";
 import type { ReactNode } from "react";
+import { useHydrated } from "@tanstack/react-router";
 
 import {
   RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN,
@@ -246,6 +247,7 @@ export function RuntimeUsagePopoverContent({
   onClose?: () => void;
   footer?: ReactNode;
 }) {
+  const hydrated = useHydrated();
   const snapshot = data?.result?.snapshot;
   const badge = data?.result ? usageBadge(data.result) : undefined;
   const reason =
@@ -284,7 +286,8 @@ export function RuntimeUsagePopoverContent({
           <h2 className="truncate font-semibold text-primary">{runtime.displayName}</h2>
           <p className="truncate text-xs text-tertiary">
             {runtime.version}
-            {showUsage && data?.result && (
+            {/* RelativeTime is blank until hydration; the separator waits with it. */}
+            {hydrated && showUsage && data?.result && (
               <>
                 {runtime.version ? " · " : ""}
                 <RelativeTime value={data.result.collectedAt} timeZone={timeZone} />
@@ -380,6 +383,7 @@ function UsageWindow({
   // The header line is label + a short value + reset, kept on one line: a credit plan's amounts
   // ("7,517.29 / 10,000 credits used") would squeeze the label onto two lines in the popover, so
   // they move under the bar and the header shows the percentage, like a session window (task #109).
+  const hydrated = useHydrated();
   const value =
     window.usedPercent !== undefined
       ? formatPercent(window.usedPercent)
@@ -397,7 +401,7 @@ function UsageWindow({
         <p className="min-w-0 truncate font-medium text-secondary">{label}</p>
         <p className="shrink-0 text-tertiary tabular-nums">
           <span className="font-medium text-primary">{value}</span>
-          {window.resetsAt !== undefined && (
+          {hydrated && window.resetsAt !== undefined && (
             <>
               {" · "}
               <RelativeTime value={window.resetsAt} timeZone={timeZone} />
