@@ -85,8 +85,8 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
       size="sm"
       noTextPadding
       onPress={() => onOpen(rootId)}
-      // Design spec: 8px above and below the content, 16px on each side.
-      className="mt-1.5 block h-auto w-full rounded-lg bg-secondary px-4 py-2 text-left font-normal hover:bg-secondary_hover"
+      // Design spec: 8px above the content, 16px below it and on each side.
+      className="mt-1.5 block h-auto w-full rounded-lg bg-secondary px-4 pt-2 pb-4 text-left font-normal hover:bg-secondary_hover"
       data-thread-preview=""
     >
       {/* The reply count reads in the spec's text grey; only the viewer's unread count (and the
