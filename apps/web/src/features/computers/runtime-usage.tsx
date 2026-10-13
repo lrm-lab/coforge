@@ -1,5 +1,11 @@
-import { RefreshCw01 as RefreshCw } from "@untitledui/icons";
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { RefreshCw01 as RefreshCw, XClose } from "@untitledui/icons";
+import {
+  Button as AriaButton,
+  Dialog as AriaDialog,
+  DialogTrigger as AriaDialogTrigger,
+  Popover as AriaPopover,
+} from "react-aria-components";
+import type { ReactNode } from "react";
 
 import {
   RUNTIME_PROVIDER,
@@ -8,6 +14,8 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { HoverPopover } from "#src/components/ui/hover-popover";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { cn } from "#src/lib/utils";
@@ -87,6 +95,8 @@ export function RuntimeUsage({
   timeZone = null,
   trigger,
   triggerClassName,
+  footer,
+  openOnPress = false,
 }: {
   computerId: string;
   runtime: Runtime;
@@ -95,17 +105,18 @@ export function RuntimeUsage({
   timeZone?: string | null;
   trigger?: (health: UsageHealth | undefined) => ReactNode;
   triggerClassName?: string;
+  /** Controls for this runtime under its usage (the Computer page's Public switch). With a
+   * footer, a runtime that reports no usage still opens a popover, holding only the footer. */
+  footer?: ReactNode;
+  /** Open on a press, with a close button, instead of peeking on hover: for a popover holding
+   * controls the pointer must reach without the popover closing under it. */
+  openOnPress?: boolean;
 }) {
   const supportsUsage = RUNTIME_PROVIDER_USES_EXTERNAL_CLI[runtime.provider];
   const usage = useRuntimeUsage(computerId, runtime.provider, {
     enabled: supportsUsage,
     computerOnline,
   });
-  const [openCount, setOpenCount] = useState(0);
-  const refreshButtonWrapRef = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (openCount > 0) refreshButtonWrapRef.current?.querySelector("button")?.focus();
-  }, [openCount]);
 
   const health = usageHealth(usage.data);
   const resolvedTrigger = trigger ? (
@@ -114,27 +125,57 @@ export function RuntimeUsage({
     <RuntimeIdentity runtime={runtime} health={health} />
   );
 
-  if (!supportsUsage) return resolvedTrigger;
+  if (!supportsUsage && !footer) return resolvedTrigger;
+
+  const content = (close?: () => void) => (
+    <RuntimeUsagePopoverContent
+      runtime={runtime}
+      showUsage={supportsUsage}
+      data={usage.data}
+      scanning={usage.scanning}
+      scanFailed={usage.scanFailed}
+      computerOnline={computerOnline}
+      timeZone={timeZone}
+      onRefresh={usage.refresh}
+      onClose={close}
+      footer={footer}
+    />
+  );
+  const label = supportsUsage
+    ? `${runtime.displayName} · ${m.computer_usage_title()}`
+    : runtime.displayName;
+
+  if (openOnPress)
+    return (
+      <AriaDialogTrigger>
+        <AriaButton aria-label={label} className={triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME}>
+          {resolvedTrigger}
+        </AriaButton>
+        <AriaPopover
+          placement="bottom start"
+          offset={8}
+          containerPadding={12}
+          className={cn(
+            "z-50 w-80 max-w-[calc(100vw-1.5rem)] origin-(--trigger-anchor-point) overflow-hidden rounded-xl border border-secondary bg-primary text-sm text-primary shadow-lg outline-none",
+            "motion-safe:data-[entering]:animate-in motion-safe:data-[entering]:fade-in motion-safe:data-[exiting]:animate-out motion-safe:data-[exiting]:fade-out",
+          )}
+        >
+          <AriaDialog aria-label={label} className="outline-hidden">
+            {({ close }) => content(close)}
+          </AriaDialog>
+        </AriaPopover>
+      </AriaDialogTrigger>
+    );
 
   return (
     <HoverPopover
-      label={`${runtime.displayName} · ${m.computer_usage_title()}`}
+      label={label}
       trigger={resolvedTrigger}
       triggerClassName={triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME}
-      className="p-4 text-sm"
+      className="text-sm"
       working={usage.scanning}
-      onOpen={() => setOpenCount((count) => count + 1)}
     >
-      <RuntimeUsagePopoverContent
-        runtime={runtime}
-        data={usage.data}
-        scanning={usage.scanning}
-        scanFailed={usage.scanFailed}
-        computerOnline={computerOnline}
-        timeZone={timeZone}
-        onRefresh={usage.refresh}
-        refreshButtonWrapRef={refreshButtonWrapRef}
-      />
+      {content()}
     </HoverPopover>
   );
 }
@@ -154,7 +195,8 @@ function usageBadge(
   if (result.status === "unavailable")
     return { color: "error", label: m.computer_usage_badge_unavailable() };
   if (result.status === "error") return { color: "error", label: m.computer_usage_badge_error() };
-  if (result.status !== "available") return undefined;
+  if (result.status === "unsupported")
+    return { color: "warning", label: m.computer_usage_badge_unsupported() };
   const rateLimited =
     result.snapshot?.health === "rate_limited" ||
     result.snapshot?.primary?.status === "limit_reached" ||
@@ -164,146 +206,155 @@ function usageBadge(
     : { color: "success", label: m.computer_usage_badge_ok() };
 }
 
-function footerStatusText(
-  data: UsageReadResult | undefined,
-  scanning: boolean,
-  computerOnline: boolean | undefined,
-  scanFailed: boolean,
-): string | undefined {
-  if (scanning) return m.computer_usage_scanning();
-  if (computerOnline === false) return m.computer_usage_offline();
-  if (scanFailed) return m.computer_usage_no_response();
-  return usageFailureDescription(data?.result?.status);
-}
-
 function usageFailureDescription(status: UsageResultRecord["status"] | undefined) {
   if (status === "reauth") return m.computer_usage_reauth();
   if (status === "unavailable") return m.computer_usage_unavailable_description();
   if (status === "error") return m.computer_usage_error();
+  if (status === "unsupported") return m.computer_usage_status_unsupported();
   return undefined;
 }
 
 /**
  * The popover's pure body: everything `RuntimeUsage` fetches, rendered without touching a query
- * client itself, so a test can render it directly with a plain `data` fixture (see
- * `agent-profile-tab.test.tsx`/the Computer detail tests) instead of standing up React Query.
+ * client itself, so a test can render it directly with a plain `data` fixture. Three bands split
+ * by full-width rules: the runtime (version, freshness, Refresh), its account (status, reason,
+ * usage windows), and the caller's `footer`.
  */
 export function RuntimeUsagePopoverContent({
   runtime,
+  showUsage = true,
   data,
   scanning,
   scanFailed = false,
   computerOnline,
   timeZone = null,
   onRefresh,
-  refreshButtonWrapRef,
+  onClose,
+  footer,
 }: {
   runtime: Pick<Runtime, "provider" | "displayName" | "version">;
+  /** False for a runtime that reports no usage: only the runtime band and the footer show. */
+  showUsage?: boolean;
   data?: UsageReadResult;
   scanning: boolean;
   scanFailed?: boolean;
   computerOnline?: boolean;
   timeZone?: string | null;
   onRefresh: () => void;
-  refreshButtonWrapRef?: RefObject<HTMLSpanElement | null>;
+  /** Present when the popover opened on a press: draws its close button. */
+  onClose?: () => void;
+  footer?: ReactNode;
 }) {
   const snapshot = data?.result?.snapshot;
   const badge = data?.result ? usageBadge(data.result) : undefined;
-  const reading = !data || (data.state === "missing" && (scanning || data.pendingScanId));
-  const status = footerStatusText(data, scanning, computerOnline, scanFailed);
+  const reason =
+    computerOnline === false
+      ? m.computer_usage_offline()
+      : scanFailed
+        ? m.computer_usage_no_response()
+        : usageFailureDescription(data?.result?.status);
+  const reading =
+    !reason && (!data || (data.state === "missing" && (scanning || data.pendingScanId)));
+  const account = [snapshot?.planType && formatPlan(snapshot.planType), snapshot?.accountLabel]
+    .filter(Boolean)
+    .join(" · ");
+  const windows = snapshot
+    ? (["primary", "secondary"] as const).flatMap((key) => {
+        const window = snapshot[key];
+        return window ? [{ key, window }] : [];
+      })
+    : [];
 
   return (
-    <div>
-      <div className="border-b border-secondary pb-3">
-        <h2 className="min-w-0 font-medium text-primary">
-          {runtime.displayName} · {m.computer_usage_title()}
-        </h2>
-        {runtime.version && (
-          <p className="mt-0.5 text-xs text-tertiary">
-            {m.computer_runtime_version({ version: runtime.version })}
-          </p>
+    <div className="divide-y divide-secondary">
+      <div className="flex items-start gap-3 px-4 py-3">
+        <RuntimeProviderMark provider={runtime.provider} className="mt-0.5 size-6 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate font-semibold text-primary">{runtime.displayName}</h2>
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <p className="truncate text-xs text-tertiary">
+              {runtime.version}
+              {showUsage && data?.result && (
+                <>
+                  {runtime.version ? " · " : ""}
+                  <RelativeTime value={data.result.collectedAt} timeZone={timeZone} />
+                </>
+              )}
+            </p>
+            {showUsage && (
+              <Button
+                size="xs"
+                color="link-gray"
+                iconLeading={RefreshCw}
+                isLoading={scanning}
+                showTextWhileLoading
+                isDisabled={scanning || computerOnline === false}
+                className="shrink-0"
+                onPress={onRefresh}
+              >
+                {scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh()}
+              </Button>
+            )}
+          </div>
+        </div>
+        {onClose && (
+          <ButtonUtility
+            size="xs"
+            color="tertiary"
+            icon={XClose}
+            aria-label={m.controls_close()}
+            className="-mt-1 -mr-1 shrink-0"
+            onClick={onClose}
+          />
         )}
-        <p className="mt-0.5 text-xs text-tertiary">{m.computer_usage_visibility()}</p>
       </div>
 
-      {reading ? (
-        <p className="mt-3 text-tertiary">{m.computer_usage_reading()}</p>
-      ) : (
-        <>
-          {data?.state === "stale" && (
-            <p className="mt-3 text-xs text-warning-primary">
-              {scanning ? m.computer_usage_stale_refreshing() : m.computer_usage_stale()}
-            </p>
-          )}
-          {snapshot && (
-            <div className="mt-3 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                {snapshot.planType && (
-                  <p className="font-medium text-primary">
-                    {m.computer_usage_plan_name({ plan: formatPlan(snapshot.planType) })}
-                  </p>
-                )}
-                {snapshot.accountLabel && (
-                  <p className="mt-0.5 truncate text-xs text-tertiary">{snapshot.accountLabel}</p>
-                )}
-              </div>
-              {badge && (
-                <Badge color={badge.color} size="sm">
-                  {badge.label}
-                </Badge>
+      {showUsage && (
+        <section className="px-4 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="font-medium text-primary">{m.computer_usage_account()}</h3>
+              {account && <p className="mt-0.5 truncate text-xs text-tertiary">{account}</p>}
+            </div>
+            {badge && (
+              <Badge color={badge.color} size="sm" className="shrink-0">
+                {badge.label}
+              </Badge>
+            )}
+          </div>
+          {reading ? (
+            <div aria-label={m.computer_usage_reading()} className="mt-3 space-y-3">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+          ) : (
+            <>
+              {reason && <p className="mt-2 text-sm text-tertiary">{reason}</p>}
+              {windows.length > 0 && (
+                <div className="mt-3 space-y-3">
+                  {windows.map(({ key, window }) => (
+                    <UsageWindow
+                      key={key}
+                      label={
+                        key === "primary"
+                          ? runtime.provider === RUNTIME_PROVIDER.KIRO
+                            ? m.computer_usage_monthly_credits()
+                            : m.computer_usage_session()
+                          : m.computer_usage_weekly()
+                      }
+                      window={window}
+                      creditUsage={key === "primary" ? snapshot?.creditUsage : undefined}
+                      timeZone={timeZone}
+                    />
+                  ))}
+                </div>
               )}
-            </div>
+            </>
           )}
-          {snapshot && (
-            <div className="mt-3 divide-y divide-secondary">
-              {(["primary", "secondary"] as const).map((key) => {
-                const window = snapshot[key];
-                if (!window) return null;
-                return (
-                  <UsageWindow
-                    key={key}
-                    label={
-                      key === "primary"
-                        ? runtime.provider === RUNTIME_PROVIDER.KIRO
-                          ? m.computer_usage_monthly_credits()
-                          : m.computer_usage_session()
-                        : m.computer_usage_weekly()
-                    }
-                    window={window}
-                    creditUsage={key === "primary" ? snapshot.creditUsage : undefined}
-                    timeZone={timeZone}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </>
+        </section>
       )}
 
-      <div className="mt-3 flex items-center justify-between gap-3 border-t border-secondary pt-3">
-        <div className="min-w-0 text-xs text-tertiary">
-          {data?.result && (
-            <p>
-              {m.computer_usage_updated()}{" "}
-              <RelativeTime value={data.result.collectedAt} timeZone={timeZone} />
-            </p>
-          )}
-          {status && <p className={data?.result ? "mt-1" : undefined}>{status}</p>}
-        </div>
-        <span ref={refreshButtonWrapRef} className="shrink-0">
-          <Button
-            type="button"
-            color="secondary"
-            size="sm"
-            onPress={onRefresh}
-            isDisabled={scanning || computerOnline === false}
-            isLoading={scanning}
-            iconLeading={RefreshCw}
-          >
-            {m.computer_usage_refresh()}
-          </Button>
-        </span>
-      </div>
+      {footer && <div className="px-4 py-3">{footer}</div>}
     </div>
   );
 }
@@ -319,35 +370,30 @@ function UsageWindow({
   creditUsage?: NonNullable<UsageResultRecord["snapshot"]>["creditUsage"];
   timeZone: string | null;
 }) {
-  const value =
-    window.usedPercent === undefined
+  const value = creditUsage
+    ? m.computer_usage_credit_amounts({ used: creditUsage.used, limit: creditUsage.limit })
+    : window.usedPercent === undefined
       ? window.status === "parse_unavailable"
         ? m.computer_usage_badge_unavailable()
         : window.status === "limit_reached"
           ? m.computer_usage_limit_reached()
           : m.computer_usage_available()
-      : m.computer_usage_used_percent({ percent: window.usedPercent });
+      : `${window.usedPercent}%`;
 
   return (
-    <div className="py-2 first:pt-0 last:pb-0">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="font-medium text-primary">{label}</p>
-        <p className="shrink-0 text-xs text-tertiary tabular-nums">
-          {value}
+    <div>
+      <div className="flex items-baseline justify-between gap-3 text-xs">
+        <p className="font-medium text-secondary">{label}</p>
+        <p className="shrink-0 text-tertiary tabular-nums">
+          <span className="font-medium text-primary">{value}</span>
           {window.resetsAt !== undefined && (
             <>
               {" · "}
-              {m.computer_usage_resets()}{" "}
               <RelativeTime value={window.resetsAt} timeZone={timeZone} />
             </>
           )}
         </p>
       </div>
-      {creditUsage && (
-        <p className="mt-1 text-xs tabular-nums text-tertiary">
-          {m.computer_usage_credit_amounts({ used: creditUsage.used, limit: creditUsage.limit })}
-        </p>
-      )}
       {window.usedPercent !== undefined && (
         <div
           role="progressbar"
@@ -355,12 +401,12 @@ function UsageWindow({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={window.usedPercent}
-          className="mt-2 h-1 overflow-hidden rounded-full bg-secondary"
+          className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-quaternary"
         >
           <div
             className={cn(
               "h-full rounded-full",
-              window.status === "limit_reached" ? "bg-warning-solid" : "bg-fg-tertiary",
+              window.status === "limit_reached" ? "bg-warning-solid" : "bg-brand-solid",
             )}
             style={{
               width: `${Math.min(100, Math.max(0, window.usedPercent))}%`,
@@ -369,7 +415,7 @@ function UsageWindow({
         </div>
       )}
       {creditUsage && creditUsage.overage > 0 && (
-        <p className="mt-2 text-xs tabular-nums text-tertiary">
+        <p className="mt-1 text-xs tabular-nums text-tertiary">
           {m.computer_usage_credit_overage({ overage: creditUsage.overage })}
         </p>
       )}
@@ -377,7 +423,6 @@ function UsageWindow({
   );
 }
 
-/** The provider's own plan name, which CoForge shows as the provider wrote it. */
 function formatPlan(plan: string) {
   return plan ? `${plan[0]!.toUpperCase()}${plan.slice(1)}` : plan;
 }
