@@ -41,6 +41,9 @@ export interface TurnScope {
  * error) belongs to that turn alone, so a new turn gets a new reader. */
 export interface TurnReader {
   read(record: TurnRecord): void;
+  /** Called after the process and its output end, before `completed`, while the turn still owns
+   * its event scope. A reader may clear an episode whose native terminal frame never arrived. */
+  end?(): void;
   /** Whether the turn reported an error of its own, which fails it even after a clean exit. */
   readonly failed: boolean;
   /** Asked once the process has exited: whether this turn resumed a session the provider no longer

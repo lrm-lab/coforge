@@ -470,7 +470,7 @@ export async function discoverCodeAgentCatalogs(
     const executable = probe.which(externalCodeAgentExecutable[RUNTIME_PROVIDER.GROK], searchPath);
     if (executable)
       discoveries.push(
-        discoverGrokCatalog(commands.grok ?? [executable, "models"], cwd, environment)
+        discoverGrokCatalog(commands.grok ?? [executable], cwd, environment)
           .catch(() => undefined)
           .then((catalog) => ({
             provider: RUNTIME_PROVIDER.GROK,

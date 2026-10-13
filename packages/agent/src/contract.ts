@@ -121,8 +121,8 @@ export type AgentRuntimeEvent =
   // agent-runtime/runtime-progress.ts.
   | { type: "compaction-started"; occurredAt?: string }
   | { type: "compaction-finished"; occurredAt?: string }
-  // Only providers that can observe an aborted compaction report this (currently Pi/CoForge's
-  // `compaction_end` with `aborted: true`); a provider with no such signal never emits it.
+  // Only providers that can observe an aborted compaction report this; a provider with no such
+  // signal never emits it.
   | { type: "compaction-interrupted"; occurredAt?: string }
   // Content-free "the provider is alive" signal (e.g. a partial stream frame with no
   // renderable text, or a turn/message lifecycle notification that carries no content).

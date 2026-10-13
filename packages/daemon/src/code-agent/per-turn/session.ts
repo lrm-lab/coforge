@@ -256,6 +256,9 @@ class PerTurnAgentSession implements AgentSession {
    * summary and the recent stderr lines, so the failure explains itself. */
   #onTurnExit(turn: ActiveTurn, result: TurnResult): void {
     if (this.#currentTurn !== turn) return;
+    turn.reader.end?.();
+    // A listener of a reader's final event may dispose the session synchronously.
+    if (this.#currentTurn !== turn) return;
     this.#currentTurn = undefined;
     const interrupted = this.#state === "interrupting";
     if (turn.reader.lostResume?.({ ...result, interrupted })) {

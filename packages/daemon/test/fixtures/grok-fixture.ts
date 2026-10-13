@@ -205,6 +205,27 @@ if (mode === "thinking") {
   endTurn();
   process.exit(0);
 }
+// Captured from Grok 1.0.52 after a file-read tool pushed a small model past its threshold.
+if (mode === "compaction") {
+  announceCommands();
+  write({ type: "auto_compact_started", percentage: 76 });
+  write({ type: "auto_compact_completed" });
+  write({ type: "text", data: "answer after compaction" });
+  endResponse();
+  endTurn();
+  process.exit(0);
+}
+// Native terminal variants from the upstream streaming-json reducer: a cancelled or failed
+// compaction is not a successful compact_boundary, and need not fail the whole turn.
+if (mode === "compaction-cancelled" || mode === "compaction-failed") {
+  write({ type: "auto_compact_started", percentage: 76 });
+  if (mode === "compaction-failed")
+    write({ type: "auto_compact_failed", error: "Compaction failed: summary model unavailable" });
+  else write({ type: "auto_compact_cancelled" });
+  write({ type: "text", data: "continued after aborted compaction" });
+  endTurn();
+  process.exit(0);
+}
 // A turn whose `end` carries the stop reason in `COFORGE_GROK_STOP_REASON`.
 if (mode === "end-reason") {
   announceCommands();

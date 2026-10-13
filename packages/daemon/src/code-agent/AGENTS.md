@@ -109,7 +109,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   `provider.ts`, which keeps discovery, catalog, usage, and the version gate. Never add a session copy.
 - Composition, not inheritance: a difference is a `TurnProtocol` field or a `TurnReader` hook. Each
   one (`instructionsTurn`, `resumedIdentity`, `repeatedSessionId`, `identityReports`,
-  `mintSessionId`, `sanitizeEnvironment`, `lostResume`) records an observed CLI difference. Check the real CLI before adding
+  `mintSessionId`, `sanitizeEnvironment`, `lostResume`, reader `end`) records an observed CLI difference. Check the real CLI before adding
   one or making two providers agree; the fixtures do not prove a binary.
 - The session never parses provider output. A reader emits through the `TurnScope`, synchronously,
   so events keep the CLI's order. A turn's stdin mode is a CLI fact: `eof` where the CLI waits for
@@ -141,33 +141,32 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Grok Build (`grok`)
 
-- One headless process per turn: `grok -p <prompt> --output-format streaming-json`. The prompt rides
-  argv and the standing instructions ride `--rules` on every turn, so a fresh session spawns
-  nothing until real input arrives. The CLI's guide ships with it in `~/.grok/docs/user-guide/`.
-- The session id is ours: a UUID pinned with `--session-id`, which creates a new session and refuses
-  an id that exists. Clear that flag when a turn is spawned with it, never when it exits: grok
-  creates the session before the turn can fail. Every later turn is `--resume`. A session the
-  daemon asks to `create` is pinned; a `resume` grok has no session for is re-run as a fresh session
-  under a new id and reported with `onSessionId(new, replaced)`.
-- Every turn passes `--trust`. Headless startup loads project skills and instructions only from a
-  trusted folder (`22-permissions-and-safety.md`), and assigned skills are installed in
-  `<Agent workspace>/.grok/skills`. It records the Agent workspace in `~/.grok/trusted_folders.toml`
-  and, per `10-hooks.md`, trusts that folder's hooks and MCP and LSP servers with it. Global skills
-  (`$GROK_HOME/skills`) load without it. Folder trust is a security boundary: get Frank's approval
-  before widening it past the Agent workspace or dropping it.
-- Tool events pass grok's `toolName` and `rawInput` through, except that `read_file`'s `target_file`
-  is carried as the `file_path` the daemon core reads (`grok/tool-call.ts`); canonical names and
-  argument summaries belong to `tool-activity.ts`. The output text is the terminal update's `content`
-  text entries (`rawOutput` is an object, never text). A shell command that exits non-zero or times
-  out still ends `completed`, so the error comes from `rawOutput.exit_code` and `timed_out`; a call
-  grok could not run ends `failed`.
-- Observed on grok 1.0.41, not documented: the tool frame shapes above, `--session-id` refusing an
-  existing id, the session a failed first turn leaves behind, the missing-session stderr
-  (`not found locally`, `Failed to restore session`), and SIGINT, which kills grok at once by the
-  signal with no `error` or `end` frame (so `interrupt()` is reported by the exit, never by a frame).
-  `--trust` and `--no-memory` are hidden flags: absent from `grok --help`, accepted; the guide's
-  headless flag table also omits `--always-approve` (it lists `--yolo`). Re-check all of these when
-  raising the version gate.
+- One headless process per turn: `grok -p <prompt> --output-format streaming-json`. Prompts ride argv,
+  standing instructions ride `--rules` every turn; a fresh session spawns nothing until real input.
+- A UUID pinned with `--session-id` creates a new session and refuses an existing id. Clear that
+  flag at spawn, not exit: a failed first turn can leave the session created. Later turns use
+  `--resume`, without `--fork-session`. A missing resume is retried fresh under a new id and
+  reported with `onSessionId(new, replaced)` only when remote restore says `404 Not Found`.
+- Every turn passes `--trust`: project skills and instructions load only from trusted folders
+  (`22-permissions-and-safety.md`); assigned skills live in `<Agent workspace>/.grok/skills`.
+  Trust is recorded in `~/.grok/trusted_folders.toml` and covers that folder's hooks, MCP and LSP
+  servers (`10-hooks.md`). Global `$GROK_HOME/skills` need no grant. Folder trust is a security
+  boundary: get Frank's approval before widening it past the Agent workspace or dropping it.
+- Tool events carry native `toolName` and `rawInput`; `read_file.target_file` becomes `file_path`.
+  Only terminal update `content` text is display output, never the `rawOutput` object. A shell
+  command ending `completed` can still fail via `rawOutput.exit_code` or `timed_out`.
+- `auto_compact_started`/`completed` report normalized compaction events; `cancelled`/`failed`
+  report interruption, never successful completion. Preserve the failed frame's error as an
+  error event without failing a turn the CLI subsequently completes successfully. Reader `end`
+  interrupts an unclosed episode before `completed` when the CLI exits without its final frame. The core
+  owns episode de-duplication and Activity. Unknown members of this event family stay ignored.
+- Catalog discovery uses ACP `initialize` then `_x.ai/models/list`, the same operation as
+  `grok models`, without authentication or a session. Read `_meta.reasoningEfforts[].value`
+  and `reasoningEffort`; a model without choices exposes none. Never invent a common effort list.
+- Create/resume identity, hidden `--trust`/`--no-memory`, model metadata and successful compaction
+  frames are verified on 1.0.52. SIGINT exits 130 without error/end frames; use the owned turn's
+  interruption state. Missing-session stderr and failed-first-turn persistence were observed
+  on 1.0.41. The CLI guide ships under `~/.grok/docs/user-guide/`; re-check on version changes.
 
 ## Pi and built-in CoForge Agent
 

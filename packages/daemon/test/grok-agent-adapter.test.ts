@@ -181,6 +181,48 @@ test(
 );
 
 test(
+  "reports native compaction before continuing the same turn",
+  async () => {
+    await withSession({ environment: { COFORGE_GROK_MODE: "compaction" } }, async ({ session }) => {
+      const events = await runTurn(session, "continue the long conversation");
+      expect(events.filter((event) => event.type !== "session")).toEqual([
+        { type: "compaction-started" },
+        { type: "compaction-finished" },
+        { type: "text-delta", text: "answer after compaction" },
+        { type: "completed", status: "completed" },
+      ]);
+    });
+  },
+  SESSION_BUDGET_MS,
+);
+
+test.each(["compaction-cancelled", "compaction-failed"])(
+  "%s clears the episode without reporting successful compaction or failing a recovered turn",
+  async (mode) => {
+    await withSession({ environment: { COFORGE_GROK_MODE: mode } }, async ({ session }) => {
+      const events = await runTurn(session, "continue");
+      expect(events.filter((event) => event.type.startsWith("compaction-"))).toEqual([
+        { type: "compaction-started" },
+        { type: "compaction-interrupted" },
+      ]);
+      expect(events.at(-1)).toEqual({ type: "completed", status: "completed" });
+      expect(events.filter((event) => event.type === "error")).toEqual(
+        mode === "compaction-failed"
+          ? [
+              {
+                type: "error",
+                message: "Compaction failed: summary model unavailable",
+                providerErrorReason: "auto_compact_failed",
+              },
+            ]
+          : [],
+      );
+    });
+  },
+  SESSION_BUDGET_MS,
+);
+
+test(
   "every turn trusts the Agent workspace so its skills and project instructions load",
   async () => {
     // 22-permissions-and-safety.md: headless startup loads project skills and instructions only for
