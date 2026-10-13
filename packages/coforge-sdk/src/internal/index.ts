@@ -346,9 +346,9 @@ export function parseRuntimeProvider(value: unknown): RuntimeProvider | undefine
 }
 /**
  * Whether the Daemon runs this provider as a spawned external CLI process (Codex, Claude Code,
- * Kiro) rather than in-process through the Pi SDK (Pi, CoForge). Governs whether usage scanning
- * reads that CLI's own local usage data, and whether a CoForge-managed model-provider API key
- * applies (only the in-process providers accept one).
+ * Kiro) rather than in-process through the Pi SDK (Pi, CoForge). Governs whether a
+ * CoForge-managed model-provider API key applies (only the in-process providers accept one).
+ * A separate capability below describes which adapters implement usage scanning.
  */
 export const RUNTIME_PROVIDER_USES_EXTERNAL_CLI: Record<RuntimeProvider, boolean> = {
   [RUNTIME_PROVIDER.COFORGE]: false,
@@ -358,6 +358,21 @@ export const RUNTIME_PROVIDER_USES_EXTERNAL_CLI: Record<RuntimeProvider, boolean
   [RUNTIME_PROVIDER.KIRO]: true,
   [RUNTIME_PROVIDER.CURSOR]: true,
   [RUNTIME_PROVIDER.OPENCODE]: true,
+  [RUNTIME_PROVIDER.GROK]: true,
+  [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
+};
+
+/** Whether the shipped adapter implements `readUsage`. External CLI execution alone does not
+ * imply a usage reader. A reader may still return unsupported for a particular account.
+ * The daemon registry test checks this table against the actual adapters. */
+export const RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN: Record<RuntimeProvider, boolean> = {
+  [RUNTIME_PROVIDER.COFORGE]: false,
+  [RUNTIME_PROVIDER.CODEX]: true,
+  [RUNTIME_PROVIDER.CLAUDE_CODE]: true,
+  [RUNTIME_PROVIDER.PI]: false,
+  [RUNTIME_PROVIDER.KIRO]: true,
+  [RUNTIME_PROVIDER.CURSOR]: false,
+  [RUNTIME_PROVIDER.OPENCODE]: false,
   [RUNTIME_PROVIDER.GROK]: true,
   [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
 };

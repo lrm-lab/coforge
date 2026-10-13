@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 
 import {
   RUNTIME_PROVIDER,
-  RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
+  RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import { Badge } from "#src/components/base/badges/badges";
@@ -112,13 +112,13 @@ export function RuntimeUsage({
    * controls the pointer must reach without the popover closing under it. */
   openOnPress?: boolean;
 }) {
-  const supportsUsage = RUNTIME_PROVIDER_USES_EXTERNAL_CLI[runtime.provider];
+  const supportsUsage = RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime.provider];
   const usage = useRuntimeUsage(computerId, runtime.provider, {
     enabled: supportsUsage,
     computerOnline,
   });
 
-  const health = usageHealth(usage.data);
+  const health = supportsUsage ? usageHealth(usage.data) : undefined;
   const resolvedTrigger = trigger ? (
     trigger(health)
   ) : (
