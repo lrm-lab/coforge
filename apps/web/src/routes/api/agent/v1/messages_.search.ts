@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { AgentSearchResponse, AgentMessage } from "@lrm/coforge-sdk/agent";
 import type { AgentMessageValidationMessage } from "@lrm/coforge-sdk/internal";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
+import { agentIdempotencyKeyFromQuery } from "#src/server/agents/agent-http-routes.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import {
   searchAgentMessages,
@@ -29,7 +30,7 @@ export async function handleAgentMessagesSearchGet(
     const value = query.get(name);
     return value ? new Date(value).toISOString() : undefined;
   };
-  const idempotencyKey = query.get("idempotencyKey") || crypto.randomUUID();
+  const idempotencyKey = agentIdempotencyKeyFromQuery(request);
   const scope = { workspaceId: principal.workspaceId, agentId: principal.agentId };
   try {
     const results = (await searchAgentMessages(repository, scope, {

@@ -1,40 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import type { AgentChannelAttentionResponse } from "@lrm/coforge-sdk/agent";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import {
-  muteAgentChannel,
-  type AgentMessageRepository,
-} from "#src/server/agents/agent-messages.server";
-import {
-  agentIdempotencyKey,
-  agentRouteErrorResponse,
-  readAgentJsonBody,
-} from "#src/server/agents/agent-http-routes.server";
+import type { AgentMessageRepository } from "#src/server/agents/agent-messages.server";
+import { handleAgentChannelMutePost } from "./channels_.$channel.mute";
+import type { AgentChannelManagementPrincipal } from "#src/server/agents/agent-channel-routes.server";
 
-export type AgentChannelMutePrincipal = { workspaceId: string; agentId: string };
-
-export async function handleAgentChannelUnmutePost(
+/** `mute` with `muted: false`; kept as its own route so `coforge channel unmute` has a path. */
+export function handleAgentChannelUnmutePost(
   request: Request,
   channel: string,
-  principal: AgentChannelMutePrincipal,
+  principal: AgentChannelManagementPrincipal,
   repository: AgentMessageRepository,
 ): Promise<Response> {
-  const scope = { workspaceId: principal.workspaceId, agentId: principal.agentId };
-  try {
-    const idempotencyKey = agentIdempotencyKey(await readAgentJsonBody(request));
-    await muteAgentChannel(repository, scope, channel, false);
-    const response: AgentChannelAttentionResponse = {
-      idempotencyKey,
-      target: channel,
-      muted: false,
-    };
-    return Response.json(response);
-  } catch (error) {
-    return agentRouteErrorResponse(error, "channel unmute failed", [
-      "mute requires a channel target",
-    ]);
-  }
+  return handleAgentChannelMutePost(request, channel, false, principal, repository);
 }
 
 export const Route = createFileRoute("/api/agent/v1/channels_/$channel/unmute")({

@@ -41,7 +41,10 @@ import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rej
 import { postingTargetRefusalResponse } from "#src/server/agents/agent-target-status.server";
 import { applyIncomingWeeklyReportBodyEdit } from "#src/server/records/weekly-report-body-restore.server";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
-import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
+import {
+  agentIdempotencyKeyFromQuery,
+  readAgentJsonBody,
+} from "#src/server/agents/agent-http-routes.server";
 
 export type AgentMessagesGetPrincipal = { workspaceId: string; agentId: string };
 
@@ -64,7 +67,7 @@ export async function handleAgentMessagesGet(
   repository: AgentMessageRepository,
 ): Promise<Response> {
   const query = new URL(request.url).searchParams;
-  const idempotencyKey = query.get("idempotencyKey") || crypto.randomUUID();
+  const idempotencyKey = agentIdempotencyKeyFromQuery(request);
   const scope = { workspaceId: principal.workspaceId, agentId: principal.agentId };
   try {
     if (query.has("query"))
