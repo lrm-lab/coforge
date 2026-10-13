@@ -246,7 +246,6 @@
   "messages_agents_action": "私聊",
   "conversation_start_direct": "新建私聊",
   "conversation_opening_direct": "正在打开会话…",
-  "messages_live_activity": "Agent 实时活动",
   "messages_empty_title": "选择一个会话",
   "messages_empty_description": "从列表选择频道或私聊，查看消息。",
   "conversation_history": "消息记录",

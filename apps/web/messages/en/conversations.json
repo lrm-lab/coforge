@@ -251,7 +251,6 @@
   "messages_agents_action": "Direct messages",
   "conversation_start_direct": "New direct message",
   "conversation_opening_direct": "Opening conversation…",
-  "messages_live_activity": "Live agent activity",
   "messages_empty_title": "Choose a conversation",
   "messages_empty_description": "Select a channel or direct message from the list.",
   "conversation_history": "Message history",
