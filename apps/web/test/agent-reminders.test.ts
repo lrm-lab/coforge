@@ -6,6 +6,7 @@ import {
   prismaAgentReminderReadStore,
   type AgentReminderReadStore,
 } from "#src/server/agents/agent-reminders.server";
+import { withFakePagination } from "./helpers/fake-paginated";
 
 const viewer = { userId: "user-1", workspaceId: "workspace-1" };
 const item = (id: string) => ({
@@ -27,7 +28,7 @@ const item = (id: string) => ({
 function store(overrides: Partial<AgentReminderReadStore> = {}): AgentReminderReadStore {
   return {
     ownsAgent: async () => true,
-    list: async () => [],
+    list: async () => ({ reminders: [], hasMore: false }),
     ...overrides,
   };
 }
@@ -39,7 +40,7 @@ test("does not query reminders when the viewer does not own the Agent in the Wor
       ownsAgent: async () => false,
       list: async () => {
         read = true;
-        return [];
+        return { reminders: [], hasMore: false };
       },
     }),
   );
@@ -48,17 +49,20 @@ test("does not query reminders when the viewer does not own the Agent in the Wor
 });
 
 test("returns a bounded page and stable explicit cursor", async () => {
-  let take = 0;
+  let limit = 0;
   const query = new AgentRemindersQuery(
     store({
       list: async (input) => {
-        take = input.take;
-        return Array.from({ length: 51 }, (_, index) => item(`id-${index}`));
+        limit = input.limit;
+        return {
+          reminders: Array.from({ length: 50 }, (_, index) => item(`id-${index}`)),
+          hasMore: true,
+        };
       },
     }),
   );
   const result = await query.list(viewer, { agentId: "agent-1" });
-  expect(take).toBe(AGENT_REMINDER_PAGE_SIZE + 1);
+  expect(limit).toBe(AGENT_REMINDER_PAGE_SIZE);
   expect(result.status).toBe("ready");
   if (result.status !== "ready") throw new Error("expected ready result");
   expect(result.reminders).toHaveLength(50);
@@ -77,7 +81,7 @@ test("exposes targets and derives readable message anchors from the canonical co
     messageId,
     target: id === "public-channel" ? "#general" : "@owner",
   });
-  const db = {
+  const db = withFakePagination({
     reminder: {
       findMany: async () => [
         reminder("owned-dm", "message-owned-dm"),
@@ -122,12 +126,12 @@ test("exposes targets and derives readable message anchors from the canonical co
         },
       ],
     },
-  } as unknown as PrismaClient;
+  }) as unknown as PrismaClient;
 
-  const rows = await prismaAgentReminderReadStore(db).list({
+  const { reminders: rows } = await prismaAgentReminderReadStore(db).list({
     viewer,
     agentId: "agent-1",
-    take: 50,
+    limit: 50,
   });
   expect(rows.map((row) => row.anchor)).toEqual([
     {
@@ -162,8 +166,8 @@ test("filters scheduled reminders in the database before cursor pagination", asy
     { id: "fired", status: "fired", fireAt: new Date("2026-09-07T10:00:00Z"), firedAt: null },
     { id: "canceled", status: "canceled", fireAt: new Date("2026-09-06T10:00:00Z"), firedAt: null },
   ];
-  let findManyInput: Record<string, unknown> | undefined;
-  const db = {
+  const findManyInputs: Record<string, unknown>[] = [];
+  const db = withFakePagination({
     reminder: {
       findMany: async (input: {
         where: { status: string };
@@ -171,7 +175,7 @@ test("filters scheduled reminders in the database before cursor pagination", asy
         skip: number;
         take: number;
       }) => {
-        findManyInput = input;
+        findManyInputs.push(input);
         return seeded
           .filter((row) => row.status === input.where.status)
           .slice(0, input.take)
@@ -187,19 +191,22 @@ test("filters scheduled reminders in the database before cursor pagination", asy
       },
     },
     message: { findMany: async () => [] },
-  } as unknown as PrismaClient;
+  }) as unknown as PrismaClient;
 
-  const rows = await prismaAgentReminderReadStore(db).list({
+  const { reminders: rows } = await prismaAgentReminderReadStore(db).list({
     viewer,
     agentId: "agent-1",
     cursor: { id: "before-50" },
-    take: 50,
+    limit: 50,
   });
 
-  if (!findManyInput) throw new Error("expected the reminder query");
-  expect((findManyInput.where as { status?: string }).status).toBe("scheduled");
-  expect(findManyInput.cursor).toEqual({ id: "before-50" });
-  expect(findManyInput.skip).toBe(1);
-  expect(findManyInput.take).toBe(50);
+  // The page itself: after the cursor row, one more than the page to learn whether another exists.
+  // (The extension's other read is its `hasPreviousPage` probe: `take: -1` from the cursor.)
+  const page = findManyInputs.find((input) => input.skip === 1);
+  if (!page) throw new Error("expected the reminder page query");
+  expect((page.where as { status?: string }).status).toBe("scheduled");
+  expect(page.cursor).toEqual({ id: "before-50" });
+  expect(page.take).toBe(51);
+  expect(page.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
   expect(rows.map((row) => row.id)).toEqual(["future", "recurring", "overdue"]);
 });
