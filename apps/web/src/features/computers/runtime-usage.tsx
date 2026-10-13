@@ -14,6 +14,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { Badge } from "#src/components/base/badges/badges";
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
+import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { HoverPopover } from "#src/components/ui/hover-popover";
@@ -290,20 +291,26 @@ export function RuntimeUsagePopoverContent({
             {hydrated && showUsage && data?.result && (
               <>
                 {runtime.version ? " · " : ""}
-                <RelativeTime value={data.result.collectedAt} timeZone={timeZone} />
+                <RelativeTime value={data.result.collectedAt} timeZone={timeZone} plain />
               </>
             )}
           </p>
         </div>
         {showUsage && (
-          <ButtonUtility
+          // Two React Aria behaviours keep the peek open across a refresh (task #109):
+          // - `isLoading` is React Aria's `isPending`: the button ignores presses but keeps focus.
+          //   `isDisabled` would drop focus to the page mid-press, and the peek follows focus out.
+          // - No Tooltip. PreviewTrigger shares React Aria's one-open-tooltip-at-a-time state, so a
+          //   tooltip opening inside the peek closes the peek. The aria-label names the button.
+          <Button
             size="xs"
             color="tertiary"
-            icon={RefreshCw}
-            tooltip={scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh()}
-            isDisabled={scanning || computerOnline === false}
-            className={cn("shrink-0", scanning && "*:data-icon:motion-safe:animate-spin")}
-            onClick={onRefresh}
+            iconLeading={RefreshCw}
+            aria-label={scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh()}
+            isLoading={scanning}
+            isDisabled={computerOnline === false}
+            className="shrink-0"
+            onPress={onRefresh}
           />
         )}
         {onClose && (
@@ -404,7 +411,7 @@ function UsageWindow({
           {hydrated && window.resetsAt !== undefined && (
             <>
               {" · "}
-              <RelativeTime value={window.resetsAt} timeZone={timeZone} />
+              <RelativeTime value={window.resetsAt} timeZone={timeZone} plain />
             </>
           )}
         </p>
