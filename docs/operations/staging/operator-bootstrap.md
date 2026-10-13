@@ -3,6 +3,12 @@
 1. Provision one ECS host in an ICP-compliant region and install Docker plus
    the Compose plugin. Run Docker rootless under a dedicated non-root
    deployment user (for example `deploy`); do not deploy as `root`.
+   Rootless Docker binds only ports at or above
+   `net.ipv4.ip_unprivileged_port_start`, and Caddy publishes 80 and 443, so
+   set it to 80 in `/etc/sysctl.conf` (which `sysctl --system` applies last,
+   over any `/etc/sysctl.d/` file) and apply it with `sudo sysctl --system`.
+   With 443 there, the deploy fails with `cannot expose privileged port 80`
+   and rolls back.
 2. Create the release deployment identity on the host as a non-root user:
    ```
    sudo useradd -r -m -s /bin/bash deploy
