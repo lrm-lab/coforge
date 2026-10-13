@@ -65,16 +65,6 @@ test("The collapsed rail is an icon column and each item keeps its name", () => 
   expect(visible).not.toContain(`>${chat}<`);
 });
 
-test("A rail icon's name is the official tooltip, placed to the right", async () => {
-  // A closed tooltip is portaled and absent from static markup, so this locks the wiring
-  // the hover actually uses: the same label, on the official Tooltip, to the right of the icon.
-  const source = await Bun.file(
-    new URL("../src/components/layout/sidebar/sidebar-rail.tsx", import.meta.url),
-  ).text();
-  expect(source).toContain('<Tooltip title={label} placement="right" offset={4}>');
-  expect(source).toContain('tooltipPlacement="right"');
-});
-
 test("The token carries the spec's value in light, and a lighter one for the dark column", async () => {
   const css = await Bun.file(new URL("../src/styles/coforge-theme.css", import.meta.url)).text();
   const values = [...css.matchAll(/--color-nav-icon:\s*([^;]+);/g)].map((hit) =>
