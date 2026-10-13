@@ -33,6 +33,7 @@ import {
 } from "#src/server/conversations/direct-conversation-peer.server";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { storedTaskStatus } from "#src/server/tasks/task-view.server";
+import { clampPageLimit } from "#src/server/db/page-limit.server";
 
 /**
  * A person's Activity inbox: every joined channel, every direct message of theirs (with their own
@@ -110,7 +111,7 @@ export class ActivityInbox {
         right.latestSequence - left.latestSequence,
     );
     const offset = Math.max(0, options.offset ?? 0);
-    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, options.limit ?? DEFAULT_PAGE_SIZE));
+    const limit = clampPageLimit(options.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
     const end = offset + limit;
     return {
       items: await this.hydrate(workspaceId, userId, candidates.slice(offset, end)),

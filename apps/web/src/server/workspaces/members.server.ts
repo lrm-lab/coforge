@@ -11,6 +11,7 @@ import {
 } from "#src/server/agents/agent-visibility.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { CREATED_AGENT_FACES, MEMBER_PAGE_MAX } from "#src/features/workspaces/member-directory";
+import { clampPageLimit } from "#src/server/db/page-limit.server";
 
 /** The actor's Workspace role; ACCESS_DENIED when the user is not a member. */
 export async function workspaceMemberRole(
@@ -83,7 +84,7 @@ export class WorkspaceMembers {
   async agentPage(workspaceId: string, userId: string, input: AgentPageInput) {
     const { visibleAgents } = await this.viewer(workspaceId, userId);
     const query = input.query.trim();
-    const limit = Math.min(Math.max(input.limit, 1), MEMBER_PAGE_MAX);
+    const limit = clampPageLimit(input.limit, MEMBER_PAGE_MAX);
     const agents = await this.db.agent.findMany({
       where: {
         AND: [
@@ -249,7 +250,7 @@ export class WorkspaceMembers {
 
   async peoplePage(workspaceId: string, userId: string, input: PeoplePageInput) {
     const { visibleAgents } = await this.viewer(workspaceId, userId);
-    const limit = Math.min(Math.max(input.limit, 1), MEMBER_PAGE_MAX);
+    const limit = clampPageLimit(input.limit, MEMBER_PAGE_MAX);
     const ids = await this.orderedPersonIds(workspaceId, input, limit + 1);
     const rows = await this.db.user.findMany({
       where: { id: { in: ids } },

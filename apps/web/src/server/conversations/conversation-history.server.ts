@@ -20,6 +20,7 @@ import {
   weeklyReportAssistantSuggestionDisplayBody,
 } from "#src/server/records/weekly-report-assistant-suggestion.server";
 import { followedThreadRootIds, readWindowThreads } from "./thread-summaries.server";
+import { clampPageLimit } from "#src/server/db/page-limit.server";
 
 /** Exported so projections that must render exactly like the message stream (the Saved list,
  * #120/#124) reuse this same row shape instead of growing a near-copy. */
@@ -190,7 +191,7 @@ export class ConversationHistory {
     const { viewerMemberId } = await this.authorize(workspaceId, userId, conversationId);
     // A viewer who never joined has sent nothing here.
     if (!viewerMemberId) return { hasOlder: false, messages: [] };
-    const limit = Math.min(Math.max(page.limit ?? 20, 1), 50);
+    const limit = clampPageLimit(page.limit ?? 20, 50);
     const rows = await this.db.message.findMany({
       where: {
         conversationId,
@@ -255,7 +256,7 @@ export class ConversationHistory {
     if (!anchor) throw new AppError("NOT_FOUND");
     const center = anchor.threadRoot ?? anchor;
 
-    const limit = Math.min(Math.max(requestedLimit, 1), 81);
+    const limit = clampPageLimit(requestedLimit, 81);
     const beforeCount = Math.floor((limit - 1) / 2);
     const afterCount = limit - beforeCount - 1;
     const [beforeRows, afterRows] = await Promise.all([

@@ -78,6 +78,7 @@ import {
   unreadAgentMessagesFragment,
   type AgentAttentionScope,
 } from "#src/server/db/repositories/agent-attention.repositories.server";
+import { clampPageLimit } from "#src/server/db/page-limit.server";
 
 /** The three Agent-visible sender facts, spread onto every Agent-facing message shape
  * in this file so they cannot drift into three different field sets. */
@@ -785,7 +786,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   async searchMessages(workspaceId: string, agentId: string, options: AgentMessageSearchOptions) {
-    const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+    const limit = clampPageLimit(options.limit ?? 20, 100);
     const offset = Math.max(options.offset ?? 0, 0);
     const scope = options.target
       ? await this.resolveAgentTarget(workspaceId, agentId, options.target)
@@ -1579,7 +1580,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         ? { deliveries: { some: { agentId } } }
         : {}),
     };
-    const limit = Math.min(Math.max(page.limit ?? 50, 1), 100);
+    const limit = clampPageLimit(page.limit ?? 50, 100);
     if ([page.before, page.after, page.around].filter(Boolean).length > 1)
       throw new Error("use only one range anchor");
     const anchorId = page.before ?? page.after ?? page.around;
@@ -1813,7 +1814,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     messages: (ReturnType<typeof toAgentMessage> & { nonMemberMention?: boolean })[];
     hasMore: boolean;
   }> {
-    const bounded = Math.min(Math.max(limit, 1), 100);
+    const bounded = clampPageLimit(limit, 100);
     const scope = target ? await this.drainScope(workspaceId, agentId, target) : undefined;
     return this.db.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<

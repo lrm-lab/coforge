@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ConversationHistory } from "./conversation-history.server";
+import { clampPageLimit } from "#src/server/db/page-limit.server";
 
 const noticeType = (type: string): "created" | "fired" =>
   type === "created" ? "created" : "fired";
@@ -16,7 +17,7 @@ export class ReminderNotices {
     requestedLimit = 40,
   ) {
     await new ConversationHistory(this.db).authorize(workspaceId, userId, conversationId);
-    const limit = Math.min(Math.max(requestedLimit, 1), 50);
+    const limit = clampPageLimit(requestedLimit, 50);
     const messages = await this.db.message.findMany({
       where: {
         workspaceId,
