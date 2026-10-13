@@ -105,9 +105,11 @@ export function OutboxMessageRow({
   return (
     <li
       data-outbox-state={entry.state}
-      className={cn("flex flex-col", !grouped && "mt-6 first:mt-0")}
+      data-header-row={grouped ? undefined : ""}
+      // Same geometry as `MessageRow` (see there).
+      className={cn("flex flex-col", !grouped && "mt-4 first:mt-0 [[data-header-row]+&]:mt-2")}
     >
-      <div className={cn("flex p-3", "gap-3")}>
+      <div className={cn("mx-1 flex px-3 md:mx-3", "gap-3", grouped ? "pt-0 pb-1" : "py-3")}>
         <div className="flex w-9 shrink-0 items-start justify-center">
           {!grouped && (
             <Avatar

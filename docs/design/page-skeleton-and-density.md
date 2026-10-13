@@ -21,6 +21,7 @@
 
 用户确认参考 Slack 消息流：采用保留头像的 [Clean 布局](https://slack.com/help/articles/213893898-Change-how-messages-are-displayed)，不是隐藏头像的 Compact 模式或左右气泡。
 消息、附件和任务引用沿正文列左对齐；同一发送者五分钟内的连续消息合组，跨日期不合组。
+间距（设计稿，task #99）：带发送者名字的消息，内容距 hover 背景四边各 12px；同一发送者的连续消息只留左右 12px，上下仍紧贴（距上一行 4px）。两段发送者之间内容到内容 32px。hover 背景是 `border-secondary` 的 50%，右侧操作图标无背景浮层，距 hover 背景右上各 12px。日期和未读分割线距上下内容各 16px，线色 `border-secondary`，日期标签带同色描边。
 短日期分隔与时分时间戳承担辅助信息，已有 thread 才在消息下显示回复摘要。
 [Slack thread 示例](https://slack.com/help/articles/115000769927-Use-threads-to-organize-discussions)是按需消息操作的参考；Web 的触摸适配保留无描边的消息菜单入口，不能只靠 hover。
 输入区与附件排版参考 [Untitled Messaging examples](https://www.untitledui.com/react/components/messaging)，继续组合已安装的官方基础组件，不复制受 PRO 授权限制的源码。

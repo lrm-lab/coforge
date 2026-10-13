@@ -470,11 +470,13 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
 }
 
 /**
- * A divider row: 16px spacing above and below its label (py-4), matching the design spec distance
- * between the divider and neighbouring content areas. Spans full width with 12px horizontal padding
- * (px-3) aligned with the message row content.
+ * A divider row: 16px between its label and the content above and below (design spec). The row
+ * below a divider always starts a sender run, whose own 12px top padding plus `pb-1` makes 16px.
+ * Above, a continuation or notice row ends in 4px of padding, so the divider adds 12px; a row
+ * with a sender heading ends in 12px, so the divider adds 4px.
  */
-const DIVIDER_ROW_CLASS = "message-text flex items-center gap-3 px-3 py-4";
+const DIVIDER_ROW_CLASS =
+  "message-text flex items-center gap-3 px-4 pt-3 pb-1 md:px-6 [[data-header-row]+li>&]:pt-1";
 
 /** The "new messages" divider (Slack-style): a brand rule naming where unread begins. */
 export function UnreadDivider() {
@@ -500,11 +502,11 @@ export function DayDivider({ value, locale }: { value: Date | string; locale?: s
   const timeZone = useTimeZone();
   return (
     <div className={DIVIDER_ROW_CLASS}>
-      <span aria-hidden="true" className="h-px flex-1 bg-[#E0E5F1]" />
-      <span className="shrink-0 rounded-full border border-[#E0E5F1] bg-primary px-3 py-1 text-md text-tertiary tabular-nums">
+      <span aria-hidden="true" className="h-px flex-1 bg-border-secondary" />
+      <span className="shrink-0 rounded-full border border-secondary bg-primary px-3 py-1 text-md text-tertiary tabular-nums">
         {dayLabel(value, locale, timeZone)}
       </span>
-      <span aria-hidden="true" className="h-px flex-1 bg-[#E0E5F1]" />
+      <span aria-hidden="true" className="h-px flex-1 bg-border-secondary" />
     </div>
   );
 }
@@ -816,7 +818,7 @@ export const MessageRow = memo(function MessageRow({
           data-message="system"
           data-scroll-anchor
           className={cn(
-            "group/message flex scroll-m-6 items-baseline gap-2 px-3 py-1 text-xs text-tertiary transition-[background-color,box-shadow] duration-500 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary",
+            "group/message flex scroll-m-6 items-baseline gap-2 px-4 py-1 text-xs text-tertiary transition-[background-color,box-shadow] duration-500 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:px-6",
             highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
           )}
         >
@@ -848,18 +850,25 @@ export const MessageRow = memo(function MessageRow({
   // shell; the sheet therefore also opens for a message with no thread and no reactions.
   const copyable = Boolean(messagePlainText(message, channelNames).trim());
   return (
-    // A message row keeps 12px (p-3) padding around its content, so hover and focus-within
-    // backgrounds sit exactly 12px from content on all four sides. A new sender run keeps
-    // a 24px (mt-6) margin above it; grouped continuations share the row padding.
+    // Spacing (design spec, docs/design/page-skeleton-and-density.md): a message with a sender
+    // heading keeps 12px between its content and its hover background on all four sides; a
+    // same-sender continuation keeps 12px at the sides only and sits 4px under the row above. Two
+    // sender runs are 32px apart content to content: 16px of margin after a continuation's 4px,
+    // 8px after a heading row's 12px. The row is inset 4px (24px column: 12px) so the content
+    // stays on the stream's column with the composer and the dividers.
     <li
       data-message-id={message.id}
+      data-header-row={grouped ? undefined : ""}
       className={cn(
         ROW_CLASS,
-        !grouped && !dayChanged && !unreadStartsHere && "mt-6 first:mt-0",
+        !grouped &&
+          !dayChanged &&
+          !unreadStartsHere &&
+          "mt-4 first:mt-0 [[data-header-row]+&]:mt-2",
         // A continuation under a thread preview card starts 16px below the card (design spec):
-        // 12px here plus the card row's own 4px bottom padding. A new sender run already sits
-        // further down through its own margin.
-        grouped && "[li:has([data-thread-preview])+&]:mt-3",
+        // a heading row ends 12px under its card, a continuation row 4px.
+        grouped &&
+          "[[data-header-row]:has([data-thread-preview])+&]:mt-1 [li:not([data-header-row]):has([data-thread-preview])+&]:mt-3",
       )}
     >
       {unreadStartsHere && <UnreadDivider />}
@@ -869,9 +878,10 @@ export const MessageRow = memo(function MessageRow({
         data-message={own ? "own" : "other"}
         onClick={openActions}
         className={cn(
-          "group/message relative flex scroll-m-6 p-3 transition-[background-color,box-shadow] duration-500 hover:bg-[#E0E5F1]/50 focus-within:bg-[#E0E5F1]/50 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary",
+          "group/message relative mx-1 flex scroll-m-6 px-3 transition-[background-color,box-shadow] duration-500 hover:bg-border-secondary/50 focus-within:bg-border-secondary/50 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:mx-3",
           highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
           "gap-3",
+          grouped ? "pt-0 pb-1" : "py-3",
         )}
       >
         <div className="flex w-9 shrink-0 items-start justify-center">
@@ -1092,7 +1102,9 @@ export const MessageRow = memo(function MessageRow({
              reactions, then whole-message copy last — the IM-standard order (#546). */
           <div
             className={cn(
-              "pointer-events-none absolute top-3 right-3 flex items-center gap-0.5 opacity-0 transition-opacity",
+              "pointer-events-none absolute right-3 flex items-center gap-0.5 opacity-0 transition-opacity",
+              // 12px from the top of a heading row (design spec); a continuation has no top padding.
+              grouped ? "top-0.5" : "top-3",
               "lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:opacity-100",
               "lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:opacity-100",
             )}
