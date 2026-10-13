@@ -46,23 +46,22 @@ test("workspace user avatar serves the requested sender only to workspace member
 });
 
 describe("saveUserProfileInputSchema", () => {
-  const parse = (input: { fullName: string; displayName?: string; description?: string }) =>
+  const parse = (input: { displayName?: string; description?: string }) =>
     saveUserProfileInputSchema.safeParse({ description: "", ...input });
 
-  test("normalizes both names and the description", () => {
+  test("normalizes the name and the description", () => {
     expect(
       saveUserProfileInputSchema.parse({
-        fullName: "  Frank   An  ",
-        displayName: "  Frankie ",
+        displayName: "  Frank   An  ",
         description: "  Building CoForge.  ",
       }),
-    ).toEqual({ fullName: "Frank An", displayName: "Frankie", description: "Building CoForge." });
+    ).toEqual({ displayName: "Frank An", description: "Building CoForge." });
   });
 
-  test("names follow the same rule as the full name asked at first sign-in", () => {
+  test("the name follows the same rule as the one asked at first sign-in", () => {
     // Counted in characters, not UTF-16 units: 80 emoji are 160 units and fit, 81 do not.
-    expect(parse({ fullName: "\u{1F600}".repeat(80) }).success).toBe(true);
-    expect(parse({ fullName: "\u{1F600}".repeat(81) }).success).toBe(false);
+    expect(parse({ displayName: "\u{1F600}".repeat(80) }).success).toBe(true);
+    expect(parse({ displayName: "\u{1F600}".repeat(81) }).success).toBe(false);
     for (const refused of [
       "@ada",
       "System",
@@ -71,154 +70,83 @@ describe("saveUserProfileInputSchema", () => {
       "Ada\u202eLovelace",
       "Ada\u0000",
     ]) {
-      expect(parse({ fullName: refused }).success, refused).toBe(false);
-      expect(parse({ fullName: "Ada", displayName: refused }).success, refused).toBe(false);
+      expect(parse({ displayName: refused }).success, refused).toBe(false);
     }
   });
 
   test("a refused name says why: empty, too_long or refused", () => {
-    const problem = (input: { fullName: string; displayName?: string }) => {
+    const problem = (input: { displayName: string }) => {
       const parsed = parse(input);
       return parsed.success ? undefined : parsed.error.issues[0]?.message;
     };
-    expect(problem({ fullName: "  " })).toBe("empty");
-    expect(problem({ fullName: "a".repeat(81) })).toBe("too_long");
-    expect(problem({ fullName: "system" })).toBe("refused");
-    expect(problem({ fullName: "Ada", displayName: "@bot" })).toBe("refused");
+    expect(problem({ displayName: "  " })).toBe("empty");
+    expect(problem({ displayName: "a".repeat(81) })).toBe("too_long");
+    expect(problem({ displayName: "system" })).toBe("refused");
+    expect(problem({ displayName: "@bot" })).toBe("refused");
   });
 
   test("composes accents (NFC) and collapses every kind of internal whitespace", () => {
-    const parsed = parse({ fullName: "Jose\u0301\t\u00a0 Garci\u0301a\n" });
-    expect(parsed.success && parsed.data.fullName).toBe("Jos\u00e9 Garc\u00eda");
+    const parsed = parse({ displayName: "Jose\u0301\t\u00a0 Garci\u0301a\n" });
+    expect(parsed.success && parsed.data.displayName).toBe("Jos\u00e9 Garc\u00eda");
   });
 
-  test("a full name is required and may not be blank", () => {
-    expect(parse({ fullName: "" }).success).toBeFalse();
-    expect(parse({ fullName: "   \n\t " }).success).toBeFalse();
+  test("a name is required and may not be blank", () => {
+    expect(parse({ displayName: "" }).success).toBeFalse();
+    expect(parse({ displayName: "   \n\t " }).success).toBeFalse();
     expect(saveUserProfileInputSchema.safeParse({ description: "" }).success).toBeFalse();
   });
 
   test("a name is at most 80 characters once normalized", () => {
-    expect(parse({ fullName: "a".repeat(80) }).success).toBeTrue();
-    expect(parse({ fullName: "a".repeat(81) }).success).toBeFalse();
+    expect(parse({ displayName: "a".repeat(80) }).success).toBeTrue();
+    expect(parse({ displayName: "a".repeat(81) }).success).toBeFalse();
     // The spaces collapse first: 80 letters and a doubled space is still 80 letters wide.
-    expect(parse({ fullName: `${"a".repeat(39)}   ${"b".repeat(40)}` }).success).toBeTrue();
-    expect(parse({ fullName: "Ada", displayName: "b".repeat(81) }).success).toBeFalse();
+    expect(parse({ displayName: `${"a".repeat(39)}   ${"b".repeat(40)}` }).success).toBeTrue();
   });
 
   test("a name holds no control characters", () => {
-    expect(parse({ fullName: "Ada\u0000Lovelace" }).success).toBeFalse();
-    expect(parse({ fullName: "Ada\u001b[31mLovelace" }).success).toBeFalse();
-    expect(parse({ fullName: "Ada", displayName: "Count\u0007ess" }).success).toBeFalse();
-  });
-
-  test("a display name is optional: absent or blank means none", () => {
-    expect(parse({ fullName: "Ada Lovelace" })).toMatchObject({
-      success: true,
-      data: { displayName: null },
-    });
-    expect(parse({ fullName: "Ada Lovelace", displayName: "  " })).toMatchObject({
-      success: true,
-      data: { displayName: null },
-    });
+    expect(parse({ displayName: "Ada\u0000Lovelace" }).success).toBeFalse();
+    expect(parse({ displayName: "Ada\u001b[31mLovelace" }).success).toBeFalse();
+    expect(parse({ displayName: "Count\u0007ess" }).success).toBeFalse();
   });
 });
 
 describe("PrismaUserProfileRepository", () => {
-  test("names the person by the label teammates see, and reports both names", async () => {
-    const nicknamed = profileRepository({
-      username: "ada",
-      displayName: "Countess",
-      fullName: "Ada Lovelace",
-    });
-    expect(await nicknamed.repository.get("user-1")).toMatchObject({
+  test("names the person by the name teammates see", async () => {
+    const named = profileRepository({ username: "ada", displayName: "Countess" });
+    expect(await named.repository.get("user-1")).toMatchObject({
       name: "Countess",
-      fullName: "Ada Lovelace",
       displayName: "Countess",
-    });
-
-    const plain = profileRepository({
-      username: "ada",
-      displayName: null,
-      fullName: "Ada Lovelace",
-    });
-    expect(await plain.repository.get("user-1")).toMatchObject({
-      name: "Ada Lovelace",
-      fullName: "Ada Lovelace",
-      displayName: null,
     });
   });
 
-  test("says whether the person has been asked for a full name", async () => {
-    // A display name is a nickname: having one does not answer the first-sign-in question.
-    const unasked = profileRepository({ username: "ada", displayName: "Countess", fullName: null });
+  test("says whether the person has been asked for a name", async () => {
+    const unasked = profileRepository({ username: "ada", displayName: null });
     expect((await unasked.repository.get("user-1")).named).toBe(false);
 
-    const asked = profileRepository({
-      username: "ada",
-      displayName: null,
-      fullName: "Ada Lovelace",
-    });
+    const asked = profileRepository({ username: "ada", displayName: "Countess" });
     expect((await asked.repository.get("user-1")).named).toBe(true);
   });
 
-  test("a person who has not given a full name is still named, by the username fallback", async () => {
-    const unnamed = profileRepository({ username: "ada", displayName: null, fullName: null });
+  test("a person who has not given a name is still named, by the username fallback", async () => {
+    const unnamed = profileRepository({ username: "ada", displayName: null });
     expect(await unnamed.repository.get("user-1")).toMatchObject({
       name: "ada",
-      fullName: null,
       displayName: null,
     });
   });
 
-  test("a display name equal to the full name is no display name", async () => {
-    const same = profileRepository({
-      username: "ada",
-      displayName: "Ada Lovelace",
-      fullName: "Ada Lovelace",
-    });
-    expect(await same.repository.get("user-1")).toMatchObject({
-      name: "Ada Lovelace",
-      displayName: null,
-    });
-  });
-
-  test("saving stores both names and the description", async () => {
-    const { repository, updates } = profileRepository({
-      username: "ada",
-      displayName: null,
-      fullName: null,
-    });
+  test("saving stores the name and the description", async () => {
+    const { repository, updates } = profileRepository({ username: "ada", displayName: null });
     const saved = await repository.set("user-1", {
-      fullName: "Ada Lovelace",
       displayName: "Countess",
       description: "Building CoForge.",
     });
-    expect(updates).toEqual([
-      { fullName: "Ada Lovelace", displayName: "Countess", description: "Building CoForge." },
-    ]);
+    expect(updates).toEqual([{ displayName: "Countess", description: "Building CoForge." }]);
     expect(saved).toEqual({
       name: "Countess",
-      fullName: "Ada Lovelace",
       displayName: "Countess",
       description: "Building CoForge.",
     });
-  });
-
-  test("saving a display name equal to the full name stores none", async () => {
-    const { repository, updates } = profileRepository({
-      username: "ada",
-      displayName: "Countess",
-      fullName: "Ada Lovelace",
-    });
-    const saved = await repository.set("user-1", {
-      fullName: "Ada Lovelace",
-      displayName: "Ada Lovelace",
-      description: "",
-    });
-    expect(updates).toEqual([{ fullName: "Ada Lovelace", displayName: null, description: "" }]);
-    expect(saved.name).toBe("Ada Lovelace");
-    expect(saved.displayName).toBeNull();
   });
 
   test("saving for a person who no longer exists is NOT_FOUND, not a database error", async () => {
@@ -231,8 +159,7 @@ describe("PrismaUserProfileRepository", () => {
     } as never;
     await expect(
       new PrismaUserProfileRepository(db).set("gone", {
-        fullName: "Ada Lovelace",
-        displayName: null,
+        displayName: "Ada Lovelace",
         description: "",
       }),
     ).rejects.toEqual(new AppError("NOT_FOUND"));
@@ -249,26 +176,10 @@ describe("PrismaUserProfileRepository", () => {
     } as never;
     await expect(
       new PrismaUserProfileRepository(db).set("user-1", {
-        fullName: "Ada Lovelace",
-        displayName: null,
+        displayName: "Ada Lovelace",
         description: "",
       }),
     ).rejects.toBe(failure);
-  });
-
-  test("saving without a display name clears it, and the full name is the label again", async () => {
-    const { repository, updates } = profileRepository({
-      username: "ada",
-      displayName: "Countess",
-      fullName: "Ada Lovelace",
-    });
-    const saved = await repository.set("user-1", {
-      fullName: "Ada Lovelace",
-      displayName: null,
-      description: "",
-    });
-    expect(updates).toEqual([{ fullName: "Ada Lovelace", displayName: null, description: "" }]);
-    expect(saved.name).toBe("Ada Lovelace");
   });
 });
 
@@ -363,11 +274,7 @@ test("profile image HTTP boundary rejects unauthenticated requests", async () =>
   expect(response.headers.get("cache-control")).toBe("no-store");
 });
 
-function profileRepository(row: {
-  username: string;
-  displayName: string | null;
-  fullName: string | null;
-}) {
+function profileRepository(row: { username: string; displayName: string | null }) {
   const updates: unknown[] = [];
   const stored = { ...row, description: "", avatarObjectKey: null };
   const db = {

@@ -24,13 +24,9 @@ import {
 } from "#src/agent-runtime/runtime-error-activity";
 import {
   classifyRuntimeErrorText,
-  RUNTIME_ERROR_CLASS,
-  RUNTIME_ERROR_RETRY_DECISION,
   type RuntimeErrorClassification,
 } from "#src/agent-runtime/runtime-error-classification";
 import {
-  RuntimeErrorDeliveryBackoff,
-  RuntimeErrorFingerprintFence,
   runtimeErrorFingerprintFenceDetail,
   type RuntimeErrorFingerprintFenceState,
 } from "#src/agent-runtime/runtime-error-recovery";
@@ -63,7 +59,6 @@ import type {
   DaemonConnectionClientFactory,
 } from "#src/connection/daemon-connection";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
-import type { AgentMessageTransportResponse } from "#src/connection/agent-http-clients";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 import { HeldPublications } from "#src/connection/held-publications";
 import {
@@ -78,11 +73,8 @@ import {
   type AgentActivity,
   type AgentSessionInvalidate,
   type AgentSessionInvalidateReason,
-  type AgentMessageRecord,
   type AgentMessageResponse,
   type DaemonRuntimeProviderModelRefreshRequest,
-  type WorkspaceInfoRequest,
-  type WorkspaceInfoResponse,
   type AgentStartIntent,
   type AgentSessionReport,
   type AgentStopIntent,
@@ -107,11 +99,6 @@ import {
   type ReminderSync,
   type TaskCommand,
   type TaskResult,
-  type ChannelCommand,
-  type WeeklyReportCommand,
-  type WeeklyReportResponse,
-  threadParentTarget,
-  mentionsInContent,
   parseUpgradeErrorCode,
   type AgentWorkspaceFilesListRequest,
   type AgentWorkspaceFilesListResult,
@@ -120,8 +107,6 @@ import {
   type AgentContextScanRequest,
   type AgentContextScanResponse,
   AGENT_CONTEXT_SCAN_STATUS,
-  freshnessDecisionFactId,
-  HELD_CONTEXT_LIMIT,
   UUID_LIKE_SOURCE,
   utf8Encoder,
 } from "@lrm/coforge-sdk/internal";
@@ -141,7 +126,17 @@ import {
   readAgentWorkspaceFile,
 } from "#src/agent-runtime/agent-workspace-files";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
+import { AgentMessageOperations } from "./agent-message-operations";
+import { AgentRequestForwarder } from "./agent-request-forwarder";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
+import {
+  AgentActivityPublisher,
+  type ActivityDraft,
+  type BusyAgentReport,
+  isBusyActivityDetailKind,
+  type PublishedActivityLaunch,
+} from "./agent-activity-publisher";
+import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import {
   isTrackedMention,
   MentionDeliveryTracker,
@@ -149,21 +144,11 @@ import {
   type TrackedMentionDelivery,
 } from "./mention-delivery-tracker";
 import { AgentInboxStateMachine } from "./agent-inbox-state-machine";
-import {
-  locallyHeldSend,
-  planAgentInboxFreshness,
-  sendSeenExactSeqs,
-} from "./agent-inbox-freshness";
-import { heldFreshnessActivity, heldFreshnessMessageCount } from "./agent-inbox-freshness-activity";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
-import {
-  AGENT_MESSAGE_DRAFT_TTL_MS,
-  AgentMessageDraftStore,
-} from "#src/persistence/agent-message-draft-store";
+import { AgentMessageDraftStore } from "#src/persistence/agent-message-draft-store";
 import { AgentAppInbox, type MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
-import { settleAgentSend } from "./agent-send-settlement";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
 import {
   discoverCodeAgentRuntimes,
@@ -179,30 +164,7 @@ import {
 } from "#src/agent-reminder/reminder-scheduler";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
-import type {
-  AgentActionPrepareRequest,
-  AgentActionPrepareResponse,
-  GitHubCredentialRequest,
-  GitHubCredentialResponse,
-  GitHubCommitTrailersRequest,
-  GitHubCommitTrailersResponse,
-  AgentManualGetRequest,
-  AgentManualGetResponse,
-  AgentManualSearchRequest,
-  AgentManualSearchResponse,
-  AgentVersionResponse,
-  AgentUserInfoRequest,
-  AgentUserInfoResponse,
-  AgentProfileShowRequest,
-  AgentProfileShowResponse,
-  AgentProfileUpdateRequest,
-  AgentProfileUpdateResponse,
-  AgentMentionExecuteRequest,
-  AgentMentionExecuteResponse,
-  AgentMentionPendingResponse,
-  AgentMentionDeliveryRequest,
-  AgentMentionDeliveryResponse,
-} from "@lrm/coforge-sdk/agent";
+import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -270,35 +232,6 @@ function controlCodeField(error: unknown): { control_code: string } | Record<str
   const message = error instanceof Error ? error.message : undefined;
   return message !== undefined && CONTROL_ERROR_CODES.has(message) ? { control_code: message } : {};
 }
-/** Bounds how many events pages one `check` drains before reporting `hasMore: true` and yielding. */
-const MAX_EVENT_DRAIN_ROUNDS = 50;
-
-/**
- * The `--target-confirmed` guard's message: `target` is the top-level target the send is about to
- * hit, `threadTarget` is the most recently read thread rooted under it. The outgoing content is
- * saved as the local draft for `target` before this is thrown (`draftSaved: true`, carried
- * through `AgentPreflightError.draftSaved`/`agent-proxy-failure.ts`'s `draft_saved` field), so
- * the saved-draft resend below is `--send-draft`, not retyped content.
- * `#sendAgentMessage` still cannot carry a `suggestedNextAction` through
- * `AgentPreflightError`/`agent-proxy-failure.ts` today, so the equivalent guidance is folded into
- * the message text itself instead.
- */
-function targetConfirmationRequiredMessage(target: string, threadTarget: string): string {
-  return [
-    `Possible thread target mismatch: your latest read context under ${target} is ${threadTarget}, but this send targets ${target} top-level.`,
-    "This guard is intentionally narrow: moving a thread conclusion to the parent channel can be correct, but it is uncommon enough to confirm once.",
-    "",
-    "If this reply belongs in the thread, send the message to the thread target instead:",
-    `  coforge message send --target "${threadTarget}" <<'COFORGE_MESSAGE'`,
-    "  message body",
-    "  COFORGE_MESSAGE",
-    "",
-    "If the top-level channel message is intentional, send the saved draft unchanged:",
-    `  coforge message send --send-draft --target "${target}"`,
-    "",
-    `No message was sent. Send to ${threadTarget} if this belongs in the thread, or confirm the saved top-level draft with \`coforge message send --send-draft --target "${target}"\`.`,
-  ].join("\n");
-}
 
 type AgentInputCompletion = {
   resolve: () => void;
@@ -334,10 +267,7 @@ type AgentInputQueue = {
   closed: boolean;
 };
 
-type ActivityLaunch = {
-  launchId: string;
-  clientSeq: number;
-  stopping: boolean;
+type ActivityLaunch = PublishedActivityLaunch & {
   trajectory?: ActivityTrajectory;
   // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
   // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
@@ -345,41 +275,6 @@ type ActivityLaunch = {
   // core has for that decision (see agent-runtime/runtime-error-activity.ts).
   crashDetail?: RuntimeErrorEvent;
 };
-
-/** An activity envelope before the launch assigns its sequence metadata. */
-type ActivityDraft = Omit<AgentActivity, "launchId" | "clientSeq" | "observedAtMs">;
-
-// While an Agent stays busy (working/thinking) through a long silent turn, the
-// daemon re-sends the last busy Activity frame every 60s with isHeartbeat set
-// so the server's 90s display lease (WORKING_LEASE_MS) never lapses; the 30s
-// margin matches AGENT_STATUS_LEASE_MS's margin over AGENT_STATUS_REFRESH_MS.
-// Kept here, not in daemon-connection.ts: the macOS lifecycle fixture replaces
-// that module with a stub that only exports the connection class.
-export const ACTIVITY_HEARTBEAT_MS = 60_000;
-
-/** Detail kinds the busy heartbeat keeps warm: the Agent is working or thinking. */
-const BUSY_ACTIVITY_DETAIL_KINDS = new Set<string>([
-  AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED,
-  AGENT_ACTIVITY_DETAIL_KIND.MODEL_RESPONSE_STARTED,
-  AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED,
-  AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED,
-  AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND,
-  AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS,
-  // Liveness-only fillers: busy, but content-free.
-  AGENT_ACTIVITY_DETAIL_KIND.TOOL_END,
-  AGENT_ACTIVITY_DETAIL_KIND.THINKING_END,
-  AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED,
-  AGENT_ACTIVITY_DETAIL_KIND.REVIEW_FINISHED,
-  // Visible, stored busy detail kinds.
-  AGENT_ACTIVITY_DETAIL_KIND.COMPACTING_CONTEXT,
-  AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY,
-  AGENT_ACTIVITY_DETAIL_KIND.MESSAGE_RECEIVED,
-  AGENT_ACTIVITY_DETAIL_KIND.REVIEWING_CHANGES,
-  AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_STALE,
-  AGENT_ACTIVITY_DETAIL_KIND.REVIEW_STALE,
-  AGENT_ACTIVITY_DETAIL_KIND.STALLED_RECOVERY,
-  AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
-]);
 
 const TURN_ACTIVITY_EVENT_TYPES = new Set<AgentRuntimeEvent["type"]>([
   "text-delta",
@@ -393,40 +288,6 @@ const TURN_ACTIVITY_EVENT_TYPES = new Set<AgentRuntimeEvent["type"]>([
   "compaction-finished",
   "compaction-interrupted",
 ]);
-
-/** `SEND_DRAFT_EXPIRED`: nothing is sent. The entry is gone, so the discarded body travels once,
- * in `details.discarded_draft`, which the CLI prints as its last copy. */
-function expiredDraftError(target: string, content: string, savedAt: number): AgentPreflightError {
-  const savedAtIso = new Date(savedAt).toISOString();
-  return new AgentPreflightError(
-    `The saved draft for this target expired and was discarded: drafts are kept for ${AGENT_MESSAGE_DRAFT_TTL_MS / 60_000} minutes, and this one was saved at ${savedAtIso}. This command did not send anything.`,
-    "SEND_DRAFT_EXPIRED",
-    {
-      draftSaved: false,
-      retryable: false,
-      suggestedNextAction:
-        "If this draft came from a failed send whose outcome was never confirmed, the original " +
-        "may already have been delivered under its idempotency key: read the target and confirm " +
-        "before resending, or you may post it twice. To send the discarded body, send it normally: " +
-        `\`coforge message send --target ${JSON.stringify(target)}\` with the body on stdin.`,
-    },
-    { discarded_draft: { content, saved_at: savedAtIso } },
-  );
-}
-
-/** Detail kinds that end a busy turn; the heartbeat stops as soon as one is observed. */
-const TERMINAL_ACTIVITY_DETAIL_KINDS = new Set<string>([
-  AGENT_ACTIVITY_DETAIL_KIND.IDLE,
-  AGENT_ACTIVITY_DETAIL_KIND.STOPPED,
-  AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
-  AGENT_ACTIVITY_DETAIL_KIND.FRESHNESS_HOLD,
-  AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_CRASHED,
-  AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_INTERRUPTED,
-  AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_STALLED,
-]);
-
-/** One Agent that is still mid-turn when the runner hold is polled. */
-export type BusyAgentReport = { agentId: string; detailKind: string; busySinceMs: number };
 
 type SessionMode = "create" | "resume";
 
@@ -493,14 +354,6 @@ function runtimeDisplayName(provider: RuntimeProvider): string {
   return RUNTIME_DISPLAY_NAME[provider];
 }
 
-/** An activity is narrated for exactly the two hold decisions; a send that reached the provider
- * (`forward`/`bypass`) has none. */
-function heldFreshnessDecision(
-  decision: string | undefined,
-): "local_hold" | "syncing_hold" | undefined {
-  return decision === "local_hold" || decision === "syncing_hold" ? decision : undefined;
-}
-
 /** Narration for a daemon-initiated cold start after a session invalidate. */
 function sessionInvalidateActivityText(
   runtimeLabel: string,
@@ -528,7 +381,6 @@ export class DaemonRuntime {
   #stopPromise: Promise<void> | undefined;
   #started = false;
   #stopping = false;
-  #activityEnabled = false;
   #subscriptions: Array<() => void> = [];
   readonly #agentControl: AgentControl;
   readonly #agentSessions: AgentSessions;
@@ -538,6 +390,9 @@ export class DaemonRuntime {
   /** Serializes on-demand model-catalog refreshes (one CLI-spawning discovery at a time). */
   #modelRefreshChain: Promise<void> = Promise.resolve();
   readonly #messageAttention: AgentMessageAttentionIndex;
+  readonly #messageOperations: AgentMessageOperations;
+  /** The Agent requests the daemon only authorizes and forwards over Agent HTTPS. */
+  readonly agentRequests: AgentRequestForwarder;
   readonly #mentionDeliveries: MentionDeliveryTracker;
   /** The launch and native session last reported to the cloud per Agent: the identity a tracked
    * mention's envelope must name, while that launch is still the running one. */
@@ -552,12 +407,12 @@ export class DaemonRuntime {
   readonly #startBuffers = new Map<string, AgentMessageDelivery[]>();
   /** Agents whose in-flight launch is a message wake, which presents what waits as one notice. */
   readonly #wakeLaunches = new Set<string>();
-  /** Per-Agent retryable-runtime-error bookkeeping: consecutive-failure delivery
-   * backoff and the same-fingerprint repeat fence — see agent-runtime/runtime-error-recovery.ts. */
-  readonly #runtimeErrorDeliveryBackoff = new RuntimeErrorDeliveryBackoff();
-  readonly #runtimeErrorFingerprintFence = new RuntimeErrorFingerprintFence();
-  /** The one pending delivery-backoff release timer per Agent, if any. */
-  readonly #runtimeErrorBackoffTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Per-Agent delivery hold after retryable runtime errors: backoff, fingerprint fence, and the
+   * backoff's release timer. */
+  readonly #runtimeErrorHold = new RuntimeErrorDeliveryHold({
+    deliveryQueue: this.#deliveryQueue,
+    flush: (agentId, held) => this.#flushHeldDeliveries(agentId, held),
+  });
   readonly #reminders: ReminderScheduler;
   readonly #agentInboxes = new Map<string, AgentInboxStateMachine>();
   readonly #appInboxes = new Map<string, Promise<AgentAppInbox>>();
@@ -597,11 +452,7 @@ export class DaemonRuntime {
   /** One early handoff request per native session; reset when a new launch starts. */
   readonly #contextHandoffs = new Map<string, ContextHandoffCoordinator>();
   readonly #agentProxy?: AgentProxy;
-  readonly #activityHeartbeatTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  readonly #lastBusyActivity = new Map<
-    string,
-    { launch: ActivityLaunch; activity: ActivityDraft; at: number }
-  >();
+  readonly #activityPublisher: AgentActivityPublisher<ActivityLaunch>;
   /** Runner-hold reason while this runtime is refusing new turns; undefined when not held.
    * Deliberately in-memory only, so a restarted daemon is never born held. */
   #runnerHold: RunnerHold | undefined;
@@ -611,7 +462,7 @@ export class DaemonRuntime {
   readonly #compactionTracker = new CompactionTracker((agentId) => {
     const launch = this.#currentActivityLaunches.get(agentId);
     if (launch)
-      this.#emitAgentActivity(
+      this.#activityPublisher.publish(
         agentId,
         launch,
         this.#activity(
@@ -660,6 +511,16 @@ export class DaemonRuntime {
     } = {},
     private readonly computerVersion?: string,
   ) {
+    const runtime = this;
+    this.#activityPublisher = new AgentActivityPublisher<ActivityLaunch>({
+      currentLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
+      get transport() {
+        return runtime.#transport;
+      },
+      recordClientSeq: (agentId, clientSeq) =>
+        this.#agentProcessManager.recordClientSeq(agentId, clientSeq),
+      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
+    });
     this.#connection = connection;
     this.#createProvider = createProvider;
     this.#agentProcessManager = new AgentProcessManager(createProvider);
@@ -689,7 +550,7 @@ export class DaemonRuntime {
       (ack) => this.#transport.sendAgentDeliveryAck?.(ack) ?? Promise.resolve(),
       (agentId) => {
         try {
-          this.#emitCurrentActivity(
+          this.#activityPublisher.publishCurrent(
             agentId,
             this.#activity(
               agentId,
@@ -723,6 +584,36 @@ export class DaemonRuntime {
         consumedSeqs: new AgentConsumedSeqStore(),
       },
     );
+    this.agentRequests = new AgentRequestForwarder({
+      get transport() {
+        return runtime.#transport;
+      },
+      connection,
+      authorizedAgent: (context, agentApiKey) => this.#authorizedAgent(context, agentApiKey),
+    });
+    this.#messageOperations = new AgentMessageOperations({
+      connection,
+      attention: this.#messageAttention,
+      inbox: (agentId) => this.#agentInbox(agentId),
+      get transport() {
+        return runtime.#transport;
+      },
+      reportFreshnessHold: (agentId, activity) =>
+        this.#activityPublisher.publishCurrent(
+          agentId,
+          this.#activity(
+            agentId,
+            AGENT_ACTIVITY_DETAIL_KIND.FRESHNESS_HOLD,
+            "info",
+            activity.detail,
+            {
+              activityKind: activity.activityKind,
+              entries: activity.entries,
+              producerFactId: activity.producerFactId,
+            },
+          ),
+        ),
+    });
     this.#reminders = new ReminderScheduler(
       { workspaceId: connection.workspaceId, computerId: connection.computerId },
       new FileReminderReceiptStore(stateDirectory, connection.workspaceId, connection.computerId),
@@ -1280,7 +1171,7 @@ export class DaemonRuntime {
       const buffered = [...heldControl.take().items, ...heldNotices.items];
       buffering = false;
       this.#started = true;
-      this.#activityEnabled = true;
+      this.#activityPublisher.enable();
       // Kick off optional inventory before flushing buffered publications so immediate probes can
       // make progress while the first Agent inputs are delivered.
       const codeAgentReport = this.#reportCodeAgentRuntimes(connection, transport);
@@ -2012,7 +1903,7 @@ export class DaemonRuntime {
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
     if (activityLaunch) activityLaunch.stopping = true;
     this.#interruptIfBusy(agentId, activityLaunch);
-    this.#clearActivityHeartbeat(agentId);
+    this.#activityPublisher.forgetBusy(agentId);
     this.#compactionTracker.dispose(agentId);
     this.#runtimeProgress.dispose(agentId);
     this.#lastContextUsage.delete(agentId);
@@ -2139,7 +2030,7 @@ export class DaemonRuntime {
         outcome: reused ? "reused" : "minted",
       });
     this.#currentActivityLaunches.set(agentId, launch);
-    this.#clearActivityHeartbeat(agentId);
+    this.#activityPublisher.forgetBusy(agentId);
     this.#compactionTracker.dispose(agentId);
     this.#runtimeProgress.dispose(agentId);
     // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
@@ -2158,7 +2049,7 @@ export class DaemonRuntime {
         request.replacedSessionId,
         request.invalidateReason,
       );
-      this.#emitAgentActivity(
+      this.#activityPublisher.publish(
         agentId,
         launch,
         this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_UNAVAILABLE, "info", detail, {
@@ -2269,7 +2160,7 @@ export class DaemonRuntime {
                   driverReplacedSessionId,
                   "missing",
                 );
-                this.#emitAgentActivity(
+                this.#activityPublisher.publish(
                   agentId,
                   launch,
                   this.#activity(
@@ -2307,7 +2198,7 @@ export class DaemonRuntime {
       const unsubscribe = runtime.session.subscribe((event) => {
         const turnActivity =
           event.type === "activity"
-            ? BUSY_ACTIVITY_DETAIL_KINDS.has(event.activity.detailKind)
+            ? isBusyActivityDetailKind(event.activity.detailKind)
             : TURN_ACTIVITY_EVENT_TYPES.has(event.type);
         if (turnActivity && this.#reconcileIdleTurn(agentId, launch)) return;
         trajectory.accept(event);
@@ -2346,7 +2237,7 @@ export class DaemonRuntime {
         // outcome is a crash; any other unintentional exit keeps the stopped wording, because
         // the Agent's control state is stopped either way.
         const crashed = launch.crashDetail && buildRuntimeCrashedActivity(launch.crashDetail);
-        this.#emitAgentActivity(
+        this.#activityPublisher.publish(
           agentId,
           launch,
           crashed
@@ -2377,7 +2268,7 @@ export class DaemonRuntime {
         }
       }
       this.#sendAgentStatus(agentId, "active");
-      this.#emitAgentActivity(agentId, launch, {
+      this.#activityPublisher.publish(agentId, launch, {
         ...this.#activity(
           agentId,
           AGENT_ACTIVITY_DETAIL_KIND.STARTING,
@@ -2408,14 +2299,14 @@ export class DaemonRuntime {
           outcome: "failed",
         });
         this.#sendAgentStatus(agentId, "inactive");
-        this.#emitAgentActivity(
+        this.#activityPublisher.publish(
           agentId,
           launch,
           this.#launchFailureActivity(agentId, config.provider, error),
         );
       }
       if (this.#currentActivityLaunches.get(agentId) === launch) {
-        this.#clearActivityHeartbeat(agentId);
+        this.#activityPublisher.forgetBusy(agentId);
         this.#compactionTracker.dispose(agentId);
         this.#runtimeProgress.dispose(agentId);
         this.#lastContextUsage.delete(agentId);
@@ -2439,8 +2330,8 @@ export class DaemonRuntime {
    * Every closure/map this mutates is mutated IN PLACE (`activityLaunch.launchId = launchId`,
    * not a new `ActivityLaunch` object) rather than replaced, so the `#launchAgent` closures that
    * already hold a reference to it — the process-exit handler's `#agentControl.stopped(agentId,
-   * launch.launchId, ...)`, `#emitAgentActivity`'s `launch.launchId`/`launch.clientSeq`,
-   * `#lastBusyActivity`'s `{ launch, ... }` identity comparisons — see the update for free,
+   * launch.launchId, ...)`, `AgentActivityPublisher`'s `launch.launchId`/`launch.clientSeq`
+   * and its last-busy `{ launch, ... }` identity comparisons — see the update for free,
    * without restructuring each one individually or losing the exit handler's `#currentActivityLaunches.get(agentId)
    * === launch` identity check (a *replacement* object there would silently turn that handler
    * into a no-op for the rebound launch).
@@ -2549,7 +2440,7 @@ export class DaemonRuntime {
       let handoff = this.#contextHandoffs.get(agentId);
       if (!handoff) {
         handoff = new ContextHandoffCoordinator(({ prompt, percent }) => {
-          this.#emitAgentActivity(
+          this.#activityPublisher.publish(
             agentId,
             launch,
             this.#activity(
@@ -2587,7 +2478,7 @@ export class DaemonRuntime {
           activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED) &&
         this.#compactionTracker.finish(agentId) === "finished"
       )
-        this.#emitAgentActivity(
+        this.#activityPublisher.publish(
           agentId,
           launch,
           this.#activity(
@@ -2609,7 +2500,7 @@ export class DaemonRuntime {
       const subagentScoped =
         activity.level !== "error" &&
         activity.entries?.some((entry) => entry.subagent !== undefined);
-      this.#emitAgentActivity(agentId, launch, {
+      this.#activityPublisher.publish(agentId, launch, {
         ...this.#activity(
           agentId,
           subagentScoped ? AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY : activity.detailKind,
@@ -2631,7 +2522,7 @@ export class DaemonRuntime {
     }
     if (event.type === "tool-end") {
       // Liveness-only filler: renews the busy lease, never stored.
-      this.#emitAgentActivity(
+      this.#activityPublisher.publish(
         agentId,
         launch,
         this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.TOOL_END, "info", "Tool finished"),
@@ -2640,7 +2531,7 @@ export class DaemonRuntime {
     }
     if (event.type === "compaction-started") {
       if (this.#compactionTracker.start(agentId) === "started")
-        this.#emitAgentActivity(
+        this.#activityPublisher.publish(
           agentId,
           launch,
           this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.COMPACTING_CONTEXT, "info", ""),
@@ -2649,7 +2540,7 @@ export class DaemonRuntime {
     }
     if (event.type === "compaction-finished") {
       if (this.#compactionTracker.finish(agentId) === "finished")
-        this.#emitAgentActivity(
+        this.#activityPublisher.publish(
           agentId,
           launch,
           this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED, "info", ""),
@@ -2664,9 +2555,9 @@ export class DaemonRuntime {
     if (event.type === "progress") {
       this.#runtimeProgress.observe(
         agentId,
-        this.#lastBusyActivity.get(agentId)?.launch === launch,
+        this.#activityPublisher.lastBusy(agentId)?.launch === launch,
         () =>
-          this.#emitAgentActivity(
+          this.#activityPublisher.publish(
             agentId,
             launch,
             this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS, "info", ""),
@@ -2689,7 +2580,7 @@ export class DaemonRuntime {
         buildRuntimeErrorActivity(event, classification),
         classification,
       );
-      this.#emitAgentActivity(
+      this.#activityPublisher.publish(
         agentId,
         launch,
         this.#activity(agentId, built.detailKind, built.level, built.detail, {
@@ -2701,7 +2592,7 @@ export class DaemonRuntime {
     }
     if (event.type === "reconnecting") {
       const built = buildRuntimeReconnectingActivity(event);
-      this.#emitAgentActivity(
+      this.#activityPublisher.publish(
         agentId,
         launch,
         this.#activity(agentId, built.detailKind, built.level, built.detail, {
@@ -2734,7 +2625,7 @@ export class DaemonRuntime {
     // Only a genuinely successful turn clears the delivery-backoff streak and the
     // fingerprint fence; a failed or interrupted turn leaves both exactly as they were, so a
     // still-active backoff correctly keeps holding across it.
-    if (event.status === "completed") this.#resetRuntimeErrorRecovery(agentId);
+    if (event.status === "completed") this.#runtimeErrorHold.noteSuccess(agentId);
     // Release whatever a queue_until_idle provider held while this turn ran, as one
     // coalesced notice for the next turn — never blocking this turn-end Activity on it.
     this.#releaseTurnEndHolds(agentId);
@@ -2743,7 +2634,7 @@ export class DaemonRuntime {
     // A turn ending means a still-open compaction is done; report that before the turn's own
     // idle/failed/interrupted Activity.
     if (this.#compactionTracker.finish(agentId) === "finished")
-      this.#emitAgentActivity(
+      this.#activityPublisher.publish(
         agentId,
         launch,
         this.#activity(
@@ -2769,7 +2660,7 @@ export class DaemonRuntime {
         })
         .catch(() => {});
     if (!alreadyExplained)
-      this.#emitAgentActivity(
+      this.#activityPublisher.publish(
         agentId,
         launch,
         event.status === "failed"
@@ -2919,9 +2810,9 @@ export class DaemonRuntime {
       });
       return;
     }
-    const remembered = this.#lastBusyActivity.get(probe.agentId);
+    const remembered = this.#activityPublisher.lastBusy(probe.agentId);
     if (remembered && remembered.launch === launch) {
-      this.#emitAgentActivity(probe.agentId, launch, {
+      this.#activityPublisher.publish(probe.agentId, launch, {
         ...remembered.activity,
         probeId: probe.probeId,
         entries: [],
@@ -2929,7 +2820,7 @@ export class DaemonRuntime {
       });
       return;
     }
-    this.#emitAgentActivity(probe.agentId, launch, {
+    this.#activityPublisher.publish(probe.agentId, launch, {
       ...this.#activity(probe.agentId, AGENT_ACTIVITY_DETAIL_KIND.IDLE, "info", ""),
       probeId: probe.probeId,
     });
@@ -3214,7 +3105,7 @@ export class DaemonRuntime {
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
     if (activityLaunch) activityLaunch.stopping = true;
     this.#interruptIfBusy(agentId, activityLaunch);
-    this.#clearActivityHeartbeat(agentId);
+    this.#activityPublisher.forgetBusy(agentId);
     this.#compactionTracker.dispose(agentId);
     this.#runtimeProgress.dispose(agentId);
     this.#lastContextUsage.delete(agentId);
@@ -3222,7 +3113,7 @@ export class DaemonRuntime {
     const stopping = this.#stopAgent(agentId)
       .catch((error) => {
         if (activityLaunch)
-          this.#emitAgentActivity(
+          this.#activityPublisher.publish(
             agentId,
             activityLaunch,
             this.#runtimeErrorActivity(agentId, this.#stopFailureMessage(agentId, error)),
@@ -3261,13 +3152,11 @@ export class DaemonRuntime {
     this.#deliveryQueue.clearAgent(agentId);
     // An explicit Stop discards the runtime-error recovery streaks the same way — a
     // fresh start should not inherit a backoff/fence from a process that no longer exists.
-    this.#clearRuntimeErrorBackoffTimer(agentId);
-    this.#runtimeErrorDeliveryBackoff.reset(agentId);
-    this.#runtimeErrorFingerprintFence.reset(agentId);
+    this.#runtimeErrorHold.forget(agentId);
     this.#sendAgentStatus(agentId, "inactive");
     if (publishStopped && activityLaunch)
-      this.#emitAgentActivity(agentId, activityLaunch, this.#stoppedActivity(agentId));
-    this.#clearActivityHeartbeat(agentId);
+      this.#activityPublisher.publish(agentId, activityLaunch, this.#stoppedActivity(agentId));
+    this.#activityPublisher.forgetBusy(agentId);
     this.#currentActivityLaunches.delete(agentId);
   }
 
@@ -3382,30 +3271,12 @@ export class DaemonRuntime {
     built: ReturnType<typeof buildRuntimeErrorActivity>,
     classification: RuntimeErrorClassification,
   ): ReturnType<typeof buildRuntimeErrorActivity> {
-    if (classification.retryDecision !== RUNTIME_ERROR_RETRY_DECISION.RETRY) {
-      // Not worth backing off for: retrying achieves nothing on its own (D's territory is the
-      // user-facing side of that, e.g. auth). Leave the Agent in a truthful state instead of
-      // holding a delivery behind a backoff that will never usefully resolve.
-      this.#stopRuntimeErrorDeliveryBackoff(agentId);
-      return built;
-    }
-    const fingerprint = built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message);
-    const fence = this.#runtimeErrorFingerprintFence.note(agentId, fingerprint);
-    if (fence.fenced) {
-      this.#applyRuntimeErrorFingerprintFence(agentId);
-      return this.#runtimeErrorFingerprintFenceActivity(built, fence);
-    }
-    const backoff = this.#runtimeErrorDeliveryBackoff.recordFailure(agentId);
-    // The queue records that the Agent is held and why; this release timer is the single owner
-    // of when that ends.
-    this.#deliveryQueue.hold(
+    const fence = this.#runtimeErrorHold.noteFailure(
       agentId,
-      classification.errorClass === RUNTIME_ERROR_CLASS.RATE_LIMIT
-        ? "rate_limit_backoff"
-        : "runtime_error_backoff",
+      classification,
+      built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
     );
-    this.#scheduleRuntimeErrorDeliveryBackoffRelease(agentId, backoff.delayMs);
-    return built;
+    return fence ? this.#runtimeErrorFingerprintFenceActivity(built, fence) : built;
   }
 
   /** Overrides a runtime_error Activity's wording once the fingerprint fence has tripped: same
@@ -3426,60 +3297,6 @@ export class DaemonRuntime {
         errorReason: "runtime_error_fenced",
       },
     };
-  }
-
-  /** Cancels any pending release timer, releases (and flushes) anything currently held under an
-   * explicit hold, and forgets the consecutive-retryable-failure streak. Only for a failure this
-   * PR has decided is not worth retrying at all (a `terminal`-classified one) — never for a
-   * tripped fingerprint fence, which must keep its hold instead (see
-   * `#applyRuntimeErrorFingerprintFence`). Deliberately leaves the fingerprint fence's own streak
-   * untouched — that one only ever resets on a successful turn (`#resetRuntimeErrorRecovery`) or
-   * an explicit Stop, so a fenced Agent stays fenced across a merely non-retryable failure of a
-   * different class. */
-  #stopRuntimeErrorDeliveryBackoff(agentId: string): void {
-    this.#clearRuntimeErrorBackoffTimer(agentId);
-    const held = this.#deliveryQueue.release(agentId);
-    if (held.length) this.#flushHeldDeliveries(agentId, held);
-    this.#runtimeErrorDeliveryBackoff.reset(agentId);
-  }
-
-  /**
-   * A tripped fingerprint fence stops retrying — cancels any pending release timer and
-   * keeps (or starts) an indefinite explicit hold, so nothing currently held, and nothing newly
-   * queued, reaches the runtime that just failed the same way three times in a row. Deliberately
-   * never releases or flushes anything already held: doing so would deliver straight into the
-   * same broken runtime this fence exists to stop retrying — the bug this method replaces
-   * (reusing `#stopRuntimeErrorDeliveryBackoff`, which releases, here) removed protection instead
-   * of adding it. Only an explicit Stop (`#releaseAgentRuntime` → `AgentDeliveryQueue.clearAgent`)
-   * clears the hold; an unexpected exit and any relaunch that follows inherit it unchanged — see
-   * the ADR's "Held deliveries while fenced" section for why that is safe and deliberate.
-   */
-  #applyRuntimeErrorFingerprintFence(agentId: string): void {
-    this.#clearRuntimeErrorBackoffTimer(agentId);
-    this.#deliveryQueue.hold(agentId, "fingerprint_fence");
-  }
-
-  /** A genuinely successful turn: forgets both streaks entirely. */
-  #resetRuntimeErrorRecovery(agentId: string): void {
-    this.#stopRuntimeErrorDeliveryBackoff(agentId);
-    this.#runtimeErrorFingerprintFence.reset(agentId);
-  }
-
-  #clearRuntimeErrorBackoffTimer(agentId: string): void {
-    const timer = this.#runtimeErrorBackoffTimers.get(agentId);
-    if (timer === undefined) return;
-    clearTimeout(timer);
-    this.#runtimeErrorBackoffTimers.delete(agentId);
-  }
-
-  #scheduleRuntimeErrorDeliveryBackoffRelease(agentId: string, delayMs: number): void {
-    this.#clearRuntimeErrorBackoffTimer(agentId);
-    const timer = setTimeout(() => {
-      this.#runtimeErrorBackoffTimers.delete(agentId);
-      const held = this.#deliveryQueue.release(agentId);
-      if (held.length) this.#flushHeldDeliveries(agentId, held);
-    }, delayMs);
-    this.#runtimeErrorBackoffTimers.set(agentId, timer);
   }
 
   /** Attempts delivery of everything just released from an explicit or busy-gated hold, as one
@@ -3517,76 +3334,12 @@ export class DaemonRuntime {
   }
 
   /** Reports runtime_interrupted when a requested stop/restart cuts a busy turn.
-   * Must run before #clearActivityHeartbeat, which erases the busy evidence. */
+   * Must run before `forgetBusy`, which erases the busy evidence. */
   #interruptIfBusy(agentId: string, activityLaunch: ActivityLaunch | undefined): void {
     if (!activityLaunch) return;
-    const busy = this.#lastBusyActivity.get(agentId);
+    const busy = this.#activityPublisher.lastBusy(agentId);
     if (busy && busy.launch === activityLaunch)
-      this.#emitAgentActivity(agentId, activityLaunch, this.#interruptedActivity(agentId));
-  }
-
-  /** Emits against the Agent's current launch, if one exists. */
-  #emitCurrentActivity(agentId: string, activity: ActivityDraft): void {
-    const launch = this.#currentActivityLaunches.get(agentId);
-    if (launch) this.#emitAgentActivity(agentId, launch, activity);
-  }
-
-  #emitAgentActivity(agentId: string, launch: ActivityLaunch, activity: ActivityDraft): void {
-    if (!this.#activityEnabled || this.#currentActivityLaunches.get(agentId) !== launch) return;
-    if (launch.stopping) {
-      this.#clearActivityHeartbeat(agentId);
-      if (
-        activity.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.STOPPED &&
-        activity.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_INTERRUPTED &&
-        activity.level !== "error" &&
-        !activity.entries?.some((entry) => entry.kind !== "tool_start")
-      )
-        return;
-    }
-    this.#transport.sendAgentActivity?.({
-      ...activity,
-      launchId: launch.launchId,
-      clientSeq: ++launch.clientSeq,
-      observedAtMs: Date.now(),
-    });
-    // Survives a later exit so a wake reusing this launchId can continue the counter
-    // instead of colliding with the server's (agentId, launchId, clientSeq) idempotency key.
-    this.#agentProcessManager.recordClientSeq(agentId, launch.clientSeq);
-    if (TERMINAL_ACTIVITY_DETAIL_KINDS.has(activity.detailKind)) {
-      this.#clearActivityHeartbeat(agentId);
-    } else if (BUSY_ACTIVITY_DETAIL_KINDS.has(activity.detailKind)) {
-      if (!activity.isHeartbeat)
-        this.#lastBusyActivity.set(agentId, { launch, activity, at: Date.now() });
-      this.#scheduleActivityHeartbeat(agentId, launch);
-    }
-  }
-
-  /** Re-sends the last busy Activity frame every ACTIVITY_HEARTBEAT_MS so a long silent
-   * turn (a shell command or a quiet model call) never lets the display lease lapse. */
-  #scheduleActivityHeartbeat(agentId: string, launch: ActivityLaunch): void {
-    const existing = this.#activityHeartbeatTimers.get(agentId);
-    if (existing !== undefined) clearTimeout(existing);
-    const timer = setTimeout(() => {
-      this.#activityHeartbeatTimers.delete(agentId);
-      const remembered = this.#lastBusyActivity.get(agentId);
-      if (!remembered || remembered.launch !== launch) return;
-      if (this.#reconcileIdleTurn(agentId, launch)) return;
-      this.#emitAgentActivity(agentId, launch, {
-        ...remembered.activity,
-        isHeartbeat: true,
-        entries: [],
-      });
-    }, ACTIVITY_HEARTBEAT_MS);
-    this.#activityHeartbeatTimers.set(agentId, timer);
-  }
-
-  #clearActivityHeartbeat(agentId: string): void {
-    const timer = this.#activityHeartbeatTimers.get(agentId);
-    if (timer !== undefined) {
-      clearTimeout(timer);
-      this.#activityHeartbeatTimers.delete(agentId);
-    }
-    this.#lastBusyActivity.delete(agentId);
+      this.#activityPublisher.publish(agentId, activityLaunch, this.#interruptedActivity(agentId));
   }
 
   /** Restore observation and delivery gating only; this is no proof of a turn outcome. */
@@ -3600,8 +3353,11 @@ export class DaemonRuntime {
     // Otherwise the pending trajectory timer could publish it after Idle and rearm Busy.
     launch.trajectory?.flush();
     this.#compactionTracker.dispose(agentId);
-    if (this.#lastBusyActivity.has(agentId) || this.#deliveryQueue.isBusy(agentId)) {
-      this.#emitAgentActivity(
+    if (
+      this.#activityPublisher.lastBusy(agentId) !== undefined ||
+      this.#deliveryQueue.isBusy(agentId)
+    ) {
+      this.#activityPublisher.publish(
         agentId,
         launch,
         this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.IDLE, "info", ""),
@@ -3642,7 +3398,7 @@ export class DaemonRuntime {
    * launch's first identity) or the reading is unchanged from the last one sent for this launch
    * — `#lastContextUsage` is forgotten on launch end/dispose alongside `#compactionTracker`, so a
    * new launch always sends its first reading. Reuses Activity's own `clientSeq` counter on the
-   * launch, the same ordering fence `#emitAgentActivity` advances.
+   * launch, the same ordering fence `AgentActivityPublisher.publish` advances.
    */
   #sendContextUsage(
     agentId: string,
@@ -3672,7 +3428,7 @@ export class DaemonRuntime {
       clientSeq: ++launch.clientSeq,
     });
     // Survives a later exit so a wake reusing this launchId can continue the counter,
-    // the same reason `#emitAgentActivity` records it after every send on this shared counter.
+    // the same reason `AgentActivityPublisher.publish` records it after every send on this shared counter.
     this.#agentProcessManager.recordClientSeq(agentId, launch.clientSeq);
   }
 
@@ -3742,593 +3498,7 @@ export class DaemonRuntime {
           await this.#canonicalAgentMessageTarget(agentId, request.target, agentApiKey),
         )
       : undefined;
-    const { operation } = request;
-    if (operation === "check") return this.#checkAgentMessages(agentId, request, agentApiKey);
-    if (operation === "send" && target)
-      return this.#sendAgentMessage(agentId, request, target, agentApiKey);
-    return this.#forwardAgentMessage(agentId, request, operation, target, agentApiKey);
-  }
-
-  /**
-   * Drains the server-side events page for the Agent until it reports no more remain. The server
-   * owns pagination and advances the canonical read boundary as it returns each page
-   * (ack-on-drain); this loop only reconciles the daemon's volatile notice index afterward.
-   */
-  async #checkAgentMessages(
-    agentId: string,
-    request: LocalAgentMessageRequest,
-    agentApiKey: string,
-  ): Promise<AgentMessageResponse> {
-    const startedAt = performance.now();
-    const attention = this.#messageAttention.check(agentId);
-    const messages: AgentMessageRecord[] = [];
-    let hasMore = false;
-    let roundCount = 0;
-    while (roundCount < MAX_EVENT_DRAIN_ROUNDS) {
-      roundCount += 1;
-      const result = await this.#transport.agentMessage!(
-        {
-          idempotencyKey: request.idempotencyKey,
-          agentId,
-          workspaceId: this.#connection.workspaceId,
-          operation: "check",
-          target: request.target || "",
-          limit: request.limit,
-        },
-        agentApiKey,
-      );
-      if (!result.accepted || result.messages.length === 0) {
-        hasMore = false;
-        break;
-      }
-      messages.push(...result.messages);
-      hasMore = Boolean(result.hasMore);
-      if (!hasMore) break;
-    }
-    // A `check` records the exact sequences it showed, per target, and no frontier: a check
-    // drains what notified the Agent, which need not be every message of the target. It reviews
-    // nothing either, so it takes no read order.
-    const shownByTarget = new Map<string, number[]>();
-    for (const message of messages) {
-      const shown = shownByTarget.get(message.target);
-      if (shown) shown.push(message.sequence);
-      else shownByTarget.set(message.target, [message.sequence]);
-    }
-    this.#messageAttention.recordExactSeen(agentId, shownByTarget);
-    logger.info("Agent checked pending messages", {
-      event: "agent.message.checked",
-      ...this.#agentLogScope(agentId, request.idempotencyKey),
-      pending_count: attention.reduce((count, item) => count + item.pendingCount, 0),
-      displayed_count: messages.length,
-      round_count: roundCount,
-      has_more: hasMore,
-      duration_ms: Math.round(performance.now() - startedAt),
-      outcome: "ok",
-    });
-    return {
-      idempotencyKey: request.idempotencyKey,
-      accepted: true,
-      attentionCount: attention.reduce((n, a) => n + a.pendingCount, 0),
-      summaries: attention.map((item) => ({ ...item, flags: [...item.flags] })),
-      messages,
-      messageId: "",
-      hasMore,
-    };
-  }
-
-  /**
-   * The saved draft `--send-draft` re-sends, checked before anything is issued: an expired draft
-   * is discarded and returned as the error's last copy, a missing one is refused, and
-   * `--expected-draft-key` refuses a draft that now belongs to a different logical send.
-   */
-  async #draftToResend(
-    inbox: AgentInboxStateMachine,
-    target: string,
-    request: LocalAgentMessageRequest,
-  ) {
-    const lookup = await inbox.lookup(target);
-    if (lookup.status === "expired")
-      throw expiredDraftError(target, lookup.content, lookup.savedAt);
-    if (lookup.status === "missing")
-      throw new AgentPreflightError(`No saved draft for target: ${target}`, "SEND_DRAFT_NOT_FOUND");
-    const draft = lookup.draft;
-    if (request.expectedDraftKey !== undefined && draft.idempotencyKey !== request.expectedDraftKey)
-      throw new AgentPreflightError(
-        "The saved draft no longer matches the expected idempotency key. No request was made and the current draft was left unchanged because it belongs to a different logical send.",
-        "SAVED_DRAFT_IDENTITY_CHANGED",
-        {
-          draftSaved: false,
-          retryable: false,
-          suggestedNextAction:
-            "Review the current draft before deciding whether to send it; do not treat it as the earlier logical send.",
-        },
-      );
-    return draft;
-  }
-
-  /** Sends a body or a held draft, honouring the server's freshness hold decision. */
-  async #sendAgentMessage(
-    agentId: string,
-    request: LocalAgentMessageRequest,
-    target: string,
-    agentApiKey: string,
-  ): Promise<AgentMessageResponse> {
-    const startedAt = performance.now();
-    const inbox = this.#agentInbox(agentId);
-    // The daemon owns the per-target draft, and the draft names its own send by key: every local
-    // request carries a key the CLI minted for that invocation, so the draft's key alone decides
-    // which accepted send may clear it (`clearIfIdempotencyKeyMatches` below, task #70).
-    const draft = request.sendDraft ? await this.#draftToResend(inbox, target, request) : undefined;
-    // One logical send keeps one idempotency key. A fresh send's key is this invocation's;
-    // `--send-draft` re-sends under the key the draft was saved with, so a resend after an
-    // unknown outcome can never commit the same message twice.
-    const idempotencyKey = draft?.idempotencyKey ?? request.idempotencyKey;
-    // A normal send replaces whatever draft was there; the send reports that (and the hold count
-    // the draft had reached) so the server can compute `continueAnywaySuggested`.
-    const priorDraft = draft ?? (request.sendDraft ? undefined : await inbox.draft(target));
-    const draftReholdCount = priorDraft?.reholdCount ?? 0;
-    const content = draft?.content ?? request.content;
-    if (content === undefined)
-      throw new AgentPreflightError(
-        "Agent message body is required",
-        "AGENT_MESSAGE_BODY_REQUIRED",
-      );
-    // The boundary a draft already accounted for travels with the next attempt — a
-    // `--send-draft` resend reuses the draft's `seenUpToSeq`, a fresh send inherits the draft it is
-    // replacing, and only when neither has one does the daemon fall back to what this Agent has
-    // consumed for the target.
-    const draftSeenUpToSeq = request.sendDraft ? draft?.seenUpToSeq : priorDraft?.seenUpToSeq;
-    const modelSeenSequence = this.#messageAttention.modelSeenSequence(agentId, target);
-    const seenUpToSeq = draftSeenUpToSeq ?? (modelSeenSequence > 0 ? modelSeenSequence : undefined);
-    // The messages above that frontier the Agent was shown one by one travel with it, so the
-    // server's freshness check does not count them as unreviewed.
-    const seenExactSeqs = sendSeenExactSeqs(
-      request.sendDraft ? draft?.seenExactSeqs : priorDraft?.seenExactSeqs,
-      this.#messageAttention.seenExactSequences(agentId, target),
-      seenUpToSeq,
-    );
-    // `--send-draft` re-sends the saved draft's attachments/mentions unless the Agent explicitly
-    // supplies new `--mention` values, which replace them (Feature 2's documented override).
-    const attachmentIds = request.sendDraft ? draft?.attachmentIds : request.attachmentIds;
-    const mentions = request.sendDraft
-      ? request.mentions?.length
-        ? request.mentions
-        : draft?.mentions
-      : request.mentions;
-    // The presence check runs against the EFFECTIVE outgoing content on every path, including a
-    // `--send-draft` resend of the daemon-held body (the CLI can only run this check client-side
-    // when it has the body in hand, i.e. never for an unmodified draft resend).
-    if (mentions?.length) {
-      const present = mentionsInContent(content);
-      for (const mention of mentions)
-        if (!present.has(mention.name))
-          throw new AgentPreflightError(
-            `Structured mention @${mention.name} is not present in the message body.`,
-            "MENTION_NOT_IN_CONTENT",
-          );
-    }
-    // Narrow local guard, decided entirely from volatile read-context state, before any transport
-    // call is made: a top-level send whose parent was read less recently than a thread rooted
-    // under it is an easy typo (replying to the channel instead of the thread), and moving a
-    // thread conclusion to the parent channel is uncommon enough to confirm once. `--send-draft`
-    // itself skips this guard (it can only re-target what was already confirmed once, at worst).
-    if (
-      !request.sendDraft &&
-      !request.targetConfirmed &&
-      threadParentTarget(target) === undefined
-    ) {
-      const latestThread = this.#messageAttention.latestThreadReadUnderParent(agentId, target);
-      if (latestThread) {
-        const parentOrder = this.#messageAttention.readOrder(agentId, target);
-        if (parentOrder === undefined || parentOrder < latestThread.order) {
-          // The outgoing content is saved as the local draft before refusing, so the documented
-          // recovery is resending that exact draft, not retyping it.
-          await inbox.save(target, {
-            content,
-            attachmentIds,
-            mentions,
-            seenUpToSeq,
-            idempotencyKey,
-          });
-          throw new AgentPreflightError(
-            targetConfirmationRequiredMessage(target, latestThread.target),
-            "THREAD_CONTEXT_TARGET_CONFIRMATION_REQUIRED",
-            { draftSaved: true },
-          );
-        }
-      }
-    }
-    // `inbox.save` persists the draft locally BEFORE the request is issued to the transport below;
-    // any failure past this point leaves delivery state unknown, never "not sent" (see
-    // `agent-preflight-error.ts` / `agent-proxy-failure.ts` and `message send`'s CLI renderer).
-    if (!request.sendDraft)
-      await inbox.save(target, { content, attachmentIds, mentions, seenUpToSeq, idempotencyKey });
-    // The daemon's own freshness decision, taken BEFORE any transport call: a send it holds must
-    // never be issued, because a re-issue of the same request would re-decide it (observed: the
-    // same idempotencyKey held at 00:18:30 and forwarded at 00:19:30 delivered a message the Agent had
-    // been told was held, and the deliberate `--send-draft` resend then duplicated it). A hold
-    // decided here is terminal; the server still gets the request when the daemon forwards, so its
-    // own check remains the race guard for anything that arrived in between.
-    const freshness = planAgentInboxFreshness({
-      continueAnyway: Boolean(request.continueAnyway),
-      modelSeenSequence,
-      pendingMessageCount: this.#messageAttention.pendingMessageCount(agentId, target),
-      pendingMaxSequence: this.#messageAttention.pendingMaxSequence(agentId, target),
-    });
-    const result =
-      freshness.decision === "local_hold"
-        ? locallyHeldSend(
-            freshness,
-            {
-              idempotencyKey,
-              draftReholdCount,
-              freshnessContextMode: request.freshnessContextMode,
-            },
-            // A held notice shows the newest unreviewed messages. The daemon now has them (its
-            // attention index keeps a bounded window of unreviewed deliveries), so a locally decided
-            // hold carries real previews instead of a bare count — and the shared post-processing
-            // below then marks that window reviewed (`recordModelSeen`): the Agent has been shown
-            // the newest context, so a resend is no longer held by it.
-            this.#messageAttention
-              .pendingWindow(agentId, target, HELD_CONTEXT_LIMIT)
-              .map(({ delivery, receivedAt }) => ({
-                id: delivery.messageId,
-                sequence: delivery.sequence,
-                senderKind: delivery.latestSenderKind ?? "system",
-                senderHandle: delivery.latestSenderHandle ?? "",
-                senderDescription: delivery.latestSenderDescription ?? "",
-                target,
-                body: delivery.body,
-                // Deliveries carry no message timestamp (only the server knows when a message was
-                // written), so a local preview shows when this daemon received it.
-                createdAt: new Date(receivedAt).toISOString(),
-                attachments: [],
-              })),
-          )
-        : await settleAgentSend(
-            {
-              idempotencyKey,
-              agentId,
-              workspaceId: this.#connection.workspaceId,
-              operation: "send",
-              target,
-              content,
-              continueAnyway: request.continueAnyway,
-              draftReholdCount,
-              draftReplacedExisting: !request.sendDraft && draftReholdCount > 0,
-              sendDraft: request.sendDraft,
-              seenUpToSeq,
-              seenExactSeqs,
-              freshnessContextMode: request.freshnessContextMode,
-              attachmentIds: attachmentIds ? [...attachmentIds] : undefined,
-              mentions: mentions ? [...mentions] : undefined,
-            },
-            {
-              send: (send) => this.#transport.agentMessage!(send, agentApiKey),
-              reconcile: (reconciliation) => {
-                if (!this.#transport.reconcileAgentSend)
-                  throw new Error("daemon connection cannot reconcile a send");
-                return this.#transport.reconcileAgentSend(reconciliation, agentApiKey);
-              },
-              draftHoldsKey: async (draftTarget, key) =>
-                (await inbox.draft(draftTarget))?.idempotencyKey === key,
-            },
-            {
-              reviewerIsolation: request.freshnessContextMode === "withheld",
-              logScope: this.#agentLogScope(agentId, idempotencyKey),
-            },
-          );
-    const held = result.state === "held";
-    // A withheld context was never presented to the Agent, so nothing about it may be recorded
-    // (or kept in the draft) as reviewed.
-    const contextWasWithheld =
-      request.freshnessContextMode === "withheld" || result.freshnessContextMode === "withheld";
-    if (held) {
-      await inbox.replace(target, {
-        content,
-        attachmentIds,
-        mentions,
-        // The held refresh: the same content, one hold later, remembering the frontier the notice
-        // presented so the resend clears the hold.
-        reholdCount: draftReholdCount + 1,
-        seenUpToSeq: contextWasWithheld ? seenUpToSeq : (result.seenUpToSeq ?? seenUpToSeq),
-        // A presented hold's frontier covers what the draft saw one by one; a withheld one
-        // presented nothing, so the draft keeps them.
-        seenExactSeqs: contextWasWithheld ? seenExactSeqs : undefined,
-        idempotencyKey,
-      });
-    } else if (result.accepted) {
-      // Only the send whose key the draft holds consumes it, so an older send accepted late
-      // leaves a newer draft alone (task #70).
-      await inbox.clearIfIdempotencyKeyMatches(target, idempotencyKey);
-    }
-    // The consume effects, one write for the send. A presented hold consumed the frontier its
-    // notice presented (or the shown window's newest for a hold that carries no frontier) and
-    // reviewed the target; a withheld one presented nothing.
-    // A sent send whose server advanced the boundary over messages the Agent had already seen
-    // (`exact_target_pending_already_seen`, `target_first_touch_recent_context_already_seen`)
-    // consumes that boundary in either mode, which is what empties the exact set.
-    let presented = 0;
-    if (held && !contextWasWithheld) {
-      presented = result.seenUpToSeq ?? 0;
-      for (const message of result.messages)
-        if (message.target === target && message.sequence > presented) presented = message.sequence;
-    }
-    const recentUnread = contextWasWithheld
-      ? []
-      : (result.recentUnread ?? []).filter((message) => message.target === target);
-    let through = presented;
-    if (!held && result.accepted) through = Math.max(through, result.seenUpToSeq ?? 0);
-    for (const message of recentUnread) through = Math.max(through, message.sequence);
-    this.#messageAttention.recordSendContext(
-      agentId,
-      target,
-      through,
-      presented > 0 ? { sequence: presented } : undefined,
-    );
-    // The freshness-decision activity: one working status row per held send, titled `Send held by
-    // freshness check`, carrying the target, the count line and the decision line(s) as its text.
-    // A held context in `withheld` mode was never presented, so no activity is reported for it.
-    if (held && !contextWasWithheld) {
-      const heldDecision = heldFreshnessDecision(result.decision);
-      if (heldDecision) {
-        const producerFactId =
-          result.producerFactId ??
-          (await freshnessDecisionFactId({
-            agentId,
-            action: "send",
-            decision: heldDecision,
-            target,
-            reason: result.reason ?? "",
-            pendingMaxSeq: result.seenUpToSeq,
-            modelSeenSeq: modelSeenSequence,
-            heldMessageCount: result.shownMessageCount ?? result.messages.length,
-            omittedMessageCount: result.omittedMessageCount,
-          }));
-        // One record per decision, so a locally decided hold is auditable next to a
-        // server-decided one.
-        logger.info("Agent inbox freshness decision", {
-          event: "agent.inbox.freshness_decision",
-          ...this.#agentLogScope(agentId, idempotencyKey),
-          producer_fact_id: producerFactId,
-          action: "send",
-          decision: heldDecision,
-          target,
-          reason: result.reason,
-          pending_count: result.newMessageCount,
-          pending_max_seq: result.seenUpToSeq,
-          model_seen_seq: modelSeenSequence || undefined,
-          held_message_count: result.shownMessageCount ?? result.messages.length,
-          omitted_message_count: result.omittedMessageCount,
-        });
-        const activity = heldFreshnessActivity({
-          action: "send",
-          decision: heldDecision,
-          target,
-          messageCount: heldFreshnessMessageCount({
-            decision: heldDecision,
-            newMessageCount: result.newMessageCount,
-            shownMessageCount: result.shownMessageCount,
-          }),
-          producerFactId,
-        });
-        this.#emitCurrentActivity(
-          agentId,
-          this.#activity(
-            agentId,
-            AGENT_ACTIVITY_DETAIL_KIND.FRESHNESS_HOLD,
-            "info",
-            activity.detail,
-            {
-              activityKind: activity.activityKind,
-              entries: activity.entries,
-              producerFactId: activity.producerFactId,
-            },
-          ),
-        );
-      }
-    }
-    logger.info("Agent sent a message", {
-      event: "agent.message.sent",
-      ...this.#agentLogScope(agentId, idempotencyKey),
-      // A commit confirmed by reconciliation carries no freshness decision of its own, so it logs
-      // none and says `reconciled` instead.
-      ...(result.state === "committed"
-        ? { reconciled: true }
-        : { freshness_decision: result.decision ?? "forward" }),
-      accepted: result.accepted,
-      message_id: result.messageId,
-      duration_ms: Math.round(performance.now() - startedAt),
-      outcome: result.accepted ? "ok" : "rejected",
-    });
-    return {
-      idempotencyKey,
-      accepted: result.accepted,
-      attentionCount: result.attentionCount,
-      messageId: result.messageId ?? "",
-      messages: contextWasWithheld ? [] : result.messages,
-      summaries: [],
-      // The send contract, carried to the Agent unchanged.
-      state: result.state,
-      decision: result.decision,
-      reason: result.reason,
-      producerFactId: result.producerFactId,
-      availableActions: result.availableActions,
-      continueAnywaySuggested: result.continueAnywaySuggested,
-      newMessageCount: result.newMessageCount,
-      shownMessageCount: result.shownMessageCount,
-      omittedMessageCount: result.omittedMessageCount,
-      freshnessContextMode: result.freshnessContextMode,
-      withheldMessageCount: contextWasWithheld
-        ? (result.withheldMessageCount ?? result.attentionCount)
-        : undefined,
-      recentUnread,
-      // What a sent message did not deliver, for the Agent's `coforge mention` recovery.
-      pendingMentionActions: result.pendingMentionActions,
-      unresolvedMentionHandles: result.unresolvedMentionHandles,
-    };
-  }
-
-  /** Forwards read/search/mute/unmute/unfollow unchanged; an unpaged read settles attention. */
-  async #forwardAgentMessage(
-    agentId: string,
-    request: LocalAgentMessageRequest,
-    operation: Exclude<LocalAgentMessageRequest["operation"], "check">,
-    target: string | undefined,
-    agentApiKey: string,
-  ): Promise<AgentMessageResponse> {
-    // An unpaged read looks at what is unread now; when it finds nothing, the attention the daemon
-    // held for the target up to this point is stale.
-    const unpaged = operation === "read" && !request.before && !request.after && !request.around;
-    const attentionUpperBound =
-      unpaged && target
-        ? this.#messageAttention.check(agentId).find((item) => item.target === target)
-            ?.latestSequence
-        : undefined;
-    const result = await this.#transport.agentMessage!(
-      {
-        idempotencyKey: request.idempotencyKey,
-        agentId,
-        workspaceId: this.#connection.workspaceId,
-        operation,
-        target: target ?? "",
-        content: request.content,
-        before: request.before,
-        after: request.after,
-        around: request.around,
-        limit: request.limit,
-        query: request.query,
-        sender: request.sender,
-        sort: request.sort,
-        offset: request.offset,
-        messageId: request.messageId,
-        emoji: request.emoji,
-      },
-      agentApiKey,
-    );
-    if (operation === "read" && target && result.accepted)
-      this.#consumeHistoryRead(agentId, target, request, result, unpaged, attentionUpperBound);
-    return {
-      idempotencyKey: request.idempotencyKey,
-      accepted: result.accepted,
-      attentionCount: result.attentionCount,
-      messageId: result.messageId ?? "",
-      messages: result.messages,
-      summaries: [],
-      hasOlder: result.hasOlder,
-      hasNewer: result.hasNewer,
-      olderCursor: result.olderCursor,
-      newerCursor: result.newerCursor,
-    };
-  }
-
-  /**
-   * What a history read showed the Agent (the `message read` bookkeeping), kept under the target
-   * the server resolved the read to (its consumption scope; a channel's top level has none and is
-   * already canonical). An anchored `--around` read, and a page the server does not call
-   * contiguous (`modelSeenUpToSeq` null, such as a `--before` page), record the exact sequences
-   * they showed and nothing else. A read with a boundary moves the frontier there, records what
-   * it showed above it as exact, and reviews the target; so does a read that returned nothing. A
-   * consumption scope for this Agent settles what the read returned in every spelling of its
-   * conversation.
-   */
-  #consumeHistoryRead(
-    agentId: string,
-    requestedTarget: string,
-    request: LocalAgentMessageRequest,
-    result: AgentMessageTransportResponse,
-    unpaged: boolean,
-    attentionUpperBound: number | undefined,
-  ): void {
-    const scope =
-      result.consumptionScope?.agentId === agentId ? result.consumptionScope : undefined;
-    const target = scope?.target ?? requestedTarget;
-    const shown: number[] = [];
-    let visibleSequence = 0;
-    for (const message of result.messages)
-      if (message.target === target) {
-        shown.push(message.sequence);
-        if (message.sequence > visibleSequence) visibleSequence = message.sequence;
-      }
-    const through = request.around ? 0 : (result.modelSeenUpToSeq ?? 0);
-    this.#messageAttention.recordHistoryRead(agentId, {
-      spelling: requestedTarget,
-      target,
-      shown,
-      through,
-      // The thread-mismatch guard's read context: a read that joined what the Agent had read, or
-      // found nothing, reviews `target` and remembers the newest message it showed.
-      review:
-        !request.around && (through > 0 || result.messages.length === 0)
-          ? { sequence: visibleSequence }
-          : undefined,
-      scope,
-    });
-    if (unpaged && result.messages.length === 0 && attentionUpperBound !== undefined)
-      this.#messageAttention.clearThrough(agentId, target, attentionUpperBound);
-  }
-
-  /** The log's correlation field is `request_id`; on the Agent HTTP path it carries the request's
-   * idempotency key. */
-  #agentLogScope(agentId: string, idempotencyKey: string) {
-    return {
-      request_id: idempotencyKey,
-      workspace_id: this.#connection.workspaceId,
-      computer_id: this.#connection.computerId,
-      agent_id: agentId,
-    };
-  }
-
-  async workspaceInfo(
-    context: string,
-    request: WorkspaceInfoRequest,
-    agentApiKey: string,
-  ): Promise<WorkspaceInfoResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.workspaceInfo) throw new Error("daemon connection is not connected");
-    return this.#transport.workspaceInfo(request, agentApiKey);
-  }
-
-  async githubCredential(
-    context: string,
-    request: GitHubCredentialRequest,
-    agentApiKey: string,
-  ): Promise<GitHubCredentialResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.githubCredential)
-      throw new Error("GitHub credential endpoint is not configured");
-    return this.#transport.githubCredential(request, agentApiKey);
-  }
-
-  async githubCommitTrailers(
-    context: string,
-    request: GitHubCommitTrailersRequest,
-    agentApiKey: string,
-  ): Promise<GitHubCommitTrailersResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.githubCommitTrailers)
-      throw new Error("GitHub commit trailers endpoint is not configured");
-    return this.#transport.githubCommitTrailers(request, agentApiKey);
-  }
-
-  async manualGet(
-    context: string,
-    request: AgentManualGetRequest,
-    agentApiKey: string,
-  ): Promise<AgentManualGetResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.manualGet) throw new Error("Agent Manual endpoint is not configured");
-    return this.#transport.manualGet(request, agentApiKey);
-  }
-
-  async manualSearch(
-    context: string,
-    request: AgentManualSearchRequest,
-    agentApiKey: string,
-  ): Promise<AgentManualSearchResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.manualSearch) throw new Error("Agent Manual endpoint is not configured");
-    return this.#transport.manualSearch(request, agentApiKey);
+    return this.#messageOperations.handle(agentId, request, target, agentApiKey);
   }
 
   /**
@@ -4353,86 +3523,11 @@ export class DaemonRuntime {
     };
   }
 
-  async userInfo(
-    context: string,
-    request: AgentUserInfoRequest,
-    agentApiKey: string,
-  ): Promise<AgentUserInfoResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.userInfo) throw new Error("Agent user info endpoint is not configured");
-    return this.#transport.userInfo(request, agentApiKey);
-  }
-
-  async profileShow(
-    context: string,
-    request: AgentProfileShowRequest,
-    agentApiKey: string,
-  ): Promise<AgentProfileShowResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.profileShow) throw new Error("Agent profile endpoint is not configured");
-    return this.#transport.profileShow(request, agentApiKey);
-  }
-
-  async profileUpdate(
-    context: string,
-    request: AgentProfileUpdateRequest,
-    agentApiKey: string,
-  ): Promise<AgentProfileUpdateResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.profileUpdate) throw new Error("Agent profile endpoint is not configured");
-    return this.#transport.profileUpdate(request, agentApiKey);
-  }
-
   memoryFence(agentId: string): string | undefined {
     return (
       this.#agentProcessManager.runtime(agentId)?.config.toolProfile ??
       this.#agentProcessManager.restartConfig(agentId)?.config.toolProfile
     );
-  }
-
-  async agentOpenviking(
-    context: string,
-    command: import("../openviking-read-proxy").OpenVikingAgentProxyCommand,
-    agentApiKey: string,
-  ): Promise<unknown> {
-    this.#assertRunning();
-    this.#agentIdForContext(context);
-    if (!this.#transport.agentOpenviking) throw new Error("daemon connection is not connected");
-    if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
-    return this.#transport.agentOpenviking(command, agentApiKey);
-  }
-
-  async mentionPending(
-    context: string,
-    _request: Record<string, never>,
-    agentApiKey: string,
-  ): Promise<AgentMentionPendingResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.mentionPending)
-      throw new Error("Agent mention actions endpoint is not configured");
-    return this.#transport.mentionPending(agentApiKey);
-  }
-
-  async mentionExecute(
-    context: string,
-    request: AgentMentionExecuteRequest,
-    agentApiKey: string,
-  ): Promise<AgentMentionExecuteResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.mentionExecute)
-      throw new Error("Agent mention actions endpoint is not configured");
-    return this.#transport.mentionExecute(request, agentApiKey);
-  }
-
-  async mentionDelivery(
-    context: string,
-    request: AgentMentionDeliveryRequest,
-    agentApiKey: string,
-  ): Promise<AgentMentionDeliveryResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.mentionDelivery)
-      throw new Error("Agent mention delivery endpoint is not configured");
-    return this.#transport.mentionDelivery(request, agentApiKey);
   }
 
   /** Dispatches one task command to the cloud task route over its HTTPS path. The body is the
@@ -4449,44 +3544,6 @@ export class DaemonRuntime {
       if (held) return held;
     }
     return this.#transport.agentTask({ ...command }, agentApiKey);
-  }
-
-  /** Dispatches a channel lifecycle/roster command to the cloud route `agentChannel` maps it
-   * to, returning the JSON response body unchanged. */
-  async agentChannel(
-    context: string,
-    command: ChannelCommand,
-    agentApiKey: string,
-  ): Promise<Record<string, unknown>> {
-    this.#assertRunning();
-    const agentId = this.#agentIdForContext(context);
-    if (!this.#transport.agentChannel) throw new Error("daemon connection is not connected");
-    if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
-    return this.#transport.agentChannel(
-      {
-        ...command,
-        workspaceId: this.#connection.workspaceId,
-        agentId,
-      },
-      agentApiKey,
-    );
-  }
-
-  /**
-   * Posts an Agent-prepared action card (`coforge action prepare`). Unlike `agentTask`, the wire
-   * request carries no `workspaceId`/`agentId` — the HTTPS route derives the principal from the
-   * authenticated Agent/daemon API key pair, exactly like an ordinary Agent message send.
-   */
-  async agentActionPrepare(
-    context: string,
-    request: AgentActionPrepareRequest,
-    agentApiKey: string,
-  ): Promise<AgentActionPrepareResponse> {
-    this.#assertRunning();
-    this.#agentIdForContext(context);
-    if (!this.#transport.agentActionPrepare) throw new Error("daemon connection is not connected");
-    if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
-    return this.#transport.agentActionPrepare(request, agentApiKey);
   }
 
   /** Applies the attention preflight to a Task claim/update; returns the held result, if any. */
@@ -4560,57 +3617,6 @@ export class DaemonRuntime {
       heldMessages: [],
       newMessageCount: attention.pendingCount,
     };
-  }
-
-  async agentWeeklyReport(
-    context: string,
-    command: WeeklyReportCommand,
-    agentApiKey: string,
-  ): Promise<WeeklyReportResponse> {
-    if (this.#stopping || !this.#started) throw new Error("daemon runtime is not running");
-    const agentId = [...this.#agentContexts.entries()].find(([, value]) => value === context)?.[0];
-    if (!agentId) throw new Error("invalid agent local context");
-    if (!this.#transport.agentWeeklyReport) throw new Error("daemon connection is not connected");
-    if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
-    return this.#transport.agentWeeklyReport(
-      {
-        ...command,
-        idempotencyKey: crypto.randomUUID(),
-        workspaceId: this.#connection.workspaceId,
-        agentId,
-      },
-      agentApiKey,
-    );
-  }
-
-  /** Forwards Collect Run pack submit over Agent HTTPS (ADR 0032 return path). */
-  async agentWeeklyReportCollect(
-    context: string,
-    command:
-      | import("#src/connection/weekly-report-collect").WeeklyReportCollectCommand
-      | import("#src/connection/weekly-report-collect").WeeklyReportCollectFailRunningCommand,
-    agentApiKey?: string,
-  ): Promise<import("#src/connection/weekly-report-collect").WeeklyReportCollectResult> {
-    if (this.#stopping || !this.#started) throw new Error("daemon runtime is not running");
-    this.#agentIdForContext(context);
-    if (!this.#transport.agentWeeklyReportCollect)
-      throw new Error("daemon connection is not connected");
-    if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
-    return this.#transport.agentWeeklyReportCollect(command, agentApiKey);
-  }
-
-  /** Forwards personal key-point extraction write-back over Agent HTTPS. */
-  async agentWeeklyReportKeyPoints(
-    context: string,
-    command: import("#src/connection/weekly-report-key-points").WeeklyReportKeyPointsCommand,
-    agentApiKey?: string,
-  ): Promise<import("#src/connection/weekly-report-key-points").WeeklyReportKeyPointsResult> {
-    if (this.#stopping || !this.#started) throw new Error("daemon runtime is not running");
-    this.#agentIdForContext(context);
-    if (!this.#transport.agentWeeklyReportKeyPoints)
-      throw new Error("daemon connection is not connected");
-    if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
-    return this.#transport.agentWeeklyReportKeyPoints(command, agentApiKey);
   }
 
   async #canonicalAgentMessageTarget(
@@ -4857,71 +3863,6 @@ export class DaemonRuntime {
     return agentId;
   }
 
-  async agentAttachment(
-    context: string,
-    attachmentId: string,
-    agentApiKey: string,
-  ): Promise<Response> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.agentAttachment) throw new Error("daemon connection is not connected");
-    return this.#transport.agentAttachment(attachmentId, agentApiKey);
-  }
-
-  async agentAttachmentUpload(
-    context: string,
-    request: Request,
-    agentApiKey: string,
-  ): Promise<Response> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.agentAttachmentUpload)
-      throw new Error("daemon connection is not connected");
-    return this.#transport.agentAttachmentUpload(request, agentApiKey);
-  }
-
-  async agentAttachmentUploadSessionCreate(
-    context: string,
-    body: unknown,
-    agentApiKey: string,
-  ): Promise<Response> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.agentAttachmentUploadSessionCreate)
-      throw new Error("daemon connection is not connected");
-    return this.#transport.agentAttachmentUploadSessionCreate(body, agentApiKey);
-  }
-
-  async agentAttachmentUploadSessionComplete(
-    context: string,
-    uploadId: string,
-    agentApiKey: string,
-  ): Promise<Response> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.agentAttachmentUploadSessionComplete)
-      throw new Error("daemon connection is not connected");
-    return this.#transport.agentAttachmentUploadSessionComplete(uploadId, agentApiKey);
-  }
-
-  async agentAttachmentUploadSessionCancel(
-    context: string,
-    uploadId: string,
-    agentApiKey: string,
-  ): Promise<Response> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.agentAttachmentUploadSessionCancel)
-      throw new Error("daemon connection is not connected");
-    return this.#transport.agentAttachmentUploadSessionCancel(uploadId, agentApiKey);
-  }
-
-  async agentAttachmentUploadSessionGet(
-    context: string,
-    uploadId: string,
-    agentApiKey: string,
-  ): Promise<Response> {
-    this.#authorizedAgent(context, agentApiKey);
-    if (!this.#transport.agentAttachmentUploadSessionGet)
-      throw new Error("daemon connection is not connected");
-    return this.#transport.agentAttachmentUploadSessionGet(uploadId, agentApiKey);
-  }
-
   #contextFor(agentId: string): string {
     const context = crypto.randomUUID();
     this.#agentContexts.set(agentId, context);
@@ -4985,17 +3926,9 @@ export class DaemonRuntime {
     return this.#runnerHold !== undefined;
   }
 
-  /**
-   * Agents whose last emitted Activity is a busy detail kind with no terminal kind since -
-   * `#lastBusyActivity` is set on every busy emission and cleared by `#clearActivityHeartbeat`,
-   * which every terminal kind and every stop path already runs.
-   */
+  /** Agents whose last emitted Activity is a busy detail kind with no terminal kind since. */
   busyAgents(): BusyAgentReport[] {
-    return [...this.#lastBusyActivity.entries()].map(([agentId, remembered]) => ({
-      agentId,
-      detailKind: remembered.activity.detailKind,
-      busySinceMs: remembered.at,
-    }));
+    return this.#activityPublisher.busyAgents();
   }
 
   /** Why this runtime's cloud connection last failed to connect, while it is not up. */
@@ -5014,11 +3947,9 @@ export class DaemonRuntime {
     // Close every local capability synchronously before any shutdown await.
     this.#stopping = true;
     this.#started = false;
-    this.#activityEnabled = false;
-    for (const timer of this.#activityHeartbeatTimers.values()) clearTimeout(timer);
-    this.#activityHeartbeatTimers.clear();
-    this.#lastBusyActivity.clear();
+    this.#activityPublisher.disable();
     this.#compactionTracker.disposeAll();
+    this.#runtimeErrorHold.disposeAll();
     this.#runtimeProgress.disposeAll();
     this.#lastContextUsage.clear();
     for (const agentId of this.#agentInputQueues.keys())
@@ -5185,3 +4116,4 @@ function validUsageWindow(window: UsageSnapshot["primary"], now: number): UsageS
 }
 
 export type { CodeAgentProviderFactory, AgentRuntime, AgentRuntimeConfig, CodeAgentProvider };
+export type { BusyAgentReport };

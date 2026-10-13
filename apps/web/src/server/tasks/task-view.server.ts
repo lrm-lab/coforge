@@ -24,7 +24,7 @@ export const TASK_MEMBER_SELECT = {
   userId: true,
   agentId: true,
   leftAt: true,
-  user: { select: { username: true, displayName: true, fullName: true, avatarObjectKey: true } },
+  user: { select: { username: true, displayName: true, avatarObjectKey: true } },
   agent: { select: { name: true, displayName: true, deletedAt: true } },
 } satisfies Prisma.ConversationMemberSelect;
 

@@ -33,6 +33,11 @@ participant: two (a User and an Agent, or two Users), or one for a member's
 conversation with themself. Workspace membership, and for an Agent its
 ownership rules, are checked before creation.
 
+`joinedAt` is when the subject first joined; it is set once by the column default and a member who
+leaves and comes back keeps it. The channel list orders its collage avatar by it (earliest first,
+then member id). Rows that existed when the column was added were backfilled with the time of the
+member's first message, else the conversation's creation: an approximation.
+
 The database also carries `workspaceId` on the member and enforces composite
 foreign keys to `(Conversation.id, Conversation.workspaceId)` and
 `(Agent.id, Agent.workspaceId)`. Prisma represents these relations; the XOR

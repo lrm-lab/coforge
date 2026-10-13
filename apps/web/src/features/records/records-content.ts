@@ -120,6 +120,31 @@ export type ReportContent = {
    * until the author sends again.
    */
   delivered?: { tabs: Record<string, ReportTab> };
+  /**
+   * Body inserted from the assistant. Later author edits change `tabs` and
+   * leave this snapshot in place until the next confirmed assistant write.
+   */
+  assistantDraft?: { tabs: Record<string, ReportTab> };
+  /**
+   * The body before the latest assistant insert, and that insert. `showing`
+   * is which one `tabs` currently displays. Author edits stay on the side
+   * they were made until the author switches.
+   */
+  bodyRestore?: ReportBodyRestore;
+};
+
+export type ReportBodyRestore = {
+  sourceMessageId: string;
+  revision: number;
+  showing: "latest" | "previous";
+  previous: { tabs: Record<string, ReportTab> };
+  latest: { tabs: Record<string, ReportTab> };
+};
+
+export type ReportBodyRestoreView = {
+  sourceMessageId: string;
+  revision: number;
+  showing: "latest" | "previous";
 };
 
 type LegacyOutlineNode = {
@@ -168,6 +193,22 @@ function withDeliveredBody(
 ): ReportContent {
   if (!delivered) return content;
   return { ...content, delivered };
+}
+
+function withAssistantDraft(
+  content: ReportContent,
+  assistantDraft: { tabs: Record<string, ReportTab> } | undefined,
+): ReportContent {
+  if (!assistantDraft) return content;
+  return { ...content, assistantDraft };
+}
+
+function withBodyRestore(
+  content: ReportContent,
+  bodyRestore: ReportBodyRestore | undefined,
+): ReportContent {
+  if (!bodyRestore) return content;
+  return { ...content, bodyRestore };
 }
 
 function parseAssignmentMeta(value: unknown): ReportAssignmentMeta | undefined {
@@ -417,28 +458,40 @@ export function alignReportContentToTemplate(
   for (const name of Object.keys(next.tabs ?? {})) {
     next.tabs![name] = normalizedTabs[name] ?? { markdown: "" };
   }
-  return withOptionalMeta(
-    next,
-    normalized.assignment,
-    normalized.schedule,
-    normalized.keyPointPrompts,
-    normalized.keyPointExtraction,
+  return withBodyRestore(
+    withAssistantDraft(
+      withOptionalMeta(
+        next,
+        normalized.assignment,
+        normalized.schedule,
+        normalized.keyPointPrompts,
+        normalized.keyPointExtraction,
+      ),
+      normalized.assistantDraft,
+    ),
+    normalized.bodyRestore,
   );
 }
 
 /** Clear every display page without removing the page structure. */
 export function clearReportContent(content: ReportContent): ReportContent {
   const normalized = normalizeReportContent(content);
-  return withOptionalMeta(
-    {
-      tabs: Object.fromEntries(
-        Object.keys(normalized.tabs ?? {}).map((name) => [name, { markdown: "" }]),
+  return withBodyRestore(
+    withAssistantDraft(
+      withOptionalMeta(
+        {
+          tabs: Object.fromEntries(
+            Object.keys(normalized.tabs ?? {}).map((name) => [name, { markdown: "" }]),
+          ),
+        },
+        normalized.assignment,
+        normalized.schedule,
+        normalized.keyPointPrompts,
+        normalized.keyPointExtraction,
       ),
-    },
-    normalized.assignment,
-    normalized.schedule,
-    normalized.keyPointPrompts,
-    normalized.keyPointExtraction,
+      normalized.assistantDraft,
+    ),
+    normalized.bodyRestore,
   );
 }
 
@@ -453,24 +506,30 @@ export function normalizeReportContent(value: unknown): ReportContent {
     keyPointPrompts?: unknown;
     keyPointExtraction?: unknown;
     delivered?: unknown;
+    assistantDraft?: unknown;
+    bodyRestore?: unknown;
   };
   const assignment = parseAssignmentMeta(record.assignment);
   const schedule = parseScheduleMeta(record.schedule);
   const keyPointPrompts = parseKeyPointPrompts(record.keyPointPrompts);
   const keyPointExtraction = parseKeyPointExtraction(record.keyPointExtraction);
   const delivered = parseDeliveredBody(record.delivered);
+  const assistantDraft = parseDeliveredBody(record.assistantDraft);
+  const bodyRestore = parseBodyRestore(record.bodyRestore);
 
   if (record.tabs && typeof record.tabs === "object") {
     const tabs = parseReportTabs(record.tabs);
     const base = tabs ? { tabs } : emptyReportContent();
-    return withDeliveredBody(
+    return finishReportContent(
       withOptionalMeta(base, assignment, schedule, keyPointPrompts, keyPointExtraction),
       delivered,
+      assistantDraft,
+      bodyRestore,
     );
   }
 
   if (typeof record.markdown === "string") {
-    return withDeliveredBody(
+    return finishReportContent(
       withOptionalMeta(
         { tabs: { [newTabName()]: { markdown: record.markdown } } },
         assignment,
@@ -479,9 +538,11 @@ export function normalizeReportContent(value: unknown): ReportContent {
         keyPointExtraction,
       ),
       delivered,
+      assistantDraft,
+      bodyRestore,
     );
   }
-  return withDeliveredBody(
+  return finishReportContent(
     withOptionalMeta(
       emptyReportContent(),
       assignment,
@@ -490,7 +551,116 @@ export function normalizeReportContent(value: unknown): ReportContent {
       keyPointExtraction,
     ),
     delivered,
+    assistantDraft,
+    bodyRestore,
   );
+}
+
+function finishReportContent(
+  content: ReportContent,
+  delivered: { tabs: Record<string, ReportTab> } | undefined,
+  assistantDraft: { tabs: Record<string, ReportTab> } | undefined,
+  bodyRestore: ReportBodyRestore | undefined,
+): ReportContent {
+  return withBodyRestore(
+    withAssistantDraft(withDeliveredBody(content, delivered), assistantDraft),
+    bodyRestore,
+  );
+}
+
+function parseSnapshotBody(value: unknown): { tabs: Record<string, ReportTab> } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = (value as { tabs?: unknown }).tabs;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  if (Object.keys(raw).length === 0) return { tabs: {} };
+  const tabs = parseReportTabs(raw);
+  if (!tabs) return undefined;
+  return { tabs };
+}
+
+function parseBodyRestore(value: unknown): ReportBodyRestore | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const row = value as Partial<ReportBodyRestore>;
+  const previous = parseSnapshotBody(row.previous);
+  const latest = parseSnapshotBody(row.latest);
+  if (!previous || !latest) return undefined;
+  if (row.showing !== "latest" && row.showing !== "previous") return undefined;
+  if (typeof row.sourceMessageId !== "string" || row.sourceMessageId.length === 0) return undefined;
+  if (typeof row.revision !== "number" || !Number.isInteger(row.revision) || row.revision < 1) {
+    return undefined;
+  }
+  return {
+    sourceMessageId: row.sourceMessageId,
+    revision: row.revision,
+    showing: row.showing,
+    previous,
+    latest,
+  };
+}
+
+function reportTabsSnapshot(content: ReportContent): Record<string, ReportTab> {
+  return { ...(normalizeReportContent(content).tabs ?? {}) };
+}
+
+/** Remember the body on screen, then show the assistant insert as the latest version. */
+export function insertAssistantReportBody(
+  stored: ReportContent,
+  inserted: ReportContent,
+  sourceMessageId: string,
+): ReportContent {
+  const current = normalizeReportContent(stored);
+  if (current.bodyRestore?.sourceMessageId === sourceMessageId) return current;
+  const latest = reportTabsSnapshot(inserted);
+  const previous = reportTabsSnapshot(current);
+  return {
+    ...current,
+    tabs: latest,
+    assistantDraft: { tabs: { ...latest } },
+    bodyRestore: {
+      sourceMessageId,
+      revision: (current.bodyRestore?.revision ?? 0) + 1,
+      showing: "latest",
+      previous: { tabs: previous },
+      latest: { tabs: { ...latest } },
+    },
+  };
+}
+
+/**
+ * Leave the version on screen, keeping edits on that side, and show the other.
+ * The assistant original stays put.
+ */
+export function switchReportBodyVersion(stored: ReportContent): ReportContent {
+  const current = normalizeReportContent(stored);
+  const restore = current.bodyRestore;
+  if (!restore) return current;
+  const live = reportTabsSnapshot(current);
+  const showing = restore.showing === "latest" ? "previous" : "latest";
+  const previous = restore.showing === "previous" ? { tabs: live } : restore.previous;
+  const latest = restore.showing === "latest" ? { tabs: live } : restore.latest;
+  const tabs = showing === "latest" ? latest.tabs : previous.tabs;
+  return {
+    ...current,
+    tabs: { ...tabs },
+    bodyRestore: {
+      ...restore,
+      showing,
+      revision: restore.revision + 1,
+      previous,
+      latest,
+    },
+  };
+}
+
+/** Which version the author is viewing, without the stored snapshots. */
+export function reportBodyRestoreView(content: ReportContent): ReportBodyRestoreView | null {
+  const restore = normalizeReportContent(content).bodyRestore;
+  if (!restore) return null;
+  return {
+    sourceMessageId: restore.sourceMessageId,
+    revision: restore.revision,
+    showing: restore.showing,
+  };
 }
 
 /** Copy the working body into the copy recipients already hold. */
@@ -515,15 +685,25 @@ export function retainMemberReportDelivery(
   };
 }
 
-/** Author editor: working body, without the recipient snapshot. */
+/** Author editor: working body, without the recipient snapshot or assistant original. */
 export function reportContentForAuthor(content: ReportContent): ReportContent {
-  const { delivered: _delivered, ...rest } = normalizeReportContent(content);
+  const {
+    delivered: _delivered,
+    assistantDraft: _assistantDraft,
+    bodyRestore: _bodyRestore,
+    ...rest
+  } = normalizeReportContent(content);
   return rest;
 }
 
 /** Recipient view: the last sent body, or the only stored body when none was snapshotted. */
 export function reportContentForRecipient(content: ReportContent): ReportContent {
-  const { delivered, ...rest } = normalizeReportContent(content);
+  const {
+    delivered,
+    assistantDraft: _assistantDraft,
+    bodyRestore: _bodyRestore,
+    ...rest
+  } = normalizeReportContent(content);
   if (!delivered) return rest;
   return { ...rest, tabs: delivered.tabs };
 }

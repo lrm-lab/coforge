@@ -8,7 +8,7 @@ import { AppError } from "#src/lib/app-error";
 // `/` opens for them (`null` when they are in no Workspace), and — after signing out to switch
 // account — the page a returning browser should sign in to again. All three are stood in for.
 let signedIn = false;
-// Whether the signed-in person has been asked for a full name (`User.fullName` is set).
+// Whether the signed-in person has been asked for a name (`User.displayName` is set).
 let named = true;
 let startPage: string | null = null;
 
@@ -171,7 +171,7 @@ test("the first-Workspace page asks a signed-out visitor to sign in", async () =
   expect(redirectTarget(await landing(firstWorkspacePage.options.beforeLoad, {}))).toBe("/login");
 });
 
-// A signed-in person who has not been asked for a full name is sent to `/welcome` once, from
+// A signed-in person who has not been asked for a name is sent to `/welcome` once, from
 // every page that would otherwise make their personal Workspace or open one: the answer titles it.
 
 test("the first-Workspace page asks an unnamed person for their name first", async () => {

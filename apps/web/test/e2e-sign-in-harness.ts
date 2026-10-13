@@ -186,7 +186,7 @@ export async function removeSignInAccounts(
 
 /** The first-sign-in name step's field, as the selector `click` and `setInput` take and as the
  * page expression `evaluate` reads. */
-export const nameFieldSelector = 'main input[name="fullName"]';
+export const nameFieldSelector = 'main input[name="displayName"]';
 export const nameField = `document.querySelector(${JSON.stringify(nameFieldSelector)})`;
 
 /** Whether a React element has hydrated: its handlers are attached, so a click will do something. */
@@ -384,8 +384,8 @@ export function openBrowser(session: string) {
       `(() => { const input = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event("input", { bubbles: true })); })()`,
     );
   /** Answers the name step: sets the field, then presses its button (`Continue`, or `继续`). */
-  async function submitName(fullName: string, label = "Continue") {
-    await setInput(nameFieldSelector, fullName);
+  async function submitName(displayName: string, label = "Continue") {
+    await setInput(nameFieldSelector, displayName);
     await browser("eval", `${button(label)}.click()`);
   }
   return { browser, boundTabId, evaluate, waitFor, button, setInput, submitName };

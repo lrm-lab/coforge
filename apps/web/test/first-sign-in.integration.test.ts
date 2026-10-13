@@ -34,7 +34,7 @@ async function setup() {
 }
 
 test.skipIf(!connectionString)(
-  "submitting a full name saves it and makes an owned Workspace titled with it",
+  "submitting a display name saves it and makes an owned Workspace titled with it",
   async () => {
     const { db, user, memberships, teardown } = await setup();
     try {
@@ -46,13 +46,13 @@ test.skipIf(!connectionString)(
       const result = await completeFirstSignIn({
         db,
         user,
-        fullName: "  Ada   Lovelace ",
+        displayName: "  Ada   Lovelace ",
         acceptLanguage: "en-US",
       });
 
       expect(result.ok).toBe(true);
       const stored = await db.user.findUniqueOrThrow({ where: { id: user.id } });
-      expect(stored.fullName).toBe("Ada Lovelace");
+      expect(stored.displayName).toBe("Ada Lovelace");
       const [membership, ...others] = await memberships();
       expect(others).toEqual([]);
       expect(membership?.role).toBe("owner");
@@ -98,12 +98,12 @@ test.skipIf(!connectionString)(
       const result = await completeFirstSignIn({
         db,
         user,
-        fullName: "System",
+        displayName: "System",
         acceptLanguage: "en",
       });
 
       expect(result).toEqual({ ok: false, problem: "refused" });
-      expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).fullName).toBeNull();
+      expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).displayName).toBeNull();
       expect(await memberships()).toEqual([]);
     } finally {
       await teardown();
@@ -118,7 +118,7 @@ test.skipIf(!connectionString)(
     try {
       const results = await Promise.all(
         ["Ada Lovelace", "Ada Lovelace", "Ada King", "Countess Lovelace", "Ada Lovelace"].map(
-          (fullName) => completeFirstSignIn({ db, user, fullName, acceptLanguage: "en" }),
+          (displayName) => completeFirstSignIn({ db, user, displayName, acceptLanguage: "en" }),
         ),
       );
 
@@ -128,7 +128,7 @@ test.skipIf(!connectionString)(
       const rows = await memberships();
       expect(rows).toHaveLength(1);
       // Whichever tab was first, its name is the stored one and it titles the Workspace.
-      const stored = (await db.user.findUniqueOrThrow({ where: { id: user.id } })).fullName;
+      const stored = (await db.user.findUniqueOrThrow({ where: { id: user.id } })).displayName;
       expect(rows[0]?.workspace.name).toBe(`${stored}'s Workspace`);
     } finally {
       await teardown();
@@ -141,7 +141,7 @@ test.skipIf(!connectionString)(
   async () => {
     const { db, user, memberships, teardown } = await setup();
     try {
-      const enrolling = { id: user.id, username: user.username, fullName: "Ada Lovelace" };
+      const enrolling = { id: user.id, username: user.username, displayName: "Ada Lovelace" };
       const ids = await Promise.all(
         Array.from({ length: 5 }, () => workspaceIdForUser(db, enrolling, "en")),
       );
@@ -161,19 +161,19 @@ test.skipIf(!connectionString)(
     try {
       const existing = await workspaceIdForUser(
         db,
-        { id: user.id, username: user.username, fullName: "Earlier Name" },
+        { id: user.id, username: user.username, displayName: "Earlier Name" },
         "en",
       );
 
       const result = await completeFirstSignIn({
         db,
         user,
-        fullName: "Ada Lovelace",
+        displayName: "Ada Lovelace",
         acceptLanguage: "en",
       });
 
       expect(result).toEqual({ ok: true, workspaceId: existing });
-      expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).fullName).toBe(
+      expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).displayName).toBe(
         "Ada Lovelace",
       );
       expect(await memberships()).toHaveLength(1);

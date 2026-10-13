@@ -41,9 +41,11 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   delivery and concrete wake/resume batches report `Message received` Activity
   with detail kind `message_received`. Summary-only recovery and deduplicated
   inputs do not report it.
-- `runtime.ts` assigns launch and sequence metadata and publishes that
-  best-effort Activity before the live delivery ACK. An observer failure must
-  not reject accepted input.
+- `runtime.ts` publishes that best-effort Activity before the live delivery
+  ACK. An observer failure must not reject accepted input.
+- `agent-activity-publisher.ts` is the one place Activity gets its launch and
+  sequence metadata, the stopping-launch mute, and the busy heartbeat; its last
+  busy Activity is the daemon's mid-turn evidence (`busyAgents`, probes).
 - `runtime.ts` routes thread targets to the existing Agent session and
   canonicalizes short channel/DM thread targets. Threads never create sessions
   or processes.
@@ -105,6 +107,11 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   pending attention of channels the Agent can no longer read, threads
   included; an untracked delivery it drops is ACKed, so a later rejoin does not replay it on
   `ready` (a Start still surfaces it as unread from the read boundary).
+- `runtime-error-delivery-hold.ts` owns an Agent's delivery hold after
+  mid-turn runtime errors: the backoff, the fingerprint fence, and the one
+  release timer. `runtime.ts` only reports failures, successful turns, and
+  explicit Stops to it; keep hold and release decisions out of `runtime.ts`.
+  `stop` disposes it, so no release timer outlives the runtime.
 - Never launch an exited Agent for a delivery it has already consumed; ACK it
   instead.
 - A failed message-triggered launch starts the per-Agent wake cooldown
@@ -121,6 +128,15 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 
 ## Agent HTTPS forwarding
 
+- `agent-message-operations.ts` owns the Agent's `coforge message` operations
+  (check, send, and the forwarded rest). `runtime.ts` only validates the
+  request and resolves its canonical target.
+- `agent-request-forwarder.ts` (`DaemonRuntime.agentRequests`) holds the
+  requests the daemon only authorizes and forwards, keeping no state. A
+  request that reads or changes runtime state (Tasks, reminders, the App
+  Inbox) stays in `runtime.ts`. Each one refuses a stopped daemon, an unknown
+  context, or a malformed Agent API key through `authorizedAgent` first, so
+  the Agent gets that `AgentPreflightError` code, never an unclassified 502.
 - Message sends: the per-target draft (`persistence/agent-message-draft-store.ts`)
   is the only local send state. It carries its send's `idempotencyKey`;
   `--send-draft` reuses it, and only that key's accepted send clears the draft.
@@ -128,7 +144,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `agent-send-settlement.ts` settles one send: an ambiguous failure
   (pre-response or 5xx) gets one `reconcileAgentSend` and at most one same-key
   replay, never a blind retry. It sees the transport and the draft only through
-  its ports; keep reconcile logic out of `runtime.ts`.
+  its ports; keep reconcile logic out of its callers.
 - `agent-send-verdict.ts` is the one shape for what the daemon judged about a
   failed request (`retryable`, `draftSaved`, `suggestedNextAction`).
   `agent-proxy-failure.ts` classifies the cause, then applies the verdict. A

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { matchSearchEntities, type SearchEntity } from "#src/features/search/search-entities";
 
-const dm = (fields: { name: string; fullName: string | null }): SearchEntity => ({
+const dm = (fields: { name: string }): SearchEntity => ({
   kind: "dm",
   id: "dm-1",
   peerId: "user-1",
@@ -22,18 +22,13 @@ const agent: SearchEntity = {
 
 describe("matchSearchEntities", () => {
   test("a direct message is found by the name shown for the person", () => {
-    const entity = dm({ name: "Amazing Grace", fullName: "Grace Hopper" });
+    const entity = dm({ name: "Amazing Grace" });
     expect(matchSearchEntities([entity], "amazing")).toEqual([entity]);
     expect(matchSearchEntities([entity], "grace")).toEqual([entity]);
   });
 
-  test("and by the full name a nickname replaced", () => {
-    const entity = dm({ name: "Amazing Grace", fullName: "Grace Hopper" });
-    expect(matchSearchEntities([entity], "hopper")).toEqual([entity]);
-  });
-
-  test("a person with no full name matches by the name shown alone", () => {
-    const entity = dm({ name: "Ada", fullName: null });
+  test("a person matches by the name shown alone", () => {
+    const entity = dm({ name: "Ada" });
     expect(matchSearchEntities([entity], "ada")).toEqual([entity]);
     expect(matchSearchEntities([entity], "lovelace")).toEqual([]);
   });

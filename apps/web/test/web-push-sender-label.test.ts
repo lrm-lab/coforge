@@ -6,7 +6,7 @@ import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma
 
 type Sender = {
   agent: { name: string } | null;
-  user: { username: string; displayName: string | null; fullName: string | null } | null;
+  user: { username: string; displayName: string | null } | null;
 };
 
 /** The notification `notificationForRecipient` builds for a message from `sender`. */
@@ -30,7 +30,7 @@ async function notificationFor(input: { sender: Sender | null; channelName: stri
   return new PrismaWebPushSubscriptionStore(db).notificationForRecipient("message-1", "user-1");
 }
 
-const frank = (names: { displayName: string | null; fullName: string | null }) => ({
+const frank = (names: { displayName: string | null }) => ({
   agent: null,
   user: { username: "frank-an-4k2", ...names },
 });
@@ -39,25 +39,25 @@ describe("the sender a Web Push notification names", () => {
   test("a person in a direct conversation is the notification title, by their label", async () => {
     expect(
       await notificationFor({
-        sender: frank({ displayName: "Frankie", fullName: "Frank An" }),
+        sender: frank({ displayName: "Frankie" }),
         channelName: null,
       }),
     ).toMatchObject({ title: "Frankie", body: "Build finished" });
     expect(
       await notificationFor({
-        sender: frank({ displayName: null, fullName: "Frank An" }),
+        sender: frank({ displayName: null }),
         channelName: null,
       }),
-    ).toMatchObject({ title: "Frank An" });
+    ).toMatchObject({ title: "frank-an-4k2" });
   });
 
   test("a person in a channel prefixes the preview with their label", async () => {
     expect(
       await notificationFor({
-        sender: frank({ displayName: null, fullName: "Frank An" }),
+        sender: frank({ displayName: null }),
         channelName: "general",
       }),
-    ).toMatchObject({ title: "#general", body: "Frank An: Build finished" });
+    ).toMatchObject({ title: "#general", body: "frank-an-4k2: Build finished" });
   });
 
   test("an Agent keeps its @handle", async () => {

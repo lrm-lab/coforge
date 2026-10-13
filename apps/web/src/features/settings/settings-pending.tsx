@@ -5,7 +5,7 @@ import { SettingsNavigationGroup } from "./settings-navigation-group";
 
 export function SettingsPending() {
   return (
-    <main aria-busy="true" className="flex h-svh min-w-0">
+    <main aria-busy="true" className="flex h-full min-w-0">
       <p role="status" className="sr-only">
         {m.settings_loading()}
       </p>

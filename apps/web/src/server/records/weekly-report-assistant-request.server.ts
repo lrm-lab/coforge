@@ -49,6 +49,11 @@ export function isWeeklyReportPlatformTurn(body: string): boolean {
   return display.startsWith("采集已全部结束。请根据老板周报模板结构");
 }
 
+/** Memory settlement wakes stay out of the side panel, including the assistant reply. */
+export function isWeeklyReportMemoryPlatformTurn(body: string): boolean {
+  return weeklyReportAssistantDisplayBody(body).includes("[weekly-report-memory]");
+}
+
 export function weeklyReportAssistantSubjectFromBody(body: string): string | null {
   const match = body.match(/^\[weekly-report-context\][\s\S]*?\nsubject:\s*(\S+)/m);
   return match?.[1] ?? null;

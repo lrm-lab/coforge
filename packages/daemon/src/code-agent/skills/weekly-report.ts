@@ -103,9 +103,10 @@ Collect handoffs use the separate weekly-report-writing skill.
 
 When the User asks to整理、汇总或生成当前周报内容, treat the response as a
 draft for that report even when the request arrives in the User–Agent DM. After
-the draft, always append a body-edit suggestion envelope so DM and Records
-expose the same Insert action. Use the current reportId from context and preserve
-every template tab; do not require the User to repeat “preview”.
+the draft, always append a body-edit suggestion envelope. The platform writes
+that draft into the report and keeps the previous body so the User can switch
+back. Use the current reportId from context and preserve every template tab;
+do not require the User to repeat “preview”.
 
 ## Collect work from Computers
 
@@ -190,6 +191,16 @@ For platform wakes only:
 
 \`\`\`
 coforge weekly-report-key-points submit --report-id <uuid> --idempotency-key <uuid> --markdown <file>
+\`\`\`
+
+A [weekly-report-memory] wake compares the assistant original with the submitted
+body. Reuse a listed habit's sentence instead of writing the same habit again.
+Submit one JSON file with preferences, explicitRules, factCorrections and
+threads. Do not store habits in this skill. A later send replaces that week's
+settlement.
+
+\`\`\`
+coforge weekly-report-memory submit --report-id <uuid> --idempotency-key <uuid> --file <json>
 \`\`\`
 
 Collect Run wakes supply ready packs, template outline and slot status. Synthesize

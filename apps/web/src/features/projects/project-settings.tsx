@@ -129,7 +129,7 @@ export function ProjectSettingsPage({
   }
 
   return (
-    <main className="flex h-svh min-w-0 flex-col bg-primary">
+    <main className="flex h-full min-w-0 flex-col bg-primary">
       <PageHeader
         heading={m.project_settings()}
         leading={

@@ -231,10 +231,13 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     <ConversationListContext value={listControls}>
       <ConversationHostProvider channels={channelNames}>
         <UnreadContext value={controls}>
-          <main className="flex h-svh min-w-0 flex-col bg-primary lg:flex-row">
+          <main
+            data-panel-cards
+            className="flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
+          >
             <section
               className={cx(
-                "min-h-0 flex-1 flex-col lg:flex lg:w-72 lg:flex-none lg:border-r lg:border-secondary",
+                "min-h-0 flex-1 flex-col lg:flex lg:w-72 lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
                 showList ? "flex" : "hidden",
               )}
             >
@@ -255,7 +258,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
             </section>
             <div
               className={cx(
-                "min-h-0 min-w-0 flex-1 flex-col lg:flex",
+                "min-h-0 min-w-0 flex-1 flex-col lg:flex lg:overflow-hidden lg:rounded-xl lg:bg-primary",
                 showList ? "hidden" : "flex",
               )}
             >
@@ -267,15 +270,31 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
               open={creating}
               onOpenChange={setCreating}
               projects={projects}
-              onCreate={async (name, projectId) => {
-                const result = await create({ data: { name, projectId } });
-                // Only the channel list and names changed: re-read those before opening it.
-                await refreshSidebar(["channels", "channelNames"]);
-                await router.navigate({
-                  to: "/w/$workspaceSlug/channel/$channelId",
-                  params: { workspaceSlug, channelId: result.id },
+              memberPicker
+              minMembers={2}
+              onCreate={async (name, projectId, memberUserIds, memberAgentIds) => {
+                const created = await create({
+                  data: {
+                    name,
+                    projectId,
+                    userIds: memberUserIds ?? [],
+                    agentIds: memberAgentIds ?? [],
+                  },
                 });
+                // Only the channel list and names changed: re-read those. A failed re-read leaves
+                // the channel created, so it is reported as such rather than failing the create.
+                const sidebarRefreshed = await refreshSidebar(["channels", "channelNames"]).then(
+                  () => true,
+                  () => false,
+                );
+                return { ...created, sidebarRefreshed };
               }}
+              onOpenChannel={(channelId) =>
+                router.navigate({
+                  to: "/w/$workspaceSlug/channel/$channelId",
+                  params: { workspaceSlug, channelId },
+                })
+              }
             />
           )}
         </UnreadContext>

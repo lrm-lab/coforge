@@ -531,7 +531,6 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
                 id: true,
                 username: true,
                 displayName: true,
-                fullName: true,
                 avatarObjectKey: true,
               },
             },

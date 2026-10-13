@@ -11,7 +11,7 @@ import { AgentTransportError } from "#src/connection/agent-transport-error";
 import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
 import { AgentSendVerdictError, type AgentSendVerdict } from "./agent-send-verdict";
 
-const logger = getLogger(["coforge", "daemon", "runtime"]);
+const logger = getLogger(["coforge", "daemon", "agent-message"]);
 
 /** What settling one send needs: the send and reconcile calls, and whether the target's draft
  * still holds a given key. */

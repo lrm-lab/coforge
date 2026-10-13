@@ -25,43 +25,37 @@ identity provider reported at login, nullable, not unique, not an identity key.
 An account registered with a phone number alone has none and signs in like any
 other; the signed session and every consumer of it treat the email as optional.
 
-`User.fullName` is the name teammates see. It is nullable because an account
-created before it has none until it is asked for one, and `null` means not yet
-asked. A signed-in person with none is sent once to `/welcome` (a page outside
-the Workspace layout), from sign-in, from `/w/<slug>`, from `/workspaces/new`
-and from an invite link `/join/<token>`, but not from `/oauth/verify`. Sign-in
-still issues the session, but creates nothing until they answer: submitting the
-name saves it, then makes their personal Workspace, titled with it. A session
-whose user row is gone is sent to sign in again instead. The name follows the
-one rule for a person's name (`apps/web/src/features/profiles/person-name.ts`),
-which the profile's own name shares: normalized and 1 to 80 characters, counted
-as code points, and refused when it holds control, bidirectional or only
-invisible characters, is the server's sender label `System`, or starts with `@`.
-The first name saved stays: a second submit changes nothing and returns the
-memberships as they are. The signed session's `name` is only what the provider
-reported (its name, else its nickname), kept to start the name field (left empty
-when it is a phone number or an email); it never labels anyone.
-`User.displayName` is
-an optional nickname that replaces the full name in labels when set. The
-migration that added `fullName` copied every existing `displayName` there
-and left `displayName` as it was, so an account that had already set a name
-counts as named and its label does not change. A `displayName` equal to the
-user's `username` (a value an old save froze into it) was not copied and was
-cleared, which labels the same. A person with neither is named by
-their username, without an `@`, until asked. The provider's name is not stored
-and never labels a person.
-`humanLabel` in `apps/web/src/lib/human-label.ts` is the one rule for that label,
-in messages, member lists, mentions, reactions, notifications, and the
-signed-in user's own shell. No screen shows a person's username, except the
-`@` list beside two people whose label and description are identical, where
-nothing else tells them apart. It is the handle Agents use in `@mentions` and the label of last resort, and a search
-finds a person by it only when it is their label. The Workspace directory that
-the Search page and the pickers load carries a person's label and full name,
-never the username, and the Members directory lists people by label. An Agent's
-`@handle` stays visible. Settings → Account edits `fullName` (required) and
-`displayName` (optional, and blank means none), both by that one rule; a name it
-refuses is worded inline where it is typed. A `displayName` equal to the
-`fullName` is stored as none.
+`User.displayName` is the one name teammates see. It is nullable because an account created before it has none until it is
+asked for one, and `null` means not yet asked. A signed-in person with none is
+sent once to `/welcome` (a page outside the Workspace layout), from sign-in, from
+`/w/<slug>`, from `/workspaces/new` and from an invite link `/join/<token>`, but
+not from `/oauth/verify`. Sign-in still issues the session, but creates nothing
+until they answer: submitting the name saves it, then makes their personal
+Workspace, titled with it. A session whose user row is gone is sent to sign in
+again instead. The name follows the one rule for a person's name
+(`apps/web/src/features/profiles/person-name.ts`), which the profile's own name
+shares: normalized and 1 to 80 characters, counted as code points, and refused
+when it holds control, bidirectional or only invisible characters, is the
+server's sender label `System`, or starts with `@`. The first name saved at
+first sign-in stays: a second submit changes nothing and returns the memberships
+as they are. The signed session's `name` is only what the provider reported (its
+name, else its nickname), kept to start the name field (left empty when it is a
+phone number or an email); it never labels anyone.
+
+A person without a name is labelled by their username, without an `@`, until
+asked. The provider's name is not stored and never labels a person.
+
+`humanLabel` in `apps/web/src/lib/human-label.ts` is the one rule for that label
+(`displayName`, else `username`), in messages, member lists, mentions, reactions,
+notifications, and the signed-in user's own shell. No screen shows a person's
+username, except the `@` list beside two people whose label and description are
+identical, where nothing else tells them apart. It is the handle Agents use in
+`@mentions` and the label of last resort, and a search finds a person by it only
+when it is their label. The Workspace directory that the Search page and the
+pickers load carries a person's label, never the username, and the Members
+directory lists people by label. An Agent's `@handle` stays visible. Settings →
+Account edits `displayName` (required) by that one rule; a name it refuses is
+worded inline where it is typed.
 
 `User.description` stores the editable profile description. The optional
 `avatarObjectKey` and `avatarContentType` identify the user's current private

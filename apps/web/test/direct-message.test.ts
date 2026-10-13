@@ -10,6 +10,8 @@ import type {
   MessageRequestScope,
 } from "#src/server/conversations/message-request-idempotency.server";
 import type { DirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
+import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
 
 const persisted = {
@@ -213,6 +215,44 @@ describe("SendDirectMessage", () => {
       }),
     ).resolves.toEqual(persisted);
     expect(calls).toEqual(["persist", "browser:conversation-a:message-a:1", "daemon"]);
+  });
+
+  test("signals the sender's own channel with the sender named, so their other tabs and devices refresh the DM row", async () => {
+    const published: { channel: string; data: Record<string, unknown> }[] = [];
+    const repository = {
+      async getOrCreateUserAgent() {
+        return { id: "conversation-a" };
+      },
+      async sendMessage() {
+        return persisted;
+      },
+    } satisfies DirectConversationRepository;
+    const useCase = new SendDirectMessage(
+      repository,
+      new MemoryMessageRequestIdempotency(),
+      { async publish() {} },
+      new CentrifugoConversationRealtime({
+        publishJson: async (channel: string, data: Record<string, unknown>) => {
+          published.push({ channel, data });
+        },
+      } as unknown as CentrifugoServerApi),
+    );
+
+    await useCase.execute({
+      idempotencyKey: "request-a",
+      workspaceId: "workspace-a",
+      conversationId: "conversation-a",
+      senderMemberId: "member-a",
+      senderUserId: "user-a",
+      body: "Hello Agent",
+    });
+    expect(published.map((publication) => publication.channel).sort()).toEqual([
+      "chat:conversation-a",
+      "chat:user:user-a",
+    ]);
+    expect(
+      published.find((publication) => publication.channel === "chat:user:user-a")?.data,
+    ).toMatchObject({ type: "message.available.v1", agentId: "agent-a", senderUserId: "user-a" });
   });
 
   test("signals a human message with its idempotency key, so the sender's browser can match it", async () => {

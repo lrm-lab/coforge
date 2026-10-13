@@ -10,9 +10,9 @@ await db.user.upsert({
   create: {
     id: DEV_BROWSER_USER.id,
     username: DEV_BROWSER_USER.username,
-    fullName: DEV_BROWSER_USER.name,
+    displayName: DEV_BROWSER_USER.name,
   },
-  update: { username: DEV_BROWSER_USER.username, fullName: DEV_BROWSER_USER.name },
+  update: { username: DEV_BROWSER_USER.username, displayName: DEV_BROWSER_USER.name },
 });
-await workspaceIdForUser(db, { ...DEV_BROWSER_USER, fullName: DEV_BROWSER_USER.name }, "en");
+await workspaceIdForUser(db, { ...DEV_BROWSER_USER, displayName: DEV_BROWSER_USER.name }, "en");
 await db.$disconnect();

@@ -70,7 +70,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
         getPanelTabOrders(),
         loadRecordsNavAttention().catch(() => ({ preview: false })),
       ]);
-    // A person who has not been asked for a full name is asked once, here for a session that
+    // A person who has not been asked for a display name is asked once, here for a session that
     // predates the step, and comes back to this page.
     if (!user.named) throw nameStepRedirect(location.href);
     return {

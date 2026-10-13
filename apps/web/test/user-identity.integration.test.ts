@@ -191,7 +191,7 @@ test.skipIf(!connectionString)(
 );
 
 test.skipIf(!connectionString)(
-  "a first login gets a readable username from the email's local part, and no full name yet",
+  "a first login gets a readable username from the email's local part, and no display name yet",
   async () => {
     const { suffix, login, teardown } = await setup();
     try {
@@ -202,7 +202,6 @@ test.skipIf(!connectionString)(
 
       expect(plain.username).toBe(`grace-${suffix}`);
       expect(tagged.username).toBe(`ada-${suffix}`);
-      expect(plain.fullName).toBeNull();
       expect(plain.displayName).toBeNull();
     } finally {
       await teardown();

@@ -101,7 +101,7 @@ export class UserDirectConversations {
 
   /**
    * Stores a member's message once per `idempotencyKey`, then tells the conversation's open pages and
-   * the other member's list. Nothing is
+   * each member's list, the sender's included. Nothing is
    * delivered to an Agent, and `@handle` stays plain text: a direct conversation between people
    * has no one else to mention.
    */
@@ -133,12 +133,12 @@ export class UserDirectConversations {
         conversationId,
         messageId: message.id,
         sequence: message.sequence,
-        // The other member's list only: the sender's own message never bumps their badge.
-        directUserIds: members.flatMap((member) =>
-          member.userId && member.userId !== senderUserId ? [member.userId] : [],
-        ),
+        // Every member, the sender included: the sender's other tabs and devices refresh the DM
+        // row. The message names the sender, so it never bumps the sender's own badge.
+        directUserIds: members.flatMap((member) => (member.userId ? [member.userId] : [])),
         directPair: peopleDirectKeyPair(conversation.directKey),
         idempotencyKey: input.idempotencyKey,
+        senderUserId,
         ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
       });
     } catch {

@@ -167,11 +167,7 @@ function MembersRoster({
     () =>
       data.humans
         .filter((human) =>
-          memberMatchesSearch(query, {
-            kind: "user",
-            displayName: human.displayName,
-            fullName: human.fullName,
-          }),
+          memberMatchesSearch(query, { kind: "user", displayName: human.displayName }),
         )
         .map((human): Member => ({ kind: "user", ...human })),
     [data.humans, query],
@@ -569,7 +565,7 @@ type Candidate = {
   kind: "user" | "agent";
   id: string;
   displayName: string;
-  /** What the search reads: a person's full name, an Agent's handle. */
+  /** What the search reads: a person's display name, an Agent's name and handle. */
   search: SearchableMember;
   description?: string;
   avatarUrl?: string | null;
@@ -612,11 +608,7 @@ function AddMembersView({
         kind: "user" as const,
         id: human.id,
         displayName: human.displayName,
-        search: {
-          kind: "user" as const,
-          displayName: human.displayName,
-          fullName: human.fullName,
-        },
+        search: { kind: "user" as const, displayName: human.displayName },
         avatarUrl: human.avatarUrl,
       })),
     ],

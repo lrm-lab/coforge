@@ -57,9 +57,6 @@ export type Mentionable = {
   /** The name the completion list shows, the composer writes after the `@`, and the list is
    * searched by. */
   label: string;
-  /** A person's full name, when it is not already their label (they have a nickname): the list
-   * finds them by it too, as a directory search finds anyone by either name. */
-  fullName?: string;
   /** A short profile description shown after the name on the completion row, trimmed. Empty
    * when the profile has none; the row then shows no description. */
   description: string;
@@ -108,12 +105,11 @@ export function mentionKeysShowingHandle(items: readonly Mentionable[]): Set<str
 
 /**
  * The names the `@` list finds a candidate by besides its label. A person's handle is not shown, so
- * a match on it would be a hit the reader cannot explain; their full name is who they are, so it
- * matches under a nickname. An Agent's handle is its public name, so it matches.
+ * a match on it would be a hit the reader cannot explain, and a person has no other name to match.
+ * An Agent's handle is its public name, so it matches.
  */
-function mentionSearchNames(mention: Pick<Mentionable, "kind" | "handle" | "fullName">): string[] {
-  if (mention.kind === "agent") return [mention.handle];
-  return mention.fullName ? [mention.fullName] : [];
+function mentionSearchNames(mention: Pick<Mentionable, "kind" | "handle">): string[] {
+  return mention.kind === "agent" ? [mention.handle] : [];
 }
 
 /**

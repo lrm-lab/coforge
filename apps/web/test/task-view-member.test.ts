@@ -4,7 +4,7 @@ import { taskMember } from "#src/server/tasks/task-view.server";
 
 type Member = Parameters<typeof taskMember>[1];
 
-const person = (names: { displayName: string | null; fullName: string | null }): Member => ({
+const person = (names: { displayName: string | null }): Member => ({
   id: "member-1",
   userId: "user-1",
   agentId: null,
@@ -15,18 +15,16 @@ const person = (names: { displayName: string | null; fullName: string | null }):
 
 describe("taskMember", () => {
   test("a person is named by the label teammates see, without an @", () => {
-    expect(
-      taskMember("workspace-1", person({ displayName: "Frankie", fullName: "Frank An" })).name,
-    ).toBe("Frankie");
-    expect(
-      taskMember("workspace-1", person({ displayName: null, fullName: "Frank An" })).name,
-    ).toBe("Frank An");
+    expect(taskMember("workspace-1", person({ displayName: "Frankie" })).name).toBe("Frankie");
+    expect(taskMember("workspace-1", person({ displayName: null })).name).toBe("frank-an-4k2");
   });
 
   test("the handle stays on the member, for the Agent-facing view", () => {
-    expect(
-      taskMember("workspace-1", person({ displayName: null, fullName: "Frank An" })),
-    ).toMatchObject({ kind: "user", id: "user-1", handle: "frank-an-4k2" });
+    expect(taskMember("workspace-1", person({ displayName: null }))).toMatchObject({
+      kind: "user",
+      id: "user-1",
+      handle: "frank-an-4k2",
+    });
   });
 
   test("an Agent is still its display name, with its @handle as the handle", () => {

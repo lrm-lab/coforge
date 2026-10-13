@@ -33,7 +33,7 @@
 | 提示框边框色 |
 | `#1BB618` | 在线、成功 |
 | `#AFBCCB` | 掉线 |
-| `#F15341` | 未读消息、失败、警报、删除 |
+| `#F15341` | 未读消息、失败、警报、删除（未读以列表稿为准，见「未读标记」） |
 
 `#F4FAF6` 偏绿，和同组其他灰色（偏蓝）不一致，可能是设计稿笔误（如 `#F4F6FA`），向设计确认前不据此改 token。
 
@@ -50,7 +50,7 @@
 | 预览行、tab 文字 | `#777D8D` | `text-tertiary`、`text-quaternary`（`#525252`、`#737373`） | 未采用：见下，对比度不达标 |
 | 边框、分割线 | `#E0E5F1` | `border-secondary` | 已对齐 |
 | 徽标、标签背景 | `#F3F1FF` | `bg-brand-primary` | 已对齐 |
-| 未读、失败、警报、删除 | `#F15341` | `bg-error-solid`、`fg-error-primary`、`text-error-primary`（`#E7000B`） | 未采用：见下，对比度不达标 |
+| 失败、警报、删除 | `#F15341` | `bg-error-solid`、`fg-error-primary`、`text-error-primary`（`#E7000B`） | 未采用：见下，对比度不达标；未读不用红，见上 |
 | 成功 | `#1BB618` | `bg-success-solid`、`text-success-primary`（`#00A63E`） | 未采用：见下，对比度不达标 |
 | 提示框底色 | `#F6FFED` | `bg-success-primary` | 已对齐 |
 | 提示框边框色 | `#B7EB8F` | 无 | 缺 token，没有使用方 |
@@ -63,7 +63,7 @@
 
 ## 未读标记
 
-设计稿把"未读消息"画成红色。未读数字角标和未读小圆点用 `bg-error-solid`（Untitled 的标准红，不是设计稿的 `#F15341`），全站只有 `components/ui/unread-marker.tsx` 的 `UnreadBadge`、`UnreadDot` 两个出处（侧栏、会话列表、线程摘要、记录列表）。未读会话行的底色和消息流里的未读分割线设计稿没有规定，仍按[第 11 节](color-status-typography.md)用品牌紫。
+色板页把"未读消息"画成红色，但会话列表的设计稿（私聊、群聊行）把未读数字角标画成品牌紫底白字，以更具体的列表稿为准：未读数字角标和未读小圆点都用 `bg-brand-solid`（白字对比度约 6.9:1，达标）。全站只有 `components/ui/unread-marker.tsx` 的 `UnreadBadge`、`UnreadDot` 两个出处（侧栏、会话列表、线程摘要、记录列表）。未读会话行的底色和消息流里的未读分割线也用品牌紫（见[第 11 节](color-status-typography.md)）。
 
 ## 红色、绿色和文字灰没有采用（2026-10-09）
 

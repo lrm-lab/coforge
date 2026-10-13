@@ -188,7 +188,7 @@ export async function findWorkspaceUser(
     select: {
       role: true,
       user: {
-        select: { id: true, username: true, displayName: true, fullName: true, description: true },
+        select: { id: true, username: true, displayName: true, description: true },
       },
     },
   });

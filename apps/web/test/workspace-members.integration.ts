@@ -214,7 +214,7 @@ test("the directory lists people in the order of the names they are shown by", a
   }
 });
 
-test("a person with a full name and no display name is listed by the full name", async () => {
+test("a person with no display name is listed by the username", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
   if (!connectionString)
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
@@ -222,20 +222,18 @@ test("a person with a full name and no display name is listed by the full name",
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
   // The usernames sort amy < mia < zed; the names they are shown by sort Alice < mia < Zoe:
-  // amy has only a full name, zed a nickname that wins over his full name, mia neither.
+  // amy and zed have a display name, mia has none and is shown by her username.
   const usernames = ["amy", "mia", "zed"].map((name) => `full-${name}-${suffix}`);
   try {
     const [amy, mia, zed] = await Promise.all([
-      db.user.create({ data: { username: usernames[0]!, fullName: "Zoe" } }),
+      db.user.create({ data: { username: usernames[0]!, displayName: "Zoe" } }),
       db.user.create({ data: { username: usernames[1]! } }),
-      db.user.create({
-        data: { username: usernames[2]!, displayName: "Alice", fullName: "Zed Person" },
-      }),
+      db.user.create({ data: { username: usernames[2]!, displayName: "Alice" } }),
     ]);
     const workspace = await db.workspace.create({
       data: {
         slug: `full-${suffix}`,
-        name: "Full names",
+        name: "Labels",
         members: { create: [{ userId: amy!.id }, { userId: mia!.id }, { userId: zed!.id }] },
       },
     });

@@ -124,14 +124,13 @@ test("members are listed in the order of the names they are shown by, not of the
   expect(listed.map((row) => row.username)).toEqual(["zed", "mia", "ada"]);
 });
 
-test("a member with only a full name is listed by it, between a nickname and a bare username", async () => {
+test("a member with no display name is listed by their username", async () => {
   const store = memoryStore();
   store.seedMember({
     workspaceId,
     userId: ownerId,
     role: "owner",
     username: "ada",
-    fullName: "Zoe Zed",
   });
   store.seedMember({
     workspaceId,
@@ -139,13 +138,12 @@ test("a member with only a full name is listed by it, between a nickname and a b
     role: "admin",
     username: "zed",
     displayName: "Alice",
-    fullName: "Zed Person",
   });
   store.seedMember({ workspaceId, userId: memberId, role: "member", username: "mia" });
   const directory = new WorkspaceMemberDirectory(store);
 
   const listed = await directory.listMembers({ workspaceId, actorUserId: ownerId });
-  expect(listed.map(humanLabel)).toEqual(["Alice", "mia", "Zoe Zed"]);
+  expect(listed.map(humanLabel)).toEqual(["ada", "Alice", "mia"]);
 });
 
 function memoryStore(): WorkspaceMemberDirectoryStore & {
@@ -158,7 +156,6 @@ function memoryStore(): WorkspaceMemberDirectoryStore & {
     role: WorkspaceMemberRole;
     username: string;
     displayName?: string;
-    fullName?: string;
     channelIds?: string[];
   }): void;
 } {
@@ -176,7 +173,6 @@ function memoryStore(): WorkspaceMemberDirectoryStore & {
         role: input.role,
         username: input.username,
         displayName: input.displayName ?? null,
-        fullName: input.fullName ?? null,
         avatarUrl: null,
       });
     },

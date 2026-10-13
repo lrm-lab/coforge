@@ -240,9 +240,9 @@ test("people search reads the name a person is shown by, never a username they d
   try {
     const [ada, grace, legacy] = await Promise.all([
       db.user.create({
-        data: { username: usernames[0]!, displayName: "Countess", fullName: "Ada Lovelace" },
+        data: { username: usernames[0]!, displayName: "Countess" },
       }),
-      db.user.create({ data: { username: usernames[1]!, fullName: "Grace Hopper" } }),
+      db.user.create({ data: { username: usernames[1]!, displayName: "Grace Hopper" } }),
       // Never asked for a name: their username is the label everyone sees.
       db.user.create({ data: { username: usernames[2]! } }),
     ]);
@@ -259,9 +259,6 @@ test("people search reads the name a person is shown by, never a username they d
       ).items.map((person) => person.displayName);
 
     expect(await search("countess")).toEqual(["Countess"]);
-    // The nickname replaced the full name on screen, and the full name still finds them.
-    expect(await search("ada lovelace")).toEqual(["Countess"]);
-    expect(await search("HOPPER")).toEqual(["Grace Hopper"]);
     // A person with no name is shown by, and found by, their username.
     expect(await search(`legacy-${uid}`)).toEqual([`legacy-${uid}`]);
     // A username nobody sees does not find a person who has a name.
@@ -283,16 +280,16 @@ test("people are paged in the order of the names they are shown by, not of their
   const uid = crypto.randomUUID().slice(0, 8);
   // Their usernames sort z, a, m, b, c, t2, t1; the names shown sort differently.
   const specs = [
-    { username: `pg-z-${uid}`, fullName: "Ada Lovelace" },
-    { username: `pg-a-${uid}`, displayName: "bea", fullName: "Zed Zimmer" },
-    { username: `pg-m-${uid}`, fullName: "Cyd Charisse" },
-    // A blank display name is no name: the full name is shown.
-    { username: `pg-b-${uid}`, displayName: "  ", fullName: "Bob Barker" },
+    { username: `pg-z-${uid}`, displayName: "Ada Lovelace" },
+    { username: `pg-a-${uid}`, displayName: "bea" },
+    { username: `pg-m-${uid}`, displayName: "Cyd Charisse" },
+    // A blank display name is no name: the username is shown.
+    { username: `pg-b-${uid}`, displayName: "  " },
     // No names at all: the username is the label.
     { username: `pg-c-${uid}` },
     // Two people shown alike are told apart by username.
-    { username: `pg-t2-${uid}`, fullName: "Sam Same" },
-    { username: `pg-t1-${uid}`, fullName: "Sam Same" },
+    { username: `pg-t2-${uid}`, displayName: "Sam Same" },
+    { username: `pg-t1-${uid}`, displayName: "Sam Same" },
   ];
   const usernames = specs.map((spec) => spec.username);
   try {
@@ -321,8 +318,8 @@ test("people are paged in the order of the names they are shown by, not of their
     const inOrder = [
       "Ada Lovelace",
       "bea",
-      "Bob Barker",
       "Cyd Charisse",
+      `pg-b-${uid}`,
       `pg-c-${uid}`,
       "Sam Same",
       "Sam Same",

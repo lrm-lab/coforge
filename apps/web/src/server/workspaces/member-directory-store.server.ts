@@ -37,7 +37,7 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
         userId: true,
         role: true,
         user: {
-          select: { username: true, displayName: true, fullName: true, avatarObjectKey: true },
+          select: { username: true, displayName: true, avatarObjectKey: true },
         },
       },
     });
@@ -47,7 +47,6 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
       role: asRole(row.role),
       username: row.user.username,
       displayName: row.user.displayName,
-      fullName: row.user.fullName,
       avatarUrl: workspaceUserAvatarUrl(workspaceId, row.userId, row.user.avatarObjectKey),
     }));
   }
@@ -61,7 +60,7 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
         userId: true,
         role: true,
         user: {
-          select: { username: true, displayName: true, fullName: true, avatarObjectKey: true },
+          select: { username: true, displayName: true, avatarObjectKey: true },
         },
       },
     });
@@ -71,7 +70,6 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
       role: asRole(row.role),
       username: row.user.username,
       displayName: row.user.displayName,
-      fullName: row.user.fullName,
       avatarUrl: workspaceUserAvatarUrl(workspaceId, row.userId, row.user.avatarObjectKey),
     };
   }

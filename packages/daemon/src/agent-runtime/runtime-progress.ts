@@ -6,7 +6,7 @@
  * instead of "at most one every N seconds", the rule is "announce only while the Agent does not
  * already look busy". Once something else (a tool call, streamed text, a compaction notice, ...)
  * has made the Agent visibly busy, further progress pings only refresh liveness bookkeeping - the
- * caller decides "already busy" from `#lastBusyActivity` (see runtime.ts), so this tracker itself
+ * caller decides "already busy" from the last busy Activity (`AgentActivityPublisher.lastBusy`), so this tracker itself
  * carries no Activity/detail-kind knowledge and stays trivially testable.
  */
 export class RuntimeProgressTracker {

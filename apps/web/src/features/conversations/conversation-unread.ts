@@ -135,6 +135,36 @@ export function closedConversationLists(
   return event.agentId !== undefined || event.peerUserId !== undefined ? ["dms"] : ["channels"];
 }
 
+/**
+ * Which list a top-level message makes stale in a DM the sidebar already lists: the DM list, so
+ * the row shows its new last message time and preview. Incoming and the viewer's own message
+ * alike (a send from another tab or device). Thread replies and channels never do; an unlisted DM
+ * is `closedConversationLists`' case, so the two rules never both name the list.
+ */
+export function directRowRefreshLists(
+  event: UnreadEventInput,
+  listed: ReadonlySet<string>,
+): readonly ChatList[] {
+  const direct = event.agentId !== undefined || event.peerUserId !== undefined;
+  if (!direct || event.threadRootId || !listed.has(event.conversationId)) return [];
+  return ["dms"];
+}
+
+/**
+ * Which list a top-level message makes stale in a channel the sidebar already lists: the channel
+ * list, so the row shows its new last message time and preview. Incoming and the viewer's own
+ * message alike (a send from another tab or device). Thread replies and DMs never do; an unlisted
+ * channel is `closedConversationLists`' case, so the two rules never both name the list.
+ */
+export function channelRowRefreshLists(
+  event: UnreadEventInput,
+  listed: ReadonlySet<string>,
+): readonly ChatList[] {
+  const direct = event.agentId !== undefined || event.peerUserId !== undefined;
+  if (direct || event.threadRootId || !listed.has(event.conversationId)) return [];
+  return ["channels"];
+}
+
 /** A conversation was read: clear its badge and remember the boundary it was read to. */
 export function clearUnread(
   current: UnreadCounts,
@@ -202,6 +232,15 @@ export function sidebarListsChangedBy(event: ViewerEvent): readonly ChatList[] {
   if (event.type === "pref.changed.v1")
     return event.name === "pins" ? ["channels", "dms"] : ["channels"];
   return event.type.startsWith("dm.") ? ["dms"] : ["channels"];
+}
+
+/** A message signal, or undefined for any other publication on the viewer's channel. */
+function decodeMessageSignal(data: unknown): UnreadEventInput | undefined {
+  try {
+    return decodeMessageAvailableEvent(data);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -491,6 +530,8 @@ export function useChannelUnread({
       const viewerId = refs.current.userId;
       const stale = closedConversationLists(event, listed, viewerId);
       if (stale.length > 0) reopenFromActivity(stale, event);
+      const rowLists = channelRowRefreshLists(event, listed);
+      if (rowLists.length > 0) refs.current.onSidebarListsChanged(rowLists);
       setCounts((current) =>
         applyUnreadEvent(current, event, {
           conversations,
@@ -516,7 +557,15 @@ export function useChannelUnread({
   const onUserPublication = useCallback(
     (publication: { data: unknown }) => {
       const event = decodeViewerEvent(publication.data);
-      if (!event) return onPublication(publication);
+      if (!event) {
+        onPublication(publication);
+        const message = decodeMessageSignal(publication.data);
+        const lists = message
+          ? directRowRefreshLists(message, refs.current.listedConversationIds)
+          : [];
+        if (lists.length > 0) refs.current.onSidebarListsChanged(lists);
+        return;
+      }
       if ("unreadCount" in event) {
         const open = refs.current.openConversationId;
         setCounts((current) => applyMarked(current, event, { openConversationId: open }));

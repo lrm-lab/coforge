@@ -17,10 +17,13 @@ import {
   isHourlySendTime,
   memberReportTitle,
   memberWeekTitle,
+  insertAssistantReportBody,
   normalizeReportContent,
   publishMemberReportDelivery,
+  reportBodyRestoreView,
   reportContentForAuthor,
   reportContentForRecipient,
+  switchReportBodyVersion,
   reportTabsEqual,
   retainMemberReportDelivery,
   withAssignmentUnread,
@@ -52,6 +55,7 @@ import {
 } from "#src/features/records/template-outline-sections";
 import { isVisibleTemplateSubmission } from "./template-submission-visibility.server";
 import { canEditWeeklyReportContent } from "./weekly-report-editability.server";
+import { memoryForPrompt, parseStoredWeeklyReportMemory } from "./weekly-report-memory.server";
 import { buildWeeklyReportHtml } from "./weekly-report-html.server";
 import { buildWeeklyReportPresentation } from "./weekly-report-presentation.server";
 import {
@@ -1536,6 +1540,14 @@ export class RecordCatalog {
     });
   }
 
+  private async memberMemoryPrompt(workspaceId: string, userId: string) {
+    const assistant = await this.db.weeklyReportAssistant.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { memory: true },
+    });
+    return memoryForPrompt(parseStoredWeeklyReportMemory(assistant?.memory));
+  }
+
   async loadAssistantContextManifest(input: {
     workspaceId: string;
     userId: string;
@@ -1569,6 +1581,9 @@ export class RecordCatalog {
         templateFormats: formats.templates,
         templateFormatsNextCursor: formats.nextCursor,
         contextVersion: subject.report.updatedAt,
+        ...(subject.report.kind === "member"
+          ? await this.memberMemoryPrompt(input.workspaceId, subject.report.author.userId)
+          : {}),
       } as const;
     }
 
@@ -1865,6 +1880,10 @@ export class RecordCatalog {
               : report.title,
           status: report.status,
           content,
+          bodyRestoreView:
+            report.kind === "member" && report.author.id === input.userId
+              ? reportBodyRestoreView(asReportContent(report.content))
+              : null,
           submittedAt: report.submittedAt?.toISOString() ?? null,
           updatedAt: report.updatedAt.toISOString(),
           author: {
@@ -2070,6 +2089,11 @@ export class RecordCatalog {
     now?: Date;
     /** Explicit「保存」: ask assistant whether to send when still eligible. */
     askToSend?: boolean;
+    /**
+     * Assistant body-edit message that should become the latest version.
+     * The same message id does not capture the pair again.
+     */
+    assistantInsertMessageId?: string;
   }) {
     await requireMembership(this.db, input.workspaceId, input.userId);
     const report = await this.db.weeklyReport.findFirst({
@@ -2106,6 +2130,15 @@ export class RecordCatalog {
     }
     if (stored.keyPointExtraction && !content.keyPointExtraction) {
       content = { ...content, keyPointExtraction: stored.keyPointExtraction };
+    }
+    if (stored.assistantDraft && !content.assistantDraft) {
+      content = { ...content, assistantDraft: stored.assistantDraft };
+    }
+    if (stored.bodyRestore && !content.bodyRestore) {
+      content = { ...content, bodyRestore: stored.bodyRestore };
+    }
+    if (input.assistantInsertMessageId) {
+      content = insertAssistantReportBody(stored, content, input.assistantInsertMessageId);
     }
     const publishing = isSentMemberReport(report.kind, input.status ?? "");
     const alreadySent = isSentMemberReport(report.kind, report.status);
@@ -2188,14 +2221,12 @@ export class RecordCatalog {
       }
     }
 
+    const publishingMember =
+      report.kind === "member" && (input.status === "submitted" || input.status === "shared");
+    const firstMemberPublish =
+      publishingMember && report.status !== "submitted" && report.status !== "shared";
     // Member first submit/share → Leader personal key-point extraction (LLM).
-    if (
-      report.kind === "member" &&
-      input.status &&
-      (input.status === "submitted" || input.status === "shared") &&
-      report.status !== "submitted" &&
-      report.status !== "shared"
-    ) {
+    if (firstMemberPublish) {
       try {
         const { startPersonalKeyPointExtraction } =
           await import("./weekly-report-key-points.server");
@@ -2207,6 +2238,18 @@ export class RecordCatalog {
         // Extraction is best-effort; member submit must still succeed.
       }
     }
+    if (publishingMember) {
+      try {
+        const { startWeeklyReportMemorySettlement } =
+          await import("./weekly-report-memory-settlement.server");
+        await startWeeklyReportMemorySettlement(this.db, {
+          workspaceId: input.workspaceId,
+          reportId: report.id,
+        });
+      } catch {
+        // Memory settlement is best-effort; member submit must still succeed.
+      }
+    }
 
     return {
       id: updated.id,
@@ -2214,23 +2257,64 @@ export class RecordCatalog {
       updatedAt: updated.updatedAt.toISOString(),
       autoSendJustCancelled,
       assistantPosted,
+      content: reportContentForAuthor(content),
+      bodyRestoreView: reportBodyRestoreView(content),
     };
   }
 
   /**
-   * Confirmed assistant body-edit write. Does not ask-to-send; the user still controls send.
+   * Assistant body-edit write. Does not ask-to-send; the user still controls send.
+   * A message id captures the previous body so the author can switch back.
    */
   async applyConfirmedReportBody(input: {
     workspaceId: string;
     userId: string;
     reportId: string;
     content: ReportContent;
+    sourceMessageId?: string;
   }) {
+    const content = normalizeReportContent(input.content);
     return this.saveReportContent({
       workspaceId: input.workspaceId,
       userId: input.userId,
       reportId: input.reportId,
-      content: input.content,
+      content: {
+        ...content,
+        ...(content.tabs && !input.sourceMessageId
+          ? { assistantDraft: { tabs: { ...content.tabs } } }
+          : {}),
+      },
+      askToSend: false,
+      assistantInsertMessageId: input.sourceMessageId,
+    });
+  }
+
+  /** Show the other stored version, keeping edits on the side the author leaves. */
+  async switchWeeklyReportBodyVersion(input: {
+    workspaceId: string;
+    userId: string;
+    reportId: string;
+  }) {
+    await requireMembership(this.db, input.workspaceId, input.userId);
+    const report = await this.db.weeklyReport.findFirst({
+      where: { id: input.reportId, workspaceId: input.workspaceId },
+      select: { id: true, authorId: true, content: true },
+    });
+    if (!report) throw new AppError("NOT_FOUND");
+    if (
+      !canEditWeeklyReportContent({
+        viewerUserId: input.userId,
+        authorUserId: report.authorId,
+      })
+    ) {
+      throw new AppError("ACCESS_DENIED");
+    }
+    const next = switchReportBodyVersion(asReportContent(report.content));
+    return this.saveReportContent({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      reportId: input.reportId,
+      content: next,
       askToSend: false,
     });
   }

@@ -88,7 +88,6 @@ test("a weekly-report context block stays on the message and leaves the chat tex
         user: {
           username: "lijian",
           displayName: "lijian",
-          fullName: null,
           avatarObjectKey: null,
         },
         agent: null,
@@ -126,7 +125,6 @@ test("a weekly-report platform turn stays stored and is hidden from the chat", (
         user: {
           username: "lijian",
           displayName: "lijian",
-          fullName: null,
           avatarObjectKey: null,
         },
         agent: null,
@@ -149,7 +147,6 @@ test("an ordinary chat message is not treated as a weekly-report envelope", () =
         user: {
           username: "lijian",
           displayName: "lijian",
-          fullName: null,
           avatarObjectKey: null,
         },
         agent: null,
@@ -204,7 +201,6 @@ test("a user-sent channel message has no senderAgentId", () => {
         user: {
           username: "ada",
           displayName: "Ada Lovelace",
-          fullName: null,
           avatarObjectKey: null,
         },
       },
@@ -223,7 +219,7 @@ test("a channel mention exposes the current display label separately from its st
           kind: "user",
           actorId: "user-ada",
           handle: "ada",
-          member: { user: { displayName: "Ada Lovelace", fullName: null }, agent: null },
+          member: { user: { displayName: "Ada Lovelace" }, agent: null },
         },
       ],
     }),
@@ -253,7 +249,6 @@ test("a person's message is attributed to their display name, not their @usernam
         user: {
           username: "ada",
           displayName: "Ada Lovelace",
-          fullName: null,
           avatarObjectKey: null,
         },
       },
@@ -273,7 +268,6 @@ test("a person with no display name falls back to their username, without an @",
         user: {
           username: "ada",
           displayName: null,
-          fullName: null,
           avatarObjectKey: null,
         },
       },
@@ -293,7 +287,6 @@ test("a blank display name is treated as unset rather than shown as an empty nam
         user: {
           username: "ada",
           displayName: "   ",
-          fullName: null,
           avatarObjectKey: null,
         },
       },

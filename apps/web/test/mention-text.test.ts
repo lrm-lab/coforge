@@ -46,9 +46,8 @@ test("a person whose label is their handle is still found by it", () => {
   ]);
 });
 
-test("a person shown by a nickname is also found by their full name", () => {
-  const lin = { ...person("lin", "小林"), fullName: "林晓明" };
-  expect(filterMentionables([lin], "晓明").map((item) => item.handle)).toEqual(["lin"]);
+test("a person is found by the name they are shown by, not by their handle", () => {
+  const lin = person("lin", "小林");
   expect(filterMentionables([lin], "小林").map((item) => item.handle)).toEqual(["lin"]);
   expect(filterMentionables([lin], "lin")).toEqual([]);
 });

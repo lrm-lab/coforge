@@ -93,7 +93,11 @@ test("the list names each of the viewer's DMs by conversation id and who is on t
 
   const { conversations: listed } = await conversations.list(workspaceId, ada.id);
   expect(listed).toEqual([
-    { conversationId: withHelper.conversationId, peer: { kind: "agent", agentId: helper.id } },
+    {
+      conversationId: withHelper.conversationId,
+      peer: { kind: "agent", agentId: helper.id },
+      lastMessage: null,
+    },
     {
       conversationId: withGrace.conversationId,
       peer: {
@@ -103,6 +107,7 @@ test("the list names each of the viewer's DMs by conversation id and who is on t
         displayName: "Grace Hopper",
         avatarUrl: null,
       },
+      lastMessage: null,
     },
     {
       conversationId: withSelf.conversationId,
@@ -113,6 +118,7 @@ test("the list names each of the viewer's DMs by conversation id and who is on t
         displayName: usernames[0]!,
         avatarUrl: null,
       },
+      lastMessage: null,
     },
   ]);
 });
@@ -214,10 +220,24 @@ test("a closed DM comes back when someone other than the viewer posts a top-leve
       sending,
     );
   const closed = async () => (await conversations.list(workspaceId, mo.id)).hidden;
+  // Moves the DM's existing messages two seconds and its close one second into the past, so every
+  // message sent afterwards is newer than the close and every earlier one is older, without
+  // waiting on the clock.
+  const backdateClose = async (conversationId: string, userId: string) => {
+    await db.message.updateMany({
+      where: { conversationId },
+      data: { createdAt: new Date(Date.now() - 2_000) },
+    });
+    await db.conversationMember.updateMany({
+      where: { conversationId, userId },
+      data: { hiddenAt: new Date(Date.now() - 1_000) },
+    });
+  };
 
   const root = await send(lin.id, "before the close");
   await conversations.setHidden(workspaceId, mo.id, conversationId, true);
-  await Bun.sleep(2); // createdAt and hiddenAt are millisecond timestamps
+  // A message reopens a closed DM only when it is newer than `hiddenAt`.
+  await backdateClose(conversationId, mo.id);
   // The viewer's own message and a reply in a thread leave it closed.
   await send(mo.id, "my own");
   await send(lin.id, "a reply", root.id);
@@ -229,7 +249,7 @@ test("a closed DM comes back when someone other than the viewer posts a top-leve
   // A member's DM with themself has no one else to bring it back.
   const self = await conversations.open(workspaceId, mo.id, { userId: mo.id });
   await conversations.setHidden(workspaceId, mo.id, self.conversationId, true);
-  await Bun.sleep(2);
+  await backdateClose(self.conversationId, mo.id);
   await conversations.send(
     workspaceId,
     mo.id,
@@ -306,4 +326,71 @@ test("the list and a pin drag leave out DMs the viewer cannot open", async () =>
         unpinned: [],
       }),
     ).rejects.toThrow("ACCESS_DENIED");
+});
+
+test("each DM's lastMessage is its newest top-level message: its time and one line of text, or null", async () => {
+  const conversations = new DirectConversations(db);
+  const ruth = await newMember("ruth");
+  const withLin = await conversations.open(workspaceId, ruth.id, { userId: lin.id });
+  const withGrace = await conversations.open(workspaceId, ruth.id, { userId: grace.id });
+  const withSelf = await conversations.open(workspaceId, ruth.id, { userId: ruth.id });
+  const send = (senderId: string, conversationId: string, body: string, threadRootId?: string) =>
+    conversations.send(
+      workspaceId,
+      senderId,
+      conversationId,
+      { idempotencyKey: crypto.randomUUID(), body, threadRootId },
+      sending,
+    );
+  const createdAtOf = async (messageId: string) =>
+    (
+      await db.message.findUniqueOrThrow({ where: { id: messageId }, select: { createdAt: true } })
+    ).createdAt.toISOString();
+  const lastOf = async (conversationId: string) =>
+    (await conversations.list(workspaceId, ruth.id)).conversations.find(
+      (row) => row.conversationId === conversationId,
+    )?.lastMessage;
+
+  const first = await send(lin.id, withLin.conversationId, "first");
+  // A newline and a mention token: the preview is one line with the mention read as @handle. A
+  // person-to-person DM writes no mention rows through `send`, so this stores the body and its row
+  // the way a channel's mention would.
+  const pinged = await send(ruth.id, withLin.conversationId, "ping for now");
+  const linMember = await db.conversationMember.findFirstOrThrow({
+    where: { conversationId: withLin.conversationId, userId: lin.id },
+    select: { id: true },
+  });
+  await db.message.update({
+    where: { id: pinged.id },
+    data: { body: `ping <@human:${lin.id}>,\n\nsee the notes` },
+  });
+  await db.messageMention.create({
+    data: {
+      messageId: pinged.id,
+      conversationId: withLin.conversationId,
+      workspaceId,
+      memberId: linMember.id,
+      kind: "user",
+      actorId: lin.id,
+      handle: usernames[2]!,
+    },
+  });
+  // A thread reply newer than the last top-level message does not become the DM's last message.
+  await send(lin.id, withLin.conversationId, "a thread reply", first.id);
+  await send(grace.id, withGrace.conversationId, "hello there");
+
+  expect(await lastOf(withLin.conversationId)).toEqual({
+    createdAt: await createdAtOf(pinged.id),
+    preview: `ping @${usernames[2]!}, see the notes`,
+  });
+  expect(await lastOf(withGrace.conversationId)).toEqual({
+    createdAt: (
+      await db.message.findFirstOrThrow({
+        where: { conversationId: withGrace.conversationId },
+        select: { createdAt: true },
+      })
+    ).createdAt.toISOString(),
+    preview: "hello there",
+  });
+  expect(await lastOf(withSelf.conversationId)).toBeNull();
 });

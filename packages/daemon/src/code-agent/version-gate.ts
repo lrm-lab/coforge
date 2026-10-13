@@ -1,6 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { RuntimeVersionUnsupportedError } from "./contract";
+import { withDeadline } from "./deadline";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
@@ -54,12 +55,11 @@ async function readVersionOutput(
 ): Promise<string | undefined> {
   const child = Bun.spawn({ cmd: [...command, "--version"], stdout: "pipe", stderr: "ignore" });
   try {
-    const [output, exitCode] = await Promise.race([
+    const [output, exitCode] = await withDeadline(
       Promise.all([new Response(child.stdout).text(), child.exited]),
-      Bun.sleep(VERSION_PROBE_TIMEOUT_MS).then(() => {
-        throw new Error("runtime version probe timed out");
-      }),
-    ]);
+      VERSION_PROBE_TIMEOUT_MS,
+      () => new Error("runtime version probe timed out"),
+    );
     return exitCode === 0 ? versionFrom(output) : undefined;
   } finally {
     child.kill();

@@ -40,8 +40,7 @@ describe("WorkspaceMembers", () => {
             {
               id: "other-user",
               username: "grace",
-              displayName: null,
-              fullName: "Grace Hopper",
+              displayName: "Grace Hopper",
               description: "Compiler pioneer",
               email: "private@example.test",
               avatarObjectKey: "avatars/other-user/7f3a/avatar",
@@ -268,24 +267,21 @@ describe("WorkspaceMembers", () => {
           id: "user-1",
           username: "grace-hopper-4k2",
           displayName: "Amazing Grace",
-          fullName: "Grace Hopper",
           avatarObjectKey: null,
         },
         {
           id: "user-2",
           username: "ada-9d3",
           displayName: null,
-          fullName: null,
           avatarObjectKey: null,
         },
       ]);
       // Listed by the name shown, so the person with no names sorts by their username label.
       expect(people).toEqual([
-        { id: "user-2", name: "ada-9d3", fullName: null, avatarUrl: null, dmId: null },
+        { id: "user-2", name: "ada-9d3", avatarUrl: null, dmId: null },
         {
           id: "user-1",
           name: "Amazing Grace",
-          fullName: "Grace Hopper",
           avatarUrl: null,
           dmId: null,
         },

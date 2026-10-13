@@ -44,7 +44,7 @@ export async function handleLoginCallback(input: {
   sessionSecret: string;
   authing?: TokenExchanger;
   resolveUser?: Parameters<typeof completeBrowserLogin>[0]["resolveUser"];
-  enrollUser?: (user: { id: string; username: string; fullName: string }) => Promise<void>;
+  enrollUser?: (user: { id: string; username: string; displayName: string }) => Promise<void>;
 }): Promise<Response> {
   const url = new URL(input.request.url);
   const code = url.searchParams.get("code") ?? "";
@@ -61,17 +61,17 @@ export async function handleLoginCallback(input: {
       resolveUser: input.resolveUser ?? persistedIdentityResolver(),
     });
     const cookies = [completed.sessionCookie, completed.clearStateCookie];
-    const { fullName } = completed;
+    const { displayName } = completed;
     // A person who has not been asked for a name is signed in, but nothing is made for them until
     // they answer: their personal Workspace is titled with it (`completeFirstSignIn`).
-    if (fullName === null) {
+    if (displayName === null) {
       return redirect(welcomeHref(completed.returnTo), {
         "set-cookie": cookies,
         "cache-control": "no-store",
       });
     }
     await atLoginStage("enrollment", async () => {
-      const enrolling = { id: completed.user.id, username: completed.user.username, fullName };
+      const enrolling = { id: completed.user.id, username: completed.user.username, displayName };
       if (input.enrollUser) return input.enrollUser(enrolling);
       const db = getDatabaseClient();
       if (!db) throw new LoginCallbackError("enrollment", { reason: "database is unavailable" });

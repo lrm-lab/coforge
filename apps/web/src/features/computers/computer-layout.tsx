@@ -38,7 +38,6 @@ export type ComputerListItem = ComputerIdentity &
     creator?: {
       username: string;
       displayName: string | null;
-      fullName: string | null;
       avatarUrl: string | null;
     } | null;
   };
@@ -98,7 +97,7 @@ export function ComputerLayout({
 
   if (!computers.length) {
     return (
-      <main className="flex h-svh min-w-0">
+      <main className="flex h-full min-w-0">
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-primary">
           <PageHeader heading={m.computer_page_title()} />
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -110,7 +109,7 @@ export function ComputerLayout({
   }
 
   return (
-    <main className="flex h-svh min-w-0">
+    <main className="flex h-full min-w-0">
       <nav
         aria-label={m.computer_connected_list()}
         className={cn(

@@ -22,7 +22,7 @@ const MESSAGE_PREVIEW_LENGTH = 180;
 function senderLabel(
   sender: {
     agent: { name: string } | null;
-    user: { username: string; displayName: string | null; fullName: string | null } | null;
+    user: { username: string; displayName: string | null } | null;
   } | null,
 ) {
   if (!sender) return SYSTEM_SENDER_LABEL;
@@ -67,7 +67,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
         sender: {
           select: {
             agent: { select: { name: true } },
-            user: { select: { username: true, displayName: true, fullName: true } },
+            user: { select: { username: true, displayName: true } },
           },
         },
         mentions: MESSAGE_MENTIONS_SELECT,

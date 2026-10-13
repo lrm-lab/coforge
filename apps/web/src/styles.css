@@ -152,6 +152,43 @@ input[type="search"]::-webkit-search-cancel-button {
     border-radius: 9999px;
   }
 
+  /* The Direct messages row's avatar: the "sm" step scaled to 44 × 48px. Its radius and status dot
+     still follow `--avatar-size`. */
+  [data-avatar].avatar-dm {
+    width: 2.75rem;
+    height: 3rem;
+    --avatar-size: 3rem;
+  }
+
+  /* A channel row's collage avatar (`group-avatar.tsx`): the same 44 × 48px rounded square and
+     light-violet frame as `avatar-dm`, drawn by the frame's own gradient. The 1px gaps between
+     member tiles show the frame colour. */
+  .avatar-group {
+    position: relative;
+    flex-shrink: 0;
+    width: 2.75rem;
+    height: 3rem;
+    border-radius: 0.75rem;
+    padding: 0.09375rem;
+    background: linear-gradient(
+      135deg,
+      var(--color-avatar-border-start) 0%,
+      var(--color-avatar-border-end) 100%
+    );
+  }
+
+  .avatar-group-grid {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border-radius: 0.65625rem;
+    background: var(--color-avatar-border-start);
+  }
+
   [data-avatar] > :first-child {
     position: relative;
     border-radius: inherit;

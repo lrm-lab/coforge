@@ -253,7 +253,7 @@ export function RecordsLayout({
 
   return (
     <FormatEditHintContext value={setFormatEditing}>
-      <main className="flex h-svh min-w-0 bg-primary">
+      <main className="flex h-full min-w-0 bg-primary">
         <nav
           aria-label={m.records_list_label()}
           className={cn(

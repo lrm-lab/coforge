@@ -400,7 +400,7 @@ export function AgentsContent({
   );
 
   return (
-    <main className="flex h-svh min-w-0 bg-primary">
+    <main className="flex h-full min-w-0 bg-primary">
       {splitOpen ? (
         <Group
           key="split"

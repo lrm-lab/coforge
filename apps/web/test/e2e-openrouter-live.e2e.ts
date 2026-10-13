@@ -96,9 +96,9 @@ test("live OpenRouter Pi delivery writes an Agent reply to canonical DB", async 
     runtime: {
       agentMessage: (...args) => runtime!.agentMessage(...args),
       agentTask: (...args) => runtime!.agentTask(...args),
-      agentAttachment: (...args) => runtime!.agentAttachment(...args),
+      agentAttachment: (...args) => runtime!.agentRequests.agentAttachment(...args),
       inbox: (...args) => runtime!.inbox(...args),
-      workspaceInfo: (...args) => runtime!.workspaceInfo(...args),
+      workspaceInfo: (...args) => runtime!.agentRequests.workspaceInfo(...args),
       issueAgentContext: (agentId, context) => runtime!.issueAgentContext(agentId, context),
     },
   });

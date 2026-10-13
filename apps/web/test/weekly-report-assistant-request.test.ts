@@ -200,3 +200,37 @@ test("platform synthesizer wakes bind session but stay hidden from the side pane
   expect(selected[0]?.author).toBe("assistant");
   expect(selected[0]?.displayBody).toBe("已根据采集包整理草稿，请确认写入。");
 });
+
+test("a memory settlement wake and its reply stay out of the side panel", () => {
+  const sessionId = "33333333-3333-3333-3333-333333333333";
+  const wake = buildWeeklyReportAssistantRequestBody({
+    subjectType: "report",
+    subjectId: "report-a",
+    sessionId,
+    platformTurn: true,
+    userText: "[weekly-report-memory]\nreportId: report-a\n请对照助手原稿。",
+    contextManifest: { subjectType: "report", subjectId: "report-a", structure: [] },
+  });
+  const selected = selectWeeklyReportAssistantMessages(
+    [
+      {
+        id: "1",
+        sequence: 1,
+        body: wake,
+        senderKind: "user",
+        createdAt: "2026-09-18T00:00:00.000Z",
+      },
+      {
+        id: "2",
+        sequence: 2,
+        body: "已提交 weekly-report-memory。",
+        senderKind: "agent",
+        createdAt: "2026-09-18T00:00:01.000Z",
+      },
+    ],
+    "report",
+    "report-a",
+    sessionId,
+  );
+  expect(selected).toEqual([]);
+});

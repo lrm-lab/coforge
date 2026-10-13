@@ -164,7 +164,7 @@ test("passes Authing preferred_username to first-identity resolution and stores 
     }),
     resolveUser: async (input) => {
       profile = input;
-      return { id: "00000000-0000-5000-8000-000000000002", username: "ada", fullName: null };
+      return { id: "00000000-0000-5000-8000-000000000002", username: "ada", displayName: null };
     },
   });
   expect(profile).toEqual({
@@ -189,7 +189,7 @@ test("the profile's name and nickname reach user resolution, so a username can b
     return {
       id: "00000000-0000-5000-8000-000000000004",
       username: "ada-lovelace",
-      fullName: null,
+      displayName: null,
     };
   });
 
@@ -237,7 +237,7 @@ test("an account with no email reaches user resolution with a null email, and no
     return {
       id: "00000000-0000-5000-8000-000000000003",
       username: "user-0a1b2c3d",
-      fullName: null,
+      displayName: null,
     };
   });
 
@@ -252,7 +252,7 @@ test("the session name is the provider's name, trimmed, else its nickname, else 
   const resolveUser = async () => ({
     id: "00000000-0000-5000-8000-000000000003",
     username: "user-0a1b2c3d",
-    fullName: null,
+    displayName: null,
   });
   const nameOf = async (profile: Omit<AuthingProfile, "sub">) =>
     (await signIn({ sub: "s", ...profile }, resolveUser)).user.name;
@@ -266,16 +266,16 @@ test("the session name is the provider's name, trimmed, else its nickname, else 
   expect(await nameOf({ preferred_username: "grace" })).toBe("");
 });
 
-test("sign-in reports the full name the person already has, or none", async () => {
-  const resolved = (fullName: string | null) => async () => ({
+test("sign-in reports the display name the person already has, or none", async () => {
+  const resolved = (displayName: string | null) => async () => ({
     id: "00000000-0000-5000-8000-000000000003",
     username: "ada",
-    fullName,
+    displayName,
   });
 
-  expect((await signIn({ sub: "s", name: "Ada" }, resolved(null))).fullName).toBeNull();
+  expect((await signIn({ sub: "s", name: "Ada" }, resolved(null))).displayName).toBeNull();
   // The provider's name is not the stored one: the stored one is what decides.
-  expect((await signIn({ sub: "s" }, resolved("Ada Lovelace"))).fullName).toBe("Ada Lovelace");
+  expect((await signIn({ sub: "s" }, resolved("Ada Lovelace"))).displayName).toBe("Ada Lovelace");
 });
 
 test("an email is trimmed and lower-cased, and a blank one counts as none", async () => {

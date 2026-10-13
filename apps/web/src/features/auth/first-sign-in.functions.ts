@@ -7,7 +7,7 @@ import { declareNoStore } from "#src/features/no-store-response.server";
 import { completeFirstSignIn, readNameStep } from "#src/server/auth/first-sign-in.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 
-/** Whether the signed-in person still has to be asked for a full name, and what to start the field
+/** Whether the signed-in person still has to be asked for a name, and what to start the field
  * with. */
 export const getNameStep = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
@@ -16,16 +16,16 @@ export const getNameStep = createServerFn({ method: "GET" })
     return readNameStep({ db: requireDatabaseClient(), user: context.user });
   });
 
-/** Saves the full name and makes the personal Workspace; `{ ok: false }` names why a name was not
+/** Saves the display name and makes the personal Workspace; `{ ok: false }` names why a name was not
  * accepted. */
-export const submitFullName = createServerFn({ method: "POST" })
+export const submitDisplayName = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ fullName: z.string() }))
+  .validator(z.object({ displayName: z.string() }))
   .handler(async ({ data, context }) =>
     completeFirstSignIn({
       db: requireDatabaseClient(),
       user: context.user,
-      fullName: data.fullName,
+      displayName: data.displayName,
       acceptLanguage: getRequest().headers.get("accept-language") ?? "",
     }),
   );

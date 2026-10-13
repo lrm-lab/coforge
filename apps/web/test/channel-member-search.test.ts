@@ -7,7 +7,6 @@ import { memberMatchesSearch } from "#src/features/conversations/channel-member-
 const person = {
   kind: "user" as const,
   displayName: "Frankie",
-  fullName: "Frank An",
   username: "frank-an-4k2",
 };
 
@@ -24,23 +23,14 @@ describe("memberMatchesSearch", () => {
     expect(memberMatchesSearch("rank", person)).toBeTrue();
   });
 
-  test("a person matches by full name, which the label may have replaced with a nickname", () => {
-    expect(memberMatchesSearch("frank an", person)).toBeTrue();
-    expect(memberMatchesSearch("an", person)).toBeTrue();
-  });
-
   test("a person is not found by their username", () => {
     expect(memberMatchesSearch("4k2", person)).toBeFalse();
     expect(memberMatchesSearch("frank-an", person)).toBeFalse();
   });
 
-  test("a person with no full name matches by label alone", () => {
-    expect(
-      memberMatchesSearch("ada", { kind: "user", displayName: "Ada", fullName: null }),
-    ).toBeTrue();
-    expect(
-      memberMatchesSearch("lovelace", { kind: "user", displayName: "Ada", fullName: null }),
-    ).toBeFalse();
+  test("a person matches by label alone", () => {
+    expect(memberMatchesSearch("ada", { kind: "user", displayName: "Ada" })).toBeTrue();
+    expect(memberMatchesSearch("lovelace", { kind: "user", displayName: "Ada" })).toBeFalse();
   });
 
   test("an Agent matches by display name or by its @handle", () => {
@@ -49,7 +39,7 @@ describe("memberMatchesSearch", () => {
     expect(memberMatchesSearch("scribe", agent)).toBeFalse();
   });
 
-  test("the search is compared in lower case", () => {
-    expect(memberMatchesSearch("frank an", { ...person, fullName: "FRANK AN" })).toBeTrue();
+  test("the names are compared in lower case", () => {
+    expect(memberMatchesSearch("frankie", { ...person, displayName: "FRANKIE" })).toBeTrue();
   });
 });

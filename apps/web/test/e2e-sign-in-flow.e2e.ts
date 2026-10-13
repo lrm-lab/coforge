@@ -19,7 +19,7 @@ import {
 
 /**
  * Signing in through the hosted login page, end to end, from a Workspace invite link. A signed-out
- * visitor signs in, gives the full name a first sign-in asks for, and comes back to the link to
+ * visitor signs in, gives the display name a first sign-in asks for, and comes back to the link to
  * join; "Use another account" signs out and comes back to the same link as the other account; a
  * sign-in that does not finish says so and signs in again to the same link; an account with no
  * email address (a phone-number sign-up) signs in like any other; two tabs signing in at once both
@@ -73,10 +73,10 @@ test("signing in through the hosted page, from a Workspace invite link", async (
     const onAuthingPage = `location.origin === ${JSON.stringify(new URL(fake.issuer).origin)} && !!document.querySelector("#as-alice")`;
     const onNameStepHere = onNameStep(origin);
     /** The first-sign-in name step: what it starts with, then the answer. */
-    async function answerNameStep(fullName: string, prefilledWith: string) {
+    async function answerNameStep(displayName: string, prefilledWith: string) {
       await waitFor(onNameStepHere);
       expect(await evaluate<string>(`${nameField}.value`)).toBe(prefilledWith);
-      await submitName(fullName);
+      await submitName(displayName);
     }
 
     // A leftover from an interrupted run starts over.
@@ -86,7 +86,7 @@ test("signing in through the hosted page, from a Workspace invite link", async (
       create: {
         id: ownerId,
         username: "e2e-sign-in-owner",
-        fullName: "Sign-in Owner",
+        displayName: "Sign-in Owner",
       },
       update: {},
     });
@@ -123,7 +123,7 @@ test("signing in through the hosted page, from a Workspace invite link", async (
       headers: { cookie: stateCookie },
       redirect: "manual",
     });
-    // A first sign-in is asked for a full name before anything is made, and comes back to the link.
+    // A first sign-in is asked for a display name before anything is made, and comes back to the link.
     expect(callback.headers.get("location")).toBe(
       `/en/welcome?returnTo=${encodeURIComponent(joinPath)}`,
     );
@@ -167,7 +167,7 @@ test("signing in through the hosted page, from a Workspace invite link", async (
     for (const person of ["alice", "phone-only"] as const) {
       const userId = await userIdOf(person);
       expect(await db.workspaceMembership.count({ where: { userId } })).toBe(0);
-      expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).fullName).toBeNull();
+      expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).displayName).toBeNull();
     }
 
     await browser("set", "viewport", "1440", "900");
@@ -180,7 +180,7 @@ test("signing in through the hosted page, from a Workspace invite link", async (
     await browser("eval", `${button("Sign in to join")}.click()`);
     await waitFor(onAuthingPage);
     await browser("click", "#as-alice");
-    // A first sign-in is asked for a full name, starting from the provider's own.
+    // A first sign-in is asked for a display name, starting from the provider's own.
     await waitFor(onNameStepHere);
     await browser("screenshot", join(artifacts, "1b-name-step.png"));
     await answerNameStep("Alice E2E", people.alice.name);

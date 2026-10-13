@@ -8,13 +8,26 @@ import {
   markUnreadAnchor,
 } from "#src/server/conversations/human-unread.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
+import {
+  viewerDirectConversationSql,
+  viewerDirectConversationWhere,
+} from "#src/server/conversations/viewer-direct-conversations.server";
+import { messagePreviewLine } from "#src/server/conversations/message-preview-line.server";
+import type { MessageMentionRef } from "#src/server/conversations/mentions.server";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import {
   peoplePeer,
   peoplePeerUserFields,
   type DirectConversationPeer,
 } from "#src/server/conversations/direct-conversation-peer.server";
+
+/** The newest top-level message of one of the viewer's DMs, as the raw query reads it. */
+type LatestMessageRow = {
+  conversationId: string;
+  messageId: string;
+  body: string;
+  createdAt: Date;
+};
 
 /** A direct conversation of the viewer's, by its id, and the viewer's own member row in it. */
 export type ViewerDirectMembership = { conversationId: string; memberId: string };
@@ -84,11 +97,11 @@ export class PrismaDirectConversationPreferences {
 
   /**
    * What the sidebar needs about the viewer's DMs, by conversation id: each DM they can open (in
-   * the order they started) and who it is with, the pinned ones with their order, and the closed
-   * ones it leaves out.
+   * the order they started), who it is with and its newest top-level message (`lastMessage`, null
+   * for a DM with none), the pinned ones with their order, and the closed ones it leaves out.
    */
   async preferencesForUser(workspaceId: string, userId: string) {
-    const [memberships, pins, hidden] = await Promise.all([
+    const [memberships, latest, pins, hidden] = await Promise.all([
       // Only DMs the viewer can open: a member row in someone else's DM, or a DM with an Agent
       // they did not create (from before only a creator could start one), lists nothing.
       this.db.conversationMember.findMany({
@@ -109,6 +122,28 @@ export class PrismaDirectConversationPreferences {
           },
         },
       }),
+      // The newest top-level message of each DM the list holds, one LATERAL per membership on
+      // `messages(conversationId, sequence)`. A DM with no top-level message has no row.
+      this.db.$queryRaw<LatestMessageRow[]>`
+        SELECT cm."conversationId" AS "conversationId",
+               latest."id" AS "messageId",
+               latest."body" AS "body",
+               latest."createdAt" AS "createdAt"
+        FROM "conversation_members" cm
+        JOIN "conversations" c
+          ON c."id" = cm."conversationId"
+         AND c."workspaceId" = ${workspaceId}::uuid
+        CROSS JOIN LATERAL (
+          SELECT m."id", m."body", m."createdAt" FROM "messages" m
+          WHERE m."conversationId" = cm."conversationId"
+            AND m."threadRootId" IS NULL
+          ORDER BY m."sequence" DESC LIMIT 1
+        ) latest
+        WHERE cm."userId" = ${userId}::uuid
+          AND cm."workspaceId" = ${workspaceId}::uuid
+          AND cm."leftAt" IS NULL
+          AND ${viewerDirectConversationSql(userId)}
+      `,
       this.db.conversationPin.findMany({
         where: {
           workspaceId,
@@ -155,15 +190,49 @@ export class PrismaDirectConversationPreferences {
         })
       : [];
     const profiles = new Map(people.map((person) => [person.id, person]));
+    const lastMessages = await this.lastMessagePreviews(latest);
     return {
       conversations: memberships.flatMap(({ conversation }) => {
         const peer = this.peerOf(workspaceId, conversation, peerIds, profiles);
-        return peer ? [{ conversationId: conversation.id, peer }] : [];
+        return peer
+          ? [
+              {
+                conversationId: conversation.id,
+                peer,
+                lastMessage: lastMessages.get(conversation.id) ?? null,
+              },
+            ]
+          : [];
       }),
       pinned: pins,
       // Closed DMs, pinned or not: the sidebar keeps a pinned one listed (in Pinned).
       hidden: hidden.map((row) => row.conversationId),
     };
+  }
+
+  /** Each DM's newest top-level message as its list preview, by conversation id. The mention rows
+   * of every previewed message load in one query. */
+  private async lastMessagePreviews(latest: LatestMessageRow[]) {
+    if (latest.length === 0) return new Map<string, { createdAt: string; preview: string }>();
+    const mentionRows = await this.db.messageMention.findMany({
+      where: { messageId: { in: latest.map((row) => row.messageId) } },
+      select: { messageId: true, kind: true, actorId: true, handle: true },
+    });
+    const mentionsByMessage = new Map<string, MessageMentionRef[]>();
+    for (const { messageId, kind, actorId, handle } of mentionRows) {
+      const mentions = mentionsByMessage.get(messageId) ?? [];
+      mentions.push({ kind, actorId, handle });
+      mentionsByMessage.set(messageId, mentions);
+    }
+    return new Map(
+      latest.map((row) => [
+        row.conversationId,
+        {
+          createdAt: row.createdAt.toISOString(),
+          preview: messagePreviewLine(row.body, mentionsByMessage.get(row.messageId) ?? []),
+        },
+      ]),
+    );
   }
 
   private peerOf(
@@ -176,7 +245,6 @@ export class PrismaDirectConversationPreferences {
         id: string;
         username: string;
         displayName: string | null;
-        fullName: string | null;
         avatarObjectKey: string | null;
       }
     >,

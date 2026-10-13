@@ -60,7 +60,6 @@ export type ComputerDetailView = ComputerIdentity & {
   osVersion?: string | null;
   creator?: {
     displayName: string | null;
-    fullName: string | null;
     username: string;
     avatarUrl: string | null;
   };

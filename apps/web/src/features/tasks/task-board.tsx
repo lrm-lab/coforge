@@ -123,7 +123,7 @@ export function TaskBoard<T extends BoardTask>({
       data-task-board=""
       className={cn(
         "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary",
-        !conversation && "h-svh max-h-svh",
+        !conversation && "h-full max-h-full",
       )}
     >
       {conversation ? conversation.header : <PageHeader heading={m.tasks_tab()} />}

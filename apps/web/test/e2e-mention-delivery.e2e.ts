@@ -68,9 +68,9 @@ test("a tracked @mention is delivered to a running Agent and refused for a stopp
     runtime: {
       agentMessage: (...args) => runtime!.agentMessage(...args),
       agentTask: (...args) => runtime!.agentTask(...args),
-      agentAttachment: (...args) => runtime!.agentAttachment(...args),
+      agentAttachment: (...args) => runtime!.agentRequests.agentAttachment(...args),
       inbox: (...args) => runtime!.inbox(...args),
-      mentionDelivery: (...args) => runtime!.mentionDelivery(...args),
+      mentionDelivery: (...args) => runtime!.agentRequests.mentionDelivery(...args),
       issueAgentContext: (agentId, context) => runtime!.issueAgentContext(agentId, context),
     },
   });

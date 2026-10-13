@@ -89,8 +89,8 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
             create: {
               id: DEV_BROWSER_USER.id,
               username: DEV_BROWSER_USER.username,
-              // Without a full name the dev user is sent to the first-sign-in name step.
-              fullName: DEV_BROWSER_USER.name,
+              // Without a display name the dev user is sent to the first-sign-in name step.
+              displayName: DEV_BROWSER_USER.name,
             },
           },
         },
@@ -165,7 +165,7 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
   const proxy = startAgentProxy({
     runtime: {
       agentMessage: (...args) => runtime!.agentMessage(...args),
-      agentAttachment: (...args) => runtime!.agentAttachment(...args),
+      agentAttachment: (...args) => runtime!.agentRequests.agentAttachment(...args),
       inbox: (...args) => runtime!.inbox(...args),
       issueAgentContext: (agentId, context) => runtime!.issueAgentContext(agentId, context),
     },

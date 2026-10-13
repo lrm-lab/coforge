@@ -12,8 +12,11 @@ import { ConversationListButton } from "./conversation-list-button";
  */
 export function MessagesPending() {
   return (
-    <main className="flex h-svh min-w-0 flex-col bg-primary lg:flex-row">
-      <section className="hidden min-h-0 flex-col lg:flex lg:w-72 lg:flex-none lg:border-r lg:border-secondary">
+    <main
+      data-panel-cards
+      className="flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
+    >
+      <section className="hidden min-h-0 flex-col lg:flex lg:w-72 lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary">
         <PageHeader heading={m.navigation_chat()} />
         <div
           aria-hidden="true"
@@ -35,7 +38,7 @@ export function MessagesPending() {
           ))}
         </div>
       </section>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:overflow-hidden lg:rounded-xl lg:bg-primary">
         <ConversationPending />
       </div>
     </main>

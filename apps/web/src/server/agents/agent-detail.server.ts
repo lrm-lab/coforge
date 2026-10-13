@@ -27,7 +27,6 @@ type DetailAgent = {
     id: string;
     username: string;
     displayName?: string | null;
-    fullName: string | null;
     avatarObjectKey?: string | null;
   };
   runtimeConfig: Prisma.JsonValue;

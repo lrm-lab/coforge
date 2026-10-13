@@ -7,7 +7,7 @@ import { m } from "#src/paraglide/messages";
 
 export function AgentsPending() {
   return (
-    <main className="flex h-svh min-w-0">
+    <main className="flex h-full min-w-0">
       <section className="@container/members flex min-w-0 flex-1 flex-col overflow-hidden bg-primary">
         <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-secondary px-4 sm:px-6 @2xl/members:grid @2xl/members:h-12 @2xl/members:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
           <div className="flex h-12 min-w-0 flex-1 items-center gap-3">

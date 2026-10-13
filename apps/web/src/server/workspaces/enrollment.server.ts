@@ -12,8 +12,8 @@ import {
 export type EnrollmentUser = {
   id: string;
   username: string;
-  /** The stored full name, which titles the personal Workspace. */
-  fullName: string;
+  /** The stored display name, which titles the personal Workspace. */
+  displayName: string;
 };
 
 export type WorkspaceEnrollmentStore = {
@@ -32,7 +32,7 @@ export class WorkspaceEnrollment {
     const existing = await this.store.findMembership(user.id);
     if (existing) return { workspaceId: existing };
 
-    const name = workspaceDisplayName(user.fullName, acceptLanguage);
+    const name = workspaceDisplayName(user.displayName, acceptLanguage);
     const workspaceId = await this.createOwnedWorkspace(user.username, user.id, name);
     return { workspaceId };
   }
@@ -83,8 +83,8 @@ export class WorkspaceEnrollment {
   }
 }
 
-export function workspaceDisplayName(fullName: string, acceptLanguage: string): string {
-  const name = fullName.trim() || "User";
+export function workspaceDisplayName(displayName: string, acceptLanguage: string): string {
+  const name = displayName.trim() || "User";
   return prefersChinese(acceptLanguage) ? `${name}的工作空间` : `${name}'s Workspace`;
 }
 

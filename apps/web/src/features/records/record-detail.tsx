@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   CheckCircle,
@@ -44,6 +44,7 @@ import {
   saveRecordNote,
   saveWeeklyReportContent,
   sendWeeklyReportAssignments,
+  switchWeeklyReportBodyVersion,
   setWeeklyReportFavorite,
   updateFormatReportMeta,
 } from "./records.functions";
@@ -60,6 +61,7 @@ import {
   withAssignmentUnread,
   withAutoSendCancelled,
   withWeekSendDismissed,
+  type ReportBodyRestoreView,
   type ReportContent,
 } from "./records-content";
 import { copyText } from "#src/features/records/report-editor/lib/clipboard";
@@ -78,6 +80,14 @@ import { normalizeLeaderFormatTabs } from "./template-outline-sections";
 import { WEEKLY_SEND_TOAST_MS, WeeklySendConfirmDialog } from "./weekly-send-confirm-dialog";
 import { zonedCalendarDate } from "./weekly-report-schedule-due";
 import { sendWindowEnd, useWeeklySendArmed } from "./use-send-window";
+import {
+  readingWheelSession,
+  sameTemplateNeighbors,
+  stageReadingEdge,
+  type ReadingEdge,
+} from "./weekly-report-reading-turn";
+
+const recordsRoute = getRouteApi("/w/$workspaceSlug/records");
 
 type ReportSubject = {
   type: "report";
@@ -87,6 +97,7 @@ type ReportSubject = {
     title: string;
     status: string;
     content: ReportContent;
+    bodyRestoreView?: ReportBodyRestoreView | null;
     submittedAt?: string | null;
     sharedBy?: {
       userId: string;
@@ -172,6 +183,7 @@ function ReportDetail({
   const workspaceSlug = useWorkspaceSlug();
   const toast = useAppToast();
   const save = useServerFn(saveWeeklyReportContent);
+  const switchBody = useServerFn(switchWeeklyReportBodyVersion);
   const removeReport = useServerFn(deleteMemberWeeklyReport);
   const markOpened = useServerFn(markWeeklyAssignmentOpened);
   const setFavorite = useServerFn(setWeeklyReportFavorite);
@@ -188,6 +200,9 @@ function ReportDetail({
   const contentRef = useRef(content);
   contentRef.current = content;
   const [editorRevision, setEditorRevision] = useState(0);
+  const [restoreView, setRestoreView] = useState(report.bodyRestoreView ?? null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const seenRestoreRevisionRef = useRef<number | null>(null);
   const reportIdRef = useRef(report.id);
   reportIdRef.current = report.id;
   const isAssignment = Boolean(report.sourceTemplateId);
@@ -215,6 +230,39 @@ function ReportDetail({
   const sendAckTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [sendAck, setSendAck] = useState(false);
   const sent = status === "submitted" || status === "shared";
+  const catalog = recordsRoute.useLoaderData();
+  const readingScroll = leaderReading && sent;
+  const neighbors = readingScroll
+    ? sameTemplateNeighbors(catalog.memberWeeks, report.id)
+    : { previousId: null, nextId: null };
+
+  useEffect(() => {
+    if (!readingScroll) return;
+    for (const recordId of [neighbors.previousId, neighbors.nextId]) {
+      if (!recordId) continue;
+      void router.preloadRoute({
+        to: "/w/$workspaceSlug/records/$recordId",
+        params: { workspaceSlug, recordId },
+        search: (previous) => ({
+          tab: previous.tab === "notes" ? "notes" : "weekly",
+          ...(typeof previous.returnTo === "string" ? { returnTo: previous.returnTo } : {}),
+        }),
+      });
+    }
+  }, [neighbors.nextId, neighbors.previousId, readingScroll, router, workspaceSlug]);
+
+  function openNeighbor(recordId: string, edge: ReadingEdge) {
+    stageReadingEdge(recordId, edge);
+    void navigate({
+      to: "/w/$workspaceSlug/records/$recordId",
+      params: { workspaceSlug, recordId },
+      search: (previous) => ({
+        tab: previous.tab === "notes" ? "notes" : "weekly",
+        ...(typeof previous.returnTo === "string" ? { returnTo: previous.returnTo } : {}),
+      }),
+      resetScroll: false,
+    });
+  }
 
   useEffect(() => {
     setFavorited(Boolean(report.favorited));
@@ -396,7 +444,24 @@ function ReportDetail({
     contentRef.current = next;
   }, [editable, report.content, report.id]);
 
-  function applyAssistantBody(reportId: string, next: ReportContent) {
+  useEffect(() => {
+    const revision = report.bodyRestoreView?.revision ?? 0;
+    if (seenRestoreRevisionRef.current === null) {
+      seenRestoreRevisionRef.current = revision;
+      setRestoreView(report.bodyRestoreView ?? null);
+      return;
+    }
+    setRestoreView(report.bodyRestoreView ?? null);
+    if (seenRestoreRevisionRef.current === revision) return;
+    seenRestoreRevisionRef.current = revision;
+    applyAssistantBody(report.id, normalizeReportContent(report.content));
+  }, [report.bodyRestoreView, report.content, report.id]);
+
+  function applyAssistantBody(
+    reportId: string,
+    next: ReportContent,
+    restore?: ReportBodyRestoreView | null,
+  ) {
     if (reportId !== report.id) return;
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
@@ -406,8 +471,24 @@ function ReportDetail({
     writeReportDraft(report.id, normalized);
     setContent(normalized);
     contentRef.current = normalized;
+    if (restore) {
+      setRestoreView(restore);
+      seenRestoreRevisionRef.current = restore.revision;
+    }
     // TipTap keeps a dirty buffer; remount so the inserted body is visible immediately.
     setEditorRevision((value) => value + 1);
+  }
+
+  async function onSwitchBodyVersion() {
+    if (!editable || restoreBusy) return;
+    setRestoreBusy(true);
+    try {
+      const result = await switchBody({ data: { reportId: report.id } });
+      applyAssistantBody(report.id, result.content, result.bodyRestoreView);
+      await router.invalidate({ sync: true });
+    } finally {
+      setRestoreBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -509,6 +590,19 @@ function ReportDetail({
                 </div>
               </div>
               <div className="ml-auto flex shrink-0 items-center gap-1 pt-0.5">
+                {editable && restoreView ? (
+                  <Button
+                    size="sm"
+                    color="secondary"
+                    isDisabled={restoreBusy}
+                    isLoading={restoreBusy}
+                    onPress={() => void onSwitchBodyVersion()}
+                  >
+                    {restoreView.showing === "latest"
+                      ? m.records_body_restore_previous()
+                      : m.records_body_restore_latest()}
+                  </Button>
+                ) : null}
                 {editable && isAssignment ? (
                   <>
                     {sendAck ? (
@@ -603,12 +697,24 @@ function ReportDetail({
                   extraction={content.keyPointExtraction}
                   restartBusy={keyPointRestartBusy}
                   onRestart={() => void restartPersonalKeyPoints()}
+                  scrollable={!readingScroll}
                   editPrompt={{
                     slot: "personal",
                     returnTo: `/w/${workspaceSlug}/records/${report.id}`,
                   }}
                 />
               ) : null
+            }
+            readingTurn={
+              readingScroll
+                ? {
+                    reportId: report.id,
+                    previousReportId: neighbors.previousId,
+                    nextReportId: neighbors.nextId,
+                    wheel: readingWheelSession(),
+                    onOpenReport: openNeighbor,
+                  }
+                : undefined
             }
             onChange={schedulePersist}
             onBlur={() => {
@@ -628,6 +734,8 @@ function ReportDetail({
         open={sideOpen}
         onOpenChange={setSideOpen}
         onBodyApplied={applyAssistantBody}
+        bodyRestoreView={restoreView}
+        onSwitchBodyVersion={() => void onSwitchBodyVersion()}
         keyPointExtraction={leaderReading ? content.keyPointExtraction : undefined}
         keyPointRestartBusy={keyPointRestartBusy}
         onRestartKeyPointExtraction={

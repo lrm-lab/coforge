@@ -1,7 +1,7 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 import { isRedirect } from "@tanstack/react-router";
 
-// Where `/welcome` sends a person: on when they have a full name, back to sign-in when their
+// Where `/welcome` sends a person: on when they have a display name, back to sign-in when their
 // session outlived their user, and otherwise nowhere — the name step is for them. The one server
 // read that decides it is stood in for.
 type NameStep =
@@ -12,7 +12,7 @@ let step: NameStep = { status: "ask", prefill: "" };
 
 mock.module("#src/features/auth/first-sign-in.functions", () => ({
   getNameStep: async () => step,
-  submitFullName: async () => ({ ok: true }),
+  submitDisplayName: async () => ({ ok: true }),
 }));
 
 const { Route } = await import("#src/routes/welcome");
@@ -53,7 +53,7 @@ test("a return path that could leave the site is dropped, and a page of the site
   expect(validate({ returnTo: "/join/abc?x=1" })).toEqual({ returnTo: "/join/abc?x=1" });
 });
 
-test("a person who has a full name is sent straight on, to the page they were going to", async () => {
+test("a person who has a display name is sent straight on, to the page they were going to", async () => {
   step = { status: "named" };
   expect(redirectOptions(await enter({ returnTo: "/w/acme/tasks" })).href).toBe("/en/w/acme/tasks");
   // With no page in mind, the app's own start page.

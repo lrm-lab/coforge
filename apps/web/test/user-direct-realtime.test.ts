@@ -5,6 +5,8 @@ import {
   conversationSignalScopes,
 } from "#src/server/conversations/conversation-realtime.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { UserDirectConversations } from "#src/server/conversations/user-direct-conversations.server";
+import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 
 const directConversation = (
   directKey: string,
@@ -105,4 +107,62 @@ test("a member still hears the other named as their peer after the other's membe
     "chat:user:ada",
   ]);
   expect(published.find((p) => p.channel === "chat:user:ada")?.data.peerUserId).toBe("grace");
+});
+
+test("a person's message in a direct conversation also signals the sender's own channel, naming the other person", async () => {
+  const { centrifugo, published } = recordingCentrifugo();
+  const db = {
+    conversation: {
+      findFirst: async () => ({
+        directKey: "user:ada|user:grace",
+        members: [
+          { id: "member-ada", userId: "ada" },
+          { id: "member-grace", userId: "grace" },
+        ],
+      }),
+    },
+  } as unknown as PrismaClient;
+  const idempotency = {
+    execute: async () => ({ id: "message-4", sequence: 1 }),
+  } as unknown as MessageRequestIdempotency;
+  await new UserDirectConversations(
+    db,
+    idempotency,
+    new CentrifugoConversationRealtime(centrifugo),
+  ).send({
+    workspaceId: "workspace-1",
+    conversationId: "conversation-4",
+    senderUserId: "ada",
+    body: "hello",
+    idempotencyKey: "request-4",
+  });
+
+  expect(published.map((publication) => publication.channel).sort()).toEqual([
+    "chat:conversation-4",
+    "chat:user:ada",
+    "chat:user:grace",
+  ]);
+  const messageTo = (channel: string) =>
+    published.find(
+      (publication) =>
+        publication.channel === channel && publication.data.type === "message.available.v1",
+    )?.data;
+  expect(messageTo("chat:user:ada")).toMatchObject({ senderUserId: "ada", peerUserId: "grace" });
+  expect(messageTo("chat:user:grace")).toMatchObject({ senderUserId: "ada", peerUserId: "ada" });
+});
+
+test("a member's own conversation signals them once, even when a member row repeats their id", async () => {
+  const { centrifugo, published } = recordingCentrifugo();
+  await new CentrifugoConversationRealtime(centrifugo).messageAvailable({
+    conversationId: "conversation-5",
+    messageId: "message-5",
+    sequence: 1,
+    directUserIds: ["ada", "ada"],
+    directPair: ["ada", "ada"],
+    senderUserId: "ada",
+  });
+  expect(published.map((publication) => publication.channel).sort()).toEqual([
+    "chat:conversation-5",
+    "chat:user:ada",
+  ]);
 });

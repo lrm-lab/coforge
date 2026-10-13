@@ -57,7 +57,7 @@ export function ProjectTree({ slug, path }: { slug: string; path: string }) {
   if (repository.status !== "ready") {
     if (repository.status === "not_found") throw notFound();
     return (
-      <main className="flex h-svh min-w-0 flex-col bg-primary">
+      <main className="flex h-full min-w-0 flex-col bg-primary">
         <PageHeader
           heading={project.name}
           leading={
@@ -188,7 +188,7 @@ export function ProjectTree({ slug, path }: { slug: string; path: string }) {
   );
 
   return (
-    <main className="flex h-svh min-w-0 flex-col bg-primary">
+    <main className="flex h-full min-w-0 flex-col bg-primary">
       <PageHeader
         heading={segments.at(-1) ?? defaultBranch}
         leading={

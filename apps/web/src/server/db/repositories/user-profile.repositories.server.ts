@@ -19,7 +19,6 @@ export class PrismaUserProfileRepository {
       select: {
         username: true,
         displayName: true,
-        fullName: true,
         description: true,
         avatarObjectKey: true,
       },
@@ -31,24 +30,19 @@ export class PrismaUserProfileRepository {
       /** Only for a caller that needs the handle itself (Records names its viewer by it); no page
        * shows it. */
       username: profile.username,
-      fullName: profile.fullName,
-      displayName: nickname(profile.fullName, profile.displayName),
-      /** False until the person has been asked for their full name (first sign-in). */
-      named: profile.fullName !== null,
+      displayName: profile.displayName,
+      /** False until the person has been asked for their name (first sign-in). */
+      named: profile.displayName !== null,
       description: profile.description,
       avatarUrl: avatarUrl(profile.avatarObjectKey),
     };
   }
 
-  async set(
-    userId: string,
-    input: { fullName: string; displayName: string | null; description: string },
-  ) {
-    const displayName = nickname(input.fullName, input.displayName);
+  async set(userId: string, input: { displayName: string; description: string }) {
     const profile = await this.db.user
       .update({
         where: { id: userId },
-        data: { fullName: input.fullName, displayName, description: input.description },
+        data: { displayName: input.displayName, description: input.description },
         select: { description: true },
       })
       .catch((error: unknown) => {
@@ -56,19 +50,11 @@ export class PrismaUserProfileRepository {
         throw hasErrorCode(error, "P2025") ? new AppError("NOT_FOUND") : error;
       });
     return {
-      name: displayName ?? input.fullName,
-      fullName: input.fullName,
-      displayName,
+      name: input.displayName,
+      displayName: input.displayName,
       description: profile.description,
     };
   }
-}
-
-/** The nickname a person chose: none when they left it empty or wrote their full name again,
- * since the full name is what shows in both cases. */
-function nickname(fullName: string | null, displayName: string | null) {
-  const chosen = displayName?.trim();
-  return chosen && chosen !== fullName?.trim() ? chosen : null;
 }
 
 /**

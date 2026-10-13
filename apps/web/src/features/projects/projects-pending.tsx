@@ -4,7 +4,7 @@ import { m } from "#src/paraglide/messages";
 
 export function ProjectsPending({ heading = m.projects_title() }: { heading?: string } = {}) {
   return (
-    <main className="flex h-svh min-w-0 flex-col bg-primary">
+    <main className="flex h-full min-w-0 flex-col bg-primary">
       <PageHeader heading={heading} />
       <div aria-busy="true" aria-label={heading} className="space-y-6 px-4 py-6 sm:px-6">
         <p role="status" className="sr-only">

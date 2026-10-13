@@ -1,6 +1,6 @@
 /**
- * The one rule for a person's name, wherever they set it: the full name asked at first sign-in and
- * the profile's own name. It is pure and client-safe, so the server (which decides) and a page
+ * The one rule for a person's name, wherever they set it: the display name asked at first sign-in
+ * and the profile's own name. It is pure and client-safe, so the server (which decides) and a page
  * (which words the problem) share it.
  */
 

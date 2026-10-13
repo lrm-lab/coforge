@@ -34,6 +34,9 @@
   --color-sidebar-fg: #101319;
   --color-sidebar-accent: #ebeaf7;
   --color-sidebar-accent-fg: #5d36dc;
+  /* Expanded sidebar nav rows (design spec): resting and current/hover. */
+  --color-sidebar-item: #f7f6ff;
+  --color-sidebar-item-active: #f3f1ff;
 
   /* Terminal / command blocks stay dark in both themes. */
   --color-terminal: #171b23;
@@ -60,9 +63,15 @@
 
 /* Sidebar background is a gradient in dark mode, which can't be expressed as a single
    `--color-*` token (Tailwind color utilities need a flat color). Consumers that need the
-   gradient use this custom property directly via `style`, per the app shell. */
+   gradient use this custom property as `bg-(image:--sidebar-gradient)`; the app shell paints it
+   behind both the sidebar and the gutter around the content card. */
 :root {
-  --sidebar-gradient: linear-gradient(180deg, #f6f5fe 0%, #faf9ff 100%);
+  /* Light value from the design spec: a faint brand tint over the page white. */
+  --sidebar-gradient: linear-gradient(
+    161.7deg,
+    rgba(197, 186, 254, 0.15) 0.5%,
+    rgba(197, 186, 254, 0.05) 78.18%
+  );
 }
 
 /* Light-mode values from the design spec's Color page (docs/design/color-palette.md): the
@@ -138,6 +147,8 @@
     --color-sidebar: #141720;
     --color-sidebar-fg: #f4f6fb;
     --color-sidebar-accent: #2b2544;
+    --color-sidebar-item: #1c1930;
+    --color-sidebar-item-active: #262142;
     --color-sidebar-accent-fg: #c5bafe;
 
     --color-online: #42c83f;

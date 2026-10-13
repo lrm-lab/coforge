@@ -281,7 +281,7 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
           event,
           idempotencyKey,
         ),
-        ...directUserIds.map((memberId) =>
+        ...[...new Set(directUserIds)].map((memberId) =>
           this.centrifugo.publishJson(
             userConversationChannel(memberId),
             {

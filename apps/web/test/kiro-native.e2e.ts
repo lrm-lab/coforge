@@ -48,7 +48,7 @@ test("real Kiro v3 reads and replies through Web, Centrifugo and Daemon", async 
   const proxy = startAgentProxy({
     runtime: {
       agentMessage: (...args) => runtime!.agentMessage(...args),
-      agentAttachment: (...args) => runtime!.agentAttachment(...args),
+      agentAttachment: (...args) => runtime!.agentRequests.agentAttachment(...args),
       inbox: (...args) => runtime!.inbox(...args),
       issueAgentContext: (agentId, context) => runtime!.issueAgentContext(agentId, context),
     },

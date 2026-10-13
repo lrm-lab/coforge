@@ -94,6 +94,22 @@ export function formatMonthDay(
   }).format(new Date(value));
 }
 
+/** The time of day a message was sent at, in `timeZone`; empty without a `locale`. */
+export function clockLabel(
+  value: Date | string,
+  locale?: string,
+  timeFormat: TimeFormat | null = null,
+  timeZone?: string,
+): string {
+  if (!locale) return "";
+  return dateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: hour12For(timeFormat),
+    timeZone,
+  }).format(new Date(value));
+}
+
 /** Absolute wall-clock time with seconds, for contexts that need a fixed timestamp instead of
  * relative text (the Activity timeline's clock column), in the viewer's hour cycle. */
 export function formatClockTime(

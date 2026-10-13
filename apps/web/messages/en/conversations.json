@@ -3,6 +3,15 @@
   "conversation_back_to_list": "Back to conversations",
   "channels_title": "Channels",
   "channel_create": "Create channel",
+  "channel_start_group": "Start group chat",
+  "channel_group_selected_count": "{count} selected",
+  "channel_group_min_members": "Select at least {count} members to create a group chat.",
+  "channel_group_finish": "Finish",
+  "channel_open": "Open channel",
+  "channel_created_members_failed": "#{name} was created, but the members could not be added.",
+  "channel_created": "#{name} was created.",
+  "channel_project": "Project",
+  "channel_no_project": "No project",
   "channel_name": "Channel name",
   "channel_name_hint": "Use lowercase letters, numbers, hyphens or underscores (up to 32 characters).",
   "channel_public": "Workspace public",
@@ -184,6 +193,16 @@
       "match": {
         "countPlural=one": "{channel}, {count} unread message",
         "countPlural=other": "{channel}, {count} unread messages"
+      }
+    }
+  ],
+  "channel_unread_mention_accessible": [
+    {
+      "declarations": ["input channel", "input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{channel}, {count} unread message, you were mentioned",
+        "countPlural=other": "{channel}, {count} unread messages, you were mentioned"
       }
     }
   ],

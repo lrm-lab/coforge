@@ -13,6 +13,7 @@ import { tmpdir, userInfo } from "node:os";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
+import { RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS } from "#src/agent-runtime/runtime-error-recovery";
 import { RuntimeExecutableNotFoundError } from "#src/platform/runtime-executable-not-found";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 import {
@@ -1305,7 +1306,7 @@ describe("Agent attachment upload", () => {
         headers: { "content-type": "multipart/form-data; boundary=b" },
         body: "irrelevant",
       });
-      const response = await harness.runtime.agentAttachmentUpload(
+      const response = await harness.runtime.agentRequests.agentAttachmentUpload(
         harness.context,
         request,
         harness.apiKey,
@@ -1340,7 +1341,11 @@ describe("Agent attachment upload", () => {
         body: "irrelevant",
       });
       await expect(
-        harness.runtime.agentAttachmentUpload("forged-context", request, harness.apiKey),
+        harness.runtime.agentRequests.agentAttachmentUpload(
+          "forged-context",
+          request,
+          harness.apiKey,
+        ),
       ).rejects.toThrow();
       expect(calls).toBe(0);
     } finally {
@@ -1387,28 +1392,28 @@ describe("Agent direct-upload sessions", () => {
     );
     try {
       expect(
-        await harness.runtime.agentAttachmentUploadSessionCreate(
+        await harness.runtime.agentRequests.agentAttachmentUploadSessionCreate(
           harness.context,
           { target: "#general" },
           harness.apiKey,
         ),
       ).toBe(createResponse);
       expect(
-        await harness.runtime.agentAttachmentUploadSessionComplete(
+        await harness.runtime.agentRequests.agentAttachmentUploadSessionComplete(
           harness.context,
           "upload-1",
           harness.apiKey,
         ),
       ).toBe(completeResponse);
       expect(
-        await harness.runtime.agentAttachmentUploadSessionCancel(
+        await harness.runtime.agentRequests.agentAttachmentUploadSessionCancel(
           harness.context,
           "upload-1",
           harness.apiKey,
         ),
       ).toBe(cancelResponse);
       expect(
-        await harness.runtime.agentAttachmentUploadSessionGet(
+        await harness.runtime.agentRequests.agentAttachmentUploadSessionGet(
           harness.context,
           "upload-1",
           harness.apiKey,
@@ -1446,7 +1451,7 @@ describe("Agent direct-upload sessions", () => {
     );
     try {
       await expect(
-        harness.runtime.agentAttachmentUploadSessionCreate(
+        harness.runtime.agentRequests.agentAttachmentUploadSessionCreate(
           "forged-context",
           { target: "#general" },
           harness.apiKey,
@@ -2882,7 +2887,7 @@ describe("DaemonRuntime", () => {
     await runtime.startAgent("agent-a", config);
     const context = runtime.issueAgentContext("agent-a");
 
-    const rejected = await runtime
+    const rejected = await runtime.agentRequests
       .workspaceInfo(context, { idempotencyKey: "r" }, "not-an-agent-key")
       .catch((error: unknown) => error);
 
@@ -2890,6 +2895,90 @@ describe("DaemonRuntime", () => {
     expect((rejected as AgentPreflightError).code).toBe("AGENT_API_KEY_MISSING");
     expect(forwarded).toBe(0);
     await runtime.stop();
+  });
+
+  test("every forwarded Agent request refuses a local precondition as that precondition, forwarding nothing", async () => {
+    const forwardedRequests = [
+      "workspaceInfo",
+      "githubCredential",
+      "githubCommitTrailers",
+      "manualGet",
+      "manualSearch",
+      "userInfo",
+      "profileShow",
+      "profileUpdate",
+      "agentOpenviking",
+      "mentionPending",
+      "mentionExecute",
+      "mentionDelivery",
+      "agentChannel",
+      "agentActionPrepare",
+      "agentWeeklyReport",
+      "agentWeeklyReportCollect",
+      "agentWeeklyReportKeyPoints",
+      "agentWeeklyReportMemory",
+      "agentAttachment",
+      "agentAttachmentUpload",
+      "agentAttachmentUploadSessionCreate",
+      "agentAttachmentUploadSessionComplete",
+      "agentAttachmentUploadSessionCancel",
+      "agentAttachmentUploadSessionGet",
+    ] as const;
+    const credentials = new InMemoryDaemonCredentialStore();
+    await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+    const forwarded: string[] = [];
+    const runtime = new DaemonRuntime(
+      connection,
+      () => ({
+        provider: "pi",
+        createAgentSession: async () => ({ ...sessionSpy(), async notify() {} }),
+      }),
+      credentials,
+      {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async stop() {},
+          requestAgentApiKey: async () => `sk_agent_${"a".repeat(43)}`,
+          ...Object.fromEntries(
+            forwardedRequests.map((name) => [
+              name,
+              async () => {
+                forwarded.push(name);
+                return {};
+              },
+            ]),
+          ),
+        }),
+      },
+    );
+    await runtime.start(connection);
+    await runtime.startAgent("agent-a", config);
+    const context = runtime.issueAgentContext("agent-a");
+    const agentApiKey = `sk_agent_${"a".repeat(43)}`;
+    const refusal = async (name: (typeof forwardedRequests)[number], ...input: unknown[]) => {
+      const request = runtime.agentRequests[name] as (...input: unknown[]) => Promise<unknown>;
+      const error = await request.call(runtime.agentRequests, ...input).catch((error) => error);
+      return error instanceof AgentPreflightError ? error.code : String(error);
+    };
+
+    for (const name of forwardedRequests) {
+      expect([name, await refusal(name, context, {}, "not-an-agent-key")]).toEqual([
+        name,
+        "AGENT_API_KEY_MISSING",
+      ]);
+      expect([name, await refusal(name, "forged-context", {}, agentApiKey)]).toEqual([
+        name,
+        "AGENT_CONTEXT_INVALID",
+      ]);
+    }
+    await runtime.stop();
+    for (const name of forwardedRequests)
+      expect([name, await refusal(name, context, {}, agentApiKey)]).toEqual([
+        name,
+        "DAEMON_NOT_RUNNING",
+      ]);
+    expect(forwarded).toEqual([]);
   });
 
   test("version answers coforge version's local-only query from the already-running process, without a transport call", async () => {
@@ -9159,6 +9248,44 @@ describe("Agent delivery queue", () => {
 
       // A fresh launch starts with no inherited hold or backoff state: a delivery on it reaches
       // the (new) session immediately instead of staying stuck behind the stopped launch's hold.
+      await runtime.startAgent("agent-a", { ...config, provider: "pi" });
+      await deliver(2);
+      await fake.waitForNotices(1);
+      await acks.done;
+      expect(fake.notices).toHaveLength(1);
+    });
+
+    test(
+      "a runtime stopped mid-backoff lets its process exit without waiting the backoff out",
+      async () => {
+        // A release timer left behind would keep the stopped daemon process alive until it fired.
+        const startedAt = performance.now();
+        const child = Bun.spawn(
+          [
+            process.execPath,
+            new URL("./fixtures/stopped-runtime-exit.ts", import.meta.url).pathname,
+          ],
+          { cwd: new URL("..", import.meta.url).pathname, stdout: "ignore", stderr: "pipe" },
+        );
+        const exitCode = await child.exited;
+        if (exitCode !== 0) throw new Error(await child.stderr.text());
+        expect(performance.now() - startedAt).toBeLessThan(RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS);
+      },
+      3 * RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS,
+    );
+
+    test("a runtime started again after stopping mid-backoff delivers without waiting it out", async () => {
+      const acks = ackGate(1);
+      const { runtime, fake, deliver } = await deliveryQueueHarness("pi", acks);
+      jest.useFakeTimers();
+
+      fake.emit({ type: "error", message: "connect ECONNRESET" });
+      fake.emit({ type: "completed", status: "failed" });
+      await runtime.stop();
+
+      // Stopping ended the backoff it would otherwise have waited out; no hold is left behind
+      // without the timer that would have released it.
+      await runtime.start(connection);
       await runtime.startAgent("agent-a", { ...config, provider: "pi" });
       await deliver(2);
       await fake.waitForNotices(1);

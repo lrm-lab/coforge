@@ -5,9 +5,9 @@ import { directorySenders } from "#src/features/search/search-senders";
 const directory = {
   viewerId: "user-1",
   people: [
-    { id: "user-2", name: "Amazing Grace", fullName: "Grace Hopper", avatarUrl: null, dmId: null },
-    { id: "user-1", name: "Dee", fullName: "Dev Viewer", avatarUrl: null, dmId: null },
-    { id: "user-3", name: "ada-9d3", fullName: null, avatarUrl: null, dmId: null },
+    { id: "user-2", name: "Amazing Grace", avatarUrl: null, dmId: null },
+    { id: "user-1", name: "Dee", avatarUrl: null, dmId: null },
+    { id: "user-3", name: "ada-9d3", avatarUrl: null, dmId: null },
   ],
   agents: [
     {
@@ -16,6 +16,8 @@ const directory = {
       handle: "atlas",
       avatarUrl: null,
       ownedByCurrentUser: true,
+      visibility: "public",
+      weeklyReportAssistant: false,
       dmId: null,
     },
     {
@@ -24,6 +26,8 @@ const directory = {
       handle: "a-very-long-generated-agent-handle-name",
       avatarUrl: null,
       ownedByCurrentUser: false,
+      visibility: "public",
+      weeklyReportAssistant: false,
       dmId: null,
     },
   ],
@@ -43,12 +47,10 @@ describe("directorySenders", () => {
     ]);
   });
 
-  test("a person has no @ addon, and is found by their name and full name", () => {
+  test("a person has no @ addon, and is found by their name", () => {
     expect(byId("user-2").addon).toBeUndefined();
-    expect(byId("user-2").textValue).toBe("Amazing Grace Amazing Grace Grace Hopper");
-    expect(byId("user-1").textValue).toContain("Dev Viewer");
-    // With no full name there is only the name shown.
-    expect(byId("user-3").textValue).toBe("ada-9d3 ada-9d3");
+    expect(byId("user-2").textValue).toBe("Amazing Grace");
+    expect(byId("user-3").textValue).toBe("ada-9d3");
   });
 
   test("an Agent is told by its @handle, cut short when it is long, and found by it", () => {

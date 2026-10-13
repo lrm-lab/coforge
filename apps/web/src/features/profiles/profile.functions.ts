@@ -19,7 +19,6 @@ export const getUserProfile = createServerFn({ method: "GET" })
       name: profile.name,
       username: profile.username,
       named: profile.named,
-      fullName: profile.fullName,
       displayName: profile.displayName,
       email: user.email,
       description: profile.description,

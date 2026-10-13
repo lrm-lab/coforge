@@ -166,7 +166,7 @@ export function SearchPage({
 
   return (
     <SearchPreviewContext.Provider value={previewContext}>
-      <main className="flex h-svh min-w-0 bg-primary">
+      <main className="flex h-full min-w-0 bg-primary">
         <div
           className={
             showPreview ? "flex w-[35rem] shrink-0 flex-col" : "flex min-w-0 flex-1 flex-col"

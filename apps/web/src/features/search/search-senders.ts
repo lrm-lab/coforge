@@ -11,7 +11,7 @@ export type Sender = {
   /** The name shown for them, for the avatar's initial. */
   name: string;
   avatarUrl?: string | null;
-  /** What the menu's search reads: a person's name and full name, an Agent's name and `@handle`.
+  /** What the menu's search reads: a person's name, an Agent's name and `@handle`.
    * A person's username is not here: it is not shown, so it is not searched. */
   textValue: string;
   /** An Agent's `@handle`, which tells it from a person; a person has none. */
@@ -40,7 +40,7 @@ export function directorySenders(
       label,
       name: person.name,
       avatarUrl: person.avatarUrl,
-      textValue: [label, person.name, person.fullName].filter(Boolean).join(" "),
+      textValue: label === person.name ? label : `${label} ${person.name}`,
     };
   });
   const agents = directory.agents.map((agent): Sender => ({

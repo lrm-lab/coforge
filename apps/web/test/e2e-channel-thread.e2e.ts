@@ -45,7 +45,7 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
     runtime: {
       agentMessage: (...args) => runtime!.agentMessage(...args),
       agentTask: (...args) => runtime!.agentTask(...args),
-      agentAttachment: (...args) => runtime!.agentAttachment(...args),
+      agentAttachment: (...args) => runtime!.agentRequests.agentAttachment(...args),
       inbox: (...args) => runtime!.inbox(...args),
       issueAgentContext: (agentId, context) => runtime!.issueAgentContext(agentId, context),
     },

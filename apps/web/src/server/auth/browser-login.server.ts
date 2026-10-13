@@ -11,7 +11,7 @@ export type BrowserUser = {
   email: string | null;
   /** What the provider reported as the person's name (else its nickname), trimmed; empty when it
    * reported neither. It only starts the first-sign-in name field: a person is named by their
-   * stored `fullName` (`humanLabel`), never by this. */
+   * stored `displayName` (`humanLabel`), never by this. */
   name: string;
   authingSub: string;
   username: string;
@@ -27,8 +27,8 @@ export type InternalUserResolver = (input: {
 }) => Promise<{
   id: string;
   username: string;
-  /** The person's stored full name; null until they have been asked for one. */
-  fullName: string | null;
+  /** The person's stored display name; null until they have been asked for one. */
+  displayName: string | null;
 }>;
 
 export type AuthingConfig = {
@@ -163,9 +163,9 @@ export async function completeBrowserLogin(input: {
   now?: () => number;
 }): Promise<{
   user: BrowserUser;
-  /** The person's stored full name, or null when they have none yet: sign-in then continues at the
-   * name step rather than creating anything for them. */
-  fullName: string | null;
+  /** The person's stored display name, or null when they have none yet: sign-in then continues at
+   * the name step rather than creating anything for them. */
+  displayName: string | null;
   sessionCookie: string;
   clearStateCookie: string;
   /** Where sign-in started, when that was a page of this site. */
@@ -204,7 +204,7 @@ export async function completeBrowserLogin(input: {
     : {
         id: testOnlyStableInternalUserId("authing", profile.sub),
         username: `user-${testOnlyStableInternalUserId("authing", profile.sub).replaceAll("-", "")}`,
-        fullName: null,
+        displayName: null,
       };
   const user: BrowserUser = {
     id: resolved.id,
@@ -220,7 +220,7 @@ export async function completeBrowserLogin(input: {
   };
   return {
     user,
-    fullName: resolved.fullName,
+    displayName: resolved.displayName,
     sessionCookie: serializeCookie(
       SESSION_COOKIE,
       sign("session", session, input.sessionSecret),

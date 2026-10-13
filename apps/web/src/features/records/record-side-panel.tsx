@@ -44,7 +44,11 @@ import { cx } from "#src/utils/cx";
 import { shouldSendOnEnter } from "#src/features/conversations/composer-behavior";
 import { useConversationRealtime } from "#src/features/conversations/conversation-realtime-client";
 import type { WeeklyReportAssistantSuggestion } from "#src/server/records/weekly-report-assistant-suggestion.server";
-import type { KeyPointExtractionMeta, ReportContent } from "./records-content";
+import type {
+  KeyPointExtractionMeta,
+  ReportBodyRestoreView,
+  ReportContent,
+} from "./records-content";
 import { formatWeeklyReportCompletedAt } from "./records-content";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import {
@@ -164,6 +168,8 @@ export function RecordSidePanel({
   onWeekSendDismissed,
   sendOfferActive = false,
   onBodyApplied,
+  bodyRestoreView = null,
+  onSwitchBodyVersion,
   keyPointExtraction,
   keyPointRestartBusy,
   onRestartKeyPointExtraction,
@@ -181,8 +187,14 @@ export function RecordSidePanel({
   onWeekSendDismissed?: () => void;
   /** Whether the format can still be sent (hides offer actions when false). */
   sendOfferActive?: boolean;
-  /** After Confirm body-edit, parent syncs the open editor (draft + view). */
-  onBodyApplied?: (reportId: string, content: ReportContent) => void;
+  /** After a body-edit write or version switch, parent syncs the open editor. */
+  onBodyApplied?: (
+    reportId: string,
+    content: ReportContent,
+    restore?: ReportBodyRestoreView | null,
+  ) => void;
+  bodyRestoreView?: ReportBodyRestoreView | null;
+  onSwitchBodyVersion?: () => void;
   /** Leader member-report: show personal key-point status + re-extract. */
   keyPointExtraction?: KeyPointExtractionMeta;
   keyPointRestartBusy?: boolean;
@@ -243,7 +255,9 @@ export function RecordSidePanel({
     session.appliedSuggestionIds,
   );
   const [awaitingSynthesis, setAwaitingSynthesis] = useState(false);
+  const [awaitingLabel, setAwaitingLabel] = useState<string | null>(null);
   const synthesisStartedAtRef = useRef<number | null>(null);
+  const awaitingLabelRef = useRef<string | null>(null);
   const [assistantConversationId, setAssistantConversationId] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
   const legacySessionIdRef = useRef<string | null>(null);
@@ -358,8 +372,7 @@ export function RecordSidePanel({
     setError(session.error);
     setDismissedSuggestionIds(session.dismissedSuggestionIds);
     setAppliedSuggestionIds(session.appliedSuggestionIds);
-    setAwaitingSynthesis(false);
-    synthesisStartedAtRef.current = null;
+    hideAwaitingAssistant();
     setAssistantConversationId(null);
     setChatSessions([]);
     setActiveSessionId(null);
@@ -404,16 +417,44 @@ export function RecordSidePanel({
     stickToBottomRef.current = true;
   }
 
+  function showAwaitingAssistant(pendingAt: number, label: string | null) {
+    synthesisStartedAtRef.current = pendingAt;
+    awaitingLabelRef.current = label;
+    setAwaitingSynthesis(true);
+    setAwaitingLabel(label);
+  }
+
+  function hideAwaitingAssistant() {
+    synthesisStartedAtRef.current = null;
+    awaitingLabelRef.current = null;
+    setAwaitingSynthesis(false);
+    setAwaitingLabel(null);
+  }
+
   function maybeResumeAwaitingAssistant(
     rows: CommentRow[],
     messages: WeeklyReportAssistantMessage[],
   ) {
-    if (synthesisStartedAtRef.current != null) return;
-    const pendingAt = resolveAwaitingAssistantResume(rows, messages);
-    if (pendingAt == null) return;
-    synthesisStartedAtRef.current = pendingAt;
-    setAwaitingSynthesis(true);
+    const pending = resolveAwaitingAssistantResume(rows, messages);
+    if (pending) {
+      showAwaitingAssistant(pending.pendingAt, pending.label);
+      return;
+    }
+    if (synthesisStartedAtRef.current == null) return;
+    const label = awaitingLabelRef.current;
+    if (label != null && /请稍候/.test(label)) hideAwaitingAssistant();
   }
+
+  const invalidatedBodyEditRef = useRef<string | null>(null);
+  useEffect(() => {
+    const latest = [...assistantMessages]
+      .reverse()
+      .find((message) => message.suggestion?.type === "body-edit");
+    if (!latest || latest.id === bodyRestoreView?.sourceMessageId) return;
+    if (invalidatedBodyEditRef.current === latest.id) return;
+    invalidatedBodyEditRef.current = latest.id;
+    void router.invalidate();
+  }, [assistantMessages, bodyRestoreView?.sourceMessageId, router]);
 
   activeSessionIdRef.current = activeSessionId;
   legacySessionIdRef.current = legacySessionId;
@@ -459,8 +500,7 @@ export function RecordSidePanel({
       void loadThread(activeSessionId, legacySessionId);
     }, 4000);
     const timeout = window.setTimeout(() => {
-      setAwaitingSynthesis(false);
-      synthesisStartedAtRef.current = null;
+      hideAwaitingAssistant();
     }, 180_000);
     return () => {
       window.clearInterval(timer);
@@ -475,8 +515,7 @@ export function RecordSidePanel({
       (message) => message.author === "assistant" && Date.parse(message.createdAt) > startedAt,
     );
     if (hasNewAssistant) {
-      setAwaitingSynthesis(false);
-      synthesisStartedAtRef.current = null;
+      hideAwaitingAssistant();
       void router.invalidate();
     }
   }, [assistantMessages, awaitingSynthesis, router]);
@@ -706,13 +745,14 @@ export function RecordSidePanel({
     setError(null);
     session.error = null;
     try {
-      await applyBody({
+      const written = await applyBody({
         data: {
           reportId: suggestion.reportId,
           content: suggestion.content as ReportContent,
+          sourceMessageId: messageId,
         },
       });
-      onBodyApplied?.(suggestion.reportId, suggestion.content as ReportContent);
+      onBodyApplied?.(suggestion.reportId, written.content, written.bodyRestoreView);
       markSuggestionApplied(messageId);
       await router.invalidate({ sync: true });
     } catch {
@@ -798,8 +838,7 @@ export function RecordSidePanel({
 
       session.draft = "";
       setDraft("");
-      synthesisStartedAtRef.current = Date.now();
-      setAwaitingSynthesis(true);
+      showAwaitingAssistant(Date.now(), null);
       const chat = await loadAssistantMessages({
         data: {
           subjectType,
@@ -859,8 +898,7 @@ export function RecordSidePanel({
       setComments(rows);
       if (intent === "synthesize") {
         stickToBottomRef.current = true;
-        synthesisStartedAtRef.current = Date.now();
-        setAwaitingSynthesis(true);
+        showAwaitingAssistant(Date.now(), null);
         await loadThread(activeSessionId, legacySessionId);
       }
     } finally {
@@ -879,8 +917,7 @@ export function RecordSidePanel({
       setComments(result.comments);
       if (result.forwarded) {
         stickToBottomRef.current = true;
-        synthesisStartedAtRef.current = Date.now();
-        setAwaitingSynthesis(true);
+        showAwaitingAssistant(Date.now(), null);
         await loadThread(activeSessionId, legacySessionId);
       }
     } finally {
@@ -1365,7 +1402,9 @@ export function RecordSidePanel({
                 suggestion.type === "template-create");
             const suggestionApplied = appliedSuggestionIds.includes(message.id);
             const suggestionDismissed = dismissedSuggestionIds.includes(message.id);
-            const suggestionFrozen = suggestionApplied || suggestionDismissed;
+            const writtenByServer =
+              suggestion?.type === "body-edit" && bodyRestoreView?.sourceMessageId === message.id;
+            const suggestionFrozen = suggestionApplied || suggestionDismissed || writtenByServer;
             const preview = showSuggestion && suggestion ? suggestionPreview(suggestion) : "";
             return (
               <article key={item.id} className="space-y-2">
@@ -1412,7 +1451,7 @@ export function RecordSidePanel({
                         {m.records_assistant_suggestion_ignored()}
                       </p>
                     ) : null}
-                    {suggestionApplied && !suggestionDismissed ? (
+                    {(suggestionApplied || writtenByServer) && !suggestionDismissed ? (
                       <p className="text-sm font-medium text-tertiary">
                         {m.records_assistant_suggestion_inserted()}
                       </p>
@@ -1429,6 +1468,18 @@ export function RecordSidePanel({
                           {preview}
                         </pre>
                       </div>
+                    ) : null}
+                    {writtenByServer && bodyRestoreView && onSwitchBodyVersion ? (
+                      <Button
+                        size="sm"
+                        color="secondary"
+                        isDisabled={busy}
+                        onPress={onSwitchBodyVersion}
+                      >
+                        {bodyRestoreView.showing === "latest"
+                          ? m.records_body_restore_previous()
+                          : m.records_body_restore_latest()}
+                      </Button>
                     ) : null}
                     {!suggestionFrozen ? (
                       <div className="flex flex-wrap gap-2">
@@ -1467,12 +1518,14 @@ export function RecordSidePanel({
           <div className="flex items-center gap-2 border-t border-secondary px-4 py-2">
             <ProgressBar
               isIndeterminate
-              aria-label={m.records_side_chat_assistant_running()}
+              aria-label={awaitingLabel ?? m.records_side_chat_assistant_running()}
               className="inline-flex shrink-0 size-4 text-brand-secondary"
             >
               <Loading02 aria-hidden className="size-full motion-safe:animate-spin" />
             </ProgressBar>
-            <span className="text-xs text-tertiary">{m.records_side_chat_assistant_running()}</span>
+            <span className="text-xs text-tertiary">
+              {awaitingLabel ?? m.records_side_chat_assistant_running()}
+            </span>
           </div>
         ) : null}
 

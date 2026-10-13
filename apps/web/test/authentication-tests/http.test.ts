@@ -24,9 +24,9 @@ const persistedAda = {
   id: "11111111-1111-4111-8111-111111111111",
   username: "ada",
   // Named: sign-in goes on to the person's Workspace. See `unnamedAda` for the name step.
-  fullName: "Ada Lovelace" as string | null,
+  displayName: "Ada Lovelace" as string | null,
 };
-const unnamedAda = { ...persistedAda, fullName: null };
+const unnamedAda = { ...persistedAda, displayName: null };
 
 function fakeAuthing() {
   return {
@@ -144,7 +144,7 @@ test("login callback signs in an Authing account that has no email, and /api/me 
       },
       resolveUser: async (input) => {
         resolved.push(input);
-        return { id: persistedAda.id, username: "user-0a1b2c3d", fullName: "Ada Lovelace" };
+        return { id: persistedAda.id, username: "user-0a1b2c3d", displayName: "Ada Lovelace" };
       },
       enrollUser: async () => {},
     });
@@ -182,7 +182,7 @@ test("login callback signs in an Authing account that has no email, and /api/me 
   });
 });
 
-test("login callback enrolls a named user into a Workspace titled with their stored full name", async () => {
+test("login callback enrolls a named user into a Workspace titled with their stored display name", async () => {
   const { state, cookie } = startSignIn(null);
   const enrolled: unknown[] = [];
   // The provider says "Ada"; the person's own answer is what titles their Workspace.
@@ -190,10 +190,10 @@ test("login callback enrolls a named user into a Workspace titled with their sto
     enrolled.push(user);
   });
   expect(response.status).toBe(302);
-  expect(enrolled).toEqual([{ id: persistedAda.id, username: "ada", fullName: "Ada Lovelace" }]);
+  expect(enrolled).toEqual([{ id: persistedAda.id, username: "ada", displayName: "Ada Lovelace" }]);
 });
 
-test("a user with no full name is sent to the name step, signed in, with nothing created for them", async () => {
+test("a user with no display name is sent to the name step, signed in, with nothing created for them", async () => {
   const { state, cookie } = startSignIn(null);
   const enrolled: unknown[] = [];
   const response = await callbackFor(
@@ -474,7 +474,7 @@ function callbackFor(
   enrollUser: (user: {
     id: string;
     username: string;
-    fullName: string;
+    displayName: string;
   }) => Promise<void> = async () => {},
   user: typeof persistedAda = persistedAda,
 ) {

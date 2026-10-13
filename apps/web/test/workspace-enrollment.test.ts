@@ -8,17 +8,17 @@ import {
 const ada = {
   id: "11111111-1111-4111-8111-111111111111",
   username: "ada",
-  fullName: "Ada",
+  displayName: "Ada",
 };
 const grace = {
   id: "22222222-2222-4222-8222-222222222222",
   username: "grace",
-  fullName: "Grace",
+  displayName: "Grace",
 };
 const dong = {
   id: "33333333-3333-4333-8333-333333333333",
   username: "andong",
-  fullName: "安栋",
+  displayName: "安栋",
 };
 
 test("a user with no membership gets a Workspace of their own", async () => {
@@ -78,7 +78,7 @@ test("a taken username slug still creates a Workspace for that User", async () =
 
 test("a username that is a reserved Workspace slug does not become the slug", async () => {
   const store = memoryStore();
-  const admin = { id: ada.id, username: "admin", fullName: "Admin" };
+  const admin = { id: ada.id, username: "admin", displayName: "Admin" };
 
   const result = await new WorkspaceEnrollment(store).ensureForUser(admin, "en");
 

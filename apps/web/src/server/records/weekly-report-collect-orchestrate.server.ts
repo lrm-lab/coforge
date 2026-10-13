@@ -24,6 +24,11 @@ import {
 import { resolveCollectWindow } from "#src/features/records/weekly-report-collect-window";
 import { RecordCatalog } from "./record-catalog.server";
 import { resolveLatestChatSessionId } from "./weekly-report-assistant-chat-session.server";
+import {
+  formatMemoryPromptSection,
+  memoryForPrompt,
+  parseStoredWeeklyReportMemory,
+} from "./weekly-report-memory.server";
 
 /** Wake text for a per-Computer collector Agent (ADR 0032). */
 export function buildCollectorWakeBody(input: {
@@ -80,6 +85,10 @@ export function buildCollectSynthesizerWakeText(input: {
   }>;
   /** Side-chat revision notes (e.g. 「更概括一些」) for a re-synthesize. */
   userGuidance?: string | null;
+  memoryPrompt?: {
+    writingHabits: readonly string[];
+    openThreads: ReadonlyArray<{ title: string; status: "open" | "done" }>;
+  };
 }): string {
   const board = input.slots
     .map((slot) => {
@@ -102,7 +111,7 @@ export function buildCollectSynthesizerWakeText(input: {
     "采集包应已按作者过滤；草稿只写该成员本人工作，不要扩写同事贡献。",
     "用 coforge weekly-report context / list / read 读取模板、当前报告结构，以及同一成员最近两周已提交的周报；不要重新采集本机文件。",
     "把上周未完成事项、本周完成结果和仍需延续的 Next Steps 明确串起来；没有历史内容时不要编造延续关系。",
-    "在回复末尾附上 [weekly-report-suggestion] body-edit（reportId 如下），供用户 Confirm 写入。",
+    "在回复末尾附上 [weekly-report-suggestion] body-edit（reportId 如下）。平台收到后直接写入周报，用户可以在上一版和最新版之间切换。",
     `reportId=${input.reportId}`,
     `runId=${input.runId}`,
     ...(guidance ? ["", "## 用户调整要求", "请按下列要求重写草稿（不要忽略）：", guidance] : []),
@@ -112,6 +121,7 @@ export function buildCollectSynthesizerWakeText(input: {
     "",
     "## 可用采集包",
     packs || "(无)",
+    ...(input.memoryPrompt ? ["", formatMemoryPromptSection(input.memoryPrompt)] : []),
   ].join("\n");
 }
 
@@ -467,6 +477,10 @@ async function wakeCollectSynthesizer(
       subjectType: "report",
       subjectId: input.reportId,
     }));
+  const assistant = await db.weeklyReportAssistant.findUnique({
+    where: { workspaceId_userId: { workspaceId: input.workspaceId, userId: input.userId } },
+    select: { memory: true },
+  });
   const { openWeeklyReportAssistantChat } = await import("./weekly-report-assistant-chat.server");
   const chat = openWeeklyReportAssistantChat(db);
   await chat.postRequest({
@@ -481,6 +495,7 @@ async function wakeCollectSynthesizer(
       reportId: input.reportId,
       runId: input.runId,
       userGuidance: input.userGuidance,
+      memoryPrompt: memoryForPrompt(parseStoredWeeklyReportMemory(assistant?.memory)),
       slots: detailed.slots.map((slot) => ({
         computerLabel: slot.computerLabel,
         status: slot.status,

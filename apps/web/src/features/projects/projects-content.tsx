@@ -25,7 +25,7 @@ export function ProjectsContent({
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
   return (
-    <main className="flex h-svh min-w-0 flex-col bg-primary">
+    <main className="flex h-full min-w-0 flex-col bg-primary">
       <PageHeader
         heading={m.projects_title()}
         actions={

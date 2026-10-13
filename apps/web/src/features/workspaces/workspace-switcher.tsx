@@ -60,14 +60,17 @@ export function WorkspaceSwitcher({
         ) : (
           <AriaButton
             aria-label={m.workspace_switcher()}
-            className="flex h-12 w-full items-center bg-transparent px-2 text-left outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset"
+            className="flex h-11 w-full items-center gap-2.5 rounded-lg bg-transparent px-2 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-brand"
           >
-            {/* size-5 column matches every sidebar row's icon column, so the
-                name below lines up with row text even though the mark itself is 24px. */}
-            <span className="mr-2 flex size-5 shrink-0 items-center justify-center">
-              <WorkspaceMark workspace={current} />
-            </span>
-            <span data-workspace-name className="min-w-0 flex-1 truncate text-sm font-semibold">
+            <WorkspaceIcon
+              name={label}
+              url={current?.iconUrl ?? null}
+              className="size-7 rounded-lg bg-sidebar-accent text-brand-secondary"
+            />
+            <span
+              data-workspace-name
+              className="min-w-0 flex-1 truncate text-sm font-semibold text-primary"
+            >
               {label}
             </span>
             <ChevronSelectorVertical aria-hidden="true" className="size-4 shrink-0 text-tertiary" />

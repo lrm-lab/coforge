@@ -6,8 +6,8 @@
  * module only starts once a process is up and a turn fails.
  *
  * Pure bookkeeping on purpose, matching `LaunchFailureBackoff`'s shape: no timers, no I/O. The
- * caller (`daemon-runtime/runtime.ts`) decides what the computed delay means — releasing
- * `AgentDeliveryQueue`'s explicit hold — and owns the actual timer.
+ * caller (`daemon-runtime/runtime-error-delivery-hold.ts`) decides what the computed delay
+ * means — releasing `AgentDeliveryQueue`'s explicit hold — and owns the actual timer.
  *
  * Two independent streaks live here, both reset only by a genuinely successful turn:
  * - `RuntimeErrorDeliveryBackoff` counts consecutive retryable failures for an Agent, regardless

@@ -92,9 +92,8 @@ model User {
   username                    String                          @unique
   /// The latest email the identity provider reported at login. Not unique and never an identity key.
   email                       String?
-  /// The name teammates see. Nullable: an account created before it has none until it is asked.
-  fullName                    String?
-  /// An optional nickname that replaces `fullName` in labels when set.
+  /// The name teammates see, asked for at first sign-in. Nullable: an account created before it
+  /// has none until it is asked, and is then labelled by `username`.
   displayName                 String?
   description                 String                          @default("")
   avatarObjectKey             String?
@@ -369,6 +368,8 @@ model WeeklyReportAssistant {
   workspaceId String    @db.Uuid
   userId      String    @db.Uuid
   agentId     String    @unique @db.Uuid
+  /// Versioned writing habits, observations, and open work threads for this user.
+  memory      Json?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -774,6 +775,9 @@ model ConversationMember {
   /// Per-member hide/close: the conversation disappears from this member's list only.
   /// Distinct from archivedAt (whole conversation) and leftAt (membership ended).
   hiddenAt               DateTime?
+  /// When this member first joined the conversation. Kept across a soft leave and rejoin, so the
+  /// channel list orders its members by who joined first. Backfilled approximately by its migration.
+  joinedAt               DateTime          @default(now())
   conversation             Conversation      @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   workspace                Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user                     User?             @relation(fields: [userId], references: [id], onDelete: Cascade)

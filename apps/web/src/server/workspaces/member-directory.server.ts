@@ -17,7 +17,6 @@ export type WorkspaceMemberRecord = {
   role: WorkspaceMemberRole;
   username: string;
   displayName: string | null;
-  fullName: string | null;
   /** Where the browser reads this member's avatar; null when they have not uploaded one. */
   avatarUrl: string | null;
 };

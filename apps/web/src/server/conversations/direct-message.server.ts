@@ -68,11 +68,16 @@ export class SendDirectMessage {
           input.threadRootId,
         ),
     );
-    // The sender's own message never bumps their own badge (the server's count excludes
-    // self-authored messages), so a human-authored DM fans out to the conversation channel
-    // only: the human is the only badge owner for this DM.
-    await this.publishBrowserEvent(message, input.conversationId, {}, input.idempotencyKey);
     if (!message.agentId) throw new Error("message is not an Agent direct message");
+    // The sender is the only human in a DM with an Agent: their own channel carries the signal so
+    // their other tabs and devices refresh the DM row. The message names the sender, so it never
+    // bumps their own badge.
+    await this.publishBrowserEvent(
+      message,
+      input.conversationId,
+      { userId: input.senderUserId, agentId: message.agentId, senderUserId: input.senderUserId },
+      input.idempotencyKey,
+    );
     await this.publishUserMessageToAgent(input.idempotencyKey, input.conversationId, {
       ...message,
       agentId: message.agentId,
@@ -194,7 +199,7 @@ export class SendDirectMessage {
   private async publishBrowserEvent(
     message: { id: string; sequence: number; threadRootId?: string | null },
     conversationId: string,
-    scope: { workspaceId?: string; userId?: string; agentId?: string },
+    scope: { workspaceId?: string; userId?: string; agentId?: string; senderUserId?: string },
     /** A person's send only: lets the sender's page match its pending copy. */
     idempotencyKey?: string,
   ) {
@@ -207,6 +212,7 @@ export class SendDirectMessage {
         ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}),
         ...(scope.userId ? { userId: scope.userId } : {}),
         ...(scope.agentId ? { agentId: scope.agentId } : {}),
+        ...(scope.senderUserId ? { senderUserId: scope.senderUserId } : {}),
         ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
         ...(idempotencyKey ? { idempotencyKey } : {}),
       });

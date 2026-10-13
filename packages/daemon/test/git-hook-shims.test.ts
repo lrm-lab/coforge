@@ -9,8 +9,17 @@ import {
   resetGitHookShimDirectoryCacheForTests,
 } from "#src/code-agent/git-hook-shims";
 
-beforeEach(() => {
+// A shim forwards to whatever hooks directory git resolves, so a host's global or system git
+// config (a global `core.hooksPath`, say) would decide these tests' outcome. Every git and shim
+// process here gets `gitEnvironment`: an empty global config and no system config. It is passed
+// explicitly because Bun.spawn's default environment does not follow later process.env writes.
+let gitEnvironment: Record<string, string | undefined> = {};
+
+beforeEach(async () => {
   resetGitHookShimDirectoryCacheForTests();
+  const emptyGlobalConfig = join(await scratchDirectory("coforge-shim-gitconfig-"), "gitconfig");
+  await writeFile(emptyGlobalConfig, "");
+  gitEnvironment = { ...Bun.env, GIT_CONFIG_GLOBAL: emptyGlobalConfig, GIT_CONFIG_NOSYSTEM: "1" };
 });
 
 const scratchDirectories: string[] = [];
@@ -62,6 +71,7 @@ async function runShim(
 ): Promise<{ exitCode: number; stdout: string }> {
   const process = Bun.spawn([join(shimDirectory, name), ...args], {
     cwd,
+    env: gitEnvironment,
     stdin: stdin !== undefined ? new TextEncoder().encode(stdin) : "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -76,9 +86,13 @@ async function runShim(
 
 async function initRepo(): Promise<string> {
   const repo = await scratchDirectory("coforge-shim-repo-");
-  await Bun.spawn(["git", "init", "--quiet"], { cwd: repo }).exited;
-  await Bun.spawn(["git", "config", "user.email", "test@example.com"], { cwd: repo }).exited;
-  await Bun.spawn(["git", "config", "user.name", "Test"], { cwd: repo }).exited;
+  await Bun.spawn(["git", "init", "--quiet"], { cwd: repo, env: gitEnvironment }).exited;
+  await Bun.spawn(["git", "config", "user.email", "test@example.com"], {
+    cwd: repo,
+    env: gitEnvironment,
+  }).exited;
+  await Bun.spawn(["git", "config", "user.name", "Test"], { cwd: repo, env: gitEnvironment })
+    .exited;
   return repo;
 }
 
@@ -113,7 +127,10 @@ test("the shim honors a repository-local core.hooksPath (husky-style)", async ()
     join(repo, ".husky", "_", "pre-commit"),
     `#!/bin/sh\necho ran > "${marker}"\n`,
   );
-  await Bun.spawn(["git", "config", "core.hooksPath", ".husky/_"], { cwd: repo }).exited;
+  await Bun.spawn(["git", "config", "core.hooksPath", ".husky/_"], {
+    cwd: repo,
+    env: gitEnvironment,
+  }).exited;
   const result = await runShim(shimDirectory, "pre-commit", [], repo);
   expect(result.exitCode).toBe(0);
   expect((await readFile(marker, "utf8")).trim()).toBe("ran");
@@ -142,7 +159,10 @@ test("the shim exits without recursing when the repository's own hooksPath resol
     await scratchDirectory("coforge-shim-root-"),
   ))!;
   const repo = await initRepo();
-  await Bun.spawn(["git", "config", "core.hooksPath", shimDirectory], { cwd: repo }).exited;
+  await Bun.spawn(["git", "config", "core.hooksPath", shimDirectory], {
+    cwd: repo,
+    env: gitEnvironment,
+  }).exited;
   const result = await runShim(shimDirectory, "pre-commit", [], repo);
   expect(result.exitCode).toBe(0);
 });
@@ -165,7 +185,7 @@ test("the prepare-commit-msg shim runs coforge git prepare-commit-msg before for
   );
   const process = Bun.spawn([join(shimDirectory, "prepare-commit-msg"), "MSG_FILE", "message"], {
     cwd: repo,
-    env: { ...Bun.env, PATH: `${fakeCliDirectory}:${Bun.env.PATH}` },
+    env: { ...gitEnvironment, PATH: `${fakeCliDirectory}:${Bun.env.PATH}` },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",

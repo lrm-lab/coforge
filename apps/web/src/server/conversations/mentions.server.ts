@@ -29,7 +29,7 @@ export const BROWSER_MESSAGE_MENTIONS_SELECT = {
     handle: true,
     member: {
       select: {
-        user: { select: { displayName: true, fullName: true } },
+        user: { select: { displayName: true } },
         agent: { select: { displayName: true } },
       },
     },
@@ -41,7 +41,7 @@ export const BROWSER_MESSAGE_MENTIONS_SELECT = {
  * soft-deleted; an absent/blank display name falls back to the stored handle. */
 export type BrowserMessageMentionRow = MessageMentionRef & {
   member: {
-    user: { displayName: string | null; fullName: string | null } | null;
+    user: { displayName: string | null } | null;
     agent: { displayName: string | null } | null;
   };
 };
@@ -56,7 +56,6 @@ export function browserMessageMention(row: BrowserMessageMentionRow) {
       row.kind === "user"
         ? humanLabel({
             displayName: row.member.user?.displayName,
-            fullName: row.member.user?.fullName ?? null,
             username: row.handle,
           })
         : row.member.agent?.displayName?.trim() || row.handle,

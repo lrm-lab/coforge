@@ -34,7 +34,7 @@ card's `aria-busy` saving state to clear; optimistic movement is not persistence
 The final combined run passed on 2026-09-14: **1 pass, 0 fail, 20 assertions**,
 55.40 seconds. Its inspected screenshot
 is `.amp/in/artifacts/native-browser-task-done.png`; the card truncates the owner
-visually, while the DOM assertion checks the full name.
+visually, while the DOM assertion checks the name.
 
 Agent-originated creation is now a separate phase in the same real conversation.
 The human asks for a new follow-up subtask with a unique `FOLLOWUP_...` title,

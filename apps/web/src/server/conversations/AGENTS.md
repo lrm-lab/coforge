@@ -28,13 +28,21 @@ These rules apply to `src/server/conversations/`.
   `viewerDirectConversationSql` in the same file. Change the two together.
   A DM the viewer closed comes back when someone other than them posts a
   top-level message after the close.
+- `PublicChannels.list` also returns each channel's last top-level message with its sender, its
+  first six active members by `joinedAt` (`channel-list-preview.server.ts`), and whether the viewer
+  has an unread @mention there; each is one grouped query for all listed channels, never per channel.
+- A human's send in a DM with an Agent signals the viewer's own channel with
+  `senderUserId` set (`SendDirectMessage.execute`), for the same reason.
 - `direct-conversation-peer.server.ts` owns who a DM is with as every DM
   surface shows it (the sidebar, the Activity inbox): an Agent, or a member by
   the DM's key, still named after they leave the Workspace.
 - `UserDirectConversations` (`user-direct-conversations.server.ts`) owns
   direct conversations between Workspace members (and a member with
   themself): one per pair and sending in it. It never delivers to an
-  Agent; its list signal goes only to the other member, never the sender.
+  Agent. Its message signal goes to every member's own channel, the sender's
+  included, each naming the other person (`peerUserId`) and the sender
+  (`senderUserId`), so the sender's other tabs and devices refresh the DM row
+  while the sender's own badge never counts it.
 - `server/db/repositories/direct-conversation.repositories.server.ts` owns
   thread root validation, target-scoped ranges, Agent read positions, Agent
   target-scoped reads, and eligible-notification recovery. The Agent HTTPS

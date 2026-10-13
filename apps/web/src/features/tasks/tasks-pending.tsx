@@ -49,7 +49,7 @@ const PLACEHOLDERS: Record<TaskStatus, number> = {
  */
 export function TasksPending({ layout }: { layout?: TaskLayout }) {
   return (
-    <main className="flex h-svh max-h-svh min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary">
+    <main className="flex h-full max-h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary">
       <PageHeader heading={m.tasks_tab()} />
       <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 border-b border-secondary px-4 py-1.5 md:px-6">
         <Button size="sm" color="tertiary" iconLeading={FilterLines} isDisabled>

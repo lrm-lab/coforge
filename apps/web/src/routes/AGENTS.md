@@ -16,7 +16,7 @@ These rules apply to `src/routes/`.
   `features/auth/auth-split-layout.tsx`. A signed-in User in no Workspace is sent
   from `/` and from a `/w/<slug>` they cannot open to `workspaces/new`. A page that needs sign-in sends
   people to `/login?returnTo=<its path>`.
-- A signed-in User with no `fullName` is asked for one once, at `welcome?returnTo=<page>`: sign-in
+- A signed-in User with no display name is asked for one once, at `welcome?returnTo=<page>`: sign-in
   sends them there before it makes their personal Workspace, and `/w/$workspaceSlug` (its loader),
   `workspaces/new` and `join/$token` send them there with `nameStepRedirect`, so every way in makes
   that Workspace after the answer. `oauth/verify` is not gated: approving a Computer needs no name.

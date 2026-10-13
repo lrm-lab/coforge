@@ -3,7 +3,6 @@ import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
-  ChevronSelectorVertical,
   CheckSquare as ListTodo,
   File02 as FileText,
   Folder,
@@ -21,7 +20,10 @@ import { Avatar } from "#src/components/base/avatar/avatar";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
 import { MobileDrawerProvider } from "#src/components/layout/sidebar/mobile-header";
-import { SidebarMobileDrawer } from "#src/components/layout/sidebar/sidebar-channels";
+import {
+  SidebarExpanded,
+  SidebarMobileDrawer,
+} from "#src/components/layout/sidebar/sidebar-expanded";
 import { UnreadDot } from "#src/components/ui/unread-marker";
 import { rememberRecordsLastPath, recordsNavHref } from "#src/features/records/records-last-path";
 import {
@@ -190,24 +192,32 @@ export function AppShell({
       : pathname === item.bareHref || pathname.startsWith(`${item.bareHref}/`),
   )?.href;
   const onSidebarClickCapture = useSpaNavigation();
+  const workspaceSwitcher = (
+    <WorkspaceSwitcher
+      workspaces={workspaces}
+      current={currentWorkspace}
+      onSelect={onSelectWorkspace}
+      onCreate={onCreateWorkspace}
+    />
+  );
 
   return (
     <MobileDrawerProvider>
-      <div className="flex h-svh flex-col bg-primary font-body antialiased lg:flex-row">
+      <div className="flex h-svh flex-col bg-primary font-body antialiased lg:flex-row lg:bg-(image:--sidebar-gradient)">
         {/* Each sidebar is `fixed` + a spacer div reserving its width in flow;
-          `contents` keeps that pair as direct flex items of this `lg:flex` shell. */}
+          `contents` keeps that pair as direct flex items of this `lg:flex` shell. The drawer is
+          mobile only; on desktop `sidebar-collapsed` on <html> picks the expanded one or the rail. */}
         <div onClickCapture={onSidebarClickCapture} className="contents">
           <SidebarMobileDrawer
             activeUrl={activeUrl}
             items={navItems}
-            subheader={
-              <WorkspaceSwitcher
-                workspaces={workspaces}
-                current={currentWorkspace}
-                onSelect={onSelectWorkspace}
-                onCreate={onCreateWorkspace}
-              />
-            }
+            subheader={workspaceSwitcher}
+            footer={<UserMenuCard base={base} user={user} onSignOut={onSignOut} />}
+          />
+          <SidebarExpanded
+            activeUrl={activeUrl}
+            items={navItems}
+            subheader={workspaceSwitcher}
             footer={<UserMenuCard base={base} user={user} onSignOut={onSignOut} />}
           />
           <SidebarRail
@@ -226,7 +236,13 @@ export function AppShell({
           />
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+        {/* On desktop the content is one white card inset 8px from the sidebar's background; a page
+            made of several panels (Chat) marks itself `data-panel-cards` and draws a card per panel. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
+            {children}
+          </div>
+        </div>
       </div>
     </MobileDrawerProvider>
   );
@@ -251,6 +267,8 @@ function UserMenuCard({
       alt={user.name}
       initials={avatarInitial(user.name)}
       contentClassName={avatarToneClassName(user.name)}
+      rounded={compact}
+      className={compact ? undefined : "rounded-lg"}
     />
   );
   return (
@@ -265,22 +283,19 @@ function UserMenuCard({
       ) : (
         <AriaButton
           aria-label={m.controls_current_user()}
-          className="relative flex w-full items-center gap-3 rounded-xl p-3 text-left outline-focus-ring ring-1 ring-secondary transition duration-100 ease-linear ring-inset hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="relative flex w-full items-center gap-3 rounded-xl p-2 text-left outline-focus-ring transition duration-100 ease-linear hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 aria-expanded:bg-sidebar-accent"
         >
           {avatar}
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
-            {user.name}
-          </span>
-          <ChevronSelectorVertical
-            aria-hidden="true"
-            className="size-4 shrink-0 text-fg-quaternary"
-          />
+          <UserIdentity user={user} />
         </AriaButton>
       )}
-      <Dropdown.Popover placement={compact ? "right bottom" : "top left"} className="w-64">
-        <div className="border-b border-secondary px-3.5 py-3">
-          <p className="truncate text-sm font-semibold text-primary">{user.name}</p>
-          {user.email ? <p className="truncate text-xs text-tertiary">{user.email}</p> : null}
+      <Dropdown.Popover
+        placement={compact ? "right bottom" : "top left"}
+        className={compact ? "w-64" : "w-(--trigger-width) min-w-56"}
+      >
+        <div className="flex items-center gap-3 border-b border-secondary px-3.5 py-3">
+          {compact ? null : avatar}
+          <UserIdentity user={user} />
         </div>
         <Dropdown.Menu
           onAction={(key) => {
@@ -298,5 +313,15 @@ function UserMenuCard({
         </Dropdown.Menu>
       </Dropdown.Popover>
     </Dropdown.Root>
+  );
+}
+
+/** Name over email; the email is absent for an account made with a phone number alone. */
+function UserIdentity({ user }: { user: AppUser }) {
+  return (
+    <span className="grid min-w-0 flex-1">
+      <span className="truncate text-sm font-semibold text-primary">{user.name}</span>
+      {user.email ? <span className="truncate text-sm text-tertiary">{user.email}</span> : null}
+    </span>
   );
 }

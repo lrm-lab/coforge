@@ -350,7 +350,6 @@ describe("PrismaDirectConversationRepository", () => {
         id: "user-1",
         handle: "alice",
         label: "Alice",
-        fullName: undefined,
         description: "",
         avatarUrl: null,
         mentionScore: 0,
@@ -615,11 +614,11 @@ describe("PrismaDirectConversationRepository", () => {
     ).toBe(undefined);
   });
 
-  test("a Task's person owner is named by the label teammates see: display name, full name, then username", async () => {
+  test("a Task's person owner is named by the label teammates see: display name, then username", async () => {
     const owners = [
-      { username: "ada", displayName: "Countess", fullName: "Ada Lovelace" },
-      { username: "grace", displayName: null, fullName: "Grace Hopper" },
-      { username: "alan", displayName: null, fullName: null },
+      { username: "ada", displayName: "Countess" },
+      { username: "grace", displayName: null },
+      { username: "alan", displayName: null },
     ];
     let read = 0;
     const db = {
@@ -665,7 +664,7 @@ describe("PrismaDirectConversationRepository", () => {
 
     expect(ownerLabels).toEqual([
       { displayName: "Countess", handle: "ada" },
-      { displayName: "Grace Hopper", handle: "grace" },
+      { displayName: "grace", handle: "grace" },
       { displayName: "alan", handle: "alan" },
     ]);
   });

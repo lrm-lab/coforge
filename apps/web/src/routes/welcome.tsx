@@ -5,9 +5,9 @@ import { NameStepPage } from "#src/features/auth/name-step-page";
 import { afterSignInHref, safeReturnTo, signInHref } from "#src/features/auth/return-to";
 
 /**
- * The one question of first sign-in: a person's full name. Outside the Workspace layout on
+ * The one question of first sign-in: a person's display name. Outside the Workspace layout on
  * purpose: it is asked before their personal Workspace exists. Sign-in and every page that would
- * make or open that Workspace send a person here while they have no full name, with the page to go
+ * make or open that Workspace send a person here while they have no display name, with the page to go
  * on to as `returnTo`; someone who has one is sent straight on.
  */
 export const Route = createFileRoute("/welcome")({

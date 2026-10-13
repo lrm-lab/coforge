@@ -40,7 +40,8 @@ import {
 import { getLogger } from "@logtape/logtape";
 import type { CodeAgentProbe } from "./contract";
 import { createCodeAgentProvider } from "./registry";
-import { isVersionBelow } from "./version-gate";
+import { isVersionBelow, VERSION_PROBE_TIMEOUT_MS } from "./version-gate";
+import { withDeadline } from "./deadline";
 import { asRecord } from "./json-record";
 import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
 import {
@@ -857,29 +858,27 @@ function within<T>(
   promise: Promise<T>,
   timeoutMs: number = CATALOG_DISCOVERY_TIMEOUT_MS,
 ): Promise<T> {
-  return Promise.race([
+  return withDeadline(
     promise,
-    Bun.sleep(timeoutMs).then(() =>
-      Promise.reject(
-        new CatalogDiscoveryError(`model catalog discovery timed out after ${timeoutMs} ms`),
-      ),
-    ),
-  ]);
+    timeoutMs,
+    () => new CatalogDiscoveryError(`model catalog discovery timed out after ${timeoutMs} ms`),
+  );
 }
 
 /** Collects a `--version` child's output, killing it if it outlives the probe budget. */
 export async function versionProbeOutput(
   process: ReturnType<CodeAgentProbe["spawn"]>,
 ): Promise<{ output: string; exitCode: number }> {
-  return Promise.race([
+  return withDeadline(
     Promise.all([new Response(process.stdout).text(), process.exited]).then(
       ([output, exitCode]) => ({ output, exitCode }),
     ),
-    Bun.sleep(5_000).then(() => {
+    VERSION_PROBE_TIMEOUT_MS,
+    () => {
       process.kill?.();
-      throw new Error("runtime version probe timed out");
-    }),
-  ]);
+      return new Error("runtime version probe timed out");
+    },
+  );
 }
 
 function lastWord(output: string): string | undefined {

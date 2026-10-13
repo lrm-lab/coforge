@@ -59,8 +59,7 @@ import { copyText } from "#src/features/records/report-editor/lib/clipboard";
 import { MessageTask } from "#src/features/tasks/message-task";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
-import { hour12For, type TimeFormat } from "#src/lib/time-format";
-import { dateTimeFormat } from "#src/lib/dates";
+import { clockLabel, dateTimeFormat } from "#src/lib/dates";
 import { gutterClockLabel } from "./gutter-clock-label";
 
 export type MessageView = {
@@ -139,22 +138,6 @@ export function dayLabel(value: Date | string, locale?: string, timeZone?: strin
     year: "numeric",
     month: "short",
     day: "numeric",
-    timeZone,
-  }).format(new Date(value));
-}
-
-/** The time of day a message was sent at, in `timeZone`; empty without a `locale`. */
-export function clockLabel(
-  value: Date | string,
-  locale?: string,
-  timeFormat: TimeFormat | null = null,
-  timeZone?: string,
-): string {
-  if (!locale) return "";
-  return dateTimeFormat(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: hour12For(timeFormat),
     timeZone,
   }).format(new Date(value));
 }

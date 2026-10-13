@@ -11,6 +11,10 @@ import { HIDE_EMPTY_SIDEBAR_SECTIONS_BOOT } from "#src/features/settings/hide-em
 import { readHideEmptySidebarSections } from "#src/features/settings/hide-empty-sidebar-sections";
 import { readMessageFullWidth } from "#src/features/settings/message-width";
 import { readRailLabels } from "#src/features/settings/rail-labels";
+import {
+  SIDEBAR_EXPANDED_BOOT,
+  readSidebarExpanded,
+} from "#src/features/settings/sidebar-expanded";
 
 const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
 
@@ -114,6 +118,14 @@ const PRE_PAINTING_SETTINGS = [
     className: "rail-labels-hidden",
     // the class hides the captions, so it applies when the reader says "do not show"
     classApplies: () => !readRailLabels(),
+  },
+  {
+    name: "expanded sidebar",
+    fragment: SIDEBAR_EXPANDED_BOOT,
+    key: "coforge-sidebar-expanded",
+    className: "sidebar-collapsed",
+    // the class collapses the sidebar to its rail, so it applies when the reader says "not expanded"
+    classApplies: () => !readSidebarExpanded(),
   },
   {
     name: "hidden empty sidebar sections",

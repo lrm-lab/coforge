@@ -107,18 +107,30 @@ function fixture(options: { member?: boolean; newestSequence?: number } = {}) {
         options.newestSequence === undefined ? null : { sequence: options.newestSequence },
     },
     $transaction: async (run: (tx: unknown) => Promise<unknown>) => run(db),
-    // The per-member pin lock finds the Workspace membership; the other raw read is the unread
-    // query, whose one row also answers the lock.
-    $queryRaw: async () => [
-      {
-        conversationId: CHANNEL_ID,
-        unread:
-          member.unreadFromSequence !== null && options.newestSequence !== undefined
-            ? Math.max(1, (options.newestSequence ?? 0) - member.unreadFromSequence + 1)
-            : 0,
-        arrivedSinceClosed: activity.arrivedSinceClosed,
-      },
-    ],
+    // Each raw query is recognised by a fragment only it contains, and an unrecognised one fails the
+    // test rather than being answered by accident:
+    // - the row locks (`FOR UPDATE`, `FOR NO KEY UPDATE`) only need a row to exist;
+    // - the unread query is the one that aliases `"arrivedSinceClosed"`;
+    // - the channel preview reads (last message, members) find nothing in this fixture.
+    $queryRaw: async (query: unknown) => {
+      const sql = Array.isArray(query)
+        ? query.join("?")
+        : String((query as { sql?: string } | null)?.sql);
+      if (/FOR (NO KEY )?UPDATE$/.test(sql.trim())) return [{ id: CHANNEL_ID }];
+      if (sql.includes('"arrivedSinceClosed"'))
+        return [
+          {
+            conversationId: CHANNEL_ID,
+            unread:
+              member.unreadFromSequence !== null && options.newestSequence !== undefined
+                ? Math.max(1, (options.newestSequence ?? 0) - member.unreadFromSequence + 1)
+                : 0,
+            arrivedSinceClosed: activity.arrivedSinceClosed,
+          },
+        ];
+      if (sql.includes("LATERAL")) return [];
+      throw new Error(`unexpected raw query in the pin fixture: ${sql.slice(0, 80)}`);
+    },
   } as unknown as PrismaClient;
   return { channels: new PublicChannels(db), member, pins, writes, activity };
 }

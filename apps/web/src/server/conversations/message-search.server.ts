@@ -118,7 +118,7 @@ export async function searchMessages(
       ? (
           await db.user.findMany({
             where: { id: { in: peerIds } },
-            select: { id: true, username: true, displayName: true, fullName: true },
+            select: { id: true, username: true, displayName: true },
           })
         ).map((user) => [
           user.id,

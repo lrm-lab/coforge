@@ -1,30 +1,19 @@
-/**
- * The names a person can be called by. `fullName` is required (a `null` when there is none) so a
- * query that builds a label from a User row cannot forget to select it: the type check finds it.
- */
+/** The names a person can be called by. */
 export type HumanNames = {
   displayName?: string | null;
-  fullName: string | null;
   username: string;
 };
 
 /**
- * The one name every surface shows for a person: their display name, else their full name, else
- * their username. The username fallback serves only a person who has not been asked for a name
- * yet; it is what `@handle` looks like, not who they are.
+ * The one name every surface shows for a person: their display name (asked for at first
+ * sign-in), else their username. The username fallback serves only a person who has not
+ * been asked for a name yet; it is what `@handle` looks like, not who they are.
  *
  * Pass the row (`humanLabel(row.user)`) rather than picking fields, so a caller changes only
  * when the rule gains a name. An Agent has its own rule (`displayName || name`); this is not it.
  */
 export function humanLabel(names: HumanNames): string {
-  return names.displayName?.trim() || names.fullName?.trim() || names.username;
-}
-
-/** The person's full name when a display name is shown in its place, else `undefined`: a search
- * for people matches it too, so someone known by a nickname is still found by their own name. */
-export function fullNameBehindLabel(names: HumanNames): string | undefined {
-  const fullName = names.fullName?.trim();
-  return fullName && fullName !== humanLabel(names) ? fullName : undefined;
+  return names.displayName?.trim() || names.username;
 }
 
 // Base sensitivity: "Alex" and "alex" are one name to a reader, so the username settles the tie.

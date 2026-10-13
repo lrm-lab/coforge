@@ -11,7 +11,7 @@ export const MESSAGE_REACTIONS_SELECT = {
         userId: true,
         agentId: true,
         agent: { select: { name: true } },
-        user: { select: { username: true, displayName: true, fullName: true } },
+        user: { select: { username: true, displayName: true } },
       },
     },
   },
@@ -23,7 +23,7 @@ export type MessageReactionRow = {
     userId: string | null;
     agentId: string | null;
     agent: { name: string } | null;
-    user: { username: string; displayName: string | null; fullName: string | null } | null;
+    user: { username: string; displayName: string | null } | null;
   };
 };
 

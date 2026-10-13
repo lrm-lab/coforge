@@ -25,6 +25,11 @@ export type DirectRow = {
   pinSortOrder: number | null;
   hidden: boolean;
   unreadCount: number;
+  /** When the DM's last message was sent (ISO), or `null` while the DM has no message yet. */
+  lastMessageAt: string | null;
+  /** The start of the DM's last message, for the row's second line. `""` when that message's body
+   * is empty; `null` only when the DM has no top-level message. */
+  lastMessagePreview: string | null;
 };
 
 /** One row per DM the preferences list, in their order, with its unread count. */
@@ -34,7 +39,7 @@ export function directRowsOf(
 ): DirectRow[] {
   const pins = new Map(preferences.pinned.map((pin) => [pin.conversationId, pin.sortOrder]));
   const hidden = new Set(preferences.hidden);
-  return preferences.conversations.map(({ conversationId, peer }, position) => ({
+  return preferences.conversations.map(({ conversationId, peer, lastMessage }, position) => ({
     conversationId,
     position,
     peer,
@@ -42,6 +47,8 @@ export function directRowsOf(
     pinSortOrder: pins.get(conversationId) ?? null,
     hidden: hidden.has(conversationId),
     unreadCount: unread[conversationId] ?? 0,
+    lastMessageAt: lastMessage?.createdAt ?? null,
+    lastMessagePreview: lastMessage?.preview ?? null,
   }));
 }
 

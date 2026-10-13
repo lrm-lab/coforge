@@ -6,8 +6,8 @@
  * finishes" (previously duplicated per provider, e.g. Kiro's local `#compacting` de-dup).
  *
  * One instance is shared by the whole daemon runtime, keyed by agentId (an Agent has at most one
- * active launch's compaction in flight at a time, matching how `#lastBusyActivity` and friends in
- * runtime.ts are already keyed).
+ * active launch's compaction in flight at a time, matching how the last busy Activity in
+ * `daemon-runtime/agent-activity-publisher.ts` is already keyed).
  */
 
 /** How long a compaction can stay "active" with no finish signal before it is considered stale. */

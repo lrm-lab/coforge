@@ -20,9 +20,17 @@ const grace = {
 };
 const preferences = {
   conversations: [
-    { conversationId: "dm-helper", peer: { kind: "agent" as const, agentId: "helper" } },
-    { conversationId: "dm-grace", peer: grace },
-    { conversationId: "dm-scout", peer: { kind: "agent" as const, agentId: "scout" } },
+    {
+      conversationId: "dm-helper",
+      peer: { kind: "agent" as const, agentId: "helper" },
+      lastMessage: null,
+    },
+    { conversationId: "dm-grace", peer: grace, lastMessage: null },
+    {
+      conversationId: "dm-scout",
+      peer: { kind: "agent" as const, agentId: "scout" },
+      lastMessage: null,
+    },
   ],
   pinned: [{ conversationId: "dm-helper", sortOrder: 2 }],
   hidden: ["dm-helper", "dm-scout"],
@@ -39,6 +47,8 @@ test("DM preferences and unread counts become one row per conversation", () => {
       pinSortOrder: 2,
       hidden: true,
       unreadCount: 3,
+      lastMessageAt: null,
+      lastMessagePreview: null,
     },
     {
       conversationId: "dm-grace",
@@ -48,6 +58,8 @@ test("DM preferences and unread counts become one row per conversation", () => {
       pinSortOrder: null,
       hidden: false,
       unreadCount: 1,
+      lastMessageAt: null,
+      lastMessagePreview: null,
     },
     {
       conversationId: "dm-scout",
@@ -57,7 +69,32 @@ test("DM preferences and unread counts become one row per conversation", () => {
       pinSortOrder: null,
       hidden: true,
       unreadCount: 0,
+      lastMessageAt: null,
+      lastMessagePreview: null,
     },
+  ]);
+});
+
+test("a DM row carries its last message's time and preview, and none when the DM has no message yet", () => {
+  // The server returns `lastMessage` per DM; the row keeps its instant and its preview as given.
+  const withMessage = {
+    conversations: [
+      {
+        conversationId: "dm-helper",
+        peer: { kind: "agent", agentId: "helper" },
+        lastMessage: { createdAt: "2026-10-09T08:00:00.000Z", preview: "Ship the fix" },
+      },
+      { conversationId: "dm-grace", peer: grace, lastMessage: null },
+    ],
+    pinned: [],
+    hidden: [],
+  } as unknown as Parameters<typeof directRowsOf>[0];
+  const rows = directRowsOf(withMessage, {});
+  expect(
+    rows.map(({ lastMessageAt, lastMessagePreview }) => ({ lastMessageAt, lastMessagePreview })),
+  ).toEqual([
+    { lastMessageAt: "2026-10-09T08:00:00.000Z", lastMessagePreview: "Ship the fix" },
+    { lastMessageAt: null, lastMessagePreview: null },
   ]);
 });
 

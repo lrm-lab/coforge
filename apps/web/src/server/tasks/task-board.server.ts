@@ -100,7 +100,7 @@ const MEMBER_SELECT = {
   id: true,
   userId: true,
   agentId: true,
-  user: { select: { username: true, displayName: true, fullName: true } },
+  user: { select: { username: true, displayName: true } },
   agent: { select: { name: true, displayName: true } },
 } satisfies Prisma.ConversationMemberSelect;
 /** One conversation of one Workspace: where a Task lives and where its notices go. */

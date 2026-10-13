@@ -8,7 +8,7 @@ import { BackToComputers } from "./back-to-computers";
 
 export function ComputersPending() {
   return (
-    <main aria-busy="true" className="flex h-svh min-w-0">
+    <main aria-busy="true" className="flex h-full min-w-0">
       <p role="status" className="sr-only">
         {m.computer_loading()}
       </p>

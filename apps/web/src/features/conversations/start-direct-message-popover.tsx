@@ -83,7 +83,7 @@ function DirectMessagePicker({ onDone }: { onDone: () => void }) {
       id: "people",
       label: m.member_person(),
       members: (directory.data?.people ?? [])
-        .filter((person) => matches(person.name, person.fullName))
+        .filter((person) => matches(person.name))
         .map((person) => ({
           ...person,
           name:

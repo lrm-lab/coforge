@@ -13,7 +13,7 @@ export const getAuthenticationStatus = createServerFn({ method: "GET" }).handler
 
 /**
  * How the signed-in person's account is named (`accountLabel`) and whether they have been asked for
- * a full name yet, or null signed out: for pages that work either way. An account with no email is
+ * a name yet, or null signed out: for pages that work either way. An account with no email is
  * still signed in, so this is not an email.
  */
 export const getSignedInAccount = createServerFn({ method: "GET" }).handler(async () => {

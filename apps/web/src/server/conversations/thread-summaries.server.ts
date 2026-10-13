@@ -103,7 +103,6 @@ export async function readWindowThreads(
                 select: {
                   username: true,
                   displayName: true,
-                  fullName: true,
                   avatarObjectKey: true,
                 },
               },

@@ -43,7 +43,7 @@ export function ProjectDetail({
   const create = useServerFn(createPublicChannel);
   const [creating, setCreating] = useState(false);
   return (
-    <main className="flex h-svh min-w-0 flex-col bg-primary">
+    <main className="flex h-full min-w-0 flex-col bg-primary">
       <PageHeader
         heading={project.name}
         meta={

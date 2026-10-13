@@ -82,11 +82,9 @@ interface SettingsContentProps {
   githubWrongAccount?: boolean;
   onSectionChange?: (section: SettingsSection) => void;
   profile: {
-    /** The name teammates see: the display name, else the full name. */
+    /** The name teammates see: the display name. */
     name: string;
     /** Null until the person has been asked for it. */
-    fullName: string | null;
-    /** The optional nickname shown instead of the full name; null when there is none. */
     displayName: string | null;
     /** Null for an account made with a phone number alone. */
     email: string | null;
@@ -101,7 +99,6 @@ interface SettingsContentProps {
       role: string;
       username: string;
       displayName: string | null;
-      fullName: string | null;
       avatarUrl: string | null;
     }>;
   };
@@ -117,11 +114,7 @@ interface SettingsContentProps {
   browserNotificationPermission: NotificationPermission | "unsupported";
   browserNotificationsConfigured: boolean;
   showAddToHomeScreenGuide: boolean;
-  onProfileSave: (profile: {
-    fullName: string;
-    displayName: string;
-    description: string;
-  }) => Promise<void>;
+  onProfileSave: (profile: { displayName: string; description: string }) => Promise<void>;
   onAvatarUpload: (file: File) => Promise<void>;
   onAvatarRemove: () => Promise<void>;
   onLocaleChange: (locale: Locale) => void;
@@ -175,7 +168,7 @@ export function SettingsContent(props: SettingsContentProps) {
   }
 
   return (
-    <main className="flex h-svh min-w-0">
+    <main className="flex h-full min-w-0">
       <nav
         aria-label={m.settings_title()}
         className={cn(
@@ -339,7 +332,6 @@ function AccountSettings({
   onAvatarRemove,
 }: SettingsContentProps) {
   const [editing, setEditing] = useState(false);
-  const [fullName, setFullName] = useState(profile.fullName ?? "");
   const [displayName, setDisplayName] = useState(profile.displayName ?? "");
   const [description, setDescription] = useState(profile.description);
   const [saving, guard] = useSubmitGuard();
@@ -364,14 +356,12 @@ function AccountSettings({
 
   useEffect(() => {
     if (!editing) {
-      setFullName(profile.fullName ?? "");
       setDisplayName(profile.displayName ?? "");
       setDescription(profile.description);
     }
-  }, [editing, profile.fullName, profile.displayName, profile.description]);
+  }, [editing, profile.displayName, profile.description]);
 
   function startEditing() {
-    setFullName(profile.fullName ?? "");
     setDisplayName(profile.displayName ?? "");
     setDescription(profile.description);
     setPendingAvatar(null);
@@ -382,7 +372,6 @@ function AccountSettings({
   }
 
   function cancelEditing() {
-    setFullName(profile.fullName ?? "");
     setDisplayName(profile.displayName ?? "");
     setDescription(profile.description);
     setPendingAvatar(null);
@@ -404,7 +393,7 @@ function AccountSettings({
           avatarSaved = true;
           setRemoveAvatar(false);
         }
-        if (profileTextChanged) await onProfileSave({ fullName, displayName, description });
+        if (profileTextChanged) await onProfileSave({ displayName, description });
         setSaveSuccess(true);
         setEditing(false);
       } catch (cause) {
@@ -428,15 +417,11 @@ function AccountSettings({
 
   const avatarChanged = pendingAvatar !== null || removeAvatar;
   const profileTextChanged =
-    fullName !== (profile.fullName ?? "") ||
-    displayName !== (profile.displayName ?? "") ||
-    description !== profile.description;
+    displayName !== (profile.displayName ?? "") || description !== profile.description;
   const changed = avatarChanged || profileTextChanged;
-  // A name the server would refuse is said so here, where it is typed, not as a failed save. The
-  // full name is the one required field; a blank display name means none.
-  const fullNameProblem = nameProblem(fullName);
-  const displayNameProblem = displayName.trim() === "" ? undefined : nameProblem(displayName);
-  const canSave = changed && !saving && !fullNameProblem && !displayNameProblem;
+  // A name the server would refuse is said so here, where it is typed, not as a failed save.
+  const displayNameProblem = nameProblem(displayName);
+  const canSave = changed && !saving && !displayNameProblem;
 
   return (
     <div className="w-full px-4 pb-8 sm:px-6">
@@ -498,34 +483,17 @@ function AccountSettings({
               <p className="mt-2 text-xs text-tertiary">{m.settings_avatar_help()}</p>
 
               <div className="mt-6 grid gap-6 border-t border-secondary pt-6 md:grid-cols-2 xl:grid-cols-3">
-                {/* Slack's split: the full name is required, and the display name is an optional
-                 * nickname teammates see instead of it. */}
-                <Input
-                  label={m.settings_full_name()}
-                  value={fullName}
-                  isRequired
-                  isInvalid={fullNameProblem !== undefined}
-                  hint={
-                    fullNameProblem ? (
-                      <span role="alert">{nameProblemText[fullNameProblem]()}</span>
-                    ) : undefined
-                  }
-                  isDisabled={saving}
-                  onChange={setFullName}
-                />
                 <Input
                   label={m.settings_display_name()}
                   hint={
                     displayNameProblem ? (
                       <span role="alert">{nameProblemText[displayNameProblem]()}</span>
-                    ) : (
-                      m.settings_display_name_hint()
-                    )
+                    ) : undefined
                   }
+                  isRequired
                   isInvalid={displayNameProblem !== undefined}
                   value={displayName}
                   isDisabled={saving}
-                  hideRequiredIndicator
                   onChange={setDisplayName}
                 />
 
@@ -585,7 +553,6 @@ function AccountSettings({
               </div>
             </div>
             <dl className="grid gap-x-8 gap-y-6 border-t border-secondary pt-6 md:grid-cols-2 xl:grid-cols-3">
-              <ProfileValue label={m.settings_full_name()} value={profile.fullName || "-"} />
               <ProfileValue label={m.settings_display_name()} value={profile.displayName || "-"} />
               {profile.email ? (
                 <ProfileValue label={m.settings_email()} value={profile.email} />

@@ -7,7 +7,7 @@ import {
 } from "#src/features/profiles/person-name";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 
-// What a person's name may be, wherever they set it: the full name asked at first sign-in and the
+// What a person's name may be, wherever they set it: the display name asked at first sign-in and the
 // profile's own name are one rule. The server applies it to whatever a form sends, so a name is
 // judged here, once, and a page only shows the problem it names.
 

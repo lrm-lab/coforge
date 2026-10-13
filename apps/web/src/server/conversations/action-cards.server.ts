@@ -262,7 +262,7 @@ export class ActionCards {
         userIds.size
           ? this.db.user.findMany({
               where: { id: { in: [...userIds] } },
-              select: { id: true, username: true, displayName: true, fullName: true },
+              select: { id: true, username: true, displayName: true },
             })
           : Promise.resolve([]),
         agentIds.size

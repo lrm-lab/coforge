@@ -17,7 +17,7 @@ import type { AgentTargetFreshness } from "#src/server/agents/agent-messages.ser
 import { agentHistoryModelSeenBoundary } from "#src/server/agents/agent-history-boundary.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
-import { fullNameBehindLabel, humanLabel, type HumanNames } from "#src/lib/human-label";
+import { humanLabel, type HumanNames } from "#src/lib/human-label";
 import { STORED_USERNAME_SOURCE } from "#src/lib/username-grammar";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
@@ -178,7 +178,7 @@ const TASK_METADATA_SELECT = {
     status: true,
     owner: {
       select: {
-        user: { select: { username: true, displayName: true, fullName: true } },
+        user: { select: { username: true, displayName: true } },
         agent: { select: { name: true, displayName: true, deletedAt: true } },
       },
     },
@@ -546,7 +546,6 @@ const PEER_PROFILE_SELECT = {
   id: true,
   username: true,
   displayName: true,
-  fullName: true,
   avatarObjectKey: true,
 } satisfies Prisma.UserSelect;
 type PeerProfile = Prisma.UserGetPayload<{ select: typeof PEER_PROFILE_SELECT }>;
@@ -1061,7 +1060,6 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
                 id: true,
                 username: true,
                 displayName: true,
-                fullName: true,
                 description: true,
                 avatarObjectKey: true,
               },
@@ -1200,7 +1198,6 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
                 id: member.user.id,
                 handle: member.user.username,
                 label: humanLabel(member.user),
-                fullName: fullNameBehindLabel(member.user),
                 description: member.user.description?.trim() ?? "",
                 avatarUrl: workspaceUserAvatarUrl(
                   workspaceId,

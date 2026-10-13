@@ -4,6 +4,15 @@
   "conversation_loading": "正在加载消息…",
   "channels_title": "频道",
   "channel_create": "创建频道",
+  "channel_start_group": "发起群聊",
+  "channel_group_selected_count": "已选 {count} 人",
+  "channel_group_min_members": "至少选择 {count} 位成员才能创建群聊",
+  "channel_group_finish": "完成",
+  "channel_open": "打开频道",
+  "channel_created_members_failed": "#{name} 已创建，但成员未能添加。",
+  "channel_created": "#{name} 已创建。",
+  "channel_project": "项目",
+  "channel_no_project": "无项目",
   "channel_name": "频道名称",
   "channel_name_hint": "使用小写字母、数字、连字符或下划线，最多 32 个字符。",
   "channel_public": "工作空间内公开",
@@ -184,6 +193,15 @@
       "selectors": ["countPlural"],
       "match": {
         "countPlural=other": "{channel}，{count} 条未读消息"
+      }
+    }
+  ],
+  "channel_unread_mention_accessible": [
+    {
+      "declarations": ["input channel", "input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{channel}，{count} 条未读消息，有人提到了你"
       }
     }
   ],

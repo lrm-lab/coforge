@@ -290,11 +290,7 @@ function SettingsPage() {
     }
   }
 
-  async function changeProfile(input: {
-    fullName: string;
-    displayName: string;
-    description: string;
-  }) {
+  async function changeProfile(input: { displayName: string; description: string }) {
     await saveProfile({ data: input });
     await router.invalidate({ sync: true });
   }

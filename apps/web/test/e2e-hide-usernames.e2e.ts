@@ -8,12 +8,11 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.server";
 
 /**
- * A person is shown by their name, never by their `@username`. Settings → Account edits a required
- * full name and an optional display name (a display name equal to the full name is stored as
- * none, and the username is not shown or editable); Settings → Members, its Invite dialog (the
+ * A person is shown by their name, never by their `@username`. Settings → Account edits one
+ * required display name (the username is not shown or editable); Settings → Members, its Invite dialog (the
  * join link alone, no invite by username), the Members directory and a channel's members page
  * (roster and add view) list people by their names and do not show, or search by, their
- * usernames; a person is still found by the full name a nickname replaced. The Search page's
+ * usernames. The Search page's
  * From filter and its Frequently used direct message name people the same way, while an Agent
  * keeps its `@handle`.
  *
@@ -112,9 +111,9 @@ test("people are shown by their names, and no screen shows a username", async ()
       create: {
         id: DEV_BROWSER_USER.id,
         username: DEV_BROWSER_USER.username,
-        fullName: "Dev Viewer",
+        displayName: "Dev Viewer",
       },
-      update: { fullName: "Dev Viewer", displayName: null },
+      update: { displayName: "Dev Viewer" },
     });
     const workspace = await new PrismaWorkspaceCatalogStore(db).createForUser({
       slug,
@@ -124,9 +123,9 @@ test("people are shown by their names, and no screen shows a username", async ()
     workspaceId = workspace.id;
     const people = [];
     for (const data of [
-      { username: usernames.ada, fullName: "Ada Lovelace" },
-      { username: usernames.grace, fullName: "Grace Hopper", displayName: "Amazing Grace" },
-      { username: usernames.lin, fullName: "Lin Chen", displayName: "Lindy" },
+      { username: usernames.ada, displayName: "Ada Lovelace" },
+      { username: usernames.grace, displayName: "Amazing Grace" },
+      { username: usernames.lin, displayName: "Lindy" },
     ]) {
       const user = await db.user.create({ data });
       memberIds.push(user.id);
@@ -158,28 +157,22 @@ test("people are shown by their names, and no screen shows a username", async ()
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
-    // Settings → Account: the read view names both names and no username.
+    // Settings → Account: the read view shows the one name and no username.
     await browser("open", `${base}/settings?section=account`);
     await waitFor(hydrated(mainButton("Edit")));
     let text = await mainText();
-    check(
-      "account: read view lists Full name and Display name",
-      /Full name/.test(text) && /Display name/.test(text),
-    );
+    check("account: read view lists the Display name", /Display name/.test(text));
     check("account: read view has no Username row", !/Username/i.test(text));
     check("account: read view shows no @username", showsNoUsername(text));
-    check("account: with no display name the full name is the name", /Dev Viewer/.test(text));
+    check("account: the display name is the name", /Dev Viewer/.test(text));
     await shoot("settings-profile");
 
-    // The edit form: a required Full name and an optional Display name, and no username.
+    // The edit form: one required Display name, and no username.
     await browser("eval", `${mainButton("Edit")}.click()`);
     await waitFor(nameFields);
     text = await mainText();
-    check(
-      "account: edit form has Full name and Display name fields",
-      /Full name/.test(text) && /Display name/.test(text),
-    );
-    check("account: edit form says the display name is optional", /Optional/.test(text));
+    check("account: edit form has a Display name field", /Display name/.test(text));
+    check("account: edit form does not call the display name optional", !/Optional/.test(text));
     check(
       "account: edit form has no Username field or 'cannot be changed' copy",
       !/Username|cannot be changed/i.test(text),
@@ -191,44 +184,31 @@ test("people are shown by their names, and no screen shows a username", async ()
     const saveDisabled = `${mainButton("Save")}?.disabled === true`;
     for (const [typed, reason] of [
       ["System", "You can't use this name."],
+      ["@bot", "You can't use this name."],
       ["a".repeat(81), "Use 80 characters or fewer."],
       // Blank: an empty fill is ignored by the browser tool, and a space normalizes to nothing.
-      [" ", "Enter your full name."],
+      [" ", "Enter your display name."],
     ] as const) {
-      await browser("find", "label", "Full name", "fill", typed);
+      await browser("find", "label", "Display name", "fill", typed);
       await waitFor(
         `document.querySelector("main")?.innerText.includes(${JSON.stringify(reason)})`,
       );
       check(
-        `account: a full name refused as "${reason}" cannot be saved`,
+        `account: a display name refused as "${reason}" cannot be saved`,
         await evaluate<boolean>(saveDisabled),
       );
     }
-    await browser("find", "label", "Full name", "fill", "Dev Viewer");
-    await browser("find", "label", "Display name", "fill", "@bot");
-    await waitFor(`document.querySelector("main")?.innerText.includes("You can't use this name.")`);
-    check(
-      "account: a display name starting with @ is refused too",
-      await evaluate<boolean>(saveDisabled),
-    );
-    await browser("find", "label", "Display name", "fill", "  ");
-
-    // A display name equal to the full name is no display name; the name is normalized on save.
-    await browser("find", "label", "Full name", "fill", "  Dev   Viewer  Prime ");
-    await browser("find", "label", "Display name", "fill", "Dev Viewer Prime");
+    // The name is normalized on save.
+    await browser("find", "label", "Display name", "fill", "  Dev   Viewer  Prime ");
     await browser("eval", `${mainButton("Save")}.click()`);
     await waitFor(saved);
     let viewer = await db.user.findUniqueOrThrow({ where: { id: DEV_BROWSER_USER.id } });
     check(
-      "account: the full name is stored trimmed and single-spaced",
-      viewer.fullName === "Dev Viewer Prime",
-    );
-    check(
-      "account: a display name equal to the full name is stored as none",
-      viewer.displayName === null,
+      "account: the display name is stored trimmed and single-spaced",
+      viewer.displayName === "Dev Viewer Prime",
     );
 
-    // A real nickname replaces the full name wherever a person is shown.
+    // A changed name is the name wherever a person is shown.
     await browser("eval", `${mainButton("Edit")}.click()`);
     await waitFor(nameFields);
     await browser("find", "label", "Display name", "fill", "Dee");
@@ -236,7 +216,6 @@ test("people are shown by their names, and no screen shows a username", async ()
     await waitFor(saved);
     viewer = await db.user.findUniqueOrThrow({ where: { id: DEV_BROWSER_USER.id } });
     check("account: a display name is stored", viewer.displayName === "Dee");
-    check("account: saving it keeps the full name", viewer.fullName === "Dev Viewer Prime");
     await shoot("settings-profile-saved");
 
     // Settings → Members: people by their names and no @username; the Invite dialog holds the
@@ -321,13 +300,8 @@ test("people are shown by their names, and no screen shows a username", async ()
     };
     text = await search("lovelace");
     check(
-      "channel roster: a person is found by their full name",
+      "channel roster: a person is found by their name",
       text.includes("Ada Lovelace") && !text.includes("Amazing Grace"),
-    );
-    text = await search("hopper");
-    check(
-      "channel roster: a nickname does not hide the full name from search",
-      text.includes("Amazing Grace") && !text.includes("Ada Lovelace"),
     );
     text = await search("zq7k");
     check("channel roster: a username finds nobody", /No matches/.test(text));
@@ -347,10 +321,10 @@ test("people are shown by their names, and no screen shows a username", async ()
       showsNoUsername(text) && !/@[a-z0-9-]/i.test(text),
     );
     await shoot("channel-add-view");
-    await browser("fill", 'input[placeholder="Name"]', "chen");
+    await browser("fill", 'input[placeholder="Name"]', "lind");
     await waitFor(`${panel}.innerText.includes("Lindy")`);
     check(
-      "channel add view: a person is found by their full name",
+      "channel add view: a person is found by their name",
       (await panelText()).includes("Lindy"),
     );
     await browser("fill", 'input[placeholder="Name"]', "zq7k");
@@ -454,14 +428,9 @@ test("people are shown by their names, and no screen shows a username", async ()
     };
     options = await findSender("lovelace");
     check(
-      "from filter: a person is found by their full name",
+      "from filter: a person is found by their name",
       options.some((option) => option.includes("Ada Lovelace")) &&
         !options.some((option) => option.includes("Amazing Grace")),
-    );
-    options = await findSender("hopper");
-    check(
-      "from filter: a nickname does not hide the full name from search",
-      options.some((option) => option.includes("Amazing Grace")),
     );
     options = await findSender("zq7k");
     check(
@@ -510,7 +479,7 @@ test("people are shown by their names, and no screen shows a username", async ()
       await db.user
         .update({
           where: { id: viewerBefore.id },
-          data: { fullName: viewerBefore.fullName, displayName: viewerBefore.displayName },
+          data: { displayName: viewerBefore.displayName },
         })
         .catch(() => {});
     else await db.user.deleteMany({ where: { id: DEV_BROWSER_USER.id } }).catch(() => {});

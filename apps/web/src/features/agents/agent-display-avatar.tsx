@@ -16,6 +16,7 @@ export function AgentDisplayAvatar({
   deleted,
   size = "sm",
   cornerDot = true,
+  className,
 }: {
   name: string;
   /** The Agent's uploaded avatar, when it has one; initials stand in otherwise. */
@@ -30,6 +31,7 @@ export function AgentDisplayAvatar({
   /** Draw the status dot on the avatar's corner. Off where the status already reads inline
    * beside the name (the DM header), so it is not shown twice. */
   cornerDot?: boolean;
+  className?: string;
 }) {
   const view = agentDisplay(display, { stopped });
   return (
@@ -40,6 +42,7 @@ export function AgentDisplayAvatar({
     >
       <Avatar
         size={size}
+        className={className}
         alt=""
         src={src}
         initials={avatarInitial(name)}

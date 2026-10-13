@@ -19,13 +19,13 @@ import {
  * The first sign-in's full-name step, end to end, against real sign-in (a stand-in for Authing's
  * OIDC endpoints and a Web dev server signed in through it, `e2e-sign-in-harness.ts`).
  *
- * - A new person is asked for a full name at `/welcome`, starting from what the provider reported,
+ * - A new person is asked for a display name at `/welcome`, starting from what the provider reported,
  *   before anything is made for them. Empty and too-long names are refused inline. Submitting
- *   lands in the app in a personal Workspace titled with the full name they gave, and they are not
+ *   lands in the app in a personal Workspace titled with the display name they gave, and they are not
  *   asked again.
  * - A phone-number sign-up starts with an empty field (a number is not a name), in Chinese, on a
  *   phone-width screen.
- * - An existing person with no full name is asked once and keeps the Workspace they have.
+ * - An existing person with no display name is asked once and keeps the Workspace they have.
  * - An existing session (one that predates the step) opening a Workspace page is sent to the name
  *   step and back, while `/oauth/verify` (Computer device approval) is not gated.
  *
@@ -49,7 +49,7 @@ const people = {
   },
   // A phone-number sign-up: no email, and the provider's "name" is the number.
   phone: { sub: "e2e-fsn-phone", name: "13800138000" },
-  // Has a Workspace and no full name: an account that predates the step. The provider reports no
+  // Has a Workspace and no display name: an account that predates the step. The provider reports no
   // name, only a nickname, which starts the field instead.
   existing: {
     sub: "e2e-fsn-existing",
@@ -62,7 +62,7 @@ type PersonKey = keyof typeof people;
 const existingSlug = "e2e-fsn-existing";
 const existingWorkspaceName = "Existing Team";
 
-test("a first sign-in is asked for a full name once, and the personal Workspace is titled with it", async () => {
+test("a first sign-in is asked for a display name once, and the personal Workspace is titled with it", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   let stack: Awaited<ReturnType<typeof startSignInStack<PersonKey>>> | undefined;
   const { browser, evaluate, waitFor, button, setInput, submitName } = openBrowser(
@@ -119,7 +119,7 @@ test("a first sign-in is asked for a full name once, and the personal Workspace 
     }
 
     await removeSeeded();
-    // An account that predates the step: it has a Workspace and no full name.
+    // An account that predates the step: it has a Workspace and no display name.
     const existingUser = await db.user.create({ data: { username: "e2e-fsn-existing" } });
     await db.userIdentity.create({
       data: { userId: existingUser.id, provider: "authing", providerSubject: people.existing.sub },
@@ -137,15 +137,15 @@ test("a first sign-in is asked for a full name once, and the personal Workspace 
     await waitFor(onNameStepHere);
     expect(new URL(await evaluate<string>("location.href")).pathname).toBe("/en/welcome");
     expect(await evaluate<string>(`document.querySelector("main h1")?.textContent`)).toBe(
-      "Enter your full name",
+      "Enter your display name",
     );
     expect(await evaluate<string>(`document.querySelector("main label")?.innerText`)).toBe(
-      "Full name",
+      "Display name",
     );
     expect(await fieldValue()).toBe("Grace Hopper E2E");
     // Signed in, but nothing is made for them until they answer.
     const newcomer = await userOf("newcomer");
-    expect(newcomer.fullName).toBeNull();
+    expect(newcomer.displayName).toBeNull();
     expect(await membershipsOf("newcomer")).toHaveLength(0);
     // The page says nothing else: no subtitle, no "signed in as", no display-name field.
     expect(await evaluate<number>(`document.querySelectorAll("main input").length`)).toBe(1);
@@ -153,16 +153,16 @@ test("a first sign-in is asked for a full name once, and the personal Workspace 
       await evaluate<string[]>(
         `document.querySelector("main").innerText.split("\\n").map((line) => line.trim()).filter(Boolean)`,
       ),
-    ).toEqual(["Enter your full name", "Full name", "Continue"]);
+    ).toEqual(["Enter your display name", "Display name", "Continue"]);
     expect(await overflowsSideways()).toBe(false);
     await shoot("01-name-step-desktop-1440.png");
     passed(
-      "a new person is asked for a full name, starting from the provider's name, before anything is made",
+      "a new person is asked for a display name, starting from the provider's name, before anything is made",
     );
 
     // Empty and too-long names are refused inline, under the field, and nothing is saved.
     await submitName("");
-    await waitFor(`${fieldError} === "Enter your full name."`);
+    await waitFor(`${fieldError} === "Enter your display name."`);
     expect(await evaluate<boolean>(`!!document.querySelector("[data-sonner-toast]")`)).toBe(false);
     await shoot("02-empty-error-desktop.png");
     await submitName("a".repeat(81));
@@ -172,7 +172,7 @@ test("a first sign-in is asked for a full name once, and the personal Workspace 
     await submitName("@grace");
     await waitFor(`${fieldError} === "You can't use this name."`);
     await shoot("03b-refused-error-desktop.png");
-    expect((await userOf("newcomer")).fullName).toBeNull();
+    expect((await userOf("newcomer")).displayName).toBeNull();
     // Typing again takes the problem away.
     await setInput(nameFieldSelector, "Grace");
     await waitFor(`${fieldError} === null`);
@@ -186,7 +186,7 @@ test("a first sign-in is asked for a full name once, and the personal Workspace 
     await browser("eval", `${button("Continue")}.click()`);
     await waitFor(inAppAt("/w/"));
     const named = await userOf("newcomer");
-    expect(named.fullName).toBe("Grace Hopper");
+    expect(named.displayName).toBe("Grace Hopper");
     const [personal, ...more] = await membershipsOf("newcomer");
     expect(more).toEqual([]);
     expect(personal?.role).toBe("owner");
@@ -194,7 +194,9 @@ test("a first sign-in is asked for a full name once, and the personal Workspace 
     facts.personalWorkspace = { slug: personal?.workspace.slug, name: personal?.workspace.name };
     await waitFor(`document.body.innerText.includes("This is the start of the channel")`);
     await shoot("04-personal-workspace-desktop.png");
-    passed("submitting lands in the app in a personal Workspace titled with the full name given");
+    passed(
+      "submitting lands in the app in a personal Workspace titled with the display name given",
+    );
 
     // Signing in again, or opening /welcome, does not ask again.
     await signInAs("newcomer");
@@ -216,24 +218,24 @@ test("a first sign-in is asked for a full name once, and the personal Workspace 
     await browser("open", `${origin}/zh-CN/welcome`);
     await waitFor(onNameStepHere);
     expect(await evaluate<string>(`document.querySelector("main h1")?.textContent`)).toBe(
-      "输入你的全名",
+      "输入你的昵称",
     );
-    expect(await evaluate<string>(`document.querySelector("main label")?.innerText`)).toBe("全名");
+    expect(await evaluate<string>(`document.querySelector("main label")?.innerText`)).toBe("昵称");
     await submitName("", "继续");
-    await waitFor(`${fieldError} === "请输入你的全名。"`);
+    await waitFor(`${fieldError} === "请输入你的昵称。"`);
     await shoot("06-empty-error-zh-CN-390.png");
     await submitName("安".repeat(81), "继续");
-    await waitFor(`${fieldError} === "全名最多 80 个字符。"`);
+    await waitFor(`${fieldError} === "昵称最多 80 个字符。"`);
     expect(await overflowsSideways()).toBe(false);
     await shoot("07-too-long-error-zh-CN-390.png");
     await submitName("@安栋", "继续");
     await waitFor(`${fieldError} === "不能使用这个名字。"`);
     await submitName("安栋", "继续");
     await waitFor(inAppAt("/w/"));
-    expect((await userOf("phone")).fullName).toBe("安栋");
+    expect((await userOf("phone")).displayName).toBe("安栋");
     passed("the page and its errors are in Chinese under /zh-CN, and fit a phone");
 
-    // ── An existing person with no full name: asked once, and keeps their Workspace ─────────────
+    // ── An existing person with no display name: asked once, and keeps their Workspace ─────────────
     await browser("set", "viewport", "1440", "900");
     await signInAs("existing", `/w/${existingSlug}`);
     await waitFor(onNameStepHere);
@@ -244,7 +246,7 @@ test("a first sign-in is asked for a full name once, and the personal Workspace 
     await shoot("08-existing-account-asked-desktop.png");
     await submitName("Existing Person");
     await waitFor(inAppAt(`/w/${existingSlug}`));
-    expect((await userOf("existing")).fullName).toBe("Existing Person");
+    expect((await userOf("existing")).displayName).toBe("Existing Person");
     const [kept, ...extra] = await membershipsOf("existing");
     expect(extra).toEqual([]);
     expect(kept?.workspace.name).toBe(existingWorkspaceName);
@@ -254,9 +256,9 @@ test("a first sign-in is asked for a full name once, and the personal Workspace 
     passed("an existing account is asked once and keeps the Workspace it has");
 
     // ── An existing session that predates the step ──────────────────────────────────────────────
-    // The session is still valid, and the person has no full name: a page in a Workspace sends
+    // The session is still valid, and the person has no display name: a page in a Workspace sends
     // them to the name step and back to that page; Computer device approval is not gated.
-    await db.user.update({ where: { id: existingUser.id }, data: { fullName: null } });
+    await db.user.update({ where: { id: existingUser.id }, data: { displayName: null } });
     await browser("open", `${origin}/en/oauth/verify`);
     await waitFor(
       `location.pathname === "/oauth/verify" && document.body.innerText.includes("Signed in as")`,
@@ -270,7 +272,7 @@ test("a first sign-in is asked for a full name once, and the personal Workspace 
     await shoot("09-existing-session-sent-to-name-step.png");
     await submitName("Existing Person");
     await waitFor(`location.pathname.endsWith("/w/${existingSlug}/tasks")`);
-    expect((await userOf("existing")).fullName).toBe("Existing Person");
+    expect((await userOf("existing")).displayName).toBe("Existing Person");
     passed("an existing session opening a Workspace page is asked once and returns to that page");
 
     // ── A session that outlived its user ────────────────────────────────────────────────────────

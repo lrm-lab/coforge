@@ -76,17 +76,21 @@ export const listChannelNames = createServerFn({ method: "GET" })
     return { streamPositions, names: data };
   });
 
+/** Creates a channel, then adds the people and Agents picked for it (`PublicChannels.createWithMembers`).
+ * `membersAddFailed` says the channel exists but the picked members were not added. */
 export const createPublicChannel = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(
     z.object({
       name: z.string().trim().regex(CHANNEL_NAME_PATTERN),
       projectId: z.uuid().optional(),
+      userIds: z.array(z.uuid()).max(100).default([]),
+      agentIds: z.array(z.uuid()).max(100).default([]),
     }),
   )
   .handler(async ({ data, context }) => {
     const { channels, workspaceId, userId } = channelScope(context);
-    return channels.create(workspaceId, userId, data.name, data.projectId);
+    return channels.createWithMembers(workspaceId, userId, data);
   });
 
 export const loadPublicChannel = createServerFn({ method: "GET" })
@@ -477,7 +481,6 @@ export const sendPublicChannelMessage = createServerFn({ method: "POST" })
       // session is the fallback when this person has set no display name.
       senderName: humanLabel({
         displayName: message.sender?.user?.displayName,
-        fullName: message.sender?.user?.fullName ?? null,
         username,
       }),
       senderHandle: username,

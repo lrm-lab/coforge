@@ -1,3 +1,4 @@
+import { withDeadline } from "./deadline";
 import { agentEnvironment } from "./environment";
 
 export type CatalogCommandResult = Readonly<{
@@ -32,15 +33,14 @@ export async function runCatalogCommand(
   });
 
   try {
-    return await Promise.race([
+    return await withDeadline(
       Promise.all([new Response(child.stdout).text(), child.exited]).then(([output, exitCode]) => ({
         output,
         exitCode,
       })),
-      Bun.sleep(timeoutMs).then(() => {
-        throw new Error(`catalog command timed out after ${timeoutMs} ms`);
-      }),
-    ]);
+      timeoutMs,
+      () => new Error(`catalog command timed out after ${timeoutMs} ms`),
+    );
   } finally {
     child.kill();
   }

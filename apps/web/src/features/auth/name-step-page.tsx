@@ -5,7 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { AuthSplitLayout } from "#src/features/auth/auth-split-layout";
-import { submitFullName } from "#src/features/auth/first-sign-in.functions";
+import { submitDisplayName } from "#src/features/auth/first-sign-in.functions";
 import { afterSignInHref } from "#src/features/auth/return-to";
 import {
   checkPersonName,
@@ -24,7 +24,7 @@ const problemText: Record<Problem, () => string> = {
 };
 
 /**
- * Where a signed-in person who has not been asked for a full name lands once, before anything is
+ * Where a signed-in person who has not been asked for a display name lands once, before anything is
  * created for them. Continuing saves the name, makes their personal Workspace, titled with it, and
  * goes on to `returnTo` (or the app's own start page).
  */
@@ -36,9 +36,9 @@ export function NameStepPage({
   prefill: string;
   returnTo: string | undefined;
 }) {
-  const submit = useServerFn(submitFullName);
+  const submit = useServerFn(submitDisplayName);
   const navigate = useNavigate();
-  const [fullName, setFullName] = useState(prefill);
+  const [displayName, setDisplayName] = useState(prefill);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // Set at once, where `submitting` only changes on the next render: a second Enter in between
@@ -49,7 +49,7 @@ export function NameStepPage({
     event.preventDefault();
     if (inFlight.current) return;
     // The server judges the name again; asking here first only spares a round trip.
-    const checked = checkPersonName(fullName);
+    const checked = checkPersonName(displayName);
     if (!checked.ok) return setProblem(checked.problem);
     setProblem(null);
     inFlight.current = true;
@@ -61,7 +61,7 @@ export function NameStepPage({
     };
     let result: Awaited<ReturnType<typeof submit>> | undefined;
     try {
-      result = await submit({ data: { fullName } });
+      result = await submit({ data: { displayName } });
     } catch {
       return stop("save_failed");
     }
@@ -90,13 +90,13 @@ export function NameStepPage({
         </div>
         <form noValidate onSubmit={onSubmit}>
           <Input
-            label={m.welcome_full_name_label()}
-            name="fullName"
-            autoComplete="name"
+            label={m.welcome_display_name_label()}
+            name="displayName"
+            autoComplete="nickname"
             autoFocus
-            value={fullName}
+            value={displayName}
             onChange={(value) => {
-              setFullName(value);
+              setDisplayName(value);
               setProblem(null);
             }}
             isInvalid={problem !== null}

@@ -18,7 +18,44 @@ test("resumes from 请稍候 progress comment when agent has not replied", () =>
       [{ author: "user", createdAt: new Date(pendingAt - 60_000).toISOString() }],
       now,
     ),
-  ).toBe(pendingAt);
+  ).toEqual({
+    pendingAt,
+    label: "好的，正在根据已有采集包整理周报草稿，请稍候确认。",
+  });
+});
+
+test("uses a memory settlement comment as the running label", () => {
+  const pendingAt = now - 20_000;
+  expect(
+    resolveAwaitingAssistantResume(
+      [
+        {
+          authorType: "assistant",
+          body: "正在记录本周写作习惯，请稍候。",
+          createdAt: new Date(pendingAt).toISOString(),
+        },
+      ],
+      [],
+      now,
+    ),
+  ).toEqual({ pendingAt, label: "正在记录本周写作习惯，请稍候。" });
+});
+
+test("does not keep waiting after the memory settlement comment is finished", () => {
+  const userAt = now - 40_000;
+  expect(
+    resolveAwaitingAssistantResume(
+      [
+        {
+          authorType: "assistant",
+          body: "已记录本周写作习惯。",
+          createdAt: new Date(now - 10_000).toISOString(),
+        },
+      ],
+      [{ author: "user", createdAt: new Date(userAt).toISOString() }],
+      now,
+    ),
+  ).toBeNull();
 });
 
 test("does not resume from 请稍候 after a newer assistant DM reply", () => {
@@ -55,7 +92,7 @@ test("resumes when latest visible DM turn is still from the user", () => {
       ],
       now,
     ),
-  ).toBe(pendingAt);
+  ).toEqual({ pendingAt, label: null });
 });
 
 test("does not resume when latest DM turn is already an assistant reply", () => {
