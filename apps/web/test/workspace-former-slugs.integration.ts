@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { completeFirstSignIn, workspaceSlugAvailable } from "#src/server/auth/first-sign-in.server";
 import { PrismaWorkspaceAccess } from "#src/server/db/repositories/setup.repositories.server";
 import {
   PrismaWorkspaceCatalogStore,
@@ -106,6 +107,61 @@ test("two URL changes of one Workspace at once leave every slug it ever had rese
     });
     expect([current, ...former.map((row) => row.slug)].sort()).toEqual(
       ["a", "b", "c", "d"].map(slug),
+    );
+  } finally {
+    await db.workspace.deleteMany({ where: { slug: { endsWith: suffix } } });
+    await db.user.deleteMany({ where: { username: { contains: suffix } } });
+    await db.$disconnect();
+  }
+});
+
+test("first sign-in makes the personal Workspace at the chosen URL, never at one taken now or before", async () => {
+  const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
+  if (!connectionString)
+    throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const slug = (label: string) => `${label}-${suffix}`;
+  const catalog = new WorkspaceCatalog(new PrismaWorkspaceCatalogStore(db));
+  try {
+    const [owner, newcomer] = await Promise.all(
+      ["owner", "newcomer"].map((name) =>
+        db.user.create({ data: { username: `first-url-${name}-${suffix}` } }),
+      ),
+    );
+    const theirs = await catalog.createForUser(owner!.id, { name: "Theirs", slug: slug("old") });
+    await catalog.changeSlug(theirs.id, "owner", slug("new"));
+    const ask = (workspaceSlug: string) =>
+      completeFirstSignIn({
+        db,
+        user: { id: newcomer!.id, username: newcomer!.username },
+        displayName: "Newcomer",
+        workspaceSlug,
+        acceptLanguage: "en",
+      });
+
+    for (const taken of [slug("old"), slug("new")]) {
+      expect(await workspaceSlugAvailable({ db, slug: taken })).toEqual({ available: false });
+      expect(await ask(taken)).toEqual({ ok: false, problem: "slug_taken" });
+    }
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: newcomer!.id } })).displayName,
+    ).toBeNull();
+
+    expect(await workspaceSlugAvailable({ db, slug: slug("mine") })).toEqual({ available: true });
+    const done = await ask(slug("mine"));
+    expect(done).toMatchObject({ ok: true });
+    expect(
+      await db.workspace.findUniqueOrThrow({
+        where: { slug: slug("mine") },
+        select: { name: true, members: { select: { userId: true, role: true } } },
+      }),
+    ).toEqual({
+      name: "Newcomer's Workspace",
+      members: [{ userId: newcomer!.id, role: "owner" }],
+    });
+    expect((await db.user.findUniqueOrThrow({ where: { id: newcomer!.id } })).displayName).toBe(
+      "Newcomer",
     );
   } finally {
     await db.workspace.deleteMany({ where: { slug: { endsWith: suffix } } });

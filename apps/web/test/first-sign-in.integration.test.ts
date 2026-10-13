@@ -38,10 +38,12 @@ test.skipIf(!connectionString)(
   async () => {
     const { db, user, memberships, teardown } = await setup();
     try {
-      expect(await readNameStep({ db, user: { id: user.id, name: "Provider Ada" } })).toEqual({
-        status: "ask",
-        prefill: "Provider Ada",
-      });
+      expect(
+        await readNameStep({
+          db,
+          user: { id: user.id, name: "Provider Ada", username: user.username },
+        }),
+      ).toEqual({ status: "ask", prefill: "Provider Ada", slugPrefill: user.username });
 
       const result = await completeFirstSignIn({
         db,
@@ -62,7 +64,9 @@ test.skipIf(!connectionString)(
           where: { userId: user.id, conversation: { channelName: "general" }, leftAt: null },
         }),
       ).toBe(1);
-      expect(await readNameStep({ db, user: { id: user.id, name: "" } })).toEqual({
+      expect(
+        await readNameStep({ db, user: { id: user.id, name: "", username: user.username } }),
+      ).toEqual({
         status: "named",
       });
     } finally {
@@ -77,13 +81,12 @@ test.skipIf(!connectionString)(
     const { db, user, teardown } = await setup();
     try {
       const gone = crypto.randomUUID();
-      expect(await readNameStep({ db, user: { id: gone, name: "Ada" } })).toEqual({
+      expect(await readNameStep({ db, user: { id: gone, name: "Ada", username: "ada" } })).toEqual({
         status: "account_gone",
       });
-      expect(await readNameStep({ db, user: { id: user.id, name: "Ada" } })).toEqual({
-        status: "ask",
-        prefill: "Ada",
-      });
+      expect(
+        await readNameStep({ db, user: { id: user.id, name: "Ada", username: "ada-lovelace" } }),
+      ).toEqual({ status: "ask", prefill: "Ada", slugPrefill: "ada-lovelace" });
     } finally {
       await teardown();
     }

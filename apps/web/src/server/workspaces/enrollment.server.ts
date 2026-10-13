@@ -25,15 +25,22 @@ export type WorkspaceEnrollmentStore = {
 export class WorkspaceEnrollment {
   constructor(private readonly store: WorkspaceEnrollmentStore) {}
 
+  /**
+   * `slug` is the URL the person chose for it; it is used as given and a taken one throws the
+   * unique violation. Without one the slug comes from the username.
+   */
   async ensureForUser(
     user: EnrollmentUser,
     acceptLanguage: string,
+    slug?: string,
   ): Promise<{ workspaceId: string }> {
     const existing = await this.store.findMembership(user.id);
     if (existing) return { workspaceId: existing };
 
     const name = workspaceDisplayName(user.displayName, acceptLanguage);
-    const workspaceId = await this.createOwnedWorkspace(user.username, user.id, name);
+    const workspaceId = slug
+      ? await this.create({ slug, name, userId: user.id })
+      : await this.createOwnedWorkspace(user.username, user.id, name);
     return { workspaceId };
   }
 

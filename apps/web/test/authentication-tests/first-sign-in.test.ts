@@ -18,17 +18,22 @@ function setup(
     memberships?: Record<string, string>;
     /** Whether the person's row exists; a session can outlive it. */
     userExists?: boolean;
+    /** Slugs another Workspace has or had. */
+    takenSlugs?: string[];
   } = {},
 ) {
   const users = new Set(input.userExists === false ? [] : [ada.id]);
   const names = new Map(Object.entries(input.named ?? {}));
   const memberships = new Map(Object.entries(input.memberships ?? {}));
   const created: { slug: string; name: string; userId: string }[] = [];
+  const taken = new Set(input.takenSlugs ?? []);
   const enrollmentStore: WorkspaceEnrollmentStore = {
     async findMembership(userId) {
       return memberships.get(userId) ?? null;
     },
     async createForUser(workspace) {
+      if (taken.has(workspace.slug)) throw Object.assign(new Error("unique"), { code: "P2002" });
+      taken.add(workspace.slug);
       created.push(workspace);
       const workspaceId = `workspace-${workspace.slug}`;
       memberships.set(workspace.userId, workspaceId);
@@ -138,30 +143,39 @@ test("a named person who has no Workspace gets one titled with the name already 
 test("a person who has a display name is not asked", async () => {
   const { firstSignIn } = setup({ named: { [ada.id]: "Ada Lovelace" } });
 
-  expect(await firstSignIn.readNameStep({ id: ada.id, name: "Ada" })).toEqual({ status: "named" });
+  expect(await firstSignIn.readNameStep({ id: ada.id, name: "Ada", username: "ada" })).toEqual({
+    status: "named",
+  });
 });
 
 test("a person without one is asked, starting from the provider's name when it reads as a name", async () => {
   const { firstSignIn } = setup();
 
-  expect(await firstSignIn.readNameStep({ id: ada.id, name: " Ada  Lovelace " })).toEqual({
+  expect(
+    await firstSignIn.readNameStep({ id: ada.id, name: " Ada  Lovelace ", username: "ada" }),
+  ).toEqual({
     status: "ask",
     prefill: "Ada Lovelace",
+    slugPrefill: "ada",
   });
-  expect(await firstSignIn.readNameStep({ id: ada.id, name: "13800138000" })).toEqual({
+  expect(
+    await firstSignIn.readNameStep({ id: ada.id, name: "13800138000", username: "ada" }),
+  ).toEqual({
     status: "ask",
     prefill: "",
+    slugPrefill: "ada",
   });
-  expect(await firstSignIn.readNameStep({ id: ada.id, name: "" })).toEqual({
+  expect(await firstSignIn.readNameStep({ id: ada.id, name: "", username: "ada" })).toEqual({
     status: "ask",
     prefill: "",
+    slugPrefill: "ada",
   });
 });
 
 test("a session whose user is gone is not asked: it has to sign in again", async () => {
   const { firstSignIn } = setup({ userExists: false });
 
-  expect(await firstSignIn.readNameStep({ id: ada.id, name: "Ada" })).toEqual({
+  expect(await firstSignIn.readNameStep({ id: ada.id, name: "Ada", username: "ada" })).toEqual({
     status: "account_gone",
   });
 });
@@ -177,4 +191,45 @@ test("a name the rule refuses is told apart from an empty or a too-long one", as
   expect(await ask("")).toEqual({ ok: false, problem: "empty" });
   expect(names.size).toBe(0);
   expect(created).toEqual([]);
+});
+
+// The personal Workspace's URL: the person chooses it on the same page as their name.
+
+test("the personal Workspace gets the URL the person chose", async () => {
+  const { firstSignIn, created } = setup();
+
+  const result = await firstSignIn.complete({
+    user: { id: ada.id, username: "user-2" },
+    displayName: "Ada Lovelace",
+    workspaceSlug: "  lovelace-lab ",
+    acceptLanguage: "en",
+  });
+
+  expect(result).toEqual({ ok: true, workspaceId: "workspace-lovelace-lab" });
+  expect(created.map((workspace) => workspace.slug)).toEqual(["lovelace-lab"]);
+});
+
+test("a URL that is malformed, reserved or taken saves nothing, so the person can choose again", async () => {
+  const { firstSignIn, names, created } = setup({ takenSlugs: ["ada"] });
+  const ask = (workspaceSlug: string) =>
+    firstSignIn.complete({ user: ada, displayName: "Ada", workspaceSlug, acceptLanguage: "en" });
+
+  expect(await ask("Ada Lab")).toEqual({ ok: false, problem: "slug_invalid" });
+  expect(await ask("settings")).toEqual({ ok: false, problem: "slug_invalid" });
+  expect(await ask("ada")).toEqual({ ok: false, problem: "slug_taken" });
+  expect(names.size).toBe(0);
+  expect(created).toEqual([]);
+
+  expect(await ask("ada-2")).toEqual({ ok: true, workspaceId: "workspace-ada-2" });
+  expect(names.get(ada.id)).toBe("Ada");
+});
+
+test("the URL field starts from the username, unless that is only the fallback name", async () => {
+  const { firstSignIn } = setup();
+  const step = (username: string) =>
+    firstSignIn.readNameStep({ id: ada.id, name: "Ada", username });
+
+  expect(await step("ada_lovelace")).toMatchObject({ status: "ask", slugPrefill: "ada-lovelace" });
+  for (const username of ["user", "user-2", "user-1a2b3c4d", "settings"])
+    expect(await step(username)).toMatchObject({ status: "ask", slugPrefill: "" });
 });

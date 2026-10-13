@@ -30,8 +30,10 @@ asked for one, and `null` means not yet asked. A signed-in person with none is
 sent once to `/welcome` (a page outside the Workspace layout), from sign-in, from
 `/w/<slug>`, from `/workspaces/new` and from an invite link `/join/<token>`, but
 not from `/oauth/verify`. Sign-in still issues the session, but creates nothing
-until they answer: submitting the name saves it, then makes their personal
-Workspace, titled with it. A session whose user row is gone is sent to sign in
+until they answer. The same page asks for their personal Workspace's URL
+(slug), starting from the username unless that is only the fallback `user…`;
+submitting makes the Workspace at that URL, titled with the name, then saves the
+name, so a URL found taken leaves them unnamed and still asked. A session whose user row is gone is sent to sign in
 again instead. The name follows the one rule for a person's name
 (`apps/web/src/features/profiles/person-name.ts`), which the profile's own name
 shares: normalized and 1 to 80 characters, counted as code points, and refused

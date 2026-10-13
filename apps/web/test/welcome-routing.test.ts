@@ -6,19 +6,20 @@ import { isRedirect } from "@tanstack/react-router";
 // read that decides it is stood in for.
 type NameStep =
   | { status: "named" }
-  | { status: "ask"; prefill: string }
+  | { status: "ask"; prefill: string; slugPrefill: string }
   | { status: "account_gone" };
-let step: NameStep = { status: "ask", prefill: "" };
+let step: NameStep = { status: "ask", prefill: "", slugPrefill: "" };
 
 mock.module("#src/features/auth/first-sign-in.functions", () => ({
   getNameStep: async () => step,
   submitDisplayName: async () => ({ ok: true }),
+  checkWorkspaceSlug: async () => ({ available: true }),
 }));
 
 const { Route } = await import("#src/routes/welcome");
 
 beforeEach(() => {
-  step = { status: "ask", prefill: "" };
+  step = { status: "ask", prefill: "", slugPrefill: "" };
 });
 
 async function enter(search: { returnTo?: string }): Promise<unknown> {
@@ -61,8 +62,11 @@ test("a person who has a display name is sent straight on, to the page they were
 });
 
 test("a person who has none is asked, starting from what the provider reported", async () => {
-  step = { status: "ask", prefill: "Ada Lovelace" };
-  expect(await enter({ returnTo: "/join/abc" })).toEqual({ prefill: "Ada Lovelace" });
+  step = { status: "ask", prefill: "Ada Lovelace", slugPrefill: "ada" };
+  expect(await enter({ returnTo: "/join/abc" })).toEqual({
+    prefill: "Ada Lovelace",
+    slugPrefill: "ada",
+  });
 });
 
 test("a session whose user is gone signs in again, and comes back to where it was going", async () => {

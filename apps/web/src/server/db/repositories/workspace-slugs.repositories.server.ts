@@ -73,3 +73,12 @@ export function moveWorkspaceSlug<S extends Prisma.WorkspaceSelect>(
     return tx.workspace.update({ where: { id: workspaceId }, data: { slug }, select });
   });
 }
+
+/** Whether no Workspace has or had `slug`. Only a hint for a form: the create still decides. */
+export async function isWorkspaceSlugFree(db: PrismaClient, slug: string): Promise<boolean> {
+  const [current, former] = await Promise.all([
+    db.workspace.findUnique({ where: { slug }, select: { id: true } }),
+    db.workspaceFormerSlug.findUnique({ where: { slug }, select: { id: true } }),
+  ]);
+  return !current && !former;
+}
