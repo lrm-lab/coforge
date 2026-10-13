@@ -41,6 +41,7 @@ import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rej
 import { postingTargetRefusalResponse } from "#src/server/agents/agent-target-status.server";
 import { applyIncomingWeeklyReportBodyEdit } from "#src/server/records/weekly-report-body-restore.server";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
+import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 
 export type AgentMessagesGetPrincipal = { workspaceId: string; agentId: string };
 
@@ -236,7 +237,7 @@ export async function handleAgentMessagesPost(
     onMessageSent?: (input: { messageId: string; target: string; body: string }) => Promise<void>;
   },
 ): Promise<Response> {
-  const body = await request.json().catch(() => undefined);
+  const body = await readAgentJsonBody(request);
   if (body && typeof body === "object") {
     if (body.reconcileOnly !== undefined && typeof body.reconcileOnly !== "boolean")
       return Response.json({ error: "invalid reconcileOnly" }, { status: 400 });

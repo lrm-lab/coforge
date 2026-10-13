@@ -11,6 +11,7 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { isAppError } from "#src/lib/app-error";
 import { postingTargetRefusalResponse } from "#src/server/agents/agent-target-status.server";
+import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 
 export type AgentActionPreparePrincipal = { workspaceId: string; agentId: string };
 
@@ -35,7 +36,7 @@ export async function handleAgentActionPrepare(
   principal: AgentActionPreparePrincipal,
   actionCards: () => Pick<ActionCards, "prepare">,
 ): Promise<Response> {
-  const body = await request.json().catch(() => undefined);
+  const body = await readAgentJsonBody(request);
   if (!body || typeof body !== "object" || typeof body.target !== "string" || !body.target)
     return Response.json({ error: "target is required" }, { status: 400 });
   try {

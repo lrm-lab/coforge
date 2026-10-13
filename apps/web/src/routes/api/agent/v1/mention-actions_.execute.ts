@@ -12,6 +12,7 @@ import {
   refuseAgentMentionAdds,
   type MentionActionResult,
 } from "#src/server/conversations/pending-mention-actions.server";
+import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 
 const UUID = UUID_LIKE_PATTERN;
 
@@ -38,9 +39,7 @@ export async function handleAgentMentionExecutePost(
     refuseAgentMentionAdds: MentionActionHandler;
   },
 ): Promise<Response> {
-  const body = (await request.json().catch(() => undefined)) as
-    | { action?: unknown; resolutionIds?: unknown }
-    | undefined;
+  const body = await readAgentJsonBody(request);
   if (!body || typeof body !== "object") return invalidRequest("The request body must be JSON.");
   const action = body.action;
   if (!isAgentMentionActionKind(action)) return invalidRequest('action must be "notify" or "add".');

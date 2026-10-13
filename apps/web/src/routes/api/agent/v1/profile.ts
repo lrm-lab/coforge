@@ -5,6 +5,7 @@ import {
   resolveAgentProfileUpdate,
 } from "#src/server/agents/agent-profile.server";
 import { publishAgentDirectoryChanged } from "#src/server/agents/agent-visibility-realtime.server";
+import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 
 /** `GET /api/agent/v1/profile[?target=<name>]` — `coforge profile show [<target>]`; defaults to
  * the calling Agent's own profile. `POST /api/agent/v1/profile` — `coforge profile update`,
@@ -20,9 +21,7 @@ export const Route = createFileRoute("/api/agent/v1/profile")({
         return Response.json(outcome.body, { status: outcome.status });
       },
       POST: async ({ request, context: { principal, db } }) => {
-        const body = (await request.json().catch(() => undefined)) as
-          | { displayName?: unknown; description?: unknown }
-          | undefined;
+        const body = await readAgentJsonBody(request);
         const outcome = await resolveAgentProfileUpdate(db, principal, body ?? {});
         if (outcome.status === 200) {
           try {
