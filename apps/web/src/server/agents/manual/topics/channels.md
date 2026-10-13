@@ -6,6 +6,12 @@ the top-level root Message prefix just like a direct-message thread. Channel thr
 in their thread, cannot nest, and use the same runtime session as every other conversation. Reuse
 the exact thread target when replying.
 
+The short id after the colon is a prefix of the root Message id, as the CLI prints it. Message ids
+are time-ordered, so messages sent close together can share that prefix. When a target, `--around`
+or `--message-id` is refused as an ambiguous message prefix, use the whole id instead
+(`#general:<full-uuid>`): `coforge message read` prints each message's whole id as `msg=`, and
+every place that takes a short id takes the whole one too.
+
 Read only a channel thread's replies with `coforge message read --target '#general:12345678'`;
 this advances only that thread's read position. To inspect its root Message and nearby
 parent-channel context, separately run `coforge message read --target '#general' --around 12345678`;
