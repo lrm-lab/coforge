@@ -450,3 +450,41 @@ test("get: a session belonging to a different Agent or workspace is UPLOAD_SESSI
     }),
   ).rejects.toMatchObject({ code: "UPLOAD_SESSION_NOT_FOUND" });
 });
+
+test.each([
+  ["an unknown uploadId", { uploadId: "missing" }],
+  ["another Agent's session", { agentId: "agent-2" }],
+  ["another workspace's session", { workspaceId: "workspace-2" }],
+] as const)(
+  "complete, cancel and get all refuse %s as a 404 UPLOAD_SESSION_NOT_FOUND",
+  async (_case, override) => {
+    const { db } = fakeDb();
+    const { storage } = fakeStorage();
+    const created = await createAttachmentUploadSession(db as never, storage, input);
+    const lookup = {
+      agentId: "agent-1",
+      workspaceId: "workspace-1",
+      uploadId: created.uploadId,
+      ...override,
+    };
+    const refusal = {
+      code: "UPLOAD_SESSION_NOT_FOUND",
+      status: 404,
+      message: "upload session does not exist",
+    };
+    await expect(
+      completeAttachmentUploadSession(db as never, storage, lookup),
+    ).rejects.toMatchObject(refusal);
+    await expect(cancelAttachmentUploadSession(db as never, storage, lookup)).rejects.toMatchObject(
+      refusal,
+    );
+    await expect(getAttachmentUploadSession(db as never, lookup)).rejects.toMatchObject(refusal);
+    // None of them touched the session that does exist.
+    const view = await getAttachmentUploadSession(db as never, {
+      agentId: "agent-1",
+      workspaceId: "workspace-1",
+      uploadId: created.uploadId,
+    });
+    expect(view.state).toBe("pending");
+  },
+);
