@@ -52,18 +52,13 @@ export function directRowsOf(
   }));
 }
 
-/** The rows as the sidebar reads them: all of them in the server's order, each Agent's own DM
- * (for what opens it from outside the list), the closed ones (a closed DM that is pinned stays
- * listed, in Pinned), and the unread counts, all by conversation id. */
+/** The rows as the sidebar reads them: all of them in the server's order, the closed ones (a
+ * closed DM that is pinned stays listed, in Pinned), and the unread counts, all by conversation
+ * id. */
 export function directListsOf(unordered: readonly DirectRow[]) {
   const rows = [...unordered].sort((left, right) => left.position - right.position);
   return {
     rows,
-    agentDms: new Map(
-      rows.flatMap((row) =>
-        row.peer.kind === "agent" ? [[row.peer.agentId, row.conversationId] as const] : [],
-      ),
-    ),
     closedIds: rows.filter((row) => row.hidden && !row.pinned).map((row) => row.conversationId),
     unread: Object.fromEntries(
       rows.filter((row) => row.unreadCount > 0).map((row) => [row.conversationId, row.unreadCount]),

@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
+  DaemonApiKeyMint,
   DaemonApiKeyRecord,
   DaemonApiKeyRepository,
 } from "#src/server/auth/daemon-api-key.server";
@@ -7,7 +8,7 @@ import type {
 export class PrismaDaemonApiKeyRepository implements DaemonApiKeyRepository {
   constructor(private readonly db: PrismaClient) {}
 
-  async replaceActive(record: DaemonApiKeyRecord): Promise<void> {
+  async replaceActive(record: DaemonApiKeyMint): Promise<void> {
     await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "computers" WHERE "id" = ${record.computerId}::uuid FOR UPDATE`;
       await tx.daemonApiKey.updateMany({

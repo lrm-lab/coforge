@@ -13,7 +13,7 @@ export type ComputerRestartStatus =
     }
   | { requestId: string; status: "failed"; reason: "timeout" | "publication" };
 
-/** The client-side shape of one upgrade operation's status, mirroring the server's store. */
+/** One upgrade operation's status, as `computer-upgrade-store.server.ts` stores and returns it. */
 export type ComputerUpgradeStatus =
   | { requestId: string; status: "accepted"; expectedVersion: string; expiresAt: string }
   | {
@@ -28,12 +28,25 @@ export type ComputerUpgradeStatus =
   | {
       requestId: string;
       status: "failed";
+      /** "reported" is the Computer's own terminal receipt; the others are server inferences. */
       reason: "timeout" | "publication" | "evidence" | "reported";
       error?: string;
       /** See `UPGRADE_ERROR_CODE`; only ever set alongside `reason: "reported"`. */
       errorCode?: string;
     }
   | { requestId: string; status: "unknown"; reason: "corrupt" };
+
+export type ComputerAgentWorkspaceScan = {
+  agentId: string;
+  name: string;
+  displayName: string;
+  state: "active" | "deleted";
+  status: "present" | "missing" | "unavailable" | "partial";
+  rootPath: string;
+  fileCount: number;
+  totalSizeBytes: number;
+  modifiedAtMs: number;
+};
 
 const runtimeInput = z.object({
   computerId: z.string().min(1),
@@ -48,6 +61,10 @@ export const restartComputerInputSchema = z.object({
 export const readRestartStatusInputSchema = restartComputerInputSchema;
 export const scanUsageInputSchema = runtimeInput;
 export const readUsageInputSchema = runtimeInput;
+export const scanAgentWorkspacesInputSchema = computerIdInputSchema;
+export const deleteAgentWorkspaceInputSchema = computerIdInputSchema.extend({
+  agentId: z.string().min(1),
+});
 export const setRuntimeVisibilityInputSchema = z.object({
   runtimeId: z.string().min(1),
   isPublic: z.boolean(),

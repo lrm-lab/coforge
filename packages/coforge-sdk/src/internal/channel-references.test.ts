@@ -37,11 +37,11 @@ test("a thread token stores the lower-cased channel and root ids and the channel
   );
 });
 
-test("the reader turns a thread token into #name:<first 8 hex of the root>, the form a thread target takes", () => {
+test("the reader turns a thread token into #name:<first twelve hex of the root>, the form a thread target takes", () => {
   const body = `see ${threadReferenceToken(PRODUCT, ROOT, "product")}.`;
-  expect(replaceThreadReferenceTokens(body)).toBe("see #product:abcdef12.");
+  expect(replaceThreadReferenceTokens(body)).toBe("see #product:abcdef12-3456.");
   expect(replaceThreadReferenceTokens(body, (id) => (id === PRODUCT ? "launch" : undefined))).toBe(
-    "see #launch:abcdef12.",
+    "see #launch:abcdef12-3456.",
   );
   // A channel token is not a thread token, and the reverse.
   expect(replaceThreadReferenceTokens(channelReferenceToken(PRODUCT, "product"))).toBe(
@@ -64,5 +64,5 @@ test("the prose thread reference captures the channel name and the message id", 
     ["product", ROOT],
   ]);
   // Too short, too long, or running on into a word: not a thread reference.
-  expect(read("#product:abc12 #product:abcdef123 #product:abcdef12x")).toEqual([]);
+  expect(read("#product:abc12 #product:abcdef1234567 #product:abcdef12x")).toEqual([]);
 });

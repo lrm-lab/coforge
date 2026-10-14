@@ -65,11 +65,59 @@ if (launchLog) {
 }
 
 function write(record: Record<string, unknown>): void {
+  // Ordinary synthetic responses represent partial text. The streaming scenario explicitly
+  // authors both deltas and their duplicate flushes; measured replay files stay verbatim.
+  if (record.type === "assistant" && Bun.env.COFORGE_CURSOR_MODE !== "partial-output")
+    record = { timestamp_ms: Date.now(), ...record };
   process.stdout.write(`${JSON.stringify(record)}\n`);
 }
 
 const sessionId = resumeId ?? Bun.env.COFORGE_CURSOR_SESSION_ID ?? crypto.randomUUID();
 const mode = Bun.env.COFORGE_CURSOR_MODE ?? "text";
+
+if (mode === "partial-output") {
+  process.on("SIGINT", () => process.exit(130));
+  const partial = argv.includes("--stream-partial-output");
+  const assistant = (text: string, metadata: Record<string, unknown> = {}) =>
+    write({
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text }] },
+      session_id: sessionId,
+      ...metadata,
+    });
+  if (partial) {
+    assistant("Reading ", { timestamp_ms: 1 });
+    assistant("Reading ", { timestamp_ms: 2 });
+    assistant("fixture now.", { timestamp_ms: 3 });
+  }
+  // The parent owns this external boundary, not a sleep or a private reader hook.
+  await fetch(Bun.env.COFORGE_CURSOR_STREAM_GATE!);
+  assistant("Reading Reading fixture now.", { timestamp_ms: 4, model_call_id: "model-1" });
+  write({
+    type: "tool_call",
+    subtype: "started",
+    call_id: "read-1",
+    tool_call: { readToolCall: { args: { path: "fixture.txt" } } },
+  });
+  write({
+    type: "tool_call",
+    subtype: "completed",
+    call_id: "read-1",
+    tool_call: { readToolCall: { result: { success: {} } } },
+  });
+  if (partial) {
+    assistant("Fixture ", { timestamp_ms: 4 });
+    assistant("read complete.", { timestamp_ms: 5 });
+  }
+  assistant("Fixture read complete.");
+  write({
+    type: "result",
+    subtype: "success",
+    is_error: false,
+    result: "Reading Reading fixture now.Fixture read complete.",
+  });
+  process.exit(0);
+}
 
 if (mode === "replay") {
   // Replays a trimmed real capture verbatim - used to prove what the frames this build observed

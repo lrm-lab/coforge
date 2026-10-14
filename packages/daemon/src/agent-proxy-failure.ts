@@ -14,6 +14,7 @@ import {
 } from "#src/daemon-runtime/agent-send-verdict";
 
 import type { AgentProxyFailureBody, AgentProxyFailureClass } from "@lrm/coforge-sdk/internal";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 /** Response header carrying the same correlation id as the JSON error body. */
 export const AGENT_PROXY_CORRELATION_HEADER = "x-coforge-correlation-id";
@@ -254,7 +255,7 @@ function classifyFailure(
   }
 
   return build(502, "unclassified", "UNCLASSIFIED_PROXY_FAILURE", {
-    detail: boundedDetail(error instanceof Error ? error.message : String(error)),
+    detail: boundedDetail(thrownMessage(error)),
     // A refusal this layer could not classify is exactly the case where the server's own code is
     // the only thing that says what happened; the caller still gets the correlation id and nothing
     // else, and the code is written to the daemon log beside it.

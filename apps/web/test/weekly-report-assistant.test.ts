@@ -5,10 +5,13 @@ import {
   WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
   ensureWeeklyReportAssistant,
   weeklyReportAssistantAgentName,
+  weeklyReportAssistantDisplayName,
 } from "#src/server/records/weekly-report-assistant.server";
 
-test("weekly report assistants keep a fixed display name and User-scoped Agent identity", () => {
+test("weekly report assistants are named after their owner and keep a User-scoped Agent identity", () => {
   expect(WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME).toBe("周报助手");
+  expect(weeklyReportAssistantDisplayName("李健")).toBe("李健的周报助手");
+  expect(weeklyReportAssistantDisplayName("  李健  ")).toBe("李健的周报助手");
   expect(weeklyReportAssistantAgentName("user-a")).toBe("weekly-report-assistant-user-a");
   expect(weeklyReportAssistantAgentName("user-b")).not.toBe(
     weeklyReportAssistantAgentName("user-a"),
@@ -196,7 +199,14 @@ test("ensureWeeklyReportAssistant creates one assistant per User in a Workspace"
   }> = [];
   const agents: Array<Record<string, unknown>> = [];
   let agentSequence = 0;
+  const users: Record<string, { username: string; displayName: string | null }> = {
+    "user-1": { username: "lijian", displayName: "李健" },
+    "user-2": { username: "ada", displayName: null },
+  };
   const tx = {
+    user: {
+      findUnique: async ({ where }: { where: { id: string } }) => users[where.id] ?? null,
+    },
     weeklyReportAssistant: {
       findUnique: async ({
         where,
@@ -301,13 +311,21 @@ test("ensureWeeklyReportAssistant creates one assistant per User in a Workspace"
     workspaceId: "workspace-1",
     ownerId: "user-1",
     name: weeklyReportAssistantAgentName("user-1"),
-    displayName: WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
+    displayName: "李健的周报助手",
     visibility: "private",
     runtimeConfig: {
       runtime: "coforge",
       provider: { kind: "default" },
     },
   });
+  expect(agents[1]).toMatchObject({ displayName: "ada的周报助手" });
+
+  agents[0]!.displayName = WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
+  await ensureWeeklyReportAssistant(db as never, {
+    workspaceId: "workspace-1",
+    userId: "user-1",
+  });
+  expect(agents[0]!.displayName).toBe("李健的周报助手");
 });
 
 test("ensureWeeklyReportAssistant reclaims an orphan Agent left without an assistant row", async () => {

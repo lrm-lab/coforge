@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  deleteAgentWorkspaceFiles,
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
 } from "#src/agent-runtime/agent-workspace-files";
@@ -130,6 +131,26 @@ test("Workspace Files listing and reading refuse a symlink that escapes the Agen
   }
 });
 
+test("Workspace Files deletion clears contents, preserves the workspace root, and does not follow symlinks", async () => {
+  const root = await mkdtemp(join(tempRoot, "workspace-files-delete-"));
+  const outside = await mkdtemp(join(tempRoot, "workspace-files-delete-outside-"));
+  try {
+    await mkdir(join(root, "nested"));
+    await Bun.write(join(root, "notes.txt"), "remove me");
+    await Bun.write(join(outside, "keep.txt"), "keep me");
+    await symlink(join(outside, "keep.txt"), join(root, "escape.txt"));
+
+    const result = await deleteAgentWorkspaceFiles({ agentWorkspaceDirectory: root });
+    expect(result.status).toBe("ok");
+    expect(await readdir(root)).toEqual([]);
+    expect(await Bun.file(join(outside, "keep.txt")).text()).toBe("keep me");
+    expect((await readdir(root)).length).toBe(0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
 test("Workspace Files path validation rejects '..' segments and absolute paths defensively", async () => {
   const root = await mkdtemp(join(tempRoot, "workspace-files-traversal-"));
   try {
@@ -163,9 +184,14 @@ test("Workspace File read detects binary content by a NUL byte in the first 8KB"
       agentWorkspaceDirectory: root,
       path: "blob.bin",
     });
-    expect(result.status).toBe("binary");
-    expect(result.text).toBe("");
-    expect(result.sizeBytes).toBe(1024);
+    expect(result).toEqual({
+      status: "binary",
+      sizeBytes: 1024,
+      modifiedAtMs: Math.round((await stat(join(root, "blob.bin"))).mtimeMs),
+      text: "",
+      contentType: "",
+      contentBase64: "",
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -178,9 +204,14 @@ test("Workspace File read refuses a file over the 1MiB text cap", async () => {
     await Bun.write(join(root, "big.txt"), content);
 
     const result = await readAgentWorkspaceFile({ agentWorkspaceDirectory: root, path: "big.txt" });
-    expect(result.status).toBe("too_large");
-    expect(result.text).toBe("");
-    expect(result.sizeBytes).toBe(1024 * 1024 + 1);
+    expect(result).toEqual({
+      status: "too_large",
+      sizeBytes: 1024 * 1024 + 1,
+      modifiedAtMs: Math.round((await stat(join(root, "big.txt"))).mtimeMs),
+      text: "",
+      contentType: "",
+      contentBase64: "",
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -319,10 +350,14 @@ test("Workspace File read refuses an image past the publish ceiling", async () =
       agentWorkspaceDirectory: root,
       path: "huge.png",
     });
-    expect(result.status).toBe("too_large");
-    expect(result.contentType).toBe("");
-    expect(result.contentBase64).toBe("");
-    expect(result.sizeBytes).toBe(bytes.length);
+    expect(result).toEqual({
+      status: "too_large",
+      sizeBytes: bytes.length,
+      modifiedAtMs: Math.round((await stat(join(root, "huge.png"))).mtimeMs),
+      text: "",
+      contentType: "",
+      contentBase64: "",
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

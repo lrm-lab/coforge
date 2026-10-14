@@ -1,6 +1,8 @@
 import type {
   AgentWorkspaceFileReadRequest,
   AgentWorkspaceFileReadResult,
+  AgentWorkspaceDeleteRequest,
+  AgentWorkspaceDeleteResult,
   AgentWorkspaceFilesListRequest,
   AgentWorkspaceFilesListResult,
 } from "@lrm/coforge-sdk/internal";
@@ -20,6 +22,11 @@ export type PendingWorkspaceFileRead = {
   userId: string;
   revision: string;
 };
+export type PendingWorkspaceDelete = {
+  request: AgentWorkspaceDeleteRequest;
+  userId: string;
+  revision: string;
+};
 
 export interface AgentWorkspaceFilesListResults {
   begin(pending: PendingWorkspaceFilesList): Promise<void>;
@@ -31,6 +38,11 @@ export interface AgentWorkspaceFileReadResults {
   read(requestId: string): Promise<AgentWorkspaceFileReadResult | undefined>;
   clear(requestId: string): Promise<void>;
 }
+export interface AgentWorkspaceDeleteResults {
+  begin(pending: PendingWorkspaceDelete): Promise<void>;
+  read(requestId: string): Promise<AgentWorkspaceDeleteResult | undefined>;
+  clear(requestId: string): Promise<void>;
+}
 
 type WorkspaceFilesListResponse =
   | { status: "ready"; result: AgentWorkspaceFilesListResult }
@@ -38,6 +50,21 @@ type WorkspaceFilesListResponse =
 type WorkspaceFileReadResponse =
   | { status: "ready"; result: AgentWorkspaceFileReadResult }
   | { status: "offline" | "timeout" | "unavailable" };
+type WorkspaceDeleteResponse =
+  | { status: "ready"; result: AgentWorkspaceDeleteResult }
+  | { status: "offline" | "timeout" | "unavailable" };
+
+/**
+ * How long to wait before reading a pending result again. A Daemon usually answers within tens of
+ * milliseconds, so a flat 100 ms poll made every observation cost at least 100 ms, and the Computer
+ * page's workspace scan pays it once per directory, one directory at a time (the Daemon serves one
+ * listing at a time). For the first half second the result is read every 20 ms, so an answer is seen
+ * within 20 ms of arriving; after that the old 100 ms interval returns, so a slow or missing answer
+ * costs only 20 extra reads over its 5 s timeout.
+ */
+function pollDelayMs(attempt: number) {
+  return attempt < 25 ? 20 : 100;
+}
 
 /** Authorizes a fresh directory/file observation, not Computer inventory or session state. Same
  * publish/poll/timeout shape as `AgentSkillsQuery`, with two operations instead of one. */
@@ -53,8 +80,14 @@ export class AgentWorkspaceFilesQuery {
       publishRead(request: AgentWorkspaceFileReadRequest): Promise<void>;
       listResults: AgentWorkspaceFilesListResults;
       readResults: AgentWorkspaceFileReadResults;
+      publishDelete: (request: AgentWorkspaceDeleteRequest) => Promise<void>;
+      deleteResults: AgentWorkspaceDeleteResults;
     },
-    private readonly timing = { now: Date.now, wait: () => Bun.sleep(100), timeoutMs: 5_000 },
+    private readonly timing: {
+      now: () => number;
+      wait: (ms: number) => Promise<void>;
+      timeoutMs: number;
+    } = { now: Date.now, wait: (ms) => Bun.sleep(ms), timeoutMs: 5_000 },
   ) {}
 
   async list(
@@ -80,6 +113,7 @@ export class AgentWorkspaceFilesQuery {
       await listResults.begin({ request, userId: viewer.userId, revision: assignment.revision });
       await publishList(request);
       const deadline = this.timing.now() + this.timing.timeoutMs;
+      let attempt = 0;
       do {
         const result = await listResults.read(request.requestId);
         if (result) {
@@ -93,7 +127,7 @@ export class AgentWorkspaceFilesQuery {
             return { status: "unavailable" };
           return { status: "ready", result };
         }
-        await this.timing.wait();
+        await this.timing.wait(pollDelayMs(attempt++));
       } while (this.timing.now() < deadline);
       return { status: "timeout" };
     } catch {
@@ -124,6 +158,7 @@ export class AgentWorkspaceFilesQuery {
       await readResults.begin({ request, userId: viewer.userId, revision: assignment.revision });
       await publishRead(request);
       const deadline = this.timing.now() + this.timing.timeoutMs;
+      let attempt = 0;
       do {
         const result = await readResults.read(request.requestId);
         if (result) {
@@ -137,13 +172,53 @@ export class AgentWorkspaceFilesQuery {
             return { status: "unavailable" };
           return { status: "ready", result };
         }
-        await this.timing.wait();
+        await this.timing.wait(pollDelayMs(attempt++));
       } while (this.timing.now() < deadline);
       return { status: "timeout" };
     } catch {
       return { status: "unavailable" };
     } finally {
       await readResults.clear(request.requestId).catch(() => {});
+    }
+  }
+
+  async delete(viewer: WorkspaceFilesViewer, agentId: string): Promise<WorkspaceDeleteResponse> {
+    const { findOwned, online, publishDelete, deleteResults } = this.dependencies;
+    const assignment = await findOwned(viewer, agentId);
+    if (!assignment) return { status: "unavailable" };
+    const request: AgentWorkspaceDeleteRequest = {
+      protocolMajor: 1,
+      requestId: crypto.randomUUID(),
+      workspaceId: viewer.workspaceId,
+      computerId: assignment.computerId,
+      agentId,
+    };
+    try {
+      if (!(await online(request))) return { status: "offline" };
+      await deleteResults.begin({ request, userId: viewer.userId, revision: assignment.revision });
+      await publishDelete(request);
+      const deadline = this.timing.now() + this.timing.timeoutMs;
+      let attempt = 0;
+      do {
+        const result = await deleteResults.read(request.requestId);
+        if (result) {
+          const current = await findOwned(viewer, agentId);
+          if (
+            !current ||
+            current.computerId !== assignment.computerId ||
+            current.revision !== assignment.revision ||
+            !sameWorkspaceDeleteScope(request, result)
+          )
+            return { status: "unavailable" };
+          return { status: "ready", result };
+        }
+        await this.timing.wait(pollDelayMs(attempt++));
+      } while (this.timing.now() < deadline);
+      return { status: "timeout" };
+    } catch {
+      return { status: "unavailable" };
+    } finally {
+      await deleteResults.clear(request.requestId).catch(() => {});
     }
   }
 }
@@ -174,6 +249,19 @@ export function sameWorkspaceFileReadScope(
     a.computerId === b.computerId &&
     a.agentId === b.agentId &&
     a.path === b.path
+  );
+}
+
+export function sameWorkspaceDeleteScope(
+  a: AgentWorkspaceDeleteRequest,
+  b: AgentWorkspaceDeleteResult,
+) {
+  return (
+    a.protocolMajor === b.protocolMajor &&
+    a.requestId === b.requestId &&
+    a.workspaceId === b.workspaceId &&
+    a.computerId === b.computerId &&
+    a.agentId === b.agentId
   );
 }
 

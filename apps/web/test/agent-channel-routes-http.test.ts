@@ -115,6 +115,22 @@ test("unmute forwards muted=false for the decoded channel target", async () => {
   });
 });
 
+test("unmute hides an unexpected repository failure behind its own generic message", async () => {
+  const result = await handleAgentChannelUnmutePost(
+    post("/api/agent/v1/channels/%23general/unmute"),
+    "#general",
+    principal,
+    {
+      setAgentChannelMuted: async () => {
+        throw new Error("database password leaked");
+      },
+      setAgentThreadFollowed: async () => {},
+    },
+  );
+  expect(result.status).toBe(400);
+  expect(await result.text()).toBe("channel unmute failed");
+});
+
 test("unmute returns the exact validation text as a plain-text 400 body", async () => {
   const result = await handleAgentChannelUnmutePost(
     post("/api/agent/v1/channels/%40ada/unmute"),

@@ -1,4 +1,5 @@
 import {
+  isRecord,
   TASK_STATUSES,
   type TaskConversationKind,
   type TaskMember,
@@ -89,10 +90,6 @@ export function storedTaskStatus(value: string): TaskStatus {
     default:
       throw new AppError("INTERNAL_ERROR");
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** A Task's owner or creator; a conversation member is exactly one of a User or an Agent. */

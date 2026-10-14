@@ -40,8 +40,10 @@ impl Drop for Scratch {
 fn installer(home: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_coforge-installer"))
         .args(args)
+        // The installer resolves the home as the Computer does: `HOME` on Unix, `USERPROFILE` on
+        // Windows. Name the scratch home through both, or Windows reads the runner's real profile.
         .env("HOME", home)
-        .env_remove("USERPROFILE")
+        .env("USERPROFILE", home)
         .env_remove("XDG_BIN_HOME")
         .output()
         .expect("the installer runs")

@@ -5,7 +5,7 @@ import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Edit01 as Pencil, UserX01, XClose as X } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { Skeleton } from "#src/components/ui/skeleton";
 import {
   Empty,
@@ -47,6 +47,7 @@ import {
 import {
   updateAgent,
   uploadAgentAvatar,
+  chooseAgentAvatarPicture,
   removeAgentAvatar,
   updateAgentRole,
   saveAgentRuntimeCredential,
@@ -129,13 +130,18 @@ export function AgentProfilePanel({
   const canManage = profile ? canManageAgent(profile) : false;
   const canSeeWorkspace = profile ? profile.ownedByCurrentUser : false;
   const loadComputers = useServerFn(listComputers);
+  // An unbound Agent needs a Computer before its runtime can be saved. A weekly-report
+  // assistant keeps the picker after that first bind, so a retired Computer can be replaced.
+  const offerComputerPicker = Boolean(
+    profile && canManage && (!profile.computer || profile.isWeeklyReportAssistant),
+  );
   const computersQuery = useQuery({
     queryKey: ["agent-runtime-computers", profile?.id, profile?.computerId ?? "none"],
     queryFn: () => loadComputers(),
-    enabled: Boolean(profile && canManage && !profile.computer),
+    enabled: offerComputerPicker,
   });
   const setupComputers =
-    profile && !profile.computer && computersQuery.isSuccess
+    offerComputerPicker && computersQuery.isSuccess
       ? (computersQuery.data ?? []).map((computer) => ({
           id: computer.id,
           displayName: computer.displayName || computer.name || m.agent_computer_unnamed(),
@@ -200,6 +206,7 @@ export function AgentProfilePanel({
 
   const update = useServerFn(updateAgent);
   const uploadAvatar = useServerFn(uploadAgentAvatar);
+  const chooseAvatarPicture = useServerFn(chooseAgentAvatarPicture);
   const removeAvatar = useServerFn(removeAgentAvatar);
   const updateRole = useServerFn(updateAgentRole);
   const saveCredential = useServerFn(saveAgentRuntimeCredential);
@@ -282,7 +289,7 @@ export function AgentProfilePanel({
   if (query.isError) {
     // An Agent that exists but is private to someone else answers a distinct, detail-
     // free state — no "you may not have access, or it was removed" guess, just the one fact.
-    const notVisible = isAppError(query.error) && query.error.code === "AGENT_NOT_VISIBLE";
+    const notVisible = isAppErrorCode(query.error, "AGENT_NOT_VISIBLE");
     return (
       <div className="flex h-full min-h-0 flex-col">
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-secondary px-2">
@@ -438,6 +445,15 @@ export function AgentProfilePanel({
                     data.set("agentId", agentId);
                     data.set("file", file);
                     await uploadAvatar({ data });
+                    await invalidate();
+                    await router.invalidate();
+                  }
+                : undefined
+            }
+            onAvatarChoosePicture={
+              profile.ownedByCurrentUser
+                ? async (pictureId) => {
+                    await chooseAvatarPicture({ data: { agentId, pictureId } });
                     await invalidate();
                     await router.invalidate();
                   }

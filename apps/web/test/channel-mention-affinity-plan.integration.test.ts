@@ -135,3 +135,105 @@ test.skipIf(!connectionString)(
   },
   60_000,
 );
+
+/**
+ * The other shape: a viewer whose every message mentions someone, in a database whose other
+ * channels hold far more mentions. Joining the viewer's messages to `message_mentions` let the
+ * planner hash every mention row in the database to find the viewer's 300; the read must take
+ * only the newest 50 of them.
+ */
+test.skipIf(!connectionString)(
+  "scoring @-completion reads only the viewer's newest mentions, not the database's",
+  async () => {
+    const db = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: connectionString! }),
+      log: [{ emit: "event", level: "query" }],
+    });
+    const reads: { query: string; params: unknown[] }[] = [];
+    let recording = false;
+    db.$on("query", (event) => {
+      if (recording && event.query.trimStart().startsWith("SELECT"))
+        reads.push({ query: event.query, params: JSON.parse(event.params) });
+    });
+    const handle = crypto.randomUUID().slice(0, 8);
+    const viewer = await db.user.create({ data: { username: `affinity-mentioner-${handle}` } });
+    const target = await db.user.create({ data: { username: `affinity-mentioned-${handle}` } });
+    const workspace = await db.workspace.create({
+      data: {
+        slug: `affinity-mentioner-${handle}`,
+        name: "Mention affinity",
+        members: { create: [{ userId: viewer.id, role: "owner" }, { userId: target.id }] },
+      },
+    });
+    try {
+      const channel = (name: string) =>
+        db.conversation.create({
+          data: {
+            workspaceId: workspace.id,
+            channelName: `${name}-${handle}`,
+            members: { create: [viewer, target].map((user) => ({ userId: user.id })) },
+          },
+          include: { members: true },
+        });
+      const here = await channel("here");
+      const elsewhere = await channel("elsewhere");
+      const memberOf = (conversation: typeof here, userId: string) =>
+        conversation.members.find((member) => member.userId === userId)!.id;
+      // `count` messages from `sender`, each mentioning `mentioned`.
+      const mentioning = (
+        conversation: typeof here,
+        count: number,
+        sender: string,
+        mentioned: string,
+        mentionedUser: { id: string; username: string },
+      ) => db.$executeRaw`
+        WITH sent AS (
+          INSERT INTO messages (id, "conversationId", "workspaceId", "senderMemberId", body, sequence,
+            "createdAt")
+          SELECT gen_random_uuid(), ${conversation.id}::uuid, ${workspace.id}::uuid,
+            ${sender}::uuid, 'message ' || n, n, now() - interval '1 day' + n * interval '1 second'
+          FROM generate_series(1, ${count}::int) AS n
+          RETURNING id, "createdAt"
+        )
+        INSERT INTO message_mentions ("messageId", "memberId", "conversationId", "workspaceId",
+          kind, "actorId", handle, "createdAt")
+        SELECT id, ${mentioned}::uuid, ${conversation.id}::uuid, ${workspace.id}::uuid, 'user',
+          ${mentionedUser.id}::uuid, ${mentionedUser.username}, "createdAt"
+        FROM sent`;
+      await mentioning(here, 300, memberOf(here, viewer.id), memberOf(here, target.id), target);
+      await mentioning(
+        elsewhere,
+        30_000,
+        memberOf(elsewhere, target.id),
+        memberOf(elsewhere, viewer.id),
+        viewer,
+      );
+      await db.$executeRaw`ANALYZE messages, message_mentions, conversation_members`;
+
+      recording = true;
+      const directory = await new PublicChannels(db).mentionDirectory(
+        workspace.id,
+        viewer.id,
+        here.id,
+      );
+      recording = false;
+      expect(directory.find((entry) => entry.id === target.id)?.mentionScore).toBeGreaterThan(0);
+
+      let touched = 0;
+      for (const { query, params } of reads) {
+        const [{ "QUERY PLAN": plan }] = await db.$queryRawUnsafe<
+          [{ "QUERY PLAN": [{ Plan: PlanNode }] }]
+        >(`EXPLAIN (ANALYZE, FORMAT JSON) ${query}`, ...params);
+        for (const node of planNodes(plan[0].Plan))
+          if (node["Relation Name"] === "message_mentions") touched += rowsTouched(node);
+      }
+      // The viewer's newest 50 mentions (and the channel's own reads), far below the 30,300 rows.
+      expect(touched).toBeLessThan(1_000);
+    } finally {
+      await db.workspace.delete({ where: { id: workspace.id } });
+      await db.user.deleteMany({ where: { id: { in: [viewer.id, target.id] } } });
+      await db.$disconnect();
+    }
+  },
+  60_000,
+);

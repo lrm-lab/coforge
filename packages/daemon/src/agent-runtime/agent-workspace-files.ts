@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
-import { lstat, open, readdir, realpath } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { lstat, open, readdir, realpath, rm } from "node:fs/promises";
+import { dirname, join, resolve, sep } from "node:path";
 import { getCoforgeAgentDir, getCoforgeSessionDir } from "@coforge/agent";
 import { RPC_PAYLOAD_MAX_BYTES } from "@lrm/coforge-sdk/internal";
 
@@ -27,6 +27,10 @@ export type AgentWorkspaceFileReadOutcome = {
   contentType: string;
   /** Standard base64 of a previewable image's bytes, or `""` for a text read. */
   contentBase64: string;
+};
+
+export type AgentWorkspaceFilesDeleteOutcome = {
+  status: "ok" | "missing" | "unreadable" | "error";
 };
 
 // Must stay under Centrifugo's websocket.message_size_limit (infra/*/centrifugo/config.yaml),
@@ -132,6 +136,49 @@ async function resolveWorkspaceDirectory(
   return { ok: true, absolutePath: realTarget, realRoot };
 }
 
+async function noLinkedAncestors(path: string): Promise<void> {
+  let current = resolve(path);
+  for (;;) {
+    try {
+      if ((await lstat(current)).isSymbolicLink())
+        throw new Error("Agent workspace path contains a symbolic link");
+    } catch (error) {
+      if (!isENOENT(error)) throw error;
+    }
+    const parent = dirname(current);
+    if (parent === current) return;
+    current = parent;
+  }
+}
+
+/** Destructive workspace operation. Removes entries below the root, never the root itself, and
+ * unlinks symlinks without following their targets. The caller stops any Agent runtime first. */
+export async function deleteAgentWorkspaceFiles(params: {
+  agentWorkspaceDirectory: string;
+}): Promise<AgentWorkspaceFilesDeleteOutcome> {
+  try {
+    const root = resolve(params.agentWorkspaceDirectory);
+    await noLinkedAncestors(root);
+    let entries: string[];
+    try {
+      entries = await readdir(root);
+    } catch (error) {
+      return { status: isENOENT(error) ? "missing" : "unreadable" };
+    }
+    let firstError: unknown;
+    for (const entry of entries) {
+      try {
+        await rm(join(root, entry), { recursive: true, force: true });
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    return { status: firstError === undefined ? "ok" : "error" };
+  } catch {
+    return { status: "unreadable" };
+  }
+}
+
 /** Directory observation only. Never opens, follows a symlink target, or executes anything. */
 export async function listAgentWorkspaceFiles(params: {
   agentWorkspaceDirectory: string;
@@ -232,6 +279,15 @@ export async function readAgentWorkspaceFile(params: {
       if (!info.isFile()) return { status: "unreadable", ...empty };
       const sizeBytes = info.size;
       const modifiedAtMs = Math.round(info.mtimeMs);
+      /** This file's metadata with no content: a read that will not hand its bytes over. */
+      const withoutContent = (status: "binary" | "too_large") => ({
+        status,
+        sizeBytes,
+        modifiedAtMs,
+        text: "",
+        contentType: "",
+        contentBase64: "",
+      });
       const sniffLength = Math.min(SNIFF_BYTES, sizeBytes);
       let sniff = Buffer.alloc(0);
       if (sniffLength > 0) {
@@ -244,15 +300,7 @@ export async function readAgentWorkspaceFile(params: {
       // see the picture.
       const contentType = sniffImageContentType(sniff);
       if (contentType) {
-        if (sizeBytes > MAX_IMAGE_BYTES)
-          return {
-            status: "too_large",
-            sizeBytes,
-            modifiedAtMs,
-            text: "",
-            contentType: "",
-            contentBase64: "",
-          };
+        if (sizeBytes > MAX_IMAGE_BYTES) return withoutContent("too_large");
         const buffer = Buffer.alloc(sizeBytes);
         if (sizeBytes > 0) await file.read(buffer, 0, sizeBytes, 0);
         return {
@@ -264,24 +312,8 @@ export async function readAgentWorkspaceFile(params: {
           contentBase64: buffer.toString("base64"),
         };
       }
-      if (sniff.includes(0))
-        return {
-          status: "binary",
-          sizeBytes,
-          modifiedAtMs,
-          text: "",
-          contentType: "",
-          contentBase64: "",
-        };
-      if (sizeBytes > MAX_TEXT_BYTES)
-        return {
-          status: "too_large",
-          sizeBytes,
-          modifiedAtMs,
-          text: "",
-          contentType: "",
-          contentBase64: "",
-        };
+      if (sniff.includes(0)) return withoutContent("binary");
+      if (sizeBytes > MAX_TEXT_BYTES) return withoutContent("too_large");
       const buffer = Buffer.alloc(sizeBytes);
       if (sizeBytes > 0) await file.read(buffer, 0, sizeBytes, 0);
       return {

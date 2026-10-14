@@ -23,13 +23,13 @@ export const Route = createFileRoute("/welcome")({
     if (step.status === "account_gone") {
       throw redirect({ href: signInHref(search.returnTo), reloadDocument: true });
     }
-    return { prefill: step.prefill };
+    return { prefill: step.prefill, slugPrefill: step.slugPrefill };
   },
   component: Welcome,
 });
 
 function Welcome() {
-  const { prefill } = Route.useRouteContext();
+  const { prefill, slugPrefill } = Route.useRouteContext();
   const { returnTo } = Route.useSearch();
-  return <NameStepPage prefill={prefill} returnTo={returnTo} />;
+  return <NameStepPage prefill={prefill} slugPrefill={slugPrefill} returnTo={returnTo} />;
 }

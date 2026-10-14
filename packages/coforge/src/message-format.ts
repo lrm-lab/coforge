@@ -16,8 +16,11 @@ function isThreadTarget(target: string): boolean {
   return target.includes(":");
 }
 
+/** The short form of a message id: its first twelve hex characters with the first dash kept
+ * (`xxxxxxxx-xxxx`) — the full UUIDv7 millisecond timestamp, so it stays unambiguous except for
+ * ids minted in the same millisecond. */
 function shortId(id: string): string {
-  return id.slice(0, 8);
+  return id.slice(0, 13);
 }
 
 function pad(value: number): string {

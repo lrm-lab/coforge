@@ -13,7 +13,7 @@ import {
   listAccessibleGitHubRepositories,
 } from "#src/features/integrations/github.functions";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { nameToSlug } from "#src/lib/slug";
 import { m } from "#src/paraglide/messages";
 import { parseGitHubRepositoryInput } from "./github-repository-input";
@@ -204,9 +204,9 @@ export function CreateProjectDialog({
       onOpenChange(false);
     } catch (cause) {
       setError(
-        isAppError(cause) && cause.code === "CONFLICT"
+        isAppErrorCode(cause, "CONFLICT")
           ? m.project_slug_taken()
-          : isAppError(cause) && cause.code === "ACCESS_DENIED"
+          : isAppErrorCode(cause, "ACCESS_DENIED")
             ? m.project_repository_needs_access()
             : m.project_create_error(),
       );

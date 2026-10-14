@@ -1,5 +1,6 @@
 import type { MemoryAgentToolProfile } from "../agent/memory-tool-fences";
 import { RPC_METHODS } from "./rpc-methods";
+import { MESSAGE_ANCHOR_SOURCE, UUID_LIKE_SOURCE } from "./uuid";
 /** TypeScript boundary; codec/transport remains an adapter concern. */
 export const COMPUTER_REGISTER_METHOD = RPC_METHODS.computerRegister;
 export const COMPUTER_REGISTER_PROTOCOL_MAJOR = 1 as const;
@@ -67,9 +68,9 @@ export const AGENT_THREAD_UNFOLLOW_METHOD = RPC_METHODS.agentThreadUnfollow;
 export const isChannelTarget = (target: string): boolean =>
   /^#[a-z0-9][a-z0-9_-]{0,31}$/.test(target);
 export const isChannelMessageTarget = (target: string): boolean =>
-  /^#[a-z0-9][a-z0-9_-]{0,31}(?::(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?$/.test(
-    target,
-  );
+  new RegExp(
+    `^#[a-z0-9][a-z0-9_-]{0,31}(?::(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE}))?$`,
+  ).test(target);
 /** A thread target split at its first `:` into parent and root, or `undefined` for a top-level
  * target. */
 const splitThreadTarget = (target: string): [parent: string, root: string] | undefined => {
@@ -345,9 +346,9 @@ export function parseRuntimeProvider(value: unknown): RuntimeProvider | undefine
 }
 /**
  * Whether the Daemon runs this provider as a spawned external CLI process (Codex, Claude Code,
- * Kiro) rather than in-process through the Pi SDK (Pi, CoForge). Governs whether usage scanning
- * reads that CLI's own local usage data, and whether a CoForge-managed model-provider API key
- * applies (only the in-process providers accept one).
+ * Kiro) rather than in-process through the Pi SDK (Pi, CoForge). Governs whether a
+ * CoForge-managed model-provider API key applies (only the in-process providers accept one).
+ * A separate capability below describes which adapters implement usage scanning.
  */
 export const RUNTIME_PROVIDER_USES_EXTERNAL_CLI: Record<RuntimeProvider, boolean> = {
   [RUNTIME_PROVIDER.COFORGE]: false,
@@ -357,6 +358,21 @@ export const RUNTIME_PROVIDER_USES_EXTERNAL_CLI: Record<RuntimeProvider, boolean
   [RUNTIME_PROVIDER.KIRO]: true,
   [RUNTIME_PROVIDER.CURSOR]: true,
   [RUNTIME_PROVIDER.OPENCODE]: true,
+  [RUNTIME_PROVIDER.GROK]: true,
+  [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
+};
+
+/** Whether the shipped adapter implements `readUsage`. External CLI execution alone does not
+ * imply a usage reader. A reader may still return unsupported for a particular account.
+ * The daemon registry test checks this table against the actual adapters. */
+export const RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN: Record<RuntimeProvider, boolean> = {
+  [RUNTIME_PROVIDER.COFORGE]: false,
+  [RUNTIME_PROVIDER.CODEX]: true,
+  [RUNTIME_PROVIDER.CLAUDE_CODE]: true,
+  [RUNTIME_PROVIDER.PI]: false,
+  [RUNTIME_PROVIDER.KIRO]: true,
+  [RUNTIME_PROVIDER.CURSOR]: false,
+  [RUNTIME_PROVIDER.OPENCODE]: false,
   [RUNTIME_PROVIDER.GROK]: true,
   [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
 };
@@ -1004,7 +1020,6 @@ export * from "./weekly-report-memory";
 export * from "./codec";
 export * from "./agent-send-budget";
 export * from "./agent-proxy-failure";
-export * from "./validation";
 export * from "./weekly-report";
 export * from "./mentions";
 export * from "./task-references";
@@ -1016,6 +1031,7 @@ export * from "./mime-type";
 export * from "./json-record";
 export * from "./agent-environment";
 export * from "./error-code";
+export * from "./thrown-message";
 export * from "./text-codec";
 export * from "./mention-delivery";
 

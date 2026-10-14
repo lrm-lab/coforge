@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
 
 import { AppError } from "#src/lib/app-error";
-import { AgentAvatars } from "#src/server/agents/agent-avatar.server";
+import {
+  AgentAvatars,
+  agentAvatarUrl,
+  parsePlatformAvatarKey,
+} from "#src/server/agents/agent-avatar.server";
 import type { FileStorage } from "#src/server/files/file-storage.server";
 
 const png = (byte: number) =>
@@ -182,4 +186,142 @@ test("an invalid image never reaches storage", async () => {
     ),
   ).rejects.toEqual(new AppError("INVALID_INPUT"));
   expect(objects.size).toBe(0);
+});
+
+test("a new Agent's first picture is stored as its own avatar object, readable by the Workspace", async () => {
+  const { objects, storage } = memoryStorage();
+  const { db, row } = fakeDb({
+    id: "agent-1",
+    workspaceId: "workspace-1",
+    ownerId: "owner-1",
+    visibility: "public",
+    deletedAt: null,
+    avatarObjectKey: null,
+    avatarContentType: null,
+  });
+  const avatars = new AgentAvatars(db as never, async () => storage);
+
+  const initial = await avatars.storeInitial("workspace-1", "agent-1");
+
+  expect(initial?.objectKey).toStartWith("workspaces/workspace-1/agents/agent-1/avatars/");
+  expect(initial?.contentType).toBe("image/webp");
+  expect(parsePlatformAvatarKey(initial!.objectKey)).toEqual({
+    version: "v1",
+    pictureId: expect.stringMatching(/^ai-\d{2}$/),
+  });
+  expect(objects.get(initial!.objectKey)?.type).toBe("image/webp");
+  expect(agentAvatarUrl("workspace-1", "agent-1", initial!.objectKey)).toStartWith(
+    "/api/workspaces/workspace-1/agents/agent-1/avatar?v=",
+  );
+  // The Agent row is written by the create that follows, which is what makes the object readable.
+  row.avatarObjectKey = initial!.objectKey;
+  row.avatarContentType = initial!.contentType;
+  const read = await avatars.read("member-2", "workspace-1", "agent-1");
+  expect(read.contentType).toBe("image/webp");
+
+  await avatars.discard(initial!.objectKey);
+  expect(objects.size).toBe(0);
+});
+
+test("a picture that cannot be stored leaves the Agent without one instead of failing", async () => {
+  const { storage } = memoryStorage();
+  const failing = {
+    ...storage,
+    put: async () => {
+      throw new Error("object store unavailable");
+    },
+  };
+  const { db } = fakeDb({
+    id: "agent-1",
+    workspaceId: "workspace-1",
+    ownerId: "owner-1",
+    visibility: "public",
+    deletedAt: null,
+    avatarObjectKey: null,
+    avatarContentType: null,
+  });
+
+  expect(
+    await new AgentAvatars(db as never, async () => failing).storeInitial("workspace-1", "agent-1"),
+  ).toBeNull();
+});
+
+// A later job that swaps every platform-assigned avatar finds them by this, so an avatar a creator
+// uploaded must never parse as one, and a malformed key must never parse as one either.
+test("only a picture the platform assigned parses as one; an upload never does", async () => {
+  const { storage } = memoryStorage();
+  const { db, row } = fakeDb({
+    id: "agent-1",
+    workspaceId: "workspace-1",
+    ownerId: "owner-1",
+    visibility: "public",
+    deletedAt: null,
+    avatarObjectKey: null,
+    avatarContentType: null,
+  });
+  const avatars = new AgentAvatars(db as never, async () => storage);
+  const initial = await avatars.storeInitial("workspace-1", "agent-1");
+  row.avatarObjectKey = initial!.objectKey;
+  row.avatarContentType = initial!.contentType;
+  expect(parsePlatformAvatarKey(row.avatarObjectKey)).not.toBeNull();
+
+  await avatars.store("workspace-1", "owner-1", "agent-1", png(1));
+
+  expect(parsePlatformAvatarKey(row.avatarObjectKey!)).toBeNull();
+  expect(parsePlatformAvatarKey(null)).toBeNull();
+  expect(
+    parsePlatformAvatarKey("workspaces/w/agents/a/avatars/platform-v1-ai-07-not-a-uuid/original"),
+  ).toBeNull();
+  expect(
+    parsePlatformAvatarKey(
+      "workspaces/w/agents/a/avatars/platform-v2-ai-07-6f1c2a54-0b1e-4c53-9a8d-3a5b6c7d8e9f/original",
+    ),
+  ).toEqual({ version: "v2", pictureId: "ai-07" });
+});
+
+function chosenFixture(ownerKey: string | null = null) {
+  const { objects, storage } = memoryStorage();
+  const { db, row } = fakeDb({
+    id: "agent-1",
+    workspaceId: "workspace-1",
+    ownerId: "owner-1",
+    visibility: "public",
+    deletedAt: null,
+    avatarObjectKey: ownerKey,
+    avatarContentType: ownerKey ? "image/webp" : null,
+  });
+  if (ownerKey) objects.set(ownerKey, new Blob(["old"], { type: "image/webp" }));
+  return { objects, row, avatars: new AgentAvatars(db as never, async () => storage) };
+}
+
+// Frank, 2026-10-14: a picture the creator picks is theirs, not "platform-assigned", so a later
+// replacement of every platform avatar leaves it alone.
+test("a picture the creator chooses becomes their own avatar, not a platform-assigned one", async () => {
+  const platformKey =
+    "workspaces/workspace-1/agents/agent-1/avatars/platform-v1-ai-02-6f1c2a54-0b1e-4c53-9a8d-3a5b6c7d8e9f/original";
+  const { objects, row, avatars } = chosenFixture(platformKey);
+
+  const chosen = await avatars.storeChosen("workspace-1", "owner-1", "agent-1", "ai-07");
+
+  expect(chosen.avatarUrl).toStartWith("/api/workspaces/workspace-1/agents/agent-1/avatar?v=");
+  expect(row.avatarContentType).toBe("image/webp");
+  expect(parsePlatformAvatarKey(row.avatarObjectKey)).toBeNull();
+  expect(row.avatarObjectKey).toContain("workspaces/workspace-1/agents/agent-1/avatars/");
+  expect(objects.has(platformKey)).toBeFalse();
+  expect(objects.size).toBe(1);
+  expect(objects.get(row.avatarObjectKey!)?.type).toBe("image/webp");
+});
+
+test("only the creator can choose a picture, and only one of the pool's own", async () => {
+  const { objects, row, avatars } = chosenFixture();
+
+  await expect(avatars.storeChosen("workspace-1", "member-2", "agent-1", "ai-07")).rejects.toEqual(
+    new AppError("ACCESS_DENIED"),
+  );
+  for (const pictureId of ["ai-99", "../ai-07", ""])
+    await expect(
+      avatars.storeChosen("workspace-1", "owner-1", "agent-1", pictureId),
+    ).rejects.toEqual(new AppError("INVALID_INPUT"));
+  expect(objects.size).toBe(0);
+  expect(row.avatarObjectKey).toBeNull();
 });

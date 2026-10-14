@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { humanLabel } from "#src/lib/human-label";
 import { resolveAgentStatuses } from "#src/server/agents/agent-user-info.server";
@@ -110,7 +111,7 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
             ...buildSelfRuntimeContext(self, workspace),
           });
         } catch {
-          return new Response("unauthorized", { status: 401 });
+          return textResponse("unauthorized", { status: 401 });
         }
       },
     },

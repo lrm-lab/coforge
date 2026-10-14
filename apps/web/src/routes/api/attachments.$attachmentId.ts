@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { requireBrowserUser } from "#src/server/auth/require-user.server";
@@ -54,7 +55,7 @@ export async function handleAttachmentDownload(
 ): Promise<Response> {
   const user = await dependencies.authenticate(request.headers.get("cookie") ?? undefined);
   const db = dependencies.database();
-  if (!db) return new Response("persistence unavailable", { status: 503 });
+  if (!db) return textResponse("persistence unavailable", { status: 503 });
   try {
     const { attachment, open } = await dependencies.read(db, {
       attachmentId: params.attachmentId,
@@ -75,7 +76,7 @@ export async function handleAttachmentDownload(
       headers: attachmentResponseHeaders(attachment, forceDownload),
     });
   } catch {
-    return new Response("not found", { status: 404 });
+    return textResponse("not found", { status: 404 });
   }
 }
 

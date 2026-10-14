@@ -10,6 +10,7 @@ import {
   type MentionDeliveryTransitionOutcome,
 } from "@lrm/coforge-sdk/internal";
 import type { DeliveryHoldReason } from "./agent-delivery-queue";
+import { diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 
 const logger = getLogger(["coforge", "daemon", "mention-delivery"]);
 
@@ -50,6 +51,8 @@ export type MentionDeliveryPorts = {
   consumed(message: TrackedMentionDelivery): boolean;
   /** Whether the Agent's current session already accepted a notice of this delivery. */
   told(message: TrackedMentionDelivery): boolean;
+  /** Logs a decision that tells the session nothing (`agent.message.attention_decision`). */
+  decided?(message: TrackedMentionDelivery, outcome: "consumed" | "already_notified"): void;
   /** Writes the delivery's notice to the Agent's session: `gone` when its process went away before
    * the notice was accepted. Rejects when the session refused it. */
   announce(message: TrackedMentionDelivery): Promise<"told" | "gone">;
@@ -111,7 +114,10 @@ export class MentionDeliveryTracker {
    * that turn ends. Rejects only when the session refused the notice (after reporting it).
    */
   async deliver(message: TrackedMentionDelivery): Promise<void> {
-    if (this.ports.consumed(message)) return this.#drain(message);
+    if (this.ports.consumed(message)) {
+      this.ports.decided?.(message, "consumed");
+      return this.#drain(message);
+    }
     const envelope = message.mentionDelivery;
     const running = this.ports.running(message.agentId);
     if (!running) return this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
@@ -136,7 +142,10 @@ export class MentionDeliveryTracker {
     }
     this.#set(message, "received");
     this.#transition(message, "daemon_received", "accepted");
-    if (this.ports.told(message)) return this.#told(message);
+    if (this.ports.told(message)) {
+      this.ports.decided?.(message, "already_notified");
+      return this.#told(message);
+    }
     const blocked = this.ports.blocked(message.agentId);
     if (blocked) return this.refuse(message, BLOCKED_CODES[blocked]);
     // Read before the notice: writing it marks the Agent busy.
@@ -321,7 +330,7 @@ export class MentionDeliveryTracker {
         report: kind,
         agent_id: message.agentId,
         delivery_id: message.deliveryId,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
     }
   }

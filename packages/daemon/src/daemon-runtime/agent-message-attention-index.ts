@@ -17,13 +17,18 @@ import {
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import { CLI_CHANNEL_MESSAGE_EXAMPLE } from "#src/code-agent/agent-instructions";
+import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import type {
   AgentConsumedSeqEntry,
   AgentConsumedSeqPort,
 } from "#src/persistence/agent-consumed-seq-store";
+import { diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
+
+/** What the daemon decided for one delivery (`agent.message.attention_decision`). */
+export type AttentionDecisionOutcome = "notified" | "held" | "consumed" | "already_notified";
 
 export type MessageAttention = Readonly<{
   target: string;
@@ -53,6 +58,23 @@ const PENDING_WINDOW_LIMIT = HELD_CONTEXT_LIMIT;
 const INBOX_DRAIN_HINT =
   "Drain each listed target with `coforge message check --target '<target>'`, or inspect with `coforge message read --target '<target>'`. Either may return nothing, because a message can already have been read.\n" +
   CLI_CHANNEL_MESSAGE_EXAMPLE;
+
+/**
+ * The text of one inbox notice: a headline counting what is delivered or held, one row per target,
+ * and how to drain them. `occasion` names why it was sent when that is not a plain delivery
+ * (`restart recovery`). Never a message body: the Agent reads those through `check`.
+ */
+export function inboxNoticeText(
+  occasion: string | undefined,
+  totalCount: number,
+  rows: readonly string[],
+  drainHint = INBOX_DRAIN_HINT,
+): string {
+  return `[CoForge inbox notice${occasion ? ` (${occasion})` : ""}:
+Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
+${rows.join("\n")}
+${drainHint}]`;
+}
 
 /** One unreviewed delivery plus the moment this daemon learned about it. Deliveries carry no
  * message timestamp of their own (only the server knows when a message was written), so the
@@ -164,6 +186,8 @@ export class AgentMessageAttentionIndex {
    * never move it: it answers "has a review shown the Agent anything here", which is what makes a
    * thread count as reply context. Persisted apart from the frontier as `reviewedSeq`. */
   readonly #reviewedSequence = new Map<string, Map<string, number>>();
+  /** The conversation each target's consumed cursor counts in (`conversationId`, persisted). */
+  readonly #cursorConversation = new Map<string, Map<string, string>>();
   readonly #readContextCounters = new Map<string, number>();
   /** `consumed-seqs.json`: the durable copy of `#modelSeen` (the `seq` frontier), `#readContext`
    * (the `readOrder` each target was last reviewed at), `#reviewedSequence` (`reviewedSeq`),
@@ -231,15 +255,17 @@ export class AgentMessageAttentionIndex {
     if (generation.seenDeliveryIds.has(message.deliveryId)) {
       if (!generation.notified.has(message.deliveryId)) {
         if (this.hold.shouldHold(message.agentId)) {
+          this.logDecision(message, "held");
           this.hold.enqueue(message.agentId, message);
           // Held for a later notice: the daemon has it, so it is acknowledged now.
           this.acknowledgeCustody(message);
           return;
         }
         const attempt = generation.notificationAttempts.get(message.deliveryId);
+        this.logDecision(message, attempt ? "already_notified" : "notified");
         await (attempt ?? this.#notify(message));
         if (this.#generations.get(message.agentId) !== generation) return;
-      }
+      } else this.logDecision(message, "already_notified");
       await this.sendAck({
         ...message,
         method: AGENT_MESSAGE_ACK_METHOD,
@@ -249,6 +275,7 @@ export class AgentMessageAttentionIndex {
     }
     this.#remember(generation, message.deliveryId);
     if (this.#consumed(message)) {
+      this.logDecision(message, "consumed");
       await this.sendAck({
         ...message,
         method: AGENT_MESSAGE_ACK_METHOD,
@@ -258,11 +285,13 @@ export class AgentMessageAttentionIndex {
     }
     const current = this.#recordAttention(message);
     if (this.hold.shouldHold(message.agentId)) {
+      this.logDecision(message, "held");
       this.hold.enqueue(message.agentId, message);
       // Held for a later notice: the daemon has it, so it is acknowledged now.
       this.acknowledgeCustody(message);
       return;
     }
+    this.logDecision(message, "notified");
     await this.#notify(message, current);
     if (this.#generations.get(message.agentId) !== generation) return;
     await this.sendAck({
@@ -286,10 +315,40 @@ export class AgentMessageAttentionIndex {
     const generation = this.#generation(message.agentId);
     if (!generation.seenDeliveryIds.has(message.deliveryId)) {
       this.#remember(generation, message.deliveryId);
+      this.logDecision(message, "notified");
       await this.#notify(message, this.#recordAttention(message));
-    } else if (!generation.notified.has(message.deliveryId))
-      await (generation.notificationAttempts.get(message.deliveryId) ?? this.#notify(message));
+    } else if (!generation.notified.has(message.deliveryId)) {
+      const attempt = generation.notificationAttempts.get(message.deliveryId);
+      this.logDecision(message, attempt ? "already_notified" : "notified");
+      await (attempt ?? this.#notify(message));
+    }
     return this.#generations.get(message.agentId) === generation ? "told" : "gone";
+  }
+
+  /**
+   * Logs what the daemon decided for one delivery: whether it notified the Agent's session now,
+   * held it for a later notice, found it already consumed (with the frontier that covered it), or
+   * found its notice already given. Without this line every outcome looks the same in the log,
+   * because `agent.message.delivery_indexed` is written after the decision either way.
+   */
+  logDecision(message: AgentMessageDelivery, outcome: AttentionDecisionOutcome): void {
+    const target = message.target ?? "";
+    logger.info("Agent delivery attention decided", {
+      event: "agent.message.attention_decision",
+      workspace_id: message.workspaceId,
+      agent_id: message.agentId,
+      delivery_id: message.deliveryId,
+      message_id: message.messageId,
+      target,
+      sequence: message.sequence,
+      tracked_mention: isTrackedMention(message),
+      outcome,
+      model_seen_seq: this.modelSeenSequence(message.agentId, target),
+      exact_seen: containsSorted(
+        this.#exactSeen.get(message.agentId)?.get(target),
+        message.sequence,
+      ),
+    });
   }
 
   /** Whether the Agent's current session accepted a notice of this delivery. */
@@ -357,7 +416,10 @@ export class AgentMessageAttentionIndex {
         continue;
       }
       this.#remember(generation, message.deliveryId);
-      if (this.#consumed(message)) continue;
+      if (this.#consumed(message)) {
+        this.logDecision(message, "consumed");
+        continue;
+      }
       this.#recordAttention(message);
       announced.push(message);
     }
@@ -452,10 +514,13 @@ export class AgentMessageAttentionIndex {
       recoveredMessages.length + summaryOnly.reduce((sum, [, count]) => sum + count, 0);
     const notice = this.#withMemoryReminder(
       agentId,
-      `[CoForge inbox notice (restart recovery):
-Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
-${rows.join("\n")}
-${this.#inboxDrainHint(agentId)}]`,
+      recoveredMessages.length
+        ? inboxNoticeText("restart recovery", totalCount, rows, this.#inboxDrainHint(agentId))
+        : agentStartupCatchupInput(
+            totalCount,
+            rows,
+            Boolean(this.#runtimes.runtime?.(agentId)?.config.toolProfile),
+          ),
     );
     // Same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
     this.hold.busy(agentId);
@@ -597,10 +662,7 @@ ${this.#inboxDrainHint(agentId)}]`,
     const totalCount = countDistinctMessages([...announced, ...queued]);
     const notice = this.#withMemoryReminder(
       message.agentId,
-      `[CoForge inbox notice:
-Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
-${rows.join("\n")}
-${this.#inboxDrainHint(message.agentId)}]`,
+      inboxNoticeText(undefined, totalCount, rows, this.#inboxDrainHint(message.agentId)),
     );
     // The session names these back if the notice never reaches the model (`notice-undelivered`).
     const trackedIds = announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId);
@@ -635,7 +697,7 @@ ${this.#inboxDrainHint(message.agentId)}]`,
           target_count: rows.length,
           pending_count: countDistinctMessages(announced),
           total_pending_count: totalCount,
-          error_code: error instanceof Error ? error.name : "UnknownError",
+          error_code: diagnosticErrorName(error),
           outcome: "failed",
         });
         throw error;
@@ -708,7 +770,7 @@ ${this.#inboxDrainHint(message.agentId)}]`,
         event: "agent.message.custody_ack_failed",
         agent_id: message.agentId,
         delivery_id: message.deliveryId,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
     });
   }
@@ -825,7 +887,40 @@ ${this.#inboxDrainHint(message.agentId)}]`,
 
   /** A delivery's target is the server's canonical spelling, so it needs no alias lookup. */
   #consumed(message: AgentMessageDelivery & { target: string }): boolean {
+    if (message.conversationId)
+      this.bindConversation(message.agentId, message.target, message.conversationId);
     return this.hasSeen(message.agentId, message.target, message.sequence);
+  }
+
+  /**
+   * Ties `target`'s consumed cursor to the conversation it counts in. When the cursor was counting
+   * in another conversation (the channel was recreated under the same name, and its sequences
+   * restarted), every number it holds belongs to the old one, so the target starts over: otherwise
+   * each new message would read as already consumed and never be announced. A cursor recorded in
+   * memory before its target was bound adopts the conversation unchanged; the file never holds one
+   * without a conversation, because a read drops it.
+   */
+  bindConversation(agentId: string, target: string, conversationId: string): void {
+    this.#hydrate(agentId);
+    const byTarget = this.#cursorConversation.get(agentId) ?? new Map<string, string>();
+    this.#cursorConversation.set(agentId, byTarget);
+    const recorded = byTarget.get(target);
+    if (recorded === conversationId) return;
+    byTarget.set(target, conversationId);
+    if (recorded !== undefined) {
+      logger.info("Agent consumed cursor reset for a recreated conversation", {
+        event: "agent.message.consumed_cursor_reset",
+        agent_id: agentId,
+        target,
+        previous_conversation_id: recorded,
+        conversation_id: conversationId,
+        model_seen_seq: this.#modelSeen.get(agentId)?.get(target) ?? 0,
+      });
+      this.#modelSeen.get(agentId)?.delete(target);
+      this.#exactSeen.get(agentId)?.delete(target);
+      this.#reviewedSequence.get(agentId)?.delete(target);
+    }
+    this.#persist(agentId);
   }
 
   /** Adds `sequences` above the frontier to `target`'s exact set; whether anything was added. */
@@ -1005,6 +1100,8 @@ ${this.#inboxDrainHint(message.agentId)}]`,
     }
     for (const [target, exactSeqs] of this.#exactSeen.get(agentId) ?? [])
       if (exactSeqs.length > 0) entry(target).exactSeqs = exactSeqs;
+    for (const [target, conversationId] of this.#cursorConversation.get(agentId) ?? [])
+      if (targets[target]) entry(target).conversationId = conversationId;
     store.write(agentId, {
       targets,
       aliases: Object.fromEntries(this.#aliases.get(agentId) ?? []),
@@ -1113,7 +1210,9 @@ ${this.#inboxDrainHint(message.agentId)}]`,
     const readContext = new Map<string, number>();
     const reviewedSequence = new Map<string, number>();
     const exactSeen = new Map<string, readonly number[]>();
+    const cursorConversation = new Map<string, string>();
     for (const [target, entry] of Object.entries(state.targets)) {
+      if (entry.conversationId !== undefined) cursorConversation.set(target, entry.conversationId);
       if (entry.seq !== undefined) modelSeen.set(target, entry.seq);
       if (entry.readOrder !== undefined) readContext.set(target, entry.readOrder);
       if (entry.reviewedSeq !== undefined) reviewedSequence.set(target, entry.reviewedSeq);
@@ -1123,6 +1222,7 @@ ${this.#inboxDrainHint(message.agentId)}]`,
     this.#readContext.set(agentId, readContext);
     this.#reviewedSequence.set(agentId, reviewedSequence);
     this.#exactSeen.set(agentId, exactSeen);
+    this.#cursorConversation.set(agentId, cursorConversation);
     this.#aliases.set(agentId, new Map(Object.entries(state.aliases)));
     this.#readContextCounters.set(agentId, state.nextReadOrder - 1);
   }
@@ -1134,6 +1234,7 @@ ${this.#inboxDrainHint(message.agentId)}]`,
     this.#modelSeen.delete(agentId);
     this.#reviewedSequence.delete(agentId);
     this.#exactSeen.delete(agentId);
+    this.#cursorConversation.delete(agentId);
     this.#aliases.delete(agentId);
     this.#conversationTargets.delete(agentId);
     this.#attentionConversation.delete(agentId);

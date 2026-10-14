@@ -2,8 +2,8 @@
 # Runs the Web integration suites - the ones CI cannot run, because the jobs have no PostgreSQL, so
 # nothing exercises them between a developer's machine and `main`.
 #
-# Their environment is the obstacle: each suite checks its own `<AREA>_TEST_DATABASE_URL` (two of
-# them a redis one instead), so the set of names is only learnable one failure at a time. This points
+# Their environment is the obstacle: each suite checks its own database or Redis test URL,
+# so the set of names is only learnable one failure at a time. This points
 # every one of them at one scratch database and one scratch redis. The list below is the truth about
 # how many there are - a count in prose would rot, which is what the guard in scripts/ci is for.
 #
@@ -51,6 +51,7 @@ for name in \
 done
 export CHANNEL_TEST_REDIS_URL="$redis"
 export SKILLS_TEST_REDIS_URL="$redis"
+export MODEL_CATALOG_TEST_REDIS_URL="$redis"
 
 cd "$root/apps/web"
 files=()

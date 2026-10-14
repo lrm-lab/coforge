@@ -844,3 +844,93 @@ test("PostgreSQL reminder lifecycle is scoped, idempotent, concurrent, and chron
     ),
   ).rejects.toThrow("reminder not found");
 });
+
+test("an operation receipt replays only the input it was recorded for", async () => {
+  // The repository directly, so the in-transaction receipt checks run: through `Reminders` the
+  // pre-transaction `replay` answers first, and the in-transaction ones only decide a race.
+  const repository = new PrismaReminderRepository(db);
+  // An Agent no other test schedules for, so the counts below are this test's own.
+  const scope = {
+    workspaceId: fixture.workspaceId,
+    computerId: fixture.computerId,
+    agentId: fixture.sameOwnerAgentId,
+    userId: fixture.userId,
+  };
+  const input = (title: string) => ({
+    ownerAgentId: scope.agentId,
+    computerId: scope.computerId,
+    version: 1,
+    title,
+    target: fixture.target,
+    messageId: fixture.messageId,
+    fireAt: "2027-01-01T00:00:00.000Z",
+    status: "scheduled" as const,
+  });
+  const conflict = { name: "ReminderRefusal", code: "CONFLICT" };
+
+  const first = await repository.create(scope, "receipt-create", "fp-first", input("First"));
+  // Same request ID and fingerprint: the recorded result, not a second reminder.
+  expect(await repository.create(scope, "receipt-create", "fp-first", input("Other"))).toEqual(
+    first,
+  );
+  await expect(
+    repository.create(scope, "receipt-create", "fp-other", input("First")),
+  ).rejects.toMatchObject(conflict);
+  expect(await db.reminder.count({ where: { ownerAgentId: scope.agentId } })).toBe(1);
+
+  expect(await repository.replay(scope, "receipt-create", "fp-first")).toEqual(first);
+  expect(await repository.replay(scope, "receipt-create", "fp-first", first.reminderId)).toEqual(
+    first,
+  );
+  expect(await repository.replay(scope, "receipt-unused", "fp-first")).toBeUndefined();
+  // `replay` runs before any authorization, so only the receipt's own Workspace stops a request
+  // from another one reading it back.
+  await expect(
+    repository.replay(
+      { ...scope, workspaceId: fixture.otherWorkspaceId },
+      "receipt-create",
+      "fp-first",
+    ),
+  ).rejects.toMatchObject(conflict);
+  await expect(repository.replay(scope, "receipt-create", "fp-other")).rejects.toMatchObject(
+    conflict,
+  );
+  await expect(
+    repository.replay(scope, "receipt-create", "fp-first", crypto.randomUUID()),
+  ).rejects.toMatchObject(conflict);
+
+  const second = await repository.create(scope, "receipt-create-2", "fp-second", input("Second"));
+  const rename = (reminderId: string, title: string): AgentReminderOperationRequest => ({
+    idempotencyKey: "receipt-update",
+    workspaceId: scope.workspaceId,
+    computerId: scope.computerId,
+    agentId: scope.agentId,
+    operation: "update",
+    reminderId,
+    title,
+  });
+  const update = (fingerprint: string, reminderId: string, title: string) =>
+    repository.update(
+      scope,
+      "receipt-update",
+      fingerprint,
+      reminderId,
+      rename(reminderId, title),
+      now,
+      "updated",
+    );
+  const renamed = await update("fp-update", first.reminderId, "Renamed");
+  expect(renamed).toMatchObject({ reminderId: first.reminderId, title: "Renamed", version: 2 });
+  expect(await update("fp-update", first.reminderId, "Again")).toEqual(renamed);
+  // The receipt names its reminder: the same request ID cannot change another one.
+  await expect(update("fp-update", second.reminderId, "Stolen")).rejects.toMatchObject(conflict);
+  await expect(update("fp-changed", first.reminderId, "Changed")).rejects.toMatchObject(conflict);
+  expect(await repository.get(scope, first.reminderId)).toMatchObject({
+    title: "Renamed",
+    version: 2,
+  });
+  expect(await repository.get(scope, second.reminderId)).toMatchObject({
+    title: "Second",
+    version: 1,
+  });
+});

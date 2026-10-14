@@ -9,6 +9,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import { captureDaemonLogs } from "./log-capture";
 
 const stateDirectories: string[] = [];
 
@@ -64,6 +65,12 @@ const delivery = (
     : {}),
 });
 
+/** Binds targets to the one conversation these fixtures share: a cursor is durable only for a
+ * target bound to a conversation. */
+const bindTargets = (index: AgentMessageAttentionIndex, ...targets: string[]) => {
+  for (const target of targets) index.bindConversation("agent-1", target, "conversation-1");
+};
+
 const session = (notify: (notice: string) => void = () => {}) => ({
   sendMessage: async () => {},
   notify: async (notice: string) => {
@@ -98,8 +105,10 @@ test("fenced Memory inbox notices teach native reads and no CLI", async () => {
   await index.receive({ ...delivery("memory"), target: "#software-engineering" });
   await index.recover("agent-1", [], { "#software-engineering": 1 });
   expect(notices).toHaveLength(2);
+  expect(notices[0]).toContain("message_check or message_read");
+  expect(notices[1]).toContain("once, retrying only a failed read");
   for (const notice of notices) {
-    expect(notice).toContain("message_check or message_read");
+    expect(notice).toContain("message_read");
     expect(notice).not.toContain("coforge message");
     expect(notice).not.toContain("COFORGE_MESSAGE");
   }
@@ -636,6 +645,7 @@ test("forgets the oldest deliveries so a long-lived Agent does not grow without 
 test("the consumed cursor survives a restart, in the consumed-seqs file", () => {
   const store = new AgentConsumedSeqStore(temporaryStateDirectory());
   const before = indexWithConsumedSeqs(store);
+  bindTargets(before, "@ada", "#general:11111111", "#general");
   before.recordModelSeen("agent-1", "@ada", 7);
   before.recordReadContext("agent-1", "#general:11111111", 2);
 
@@ -655,6 +665,7 @@ test("the consumed cursor survives a restart, in the consumed-seqs file", () => 
 test("a restart keeps the read context a thread-target confirmation is decided from", () => {
   const store = new AgentConsumedSeqStore(temporaryStateDirectory());
   const before = indexWithConsumedSeqs(store);
+  bindTargets(before, "#general:11111111");
   // The Agent read a thread under the channel and never read the channel itself: exactly the shape
   // that makes a top-level send to the channel ask for confirmation.
   before.recordReadContext("agent-1", "#general:11111111", 2);
@@ -671,6 +682,7 @@ test("stopping an Agent drops its volatile bookkeeping, not its durable cursor",
   const store = new AgentConsumedSeqStore(temporaryStateDirectory());
   const index = indexWithConsumedSeqs(store);
   await index.receive(delivery("1"));
+  bindTargets(index, "@ada");
   index.recordModelSeen("agent-1", "@ada", 4);
   expect(index.check("agent-1").length).toBeGreaterThan(0);
 
@@ -755,6 +767,7 @@ test("a thread counts as read context only once a read of it has shown a message
 test("a consumed frontier alone does not order its target, before or after a restart", () => {
   const store = new AgentConsumedSeqStore(temporaryStateDirectory());
   const before = indexWithConsumedSeqs(store);
+  bindTargets(before, "#general:11111111", "#general");
   before.recordReadContext("agent-1", "#general:11111111", 2);
   // What a `check` of the channel records: the messages it returned, not a review of the channel.
   before.recordModelSeen("agent-1", "#general", 9);
@@ -771,6 +784,7 @@ test("a consumed frontier alone does not order its target, before or after a res
 test("which threads count as read context survives the Agent's next launch", () => {
   const store = new AgentConsumedSeqStore(temporaryStateDirectory());
   const index = indexWithConsumedSeqs(store);
+  bindTargets(index, "#general:11111111", "#general:22222222");
   // Read empty, then drained by a check: shown nothing by a read.
   index.recordReadContext("agent-1", "#general:11111111");
   index.recordModelSeen("agent-1", "#general:11111111", 5);
@@ -1288,6 +1302,7 @@ test("messages shown one by one settle their attention without moving the fronti
 test("exact sequences survive a restart and a frontier that reaches them prunes them", () => {
   const store = new AgentConsumedSeqStore(temporaryStateDirectory());
   const first = indexWithConsumedSeqs(store);
+  bindTargets(first, "@agent", "#general");
   first.recordExactSeen(
     "agent-1",
     new Map([
@@ -1308,6 +1323,7 @@ test("exact sequences survive a restart and a frontier that reaches them prunes 
 test("an alias spelling shares its target's consumed state, across a restart", () => {
   const store = new AgentConsumedSeqStore(temporaryStateDirectory());
   const index = indexWithConsumedSeqs(store);
+  bindTargets(index, "@agent");
   index.recordTargetAlias("agent-1", "@Agent", "@agent");
   index.recordExactSeen("agent-1", new Map([["@agent", [4]]]));
 
@@ -1348,6 +1364,8 @@ test("a history read records its alias, frontier, exact sequences and read order
     () => {},
     { shouldHold: () => false, enqueue: () => {}, busy: () => {}, consumedSeqs: counting },
   );
+  bindTargets(index, "@agent");
+  writes.length = 0;
 
   index.recordHistoryRead("agent-1", {
     spelling: "@Agent",
@@ -1359,7 +1377,15 @@ test("a history read records its alias, frontier, exact sequences and read order
 
   expect(writes).toHaveLength(1);
   expect(store.read("agent-1")).toEqual({
-    targets: { "@agent": { seq: 4, readOrder: 1, reviewedSeq: 9, exactSeqs: [6, 9] } },
+    targets: {
+      "@agent": {
+        conversationId: "conversation-1",
+        seq: 4,
+        readOrder: 1,
+        reviewedSeq: 9,
+        exactSeqs: [6, 9],
+      },
+    },
     aliases: { "@Agent": "@agent" },
     nextReadOrder: 2,
   });
@@ -1438,6 +1464,7 @@ test("a lower frontier or review after a higher one never lowers either, in memo
   const { store, port } = countingStore();
   const index = indexOver(port);
   const thread = "@agent:0f0e0d0c-0b0a-4908-8706-050403020100";
+  bindTargets(index, "@agent", thread);
 
   index.recordModelSeen("agent-1", "@agent", 9);
   index.recordModelSeen("agent-1", "@agent", 4);
@@ -1446,8 +1473,8 @@ test("a lower frontier or review after a higher one never lowers either, in memo
 
   expect(index.modelSeenSequence("agent-1", "@agent")).toBe(9);
   expect(store.read("agent-1").targets).toEqual({
-    "@agent": { seq: 9 },
-    [thread]: { readOrder: 2, reviewedSeq: 6 },
+    "@agent": { conversationId: "conversation-1", seq: 9 },
+    [thread]: { conversationId: "conversation-1", readOrder: 2, reviewedSeq: 6 },
   });
   const restarted = indexOver(port);
   expect(restarted.modelSeenSequence("agent-1", "@agent")).toBe(9);
@@ -1500,4 +1527,94 @@ test("a consumption scope settles in other spellings only the messages the read 
   expect(index.pendingWindow("agent-1", upper, 3).map(({ delivery }) => delivery.sequence)).toEqual(
     [6],
   );
+});
+
+test("every delivery decision is logged with its target, sequence and outcome", async () => {
+  let holding = false;
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session() },
+    async () => {},
+    () => {},
+    { shouldHold: () => holding, enqueue: () => {}, busy: () => {} },
+  );
+  index.recordModelSeen("agent-1", "#general", 4);
+  const decisions = async (run: () => Promise<void>) =>
+    (await captureDaemonLogs(run)).records
+      .filter((record) => record.properties.event === "agent.message.attention_decision")
+      .map((record) => record.properties);
+
+  expect(
+    await decisions(() => index.receive({ ...delivery("seen"), target: "#general", sequence: 3 })),
+  ).toEqual([
+    expect.objectContaining({
+      delivery_id: "delivery-seen",
+      target: "#general",
+      sequence: 3,
+      tracked_mention: false,
+      outcome: "consumed",
+      model_seen_seq: 4,
+    }),
+  ]);
+  expect(
+    await decisions(() => index.receive({ ...delivery("fresh"), target: "#general", sequence: 5 })),
+  ).toEqual([expect.objectContaining({ target: "#general", sequence: 5, outcome: "notified" })]);
+  holding = true;
+  expect(
+    await decisions(() =>
+      index.receive({ ...delivery("busy"), target: "#general:11111111", sequence: 6 }),
+    ),
+  ).toEqual([
+    expect.objectContaining({ target: "#general:11111111", sequence: 6, outcome: "held" }),
+  ]);
+});
+
+test("a channel recreated under the same target name starts from a fresh consumed cursor", async () => {
+  const notices: string[] = [];
+  const store = new AgentConsumedSeqStore(temporaryStateDirectory());
+  const index = indexWithConsumedSeqs(store, () => session((notice) => notices.push(notice)));
+  const inConversation = (id: string, conversationId: string, sequence: number) => ({
+    ...delivery(id, "human", "ada"),
+    conversationId,
+    target: "#general",
+    sequence,
+  });
+
+  // The old #general reached message 5704 and the Agent consumed it.
+  await index.receive(inConversation("old", "conversation-old", 5704));
+  index.recordModelSeen("agent-1", "#general", 5704);
+  // The channel is recreated under the same name: a new conversation whose sequences restart.
+  await index.receive(inConversation("new", "conversation-new", 3));
+
+  expect(notices).toHaveLength(2);
+  expect(index.check("agent-1").find((row) => row.target === "#general")?.pendingCount).toBe(1);
+});
+
+test("a persisted cursor of another conversation is reset, and one without a conversation is not trusted", async () => {
+  const store = new AgentConsumedSeqStore(temporaryStateDirectory());
+  store.write("agent-1", {
+    targets: {
+      "#general": { seq: 5704, conversationId: "conversation-old" },
+      "#legacy": { seq: 5704 },
+    },
+    aliases: {},
+    nextReadOrder: 1,
+  });
+  const notices: string[] = [];
+  const index = indexWithConsumedSeqs(store, () => session((notice) => notices.push(notice)));
+  const fresh = (target: string) => ({
+    ...delivery(target, "human", "ada"),
+    conversationId: "conversation-new",
+    target,
+    sequence: 3,
+  });
+
+  await index.receive(fresh("#general"));
+  await index.receive(fresh("#legacy"));
+
+  // Both new messages are announced: the frontier of 5704 an older build wrote for `#legacy` names
+  // no conversation, so it cannot hide a message of one whose sequences restarted at 1.
+  expect(notices).toHaveLength(2);
+  expect(index.modelSeenSequence("agent-1", "#general")).toBe(0);
+  expect(index.modelSeenSequence("agent-1", "#legacy")).toBe(0);
 });

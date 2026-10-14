@@ -70,8 +70,8 @@ import {
   isRecord,
   mentionActionError,
   postAgentEnvelopeJson,
-  readAgentResponseJson,
   readUpstreamErrorCode,
+  sendAgentJson,
   validateAgentMessageArrayShape,
   validateAgentSendReconciliationShape,
   validateAgentSendResponseShape,
@@ -385,66 +385,42 @@ export const createAgentMessageHttpClient = (
       },
       validate: validateAgentMessageArrayShape("results"),
     }),
-  async requestSend({ url, request, ...keys }) {
-    const response = await fetchAgentResponse(
-      httpClient,
-      url,
-      {
-        method: "POST",
-        headers: agentHeaders(keys, true),
-        signal: AbortSignal.timeout(AGENT_SEND_REQUEST_TIMEOUT_MS),
-        // The send body's field names: the idempotency key is `idempotencyKey`, `sendDraft` is
-        // declared when this send is the resend of a held draft, and `mentions` is the structured
-        // list. The body carries no `continue` field; the force-send flag is `continueAnyway`.
-        body: JSON.stringify({
-          idempotencyKey: request.idempotencyKey,
-          target: request.target,
-          content: request.content,
-          continueAnyway: request.continueAnyway,
-          sendDraft: request.sendDraft,
-          draftReholdCount: request.draftReholdCount,
-          draftReplacedExisting: request.draftReplacedExisting,
-          seenUpToSeq: request.seenUpToSeq,
-          seenExactSeqs: request.seenExactSeqs,
-          freshnessContextMode: request.freshnessContextMode,
-          attachmentIds: request.attachmentIds,
-          mentions: request.mentions,
-        }),
+  requestSend: ({ request, ...keys }) =>
+    sendAgentJson<AgentSendDecisionResponse>(httpClient, {
+      ...keys,
+      method: "POST",
+      what: "agent send",
+      timeoutMs: AGENT_SEND_REQUEST_TIMEOUT_MS,
+      // The send body's field names: the idempotency key is `idempotencyKey`, `sendDraft` is
+      // declared when this send is the resend of a held draft, and `mentions` is the structured
+      // list. The body carries no `continue` field; the force-send flag is `continueAnyway`.
+      body: {
+        idempotencyKey: request.idempotencyKey,
+        target: request.target,
+        content: request.content,
+        continueAnyway: request.continueAnyway,
+        sendDraft: request.sendDraft,
+        draftReholdCount: request.draftReholdCount,
+        draftReplacedExisting: request.draftReplacedExisting,
+        seenUpToSeq: request.seenUpToSeq,
+        seenExactSeqs: request.seenExactSeqs,
+        freshnessContextMode: request.freshnessContextMode,
+        attachmentIds: request.attachmentIds,
+        mentions: request.mentions,
       },
-      "agent send",
-    );
-    await assertAgentResponseOk(response, "agent send");
-    return readAgentResponseJson<AgentSendDecisionResponse>(
-      response,
-      "agent send",
-      validateAgentSendResponseShape,
-    );
-  },
+      validate: validateAgentSendResponseShape,
+    }),
   /** The `reconcileOnly` request on the send route: it asks only whether this key already
    * committed, so it carries the key and the target and nothing that could send or hold. */
-  async requestSendReconciliation({ url, request, ...keys }) {
-    const response = await fetchAgentResponse(
-      httpClient,
-      url,
-      {
-        method: "POST",
-        headers: agentHeaders(keys, true),
-        signal: AbortSignal.timeout(AGENT_SEND_REQUEST_TIMEOUT_MS),
-        body: JSON.stringify({
-          idempotencyKey: request.idempotencyKey,
-          target: request.target,
-          reconcileOnly: true,
-        }),
-      },
-      "agent send reconciliation",
-    );
-    await assertAgentResponseOk(response, "agent send reconciliation");
-    return readAgentResponseJson<AgentSendReconciliationResponse>(
-      response,
-      "agent send reconciliation",
-      validateAgentSendReconciliationShape,
-    );
-  },
+  requestSendReconciliation: ({ request, ...keys }) =>
+    sendAgentJson<AgentSendReconciliationResponse>(httpClient, {
+      ...keys,
+      method: "POST",
+      what: "agent send reconciliation",
+      timeoutMs: AGENT_SEND_REQUEST_TIMEOUT_MS,
+      body: { idempotencyKey: request.idempotencyKey, target: request.target, reconcileOnly: true },
+      validate: validateAgentSendReconciliationShape,
+    }),
   requestEvents: ({ request, ...keys }) =>
     getAgentJson<AgentEventsResponse>(httpClient, {
       ...keys,
@@ -456,67 +432,36 @@ export const createAgentMessageHttpClient = (
       },
       validate: validateAgentMessageArrayShape("events"),
     }),
-  async requestChannelMute({ url, request, ...keys }) {
-    const response = await fetchAgentResponse(
-      httpClient,
-      url,
-      {
-        method: "POST",
-        headers: agentHeaders(keys, true),
-        body: JSON.stringify({ idempotencyKey: request.idempotencyKey }),
-      },
-      "agent channel attention",
-    );
-    await assertAgentResponseOk(response, "agent channel attention");
-    return readAgentResponseJson<AgentChannelAttentionResponse>(
-      response,
-      "agent channel attention",
-    );
-  },
-  async requestThreadUnfollow({ url, request, ...keys }) {
-    const response = await fetchAgentResponse(
-      httpClient,
-      url,
-      {
-        method: "POST",
-        headers: agentHeaders(keys, true),
-        body: JSON.stringify({ idempotencyKey: request.idempotencyKey }),
-      },
-      "agent thread attention",
-    );
-    await assertAgentResponseOk(response, "agent thread attention");
-    return readAgentResponseJson<AgentThreadAttentionResponse>(response, "agent thread attention");
-  },
-  async requestResolve({ url, request, ...keys }) {
-    const endpoint = new URL(url);
-    endpoint.searchParams.set("idempotencyKey", request.idempotencyKey);
-    const response = await fetchAgentResponse(
-      httpClient,
-      endpoint,
-      { method: "GET", headers: agentHeaders(keys) },
-      "agent resolve",
-    );
-    await assertAgentResponseOk(response, "agent resolve");
-    return readAgentResponseJson<AgentResolveResponse>(response, "agent resolve", (data) =>
-      isRecord(data) && isRecord(data.message)
-        ? undefined
-        : "response is missing the message object",
-    );
-  },
-  async requestReaction({ url, request, method, ...keys }) {
-    const response = await fetchAgentResponse(
-      httpClient,
-      url,
-      {
-        method,
-        headers: agentHeaders(keys, true),
-        body: JSON.stringify({ idempotencyKey: request.idempotencyKey, emoji: request.emoji }),
-      },
-      "agent reaction",
-    );
-    await assertAgentResponseOk(response, "agent reaction");
-    return readAgentResponseJson<AgentReactionResponse>(response, "agent reaction");
-  },
+  requestChannelMute: ({ request, ...keys }) =>
+    sendAgentJson<AgentChannelAttentionResponse>(httpClient, {
+      ...keys,
+      method: "POST",
+      what: "agent channel attention",
+      body: { idempotencyKey: request.idempotencyKey },
+    }),
+  requestThreadUnfollow: ({ request, ...keys }) =>
+    sendAgentJson<AgentThreadAttentionResponse>(httpClient, {
+      ...keys,
+      method: "POST",
+      what: "agent thread attention",
+      body: { idempotencyKey: request.idempotencyKey },
+    }),
+  requestResolve: ({ request, ...keys }) =>
+    getAgentJson<AgentResolveResponse>(httpClient, {
+      ...keys,
+      what: "agent resolve",
+      query: { idempotencyKey: request.idempotencyKey },
+      validate: (data) =>
+        isRecord(data) && isRecord(data.message)
+          ? undefined
+          : "response is missing the message object",
+    }),
+  requestReaction: ({ request, ...keys }) =>
+    sendAgentJson<AgentReactionResponse>(httpClient, {
+      ...keys,
+      what: "agent reaction",
+      body: { idempotencyKey: request.idempotencyKey, emoji: request.emoji },
+    }),
   async requestWorkspaceInfo({ request, ...keys }) {
     const data = await getAgentJson<Omit<WorkspaceInfoResponse, "idempotencyKey">>(httpClient, {
       ...keys,

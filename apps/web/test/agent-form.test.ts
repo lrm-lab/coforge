@@ -97,3 +97,29 @@ test("a refused environment save shows the broken rule instead of asking to try 
   expect(refusal("agent-environment-too-many")).toBe(m.agent_env_too_many({ max: 64 }));
   expect(refusal("agent-environment-too-large")).toBe(m.agent_env_too_large());
 });
+
+test("a refused Agent save names the reason instead of only asking to try again", () => {
+  const refusal = (
+    errorId: string,
+    code: "INVALID_INPUT" | "ACCESS_DENIED" | "INTERNAL_ERROR" = "INVALID_INPUT",
+  ) => agentUpdateErrorMessage(new AppError(code, { errorId }));
+  // The server's save path has no other wording for these: each throw carries its own id, so the
+  // dialog can say which rule refused instead of the generic retry line.
+  expect(refusal("agent-name-required")).toBe(m.agent_form_name_required());
+  expect(refusal("agent-provider-unsupported")).toBe(m.agent_form_provider_unsupported());
+  expect(refusal("agent-computer-required")).toBe(m.agent_form_computer_required());
+  expect(refusal("agent-not-authorized", "ACCESS_DENIED")).toBe(m.agent_form_not_authorized());
+  expect(refusal("agent-model-provider-required")).toBe(m.agent_form_model_provider_required());
+  expect(refusal("agent-credential-unavailable", "INTERNAL_ERROR")).toBe(
+    m.agent_form_credential_unavailable(),
+  );
+  expect(refusal("agent-api-key-required")).toBe(m.agent_form_api_key_required());
+  expect(refusal("agent-runtime-unavailable")).toBe(m.agent_form_runtime_unavailable());
+  expect(refusal("agent-name-taken")).toBe(m.agent_form_name_taken());
+  // Anything unmapped still asks to retry: a plain Error, or a 5xx during a deploy, carries no
+  // rule to name - and "try again" is the honest copy for a request that never reached the rule.
+  expect(agentUpdateErrorMessage(new Error("provider is not supported"))).toBe(
+    m.agent_update_error(),
+  );
+  expect(refusal("an-error-id-nobody-mapped")).toBe(m.agent_update_error());
+});

@@ -20,6 +20,10 @@ import { Select } from "#src/components/base/select/select";
 import { m } from "#src/paraglide/messages";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { isValidTemplateName, hourlySendTimes } from "./records-content";
+import {
+  FOUNDATION_MODELS_WEEKLY_SECTIONS,
+  FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME,
+} from "./foundation-models-weekly";
 import { parseTemplateSections, type TemplateOutlineSection } from "./template-outline-sections";
 import { memberLabel, weekdayLabel, type TemplateMemberOption } from "./weekly-template-members";
 import type { WeeklyTemplateList } from "./weekly-report-settings";
@@ -30,13 +34,6 @@ const SEND_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 function emptySection(): TemplateOutlineSection {
   return { title: "", children: [] };
 }
-
-const FOUNDATION_MODELS_WEEKLY_SECTIONS: TemplateOutlineSection[] = [
-  { title: "Summary", children: ["Work Summary", "Next Steps"] },
-  { title: "Technique", children: ["Technique"] },
-  { title: "Achievements", children: ["Achievements"] },
-  { title: "Research", children: ["New paper / model / product"] },
-];
 
 export type CreateWeeklyTemplateInput = {
   name: string;
@@ -105,7 +102,7 @@ export function CreateWeeklyTemplateDialog({
   }
 
   function applyFoundationModelsPreset() {
-    setName("Foundation Weekly");
+    setName(FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME);
     setSections(
       FOUNDATION_MODELS_WEEKLY_SECTIONS.map((section) => ({
         ...section,

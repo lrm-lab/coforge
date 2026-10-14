@@ -14,7 +14,6 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { ConversationListContext } from "./conversation-list-button";
 import { ConversationDirectory } from "./conversation-directory";
-import { LiveAgentActivityBar } from "./live-agent-activity-bar";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { createPublicChannel } from "./channels.functions";
@@ -254,7 +253,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                   onCreateChannel={() => setCreating(true)}
                 />
               </div>
-              <LiveAgentActivityBar agents={agents} agentDms={directs.agentDms} />
             </section>
             <div
               className={cx(

@@ -9,14 +9,15 @@ These rules apply to `src/routes/`.
   `saved`, `activity`, `tasks`, `search`, `members`, `agent/$agentId`,
   `computers`, `computer/$computerId`, `settings`, plus `projects` and
   `records`; a direct message is `dm/$dmId`, by its conversation id. Pathless layouts (`_chat`, `_computers`) share chrome between
-  pages without adding a URL segment. Old URLs are not redirected.
+  pages without adding a URL segment. Old page names are not redirected; a Workspace's former
+  slug is: `/w/<former>/…` goes to the same page under its current slug.
 - Pages opened before someone is in a Workspace — `login`, `welcome`, `join/$token`,
   `oauth/verify`, `workspaces/new` — stay outside `/w/$workspaceSlug`; sign-in,
   the name step, invite links, and creating a first Workspace share
   `features/auth/auth-split-layout.tsx`. A signed-in User in no Workspace is sent
   from `/` and from a `/w/<slug>` they cannot open to `workspaces/new`. A page that needs sign-in sends
   people to `/login?returnTo=<its path>`.
-- A signed-in User with no display name is asked for one once, at `welcome?returnTo=<page>`: sign-in
+- A signed-in User with no display name is asked for one (and their personal Workspace's URL) once, at `welcome?returnTo=<page>`: sign-in
   sends them there before it makes their personal Workspace, and `/w/$workspaceSlug` (its loader),
   `workspaces/new` and `join/$token` send them there with `nameStepRedirect`, so every way in makes
   that Workspace after the answer. `oauth/verify` is not gated: approving a Computer needs no name.
@@ -41,6 +42,9 @@ These rules apply to `src/routes/`.
   `.lazy.tsx` route file, use `getRouteApi()` rather than importing `Route`.
 - Raw routes under `api/` and OAuth callbacks are thin adapters: parse the
   request, call the owning `src/server/` module, and map its result.
+- Declare response types explicitly. Use `textResponse()` from
+  `#src/server/http/text-response.server` for plain text; Start re-wraps bodies
+  as streams, dropping Bun's implicit string-body content type.
 - TanStack Router splits only `component`, `errorComponent` and
   `notFoundComponent` out of a route file. Everything else the file imports
   (`loader`, `beforeLoad`, search validation and `pendingComponent`) lands in

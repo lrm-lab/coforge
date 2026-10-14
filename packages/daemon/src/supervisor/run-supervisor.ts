@@ -5,6 +5,7 @@ import {
   UPGRADE_ERROR_CODE,
   type ManagedRuntimeIdentity,
   type RunnerHoldReason,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { startDaemonLocalRpcServer, type DaemonHoldReport } from "#src/local-rpc";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
@@ -16,15 +17,12 @@ import {
   UPGRADE_OPERATION_PENDING_TTL_MS,
   WorkspaceRecoveryError,
   type BindingStore,
-  type ManagedBinding,
 } from "./machine-supervisor";
 import { FileBindingStore } from "./binding-store";
 import { dispose, getLogger, withContext } from "@logtape/logtape";
 import { configureDaemonLogging } from "#src/platform/daemon-logging";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
-import { SystemdWorkspaceInstance } from "./systemd-workspace-instance";
-import { LaunchdWorkspaceInstance } from "./launchd-workspace-instance";
-import { WindowsWorkspaceInstance } from "./windows-workspace-instance";
+import { platformWorkspaceInstance, workspaceInstanceConfig } from "./platform-workspace-instance";
 import { startWindowsWorkspaceReconcileLoop } from "./windows-workspace-reconcile";
 import { workspaceStateDirectory, type WorkspaceInstance } from "./workspace-instance";
 import {
@@ -32,7 +30,9 @@ import {
   workspaceDegradedMessage,
   workspaceHealthJournalPath,
 } from "./workspace-health-journal";
-import { answeredWithin } from "./runner-hold";
+import { askWorkspaceRunnerHold } from "./runner-hold";
+import { workspaceDaemonConfig } from "./workspace-daemon-config";
+import { workspaceRuntimeView } from "./workspace-runtime-view";
 import {
   awaitCloudConnections,
   OPERATOR_COMMAND_BUDGET_MS,
@@ -54,12 +54,6 @@ import {
 /** How often a Coordinator checks for a receipt from a job it is watching. */
 const UPGRADE_RECEIPT_POLL_MS = 2_000;
 
-/**
- * How long the Coordinator waits for one Workspace daemon to answer a runner hold. A Workspace
- * that does not answer is reported unreachable and counted as idle: a wedged or dead Workspace
- * daemon must never be able to block a Computer upgrade or a restart.
- */
-const RUNNER_HOLD_WORKSPACE_TIMEOUT_MS = 5_000;
 /** How long a Workspace start waits for its process to answer. */
 const WORKSPACE_READINESS_MS = 30_000;
 
@@ -98,7 +92,7 @@ export async function runMachineSupervisor(
           }).catch((error) =>
             logger.error("Leftover Computer upgrade job sweep failed", {
               event: "upgrade:leftover_job_sweep_failed",
-              error_message: error instanceof Error ? error.message : String(error),
+              error_message: thrownMessage(error),
             }),
           );
           if (process.platform !== "win32") await leftoverSweep;
@@ -186,79 +180,31 @@ async function runWithSupervisorLock(
       socketPath: workspaceSocketPath(stateDirectory, workspaceId),
       spawn: () => {},
     });
-  const workspaceInstance = (workspaceId: string): WorkspaceInstance => {
-    const config = {
-      stateRoot: stateDirectory,
-      workspaceId,
-      executablePath: process.execPath,
-      socketPath: workspaceSocketPath(stateDirectory, workspaceId),
-      stateDirectory: workspaceDirectory(workspaceId),
-      unitDirectory:
-        process.platform === "darwin"
-          ? join(stateDirectory, "launchd-workspaces")
-          : process.platform === "win32"
-            ? join(stateDirectory, "windows-workspaces")
-            : join(homedir(), ".config", "systemd", "user"),
-      supervisorSocketPath: socketPath,
-      daemonConnectionEndpoint: Bun.env.COFORGE_DAEMON_CONNECTION_ENDPOINT,
-    };
-    if (process.platform === "darwin") return new LaunchdWorkspaceInstance(config);
-    if (process.platform === "win32") return new WindowsWorkspaceInstance(config);
-    if (process.platform !== "linux")
-      throw new Error("per-Workspace OS containment is not implemented on this platform");
-    return new SystemdWorkspaceInstance(config, async (args) => {
-      const command = Bun.spawn(["systemctl", "--user", ...args], {
-        stdin: "ignore",
-        stdout: "ignore",
-        stderr: "ignore",
-      });
-      return await command.exited;
-    });
-  };
+  const workspaceInstance = (workspaceId: string): WorkspaceInstance =>
+    platformWorkspaceInstance(
+      workspaceInstanceConfig(stateDirectory, socketPath, workspaceId, {
+        platform: process.platform,
+        homeDirectory: homedir(),
+        executablePath: process.execPath,
+        daemonConnectionEndpoint: Bun.env.COFORGE_DAEMON_CONNECTION_ENDPOINT,
+      }),
+      process.platform,
+    );
   const supervisorLogger = getLogger(["coforge", "daemon", "supervisor"]);
-  /**
-   * Asks one Workspace daemon to hold (or release) its runners. A Workspace that does not answer
-   * inside `RUNNER_HOLD_WORKSPACE_TIMEOUT_MS`, answers `accepted: false`, or fails outright is
-   * reported unreachable and counted as idle: a wedged or dead Workspace daemon must never be
-   * able to block a Computer upgrade or a restart. Shared by the
-   * Coordinator-wide fan-out below and by the per-Workspace restart hold.
-   */
-  const holdWorkspaceRunners = async (
+  /** `askWorkspaceRunnerHold` against one Workspace daemon's local socket. */
+  const holdWorkspaceRunners = (
     workspaceId: string,
     operation: "hold" | "release",
     reason: RunnerHoldReason | undefined,
     eventPrefix: string,
-    // `unreachableWorkspaceIds` is optional on the wire report but always known here, so the
-    // restart hold can read it without a fallback.
-  ): Promise<DaemonHoldReport & { unreachableWorkspaceIds: string[] }> => {
-    const held = operation === "hold";
-    try {
-      const response = await answeredWithin(
-        childClient(workspaceId).hold(operation, reason),
-        RUNNER_HOLD_WORKSPACE_TIMEOUT_MS,
-        `Workspace ${workspaceId} did not answer the runner hold`,
-      );
-      if (!response.accepted)
-        return { held, busyAgents: [], unreachableWorkspaceIds: [workspaceId] };
-      return {
-        held,
-        busyAgents: response.busyAgents.map((agent) => ({
-          ...agent,
-          workspaceId: agent.workspaceId || workspaceId,
-        })),
-        unreachableWorkspaceIds: [],
-      };
-    } catch (error) {
-      supervisorLogger.warn("Workspace daemon did not answer the runner hold; treating as idle", {
-        event: `${eventPrefix}:runner_hold_unreachable`,
-        workspace_id: workspaceId,
-        operation,
-        timeout_ms: RUNNER_HOLD_WORKSPACE_TIMEOUT_MS,
-        error_message: error instanceof Error ? error.message : String(error),
-      });
-      return { held, busyAgents: [], unreachableWorkspaceIds: [workspaceId] };
-    }
-  };
+  ) =>
+    askWorkspaceRunnerHold({
+      workspaceId,
+      operation,
+      reason,
+      eventPrefix,
+      hold: (operation, reason) => childClient(workspaceId).hold(operation, reason),
+    });
   /**
    * Read-only settle check for `MachineSupervisor.recordUpgrade`'s blocking pending operation: a
    * receipt already on disk, or the pending TTL already passed, settles it right there instead of
@@ -282,56 +228,24 @@ async function runWithSupervisorLock(
     );
     return settlement;
   };
-  /**
-   * The config a Workspace daemon child reads: pending operations are ready hints; terminal ones
-   * are results it owes the server. `refreshChildUpgradeConfig` pushes a settled receipt to a child
-   * that is already running; its reconnect recovery is the fallback.
-   */
-  const buildChildConfig = (binding: ManagedBinding) => {
-    // Only the replacement receives the pending request as a cloud ready hint.
-    // Local completion still requires the application handshake and durable result.
-    const restartRequestIds = (binding.restartResults ?? [])
-      .filter((result) => result.status === "completed")
-      .map((result) => result.requestId);
-    if (binding.restart?.phase === "starting") restartRequestIds.push(binding.restart.requestId);
-    const {
-      enabled: _enabled,
-      restart: _restart,
-      restartResults: _results,
-      restartRequestIds: _legacy,
-      upgradeRequestIds: _upgrades,
-      upgradeRequests: _legacyUpgrades,
-      upgradeOperations,
-      ...config
-    } = binding;
-    const operations = (upgradeOperations ?? [])
-      .filter((operation) => operation.state !== "acknowledged")
-      .slice(-128);
-    return {
-      ...config,
-      restartRequestIds: restartRequestIds.slice(-128),
-      upgradeRequestIds: operations.map((entry) => entry.requestId),
-      upgradeExpectedVersions: Object.fromEntries(
-        operations.map((entry) => [entry.requestId, entry.expectedVersion]),
-      ),
-      upgradeOperations: operations,
-    };
-  };
   /** Rewrites one already-running Workspace's config file with its binding's current upgrade
    * state, without restarting it. Best-effort: a Workspace that was never started (no directory
-   * yet) or whose write fails is left for its next real start to pick up instead. */
+   * yet) or whose write fails is left for its next real start to pick up instead; a running
+   * child's reconnect recovery is the fallback for a settled receipt it missed. */
   const refreshChildUpgradeConfig = async (workspaceId: string): Promise<void> => {
     try {
       const binding = (await supervisor.snapshot()).find(
         (entry) => entry.workspaceId === workspaceId,
       );
       if (!binding) return;
-      await new DaemonConfigStore(workspaceDirectory(workspaceId)).save(buildChildConfig(binding));
+      await new DaemonConfigStore(workspaceDirectory(workspaceId)).save(
+        workspaceDaemonConfig(binding),
+      );
     } catch (error) {
       supervisorLogger.warn("Refreshing a Workspace's local upgrade config failed", {
         event: "upgrade:child_config_refresh_failed",
         workspace_id: workspaceId,
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       });
     }
   };
@@ -363,7 +277,7 @@ async function runWithSupervisorLock(
           });
           throw new Error(message);
         }
-        await new DaemonConfigStore(directory).save(buildChildConfig(binding));
+        await new DaemonConfigStore(directory).save(workspaceDaemonConfig(binding));
         const instance = workspaceInstance(binding.workspaceId);
         const processId = await instance.ensureStarted();
         const observed = await instance.identity();
@@ -482,27 +396,9 @@ async function runWithSupervisorLock(
    * exited, e.g. after parking, is reaped here), plus why it is parked, when it is. */
   const runtimes = async (bindings: Awaited<ReturnType<typeof supervisor.snapshot>>) =>
     Promise.all(
-      bindings.map(async (binding) => {
-        // A start, restart, or configure queued or running: an upgrade waits for it instead of
-        // reading the Workspace as down, and the CLI reports it as still starting.
-        const underWay = binding.inFlight ? { lifecycleUnderWay: true } : {};
-        const child = children.get(binding.workspaceId);
-        if (child && binding.instanceId === child.osInstanceId)
-          return { ...child.identity, enabled: binding.enabled, ...underWay };
-        // Only a Workspace that is down can be parked.
-        const reason = await startPorts.parkReason(binding.workspaceId);
-        const parked = reason ? { parkReason: reason } : {};
-        return {
-          workspaceId: binding.workspaceId,
-          computerId: binding.computerId,
-          enabled: binding.enabled,
-          processId: 0,
-          instanceId: "",
-          version: "",
-          ...parked,
-          ...underWay,
-        };
-      }),
+      bindings.map((binding) =>
+        workspaceRuntimeView(binding, children.get(binding.workspaceId), startPorts.parkReason),
+      ),
     );
   /** After every lifecycle mutation queued so far: what the Coordinator's own steps act on. */
   const snapshot = async () => runtimes(await supervisor.snapshot());
@@ -554,7 +450,7 @@ async function runWithSupervisorLock(
     } catch (error) {
       supervisorLogger.error("Computer upgrade receipt sweep failed", {
         event: "upgrade:receipt_sweep_failed",
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       });
     }
   };
@@ -580,7 +476,7 @@ async function runWithSupervisorLock(
         event: "upgrade:receipt_watch_failed",
         workspace_id: workspaceId,
         request_id: requestId,
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       }),
     );
     upgradeWatches.add(watch);
@@ -635,7 +531,7 @@ async function runWithSupervisorLock(
         }
         supervisorLogger.error("Windows Workspace reconcile failed", {
           event: "workspace:windows_reconcile_failed",
-          error_message: error instanceof Error ? error.message : String(error),
+          error_message: thrownMessage(error),
         });
       },
     });
@@ -683,7 +579,7 @@ async function runWithSupervisorLock(
                   // TTL, refusing every later upgrade in the meantime (the requirement this
                   // record exists for: never leave an operation pending when the launch itself is
                   // what failed).
-                  const message = error instanceof Error ? error.message : String(error);
+                  const message = thrownMessage(error);
                   await completeUpgrade(request.workspaceId, request.requestId, {
                     requestId: request.requestId,
                     status: "failed",

@@ -255,8 +255,9 @@ async function pageIsUp(ready: string) {
   await waitFor(ready, 60_000);
   await browser("wait", "--load", "networkidle");
 }
-/** A Workspace page away from Chat, up with the rail's Chat link to click. */
-const chatLinkShown = `[...document.querySelectorAll("a")].some((a) => a.textContent.trim() === "Chat")`;
+/** The rail's Workspace-home link, independent of its translated navigation label. */
+const chatLink = () =>
+  `[...document.querySelectorAll("a")].find((a) => a.getAttribute("href") === ${JSON.stringify(workspacePath)})`;
 
 let workspacePath = "";
 let workspaceId = "";
@@ -326,13 +327,10 @@ test("Chat opens from the browser's copy while its reads are outstanding, then t
 
   // A new page load away from Chat: nothing of the conversation is in memory.
   await browser("open", `${proxy.origin}${workspacePath}/members`);
-  await pageIsUp(chatLinkShown);
+  await pageIsUp(`!!(${chatLink()})`);
   proxy.hold();
   await browser("eval", "window.__stayedInThisDocument = true");
-  await browser(
-    "eval",
-    `[...document.querySelectorAll("a")].find((a) => a.textContent.trim() === "Chat").click()`,
-  );
+  await browser("eval", `${chatLink()}.click()`);
 
   // The sidebar and the conversation are on screen from storage, with the reads still waiting.
   await waitFor(visible(first));
@@ -385,15 +383,12 @@ test("a conversation read in one page load opens from the browser's copy without
   )})?.state.data.pages[0]?.readThroughSequence)()`;
   await until(`${storedCursor}.then((cursor) => cursor === 3)`);
   await browser("open", `${proxy.origin}${workspacePath}/members`);
-  await pageIsUp(chatLinkShown);
+  await pageIsUp(`!!(${chatLink()})`);
 
   // A new page load opens the channel from storage, with its reads held.
   proxy.hold();
   try {
-    await browser(
-      "eval",
-      `[...document.querySelectorAll("a")].find((a) => a.textContent.trim() === "Chat").click()`,
-    );
+    await browser("eval", `${chatLink()}.click()`);
     await waitFor(visible(third));
     expect(proxy.held()).toBeGreaterThan(0);
     expect(
@@ -442,10 +437,7 @@ test("a conversation read and left, then opened again in the same page load, sho
     `[...document.querySelectorAll("a")].find((a) => a.textContent.trim() === "Members").click()`,
   );
   await waitFor(`location.pathname.endsWith("/members")`);
-  await browser(
-    "eval",
-    `[...document.querySelectorAll("a")].find((a) => a.textContent.trim() === "Chat").click()`,
-  );
+  await browser("eval", `${chatLink()}.click()`);
   await waitFor(visible(fourth));
   expect(await evaluate<boolean>("window.__stayedInThisDocument === true")).toBe(true);
   expect(
@@ -481,6 +473,10 @@ test("another person on the same browser starts from nothing", async () => {
   // of the current stored-shape version and of a shape a restore opens, so only that it belongs to
   // someone else keeps it from being read and removes it.
   const secret = `Someone else's secret ${process.pid}`;
+  const health = await fetch(`${proxy.origin}/en/health`);
+  expect(health.status).toBe(200);
+  expect(health.headers.get("content-type")).toContain("text/plain");
+  expect(await health.text()).toBe("ok");
   await browser("open", `${proxy.origin}/en/health`);
   const earlier = "11111111-1111-4111-8111-111111111111";
   await store(channelKey(earlier), {

@@ -88,6 +88,19 @@ describe("Computer HTTPS route contract", () => {
     });
   });
 
+  test("answers a Workspace the User cannot reach with the query's own 404", async () => {
+    const response = await handler().handleRequest(
+      request(
+        "workspace",
+        encodeWorkspaceGetRequest({ protocolMajor: 1, requestId: "r", workspaceSlug: "beta" }),
+      ),
+      WORKSPACE_GET_METHOD,
+    );
+    expect(await response.json()).toEqual({
+      error: { code: 404, message: "workspace not found" },
+    });
+  });
+
   test("maps computer:register through the authenticated registrar", async () => {
     const response = await handler().handleRequest(
       request(

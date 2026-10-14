@@ -131,25 +131,94 @@ test("a Workspace name is 1 to 100 characters after trimming", async () => {
   );
 });
 
+test("only the owner changes the Workspace URL, and the old one keeps naming it", async () => {
+  const catalog = new WorkspaceCatalog(memoryStore());
+  const workspace = await catalog.createForUser(ada, { name: "Ada's Workspace", slug: "user" });
+
+  for (const role of ["admin", "member", undefined])
+    await expect(catalog.changeSlug(workspace.id, role, "ada")).rejects.toEqual(
+      new AppError("ACCESS_DENIED"),
+    );
+  expect(await catalog.changeSlug(workspace.id, "owner", "  ada  ")).toEqual({
+    id: workspace.id,
+    slug: "ada",
+    name: "Ada's Workspace",
+    iconUrl: null,
+  });
+  expect(await catalog.listForUser(ada)).toEqual([
+    { id: workspace.id, slug: "ada", name: "Ada's Workspace", iconUrl: null },
+  ]);
+});
+
+test("a Workspace URL must be well formed and not reserved", async () => {
+  const catalog = new WorkspaceCatalog(memoryStore());
+  const workspace = await catalog.createForUser(ada, { name: "Ada's Workspace", slug: "ada" });
+
+  for (const slug of ["Ada", "", "a--b", "-ada", "x".repeat(49), "settings"])
+    await expect(catalog.changeSlug(workspace.id, "owner", slug)).rejects.toEqual(
+      new AppError("INVALID_INPUT"),
+    );
+  expect((await catalog.listForUser(ada))[0]?.slug).toBe("ada");
+});
+
+test("a URL another Workspace has now, or had before, is taken for good", async () => {
+  const catalog = new WorkspaceCatalog(memoryStore());
+  const mine = await catalog.createForUser(ada, { name: "Ada's Workspace", slug: "ada" });
+  const theirs = await catalog.createForUser(grace, { name: "Grace's Workspace", slug: "grace" });
+  await catalog.changeSlug(theirs.id, "owner", "hopper");
+
+  for (const slug of ["hopper", "grace"])
+    await expect(catalog.changeSlug(mine.id, "owner", slug)).rejects.toEqual(
+      new AppError("CONFLICT"),
+    );
+  await expect(catalog.createForUser(ada, { name: "Grace", slug: "grace" })).rejects.toEqual(
+    new AppError("CONFLICT"),
+  );
+});
+
+test("a Workspace can go back to a URL it had before, and keeping its URL changes nothing", async () => {
+  const catalog = new WorkspaceCatalog(memoryStore());
+  const workspace = await catalog.createForUser(ada, { name: "Ada's Workspace", slug: "user" });
+  await catalog.changeSlug(workspace.id, "owner", "ada");
+
+  expect((await catalog.changeSlug(workspace.id, "owner", "user")).slug).toBe("user");
+  expect((await catalog.changeSlug(workspace.id, "owner", "user")).slug).toBe("user");
+  expect((await catalog.changeSlug(workspace.id, "owner", "ada")).slug).toBe("ada");
+});
+
 function memoryStore(): WorkspaceCatalogStore {
   const workspaces: WorkspaceRecord[] = [];
   const members = new Map<string, string[]>();
+  /** Former URLs, each naming the Workspace that had it. */
+  const formerSlugs = new Map<string, string>();
+  const unique = () => Object.assign(new Error("unique"), { code: "P2002" });
+  const taken = (slug: string, by?: string) =>
+    workspaces.some((workspace) => workspace.slug === slug && workspace.id !== by) ||
+    (formerSlugs.has(slug) && formerSlugs.get(slug) !== by);
   return {
     async rename(workspaceId, name) {
       const workspace = workspaces.find((candidate) => candidate.id === workspaceId)!;
       workspace.name = name;
       return { ...workspace };
     },
+    async changeSlug(workspaceId, slug) {
+      const workspace = workspaces.find((candidate) => candidate.id === workspaceId)!;
+      if (workspace.slug === slug) return { ...workspace };
+      if (taken(slug, workspaceId)) throw unique();
+      formerSlugs.delete(slug);
+      formerSlugs.set(workspace.slug, workspaceId);
+      workspace.slug = slug;
+      return { ...workspace };
+    },
     async listForUser(userId) {
-      const slugs = members.get(userId) ?? [];
-      return slugs
-        .map((slug) => workspaces.find((workspace) => workspace.slug === slug))
-        .filter((workspace): workspace is WorkspaceRecord => Boolean(workspace));
+      const ids = members.get(userId) ?? [];
+      return ids
+        .map((id) => workspaces.find((workspace) => workspace.id === id))
+        .filter((workspace): workspace is WorkspaceRecord => Boolean(workspace))
+        .map((workspace) => ({ ...workspace }));
     },
     async createForUser(input) {
-      if (workspaces.some((workspace) => workspace.slug === input.slug)) {
-        throw Object.assign(new Error("unique"), { code: "P2002" });
-      }
+      if (taken(input.slug)) throw unique();
       const workspace = {
         id: `workspace-${input.slug}`,
         slug: input.slug,
@@ -157,9 +226,9 @@ function memoryStore(): WorkspaceCatalogStore {
         iconUrl: null,
       };
       workspaces.push(workspace);
-      const slugs = members.get(input.userId) ?? [];
-      slugs.push(workspace.slug);
-      members.set(input.userId, slugs);
+      const ids = members.get(input.userId) ?? [];
+      ids.push(workspace.id);
+      members.set(input.userId, ids);
       return { ...workspace };
     },
   };

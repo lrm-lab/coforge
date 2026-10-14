@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createMiddleware } from "@tanstack/react-start";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { authenticateAgentHttpRequest } from "./agent-api-http.server";
@@ -36,13 +37,13 @@ export function noStore(response: Response): Response {
 
 export const agentAuthMiddleware = createMiddleware().server(async ({ next, request }) => {
   const db = getDatabaseClient();
-  if (!db) return new Response("unauthorized", { status: 401, headers: NO_STORE });
+  if (!db) return textResponse("unauthorized", { status: 401, headers: NO_STORE });
   try {
     const principal = await authenticateAgentHttpRequest(request, db);
     const result = await next({ context: { principal, db } });
     result.response = noStore(result.response);
     return result;
   } catch {
-    return new Response("unauthorized", { status: 401, headers: NO_STORE });
+    return textResponse("unauthorized", { status: 401, headers: NO_STORE });
   }
 });

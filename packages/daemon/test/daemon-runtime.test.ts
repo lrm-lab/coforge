@@ -792,6 +792,7 @@ async function queueHarness(
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
   const notices: string[] = [];
   const acknowledgements: string[] = [];
+  const startupNotices: string[] = [];
   let sessions = 0;
   let mints = 0;
   let readyFactory: (() => { runningAgentIds: string[] }) | undefined;
@@ -804,6 +805,9 @@ async function queueHarness(
         sessions++;
         return {
           ...sessionSpy(),
+          async sendMessage(text: string) {
+            startupNotices.push(text);
+          },
           subscribe(listener: (event: AgentRuntimeEvent) => void) {
             options.subscribe?.(listener);
             return () => undefined;
@@ -851,6 +855,7 @@ async function queueHarness(
   return {
     runtime,
     notices,
+    startupNotices,
     acknowledgements,
     sessions: () => sessions,
     mints: () => mints,
@@ -3183,6 +3188,13 @@ describe("DaemonRuntime", () => {
 
   test("a server-held send stores the draft fields and the resend carries its seenUpToSeq", async () => {
     const stateDirectory = join(tempRoot, `coforge-message-drafts-${crypto.randomUUID()}`);
+    // The Agent has met @ada's conversation before: a cursor is durable only for a target bound to
+    // one, and nothing in this test delivers to or reads @ada.
+    new AgentConsumedSeqStore().write("agent-a", {
+      targets: { "@ada": { conversationId: "conversation-b", readOrder: 1 } },
+      aliases: {},
+      nextReadOrder: 1,
+    });
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const operations: string[] = [];
@@ -3556,7 +3568,7 @@ describe("DaemonRuntime", () => {
     // The Agent reviewed @agent through message 3 before its process exited; the consumed cursor
     // outlives the process.
     new AgentConsumedSeqStore().write("agent-a", {
-      targets: { "@agent": { seq: 3 } },
+      targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
       aliases: {},
       nextReadOrder: 1,
     });
@@ -3910,7 +3922,7 @@ describe("DaemonRuntime", () => {
 
   test("acknowledges, rather than rejects, a message an Agent with no process has already seen", async () => {
     new AgentConsumedSeqStore().write("agent-a", {
-      targets: { "@agent": { seq: 3 } },
+      targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
       aliases: {},
       nextReadOrder: 1,
     });
@@ -4871,6 +4883,7 @@ describe("DaemonRuntime", () => {
         }) => Promise<void>)
       | undefined;
     let discoveryCalls = 0;
+    let discoveryOptions: unknown;
     const runtime = new DaemonRuntime(
       connection,
       () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
@@ -4896,7 +4909,8 @@ describe("DaemonRuntime", () => {
       {
         runtimes: async () => [{ provider: "codex", version: "0.151.0", displayName: "Codex" }],
         cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-        catalogs: async () => {
+        catalogs: async (_runtimes, options) => {
+          discoveryOptions = options;
           discoveryCalls++;
           return [{ provider: "codex", models: [] }];
         },
@@ -4915,6 +4929,7 @@ describe("DaemonRuntime", () => {
     });
 
     expect(discoveryCalls).toBe(1);
+    expect(discoveryOptions).toEqual({ force: true });
     expect(updates).toHaveLength(2);
     expect(updates[1]).toMatchObject({
       workspaceId: connection.workspaceId,
@@ -6109,7 +6124,7 @@ describe("DaemonRuntime", () => {
     await runtime.stop();
   });
 
-  test("a launch that creates a new session with nothing to recover sends no notices", async () => {
+  test("an explicit create launch opens a fresh startup turn without a recovery notice", async () => {
     const harness = await queueHarness();
     await harness.runtime.startAgent(
       "agent-a",
@@ -6120,8 +6135,8 @@ describe("DaemonRuntime", () => {
       undefined,
       "create",
     );
-    await Bun.sleep(10);
     expect(harness.notices).toEqual([]);
+    expect(harness.startupNotices).toEqual(["Start."]);
     await harness.runtime.stop();
   });
 
@@ -6177,7 +6192,7 @@ describe("DaemonRuntime", () => {
     await harness.runtime.stop();
   });
 
-  test("a resume launch sends no notices", async () => {
+  test("a resume launch opens one no-work startup turn", async () => {
     const harness = await queueHarness();
     await harness.runtime.startAgent(
       "agent-a",
@@ -6188,17 +6203,35 @@ describe("DaemonRuntime", () => {
       undefined,
       "resume",
     );
-    await Bun.sleep(10);
     expect(harness.notices).toEqual([]);
+    expect(harness.startupNotices).toEqual([
+      "You are back online. No new messages are pending. End this turn without taking action.",
+    ]);
     await harness.runtime.stop();
   });
 
-  test("a launch without an explicit session mode sends no notices", async () => {
+  test("a fresh launch opens one startup turn", async () => {
     const harness = await queueHarness();
     await harness.runtime.startAgent("agent-a", config);
-    await Bun.sleep(10);
-    expect(harness.notices).toEqual([]);
+    expect(harness.startupNotices).toEqual(["Start."]);
     await harness.runtime.stop();
+  });
+
+  test("summary-only startup catch-up reads each target once and acts only on directed work", async () => {
+    const harness = await queueHarness();
+    try {
+      await harness.runtime.startAgent("agent-a", config, "stored-session", "resume-summary", {
+        unreadSummary: { "#team": 3 },
+      });
+      expect(harness.startupNotices).toEqual([]);
+      expect(harness.notices).toHaveLength(1);
+      expect(harness.notices[0]).toContain("coforge message read --target <target>");
+      expect(harness.notices[0]).toContain("once");
+      expect(harness.notices[0]).toContain("direct request");
+      expect(harness.notices[0]).toContain("Do not call `coforge message check`");
+    } finally {
+      await harness.runtime.stop();
+    }
   });
 
   test("a create launch with a wake message sends only the wake notice", async () => {
@@ -7164,12 +7197,15 @@ describe("DaemonRuntime", () => {
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
+    // This crash belongs to an established runtime, after its startup turn succeeded.
+    listener({ type: "completed", status: "completed" });
     listener({ type: "error", message: "code agent process exited unexpectedly" });
     exit?.();
     // `AgentSession.onExit` itself carries no exit code/signal; "Crashed" wording can only
     // describe the last observed error, tracked on the launch since the `error` event above.
     expect(activities.map(({ detailKind }) => detailKind)).toEqual([
       "starting",
+      "idle",
       "runtime_error",
       "runtime_crashed",
     ]);
@@ -7561,7 +7597,7 @@ describe("DaemonRuntime", () => {
         expect(
           activities.filter((activity) => activity.detailKind === "runtime_unavailable"),
         ).toHaveLength(1);
-        // The fresh session the retry creates waits for a real message.
+        // The startup turn uses sendMessage; recovery notifications remain separate.
         await Bun.sleep(10);
         expect(notices).toEqual([]);
       } finally {
@@ -8898,7 +8934,11 @@ function deliveryQueueSession() {
   const waiters: Array<{ length: number; resolve: () => void }> = [];
   return {
     session: {
-      async sendMessage() {},
+      async sendMessage() {
+        // These tests exercise delivery after successful startup, not a provider still
+        // waiting for its first model event.
+        for (const listener of listeners) listener({ type: "completed", status: "completed" });
+      },
       async notify(notice: string) {
         notices.push(notice);
         // Iterate backward while splicing so removing an earlier waiter never shifts a not-yet-

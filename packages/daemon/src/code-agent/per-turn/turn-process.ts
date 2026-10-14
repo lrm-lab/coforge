@@ -6,6 +6,7 @@ import {
   type OwnedProcessTree,
   type ProcessTreeSpawner,
 } from "#src/platform/process-tree";
+import { LineBuffer } from "#src/code-agent/line-buffer";
 import { cleanupOwnedTree } from "#src/code-agent/process-tree-cleanup";
 import { readStderrTail } from "#src/code-agent/stderr-tail";
 
@@ -121,18 +122,14 @@ export class TurnProcess {
 
   async #readStdout(): Promise<void> {
     const decoder = new TextDecoder();
-    let buffer = "";
+    const lines = new LineBuffer();
+    const accept = (line: string) => {
+      if (line) this.#accept(line);
+    };
     for await (const chunk of this.#child.stdout) {
-      buffer += decoder.decode(chunk, { stream: true });
-      let newline = buffer.indexOf("\n");
-      while (newline >= 0) {
-        const line = buffer.slice(0, newline).replace(/\r$/, "");
-        buffer = buffer.slice(newline + 1);
-        if (line) this.#accept(line);
-        newline = buffer.indexOf("\n");
-      }
+      lines.push(decoder.decode(chunk, { stream: true }), accept);
     }
-    const tail = buffer.replace(/\r$/, "");
+    const tail = lines.rest().replace(/\r$/, "");
     if (tail) this.#accept(tail);
   }
 

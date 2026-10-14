@@ -10,7 +10,7 @@ import {
 import { tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { getLogger } from "@logtape/logtape";
-import { normalizeSeenExactSeqs } from "@lrm/coforge-sdk/internal";
+import { normalizeSeenExactSeqs, thrownMessage } from "@lrm/coforge-sdk/internal";
 import { escapePathIdentity, isSafePathScope } from "./path-scope";
 
 const logger = getLogger(["coforge", "daemon", "consumed-seqs"]);
@@ -30,6 +30,11 @@ export type AgentConsumedSeqEntry = Readonly<{
    * `SEEN_EXACT_SEQS_LIMIT`. A send reports them as `seenExactSeqs` so its freshness check does
    * not count them as unreviewed. */
   exactSeqs?: readonly number[];
+  /** The conversation the cursor's sequences count in. A channel recreated under the same name is
+   * another conversation whose sequences restart, so a delivery from a different conversation
+   * starts the target over. An entry without one is dropped on read: it cannot say whose
+   * sequences it holds. */
+  conversationId?: string;
 }>;
 
 /** The `consumed-seqs.json` shape: a `targets` map, the `aliases` map, and the next `readOrder` to
@@ -151,7 +156,7 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
       logger.warn("could not persist the consumed sequence cursor", {
         event: "message.consumed_seqs_write_failed",
         agent_id: agentId,
-        error: error instanceof Error ? error.message : String(error),
+        error: thrownMessage(error),
       });
     }
   }
@@ -186,7 +191,9 @@ function normalizeState(value: unknown): AgentConsumedSeqState {
         readOrder?: unknown;
         reviewedSeq?: unknown;
         exactSeqs?: unknown;
+        conversationId?: unknown;
       };
+      if (typeof record.conversationId !== "string" || record.conversationId.length === 0) continue;
       const seq = positiveFiniteNumber(record.seq);
       const readOrder = positiveFiniteNumber(record.readOrder);
       const exactSeqs = normalizeSeenExactSeqs(record.exactSeqs, seq ?? 0);
@@ -199,6 +206,7 @@ function normalizeState(value: unknown): AgentConsumedSeqState {
         ...(readOrder !== undefined ? { readOrder } : {}),
         ...(reviewedSeq !== undefined ? { reviewedSeq } : {}),
         ...(exactSeqs.length > 0 ? { exactSeqs } : {}),
+        conversationId: record.conversationId,
       };
       // Only a real order counts. There is no fallback to `seq` (this file never had a shape
       // without `readOrder`), and a frontier recorded without a review must not push the order

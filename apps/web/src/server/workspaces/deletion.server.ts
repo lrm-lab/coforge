@@ -23,7 +23,8 @@ import {
 } from "#src/server/workspace-memory/cleanup-remotes.server";
 import type { WorkspaceFileCleanup } from "./file-cleanup.server";
 import { assertCanDeleteWorkspace } from "./member-role.server";
-import { workspaceMemberRole } from "./members.server";
+import { workspaceMemberRole } from "./workspace-membership.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /** Who hears that a Workspace is gone, after the delete commits. */
 export type WorkspaceDeletionSignals = {
@@ -335,7 +336,7 @@ function logEffectFailure(effect: string, workspaceId: string, error: unknown) {
       event: "workspace_deletion:effect_failed",
       effect,
       workspace_id: workspaceId,
-      error_type: error instanceof Error ? error.name : typeof error,
+      error_type: errorType(error),
     }),
   );
 }

@@ -1,9 +1,6 @@
 import {
   AGENT_RUNTIME_EVENT_TYPE,
   AgentProcessCleanupError,
-  UsageUnavailableError,
-  UsageUnsupportedError,
-  AgentContextReportTimeoutError,
   type AgentRuntimeConfig,
   type AgentRuntimeEvent,
   type CodeAgentProvider,
@@ -36,6 +33,7 @@ import {
   type AgentRestartConfig,
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
+import { resolveLaunchIdentity, type SessionReference } from "./launch-identity";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import {
   AgentAuthorizationError,
@@ -43,6 +41,11 @@ import {
   launchFailureLogFields,
 } from "#src/agent-runtime/launch-failure";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
+import {
+  AgentStartup,
+  AGENT_STARTUP_TIMEOUT_MS,
+  agentStartupInput,
+} from "#src/agent-runtime/agent-startup";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
 import { toolActivity } from "#src/code-agent/tool-activity";
 export type DaemonConfig = {
@@ -104,13 +107,23 @@ import {
   type AgentWorkspaceFilesListResult,
   type AgentWorkspaceFileReadRequest,
   type AgentWorkspaceFileReadResult,
+  type AgentWorkspaceDeleteRequest,
+  type AgentWorkspaceDeleteResult,
   type AgentContextScanRequest,
   type AgentContextScanResponse,
   AGENT_CONTEXT_SCAN_STATUS,
+  MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
-  utf8Encoder,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
+import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
+import {
+  agentContextReportOutcome,
+  agentContextScanFailure,
+  agentContextScanResponse,
+  type AgentContextScanOutcome,
+} from "./agent-context-scan-response";
 import { memoryIndexReminder } from "#src/agent-runtime/agent-memory-seed";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
@@ -122,6 +135,7 @@ import {
 import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
 import { listAgentSkills } from "#src/code-agent/agent-skills";
 import {
+  deleteAgentWorkspaceFiles,
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
 } from "#src/agent-runtime/agent-workspace-files";
@@ -147,6 +161,7 @@ import { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import { AgentMessageDraftStore } from "#src/persistence/agent-message-draft-store";
 import { AgentAppInbox, type MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
+import { reminderDueItemId } from "#src/agent-app-inbox/registry";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
@@ -163,7 +178,7 @@ import {
   reminderAppInboxSummary,
 } from "#src/agent-reminder/reminder-scheduler";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode, diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -171,14 +186,17 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 /**
  * The injectable half of Code Agent discovery. `runtimes` is the fast, always-awaited probe;
  * `cachedCatalogs` is a disk-only read (no spawning) used for the same report; `catalogs` is the
- * live, possibly-spawning discovery used only for the background refresh.
+ * live, possibly-spawning discovery. Explicit refreshes forbid cached fallback.
  */
 export type CodeAgentDiscovery = {
   runtimes(): Promise<RuntimeMetadata[]>;
   cachedCatalogs(
     runtimes: RuntimeMetadata[],
   ): Promise<{ catalogs: CodeAgentModelCatalog[]; needsRefresh: boolean }>;
-  catalogs(runtimes: RuntimeMetadata[]): Promise<CodeAgentModelCatalog[]>;
+  catalogs(
+    runtimes: RuntimeMetadata[],
+    options?: { force: boolean },
+  ): Promise<CodeAgentModelCatalog[]>;
 };
 
 function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDiscovery {
@@ -186,7 +204,8 @@ function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDiscovery {
     runtimes: () => discoverCodeAgentRuntimes({ cacheDirectory: stateDirectory }),
     cachedCatalogs: (runtimes) =>
       loadCachedCodeAgentCatalogs(runtimes, { cacheDirectory: stateDirectory }),
-    catalogs: (runtimes) => discoverCodeAgentCatalogs(runtimes, { cacheDirectory: stateDirectory }),
+    catalogs: (runtimes, options) =>
+      discoverCodeAgentCatalogs(runtimes, { cacheDirectory: stateDirectory, ...options }),
   };
 }
 
@@ -203,7 +222,9 @@ export type RecoveredUpgradeResult = {
 const FULL_THREAD_TARGET = new RegExp(
   `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):(${UUID_LIKE_SOURCE})$`,
 );
-const SHORT_THREAD_TARGET = /^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):([0-9a-f]{8})$/;
+const SHORT_THREAD_TARGET = new RegExp(
+  `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):(${MESSAGE_ANCHOR_SOURCE})$`,
+);
 const NOT_RUNNING = "daemon runtime is not running";
 const CLEANUP_UNCONFIRMED =
   "Agent process cleanup could not be confirmed. Replacement launch is blocked.";
@@ -259,6 +280,7 @@ function recoveryHasContent(context: AgentRecoveryContext | undefined): boolean 
 type AgentInput =
   | { kind: "recovery"; context: AgentRecoveryContext; completion: AgentInputCompletion }
   | { kind: "delivery"; message: AgentMessageDelivery; completion: AgentInputCompletion }
+  | { kind: "startup"; text: string; completion: AgentInputCompletion }
   | { kind: "prompt"; text: string; completion: AgentInputCompletion };
 
 type AgentInputQueue = {
@@ -268,6 +290,7 @@ type AgentInputQueue = {
 };
 
 type ActivityLaunch = PublishedActivityLaunch & {
+  startup?: AgentStartup;
   trajectory?: ActivityTrajectory;
   // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
   // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
@@ -315,7 +338,7 @@ type AgentProxy = {
   revoke(token: string): void;
 };
 
-export function generateRuntimeInstanceId(): string {
+function generateRuntimeInstanceId(): string {
   return crypto.randomUUID();
 }
 
@@ -425,21 +448,7 @@ export class DaemonRuntime {
   /** Agents launched with the weekly-report-collect skill pack (ADR 0032). */
   readonly #collectSkillAgents = new Set<string>();
   readonly #agentLaunches = new Map<string, Promise<AgentRuntime>>();
-  readonly #sessionReferences = new Map<
-    string,
-    {
-      requestId: string;
-      provider: AgentRuntimeConfig["provider"];
-      sessionId?: string;
-      sessionMode?: SessionMode;
-      launchId?: string;
-      /** The control epoch of the request this reference was last launched/rebound under;
-       * read live by `#launchAgent`'s `reportAgentSession` closure (via this
-       * same object, mutated in place by `#rebindAgent`, never replaced) so a session report
-       * sent after a rebind carries the new epoch instead of the one captured at launch time. */
-      controlEpoch?: number;
-    }
-  >();
+  readonly #sessionReferences = new Map<string, SessionReference>();
   readonly #agentInputQueues = new Map<string, AgentInputQueue>();
   readonly #stoppingAgents = new Set<string>();
   readonly #agentStops = new Map<string, Promise<void>>();
@@ -538,6 +547,7 @@ export class DaemonRuntime {
       running: (agentId) => this.#runningMentionIdentity(agentId),
       consumed: (message) => this.#messageAttention.hasConsumed(message),
       told: (message) => this.#messageAttention.wasNotified(message),
+      decided: (message, outcome) => this.#messageAttention.logDecision(message, outcome),
       announce: (message) => this.#messageAttention.announce(message),
       busy: (agentId) => this.#deliveryQueue.isBusy(agentId),
       blocked: (agentId) =>
@@ -728,46 +738,22 @@ export class DaemonRuntime {
 
   async scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse> {
     this.#assertRunning();
-    const result = (
-      status: UsageScanResponse["status"],
-      snapshot?: UsageSnapshot,
-      message?: string,
-    ): UsageScanResponse => ({
-      protocolMajor: 1,
-      requestId: "",
-      accepted: Boolean(snapshot),
-      status,
-      ...(snapshot ? { snapshotJson: utf8Encoder.encode(JSON.stringify(snapshot)) } : {}),
-      ...(message ? { message } : {}),
-    });
-    // The one place a scan result gets its `collectedAt`: a fresh reading is stamped "now"; an
-    // observed snapshot reused from `#currentObservedUsage` already carries the time it was
-    // observed (`#rememberUsage` stamps that), which this must not overwrite.
-    const stamp = (snapshot: UsageSnapshot): UsageSnapshot =>
-      snapshot.collectedAt ? snapshot : { ...snapshot, collectedAt: new Date().toISOString() };
+    const now = () => new Date();
     if (!RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider])
-      return result("unsupported", undefined, "Pi usage scanning is unsupported");
+      return usageScanResult("unsupported", undefined, "Pi usage scanning is unsupported");
     const codeAgentProvider = this.#createProvider(provider);
-    if (!codeAgentProvider.readUsage) return result("unsupported");
+    if (!codeAgentProvider.readUsage) return usageScanResult("unsupported");
     try {
+      // An observed snapshot (`#rememberUsage` stamps when it was observed) is the fallback for a
+      // provider with no reading of its own.
       const snapshot =
         (await codeAgentProvider.readUsage({
           workingDirectory: this.#connection.workspaceRoot,
           timeoutMs: 10_000,
         })) ?? this.#currentObservedUsage(provider);
-      return snapshot
-        ? result("available", stamp(snapshot))
-        : result("reauth", undefined, "Provider usage is unavailable");
+      return usageScanReading(snapshot, now);
     } catch (error) {
-      // A non-subscription account has no plan usage at all — answering `unsupported` wins
-      // over a stale observed snapshot, which a reading like this can never have produced.
-      if (error instanceof UsageUnsupportedError)
-        return result("unsupported", undefined, "Usage scanning is unsupported for this account");
-      const snapshot = this.#currentObservedUsage(provider);
-      if (snapshot) return result("available", stamp(snapshot));
-      return error instanceof UsageUnavailableError
-        ? result("unavailable", undefined, "Provider usage is unavailable")
-        : result("error", undefined, "Usage scan failed");
+      return usageScanFailure(error, () => this.#currentObservedUsage(provider), now);
     }
   }
 
@@ -785,49 +771,43 @@ export class DaemonRuntime {
   async scanAgentContext(request: AgentContextScanRequest): Promise<AgentContextScanResponse> {
     this.#assertRunning();
     this.#assertOwnIntent(request);
-    const base = {
-      protocolMajor: request.protocolMajor,
-      requestId: request.requestId,
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
-      agentId: request.agentId,
-      provider: request.provider,
-    };
-    const result = (
-      launchId: string,
-      sessionId: string,
-      status: AgentContextScanResponse["status"],
-      reportJson?: Uint8Array,
-      message?: string,
-    ): AgentContextScanResponse => ({
-      ...base,
-      launchId,
-      sessionId,
-      accepted: Boolean(reportJson),
-      status,
-      ...(reportJson ? { reportJson } : {}),
-      ...(message ? { message } : {}),
-    });
+    const answer = (outcome: AgentContextScanOutcome) =>
+      agentContextScanResponse(request, this.#connection, outcome);
     const launch = this.#currentActivityLaunches.get(request.agentId);
     if (!launch)
-      return result(request.launchId, request.sessionId, AGENT_CONTEXT_SCAN_STATUS.NO_SESSION);
+      return answer({
+        launchId: request.launchId,
+        sessionId: request.sessionId,
+        status: AGENT_CONTEXT_SCAN_STATUS.NO_SESSION,
+      });
     if (request.launchId && launch.launchId !== request.launchId)
-      return result(
-        launch.launchId,
-        request.sessionId,
-        AGENT_CONTEXT_SCAN_STATUS.ERROR,
-        undefined,
-        "Agent context scan targets a superseded launch",
-      );
+      return answer({
+        launchId: launch.launchId,
+        sessionId: request.sessionId,
+        status: AGENT_CONTEXT_SCAN_STATUS.ERROR,
+        message: "Agent context scan targets a superseded launch",
+      });
     const config = this.#agentProcessManager.runtime(request.agentId)?.config;
     if (!config)
-      return result(launch.launchId, request.sessionId, AGENT_CONTEXT_SCAN_STATUS.NO_SESSION);
+      return answer({
+        launchId: launch.launchId,
+        sessionId: request.sessionId,
+        status: AGENT_CONTEXT_SCAN_STATUS.NO_SESSION,
+      });
     const codeAgentProvider = this.#createProvider(config.provider);
     if (!codeAgentProvider.readContextReport)
-      return result(launch.launchId, request.sessionId, AGENT_CONTEXT_SCAN_STATUS.UNSUPPORTED);
+      return answer({
+        launchId: launch.launchId,
+        sessionId: request.sessionId,
+        status: AGENT_CONTEXT_SCAN_STATUS.UNSUPPORTED,
+      });
     const sessionId = this.#sessionReferences.get(request.agentId)?.sessionId;
     if (!sessionId)
-      return result(launch.launchId, request.sessionId, AGENT_CONTEXT_SCAN_STATUS.NO_SESSION);
+      return answer({
+        launchId: launch.launchId,
+        sessionId: request.sessionId,
+        status: AGENT_CONTEXT_SCAN_STATUS.NO_SESSION,
+      });
     try {
       const report = await codeAgentProvider.readContextReport({
         workingDirectory: agentWorkspaceDirectory(
@@ -838,24 +818,9 @@ export class DaemonRuntime {
         sessionId,
         timeoutMs: 20_000,
       });
-      return report
-        ? result(
-            launch.launchId,
-            sessionId,
-            AGENT_CONTEXT_SCAN_STATUS.AVAILABLE,
-            utf8Encoder.encode(JSON.stringify(report)),
-          )
-        : result(launch.launchId, sessionId, AGENT_CONTEXT_SCAN_STATUS.UNPARSED);
+      return answer(agentContextReportOutcome(launch.launchId, sessionId, report));
     } catch (error) {
-      return error instanceof AgentContextReportTimeoutError
-        ? result(launch.launchId, sessionId, AGENT_CONTEXT_SCAN_STATUS.TIMEOUT)
-        : result(
-            launch.launchId,
-            sessionId,
-            AGENT_CONTEXT_SCAN_STATUS.ERROR,
-            undefined,
-            "Context scan failed",
-          );
+      return answer(agentContextScanFailure(launch.launchId, sessionId, error));
     }
   }
 
@@ -1015,6 +980,19 @@ export class DaemonRuntime {
         }),
       );
       this.#subscribe(
+        transport.onWorkspaceDelete?.(async (request) => {
+          if (
+            this.#stopping ||
+            request.workspaceId !== connection.workspaceId ||
+            request.computerId !== connection.computerId
+          )
+            return;
+          const result = await this.#deleteWorkspace(connection, request);
+          if (!this.#stopping && this.#transport === transport)
+            await transport.sendWorkspaceDeleteResult?.({ ...request, ...result });
+        }),
+      );
+      this.#subscribe(
         this.#transport.onUsageScan?.(async (request) => {
           if (request.computerId !== connection.computerId) return;
           const result = await this.scanUsage(request.provider);
@@ -1082,7 +1060,7 @@ export class DaemonRuntime {
               logger.warn("Agent inbox purge was not applied", {
                 event: "agent.inbox.purge_rejected",
                 agent_id: purge.agentId,
-                error_code: error instanceof Error ? error.name : "UnknownError",
+                error_code: diagnosticErrorName(error),
               });
             }
           }),
@@ -1115,7 +1093,7 @@ export class DaemonRuntime {
               logger.warn("Stopping Agents after the cloud refused the connection failed", {
                 event: "daemon_runtime:refused_stop_failed",
                 reason,
-                error_code: error instanceof Error ? error.name : "UnknownError",
+                error_code: diagnosticErrorName(error),
               }),
             )
             .then(() => this.lifecycle.connectionRefused?.(reason));
@@ -1219,7 +1197,7 @@ export class DaemonRuntime {
     try {
       await requestUpgrade(requestId, expectedVersion);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = thrownMessage(error);
       const errorCode = parseUpgradeErrorCode((error as { code?: unknown } | null)?.code);
       logger.warn("Computer upgrade request was refused", {
         event: "upgrade:request_refused",
@@ -1379,6 +1357,28 @@ export class DaemonRuntime {
     }
   }
 
+  async #deleteWorkspace(
+    connection: DaemonConfig,
+    request: Pick<AgentWorkspaceDeleteRequest, "agentId">,
+  ): Promise<Pick<AgentWorkspaceDeleteResult, "status">> {
+    try {
+      if (
+        this.#agentProcessManager.runtime(request.agentId) ||
+        this.#agentProcessManager.isStopping(request.agentId)
+      )
+        await this.stopAgent(request.agentId);
+      return await deleteAgentWorkspaceFiles({
+        agentWorkspaceDirectory: agentWorkspaceDirectory(
+          connection.workspaceRoot,
+          connection.workspaceId,
+          request.agentId,
+        ),
+      });
+    } catch {
+      return { status: "error" };
+    }
+  }
+
   /**
    * The fast half of Code Agent discovery: installed runtimes plus whatever model catalogs are
    * already on disk from a previous probe. Never spawns a provider CLI beyond what runtime
@@ -1467,7 +1467,7 @@ export class DaemonRuntime {
     };
     try {
       const runtimes = await this.#codeAgentDiscovery.runtimes();
-      const catalogs = await this.#codeAgentDiscovery.catalogs(runtimes);
+      const catalogs = await this.#codeAgentDiscovery.catalogs(runtimes, { force: true });
       if (this.#stopping || this.#transport !== transport) return;
       await transport.updateCodeAgents?.({
         protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
@@ -1649,6 +1649,15 @@ export class DaemonRuntime {
     const { resumePrompt } = request;
     const existingLaunch = this.#agentLaunches.get(agentId);
     if (existingLaunch) {
+      if (recoveryHasContent(recovery) || resumePrompt !== undefined) {
+        const queue = this.#agentInputQueues.get(agentId);
+        if (queue)
+          queue.items = queue.items.filter((item) => {
+            if (item.kind !== "startup") return true;
+            item.completion.resolve();
+            return false;
+          });
+      }
       // A launch in progress presents this start's recovery and resume prompt too.
       const inputs = [
         ...(recovery ? [enqueueRecovery(recovery)] : []),
@@ -1696,6 +1705,18 @@ export class DaemonRuntime {
     // process is still starting queues behind it.
     const promptCompletion = resumePrompt === undefined ? undefined : enqueueTurn(resumePrompt);
     void promptCompletion?.catch(() => {});
+    const startupCompletion =
+      resumePrompt === undefined && !recoveryHasContent(recovery)
+        ? this.#enqueueAgentInput(agentId, (completion) => ({
+            kind: "startup",
+            text: agentStartupInput(
+              request.sessionMode !== "create" &&
+                Boolean(request.sessionId ?? this.#sessionReferences.get(agentId)?.sessionId),
+            ),
+            completion,
+          }))
+        : undefined;
+    void startupCompletion?.catch(() => {});
     const launching = this.#launchAgent(agentId, config, request);
     const launch = launching
       .then(
@@ -1707,12 +1728,13 @@ export class DaemonRuntime {
           // No recovery item was enqueued for this launch at all (so
           // `#recoverAttention` never ran), yet the session is ready — flush anything
           // AgentDeliveryQueue held across an unexpected exit now. Do not open a
-          // synthetic first turn: standing instructions are already on the session.
+          // second recovery notice: the queued startup input opens the initial turn if needed.
           else {
             this.#flushSurvivingDeliveryQueue(agentId);
             this.#releaseHeldAppItems(agentId);
             this.#releaseFallbackNotices(agentId);
           }
+          if (startupCompletion) await startupCompletion;
           return runtime;
         },
         (error: unknown) => {
@@ -1770,6 +1792,20 @@ export class DaemonRuntime {
       const item = queue.items.shift();
       if (!item) return;
       try {
+        if (
+          item.kind === "startup" &&
+          (queue.items.some(
+            (pending) =>
+              pending.kind === "delivery" ||
+              pending.kind === "prompt" ||
+              (pending.kind === "recovery" && recoveryHasContent(pending.context)),
+          ) ||
+            this.#deliveryQueue.hasQueued(agentId) ||
+            this.#agentProcessManager.session(agentId)?.hasLiveTurn === true)
+        ) {
+          item.completion.resolve();
+          continue;
+        }
         if (item.kind === "delivery") {
           await (isTrackedMention(item.message)
             ? this.#mentionDeliveries.deliver(item.message)
@@ -1782,11 +1818,36 @@ export class DaemonRuntime {
             target: item.message.target,
             sequence: item.message.sequence,
           });
+        } else if (item.kind === "startup") {
+          const session = this.#agentProcessManager.session(agentId);
+          const launch = this.#currentActivityLaunches.get(agentId);
+          // Preserve typed input rejection for AgentControl's session recovery, but release
+          // the queue at real readiness if this provider awaits the whole turn.
+          if (session && launch) await launch.startup?.run(session.sendMessage(item.text));
         } else if (item.kind === "prompt") {
           await this.#runPromptTurn(agentId, item.text);
         } else await this.#recoverAttention(agentId, item.context);
       } catch (error) {
-        if (item.kind === "recovery" && this.#agentLaunches.has(agentId)) {
+        if (
+          (item.kind === "recovery" || item.kind === "startup") &&
+          this.#agentLaunches.has(agentId)
+        ) {
+          if (this.#stoppingAgents.has(agentId)) {
+            item.completion.reject(error);
+            return;
+          }
+          const launch = this.#currentActivityLaunches.get(agentId);
+          if (item.kind === "startup" && launch && !launch.startup?.failureObserved)
+            this.#activityPublisher.publish(
+              agentId,
+              launch,
+              this.#runtimeErrorActivity(
+                agentId,
+                scrubRuntimeErrorText(
+                  error instanceof Error ? error.message : "Agent startup input was rejected",
+                ),
+              ),
+            );
           item.completion.reject(await this.#abandonLaunch(agentId, error));
           return;
         }
@@ -1805,6 +1866,13 @@ export class DaemonRuntime {
           continue;
         }
       }
+      const launch = this.#currentActivityLaunches.get(agentId);
+      const hasInput =
+        item.kind === "delivery" ||
+        item.kind === "prompt" ||
+        (item.kind === "recovery" && recoveryHasContent(item.context));
+      if (hasInput && launch?.startup?.admitted())
+        this.#scheduleStartupFailure(agentId, launch, new Error("Agent startup turn failed"));
       item.completion.resolve();
     }
   }
@@ -1822,7 +1890,7 @@ export class DaemonRuntime {
       logger.warn("Agent recovery notice was not accepted; canonical unread state remains", {
         event: "agent.recovery_notice.rejected",
         agent_id: agentId,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
       throw error;
     }
@@ -1847,6 +1915,17 @@ export class DaemonRuntime {
     this.#releaseFallbackNotices(agentId);
   }
 
+  /** The fields every daemon -> server report opens with: this protocol, a fresh request id, and
+   * this runtime's own Workspace and Computer. */
+  #envelope() {
+    return {
+      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
+      requestId: crypto.randomUUID(),
+      workspaceId: this.#connection.workspaceId,
+      computerId: this.#connection.computerId,
+    };
+  }
+
   /**
    * The daemon has taken this delivery into its own keeping (for a later launch, a batch, or to
    * drop it), so it acknowledges it now, as the server needs no further copy. A failed ACK only
@@ -1855,6 +1934,22 @@ export class DaemonRuntime {
    */
   #acknowledgeCustody(message: AgentMessageDelivery): void {
     this.#messageAttention.acknowledgeCustody(message);
+  }
+
+  /** Keeps a delivery in `AgentDeliveryQueue` for the Agent's next launch, acknowledged now: the
+   * daemon has taken custody of it, so the server need not resend it. */
+  #keepForNextLaunch(agentId: string, message: AgentMessageDelivery): void {
+    this.#deliveryQueue.enqueue(agentId, message);
+    this.#acknowledgeCustody(message);
+  }
+
+  /** Queues a delivery as the Agent's next input; settles once the input drain handled it. */
+  #enqueueDelivery(agentId: string, message: AgentMessageDelivery): Promise<void> {
+    return this.#enqueueAgentInput(agentId, (completion) => ({
+      kind: "delivery",
+      message,
+      completion,
+    }));
   }
 
   /** Drops whatever `AgentDeliveryQueue` held for `agentId` across an unexpected exit — used when
@@ -1878,7 +1973,7 @@ export class DaemonRuntime {
         agent_id: agentId,
         held_count: held.length,
         already_acknowledged: true,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
     });
   }
@@ -1901,6 +1996,7 @@ export class DaemonRuntime {
     this.#stoppingAgents.add(agentId);
     this.#closeAgentInputQueue(agentId, error);
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
+    activityLaunch?.startup?.dispose();
     if (activityLaunch) activityLaunch.stopping = true;
     this.#interruptIfBusy(agentId, activityLaunch);
     this.#activityPublisher.forgetBusy(agentId);
@@ -1932,15 +2028,14 @@ export class DaemonRuntime {
         item.completion.resolve();
         return false;
       }
-      this.#deliveryQueue.enqueue(agentId, item.message);
-      this.#acknowledgeCustody(item.message);
+      this.#keepForNextLaunch(agentId, item.message);
       // Kept, not failed: the delivery is not lost, so it is not reported as a failed delivery.
       item.completion.resolve();
       logger.info("Agent delivery kept for the next launch after a failed launch", {
         event: "agent.message.delivery_kept",
         agent_id: agentId,
         delivery_id: item.message.deliveryId,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
       return false;
     });
@@ -1983,43 +2078,19 @@ export class DaemonRuntime {
     // instead of minting a fresh one. An Agent with no remembered identity (never brought under
     // AgentControl, or already forgotten by an explicit Stop) keeps minting, unchanged.
     const serverLaunch = control ? undefined : this.#agentProcessManager.serverLaunch(agentId);
-    const reused = serverLaunch !== undefined;
-    const previous = this.#sessionReferences.get(agentId);
-    const continuing =
-      previous?.provider === config.provider &&
-      (!request.requestId || request.requestId === previous.requestId);
-    const requestId = request.requestId ?? (continuing ? previous.requestId : crypto.randomUUID());
-    const reference = {
-      requestId,
-      provider: config.provider,
-      sessionId: request.sessionId ?? (continuing ? previous.sessionId : undefined),
-      sessionMode: request.sessionMode ?? (continuing ? previous.sessionMode : undefined),
-      launchId: request.previousLaunchId ?? (continuing ? previous.launchId : undefined),
-      controlEpoch: request.control?.controlEpoch,
-    };
-    // A hand-over is meaningless when the reused launch's identity did not change; omit it so
-    // the server never sees a spurious previousLaunchId equal to the report's own launchId.
-    const previousLaunchId =
-      reference.launchId !== (control?.launchId ?? serverLaunch?.launchId)
-        ? reference.launchId
-        : undefined;
+    const { requestId, reference, previousLaunchId, launchId, reused, managedScope } =
+      resolveLaunchIdentity({
+        request,
+        provider: config.provider,
+        previous: this.#sessionReferences.get(agentId),
+        serverLaunch,
+      });
     this.#sessionReferences.set(agentId, reference);
     const launch: ActivityLaunch = {
-      launchId: control?.launchId ?? serverLaunch?.launchId ?? crypto.randomUUID(),
+      launchId,
       clientSeq: reused ? this.#agentProcessManager.lastClientSeq(agentId) : 0,
       stopping: false,
     };
-    // A managed launch's own scope; a reused wake resends the same scope it was remembered
-    // under so `authorizeLaunch` can accept it; an unmanaged/legacy launch sends none.
-    const managedScope = control
-      ? { controlEpoch: control.controlEpoch, requestId, launchId: launch.launchId }
-      : serverLaunch
-        ? {
-            controlEpoch: serverLaunch.controlEpoch,
-            requestId: serverLaunch.requestId,
-            launchId: serverLaunch.launchId,
-          }
-        : undefined;
     if (!control)
       logger.info("Agent self-initiated launch resolved its launch identity", {
         event: "agent_control:wake_launch",
@@ -2132,10 +2203,7 @@ export class DaemonRuntime {
                 );
               }
               await this.#reportAgentSession({
-                protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-                requestId: crypto.randomUUID(),
-                workspaceId: this.#connection.workspaceId,
-                computerId: this.#connection.computerId,
+                ...this.#envelope(),
                 agentId,
                 provider: config.provider,
                 sessionId: reportedSessionId,
@@ -2191,19 +2259,34 @@ export class DaemonRuntime {
         await this.#agentProcessManager.stop(agentId);
         throw new Error(`Agent runtime is stopping: ${agentId}`);
       }
+      this.#sendAgentStatus(agentId, "active");
+      this.#activityPublisher.publish(agentId, launch, {
+        ...this.#activity(
+          agentId,
+          AGENT_ACTIVITY_DETAIL_KIND.STARTING,
+          "info",
+          "Agent runtime is starting.",
+        ),
+        requestId,
+      });
+      launch.startup = new AgentStartup(() => this.#scheduleStartupFailure(agentId, launch));
       const trajectory = new ActivityTrajectory((event) =>
         this.#observeRuntimeEvent(agentId, launch, config, runtime, Boolean(control), event),
       );
       launch.trajectory = trajectory;
       const unsubscribe = runtime.session.subscribe((event) => {
+        const startupFailed = current() && launch.startup?.observe(event);
         const turnActivity =
           event.type === "activity"
             ? isBusyActivityDetailKind(event.activity.detailKind)
             : TURN_ACTIVITY_EVENT_TYPES.has(event.type);
         if (turnActivity && this.#reconcileIdleTurn(agentId, launch)) return;
         trajectory.accept(event);
+        if (startupFailed)
+          this.#scheduleStartupFailure(agentId, launch, new Error("Agent startup turn failed"));
       });
       runtime.session.onExit(() => {
+        launch.startup?.dispose();
         trajectory.dispose();
         // No leaked watchdog timer, and a later launch for this Agent starts clean.
         this.#compactionTracker.dispose(agentId);
@@ -2267,19 +2350,10 @@ export class DaemonRuntime {
           void this.#agentControl.wake(agentId, launch.launchId).catch(() => {});
         }
       }
-      this.#sendAgentStatus(agentId, "active");
-      this.#activityPublisher.publish(agentId, launch, {
-        ...this.#activity(
-          agentId,
-          AGENT_ACTIVITY_DETAIL_KIND.STARTING,
-          "info",
-          "Agent runtime is starting.",
-        ),
-        requestId,
-      });
       void this.drainAppInboxNotices(agentId).catch(() => {});
       return runtime;
     } catch (error) {
+      launch.startup?.dispose();
       this.#revokeLocalLaunch(agentId);
       if (agentApiKey) {
         try {
@@ -2314,6 +2388,42 @@ export class DaemonRuntime {
       }
       throw error;
     }
+  }
+
+  async #failAgentStartup(agentId: string, launch: ActivityLaunch, cause?: unknown): Promise<void> {
+    if (this.#stopping || launch.stopping || this.#currentActivityLaunches.get(agentId) !== launch)
+      return;
+    const detail =
+      cause === undefined
+        ? `Agent runtime did not become ready within ${AGENT_STARTUP_TIMEOUT_MS / 1000} seconds. Check the provider on this Computer, then start the Agent again.`
+        : `Agent runtime rejected its startup input. ${scrubRuntimeErrorText(cause instanceof Error ? cause.message : "Check the provider on this Computer, then start the Agent again.")}`;
+    const error = new Error(detail);
+    if (!launch.startup?.fail(error)) return;
+    logger.warning("Agent runtime startup failed", {
+      event:
+        cause === undefined
+          ? "agent_runtime:startup_timed_out"
+          : "agent_runtime:startup_input_rejected",
+      agent_id: agentId,
+      launch_id: launch.launchId,
+      timeout_ms: AGENT_STARTUP_TIMEOUT_MS,
+      outcome: "failed",
+    });
+    if (!launch.startup.failureObserved)
+      this.#activityPublisher.publish(agentId, launch, this.#runtimeErrorActivity(agentId, detail));
+    const outcome = await this.#abandonLaunch(agentId, error);
+    if (outcome !== error) throw outcome;
+    await this.#agentControl.stopped(agentId, launch.launchId);
+  }
+
+  #scheduleStartupFailure(agentId: string, launch: ActivityLaunch, cause?: unknown): void {
+    void this.#failAgentStartup(agentId, launch, cause).catch((error: unknown) => {
+      logger.error("Agent startup cleanup did not confirm process exit", {
+        event: "agent_runtime:startup_cleanup_failed",
+        agent_id: agentId,
+        error_code: diagnosticErrorCode(error),
+      });
+    });
   }
 
   /**
@@ -2377,10 +2487,7 @@ export class DaemonRuntime {
     if (identity?.sessionId && this.#transport.reportAgentSession) {
       try {
         await this.#reportAgentSession({
-          protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-          requestId: crypto.randomUUID(),
-          workspaceId: this.#connection.workspaceId,
-          computerId: this.#connection.computerId,
+          ...this.#envelope(),
           agentId,
           provider: intent.provider,
           sessionId: identity.sessionId,
@@ -2456,7 +2563,7 @@ export class DaemonRuntime {
             logger.warning("Context handoff request was not accepted", {
               event: "agent.context_handoff.request_failed",
               agent_id: agentId,
-              error_code: error instanceof Error ? error.name : "UnknownError",
+              error_code: diagnosticErrorName(error),
             });
           });
         });
@@ -2811,6 +2918,18 @@ export class DaemonRuntime {
       return;
     }
     const remembered = this.#activityPublisher.lastBusy(probe.agentId);
+    if (launch.startup?.waiting) {
+      this.#activityPublisher.publish(probe.agentId, launch, {
+        ...this.#activity(
+          probe.agentId,
+          AGENT_ACTIVITY_DETAIL_KIND.STARTING,
+          "info",
+          "Agent runtime is starting.",
+        ),
+        probeId: probe.probeId,
+      });
+      return;
+    }
     if (remembered && remembered.launch === launch) {
       this.#activityPublisher.publish(probe.agentId, launch, {
         ...remembered.activity,
@@ -2849,15 +2968,10 @@ export class DaemonRuntime {
       this.#wakeLaunches.has(message.agentId) &&
       this.#deliveryQueue.hasQueued(message.agentId)
     ) {
-      this.#deliveryQueue.enqueue(message.agentId, message);
-      this.#acknowledgeCustody(message);
+      this.#keepForNextLaunch(message.agentId, message);
       return;
     }
-    const delivery = this.#enqueueAgentInput(message.agentId, (completion) => ({
-      kind: "delivery",
-      message,
-      completion,
-    }));
+    const delivery = this.#enqueueDelivery(message.agentId, message);
     // Runner hold: the delivery is queued, never rejected and never indexed. Attention indexing is
     // what wakes a turn, and the server's canonical read boundary only advances when the Agent
     // itself drains `check` - so a held delivery stays undelivered server-side and is re-fetched
@@ -2896,11 +3010,7 @@ export class DaemonRuntime {
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
       return Promise.resolve();
     }
-    const delivery = this.#enqueueAgentInput(agentId, (completion) => ({
-      kind: "delivery",
-      message,
-      completion,
-    }));
+    const delivery = this.#enqueueDelivery(agentId, message);
     if (this.#runnerHold !== undefined) {
       void delivery.catch(() => {});
       return Promise.resolve();
@@ -2932,8 +3042,10 @@ export class DaemonRuntime {
   async #deliverToExitedAgent(message: AgentMessageDelivery): Promise<void> {
     // An exited Agent is not woken for a message it has already consumed: the delivery is
     // acknowledged and dropped here, before any launch, rather than after one.
-    if (this.#messageAttention.hasConsumed(message))
+    if (this.#messageAttention.hasConsumed(message)) {
+      this.#messageAttention.logDecision(message, "consumed");
       return this.#messageAttention.acknowledge(message);
+    }
     const restart = this.#agentProcessManager.restartConfig(message.agentId);
     if (!restart && this.#agentControl.startPending(message.agentId))
       return this.#holdForPendingStart(message);
@@ -2945,8 +3057,7 @@ export class DaemonRuntime {
       ? this.#wakeLaunchFailures.blockedUntil(message.agentId)
       : undefined;
     if (blockedUntil !== undefined) {
-      this.#deliveryQueue.enqueue(message.agentId, message);
-      this.#acknowledgeCustody(message);
+      this.#keepForNextLaunch(message.agentId, message);
       logger.info("Agent wake deferred by a launch-failure cooldown", {
         event: "agent.wake.cooldown_deferred",
         agent_id: message.agentId,
@@ -2958,16 +3069,11 @@ export class DaemonRuntime {
     // Deliveries are already waiting for this Agent's next launch: this one joins them, so the
     // launch presents all of them in a single notice instead of this one alone.
     if (this.#deliveryQueue.hasQueued(message.agentId)) {
-      this.#deliveryQueue.enqueue(message.agentId, message);
-      this.#acknowledgeCustody(message);
+      this.#keepForNextLaunch(message.agentId, message);
       await this.#wakeAgent(message.agentId, restart);
       return;
     }
-    const delivery = this.#enqueueAgentInput(message.agentId, (completion) => ({
-      kind: "delivery",
-      message,
-      completion,
-    }));
+    const delivery = this.#enqueueDelivery(message.agentId, message);
     await Promise.all([this.#wakeAgent(message.agentId, restart), delivery]);
   }
 
@@ -3103,6 +3209,7 @@ export class DaemonRuntime {
     this.#sessionReferences.delete(agentId);
     this.#closeAgentInputQueue(agentId, new Error(`Agent runtime is stopping: ${agentId}`));
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
+    activityLaunch?.startup?.dispose();
     if (activityLaunch) activityLaunch.stopping = true;
     this.#interruptIfBusy(agentId, activityLaunch);
     this.#activityPublisher.forgetBusy(agentId);
@@ -3143,6 +3250,7 @@ export class DaemonRuntime {
    */
   async #releaseAgentRuntime(agentId: string, publishStopped = false): Promise<void> {
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
+    activityLaunch?.startup?.dispose();
     void this.#revokeAgentApiKey(agentId, this.#agentApiKeys.get(agentId)).catch((error) => {
       this.#logAgentApiKeyRevokeFailed(agentId, error);
     });
@@ -3229,10 +3337,7 @@ export class DaemonRuntime {
     reason: AgentSessionInvalidateReason,
   ): AgentSessionInvalidate {
     return {
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: crypto.randomUUID(),
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
+      ...this.#envelope(),
       agentId,
       provider,
       sessionId,
@@ -3309,7 +3414,7 @@ export class DaemonRuntime {
         agent_id: agentId,
         held_count: held.length,
         already_acknowledged: true,
-        error_code: error instanceof Error ? error.name : "UnknownError",
+        error_code: diagnosticErrorName(error),
       });
     });
   }
@@ -3380,10 +3485,7 @@ export class DaemonRuntime {
     const clientSeq = (this.#agentStatusSequences.get(agentId) ?? 0) + 1;
     this.#agentStatusSequences.set(agentId, clientSeq);
     this.#transport.sendAgentStatus?.({
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: crypto.randomUUID(),
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
+      ...this.#envelope(),
       agentId,
       status,
       daemonInstanceId: this.#runtimeInstanceId,
@@ -3413,10 +3515,7 @@ export class DaemonRuntime {
     if (last && last.usedTokens === usedTokens && last.windowTokens === windowTokens) return;
     this.#lastContextUsage.set(agentId, { usedTokens, windowTokens });
     this.#transport.sendAgentContextUsage?.({
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: crypto.randomUUID(),
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
+      ...this.#envelope(),
       agentId,
       provider,
       launchId: launch.launchId,
@@ -3660,19 +3759,20 @@ export class DaemonRuntime {
   async reminder(context: string, request: LocalReminderRequest, agentApiKey: string) {
     const agentId = this.#authorizedAgent(context, agentApiKey);
     if (request.operation === "ack" || request.operation === "dismiss") {
-      const itemId = `reminder:${request.reminderId}:${request.revision}`;
       const accepted = await this.#reminders.acknowledge(
         agentId,
         request.reminderId!,
         request.revision!,
       );
-      const inbox = await this.#appInbox(agentId);
+      const removed = await (
+        await this.#appInbox(agentId)
+      ).remove(reminderDueItemId(request.reminderId!, request.revision!));
       if (!accepted) {
         // Neither the receipt file nor this daemon knows the receipt (the file was lost or is
         // unreadable, and the daemon has restarted since), but the Agent was shown this exact
         // revision: its inbox item proves the delivery. Clear it rather than leave an item nothing
         // can ever acknowledge; the cloud already refuses to fire this revision again.
-        if (!(await inbox.remove(itemId)))
+        if (!removed)
           return { accepted: false, reason: "reminder receipt not found for exact revision" };
         logger.info("Reminder acknowledged from its inbox item without a local receipt", {
           event: "reminder.ack_without_receipt",
@@ -3681,9 +3781,7 @@ export class DaemonRuntime {
           reminder_id: request.reminderId,
           reminder_version: request.revision,
         });
-        return { accepted: true, reminderId: request.reminderId, revision: request.revision };
       }
-      await inbox.remove(itemId);
       return { accepted: true, reminderId: request.reminderId, revision: request.revision };
     }
     if (!this.#transport.agentReminder) throw new Error("Agent reminder transport is unavailable");
@@ -3715,10 +3813,7 @@ export class DaemonRuntime {
   async #requestReminderSnapshot(agentId: string): Promise<void> {
     if (!this.#transport.requestSnapshot) return;
     const sync: ReminderSync = await this.#transport.requestSnapshot({
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: crypto.randomUUID(),
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
+      ...this.#envelope(),
       agentId,
     });
     await this.#reminders.apply(sync);
@@ -3848,7 +3943,7 @@ export class DaemonRuntime {
           logger.warn("A steered notice could not be redelivered after its turn ended", {
             event: "agent.delivery_queue.fallback_notice_rejected",
             agent_id: agentId,
-            error_code: error instanceof Error ? error.name : "UnknownError",
+            error_code: diagnosticErrorName(error),
           });
           return this.#mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
         },
@@ -3948,6 +4043,7 @@ export class DaemonRuntime {
     this.#stopping = true;
     this.#started = false;
     this.#activityPublisher.disable();
+    for (const launch of this.#currentActivityLaunches.values()) launch.startup?.dispose();
     this.#compactionTracker.disposeAll();
     this.#runtimeErrorHold.disposeAll();
     this.#runtimeProgress.disposeAll();
@@ -4047,10 +4143,7 @@ export class DaemonRuntime {
       this.#settleReminders(),
       this.#connection.computerId
         ? this.#transport.sendShutdownNotice?.({
-            protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-            requestId: crypto.randomUUID(),
-            workspaceId: this.#connection.workspaceId,
-            computerId: this.#connection.computerId,
+            ...this.#envelope(),
             workerInstanceId: this.#runtimeInstanceId,
             reason: shutdownReason,
           })

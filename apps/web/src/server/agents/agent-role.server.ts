@@ -1,10 +1,8 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import {
-  assertCanAssignRole,
-  type WorkspaceMemberRole,
-} from "#src/server/workspaces/member-role.server";
+import { assertCanAssignRole } from "#src/server/workspaces/member-role.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
+import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 
 export type SetAgentRoleInput = {
   workspaceId: string;
@@ -25,12 +23,10 @@ export async function setAgentRole(
   db: PrismaClient,
   input: SetAgentRoleInput,
 ): Promise<{ agentId: string; role: string }> {
-  const membership = await db.workspaceMembership.findUnique({
-    where: { workspaceId_userId: { workspaceId: input.workspaceId, userId: input.actorUserId } },
-    select: { role: true },
-  });
-  if (!membership) throw new AppError("ACCESS_DENIED");
-  const role = assertCanAssignRole(membership.role as WorkspaceMemberRole, input.role);
+  const role = assertCanAssignRole(
+    await workspaceMemberRole(db, input.workspaceId, input.actorUserId),
+    input.role,
+  );
   const agent = await db.agent.findFirst({
     where: { id: input.agentId, workspaceId: input.workspaceId, ...ACTIVE_AGENT_WHERE },
     select: { id: true },

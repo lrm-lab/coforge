@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { paginated } from "#src/server/db/pagination.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 
 export const AGENT_REMINDER_PAGE_SIZE = 50;
@@ -32,8 +33,8 @@ export interface AgentReminderReadStore {
     viewer: AgentReminderViewer;
     agentId: string;
     cursor?: AgentReminderCursor;
-    take: number;
-  }): Promise<AgentReminderListItem[]>;
+    limit: number;
+  }): Promise<{ reminders: AgentReminderListItem[]; hasMore: boolean }>;
 }
 
 export class AgentRemindersQuery {
@@ -45,13 +46,11 @@ export class AgentRemindersQuery {
   ) {
     if (!(await this.store.ownsAgent(viewer, input.agentId)))
       return { status: "unauthorized" as const };
-    const rows = await this.store.list({
+    const { reminders, hasMore } = await this.store.list({
       viewer,
       ...input,
-      take: AGENT_REMINDER_PAGE_SIZE + 1,
+      limit: AGENT_REMINDER_PAGE_SIZE,
     });
-    const hasMore = rows.length > AGENT_REMINDER_PAGE_SIZE;
-    const reminders = rows.slice(0, AGENT_REMINDER_PAGE_SIZE);
     return {
       status: "ready" as const,
       reminders,
@@ -76,31 +75,31 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
           select: { id: true },
         }),
       ),
-    list: async ({ viewer, agentId, cursor, take }) => {
-      const rows = await db.reminder.findMany({
-        where: {
-          workspaceId: viewer.workspaceId,
-          ownerAgentId: agentId,
-          ownerAgent: {
-            ownerId: viewer.userId,
-            workspace: { members: { some: { userId: viewer.userId } } },
+    list: async ({ viewer, agentId, cursor, limit }) => {
+      const [rows, page] = await paginated(db)
+        .reminder.paginate({
+          where: {
+            workspaceId: viewer.workspaceId,
+            ownerAgentId: agentId,
+            ownerAgent: {
+              ownerId: viewer.userId,
+              workspace: { members: { some: { userId: viewer.userId } } },
+            },
+            status: "scheduled",
           },
-          status: "scheduled",
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        ...(cursor ? { cursor: { id: cursor.id }, skip: 1 } : {}),
-        take,
-        select: {
-          id: true,
-          title: true,
-          fireAt: true,
-          repeat: true,
-          timezone: true,
-          createdAt: true,
-          messageId: true,
-          target: true,
-        },
-      });
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: {
+            id: true,
+            title: true,
+            fireAt: true,
+            repeat: true,
+            timezone: true,
+            createdAt: true,
+            messageId: true,
+            target: true,
+          },
+        })
+        .withCursor({ limit, after: cursor?.id });
       const messages = await db.message.findMany({
         where: {
           workspaceId: viewer.workspaceId,
@@ -120,7 +119,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
         },
       });
       const messagesById = new Map(messages.map((message) => [message.id, message]));
-      return rows.map((row) => {
+      const reminders = rows.map((row) => {
         const message = messagesById.get(row.messageId);
         const conversation = message?.conversation;
         // A reminder anchored in a channel hidden from the Workspace links nowhere until restored.
@@ -154,6 +153,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
           anchor,
         };
       });
+      return { reminders, hasMore: page.hasNextPage };
     },
   };
 }

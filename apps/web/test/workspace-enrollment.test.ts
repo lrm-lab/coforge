@@ -39,13 +39,13 @@ test("a second user gets a different Workspace", async () => {
 test("Chinese Accept-Language names the Workspace in Chinese", async () => {
   const store = memoryStore();
   await new WorkspaceEnrollment(store).ensureForUser(dong, "zh-CN,zh;q=0.9,en;q=0.8");
-  expect(store.created).toEqual([{ slug: "andong", name: "安栋的工作空间" }]);
+  expect(store.created).toEqual([{ slug: "andong", name: "安栋的工作区" }]);
 });
 
 test("the highest-quality language tag wins", async () => {
   const store = memoryStore();
   await new WorkspaceEnrollment(store).ensureForUser(dong, "en;q=0.8,zh-CN;q=1");
-  expect(store.created[0]?.name).toBe("安栋的工作空间");
+  expect(store.created[0]?.name).toBe("安栋的工作区");
 });
 
 test("an existing membership is left unchanged", async () => {

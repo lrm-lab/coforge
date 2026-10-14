@@ -1,7 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
 import { nativeCommandDiagnostic, type NativeCommandResult } from "#src/platform/native-command";
+import { writePrivateFile } from "#src/platform/private-file";
 import { LocalDaemonLauncher } from "./launcher";
 import type { DaemonLauncher, DaemonStarted, DaemonWorkspaceConfig } from "./launcher";
 import { COORDINATOR_SERVICE } from "./service-identity";
@@ -31,12 +31,7 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
     if (!isValidServiceName(serviceName)) throw new Error("invalid systemd user service name");
     this.#unitPath = join(options.homeDirectory, ".config", "systemd", "user", serviceName);
     this.#run = options.run ?? runCommand;
-    this.#writeFile =
-      options.writeFile ??
-      (async (path, content) => {
-        await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-        await writeFile(path, content, { encoding: "utf8", mode: 0o600 });
-      });
+    this.#writeFile = options.writeFile ?? writePrivateFile;
     this.#unit = systemdUserUnit(
       options.executablePath,
       options.socketPath,

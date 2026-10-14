@@ -1,12 +1,12 @@
 import { useRouter } from "@tanstack/react-router";
 
 import { Button } from "#src/components/base/buttons/button";
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 
 export function PageLoadError({ error }: { error: unknown }) {
   const router = useRouter();
-  if (isAppError(error) && error.code === "WORKSPACE_REQUIRED") {
+  if (isAppErrorCode(error, "WORKSPACE_REQUIRED")) {
     return (
       <main className="flex-1 p-6">
         <div

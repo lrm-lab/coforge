@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { AppError } from "#src/lib/app-error";
-import { AttachmentUploadSessionError } from "#src/server/attachments/attachment-upload-session.server";
+import {
+  AttachmentUploadSessionError,
+  type AttachmentUploadSessionErrorCode,
+} from "#src/server/attachments/attachment-upload-session.server";
+import { attachmentUploadSessionRefusal } from "#src/server/agents/agent-http-error.server";
 import { handleAttachmentUploadSessionCreate } from "#src/routes/api/agent/v1/attachment-upload-sessions/index";
 
 const principal = { workspaceId: "workspace-1", agentId: "agent-1" };
@@ -168,7 +172,47 @@ test("maps every AttachmentUploadSessionError code to its status and retryable f
         },
       },
     );
+    expect(response.status).toBe(
+      code === "UPLOAD_FORBIDDEN" ? 403 : code === "UPLOAD_TOO_LARGE" ? 413 : 409,
+    );
     const body = await response.json();
     expect(body).toEqual({ error: `failed as ${code}`, code, retryable: false });
+  }
+});
+
+// The wire contract every upload-session route answers with (create, complete, cancel, status):
+// status and `retryable` per code, and exactly `{ error, code, retryable }` in the body.
+const REFUSALS: [AttachmentUploadSessionErrorCode, number, boolean][] = [
+  ["UPLOAD_INVALID_REQUEST", 400, false],
+  ["UPLOAD_FORBIDDEN", 403, false],
+  ["UPLOAD_IDEMPOTENCY_CONFLICT", 409, false],
+  ["UPLOAD_TOO_LARGE", 413, false],
+  ["UPLOAD_OBJECT_NOT_FOUND", 404, true],
+  ["UPLOAD_VERIFICATION_IN_PROGRESS", 409, true],
+  ["UPLOAD_SESSION_EXPIRED", 410, false],
+  ["UPLOAD_OBJECT_MISMATCH", 422, false],
+  ["UPLOAD_SESSION_NOT_FOUND", 404, false],
+];
+
+test.each(REFUSALS)(
+  "attachmentUploadSessionRefusal answers %s with %i, retryable=%p",
+  async (code, status, retryable) => {
+    const response = attachmentUploadSessionRefusal(
+      new AttachmentUploadSessionError(code, `failed as ${code}`),
+    );
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error: `failed as ${code}`, code, retryable });
+  },
+);
+
+test("attachmentUploadSessionRefusal rethrows anything that is not a session refusal", () => {
+  for (const error of [new Error("storage down"), new AppError("NOT_FOUND"), "thrown string"]) {
+    let thrown: unknown;
+    try {
+      attachmentUploadSessionRefusal(error);
+    } catch (caught) {
+      thrown = caught;
+    }
+    expect(thrown).toBe(error);
   }
 });

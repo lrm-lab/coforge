@@ -128,7 +128,7 @@ function expiredReceipt(
 
 /** Sleeps, but returns early - and clears its timer - the moment `signal` aborts, so an abandoned
  * wait never keeps the event loop (and so the process) alive. See `watchComputerUpgradeReceipt`. */
-export function abortableSleep(milliseconds: number, signal: AbortSignal): Promise<void> {
+function abortableSleep(milliseconds: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
   return new Promise((resolve) => {
     const timer = setTimeout(() => {

@@ -4,6 +4,7 @@ import { deLocalizeHref } from "#src/paraglide/runtime";
 import { requireBrowserUser } from "#src/server/auth/require-user.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { notificationOpenResponse } from "#src/server/notifications/open-notification.server";
+import { requireWorkspaceIdForSlug } from "#src/server/workspaces/selection.server";
 
 export const Route = createFileRoute("/notifications/open")({
   server: {
@@ -19,12 +20,12 @@ export const Route = createFileRoute("/notifications/open")({
         return notificationOpenResponse({
           request,
           userId: user.id,
+          // A notification sent before the Workspace's URL changed names a former slug; the
+          // Workspace page then moves to the current one.
           canAccessWorkspace: async (userId, slug) =>
-            Boolean(
-              await db.workspace.findFirst({
-                where: { slug, members: { some: { userId } } },
-                select: { id: true },
-              }),
+            requireWorkspaceIdForSlug(db, userId, slug).then(
+              () => true,
+              () => false,
             ),
         });
       },

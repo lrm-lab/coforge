@@ -1,0 +1,464 @@
+name: Publish installer (production)
+run-name: ${{ inputs.pointer_only && format('Move the production installer pointer to {0}', inputs.pointer_only) || format('Publish installer {0} from {1} to production{2}', inputs.version, inputs.commit, inputs.without_staging && ' without staging' || '') }}
+
+# Production promotion of coforge-installer (docs/release/installer-feed.md,
+# docs/release/staging-to-production.md). The installer compiles its feed in, so production never
+# copies staging's binaries: it builds the approved commit again against https://releases.coforge.cn.
+# The `candidate` job checks that staging published this installer version from this commit; staging
+# publishes only from `main` and only after the installer gates. The `production` GitHub Environment
+# carries the required human reviewer, who approves this exact commit and version. Otherwise this is
+# release-installer-staging.yml: the same jobs, the same scripts, the production bucket and role.
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full source commit that staging published this installer version from (40 hex)
+        required: false
+        type: string
+      version:
+        description: Installer version, the crate's at that commit, e.g. 0.1.3
+        required: false
+        type: string
+      pointer_only:
+        description: >-
+          Move installer/latest to this already-published installer version, forward or back, and do
+          nothing else (no build, no publication). Leave empty to publish `version` from `commit`.
+        required: false
+        type: string
+      without_staging:
+        description: >-
+          Skip the staging comparison and check the commit and version for shape only. For a
+          release approved without a staging publication.
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  # The credential chain is the production Computer publisher's (release-production.yml): GitHub
+  # OIDC is exchanged for a short-lived STS token of the same RAM role, whose trust policy names only
+  # this repository's `production` environment. No long-term AccessKey exists.
+  ALIBABA_CLOUD_ROLE_ARN: acs:ram::1085194890307801:role/coforge-release-publisher-production
+  ALIBABA_CLOUD_OIDC_PROVIDER_ARN: acs:ram::1085194890307801:oidc-provider/github-actions
+  ALIBABA_CLOUD_ROLE_SESSION_NAME: github-actions-${{ github.run_id }}
+  # The credential chain would otherwise fall through to the ECS metadata service and a
+  # credentials URI after an OIDC failure, spending minutes on connection timeouts before
+  # reporting the real error.
+  ALIBABA_CLOUD_ECS_METADATA_DISABLED: "true"
+
+concurrency:
+  group: release-installer-production
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    name: Verify the staging-published candidate
+    if: github.ref == 'refs/heads/main' && inputs.pointer_only == ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      # The workflow's own commit (`main`), with history: the verifier is this run's, and the
+      # candidate commit is read from `main`'s history without being checked out.
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          install: false
+
+      - name: Install toolchain
+        run: mise install
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate protocol sources
+        run: bun run --cwd packages/coforge-sdk generate
+
+      # The inputs are caller-controlled text: they reach the script only through env vars. The
+      # commit is checked for shape before git sees it, so it cannot be read as an option.
+      - name: Require the installer version staging published from this commit
+        env:
+          INPUT_COMMIT: ${{ inputs.commit }}
+          INPUT_VERSION: ${{ inputs.version }}
+          WITHOUT_STAGING: ${{ inputs.without_staging }}
+        run: |
+          if ! [[ "$INPUT_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "commit must be a full commit, 40 lowercase hex characters: $INPUT_COMMIT" >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor "$INPUT_COMMIT" HEAD
+          git show "$INPUT_COMMIT:crates/installer/Cargo.toml" > "$RUNNER_TEMP/Cargo.toml"
+          flags=()
+          if [ "$WITHOUT_STAGING" = true ]; then flags=(--without-staging); fi
+          bun scripts/release/production-candidate.ts "${flags[@]}" installer \
+            "$INPUT_VERSION" "$INPUT_COMMIT" https://releases-staging.coforge.cn "$RUNNER_TEMP/Cargo.toml"
+          echo "- Candidate: installer ${INPUT_VERSION} from ${INPUT_COMMIT}, published to staging and on main" >> "$GITHUB_STEP_SUMMARY"
+
+  # Refuses a version that is already published before six runners spend their time building it.
+  plan:
+    name: Plan the installer release
+    needs: candidate
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          install: false
+
+      - name: Install toolchain
+        run: mise install
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate protocol sources
+        run: bun run --cwd packages/coforge-sdk generate
+
+      - name: Request an OIDC token for Alibaba Cloud
+        env:
+          AUDIENCE: sts.aliyuncs.com
+        run: |
+          token_file="$RUNNER_TEMP/aliyun-oidc-token"
+          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
+            | jq -r '.value' > "$token_file"
+          chmod 600 "$token_file"
+          echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+          # The RAM role's trust policy matches these three claims exactly; print them so a
+          # trust-policy mismatch is diagnosable from the run log. The payload is public run
+          # metadata; the signature (the only secret part) is never printed.
+          payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
+          printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"
+
+      - name: Refuse a version that is already published
+        id: plan
+        # GitHub-hosted runners reach oss-cn-beijing over the public cross-border path at a few
+        # tens of KB/s; OSS transfer acceleration routes over Alibaba Cloud's backbone instead. The
+        # endpoint is global, so the bucket's region is passed for V4 signing.
+        run: |
+          bun scripts/release/publish-installer.ts plan \
+            --bucket coforge-releases \
+            --endpoint oss-accelerate.aliyuncs.com \
+            --region oss-cn-beijing
+
+  # One native runner per release target. The matrix is `installer-crate`'s in ci.yml
+  # (scripts/ci/workflow.test.ts keeps the two identical). A build job compiles about sixty crates,
+  # build scripts and proc-macros included, so it holds no OIDC token and no environment: it hands
+  # its binary on as an artifact, and the `publish` job uploads it.
+  build:
+    name: Build ${{ matrix.release_target }}
+    needs: [candidate, plan]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple's linker ad-hoc signs arm64 output itself; macOS 27 kills arm64 binaries whose
+          # signature is invalid, so the job verifies it with `codesign --verify --strict`.
+          - release_target: darwin-arm64
+            rust_target: aarch64-apple-darwin
+            runner: macos-latest
+            tools: rust
+          # Cross-compiled on the arm64 runner. The linker leaves x86_64 output unsigned, so the
+          # job ad-hoc signs it the way Bun signs its darwin-x64 executables.
+          - release_target: darwin-x64
+            rust_target: x86_64-apple-darwin
+            runner: macos-latest
+            tools: rust
+          # musl, statically linked: no glibc version floor on the user's machine. This entry
+          # also generates the licence notices, which every target's release ships beside it.
+          - release_target: linux-x64
+            rust_target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+            tools: rust github:EmbarkStudios/cargo-about
+          - release_target: linux-arm64
+            rust_target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+            tools: rust
+          - release_target: windows-x64
+            rust_target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            tools: rust
+          - release_target: windows-arm64
+            rust_target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+            tools: rust
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: crates/installer
+    env:
+      # From the repository root; the crate's own steps run one level down (`../../$BINARY`).
+      BINARY: target/${{ matrix.rust_target }}/release/coforge-installer${{ startsWith(matrix.release_target, 'windows') && '.exe' || '' }}
+      # `mise exec` would otherwise install every tool in crates/installer/mise.toml (and the root
+      # one) that is missing, including supply-chain tools only linux-x64 uses; cargo-audit
+      # publishes no windows-arm64 build. Each entry uses exactly its `tools`.
+      # https://mise.jdx.dev/configuration/settings.html#exec_auto_install
+      MISE_EXEC_AUTO_INSTALL: "false"
+      # The feed the installer binary will trust once the crate compiles it in, one build per
+      # environment (docs/release/tracks-and-identities.md); this is the production one.
+      COFORGE_RELEASE_FEED_URL: https://releases.coforge.cn
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+
+      # From crates/installer/ mise also sees the root tools, so install only what this entry uses.
+      - name: Install pinned Rust tools
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          working_directory: crates/installer
+          install_args: ${{ matrix.tools }}
+
+      - name: Add the Rust target
+        run: mise exec rust -- rustup target add "${{ matrix.rust_target }}"
+
+      - name: Install the musl C compiler for ring
+        if: startsWith(matrix.release_target, 'linux')
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+          target="${{ matrix.rust_target }}"
+          echo "CC_${target//-/_}=musl-gcc" >> "$GITHUB_ENV"
+
+      - name: Build release binary
+        run: mise exec rust -- cargo build --locked --release --target "${{ matrix.rust_target }}"
+
+      - name: Ad-hoc sign the x86_64 darwin binary
+        if: matrix.release_target == 'darwin-x64'
+        run: codesign --sign - --force "../../$BINARY"
+
+      - name: Verify the darwin signature
+        if: startsWith(matrix.release_target, 'darwin')
+        run: |
+          codesign -dv --verbose=2 "../../$BINARY"
+          codesign --verify --strict --verbose=2 "../../$BINARY"
+
+      - name: Report binary size
+        run: |
+          size="$(wc -c < "../../$BINARY" | tr -d ' ')"
+          echo "coforge-installer ${{ matrix.release_target }}: $size bytes" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run on the native host
+        if: matrix.release_target != 'darwin-x64'
+        run: '"../../$BINARY" --version'
+
+      - name: Run under Rosetta when available
+        if: matrix.release_target == 'darwin-x64'
+        run: |
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            arch -x86_64 "../../$BINARY" --version
+          else
+            echo "::warning::Rosetta is not installed on this runner; darwin-x64 was built but not run"
+          fi
+
+      - name: Generate third-party notices
+        if: matrix.release_target == 'linux-x64'
+        run: mise exec -- cargo about generate --locked --fail --output-file THIRD_PARTY_NOTICES.txt about/notices.hbs
+
+      # The artifact holds this target's binary and nothing else, plus the notices from the one job
+      # that has them; `publish-installer.ts finalize` refuses any other file in it.
+      - name: Stage this target's output
+        working-directory: .
+        env:
+          RELEASE_TARGET: ${{ matrix.release_target }}
+        run: |
+          mkdir installer-out
+          cp "$BINARY" installer-out/
+          if [ "$RELEASE_TARGET" = linux-x64 ]; then
+            cp crates/installer/THIRD_PARTY_NOTICES.txt installer-out/
+          fi
+
+      - name: Hand this target's output to the publishing job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installer-${{ matrix.release_target }}
+          path: installer-out
+          if-no-files-found: error
+          retention-days: 7
+
+  # The only job that reaches the bucket with the six binaries in hand, and it compiles nothing:
+  # it packages them, uploads and reads back every object, writes the manifest, then moves
+  # `installer/latest`.
+  publish:
+    name: Package, upload, and move installer/latest
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          install: false
+
+      - name: Install toolchain
+        run: mise install
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate protocol sources
+        run: bun run --cwd packages/coforge-sdk generate
+
+      # Not merged: each artifact lands in its own `installer-bin/installer-<target>/`, so one build
+      # job cannot replace another target's binary.
+      - name: Collect the six targets' binaries
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: installer-*
+          path: installer-bin
+
+      - name: Request an OIDC token for Alibaba Cloud
+        env:
+          AUDIENCE: sts.aliyuncs.com
+        run: |
+          token_file="$RUNNER_TEMP/aliyun-oidc-token"
+          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
+            | jq -r '.value' > "$token_file"
+          chmod 600 "$token_file"
+          echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+          # The RAM role's trust policy matches these three claims exactly; print them so a
+          # trust-policy mismatch is diagnosable from the run log. The payload is public run
+          # metadata; the signature (the only secret part) is never printed.
+          payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
+          printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"
+
+      - name: Package, upload, and verify every object, write the manifest, and move installer/latest
+        env:
+          RELEASE_COMMIT: ${{ inputs.commit }}
+        run: |
+          bun scripts/release/publish-installer.ts finalize \
+            --commit "$RELEASE_COMMIT" \
+            --binaries installer-bin \
+            --out installer-out \
+            --bucket coforge-releases \
+            --endpoint oss-accelerate.aliyuncs.com \
+            --region oss-cn-beijing
+
+      - name: Summarize published installer
+        env:
+          RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+          RELEASE_COMMIT: ${{ inputs.commit }}
+        run: |
+          {
+            echo "## Installer published to production"
+            echo ""
+            echo "- Version: ${RELEASE_VERSION}"
+            echo "- Source commit: ${RELEASE_COMMIT}"
+            echo "- Targets: Linux, macOS, Windows (x64 and arm64)"
+            echo "- Verified: uploaded bytes, checksums, private storage access, and the installer/latest pointer"
+            echo "- Installing and upgrading a Computer with it is a separate check."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # `installer/latest` moves alone, forward or back, to a version whose manifest is already up.
+  pointer:
+    name: Move installer/latest
+    if: github.ref == 'refs/heads/main' && inputs.pointer_only != ''
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          install: false
+
+      - name: Install toolchain
+        run: mise install
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate protocol sources
+        run: bun run --cwd packages/coforge-sdk generate
+
+      - name: Request an OIDC token for Alibaba Cloud
+        env:
+          AUDIENCE: sts.aliyuncs.com
+        run: |
+          token_file="$RUNNER_TEMP/aliyun-oidc-token"
+          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
+            | jq -r '.value' > "$token_file"
+          chmod 600 "$token_file"
+          echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+          # The RAM role's trust policy matches these three claims exactly; print them so a
+          # trust-policy mismatch is diagnosable from the run log. The payload is public run
+          # metadata; the signature (the only secret part) is never printed.
+          payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
+          printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"
+
+      - name: Move installer/latest
+        # inputs.pointer_only is caller-controlled text: it goes through an env var, never into the
+        # script body, and the script validates it as a version before it names any object.
+        env:
+          INPUT_POINTER_ONLY: ${{ inputs.pointer_only }}
+        run: |
+          bun scripts/release/publish-installer.ts pointer \
+            --version "$INPUT_POINTER_ONLY" \
+            --bucket coforge-releases \
+            --endpoint oss-accelerate.aliyuncs.com \
+            --region oss-cn-beijing
+
+      - name: Summarize the pointer move
+        env:
+          INPUT_POINTER_ONLY: ${{ inputs.pointer_only }}
+        run: |
+          {
+            echo "## Production installer pointer moved"
+            echo ""
+            echo "- installer/latest: ${INPUT_POINTER_ONLY}"
+            echo "- Nothing was built or published."
+          } >> "$GITHUB_STEP_SUMMARY"

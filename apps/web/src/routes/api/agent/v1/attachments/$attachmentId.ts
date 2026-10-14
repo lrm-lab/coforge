@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { readAuthorizedAttachment } from "#src/server/attachments/attachment.server";
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/api/agent/v1/attachments/$attachmentId")(
             },
           });
         } catch {
-          return new Response("not found", { status: 404 });
+          return textResponse("not found", { status: 404 });
         }
       },
     },

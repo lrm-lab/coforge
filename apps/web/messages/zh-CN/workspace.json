@@ -105,7 +105,7 @@
   "workspace_create_description": "工作区是团队协作处理智能体、对话和电脑的共享空间。",
   "workspace_name_label": "工作区名称",
   "workspace_name_placeholder": "我的工作区",
-  "workspace_slug_label": "工作区 URL",
+  "workspace_slug_label": "工作区网址",
   "workspace_slug_placeholder": "my-workspace",
   "workspace_slug_hint": "用在链接和电脑的加入命令里。",
   "workspace_create_submit": "创建工作区",

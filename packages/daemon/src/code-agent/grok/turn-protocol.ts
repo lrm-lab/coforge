@@ -130,6 +130,7 @@ class GrokTurnReader implements TurnReader {
   readonly #resumed: boolean;
   /** What the turn reported: nothing yet, a clean `end`, or a failure. */
   #outcome: "success" | "failed" | undefined;
+  #compacting = false;
   /** The tool calls this turn has announced, and those it has ended, by `toolCallId`. */
   readonly #startedTools = new Set<string>();
   readonly #endedTools = new Set<string>();
@@ -141,6 +142,14 @@ class GrokTurnReader implements TurnReader {
 
   get failed(): boolean {
     return this.#outcome === "failed";
+  }
+
+  end(): void {
+    // Grok 1.0.52 emits no terminal compaction frame when SIGINT ends its process. Clear an
+    // unclosed episode before the core could infer successful compaction from turn completion.
+    if (!this.#compacting) return;
+    this.#compacting = false;
+    this.#scope.emit({ type: "compaction-interrupted" });
   }
 
   /** The resume was lost when grok died with no outcome and stderr says the remote has no such
@@ -187,6 +196,34 @@ class GrokTurnReader implements TurnReader {
       }
       case "max_turns_reached": {
         this.#failTurn("Grok reached max turns");
+        return;
+      }
+      case "auto_compact_started": {
+        this.#compacting = true;
+        this.#scope.emit({ type: "compaction-started" });
+        return;
+      }
+      case "auto_compact_completed": {
+        this.#compacting = false;
+        this.#scope.emit({ type: "compaction-finished" });
+        return;
+      }
+      case "auto_compact_cancelled": {
+        this.#compacting = false;
+        this.#scope.emit({ type: "compaction-interrupted" });
+        return;
+      }
+      case "auto_compact_failed": {
+        this.#compacting = false;
+        this.#scope.emit({ type: "compaction-interrupted" });
+        this.#scope.emit({
+          type: "error",
+          message:
+            typeof record.error === "string" && record.error.trim()
+              ? record.error
+              : "Grok compaction failed",
+          providerErrorReason: "auto_compact_failed",
+        });
         return;
       }
       // Documented frames with nothing to report: the tool and command lists, the plan, and the

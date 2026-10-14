@@ -49,7 +49,14 @@ function cursorCommand(
   command: readonly string[],
   request: TurnRequest,
 ): TurnCommand {
-  const argv = [...command, "--print", "--output-format", "stream-json", "--force"];
+  const argv = [
+    ...command,
+    "--print",
+    "--output-format",
+    "stream-json",
+    "--stream-partial-output",
+    "--force",
+  ];
   const model = options.runtime?.model;
   if (model && model !== "default") argv.push("--model", model);
   if (request.sessionId) argv.push("--resume", request.sessionId);
@@ -71,6 +78,7 @@ function cursorCommand(
 class CursorTurnReader implements TurnReader {
   readonly #scope: TurnScope;
   #failed = false;
+  #hasTextDeltas = false;
   /** The `call_id`s of this turn's `tool_call` frames that have been reported, so that a repeated
    * frame is the same call and a completion still ends a call it had to start itself. */
   readonly #startedTools = new Set<string>();
@@ -133,6 +141,13 @@ class CursorTurnReader implements TurnReader {
       if (block.type === "thinking" && typeof block.thinking === "string" && block.thinking) {
         this.#scope.emit({ type: "thinking-delta", text: block.thinking });
       } else if (block.type === "text" && typeof block.text === "string" && block.text) {
+        // A CLI that still buffers must retain its complete text. Once native deltas arrive,
+        // suppress the buffered repeats before tools and at turn end, using the official fields:
+        // https://cursor.com/docs/cli/reference/output-format#stream-json-format
+        const delta =
+          typeof record.timestamp_ms === "number" && !Object.hasOwn(record, "model_call_id");
+        if (delta) this.#hasTextDeltas = true;
+        else if (this.#hasTextDeltas) continue;
         this.#scope.emit({ type: "text-delta", text: block.text });
       } else if (block.type === "tool_use") {
         this.#scope.emit({

@@ -15,6 +15,7 @@ import {
 import { useCreateAndOpenWorkspace } from "#src/features/workspaces/create-workspace-form";
 import { isAppError } from "#src/lib/app-error";
 import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
+import { splitWorkspacePath, workspacePath } from "#src/features/workspaces/workspace-url";
 import { loadRecordsNavAttention } from "#src/features/records/records.functions";
 import { BrowserRealtimeProvider } from "#src/features/realtime/browser-realtime";
 import { getBrowserRealtimeConnectionToken } from "#src/features/realtime/realtime.functions";
@@ -38,7 +39,7 @@ import { signOut } from "#src/features/auth/sign-out";
 
 export const Route = createFileRoute("/w/$workspaceSlug")({
   staleTime: Infinity,
-  beforeLoad: async ({ params, context, preload }) => {
+  beforeLoad: async ({ params, context, preload, location }) => {
     // A malformed slug names no Workspace; server calls would fall back to the remembered one.
     if (!isValidWorkspaceSlug(params.workspaceSlug)) throw notFound();
     // A preload runs while the browser URL still names the Workspace on screen: it must neither
@@ -48,7 +49,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
     if (shown === params.workspaceSlug) return;
     // Runs before any page loader: a Workspace the User is not in is a page that does not exist
     // for them. Checked once per Workspace entered; every server call re-checks it anyway.
-    await openWorkspace().catch(async (error: unknown) => {
+    const opened = await openWorkspace().catch(async (error: unknown) => {
       if (!isAppError(error) || error.code !== "NOT_FOUND") throw error;
       // A person in no Workspace at all has nowhere to go from here but creating one.
       if (!(await getStartPage({ data: { resume: false } })))
@@ -56,8 +57,15 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       throw notFound();
     });
     // Query keys are not scoped by Workspace, so moving to another one starts from an empty cache.
-    if (shown) context.queryClient.clear();
-    markShownWorkspace(context.queryClient, params.workspaceSlug);
+    if (shown && shown !== opened.slug) context.queryClient.clear();
+    markShownWorkspace(context.queryClient, opened.slug);
+    // A former slug still names its Workspace: the same page under the current one. It is marked
+    // shown above, so the redirected load does not open it again.
+    if (opened.slug !== params.workspaceSlug)
+      throw redirect({
+        href: workspacePath(opened.slug, splitWorkspacePath(location.href)?.rest),
+        replace: true,
+      });
   },
   loader: async ({ location }) => {
     const [user, switcher, notifications, agents, preferences, tabOrders, recordsNav] =

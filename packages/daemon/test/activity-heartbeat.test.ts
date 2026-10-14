@@ -141,6 +141,20 @@ for (const completionOrder of ["running", "before-start-response"] as const) {
       });
       const { runtime, session, activities } = await harness(provider);
       try {
+        // The shared launch now opens a startup turn. End it through the fixture's native
+        // turn protocol before exercising a separate turn's late-event reconciliation.
+        let unsubscribeStartup = () => {};
+        const startupEnded = new Promise<void>((resolve) => {
+          unsubscribeStartup = session.subscribe((event) => {
+            if (event.type === "completed") resolve();
+          });
+        });
+        try {
+          await session.notify!("finish-with-late-events");
+          await startupEnded;
+        } finally {
+          unsubscribeStartup();
+        }
         jest.useFakeTimers();
         activities.length = 0;
         if (completionOrder === "running") {

@@ -62,7 +62,7 @@ export function parseInstallerManifest(bytes: Uint8Array): InstallerManifest | u
 }
 
 /** The workflow that publishes an installer or moves its pointer. */
-const INSTALLER_WORKFLOW = "gh workflow run release-installer-staging.yml --repo LRM-Teams/coforge";
+const INSTALLER_WORKFLOW = "gh workflow run release-installer-staging.yml --repo lrm-lab/coforge";
 
 /**
  * The installer protocol a product release says it needs (`installer_protocol` in its schema 2

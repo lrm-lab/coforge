@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { AgentChannelManagementError } from "#src/server/conversations/agent-channel-management-error.server";
 
 /** Who a channel-management route acts as: one Agent, in one Workspace. Declared once here because
@@ -5,14 +6,14 @@ import { AgentChannelManagementError } from "#src/server/conversations/agent-cha
  * spell it out, and export it, themselves (nothing imported those copies). */
 export type AgentChannelManagementPrincipal = { workspaceId: string; agentId: string };
 
+// Every route in this family treats `idempotencyKey` as optional, as the mute/unmute routes it was
+// modeled on do, so a POST body may be empty or absent (`readJsonBody` tolerates both).
 export {
   agentIdempotencyKey as idempotencyKeyFrom,
   agentIdempotencyKeyFromQuery as idempotencyKeyFromQuery,
   readAgentJsonBody as readJsonBody,
 } from "./agent-http-routes.server";
 
-/** Reads a POST body as JSON, tolerating an empty/absent body (every route here treats `idempotencyKey`
- * as optional, matching the mute/unmute routes this family was modeled on). */
 /**
  * Maps a channel-management failure onto its declared HTTP status and body; anything else (an
  * unexpected repository failure) is hidden behind a generic message, matching the mute/unmute
@@ -27,7 +28,7 @@ export function channelManagementErrorResponse(error: unknown, fallbackMessage: 
         { ok: false, errorCode: error.errorCode, error: error.message },
         { status: error.status },
       );
-    return new Response(error.message, { status: error.status });
+    return textResponse(error.message, { status: error.status });
   }
-  return new Response(fallbackMessage, { status: 400 });
+  return textResponse(fallbackMessage, { status: 400 });
 }

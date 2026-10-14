@@ -90,6 +90,32 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
+/** What every weekly-report read selects of a person it names: an author, a sharer, a member. */
+const REPORT_PERSON_SELECT = {
+  id: true,
+  username: true,
+  displayName: true,
+  avatarObjectKey: true,
+} as const;
+
+/** A person as a weekly-report view names them: the display name falls back to the username. */
+function reportPersonView(
+  workspaceId: string,
+  person: {
+    id: string;
+    username: string;
+    displayName: string | null;
+    avatarObjectKey: string | null;
+  },
+) {
+  return {
+    userId: person.id,
+    username: person.username,
+    displayName: person.displayName ?? person.username,
+    avatarUrl: workspaceUserAvatarUrl(workspaceId, person.id, person.avatarObjectKey),
+  };
+}
+
 function templateListItem(template: {
   id: string;
   name: string;
@@ -294,7 +320,7 @@ export class RecordCatalog {
           reports: {
             include: {
               author: {
-                select: { id: true, username: true, displayName: true, avatarObjectKey: true },
+                select: REPORT_PERSON_SELECT,
               },
             },
             orderBy: { createdAt: "asc" },
@@ -307,7 +333,7 @@ export class RecordCatalog {
           report: {
             include: {
               author: {
-                select: { id: true, username: true, displayName: true, avatarObjectKey: true },
+                select: REPORT_PERSON_SELECT,
               },
               cycle: { select: { year: true, week: true } },
             },
@@ -324,7 +350,7 @@ export class RecordCatalog {
       }),
       this.db.user.findUnique({
         where: { id: input.userId },
-        select: { id: true, username: true, displayName: true, avatarObjectKey: true },
+        select: REPORT_PERSON_SELECT,
       }),
     ]);
 
@@ -500,16 +526,7 @@ export class RecordCatalog {
           submittedAt:
             candidate.submittedAt instanceof Date ? candidate.submittedAt.toISOString() : null,
           sourceTemplateId: candidate.sourceTemplateId,
-          author: {
-            userId: candidate.author.id,
-            username: candidate.author.username,
-            displayName,
-            avatarUrl: workspaceUserAvatarUrl(
-              input.workspaceId,
-              candidate.author.id,
-              candidate.author.avatarObjectKey,
-            ),
-          },
+          author: reportPersonView(input.workspaceId, candidate.author),
         });
       }
     }
@@ -534,16 +551,7 @@ export class RecordCatalog {
             row.report.cycle.year,
             row.report.cycle.week,
           ),
-          author: {
-            userId: row.report.author.id,
-            username: row.report.author.username,
-            displayName: row.report.author.displayName ?? row.report.author.username,
-            avatarUrl: workspaceUserAvatarUrl(
-              input.workspaceId,
-              row.report.author.id,
-              row.report.author.avatarObjectKey,
-            ),
-          },
+          author: reportPersonView(input.workspaceId, row.report.author),
         })),
       myReports: cycles.flatMap((cycle) =>
         cycle.reports
@@ -1756,14 +1764,14 @@ export class RecordCatalog {
       where: { id: input.id, workspaceId: input.workspaceId },
       include: {
         author: {
-          select: { id: true, username: true, displayName: true, avatarObjectKey: true },
+          select: REPORT_PERSON_SELECT,
         },
         cycle: { select: { id: true, year: true, week: true, title: true } },
         sourceTemplate: {
           select: {
             authorId: true,
             author: {
-              select: { id: true, username: true, displayName: true, avatarObjectKey: true },
+              select: REPORT_PERSON_SELECT,
             },
           },
         },
@@ -1840,7 +1848,7 @@ export class RecordCatalog {
                   status: true,
                   submittedAt: true,
                   author: {
-                    select: { id: true, username: true, displayName: true, avatarObjectKey: true },
+                    select: REPORT_PERSON_SELECT,
                   },
                 },
               })
@@ -1853,16 +1861,7 @@ export class RecordCatalog {
               ),
               status: child.status,
               submittedAt: child.submittedAt?.toISOString() ?? null,
-              author: {
-                userId: child.author.id,
-                username: child.author.username,
-                displayName: child.author.displayName ?? child.author.username,
-                avatarUrl: workspaceUserAvatarUrl(
-                  input.workspaceId,
-                  child.author.id,
-                  child.author.avatarObjectKey,
-                ),
-              },
+              author: reportPersonView(input.workspaceId, child.author),
             }))
           : [];
       return {
@@ -1886,30 +1885,10 @@ export class RecordCatalog {
               : null,
           submittedAt: report.submittedAt?.toISOString() ?? null,
           updatedAt: report.updatedAt.toISOString(),
-          author: {
-            userId: report.author.id,
-            username: report.author.username,
-            displayName: report.author.displayName ?? report.author.username,
-            avatarUrl: workspaceUserAvatarUrl(
-              input.workspaceId,
-              report.author.id,
-              report.author.avatarObjectKey,
-            ),
-          },
+          author: reportPersonView(input.workspaceId, report.author),
           sharedBy:
             report.kind === "member" && report.sourceTemplate?.author
-              ? {
-                  userId: report.sourceTemplate.author.id,
-                  username: report.sourceTemplate.author.username,
-                  displayName:
-                    report.sourceTemplate.author.displayName ??
-                    report.sourceTemplate.author.username,
-                  avatarUrl: workspaceUserAvatarUrl(
-                    input.workspaceId,
-                    report.sourceTemplate.author.id,
-                    report.sourceTemplate.author.avatarObjectKey,
-                  ),
-                }
+              ? reportPersonView(input.workspaceId, report.sourceTemplate.author)
               : null,
           cycle: report.cycle,
           sourceTemplateId: report.sourceTemplateId,
@@ -2840,7 +2819,7 @@ export class RecordCatalog {
     const members = await this.db.workspaceMembership.findMany({
       where: { workspaceId: input.workspaceId },
       include: {
-        user: { select: { id: true, username: true, displayName: true, avatarObjectKey: true } },
+        user: { select: REPORT_PERSON_SELECT },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -3761,7 +3740,7 @@ export class RecordCatalog {
       orderBy: { createdAt: "asc" },
       include: {
         authorUser: {
-          select: { id: true, username: true, displayName: true, avatarObjectKey: true },
+          select: REPORT_PERSON_SELECT,
         },
       },
       take: 200,
@@ -3772,18 +3751,7 @@ export class RecordCatalog {
       body: row.body,
       payload: row.payload,
       createdAt: row.createdAt.toISOString(),
-      author: row.authorUser
-        ? {
-            userId: row.authorUser.id,
-            username: row.authorUser.username,
-            displayName: row.authorUser.displayName ?? row.authorUser.username,
-            avatarUrl: workspaceUserAvatarUrl(
-              input.workspaceId,
-              row.authorUser.id,
-              row.authorUser.avatarObjectKey,
-            ),
-          }
-        : null,
+      author: row.authorUser ? reportPersonView(input.workspaceId, row.authorUser) : null,
     }));
   }
 

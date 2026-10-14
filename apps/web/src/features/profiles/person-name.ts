@@ -22,7 +22,7 @@ export type PersonNameCheck =
   | { ok: false; problem: PersonNameProblem };
 
 /** Unicode normalization form C, whitespace runs as one space, trimmed. */
-export function normalizePersonName(input: string): string {
+function normalizePersonName(input: string): string {
   return input.normalize("NFC").replace(/\s+/g, " ").trim();
 }
 

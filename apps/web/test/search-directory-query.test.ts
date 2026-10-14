@@ -1,4 +1,5 @@
-import { expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
+import { mockModuleForFile } from "./helpers/file-module-mock";
 import { QueryClient } from "@tanstack/react-query";
 
 /**
@@ -7,7 +8,7 @@ import { QueryClient } from "@tanstack/react-query";
  */
 let namesRead = 0;
 const conversationFunctions = await import("#src/features/conversations/channels.functions");
-mock.module("#src/features/conversations/channels.functions", () => ({
+await mockModuleForFile("#src/features/conversations/channels.functions", () => ({
   ...conversationFunctions,
   listChannelNames: async () => {
     namesRead += 1;
@@ -18,12 +19,12 @@ mock.module("#src/features/conversations/channels.functions", () => ({
   },
 }));
 const workspaceFunctions = await import("#src/features/workspaces/workspaces.functions");
-mock.module("#src/features/workspaces/workspaces.functions", () => ({
+await mockModuleForFile("#src/features/workspaces/workspaces.functions", () => ({
   ...workspaceFunctions,
   loadWorkspaceDirectory: async () => ({ people: [], agents: [] }),
 }));
 const computerFunctions = await import("#src/features/computers/computers.functions");
-mock.module("#src/features/computers/computers.functions", () => ({
+await mockModuleForFile("#src/features/computers/computers.functions", () => ({
   ...computerFunctions,
   listComputerNames: async () => [],
 }));

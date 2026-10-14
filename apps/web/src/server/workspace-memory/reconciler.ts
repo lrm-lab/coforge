@@ -1,3 +1,4 @@
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 import { sanitizeWorkspaceMemoryFailure, type SanitizedFailure } from "./errors";
 import {
   applyWorkspaceMemoryCommand,
@@ -109,10 +110,7 @@ async function settle(
       ensured.push(kind);
     }
   } catch (error) {
-    const failure = sanitizeWorkspaceMemoryFailure(
-      "provisioning_failed",
-      error instanceof Error ? error.message : String(error),
-    );
+    const failure = sanitizeWorkspaceMemoryFailure("provisioning_failed", thrownMessage(error));
     const errored = applyWorkspaceMemoryCommand(state, {
       type: "observe_error",
       generation: state.generation,

@@ -93,8 +93,11 @@ test.each([
       expect(observed.daemonError).toContain("does not match this daemon build");
       expect(observed.code).toBe(1);
       expect(observed.stdout + observed.stderr).toContain(serverUrl);
-      // The proxy rejects the tunnel; this checks routing, not login success.
-      expect(observed.stdout + observed.stderr).toContain("AUTH_FAILED");
+      // Bun 1.4.3 rejects a non-2xx CONNECT with ERR_PROXY_TUNNEL instead of
+      // treating the proxy reply as the origin response
+      // (https://bun.com/blog/bun-v1.4.3). Login maps that throw to
+      // AUTH_NETWORK_ERROR. The CONNECT line below is the routing check.
+      expect(observed.stdout + observed.stderr).toContain("AUTH_NETWORK_ERROR");
       expect(observed.requests.join("\n")).toContain(`CONNECT ${new URL(serverUrl).hostname}:443`);
       expect(observed.requests.join("\n")).not.toContain("invalid.example");
     } finally {

@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { importJWK, SignJWT, type JWK } from "jose";
 
 import { publicOrigin } from "#src/server/http/public-origin.server";
@@ -9,7 +10,7 @@ function enabled(): boolean {
 }
 
 function unavailable(): Response {
-  return new Response("E2E device authorization is disabled", { status: 404 });
+  return textResponse("E2E device authorization is disabled", { status: 404 });
 }
 
 const pending = new Map<string, { expires: number; polls: number }>();

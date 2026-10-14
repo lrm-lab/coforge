@@ -18,14 +18,16 @@ target=
 resolve_only=0
 quiet_header=0
 prepare_phase=all
+workspace=
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --prepare-directory|--target|--prepare-phase)
+    --prepare-directory|--target|--prepare-phase|--workspace)
       [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "install.sh: $1 requires a value" >&2; exit 2; }
       case "$1" in
         --prepare-directory) prepare_directory=$2 ;;
         --target) target=$2 ;;
         --prepare-phase) prepare_phase=$2 ;;
+        --workspace) workspace=$2 ;;
       esac
       shift 2
       ;;
@@ -37,7 +39,7 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     -h|--help)
-      echo "Usage: install.sh [--version latest|<version>]"
+      echo "Usage: install.sh [--version latest|<version>] [--workspace <slug>]"
       exit 0
       ;;
     *)
@@ -348,6 +350,20 @@ else
   fish_path_line="fish_add_path \"$bin_directory\""
 fi
 
+# `--workspace` makes the web's connect dialog one pasted command (`curl ... | sh -s -- --workspace
+# <slug>`). The PATH edit below only reaches shells started later, so setup runs through the shim's
+# own path. Under `curl ... | sh` this script's stdin is the script itself, so setup reads the
+# terminal instead; with no terminal it reads nothing rather than the rest of this script.
+run_setup() {
+  [ -n "$workspace" ] || return 0
+  step "Connecting this Computer to Workspace $workspace"
+  setup_input=/dev/null
+  if (: </dev/tty) 2>/dev/null; then setup_input=/dev/tty; fi
+  # set -e ends the script with setup's own status when it fails.
+  "$bin_directory/coforge-computer" setup --workspace "$workspace" <"$setup_input"
+  exit 0
+}
+
 # Installing into the XDG user binary directory is what makes this "just work": it is already on
 # PATH for most users, so the command is usable in this very shell and there is nothing to
 # configure and nothing to tell the user to run. Shell configuration is edited only in the
@@ -356,6 +372,7 @@ case ":${PATH:-}:" in
   *":$bin_directory:"*)
     step "$bin_directory is already on PATH"
     done_step "$computer_label installed and ready to use"
+    run_setup
     printf '%b\n' "Next: ${accent}coforge-computer setup --workspace <slug>${reset}" >&2
     exit 0
     ;;
@@ -424,4 +441,5 @@ fi
 
 done_step "$computer_label installed"
 printf '%b\n' "Current terminal: ${accent}$session_command${reset}" >&2
+run_setup
 printf '%s\n' "Next: \"$bin_directory/coforge-computer\" setup --workspace <slug>" >&2

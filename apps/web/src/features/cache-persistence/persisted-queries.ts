@@ -34,8 +34,28 @@ export const STORED_KINDS = [
   "sidebar-channels",
   "channel-names",
   "saved-messages",
+  "agent-workspace-scan",
 ] as const;
 export type StoredKind = (typeof STORED_KINDS)[number];
+
+/**
+ * Whether a restored copy is followed by the query's own read (the persister's `persisterFn` in
+ * `query-cache-persistence.ts`). Every kind is, except a Computer's Agent workspace scan: its read
+ * is a scan of the Computer's disk (seconds per Agent), which runs only when the person presses
+ * Scan, so the copy is what the page shows until then, with the time it was taken.
+ */
+export function readsAfterRestore(queryKey: QueryKey): boolean {
+  return storedKindOf(queryKey) !== "agent-workspace-scan";
+}
+
+/** A Computer's last Agent workspace scan as kept: when it was taken, and what it found. */
+type AgentWorkspaceScanSnapshot = { scannedAt: number; workspaces: unknown[] };
+
+function isAgentWorkspaceScan(data: unknown): data is AgentWorkspaceScanSnapshot {
+  return (
+    hasList(data, "workspaces") && typeof (data as { scannedAt?: unknown }).scannedAt === "number"
+  );
+}
 
 /** How many of the newest saved messages are kept: the list has no bound, and the read that
  * follows a restore brings the rest. */
@@ -60,6 +80,15 @@ export function storedKindOf(queryKey: QueryKey): StoredKind | undefined {
   const [root, scope, id, list, ...rest] = queryKey;
   if (root === "saved-messages" && typeof scope === "string" && queryKey.length === 2)
     return "saved-messages";
+  // `["computer-agent-workspaces", workspaceId, computerId]`: a Computer can serve several
+  // Workspaces, and the scan lists the Agents of the one it was taken in.
+  if (
+    root === "computer-agent-workspaces" &&
+    typeof scope === "string" &&
+    typeof id === "string" &&
+    queryKey.length === 3
+  )
+    return "agent-workspace-scan";
   if (root !== "conversation" || typeof id !== "string" || rest.length > 0) return undefined;
   if ((scope === "channel" || scope === "direct") && list === undefined)
     return "conversation-window";
@@ -180,6 +209,9 @@ function firstPaintOf(queryKey: QueryKey, data: unknown): unknown {
     case "sidebar-channels":
     case "channel-names":
       return data;
+    case "agent-workspace-scan":
+      // Nothing scanned yet (the query's own read is `null`) is not kept.
+      return isAgentWorkspaceScan(data) ? data : undefined;
     case undefined:
       return undefined;
   }
@@ -203,6 +235,8 @@ export function isStoredData(queryKey: QueryKey, data: unknown): boolean {
       return hasList(data, "names");
     case "saved-messages":
       return hasList(data, "entries");
+    case "agent-workspace-scan":
+      return isAgentWorkspaceScan(data);
     case undefined:
       return false;
   }

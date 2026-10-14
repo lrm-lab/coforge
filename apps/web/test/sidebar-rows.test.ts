@@ -108,9 +108,6 @@ test("the sidebar reads rows by conversation, in the server's order; a closed DM
   ]);
   expect(lists.closedIds).toEqual(["dm-scout"]);
   expect(lists.unread).toEqual({ "dm-helper": 3 });
-  // An Agent's own DM, for what opens it from outside the list.
-  expect(lists.agentDms.get("helper")).toBe("dm-helper");
-  expect(lists.agentDms.has("grace")).toBe(false);
 });
 
 test("the listed DMs are the open ones with a member, or with an Agent that is still there", () => {

@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 
-import { installCommands, setupCommand } from "#src/features/install/install-commands";
+import {
+  connectionCommands,
+  installCommands,
+  setupCommand,
+} from "#src/features/install/install-commands";
 
 /** Both the public landing page and the signed-in Add Computer dialog render from this, so a
  * host baked into either one would send half the users to the wrong deployment. */
@@ -26,4 +30,18 @@ test("builds the Workspace setup command for a given slug", () => {
 test("carries no fixed host, since the setup command runs against whatever server the Computer already logged into", () => {
   expect(setupCommand("acme-inc")).not.toContain("coforge.cn");
   expect(setupCommand("acme-inc")).not.toContain("http");
+});
+
+/** One pasted command installs and joins: install.sh runs setup through the installed shim, so
+ * the command never depends on the PATH entry the installer adds for later shells. PowerShell runs
+ * install.ps1 in-process and gets the PATH entry at once, so its setup stays a second line. */
+test("joins the Workspace from the install command itself", () => {
+  const commands = connectionCommands("https://coforge.example", "acme-inc");
+
+  expect(commands.posix).toBe(
+    "curl -fsSL https://coforge.example/computer/install.sh | sh -s -- --workspace acme-inc",
+  );
+  expect(commands.windows).toBe(
+    "irm https://coforge.example/computer/install.ps1 | iex\ncoforge-computer setup --workspace acme-inc",
+  );
 });

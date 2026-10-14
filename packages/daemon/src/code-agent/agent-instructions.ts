@@ -163,7 +163,6 @@ message_read: ${CHANNEL_ARGUMENT_EXAMPLES.message_read}${offerOnly ? "" : `\nsen
 }
 
 export type CoforgeCliGuideOptions = Pick<CoforgeAgentPromptContext, "extraCriticalRules">;
-export type CoforgeCliGuideSections = ReturnType<typeof buildCoforgeCliGuideSections>;
 
 export const CLI_CHANNEL_MESSAGE_EXAMPLE = `Targets starting with # must be quoted. Send bodies on stdin, never a positional argument; double quotes expand backticks and $, so use a single-quoted heredoc delimiter:
 coforge message check --target '#channel'
@@ -171,7 +170,7 @@ coforge message send --target '#channel' <<'COFORGE_MESSAGE'
 Your reply text, with literal \`backticks\` and $variables preserved.
 COFORGE_MESSAGE`;
 
-export function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
+function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
   return {
     communication: `## CoForge communication
 Use the shell tool to execute CoForge commands: text outside an executed \`coforge message send\` command is not delivered to chat. Reply to direct user messages; reply in channels when addressed or useful. Reuse the exact \`target=\`, including its thread suffix.

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { AgentEventsResponse } from "@lrm/coforge-sdk/agent";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
+import { agentIdempotencyKeyFromQuery } from "#src/server/agents/agent-http-routes.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import {
   drainAgentEvents,
@@ -15,7 +16,7 @@ export async function handleAgentEventsGet(
   repository: AgentMessageRepository,
 ): Promise<Response> {
   const query = new URL(request.url).searchParams;
-  const idempotencyKey = query.get("idempotencyKey") || crypto.randomUUID();
+  const idempotencyKey = agentIdempotencyKeyFromQuery(request);
   const scope = { workspaceId: principal.workspaceId, agentId: principal.agentId };
   try {
     const limit = query.has("limit") ? Number(query.get("limit")) : undefined;

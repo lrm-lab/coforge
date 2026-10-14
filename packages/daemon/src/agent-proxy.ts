@@ -16,6 +16,7 @@ import {
   type WeeklyReportCommand,
   ATTACHMENT_MAX_BYTES,
   isRecord,
+  MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_PATTERN,
   UUID_LIKE_SOURCE,
   utf8Encoder,
@@ -220,7 +221,7 @@ export type AgentProxyRuntime = {
 };
 
 const LOCAL_PROXY_TOKEN = /^sfp_[A-Za-z0-9_-]{43}$/;
-const MESSAGE_ID_ANCHOR = new RegExp(`^(?:[0-9a-f]{8}|${UUID_LIKE_SOURCE})$`, "i");
+const MESSAGE_ID_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
 const UUID = UUID_LIKE_PATTERN;
 const LOCAL_ATTACHMENT_ROUTE_PREFIX = agentApiRoutes.local.attachments.path("");
 const LOCAL_ATTACHMENT_UPLOAD_PATH = agentApiRoutes.local.attachments.upload.path;

@@ -14,7 +14,7 @@ const CHANNEL_ID = "33333333-3333-4333-8333-333333333333";
 const AGENT_ID = "22222222-2222-4222-8222-222222222222";
 const ROOT_ID = "abcdef12-3456-4789-8abc-def012345678";
 const TOKENIZED = `<@agent:${AGENT_ID}> see <@task:7> in <@channel:${CHANNEL_ID}:product>, reply in <@thread:${CHANNEL_ID}:${ROOT_ID}:product>`;
-const READABLE = "@helper see task #7 in #product, reply in #product:abcdef12";
+const READABLE = "@helper see task #7 in #product, reply in #product:abcdef12-3456";
 const MENTIONS = [{ kind: "agent", actorId: AGENT_ID, handle: "helper" }];
 
 /** The `src/` files whose source contains `needle`, relative to `apps/web`. */

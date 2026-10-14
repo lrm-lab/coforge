@@ -339,8 +339,8 @@ test("a push diffs from the last successful run of its workflow, so superseded p
       `#!/bin/bash
 printf '%s\\n' "$2" >> "${calls}"
 case "$2" in
-  repos/LRM-Teams/coforge/actions/runs/42) body='{"id":42,"workflow_id":7}' ;;
-  repos/LRM-Teams/coforge/actions/workflows/7/runs*) body="$RUNS" ;;
+  repos/lrm-lab/coforge/actions/runs/42) body='{"id":42,"workflow_id":7}' ;;
+  repos/lrm-lab/coforge/actions/workflows/7/runs*) body="$RUNS" ;;
   *) exit 1 ;;
 esac
 # gh applies --jq and prints strings raw.
@@ -356,7 +356,7 @@ esac
           ...Bun.env,
           PATH: `${dir}:${Bun.env.PATH}`,
           RUNS: JSON.stringify({ total_count: runs.length, workflow_runs: runs }),
-          REPOSITORY: "LRM-Teams/coforge",
+          REPOSITORY: "lrm-lab/coforge",
           RUN_ID: "42",
           BRANCH: "main",
           GITHUB_OUTPUT: output,
@@ -367,7 +367,7 @@ esac
     };
     expect(await findBase("a".repeat(40))).toBe(`sha=${"a".repeat(40)}\n`);
     expect(await Bun.file(calls).text()).toContain(
-      "repos/LRM-Teams/coforge/actions/workflows/7/runs?branch=main&event=push&status=success&per_page=1\n",
+      "repos/lrm-lab/coforge/actions/workflows/7/runs?branch=main&event=push&status=success&per_page=1\n",
     );
     // No successful run yet: an empty base makes the select step cover everything.
     expect(await findBase("")).toBe("sha=\n");

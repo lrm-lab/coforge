@@ -50,7 +50,8 @@ export class PrismaWorkspaceMemoryIdentityDirectory
       if (input.identities.length === 0) return;
       await tx.openVikingMappedIdentity.createMany({
         data: input.identities.map((identity) => ({
-          id: crypto.randomUUID(),
+          // No explicit id: the Prisma client generates uuid(7) from the schema
+          // default, even in createMany.
           workspaceId: input.workspaceId,
           actorKind: identity.actorKind,
           actorSubject: identity.actorSubject,

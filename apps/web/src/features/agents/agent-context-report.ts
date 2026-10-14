@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { getAgentContextReport, scanAgentContext } from "./agent-context-report.functions";
 
-export function agentContextReportQueryKey(agentId: string) {
+function agentContextReportQueryKey(agentId: string) {
   return ["agent-context-report", agentId] as const;
 }
 

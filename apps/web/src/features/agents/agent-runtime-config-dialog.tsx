@@ -44,9 +44,9 @@ type EnvironmentRow = { key: string; value: string };
  * Save stays disabled until `AgentRuntimeFields` reports an actual change via `onDirtyChange`, or
  * until the Advanced env rows differ from their loaded starting point.
  *
- * When `computers` is provided (Agent has no Computer yet, or the caller wants reassignment),
- * a Computer picker appears first so the unbound weekly-report assistant can bind and configure
- * in one save.
+ * When `computers` is provided (Agent has no Computer yet, or a weekly-report assistant is
+ * changing the Computer it already uses), a Computer picker appears first so that bind and
+ * runtime configuration share one save.
  */
 export function AgentRuntimeConfigForm({
   computerId,

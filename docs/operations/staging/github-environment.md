@@ -38,10 +38,10 @@ AUTHING_APP_SECRET=...
 COFORGE_SESSION_SECRET=...
 COFORGE_WEB_PUSH_PRIVATE_KEY=...
 EOF
-gh secret set -f /tmp/coforge-staging.secrets --env staging --repo LRM-Teams/coforge
+gh secret set -f /tmp/coforge-staging.secrets --env staging --repo lrm-lab/coforge
 rm -f /tmp/coforge-staging.secrets
 
-gh variable set -f /tmp/coforge-staging.vars --env staging --repo LRM-Teams/coforge
+gh variable set -f /tmp/coforge-staging.vars --env staging --repo lrm-lab/coforge
 ```
 
 The variable import file must include
@@ -52,8 +52,8 @@ mode `0600` and removed immediately after import.
 开生产环境时同样两条命令，把 `--env` 换成 `production`。核对配全了没有：
 
 ```sh
-gh secret list --env staging --repo LRM-Teams/coforge
-gh variable list --env staging --repo LRM-Teams/coforge
+gh secret list --env staging --repo lrm-lab/coforge
+gh variable list --env staging --repo lrm-lab/coforge
 ```
 
 ## 这些值分别在什么时候生效

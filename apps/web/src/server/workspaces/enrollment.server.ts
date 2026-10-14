@@ -1,9 +1,9 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { generalChannelForCreator } from "#src/server/conversations/public-channels.server";
 import { attachDefaultMemoryAgentToGeneral } from "#src/server/workspace-memory/default-memory-agent.server";
 import { WorkspaceCatalog, PrismaWorkspaceCatalogStore } from "./catalog.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { createOwnedWorkspace } from "#src/server/db/repositories/workspace-slugs.repositories.server";
 import {
   isReservedWorkspaceSlug,
   isValidWorkspaceSlug,
@@ -26,15 +26,22 @@ export type WorkspaceEnrollmentStore = {
 export class WorkspaceEnrollment {
   constructor(private readonly store: WorkspaceEnrollmentStore) {}
 
+  /**
+   * `slug` is the URL the person chose for it; it is used as given and a taken one throws the
+   * unique violation. Without one the slug comes from the username.
+   */
   async ensureForUser(
     user: EnrollmentUser,
     acceptLanguage: string,
+    slug?: string,
   ): Promise<{ workspaceId: string }> {
     const existing = await this.store.findMembership(user.id);
     if (existing) return { workspaceId: existing };
 
     const name = workspaceDisplayName(user.displayName, acceptLanguage);
-    const workspaceId = await this.createOwnedWorkspace(user.username, user.id, name);
+    const workspaceId = slug
+      ? await this.create({ slug, name, userId: user.id })
+      : await this.createOwnedWorkspace(user.username, user.id, name);
     return { workspaceId };
   }
 
@@ -84,9 +91,9 @@ export class WorkspaceEnrollment {
   }
 }
 
-export function workspaceDisplayName(displayName: string, acceptLanguage: string): string {
+function workspaceDisplayName(displayName: string, acceptLanguage: string): string {
   const name = displayName.trim() || "User";
-  return prefersChinese(acceptLanguage) ? `${name}的工作空间` : `${name}'s Workspace`;
+  return prefersChinese(acceptLanguage) ? `${name}的工作区` : `${name}'s Workspace`;
 }
 
 export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore {
@@ -102,22 +109,10 @@ export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore 
   }
 
   async createForUser(input: { slug: string; name: string; userId: string }) {
-    const row = await this.db.workspace.create({
-      data: {
-        slug: input.slug,
-        name: input.name,
-        members: { create: { userId: input.userId, role: "owner" } },
-        conversations: generalChannelForCreator(input.userId),
-      },
-      select: { id: true },
-    });
+    const row = await createOwnedWorkspace(this.db, input, { id: true });
     await attachDefaultMemoryAgentToGeneral(this.db, row.id, input.userId);
     return row.id;
   }
-}
-
-export function findWorkspaceIdForUser(db: PrismaClient, userId: string): Promise<string | null> {
-  return new PrismaWorkspaceEnrollmentStore(db).findMembership(userId);
 }
 
 export async function requireExistingWorkspaceId(

@@ -8,7 +8,6 @@ import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 
 import { paraglideOptions } from "./paraglide.config.ts";
-import { hoistTransitiveChunkImports } from "./scripts/hoist-transitive-chunk-imports.ts";
 import {
   assertLibraryChunksDoNotImportAppChunks,
   vendorChunkGroups,
@@ -145,7 +144,6 @@ const config = defineConfig({
       },
     }),
     assertLibraryChunksDoNotImportAppChunks(),
-    ...hoistTransitiveChunkImports(),
     nitro({
       preset: "bun",
       // Avoid cyclic SSR chunks evaluating server functions before createSsrRpc

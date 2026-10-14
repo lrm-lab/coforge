@@ -18,6 +18,7 @@ import {
   resolveClaudeCodeExecutable,
 } from "#src/code-agent/claude-code/runtime";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
+import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
 
 function probeFor(
   runtimes: Record<string, { path: string; version: string; exitCode?: number }>,
@@ -294,22 +295,28 @@ describe("external Code Agent inventory", () => {
     expect(probed).toEqual(["codex:/bin/codex"]);
   });
 
-  test("preserves an installed Kiro runtime when its catalog is unavailable", async () => {
-    const inventory = await discoverCodeAgentInventory({
-      probe: probeFor({
-        "kiro-cli": { path: "/bin/kiro-cli", version: "kiro-cli 2.21.2\n" },
-      }),
-      commands: { kiro: [process.execPath, "-e", "process.exit(1)"] },
-      environment: { HOME: "/fixture/home", PATH: "" },
-    });
+  test(
+    "preserves an installed Kiro runtime when its catalog is unavailable",
+    async () => {
+      const inventory = await discoverCodeAgentInventory({
+        probe: probeFor({
+          "kiro-cli": { path: "/bin/kiro-cli", version: "kiro-cli 2.21.2\n" },
+        }),
+        commands: { kiro: [process.execPath, "-e", "process.exit(1)"] },
+        environment: { HOME: "/fixture/home", PATH: "" },
+        // This case asserts Kiro inventory, not the host Pi SDK's network-backed catalog.
+        piModels: async () => [],
+      });
 
-    expect(inventory.runtimes).toContainEqual({
-      provider: "kiro",
-      version: "2.21.2",
-      displayName: "Kiro",
-    });
-    expect(inventory.catalogs.some((catalog) => catalog.provider === "kiro")).toBe(false);
-  });
+      expect(inventory.runtimes).toContainEqual({
+        provider: "kiro",
+        version: "2.21.2",
+        displayName: "Kiro",
+      });
+      expect(inventory.catalogs.some((catalog) => catalog.provider === "kiro")).toBe(false);
+    },
+    CATALOG_DISCOVERY_BUDGET_MS,
+  );
 
   test("discovers a Cursor CLI model catalog for an installed runtime", async () => {
     const inventory = await discoverCodeAgentInventory({

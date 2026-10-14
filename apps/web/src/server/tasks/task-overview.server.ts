@@ -18,6 +18,7 @@ import {
   UNFINISHED_TASK_STATUSES,
   type FinishedTaskStatus,
 } from "./task-view.server";
+import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 
 export type TaskOverview = {
   tasks: Array<
@@ -182,7 +183,7 @@ export class TaskOverviewReads {
   ) {}
 
   async overview(workspaceId: string, userId: string): Promise<TaskOverview> {
-    await this.requireWorkspaceMember(workspaceId, userId);
+    await requireWorkspaceMember(this.db, workspaceId, userId);
     const tasks = await this.db.task.findMany({
       where: {
         workspaceId,
@@ -206,7 +207,7 @@ export class TaskOverviewReads {
     ref: { conversationId: string; number: number },
   ): Promise<TaskOverview["tasks"][number] | null> {
     const { workspaceId, userId } = scope;
-    await this.requireWorkspaceMember(workspaceId, userId);
+    await requireWorkspaceMember(this.db, workspaceId, userId);
     const task = await this.db.task.findFirst({
       where: {
         workspaceId,
@@ -367,7 +368,7 @@ export class TaskOverviewReads {
   private async finishedTaskWhere(scope: FinishedTaskScope): Promise<Prisma.TaskWhereInput> {
     const { workspaceId, userId, conversationId } = scope;
     if (!conversationId) {
-      await this.requireWorkspaceMember(workspaceId, userId);
+      await requireWorkspaceMember(this.db, workspaceId, userId);
       return { workspaceId, conversation: OVERVIEW_CONVERSATION_WHERE };
     }
     return {
@@ -377,13 +378,5 @@ export class TaskOverviewReads {
         conversationId,
       ),
     };
-  }
-
-  private async requireWorkspaceMember(workspaceId: string, userId: string) {
-    const membership = await this.db.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { userId: true },
-    });
-    if (!membership) throw new AppError("ACCESS_DENIED");
   }
 }

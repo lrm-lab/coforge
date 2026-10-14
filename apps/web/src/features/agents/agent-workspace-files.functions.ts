@@ -3,6 +3,7 @@ import { declareNoStore } from "#src/features/no-store-response.server";
 import {
   encodeAgentWorkspaceFileReadRequest,
   encodeAgentWorkspaceFilesListRequest,
+  encodeAgentWorkspaceDeleteRequest,
 } from "@lrm/coforge-sdk/internal";
 import {
   listAgentWorkspaceFilesInputSchema,
@@ -21,6 +22,7 @@ import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.s
 import {
   getAgentWorkspaceFileReadResults,
   getAgentWorkspaceFilesListResults,
+  getAgentWorkspaceDeleteResults,
 } from "#src/server/centrifugo/agent-workspace-files-cache.server";
 
 function buildQuery(db: Parameters<typeof findOwnedWorkspaceFilesAssignment>[0]) {
@@ -39,6 +41,12 @@ function buildQuery(db: Parameters<typeof findOwnedWorkspaceFilesAssignment>[0])
       ),
     listResults: getAgentWorkspaceFilesListResults(),
     readResults: getAgentWorkspaceFileReadResults(),
+    publishDelete: (request) =>
+      createCentrifugoServerApi().publish(
+        daemonControlChannel(request.workspaceId, request.computerId),
+        encodeAgentWorkspaceDeleteRequest(request),
+      ),
+    deleteResults: getAgentWorkspaceDeleteResults(),
   });
 }
 

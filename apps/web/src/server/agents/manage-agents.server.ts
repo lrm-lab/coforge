@@ -59,6 +59,15 @@ type RuntimeAvailability = {
   ): Promise<boolean>;
 };
 
+/** The first picture of a new Agent. `storeInitial` answers null when none could be stored. */
+type InitialAgentAvatars = {
+  storeInitial(
+    workspaceId: string,
+    agentId: string,
+  ): Promise<{ objectKey: string; contentType: string } | null>;
+  discard(objectKey: string): Promise<void>;
+};
+
 type AgentUpdateInput = Omit<AgentCreateInput, "computerId" | "name"> & {
   agentId: string;
   computerId?: string;
@@ -74,6 +83,7 @@ export class ManageAgents {
     private readonly credentials?: () =>
       | Pick<AgentRuntimeCredentials, "encrypt">
       | Promise<Pick<AgentRuntimeCredentials, "encrypt">>,
+    private readonly initialAvatars?: InitialAgentAvatars,
   ) {}
 
   list(principal: AgentPrincipal) {
@@ -91,10 +101,12 @@ export class ManageAgents {
     if (!principal.role) throw new AppError("ACCESS_DENIED");
     assertCanCreateAgents(principal.role);
     const name = input.name.trim().toLowerCase();
-    if (!name) throw new Error("name is required");
+    if (!name) throw new AppError("INVALID_INPUT", { errorId: "agent-name-required" });
     const description = input.description.trim();
-    if (!providers.has(input.provider)) throw new Error("provider is not supported");
-    if (!input.computerId) throw new Error("computer is required");
+    if (!providers.has(input.provider))
+      throw new AppError("INVALID_INPUT", { errorId: "agent-provider-unsupported" });
+    if (!input.computerId)
+      throw new AppError("INVALID_INPUT", { errorId: "agent-computer-required" });
     const apiKeyInput = input.apiKey?.trim();
     const selection = {
       provider: input.provider,
@@ -127,23 +139,33 @@ export class ManageAgents {
             ...(encryptedApiKey ? { apiKey: encryptedApiKey } : {}),
           }
         : { kind: "default" as const };
-    const agent = await this.agents.create({
-      id: agentId,
-      workspaceId: principal.workspaceId,
-      ownerId: principal.userId,
-      name,
-      displayName: name,
-      description,
-      computerId: input.computerId,
-      visibility: input.visibility ?? AGENT_VISIBILITY.PUBLIC,
-      runtimeConfig: {
-        runtime: selection.provider,
-        provider: storedProvider,
-        model: selection.model,
-        modelProvider: selection.modelProvider,
-        reasoning: selection.reasoning,
-      },
-    });
+    // Stored last, so a refused create has stored nothing; removed again if the row is not written.
+    const avatar = await this.initialAvatars?.storeInitial(principal.workspaceId, agentId);
+    let agent: AgentRecord;
+    try {
+      agent = await this.agents.create({
+        id: agentId,
+        workspaceId: principal.workspaceId,
+        ownerId: principal.userId,
+        name,
+        displayName: name,
+        description,
+        computerId: input.computerId,
+        visibility: input.visibility ?? AGENT_VISIBILITY.PUBLIC,
+        avatarObjectKey: avatar?.objectKey ?? null,
+        avatarContentType: avatar?.contentType ?? null,
+        runtimeConfig: {
+          runtime: selection.provider,
+          provider: storedProvider,
+          model: selection.model,
+          modelProvider: selection.modelProvider,
+          reasoning: selection.reasoning,
+        },
+      });
+    } catch (error) {
+      if (avatar) await this.initialAvatars?.discard(avatar.objectKey);
+      throw error;
+    }
     try {
       await this.runtimeControl.start(agentStartIntent(agent, input.computerId), principal.userId);
       return { agent: publicAgent(agent), startPublished: true as const };
@@ -160,13 +182,14 @@ export class ManageAgents {
         current.workspaceId !== principal.workspaceId ||
         current.ownerId !== principal.userId
       )
-        throw new Error("Agent is not authorized");
+        throw new AppError("ACCESS_DENIED", { errorId: "agent-not-authorized" });
       // A deleted Agent has no editable configuration. Refused here rather than only by
       // the restart below, so a stopped/deleted Agent cannot be silently rewritten either.
       assertAgentLive(current);
       const computerId = input.computerId ?? current.computerId;
       if (!computerId) throw new AppError("INVALID_INPUT", { errorId: "agent-computer-required" });
-      if (!providers.has(input.provider)) throw new Error("provider is not supported");
+      if (!providers.has(input.provider))
+        throw new AppError("INVALID_INPUT", { errorId: "agent-provider-unsupported" });
       const apiKeyInput = input.apiKey?.trim();
       const selection = {
         provider: input.provider,
@@ -218,9 +241,10 @@ export class ManageAgents {
         throw new AppError("INVALID_INPUT", { errorId: "agent-runtime-unavailable" });
       // A stopped Agent has nothing running under the old configuration, so config
       // changes persist without the stop -> ... -> start dance; a confirmed Stop would make a
-      // stopped Agent on an offline Computer uneditable.
+      // stopped Agent on an offline Computer uneditable. Moving Computers stops the process
+      // on the Computer it is leaving, even when the runtime selection itself is unchanged.
       const stopped = Boolean(current.stoppedAt);
-      if (runtimeChanged && current.computerId && !stopped)
+      if ((runtimeChanged || computerChanged) && current.computerId && !stopped)
         await this.runtimeControl.stop(
           {
             protocolMajor: 1,
@@ -254,8 +278,10 @@ export class ManageAgents {
   }
 
   async #encrypt(agentId: string, providerId: string, apiKey: string) {
-    if (!providerId) throw new Error("model provider is required for an API key");
-    if (!this.credentials) throw new Error("Agent runtime credential encryption is unavailable");
+    if (!providerId)
+      throw new AppError("INVALID_INPUT", { errorId: "agent-model-provider-required" });
+    if (!this.credentials)
+      throw new AppError("INTERNAL_ERROR", { errorId: "agent-credential-unavailable" });
     return (await this.credentials()).encrypt(agentId, providerId, apiKey);
   }
 }

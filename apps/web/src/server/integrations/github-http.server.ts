@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { optionalBrowserUser } from "#src/server/auth/require-user.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { readPreferredWorkspaceSlug } from "#src/server/workspaces/selection.server";
+import { isAppError } from "#src/lib/app-error";
 import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
 import { configuredGitHub, readGitHubConfig } from "./github-config.server";
 import { applyGitHubWebhookEvent, verifyGitHubWebhookSignature } from "./github-webhook.server";
@@ -53,6 +54,11 @@ function settingsLocation(cookieHeader: string, github?: "connected" | "wrong_ac
   return workspacePath(slug, `/settings?section=integrations${github ? `&github=${github}` : ""}`);
 }
 
+/** A failure before or around `GitHubConnection.complete`: the stage and a short reason only. */
+function logCallbackFailure(reason: string) {
+  console.warn(JSON.stringify({ event: "github.authorization_failed", stage: "callback", reason }));
+}
+
 export async function githubCallbackHandler({ request }: { request: Request }) {
   const headers = new Headers({ "cache-control": "no-store", "referrer-policy": "no-referrer" });
   const user = await optionalBrowserUser(request.headers.get("cookie") ?? undefined);
@@ -83,8 +89,11 @@ export async function githubCallbackHandler({ request }: { request: Request }) {
         state,
         params.has("error") ? "" : (params.get("code") ?? ""),
       );
-  } catch {
-    // Never put GitHub response bodies, authorization codes or secrets in errors/logs.
+    else logCallbackFailure("not_configured");
+  } catch (error) {
+    // Never put GitHub response bodies, authorization codes or secrets in errors/logs: the log
+    // line names the stage and a short reason only (`GitHubConnection.complete` logs its own).
+    logCallbackFailure(isAppError(error) ? error.code.toLowerCase() : "error");
   }
   if (connected === true) {
     try {

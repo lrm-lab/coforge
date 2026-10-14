@@ -25,13 +25,14 @@ const UUID = UUID_LIKE_SOURCE;
 export const CHANNEL_REFERENCE_PATTERN = /#([\p{L}\p{N}_-]+)/gu;
 
 /**
- * A thread reference, `#name:` followed by a short (6–8 hex) or full message id, in any case:
+ * A thread reference, `#name:` followed by a short (6–12 hex, or the dashed display form)
+ * or full message id, in any case:
  * group 1 is the channel name as written, group 2 the id. It is a different reference than the
  * channel it names, so it is read whole, before a `#name` could be. It names a thread only when the
  * channel exists and the id is one of that channel's top-level messages, unambiguously.
  */
 export const THREAD_REFERENCE_PATTERN = new RegExp(
-  `#([\\p{L}\\p{N}_-]+):(${UUID}|[0-9a-f]{6,8})(?![0-9a-z-])`,
+  `#([\\p{L}\\p{N}_-]+):(${UUID}|[0-9a-f]{6,8}|[0-9a-f]{8}-[0-9a-f]{4})(?![0-9a-z-])`,
   "giu",
 );
 
@@ -89,14 +90,18 @@ export function threadReferenceToken(channelId: string, rootId: string, name: st
   return `<@thread:${channelId.toLowerCase()}:${rootId.toLowerCase()}:${name}>`;
 }
 
-/** How a thread reference reads as text: `#name:` and the root message's first eight hex
- * characters — the same `#name:<8 hex>` an Agent writes to target that thread. */
+/** How a thread reference reads as text: `#name:` and the root id's first twelve hex characters
+ * with the first dash kept — the same `#name:xxxxxxxx-xxxx` an Agent writes to target that thread.
+ * Twelve hex (not twelve characters) is the full UUIDv7 millisecond timestamp: eight hex repeats
+ * for every id minted within the same ~65 seconds (the pi project hit exactly this after moving
+ * to v7, earendil-works/pi#6242), twelve only collides within one millisecond, which the
+ * resolver's "at most one match" rule refuses loudly. */
 export function threadReferenceText(name: string, rootId: string): string {
-  return `#${name}:${rootId.slice(0, 8).toLowerCase()}`;
+  return `#${name}:${rootId.slice(0, 13).toLowerCase()}`;
 }
 
 /**
- * Rewrites every thread-reference token to `#name:<8 hex>`: the channel's current name when
+ * Rewrites every thread-reference token to `#name:xxxxxxxx-xxxx`: the channel's current name when
  * `currentName` knows the id, otherwise the name stored in the token. Like a channel token, a
  * thread token always has a readable form, so it is never left raw.
  */

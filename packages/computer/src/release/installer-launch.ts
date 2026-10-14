@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { getLogger } from "@logtape/logtape";
-import { isValidReleaseVersion } from "@lrm/coforge-sdk/internal";
+import { isValidReleaseVersion, thrownMessage } from "@lrm/coforge-sdk/internal";
 import type { z } from "zod";
 
 import { UpdateError } from "#src/updater";
@@ -124,7 +124,7 @@ async function runSource(options: Parameters<typeof runInstallationSource>[0]): 
   try {
     return await runInstallationSource(options);
   } catch (error) {
-    throw feedInvalid(error instanceof Error ? error.message : String(error));
+    throw feedInvalid(thrownMessage(error));
   }
 }
 

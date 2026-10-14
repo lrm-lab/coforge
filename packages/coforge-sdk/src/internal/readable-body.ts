@@ -17,7 +17,7 @@ export type ReadableBodyNames = {
 
 /**
  * Reads a stored body back as text: `<@human|agent:uuid>` → `@name`, `<@task:68>` → `task #68`,
- * `<@channel:uuid:name>` → `#name`, `<@thread:uuid:uuid:name>` → `#name:<8 hex>`. A body with no
+ * `<@channel:uuid:name>` → `#name`, `<@thread:uuid:uuid:name>` → `#name:<12 hex, dashed>`. A body with no
  * token is returned untouched.
  */
 export function readableBody(body: string, names: ReadableBodyNames): string {

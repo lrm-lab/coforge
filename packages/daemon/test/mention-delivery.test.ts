@@ -14,6 +14,7 @@ import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import { RUNNER_HOLD_REASONS } from "@lrm/coforge-sdk/internal";
 import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
+import { captureDaemonLogs } from "./log-capture";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -91,7 +92,10 @@ async function harness(
         }
         if (options.reportSession !== false) await sessionOptions.onSessionId?.("native-1");
         return {
-          async sendMessage() {},
+          async sendMessage() {
+            // Mention delivery starts from a ready Agent, after its startup turn has ended.
+            for (const listener of listeners) listener({ type: "completed", status: "completed" });
+          },
           async notify(notice: string, noticeOptions?: { deliveryIds?: readonly string[] }) {
             if (options.refuseNotice) throw new Error("the session refused the notice");
             notices.push(notice);
@@ -610,7 +614,7 @@ test("a pending mention issued again for the next launch is told to that launch 
 
 test("a mention the Agent already consumed is drained without a running process", async () => {
   new AgentConsumedSeqStore().write("agent-a", {
-    targets: { "#general": { seq: 5 } },
+    targets: { "#general": { conversationId: "conversation-a", seq: 5 } },
     aliases: {},
     nextReadOrder: 1,
   });
@@ -636,9 +640,37 @@ test("a mention the Agent already consumed is drained without a running process"
   }
 });
 
+test("a mention drained as already consumed logs why the Agent was not told", async () => {
+  new AgentConsumedSeqStore().write("agent-a", {
+    targets: { "#general": { conversationId: "conversation-a", seq: 5 } },
+    aliases: {},
+    nextReadOrder: 1,
+  });
+  const { runtime, notices, envelope, deliver } = await harness();
+  try {
+    const { records } = await captureDaemonLogs(() => deliver(1, envelope(1)));
+
+    expect(notices).toEqual([]);
+    const decision = records.find(
+      (record) => record.properties.event === "agent.message.attention_decision",
+    );
+    expect(decision?.properties).toMatchObject({
+      agent_id: "agent-a",
+      delivery_id: "delivery-1",
+      target: "#general",
+      sequence: 1,
+      tracked_mention: true,
+      outcome: "consumed",
+      model_seen_seq: 5,
+    });
+  } finally {
+    await runtime.stop();
+  }
+});
+
 test("a mention the Agent already consumed is drained even when its envelope names an older launch", async () => {
   new AgentConsumedSeqStore().write("agent-a", {
-    targets: { "#general": { seq: 5 } },
+    targets: { "#general": { conversationId: "conversation-a", seq: 5 } },
     aliases: {},
     nextReadOrder: 1,
   });

@@ -13,7 +13,7 @@ powershell_version = "7.6.6"
 
 [tools]
 node = "24"
-bun = "1.4.2"
+bun = "1.4.3"
 actionlint = "1.7.12"
 shellcheck = "0.11.0"
 

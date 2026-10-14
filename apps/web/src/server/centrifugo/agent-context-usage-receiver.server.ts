@@ -9,6 +9,7 @@ import {
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 import { rejectNonDaemonPrincipal } from "./daemon-principal.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /**
  * Fire-and-forget from the daemon's side (never awaited or retried there), gated exactly like
@@ -86,7 +87,7 @@ export function createAgentContextUsageMethod(
           workspace_id: metadata.principal.workspaceId,
           computer_id: metadata.principal.computerId,
           launch_id: message.launchId,
-          reason: `unexpected: ${error instanceof Error ? error.name : typeof error}`,
+          reason: `unexpected: ${errorType(error)}`,
         }),
       );
       return { code: 403, message: "Agent context usage is not authorized" };

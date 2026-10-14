@@ -11,6 +11,7 @@ import {
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { getAgentDisplay, type AgentDisplay, type Scope } from "./agent-display.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /** How often `AgentActivitySweep.tick()` looks for stale busy leases. */
 export const ACTIVITY_SWEEP_INTERVAL_MS = 5_000;
@@ -110,7 +111,7 @@ export class AgentActivitySweep {
       console.error(
         JSON.stringify({
           event: "agent_activity_sweep.tick_failed",
-          error_type: error instanceof Error ? error.name : typeof error,
+          error_type: errorType(error),
         }),
       );
     } finally {

@@ -4,6 +4,7 @@ import {
   type ActionCardAction,
 } from "@lrm/coforge-sdk/agent";
 import { CliError } from "./cli-error";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 /**
  * `coforge action prepare` accepts a real shell heredoc (the delimiter never reaches this
@@ -60,7 +61,7 @@ export function parseActionCardInput(raw: string): unknown {
   } catch (error) {
     throw new CliError({
       code: "INVALID_JSON",
-      message: `Action JSON failed to parse: ${error instanceof Error ? error.message : String(error)}`,
+      message: `Action JSON failed to parse: ${thrownMessage(error)}`,
       retryable: false,
     });
   }

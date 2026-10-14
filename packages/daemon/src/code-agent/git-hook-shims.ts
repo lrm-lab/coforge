@@ -97,7 +97,7 @@ function shimContentDigest(): string {
 
 /** The Daemon's own state/data directory root, matching every other Daemon-owned local store
  * (e.g. `credentials/credential-store.ts`). */
-export function daemonHomeDirectory(env: Record<string, string | undefined> = Bun.env): string {
+function daemonHomeDirectory(env: Record<string, string | undefined> = Bun.env): string {
   return env.COFORGE_DAEMON_HOME ?? join(homedir(), ".coforge", "daemon");
 }
 

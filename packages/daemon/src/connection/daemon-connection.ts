@@ -69,6 +69,11 @@ import {
   AGENT_WORKSPACE_FILE_READ_RESULT_METHOD,
   type AgentWorkspaceFileReadRequest,
   type AgentWorkspaceFileReadResult,
+  decodeAgentWorkspaceDeleteRequest,
+  encodeAgentWorkspaceDeleteResult,
+  AGENT_WORKSPACE_DELETE_RESULT_METHOD,
+  type AgentWorkspaceDeleteRequest,
+  type AgentWorkspaceDeleteResult,
   type ComputerUpgradeResult,
   decodeDaemonRuntimeUsageScanRequest,
   encodeDaemonRuntimeUsageScanResponse,
@@ -144,6 +149,7 @@ import {
   type WeeklyReportResponse,
   agentEnvironmentViolation,
   utf8Encoder,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import type { AgentRuntimeProviderConfig } from "#src/code-agent/contract";
@@ -326,6 +332,8 @@ export interface DaemonConnectionClient {
     callback: (request: AgentWorkspaceFileReadRequest) => Promise<void>,
   ): () => void;
   sendWorkspaceFileReadResult?(result: AgentWorkspaceFileReadResult): Promise<void>;
+  onWorkspaceDelete?(callback: (request: AgentWorkspaceDeleteRequest) => Promise<void>): () => void;
+  sendWorkspaceDeleteResult?(result: AgentWorkspaceDeleteResult): Promise<void>;
   onUsageScan?(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void;
   sendUsageScanResult?(response: DaemonRuntimeUsageScanResponse): Promise<void>;
   onProviderModelRefresh?(
@@ -504,6 +512,9 @@ export class DaemonConnection implements DaemonConnectionClient {
   >();
   readonly #workspaceFileRead = new ListenerSlot<
     (request: AgentWorkspaceFileReadRequest) => Promise<void>
+  >();
+  readonly #workspaceDelete = new ListenerSlot<
+    (request: AgentWorkspaceDeleteRequest) => Promise<void>
   >();
   readonly #usageScan = new ListenerSlot<
     (request: DaemonRuntimeUsageScanRequest) => Promise<void>
@@ -823,6 +834,10 @@ export class DaemonConnection implements DaemonConnectionClient {
     return this.#workspaceFileRead.set(callback);
   }
 
+  onWorkspaceDelete(callback: (request: AgentWorkspaceDeleteRequest) => Promise<void>): () => void {
+    return this.#workspaceDelete.set(callback);
+  }
+
   onUsageScan(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void {
     return this.#usageScan.set(callback);
   }
@@ -1098,6 +1113,11 @@ export class DaemonConnection implements DaemonConnectionClient {
     client.connect();
   }
 
+  /** Refuses an Agent request while this connection is not up: each one needs the server. */
+  #assertConnected(): void {
+    if (!this.#connected) throw new Error("daemon connection is not connected");
+  }
+
   #requireClient(): CentrifugeWorkspaceClient {
     if (!this.#connected || !this.#client) throw new Error("daemon connection is not connected");
     return this.#client;
@@ -1147,7 +1167,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentMessageRequest,
     agentApiKey: string,
   ): Promise<AgentMessageTransportResponse> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     const {
       requestRead,
       requestSearch,
@@ -1270,7 +1290,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentSendReconciliationRequest,
     agentApiKey: string,
   ): Promise<AgentSendReconciliationResponse> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     const { requestSendReconciliation } = this.agentMessageHttpClient;
     if (!requestSendReconciliation)
       throw new Error("unsupported Agent message operation: send reconciliation");
@@ -1480,7 +1500,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: OpenVikingAgentProxyCommand,
     agentApiKey: string,
   ): Promise<unknown> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     const url = this.#serverEndpoint("Agent OpenViking HTTP", agentApiRoutes.cloud.openviking.path);
     if (request.op === "offer") {
       return forwardOpenVikingOffer({
@@ -1501,7 +1521,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   }
 
   async agentTask(request: TaskRequest, agentApiKey: string): Promise<TaskResponse> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     return this.agentTaskHttpClient.execute({
       url: this.#serverEndpoint("Agent Task HTTP", agentApiRoutes.cloud.tasks.path),
       ...this.#agentKeys(agentApiKey),
@@ -1513,7 +1533,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentChannelRequest,
     agentApiKey: string,
   ): Promise<Record<string, unknown>> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     const endpoint = channelEndpointFor(request.operation, request.target);
     return this.agentChannelHttpClient.execute({
       method: endpoint.method,
@@ -1527,7 +1547,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentActionPrepareRequest,
     agentApiKey: string,
   ): Promise<AgentActionPrepareResponse> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     return this.agentActionPrepareHttpClient.execute({
       url: this.#serverEndpoint(
         "Agent action-prepare HTTP",
@@ -1542,7 +1562,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: WeeklyReportRequest,
     agentApiKey: string,
   ): Promise<WeeklyReportResponse> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     return this.agentWeeklyReportHttpClient.request({
       url: this.#serverEndpoint(
         "Agent weekly-report HTTP",
@@ -1559,7 +1579,7 @@ export class DaemonConnection implements DaemonConnectionClient {
       | import("./weekly-report-collect").WeeklyReportCollectFailRunningCommand,
     agentApiKey: string,
   ): Promise<import("./weekly-report-collect").WeeklyReportCollectResult> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     return defaultAgentWeeklyReportCollectHttpClient.execute({
       url: this.#serverEndpoint(
         "Agent weekly-report-collect HTTP",
@@ -1574,7 +1594,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: import("./weekly-report-key-points").WeeklyReportKeyPointsCommand,
     agentApiKey: string,
   ): Promise<import("./weekly-report-key-points").WeeklyReportKeyPointsResult> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     return defaultAgentWeeklyReportKeyPointsHttpClient.execute({
       url: this.#serverEndpoint(
         "Agent weekly-report-key-points HTTP",
@@ -1601,7 +1621,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   }
 
   async agentAttachment(attachmentId: string, agentApiKey: string): Promise<Response> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     return fetch(
       this.#serverEndpoint("Agent attachment", agentApiRoutes.cloud.attachments.path(attachmentId)),
       { headers: agentHeaders(this.#agentKeys(agentApiKey)) },
@@ -1616,7 +1636,7 @@ export class DaemonConnection implements DaemonConnectionClient {
    * unchanged; only the Agent-scoped authorization headers are added.
    */
   async agentAttachmentUpload(request: Request, agentApiKey: string): Promise<Response> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     const contentType = request.headers.get("content-type");
     if (!contentType) throw new Error("multipart content-type is missing");
     const body = await request.blob();
@@ -1636,7 +1656,7 @@ export class DaemonConnection implements DaemonConnectionClient {
    * Agent-scoped headers `agentAttachment`/`agentAttachmentUpload` already add.
    */
   async agentAttachmentUploadSessionCreate(body: unknown, agentApiKey: string): Promise<Response> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     return fetch(
       this.#serverEndpoint(
         "Agent attachment upload session create",
@@ -1654,7 +1674,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     uploadId: string,
     agentApiKey: string,
   ): Promise<Response> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     return fetch(
       this.#serverEndpoint(
         "Agent attachment upload session complete",
@@ -1671,7 +1691,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     uploadId: string,
     agentApiKey: string,
   ): Promise<Response> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     return fetch(
       this.#serverEndpoint(
         "Agent attachment upload session cancel",
@@ -1685,7 +1705,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   }
 
   async agentAttachmentUploadSessionGet(uploadId: string, agentApiKey: string): Promise<Response> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+    this.#assertConnected();
     return fetch(
       this.#serverEndpoint(
         "Agent attachment upload session get",
@@ -1856,6 +1876,11 @@ export class DaemonConnection implements DaemonConnectionClient {
           void this.#workspaceFileRead.current?.(request).catch(() => {});
         return true;
       }) ||
+      this.#route(data, decodeAgentWorkspaceDeleteRequest, (request) => {
+        if (request.workspaceId === workspaceId)
+          void this.#workspaceDelete.current?.(request).catch(() => {});
+        return true;
+      }) ||
       this.#route(data, decodeDaemonRuntimeUsageScanRequest, (usage) => {
         if (usage.protocolMajor !== 1 || usage.workspaceId !== workspaceId || !usage.computerId)
           return false;
@@ -1934,9 +1959,7 @@ export class DaemonConnection implements DaemonConnectionClient {
       // and reporting only the final attempt named a cause that belonged to a frame kind this
       // publication may never have been. An Agent that never woke leaves nothing else behind.
       rejections: rejections
-        .map(
-          ({ kind, error }) => `${kind}: ${error instanceof Error ? error.message : String(error)}`,
-        )
+        .map(({ kind, error }) => `${kind}: ${thrownMessage(error)}`)
         .join("; "),
       // The fields the payload carries, never their values, so a frame no decoder accepted can
       // still be matched against a schema without putting message text in the log.
@@ -1975,6 +1998,10 @@ export class DaemonConnection implements DaemonConnectionClient {
       AGENT_WORKSPACE_FILE_READ_RESULT_METHOD,
       encodeAgentWorkspaceFileReadResult(result),
     );
+  }
+
+  async sendWorkspaceDeleteResult(result: AgentWorkspaceDeleteResult): Promise<void> {
+    await this.#rpc(AGENT_WORKSPACE_DELETE_RESULT_METHOD, encodeAgentWorkspaceDeleteResult(result));
   }
 
   /**

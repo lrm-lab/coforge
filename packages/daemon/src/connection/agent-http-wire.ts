@@ -77,7 +77,7 @@ export async function fetchAgentResponse(
 }
 
 /** Reads a response body as text, turning a stream failure into a typed mid-response failure. */
-export async function readAgentResponseText(response: Response, what: string): Promise<string> {
+async function readAgentResponseText(response: Response, what: string): Promise<string> {
   try {
     return await response.text();
   } catch (cause) {
@@ -113,7 +113,7 @@ export async function assertAgentResponseOk(response: Response, what: string): P
  * failure into a typed protocol-mismatch error — the response arrived, but the daemon could not
  * trust it. Never lets a missing required field reach the caller as a silent `undefined`.
  */
-export async function readAgentResponseJson<Result>(
+async function readAgentResponseJson<Result>(
   response: Response,
   what: string,
   validate?: (data: unknown) => string | undefined,
@@ -163,57 +163,60 @@ export async function getAgentJson<Result>(
   return readAgentResponseJson<Result>(response, input.what, input.validate);
 }
 
+/** `getAgentJson`'s counterpart for a route that takes a JSON body: same error contract, same
+ * optional shape `validate` and deadline. */
+export async function sendAgentJson<Result>(
+  fetcher: HttpFetch,
+  input: Omit<AgentHttpInput<never>, "request"> & {
+    method: "POST" | "DELETE";
+    body: unknown;
+    what: string;
+    validate?: (data: unknown) => string | undefined;
+    /** A deadline for the whole request; none when omitted. */
+    timeoutMs?: number;
+  },
+): Promise<Result> {
+  const response = await fetchAgentResponse(
+    fetcher,
+    input.url,
+    {
+      method: input.method,
+      headers: agentHeaders(input, true),
+      ...(input.timeoutMs !== undefined ? { signal: AbortSignal.timeout(input.timeoutMs) } : {}),
+      body: JSON.stringify(input.body),
+    },
+    input.what,
+  );
+  await assertAgentResponseOk(response, input.what);
+  return readAgentResponseJson<Result>(response, input.what, input.validate);
+}
+
 /**
  * GETs an Agent Manual route, whose JSON error body is always `{ ok: false, errorCode, error }`,
  * unlike the plain-text/allowlisted `messages` error contract `getAgentJson` assumes. A
  * well-formed error body becomes a typed `AgentManualRequestError` carrying its `errorCode`
  * through to the CLI; anything else is a genuine transport failure.
  */
-export async function getAgentManualJson<Result extends { ok: true }>(
+export function getAgentManualJson<Result extends { ok: true }>(
   fetcher: HttpFetch,
   input: Omit<AgentHttpInput<never>, "request"> & {
     query: Record<string, string | undefined>;
     what: string;
   },
 ): Promise<Result> {
-  const endpoint = new URL(input.url);
-  for (const [key, value] of Object.entries(input.query))
-    if (value !== undefined) endpoint.searchParams.set(key, value);
-  const response = await fetchAgentResponse(
+  return getAgentEnvelopeJson<Result>(
     fetcher,
-    endpoint,
-    { method: "GET", headers: agentHeaders(input) },
-    input.what,
+    input,
+    (errorCode, message, status) =>
+      new AgentManualRequestError(errorCode as AgentManualErrorCode, message, status),
   );
-  let data: unknown;
-  try {
-    data = await readAgentResponseText(response, input.what).then((text) => JSON.parse(text));
-  } catch {
-    throw AgentTransportError.protocolMismatch(
-      input.what,
-      response.status,
-      "response body is not valid JSON",
-    );
-  }
-  if (!response.ok) {
-    const body = data as { errorCode?: unknown; error?: unknown } | null;
-    if (body && typeof body.errorCode === "string" && typeof body.error === "string")
-      throw new AgentManualRequestError(
-        body.errorCode as AgentManualErrorCode,
-        body.error,
-        response.status,
-      );
-    throw AgentTransportError.upstreamHttpResponse(input.what, response.status);
-  }
-  return data as Result;
 }
 
 /**
  * Shared GET helper for a route whose JSON error body is always `{ ok: false, errorCode, error }`
- * (the same convention `getAgentManualJson` implements for the Manual routes; `user info` and
- * `profile show` reuse it here rather than duplicating the parsing). `makeError` turns a
- * well-formed error body into the route family's own typed error; anything else is a genuine
- * transport failure.
+ * (the Manual, `user info`, `profile show` and mention routes). `makeError` turns a well-formed
+ * error body into the route family's own typed error; anything else is a genuine transport
+ * failure.
  */
 export async function getAgentEnvelopeJson<Result extends { ok: true }>(
   fetcher: HttpFetch,
@@ -273,7 +276,7 @@ export async function postAgentEnvelopeJson<Result extends { ok: true }>(
   return decodeAgentEnvelopeJson<Result>(response, input.what, makeError);
 }
 
-export async function decodeAgentEnvelopeJson<Result extends { ok: true }>(
+async function decodeAgentEnvelopeJson<Result extends { ok: true }>(
   response: Response,
   what: string,
   makeError: (errorCode: string, message: string, status: number) => Error,

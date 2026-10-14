@@ -6,6 +6,8 @@ import type {
   UsageSnapshot,
 } from "@coforge/agent";
 import type { CodeAgentProvider } from "#src/code-agent/contract";
+import { codexDeltaEvent, codexItemStartedEvents } from "./item-events";
+import { codexTurnOutcome } from "./turn-outcome";
 import { readCodexUsage } from "./usage";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { JsonlProcess, JsonlRequestError } from "#src/code-agent/jsonl-process";
@@ -365,51 +367,16 @@ class CodexAgentSession implements AgentSession {
       this.#emit({ type: "error", message: error.message, occurredAt: eventTime(record) });
       return;
     }
-    if (record.method === "item/agentMessage/delta" && typeof params?.delta === "string") {
-      this.#emit({ type: "text-delta", text: params.delta });
-      return;
-    }
-    // Readable summaries only. Deliberately ignore the raw reasoning text itself,
-    // but a busy Agent stays visibly busy: report it content-free as progress.
-    if (record.method === "item/reasoning/summaryTextDelta" && typeof params?.delta === "string") {
-      this.#emit({ type: "thinking-delta", text: params.delta });
-      return;
-    }
-    if (record.method === "item/reasoning/textDelta" && typeof params?.delta === "string") {
-      this.#emit({
-        type: "progress",
-        source: "codex_reasoning_text_delta",
-        occurredAt: eventTime(record),
-      });
+    const delta = codexDeltaEvent(record);
+    if (delta) {
+      this.#emit(delta);
       return;
     }
     if (record.method === "item/started") {
       const item = asRecord(params?.item);
-      if (item?.type === "commandExecution" && typeof item.id === "string") {
+      if (item?.type === "commandExecution" && typeof item.id === "string")
         this.#commandOutputBytes.set(item.id, 0);
-        const command = typeof item.command === "string" ? item.command : "command";
-        // Reported as a raw "bash" tool-start, same as every other provider, so the
-        // daemon core's `toolActivity` resolves a `coforge …` command to its hidden
-        // tool (e.g. `send_message`) instead of showing it as a generic shell command.
-        this.#emit({
-          type: "tool-start",
-          id: item.id,
-          name: "bash",
-          input: { command },
-          occurredAt: eventTime(record),
-        });
-      } else if (item?.type === "fileChange") {
-        const itemId = typeof item.id === "string" ? item.id : "file-change";
-        fileChanges(item).forEach((change, index) => {
-          this.#emit({
-            type: "tool-start",
-            id: `${itemId}:${index}`,
-            name: change.kind === "add" ? "write_file" : "edit_file",
-            input: { file_path: change.path },
-            occurredAt: eventTime(record),
-          });
-        });
-      }
+      for (const started of codexItemStartedEvents(record)) this.#emit(started);
       return;
     }
     if (
@@ -468,33 +435,24 @@ class CodexAgentSession implements AgentSession {
       }
       this.#commandOutputBytes.clear();
       this.#lastCompletedTurnId = turn.id;
-      const status =
-        turn.status === "interrupted"
-          ? "interrupted"
-          : turn.status === "completed"
-            ? "completed"
-            : "failed";
-      if (status === "failed") {
-        const error = asRecord(turn.error);
-        // Raw fact only (no scrub/cap here) — the daemon core owns redaction and
-        // truncation for the visible Activity; this local scrub only bounds what
-        // reaches the daemon's own structured log line below.
-        const rawMessage =
-          typeof error?.message === "string" ? error.message : "Codex turn failed.";
+      const { status, failure } = codexTurnOutcome(turn);
+      if (failure) {
+        // The raw message goes to the Activity (the daemon core redacts and truncates it); this
+        // local scrub only bounds what reaches the daemon's own structured log line.
         logger.error("Codex turn failed", {
           event: "codex.turn.failed",
           agent_id: this.#agentId,
           runtime_id: this.#runtimeId,
           turn_status: turn.status,
-          error_code: typeof error?.code === "string" ? error.code : undefined,
-          error_message: scrubError(rawMessage),
+          error_code: failure.code,
+          error_message: scrubError(failure.message),
           outcome: "error",
         });
         this.#emit({
           type: "error",
-          message: rawMessage,
+          message: failure.message,
           occurredAt: eventTime(record),
-          providerErrorClass: typeof error?.code === "string" ? error.code : "CodexTurnError",
+          providerErrorClass: failure.code ?? "CodexTurnError",
           providerErrorReason: "turn_failed",
         });
       }
@@ -551,20 +509,4 @@ function scrubError(message: string): string {
     .replace(/(?:sk|pk|api|token|key|secret)[_-]?[A-Za-z0-9_-]{8,}/gi, "[redacted]")
     .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
     .slice(0, 500);
-}
-
-function fileChanges(
-  item: Readonly<Record<string, unknown>>,
-): Array<{ kind: string; path: string }> {
-  const changes = Array.isArray(item.changes) ? item.changes : [item];
-  return changes.flatMap((value) => {
-    const change = asRecord(value);
-    if (!change || typeof change.path !== "string") return [];
-    return [
-      {
-        kind: typeof change.kind === "string" ? change.kind : "edit",
-        path: change.path,
-      },
-    ];
-  });
 }

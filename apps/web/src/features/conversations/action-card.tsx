@@ -13,7 +13,7 @@ import {
   loadActionCardStates,
 } from "./action-cards.functions";
 import { CreateChannelDialog } from "./create-channel-dialog";
-import { ChannelMembersDialog } from "./channel-members-dialog";
+import { ChannelAddMembersDialog } from "./channel-add-members-dialog";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import { createAgent } from "#src/features/agents/agents.functions";
 import {
@@ -22,42 +22,7 @@ import {
 } from "#src/features/computers/computers.functions";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-
-export type ActionCardRef = { id: string; displayName: string };
-type ActionCardBase = {
-  messageId: string;
-  state: "pending" | "executed" | "cancelled";
-  draftHint?: string;
-  committedBy?: { displayName: string };
-  committedAt?: string;
-  canCommit: boolean;
-  canCancel: boolean;
-};
-export type ActionCardView =
-  | (ActionCardBase & {
-      kind: "channel:create";
-      name: string;
-      visibility: "public" | "private";
-      description?: string;
-      initialHumans: ActionCardRef[];
-      initialAgents: ActionCardRef[];
-      result?: { channelId: string };
-    })
-  | (ActionCardBase & {
-      kind: "agent:create";
-      name: string;
-      description?: string;
-      suggestedComputer?: ActionCardRef;
-      requiredComputer?: ActionCardRef;
-      result?: { agentId: string };
-    })
-  | (ActionCardBase & {
-      kind: "channel:add_member";
-      channel: ActionCardRef;
-      humans: ActionCardRef[];
-      agents: ActionCardRef[];
-      result?: { channelId: string; userIds: string[]; agentIds: string[] };
-    });
+import type { ActionCardRef, ActionCardView } from "#src/server/conversations/action-cards.server";
 
 function chipList(items: ActionCardRef[]) {
   if (!items.length) return null;
@@ -284,16 +249,13 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         />
       )}
       {dialogOpen && view.kind === "channel:add_member" && (
-        <ChannelMembersDialog
+        <ChannelAddMembersDialog
           channelId={view.channel.id}
+          channelName={view.channel.displayName}
           open
           onOpenChange={setDialogOpen}
-          preselected={{
-            userIds: view.humans.map((human) => human.id),
-            agentIds: view.agents.map((agent) => agent.id),
-          }}
+          proposed={{ humans: view.humans, agents: view.agents }}
           commit={{
-            messageId: view.messageId,
             submit: (input) =>
               commitAddMember({
                 data: { messageId: view.messageId, channelId: view.channel.id, ...input },

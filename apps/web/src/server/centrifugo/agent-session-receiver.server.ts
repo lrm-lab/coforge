@@ -85,12 +85,6 @@ export function createAgentSessionMethod(
  * discipline `agent-control-receiver.server.ts`'s sibling handler uses for its own rejections. */
 const KNOWN_INVALIDATE_REJECTION_REASONS = new Set<string>([]);
 
-function invalidateRejectionReason(error: unknown): string {
-  const message = error instanceof Error ? error.message : undefined;
-  if (message && KNOWN_INVALIDATE_REJECTION_REASONS.has(message)) return message;
-  return `unexpected: ${error instanceof Error ? error.name : typeof error}`;
-}
-
 /**
  * Fire-and-forget from the daemon's side (the daemon never awaits or retries this RPC's
  * result). A malformed payload or foreign scope is a 403, matching `createAgentSessionMethod`;
@@ -126,7 +120,7 @@ export function createAgentSessionInvalidateMethod(
           workspace_id: metadata.principal.workspaceId,
           computer_id: metadata.principal.computerId,
           launch_id: message?.launchId,
-          reason: invalidateRejectionReason(error),
+          reason: rejectionReason(error, KNOWN_INVALIDATE_REJECTION_REASONS),
         }),
       );
       return { code: 403, message: "Agent Session invalidate is not authorized" };

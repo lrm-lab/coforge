@@ -5,6 +5,8 @@ const CDN_DOMAINS = [
   "files-staging.coforge.cn",
   "releases-staging.coforge.cn",
   "images-staging.coforge.cn",
+  "files.coforge.cn",
+  "images.coforge.cn",
 ];
 
 async function readScript(): Promise<string> {

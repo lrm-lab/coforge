@@ -1,7 +1,7 @@
 import { RPC_METHODS } from "./rpc-methods";
 import { isScopeId } from "./scope-id";
 import { boundedPayload } from "./codec";
-import { RFC_UUID_PATTERN } from "./uuid";
+import { MESSAGE_ANCHOR_SOURCE, RFC_UUID_PATTERN } from "./uuid";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
@@ -24,12 +24,13 @@ export const REMINDER_CAPABILITY = "reminder:v1" as const;
 export const REMINDER_PROTOCOL_MAJOR = 1 as const;
 
 const MAX_BYTES = 65_536;
-const PREFIX = /^[0-9a-f]{8}$/i;
+/** The messageId short forms reminder schedules accept: the same rule the CLI prints. */
+const PREFIX = new RegExp(`^${MESSAGE_ANCHOR_SOURCE}$`, "i");
 const USERNAME = "[a-z0-9](?:[a-z0-9_-]{1,30}[a-z0-9])?";
 const HEX = "[0-9a-fA-F]";
 const UUID_BODY = `${HEX}{8}-${HEX}{4}-[1-8]${HEX}{3}-[89abAB]${HEX}{3}-${HEX}{12}`;
 const TARGET = new RegExp(
-  `^(?:#[a-z0-9][a-z0-9_-]{0,31}|@${USERNAME}(?::(?:${HEX}{8}|${UUID_BODY}))?)$`,
+  `^(?:#[a-z0-9][a-z0-9_-]{0,31}|@${USERNAME}(?::(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_BODY}))?)$`,
 );
 const CANONICAL_TARGET = new RegExp(
   `^(?:#[a-z0-9][a-z0-9_-]{0,31}|@${USERNAME}(?::${UUID_BODY})?)$`,
@@ -349,16 +350,25 @@ export function decodeAgentReminderOperationRequest(
   );
 }
 
+/** Whether a reminder record (a response's summary or a sync's job) carries the core every one
+ * needs, checked in this order; `positive` and `instant` throw their own message for a malformed
+ * value. */
+function hasReminderCore(value: ReminderJob): boolean {
+  return Boolean(
+    isReminderId(value.reminderId) &&
+    isScopeId(value.ownerAgentId) &&
+    positive(value.version, "reminder version") &&
+    value.title &&
+    value.target &&
+    value.messageId &&
+    instant(value.fireAt, "reminder fire time"),
+  );
+}
+
 function summary(value: ReminderSummaryRecord): ReminderSummaryRecord {
   fields(value, true);
   if (
-    !isReminderId(value.reminderId) ||
-    !isScopeId(value.ownerAgentId) ||
-    !positive(value.version, "reminder version") ||
-    !value.title ||
-    !value.target ||
-    !value.messageId ||
-    !instant(value.fireAt, "reminder fire time") ||
+    !hasReminderCore(value) ||
     !instant(value.createdAt, "reminder created time") ||
     value.repeat === "none" ||
     (value.firedAt !== undefined && !instant(value.firedAt, "reminder fired time"))
@@ -404,16 +414,7 @@ export function decodeAgentReminderOperationResponse(
 
 function job(value: ReminderJob): ReminderJob {
   fields(value, true);
-  if (
-    !isReminderId(value.reminderId) ||
-    !isScopeId(value.ownerAgentId) ||
-    !positive(value.version, "reminder version") ||
-    !value.title ||
-    !value.target ||
-    !value.messageId ||
-    !instant(value.fireAt, "reminder fire time")
-  )
-    throw new Error("invalid reminder job");
+  if (!hasReminderCore(value)) throw new Error("invalid reminder job");
   return value;
 }
 function sync(value: ReminderSync): ReminderSync {

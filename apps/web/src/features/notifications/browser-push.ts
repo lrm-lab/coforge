@@ -9,11 +9,11 @@ export type SerializedBrowserPushSubscription = {
 let lifecycleDisabled = false;
 const registrationTimeoutMs = 15_000;
 
-export function disableBrowserPushLifecycle() {
+function disableBrowserPushLifecycle() {
   lifecycleDisabled = true;
 }
 
-export function browserPushLifecycleEnabled() {
+function browserPushLifecycleEnabled() {
   return !lifecycleDisabled;
 }
 
@@ -59,7 +59,7 @@ export async function syncBrowserPushSubscription(
  * active. Idempotent: a repeat call against the same scope returns the existing registration.
  * Shared by Web Push registration and the in-page path, which needs an active
  * registration to call `showNotification` on even when Web Push itself was never subscribed. */
-export async function ensureServiceWorkerRegistration(): Promise<ServiceWorkerRegistration> {
+async function ensureServiceWorkerRegistration(): Promise<ServiceWorkerRegistration> {
   await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
   return navigator.serviceWorker.ready;
 }
@@ -123,12 +123,6 @@ async function withRegistrationTimeout<T>(registration: Promise<T>) {
   } finally {
     if (timeout) clearTimeout(timeout);
   }
-}
-
-export async function currentBrowserPushEndpoint() {
-  if (browserNotificationPermission() === "unsupported") return null;
-  const registration = await navigator.serviceWorker.getRegistration("/");
-  return (await registration?.pushManager.getSubscription())?.endpoint ?? null;
 }
 
 export async function unsubscribeCurrentBrowserPush(

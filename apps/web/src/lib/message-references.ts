@@ -9,7 +9,7 @@
  *
  * 1. a mention, `@handle` (`MENTION_PATTERN`);
  * 2. a thread reference, `#name:shortid` (`THREAD_REFERENCE_PATTERN`): one top-level message of
- *    that channel, named by a unique 6–8 hex prefix of its id or by the whole id;
+ *    that channel, named by a unique 6–12 hex prefix of its id or by the whole id;
  * 3. a task reference, `task #N` (`TASK_REFERENCE_PATTERN`);
  * 4. a bare `#N` (`BARE_TASK_REFERENCE_PATTERN`): one of the conversation's tasks, otherwise a
  *    channel of that name;
@@ -181,7 +181,7 @@ export type MessageReferenceLookup = {
   mention?: (handle: string) => { type: "user" | "agent"; id: string } | undefined;
   task?: (number: number) => boolean;
   channel?: (name: string) => { id: string; name: string } | undefined;
-  /** The one top-level message of the channel called `name` that `anchor` (a 6–8 hex prefix of its
+  /** The one top-level message of the channel called `name` that `anchor` (a 6–12 hex prefix of its
    * id, or the whole id) names; `undefined` when there is none, or more than one. */
   thread?: (
     name: string,

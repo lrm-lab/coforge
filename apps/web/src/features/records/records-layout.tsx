@@ -198,6 +198,7 @@ export function RecordsLayout({
     () => catalog.myReports.filter((item) => matchesQuery(item.title, query)),
     [catalog.myReports, query],
   );
+  const myReportsUnread = catalog.myReports.some((item) => item.unread);
   const filteredMemberWeeks = useMemo(
     () =>
       catalog.memberWeeks
@@ -354,6 +355,13 @@ export function RecordsLayout({
                       if (open) enterSection("myReports");
                       else setMyReportsOpen(false);
                     }}
+                    marker={
+                      myReportsUnread ? (
+                        <span role="img" aria-label={m.records_report_unread_badge()}>
+                          <UnreadDot />
+                        </span>
+                      ) : null
+                    }
                   >
                     {filteredMyReports.length === 0 ? null : (
                       <ul className="space-y-0.5">
@@ -781,12 +789,15 @@ function CollapsibleSection({
   title,
   open,
   onOpenChange,
+  marker,
   actions,
   children,
 }: {
   title: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Stays on the section title when the list is collapsed. */
+  marker?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -807,7 +818,10 @@ function CollapsibleSection({
           }
           className="min-w-0 flex-1 justify-start px-1 text-left text-sm text-primary"
         >
-          {title}
+          <span className="truncate">{title}</span>
+          {marker ? (
+            <span className="ml-1.5 inline-flex shrink-0 align-middle">{marker}</span>
+          ) : null}
         </Button>
         {actions}
       </div>

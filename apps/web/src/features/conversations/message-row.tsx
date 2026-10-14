@@ -17,6 +17,7 @@ import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria
 
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Avatar } from "#src/components/base/avatar/avatar";
+import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useAppToast } from "#src/components/ui/toast";
@@ -39,7 +40,8 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { ActionCard, type ActionCardView } from "./action-card";
+import { ActionCard } from "./action-card";
+import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { AttachmentPreview } from "./attachment-preview";
 import { attachmentPreviewKind } from "./attachment-preview-kind";
 import { useIsMessageSaved } from "./conversation-host";
@@ -469,14 +471,13 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
 }
 
 /**
- * A divider row: one body line of spacing above and below its label (the message line height:
- * 18px at the 12px size, 20px at the default 14px size, 24px at the 16px size), less the 4px each
- * neighbouring row adds with its own `py-1`. `message-text` scopes
- * `--text-md--line-height` to Settings → Message font size, and the labels use that same `text-md`,
- * so a divider reads at the size of the message text around it.
+ * A divider row: 16px between its label and the content above and below (design spec). The row
+ * below a divider always starts a sender run, whose own 12px top padding plus `pb-1` makes 16px.
+ * Above, a continuation or notice row ends in 4px of padding, so the divider adds 12px; a row
+ * with a sender heading ends in 12px, so the divider adds 4px.
  */
 const DIVIDER_ROW_CLASS =
-  "message-text flex items-center gap-3 px-4 py-[calc(var(--text-md--line-height)-0.25rem)] md:px-6";
+  "message-text flex items-center gap-3 px-4 pt-3 pb-1 md:px-6 [[data-header-row]+li>&]:pt-1";
 
 /** The "new messages" divider (Slack-style): a brand rule naming where unread begins. */
 export function UnreadDivider() {
@@ -502,11 +503,11 @@ export function DayDivider({ value, locale }: { value: Date | string; locale?: s
   const timeZone = useTimeZone();
   return (
     <div className={DIVIDER_ROW_CLASS}>
-      <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
-      <span className="shrink-0 bg-primary px-2 text-md text-tertiary tabular-nums">
+      <span aria-hidden="true" className="h-px flex-1 bg-border-secondary" />
+      <span className="shrink-0 rounded-full border border-secondary bg-primary px-3 py-1 text-md text-tertiary tabular-nums">
         {dayLabel(value, locale, timeZone)}
       </span>
-      <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
+      <span aria-hidden="true" className="h-px flex-1 bg-border-secondary" />
     </div>
   );
 }
@@ -539,8 +540,9 @@ function MessageAgentAvatar({
   return <AgentDisplayAvatar name={name} src={src} display={display} deleted={deleted} size="sm" />;
 }
 
-/** One history row: optional day divider, then the message with its hover actions. */
 /**
+ * One history row: optional day divider, then the message with its hover actions.
+ *
  * Memoized: a conversation re-renders on every send, poll, page and pane change, and a row only
  * needs to when its own message or row state does. Callers keep its props stable (`useCallback`,
  * `useLatestCallback` for event handlers) so an unrelated change skips the row.
@@ -849,13 +851,27 @@ export const MessageRow = memo(function MessageRow({
   // shell; the sheet therefore also opens for a message with no thread and no reactions.
   const copyable = Boolean(messagePlainText(message, channelNames).trim());
   return (
-    // A message that starts a new sender run sits 32px (4px row padding on each side + 24px
-    // margin) below the previous one; the margin is on the `li` so the hover background stays
-    // 4px around the content. A grouped continuation keeps only its 4px, and a message under a
-    // day or unread divider takes the divider's own spacing instead.
+    // Spacing (design spec, docs/design/page-skeleton-and-density.md): a message with a sender
+    // heading keeps 12px between its content and its hover background on all four sides; a
+    // same-sender continuation keeps 12px at the sides only and sits 4px under the row above. Two
+    // sender runs are 32px apart content to content from `md` up (16px of margin after a
+    // continuation's 4px, 8px after a heading row's 12px) and 24px on a phone (8px and 0), where
+    // 32px read as a blank band between short messages (task #118). The row is inset 4px (24px column: 12px) so the content
+    // stays on the stream's column with the composer and the dividers.
     <li
       data-message-id={message.id}
-      className={cn(ROW_CLASS, !grouped && !dayChanged && !unreadStartsHere && "mt-6 first:mt-0")}
+      data-header-row={grouped ? undefined : ""}
+      className={cn(
+        ROW_CLASS,
+        !grouped &&
+          !dayChanged &&
+          !unreadStartsHere &&
+          "mt-2 first:mt-0 md:mt-4 [[data-header-row]+&]:mt-0 md:[[data-header-row]+&]:mt-2",
+        // A continuation under a thread preview card starts 16px below the card (design spec):
+        // a heading row ends 12px under its card, a continuation row 4px.
+        grouped &&
+          "[[data-header-row]:has([data-thread-preview])+&]:mt-1 [li:not([data-header-row]):has([data-thread-preview])+&]:mt-3",
+      )}
     >
       {unreadStartsHere && <UnreadDivider />}
       {dayChanged && <DayDivider value={message.createdAt} locale={dateLocale} />}
@@ -864,10 +880,10 @@ export const MessageRow = memo(function MessageRow({
         data-message={own ? "own" : "other"}
         onClick={openActions}
         className={cn(
-          "group/message relative flex scroll-m-6 px-4 transition-[background-color,box-shadow] duration-500 hover:bg-secondary focus-within:bg-secondary target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:px-6",
+          "group/message relative mx-1 flex scroll-m-6 px-3 transition-[background-color,box-shadow] duration-500 hover:bg-border-secondary/50 focus-within:bg-border-secondary/50 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:mx-3",
           highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
           "gap-3",
-          grouped ? "pt-0 pb-1" : "py-1",
+          grouped ? "pt-0 pb-1" : "py-3",
         )}
       >
         <div className="flex w-9 shrink-0 items-start justify-center">
@@ -877,7 +893,10 @@ export const MessageRow = memo(function MessageRow({
             // screen readers, and the tap action sheet shows it too.
             <time
               dateTime={new Date(message.createdAt).toISOString()}
-              className="message-text text-[length:0.75rem] leading-[var(--text-md--line-height)] whitespace-nowrap text-quaternary tabular-nums opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100"
+              // `text-xs` is the scale's 0.75rem; the explicit `leading-` keeps the message line
+              // height, which `text-xs` would otherwise pair with its own (measured: both spell
+              // 12px/24px here).
+              className="message-text text-xs leading-[var(--text-md--line-height)] whitespace-nowrap text-quaternary tabular-nums opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100"
             >
               <span aria-hidden="true">
                 {gutterClockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
@@ -946,10 +965,12 @@ export const MessageRow = memo(function MessageRow({
               onKeyUp={readQuoteSelection}
               className={cn(
                 "relative min-w-0 text-md text-primary [overflow-wrap:anywhere]",
-                // A grouped row has no sender header, so the touch-visible action strip would
-                // sit on its first text line; reserve the strip's width (thread + reaction +
-                // copy buttons) up front instead.
-                grouped && "pr-20",
+                // A grouped row has no sender header, so the hover action strip would sit on its
+                // first text line; reserve the strip's width (thread + reaction + save + copy)
+                // there. Only where that strip can appear — the same gate as the strip below: a
+                // touch screen opens the action sheet instead, and the reserve was 80px of blank
+                // on every continuation line on a phone.
+                grouped && "lg:[@media(hover:hover)_and_(pointer:fine)]:pr-20",
               )}
             >
               <CollapsibleMessageBody
@@ -1057,6 +1078,17 @@ export const MessageRow = memo(function MessageRow({
               })}
             </div>
           )}
+          {/* Saved is a per-viewer state, so this marker is only ever the viewer's own: it says
+              "this one is in your Saved" without opening the hover bar to check its bookmark. The
+              Saved page itself does not repeat it — that list has its own row (see
+              `saved-messages-view.tsx`), where every entry is saved by definition. */}
+          {saveSaved && (
+            <div className="flex pt-0.5">
+              <BadgeWithIcon type="color" color="brand" size="sm" iconLeading={Bookmark}>
+                {m.conversation_saved_marker()}
+              </BadgeWithIcon>
+            </div>
+          )}
           {showsTask && <MessageTask messageId={message.id} />}
           {onOpenThread && <ThreadPreview rootId={message.id} onOpen={onOpenThread} />}
         </div>
@@ -1074,7 +1106,9 @@ export const MessageRow = memo(function MessageRow({
              reactions, then whole-message copy last — the IM-standard order (#546). */
           <div
             className={cn(
-              "pointer-events-none absolute top-0.5 right-3 flex items-center gap-0.5 rounded-lg border border-secondary bg-primary p-0.5 opacity-0 shadow-lg transition-opacity",
+              "pointer-events-none absolute right-3 flex items-center gap-0.5 opacity-0 transition-opacity",
+              // 12px from the top of a heading row (design spec); a continuation has no top padding.
+              grouped ? "top-0.5" : "top-3",
               "lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:opacity-100",
               "lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:opacity-100",
             )}

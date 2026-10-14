@@ -87,7 +87,7 @@ export function AgentCreateDialog({
           modelProvider: String(form.get("modelProvider") ?? "").trim() || undefined,
           reasoning: String(form.get("reasoning") ?? "").trim(),
           apiKey: String(form.get("apiKey") ?? "").trim() || undefined,
-          computerId: String(form.get("computerId") ?? ""),
+          computerId: computerLocked ? computerId : String(form.get("computerId") ?? ""),
           actionCardMessageId,
           visibility: isPrivate ? AGENT_VISIBILITY.PRIVATE : AGENT_VISIBILITY.PUBLIC,
         });

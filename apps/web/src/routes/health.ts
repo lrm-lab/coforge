@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { fileDeliveryStatus } from "#src/server/files/file-delivery.server";
 import { publicImageDeliveryStatus } from "#src/server/files/public-image-delivery.server";
@@ -6,7 +7,7 @@ export const Route = createFileRoute("/health")({
   server: {
     handlers: {
       GET: () =>
-        new Response("ok", {
+        textResponse("ok", {
           // Operators can see whether signed CDN delivery loaded without host access. The value
           // is a state or an error class name, never configuration or secret material.
           headers: {

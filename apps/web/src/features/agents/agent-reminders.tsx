@@ -179,7 +179,7 @@ function formatRecurrence(value: string) {
 
 function Source({ reminder }: { reminder: AgentReminderListItem }) {
   const thread = reminder.anchor?.threadRootId;
-  const shortThread = thread?.slice(0, 8);
+  const shortThread = thread?.slice(0, 13);
   const target =
     reminder.anchor?.kind === "channel" ? `#${reminder.anchor.channelName}` : reminder.target;
   const label =

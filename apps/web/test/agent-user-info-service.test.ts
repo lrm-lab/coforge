@@ -1,7 +1,8 @@
 import { afterAll, expect, mock, test } from "bun:test";
+import { mockModuleForFile } from "./helpers/file-module-mock";
 
 const displaySnapshots = new Map<string, string>();
-mock.module("#src/server/agents/agent-display.server", () => ({
+await mockModuleForFile("#src/server/agents/agent-display.server", () => ({
   getAgentDisplay: () => {
     const snapshotFor = async (scope: {
       workspaceId: string;

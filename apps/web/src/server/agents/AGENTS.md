@@ -16,7 +16,18 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   inherited environment.
 - Only an Agent's creator replaces or removes its avatar; Workspace members
   read it. The image store keeps the bytes, and `avatarObjectKey` is the only
-  PostgreSQL fact. Surfaces read `agentAvatarUrl`.
+  PostgreSQL fact. Surfaces read `agentAvatarUrl`. A new Agent gets a random
+  picture from `features/agents/avatar-pictures/v1/` copied into the image store
+  as its own avatar (`AgentAvatars.storeInitial`), so retiring or replacing a
+  picture never changes an existing Agent. The copy's object key records its
+  origin (`platform-v1-ai-NN-<uuid>`, read by `parsePlatformAvatarKey`; an
+  upload's is a bare uuid): keep that shape stable, it is how a future
+  replacement of every platform avatar finds them. A new pool gets a new version
+  and directory. The pictures are embedded in the server build with Vite
+  `?inline` (the production image has no source tree); a build that leaves one
+  as a bare path makes `decodeInlinedPicture` throw. A picture that cannot be
+  stored leaves the Agent with initials; system Agents (weekly-report assistant
+  and Collector) are created in a transaction and get none.
 - Deleting an Agent requires Workspace owner/admin. It takes the runtime lock,
   writes `deletedAt` durably, then attempts a best-effort Stop. Deletion is
   soft: Messages, Tasks, and Action cards are preserved, and an Agent row is

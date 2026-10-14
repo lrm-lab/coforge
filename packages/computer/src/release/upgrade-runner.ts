@@ -11,6 +11,7 @@ import {
 } from "./installer-launch";
 import type { UpgradeOperation } from "./upgrade-operation";
 import { UpgradeFailedError, writeFallbackReceipt } from "./upgrade-receipt";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 /** How one run of the installer is started. Stdin is always ignored. */
 export type InstallerSpawn = {
@@ -123,7 +124,7 @@ export async function runUpgradeOperation(
   } catch (error) {
     return conclude(
       await settle(options, requestId, {
-        error: error instanceof Error ? error.message : String(error),
+        error: thrownMessage(error),
       }),
     );
   }

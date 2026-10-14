@@ -13,6 +13,7 @@
 import type { AgentMentionDelivery } from "@lrm/coforge-sdk/agent";
 import {
   MENTION_DELIVERY_TERMINAL_CODES,
+  MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
   type AgentMentionDeliveryTerminalError,
   type AgentMentionDeliveryTransition,
@@ -31,6 +32,7 @@ import type {
   TrackedMentionState,
 } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { publishPendingDelivery } from "./agent-delivery.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /** A pushed delivery as the issuer needs it. */
 export type MentionDeliveryCandidate = {
@@ -68,8 +70,6 @@ function envelopeFor(messageId: string, identity: MentionIdentity): MentionDeliv
     computerId: identity.computerId,
   };
 }
-
-const errorType = (error: unknown) => (error instanceof Error ? error.name : typeof error);
 
 /** Issues tracked mentions as a send pushes them. */
 export class MentionDeliveryIssuer {
@@ -456,7 +456,7 @@ export class MentionDeliveryReports {
 
 /** A message the sending Agent names by its full id or the eight-hex prefix `message read`
  * shows. */
-const SENDER_MESSAGE_ANCHOR = new RegExp(`^(?:[0-9a-f]{8}|${UUID_LIKE_SOURCE})$`, "i");
+const SENDER_MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
 
 export type SenderMentionDeliveries =
   | { state: "found"; messageId: string; deliveries: AgentMentionDelivery[] }

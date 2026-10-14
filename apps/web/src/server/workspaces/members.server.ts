@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
-import type { WorkspaceMemberRole } from "./member-role.server";
+import { weeklyReportAssistantDisplayName } from "#src/server/records/weekly-report-assistant.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import {
@@ -11,20 +11,8 @@ import {
 } from "#src/server/agents/agent-visibility.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { CREATED_AGENT_FACES, MEMBER_PAGE_MAX } from "#src/features/workspaces/member-directory";
-
-/** The actor's Workspace role; ACCESS_DENIED when the user is not a member. */
-export async function workspaceMemberRole(
-  db: Pick<PrismaClient, "workspaceMembership">,
-  workspaceId: string,
-  userId: string,
-): Promise<WorkspaceMemberRole> {
-  const membership = await db.workspaceMembership.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId } },
-    select: { role: true },
-  });
-  if (!membership) throw new AppError("ACCESS_DENIED");
-  return membership.role as WorkspaceMemberRole;
-}
+import { clampPageLimit } from "#src/server/db/page-limit.server";
+import { paginated } from "#src/server/db/pagination.server";
 
 export type AgentOwnerFilter = "all" | "mine";
 
@@ -38,6 +26,18 @@ export type AgentPageInput = {
 export type PeoplePageInput = { query: string; cursor?: string; limit: number };
 
 const contains = (query: string) => ({ contains: query, mode: "insensitive" as const });
+
+function shownAgentName(agent: {
+  name: string;
+  displayName: string;
+  weeklyReportAssistant?: { id: string } | null;
+  owner?: { username: string; displayName: string | null } | null;
+}): string {
+  if (agent.weeklyReportAssistant && agent.owner) {
+    return weeklyReportAssistantDisplayName(humanLabel(agent.owner));
+  }
+  return agent.displayName.trim() || agent.name;
+}
 
 /** `humanLabel` as SQL over the `users` row aliased `alias`: the display name, else the username,
  * a blank name counting as none. */
@@ -70,6 +70,32 @@ export class WorkspaceMembers {
     return { workspaceId, ...ACTIVE_AGENT_WHERE, ...visibleAgentWhere(viewer) };
   }
 
+  /** Writes the owner-based assistant name when the stored label differs, so search, chat,
+   * and the agent profile match the directory. */
+  private async storeAssistantNames(
+    workspaceId: string,
+    agents: Array<{
+      id: string;
+      displayName: string;
+      weeklyReportAssistant?: { id: string } | null;
+      owner?: { username: string; displayName: string | null } | null;
+    }>,
+  ) {
+    await Promise.all(
+      agents.flatMap((agent) => {
+        if (!agent.weeklyReportAssistant || !agent.owner) return [];
+        const shown = weeklyReportAssistantDisplayName(humanLabel(agent.owner));
+        if (agent.displayName === shown) return [];
+        return [
+          this.db.agent.update({
+            where: { id_workspaceId: { id: agent.id, workspaceId } },
+            data: { displayName: shown },
+          }),
+        ];
+      }),
+    );
+  }
+
   /** Tab totals; unaffected by any filter or search. */
   async summary(workspaceId: string, userId: string) {
     const { role, visibleAgents } = await this.viewer(workspaceId, userId);
@@ -83,62 +109,64 @@ export class WorkspaceMembers {
   async agentPage(workspaceId: string, userId: string, input: AgentPageInput) {
     const { visibleAgents } = await this.viewer(workspaceId, userId);
     const query = input.query.trim();
-    const limit = Math.min(Math.max(input.limit, 1), MEMBER_PAGE_MAX);
-    const agents = await this.db.agent.findMany({
-      where: {
-        AND: [
-          visibleAgents,
-          input.owner === "mine" ? { ownerId: userId } : {},
-          query
-            ? {
-                OR: [
-                  { name: contains(query) },
-                  { displayName: contains(query) },
-                  {
-                    computer: {
-                      workspaces: { some: { workspaceId } },
-                      OR: [{ name: contains(query) }, { displayName: contains(query) }],
+    const limit = clampPageLimit(input.limit, MEMBER_PAGE_MAX);
+    const [agents, meta] = await paginated(this.db)
+      .agent.paginate({
+        where: {
+          AND: [
+            visibleAgents,
+            input.owner === "mine" ? { ownerId: userId } : {},
+            query
+              ? {
+                  OR: [
+                    { name: contains(query) },
+                    { displayName: contains(query) },
+                    {
+                      computer: {
+                        workspaces: { some: { workspaceId } },
+                        OR: [{ name: contains(query) }, { displayName: contains(query) }],
+                      },
                     },
-                  },
-                ],
-              }
-            : {},
-        ],
-      },
-      select: {
-        id: true,
-        name: true,
-        displayName: true,
-        description: true,
-        avatarObjectKey: true,
-        createdAt: true,
-        owner: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarObjectKey: true,
+                  ],
+                }
+              : {},
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          displayName: true,
+          description: true,
+          avatarObjectKey: true,
+          createdAt: true,
+          owner: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarObjectKey: true,
+            },
+          },
+          weeklyReportAssistant: { select: { id: true } },
+          computer: {
+            select: {
+              id: true,
+              name: true,
+              displayName: true,
+              workspaces: { where: { workspaceId }, select: { id: true }, take: 1 },
+            },
           },
         },
-        weeklyReportAssistant: { select: { id: true } },
-        computer: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            workspaces: { where: { workspaceId }, select: { id: true }, take: 1 },
-          },
-        },
-      },
-      orderBy: [{ name: "asc" }, { id: "asc" }],
-      ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
-      take: limit + 1,
-    });
-    return pageOf(
-      agents.map((agent) => ({
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+      })
+      // An empty cursor is the first page, as before (`after: ""` would be parsed as an id).
+      .withCursor({ limit, after: input.cursor || undefined });
+    await this.storeAssistantNames(workspaceId, agents);
+    return {
+      items: agents.map((agent) => ({
         id: agent.id,
         name: agent.name,
-        displayName: agent.displayName.trim() || agent.name,
+        displayName: shownAgentName(agent),
         description: agent.description,
         avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
         computerId: agent.computer?.workspaces.length ? agent.computer.id : null,
@@ -159,8 +187,8 @@ export class WorkspaceMembers {
         // directory never offers a Delete that is certain to fail.
         deletable: !agent.weeklyReportAssistant,
       })),
-      limit,
-    );
+      nextCursor: meta.hasNextPage ? meta.endCursor : null,
+    };
   }
 
   /**
@@ -189,6 +217,7 @@ export class WorkspaceMembers {
           avatarObjectKey: true,
           ownerId: true,
           visibility: true,
+          owner: { select: { username: true, displayName: true } },
           weeklyReportAssistant: { select: { id: true } },
         },
         orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -219,6 +248,7 @@ export class WorkspaceMembers {
         return peerId ? [[peerId, row.conversationId]] : [];
       }),
     );
+    await this.storeAssistantNames(workspaceId, agents);
     return {
       // Listed by the name they are shown by, which the database cannot order by.
       people: [...people].sort(compareHumanLabels).map((person) => ({
@@ -232,7 +262,7 @@ export class WorkspaceMembers {
       agents: agents.map((agent) => ({
         id: agent.id,
         handle: agent.name,
-        name: agent.displayName.trim() || agent.name,
+        name: shownAgentName(agent),
         avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
         /** The Web opens an Agent's direct conversation only for its owner
          * (`DirectConversations.authorize`). */
@@ -249,7 +279,7 @@ export class WorkspaceMembers {
 
   async peoplePage(workspaceId: string, userId: string, input: PeoplePageInput) {
     const { visibleAgents } = await this.viewer(workspaceId, userId);
-    const limit = Math.min(Math.max(input.limit, 1), MEMBER_PAGE_MAX);
+    const limit = clampPageLimit(input.limit, MEMBER_PAGE_MAX);
     const ids = await this.orderedPersonIds(workspaceId, input, limit + 1);
     const rows = await this.db.user.findMany({
       where: { id: { in: ids } },
@@ -263,13 +293,23 @@ export class WorkspaceMembers {
         // pushes neither a nested `take` nor a page-scoped filtered `_count` into SQL.
         agents: {
           where: visibleAgents,
-          select: { id: true, name: true, displayName: true, avatarObjectKey: true },
+          select: {
+            id: true,
+            name: true,
+            displayName: true,
+            avatarObjectKey: true,
+            weeklyReportAssistant: { select: { id: true } },
+          },
           orderBy: [{ name: "asc" }, { id: "asc" }],
         },
       },
     });
     const byId = new Map(rows.map((person) => [person.id, person]));
     const people = ids.flatMap((id) => byId.get(id) ?? []);
+    await this.storeAssistantNames(
+      workspaceId,
+      people.flatMap((person) => person.agents.map((agent) => ({ ...agent, owner: person }))),
+    );
     return pageOf(
       people.map((person) => ({
         id: person.id,
@@ -280,7 +320,7 @@ export class WorkspaceMembers {
           total: person.agents.length,
           items: person.agents.slice(0, CREATED_AGENT_FACES).map((agent) => ({
             id: agent.id,
-            displayName: agent.displayName.trim() || agent.name,
+            displayName: shownAgentName({ ...agent, owner: person }),
             avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
           })),
         },

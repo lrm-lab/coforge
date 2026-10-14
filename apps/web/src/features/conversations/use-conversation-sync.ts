@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import type { StreamRead } from "./stream-state";
 import { messageIdFromHash, threadRootFromMessageAnchor } from "./conversation-thread-search";
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { conversationAroundQuery } from "./conversation-queries";
 import type { ThreadRootLoad } from "./thread-root-state";
 import type { DirectConversationView } from "./conversation-types";
@@ -77,10 +77,9 @@ export function useConversationSync({
       } catch (error) {
         setThreadRootFailure({
           rootId,
-          load:
-            isAppError(error) && error.code === "NOT_FOUND"
-              ? { status: "missing" }
-              : { status: "failed", errorId: isAppError(error) ? error.errorId : undefined },
+          load: isAppErrorCode(error, "NOT_FOUND")
+            ? { status: "missing" }
+            : { status: "failed", errorId: isAppError(error) ? error.errorId : undefined },
         });
       }
     },

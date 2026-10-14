@@ -5,8 +5,9 @@ Status: **workflow ready; credentials pending operator provisioning.**
 The approved cloud application track runs as the `coforge-staging` Compose
 project on a single ECS host. Caddy owns the only public entry (trusted
 HTTPS on 443); application ports stay private and reach the host only through
-loopback diagnostics (`18080` web, `18000` centrifugo). Port 80 is
-intentionally unreachable — no plaintext, not even redirects.
+loopback diagnostics (`18080` web, `18000` centrifugo). HTTPS responses carry
+HSTS, and port 80 serves only the permanent redirect to the same URL over
+HTTPS.
 
 ## Contents
 

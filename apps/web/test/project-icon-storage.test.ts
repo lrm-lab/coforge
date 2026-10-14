@@ -1,4 +1,5 @@
-import { expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
+import { mockModuleForFile } from "./helpers/file-module-mock";
 
 import type { FileStorage } from "#src/server/files/file-storage.server";
 import * as fileStorage from "#src/server/files/file-storage.server";
@@ -35,11 +36,11 @@ const privateFiles: FileStorage = {
     privateRemovals.push(key);
   },
 };
-mock.module("#src/server/files/file-storage.server", () => ({
+await mockModuleForFile("#src/server/files/file-storage.server", () => ({
   ...fileStorage,
   getFileStorage: async () => privateFiles,
 }));
-mock.module("#src/server/files/public-image-storage.server", () => ({
+await mockModuleForFile("#src/server/files/public-image-storage.server", () => ({
   ...publicImageStorage,
   getPublicImageStorage: async () => publicImages.storage,
 }));

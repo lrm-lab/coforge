@@ -179,6 +179,57 @@ test("HTTP malformed envelope, protobuf, and network failures are remote RPC err
   }
 });
 
+test("each HTTP RPC failure keeps its code, message and cause", async () => {
+  const network = new Error("socket hang up");
+  const cases: Array<{ fetch: () => Promise<Response>; expected: Record<string, unknown> }> = [
+    {
+      fetch: async () => {
+        throw network;
+      },
+      expected: { code: undefined, message: "The CoForge RPC request failed.", cause: network },
+    },
+    {
+      fetch: async () => new Response("not json", { status: 502 }),
+      expected: { code: 502, message: "The CoForge RPC service returned an invalid response." },
+    },
+    {
+      fetch: async () => Response.json({ error: { code: 403, message: "no" } }, { status: 200 }),
+      expected: {
+        code: 403,
+        message: `The CoForge RPC service rejected '${COMPUTER_REGISTER_METHOD}'.`,
+      },
+    },
+    {
+      fetch: async () => Response.json({ result: { b64data: "AA==" } }, { status: 500 }),
+      expected: {
+        code: 500,
+        message: `The CoForge RPC service rejected '${COMPUTER_REGISTER_METHOD}'.`,
+      },
+    },
+    {
+      fetch: async () => Response.json({ result: { b64data: "not base64!" } }),
+      expected: { code: 200, message: "The CoForge RPC service returned invalid data." },
+    },
+  ];
+  for (const { fetch, expected } of cases) {
+    const transport = new HttpComputerRegisterTransport("https://cloud.example", "token", fetch);
+    const error = await transport.request(COMPUTER_REGISTER_METHOD, request).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toMatchObject({
+      name: "RemoteRpcError",
+      method: COMPUTER_REGISTER_METHOD,
+      requestId: request.requestId,
+      ...expected,
+    });
+    // A failure that wraps a caught error keeps it as the cause; a plain rejection has none.
+    expect(Object.hasOwn(error as object, "cause")).toBe(
+      !String(expected.message).includes("rejected"),
+    );
+  }
+});
+
 test("Daemon WSS endpoint utilities remain available", () => {
   expect(centrifugoWebSocketEndpoint("https://cloud.example/api?tenant=one")).toBe(
     "wss://cloud.example/connection/websocket?tenant=one",

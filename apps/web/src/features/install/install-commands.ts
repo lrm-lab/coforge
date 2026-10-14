@@ -10,16 +10,19 @@ export function installCommands(origin: string): {
   };
 }
 
-/** The second step: sign the installed Computer in to this deployment. `setup` cannot run before
- * it, because registering a Computer needs a credential to register as - so the sequence is
- * stated here rather than left for the user to discover from a failure. */
-export function loginCommand(): string {
-  return `coforge-computer login`;
-}
-
-/** The explicit third step of the install flow: join the signed-in Computer to one Workspace by
- * slug. Kept beside installCommands so the full sequence has one source of truth, even though
- * this half doesn't depend on the deployment origin. */
+/** Join one Workspace; setup requests device-code authorization when credentials are missing. */
 export function setupCommand(workspaceSlug: string): string {
   return `coforge-computer setup --workspace ${workspaceSlug}`;
+}
+
+/** Install and join in one paste. install.sh runs setup through the installed shim, so the POSIX
+ * command needs no PATH change; install.ps1 runs in-process and updates the session's PATH, so the
+ * Windows setup can follow as a plain second line. */
+export function connectionCommands(origin: string, workspaceSlug: string | null) {
+  const commands = installCommands(origin);
+  if (!workspaceSlug) return commands;
+  return {
+    posix: `${commands.posix} -s -- --workspace ${workspaceSlug}`,
+    windows: `${commands.windows}\n${setupCommand(workspaceSlug)}`,
+  };
 }

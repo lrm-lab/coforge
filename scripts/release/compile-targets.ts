@@ -99,6 +99,11 @@ async function compileOne(options: {
   const result = await Bun.build({
     entrypoints: [options.entrypoint],
     compile: { target: options.bunTarget as Bun.Build.CompileTarget, outfile: options.outfile },
+    // `main.ts` dispatches each role through a dynamic `import()`; split, each becomes a chunk
+    // embedded in the executable and loaded at runtime (https://bun.com/docs/bundler/executables,
+    // "Code splitting"), so an `__agent-cli` call no longer parses the Daemon and Computer code.
+    // Measured on linux-x64: `coforge version` 0.40 s / 89 MB RSS unsplit, 0.09 s / 50 MB split.
+    splitting: true,
     define: options.define,
     plugins: [zodResolvePlugin(resolve(import.meta.dir, "../.."))],
   });

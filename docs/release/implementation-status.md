@@ -8,6 +8,13 @@ environment through the immutable-digest workflow in
 disabled behind the human approval gate. The release Skill must stop rather
 than reconstruct or invoke the removed gateway workflow.
 
+Production local publication is implemented by `release-production.yml` and
+`release-installer-production.yml` (`environment: production`, RAM role
+`coforge-release-publisher-production`, bucket `coforge-releases`, feed
+`https://releases.coforge.cn`). Each rebuilds a commit staging already published;
+see [the production release runbook](../operations/production/computer-release.md)
+for the operator-provisioned bucket, CDN domain, and role they need.
+
 The local feed topology in [Local Computer distribution model](local-distribution.md)
 and the `releases.coforge.cn` consumer boundary in
 [Feed hosting and installation entry points](local-feed-hosting.md) are approved.

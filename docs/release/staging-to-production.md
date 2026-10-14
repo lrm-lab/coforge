@@ -52,6 +52,17 @@ updating itself from staging. Promotion therefore rebuilds:
    access, verifies its exact bytes and unsigned-origin 403 guard, runs the
    production local-distribution checks, and records the result.
 
+`release-installer-production.yml` and `release-production.yml` implement
+steps 1 and 3-6 for the installer and the Computer; the `production` GitHub
+Environment's required reviewer is step 2. The installer goes first, because
+`install.sh` reads `installer/latest` from the same feed. The runbook is
+[`operations/production/computer-release.md`](../operations/production/computer-release.md).
+
+Their `without_staging` input skips the staging comparison and checks only the
+commit's and version's shape. It exists for a release Frank approves without a
+staging publication (the first production release, `0.1.0` from `main`, on
+2026-10-12); the run title names it, so the approver sees it.
+
 Building a commit other than the approved one, or altering the source between
 approval and build, invalidates the approval. Because the artifacts are rebuilt
 rather than copied, the production checks in

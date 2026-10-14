@@ -1,5 +1,10 @@
 import { getLogger } from "@logtape/logtape";
-import type { HeldBusyAgent } from "@lrm/coforge-sdk/internal";
+import type {
+  DaemonHoldResponse,
+  HeldBusyAgent,
+  RunnerHoldReason,
+} from "@lrm/coforge-sdk/internal";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 /**
  * How long a lifecycle operation lets in-flight Agent work finish after the runner hold is
@@ -37,6 +42,75 @@ export async function answeredWithin<T>(
     ]);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * How long the Coordinator waits for one Workspace daemon to answer a runner hold. A Workspace
+ * that does not answer is reported unreachable and counted as idle: a wedged or dead Workspace
+ * daemon must never be able to block a Computer upgrade or a restart.
+ */
+export const RUNNER_HOLD_WORKSPACE_TIMEOUT_MS = 5_000;
+
+export type WorkspaceRunnerHoldRequest = {
+  workspaceId: string;
+  operation: "hold" | "release";
+  reason: RunnerHoldReason | undefined;
+  eventPrefix: string;
+  /** Asks the Workspace daemon over its local socket. */
+  hold: (
+    operation: "hold" | "release",
+    reason: RunnerHoldReason | undefined,
+  ) => Promise<DaemonHoldResponse>;
+  timeoutMs?: number;
+};
+
+/**
+ * Asks one Workspace daemon to hold (or release) its runners. A Workspace that does not answer
+ * inside `RUNNER_HOLD_WORKSPACE_TIMEOUT_MS`, answers `accepted: false`, or fails outright is
+ * reported unreachable and counted as idle: a wedged or dead Workspace daemon must never be
+ * able to block a Computer upgrade or a restart. Shared by the Coordinator-wide fan-out and by
+ * the per-Workspace restart hold.
+ */
+export async function askWorkspaceRunnerHold({
+  workspaceId,
+  operation,
+  reason,
+  eventPrefix,
+  hold,
+  timeoutMs = RUNNER_HOLD_WORKSPACE_TIMEOUT_MS,
+}: WorkspaceRunnerHoldRequest): Promise<{
+  held: boolean;
+  busyAgents: HeldBusyAgent[];
+  // Optional on the wire report but always known here, so the restart hold can read it without
+  // a fallback.
+  unreachableWorkspaceIds: string[];
+}> {
+  const held = operation === "hold";
+  try {
+    const response = await answeredWithin(
+      hold(operation, reason),
+      timeoutMs,
+      `Workspace ${workspaceId} did not answer the runner hold`,
+    );
+    if (!response.accepted) return { held, busyAgents: [], unreachableWorkspaceIds: [workspaceId] };
+    return {
+      held,
+      busyAgents: response.busyAgents.map((agent) => ({
+        ...agent,
+        workspaceId: agent.workspaceId || workspaceId,
+      })),
+      unreachableWorkspaceIds: [],
+    };
+  } catch (error) {
+    logger.warn("Workspace daemon did not answer the runner hold; treating as idle", {
+      event: `${eventPrefix}:runner_hold_unreachable`,
+      workspace_id: workspaceId,
+      operation,
+      timeout_ms: timeoutMs,
+      error_message: thrownMessage(error),
+    });
+    return { held, busyAgents: [], unreachableWorkspaceIds: [workspaceId] };
   }
 }
 
@@ -95,7 +169,7 @@ export async function holdRunnersUntilQuiescent(
       logger.warn("Runner hold could not be applied; continuing without it", {
         event: "restart:runner_hold_failed",
         elapsed_ms: elapsed(),
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       });
       return { ...snapshot, busyAgents: [], quiescent: true, elapsedMs: elapsed() };
     }

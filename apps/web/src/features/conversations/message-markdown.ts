@@ -154,9 +154,9 @@ type ReferenceKind = {
  *   reads as the plain `#name` it stored. Without `channelNames` (a view that is itself one link,
  *   such as a Saved card) every channel token reads as plain `#name`;
  * - a thread token (`<@thread:uuid:uuid:name>`) against the same channels: a listed channel id is a
- *   chip `#name:<8 hex>` under the channel's current name, carrying `data-thread-channel-id` and
+ *   chip `#name:xxxxxxxx-xxxx` under the channel's current name, carrying `data-thread-channel-id` and
  *   `data-thread-root-id` for the renderer to make a link that opens the thread; any other reads as
- *   the plain `#name:<8 hex>` it stored. Whether the root message still exists is the thread
+ *   the plain `#name:xxxxxxxx-xxxx` it stored. Whether the root message still exists is the thread
  *   opener's to say: the chip claims only the channel.
  *
  * `plainMentions` additionally chips a *plain* `@handle` (a DM body, or a channel body whose author
@@ -362,7 +362,7 @@ function channelChip(id: string, name: string): Element {
   };
 }
 
-/** A thread chip, `#name:<8 hex>` under the channel's current name. */
+/** A thread chip, `#name:xxxxxxxx-xxxx` under the channel's current name. */
 function threadChip(channelId: string, rootId: string, name: string): Element {
   return {
     type: "element",

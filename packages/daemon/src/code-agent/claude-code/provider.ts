@@ -13,9 +13,11 @@ import { readClaudeCodeUsage } from "./usage";
 import { readClaudeCodeContextReport } from "./context-report";
 import type { AgentContextReport } from "@lrm/coforge-sdk/internal";
 import { createPromptFile } from "./prompt-file";
+import { claudeStreamEvents } from "./stream-events";
+import { claudeToolResults, claudeToolUses } from "./tool-events";
 import { claudeStaticCatalog, discoverExternalCodeAgents } from "#src/code-agent/runtime-inventory";
 import type { ProviderDiscoveryOptions } from "#src/code-agent/contract";
-import { asRecord, eventTime, textContent } from "#src/code-agent/json-record";
+import { asRecord, eventTime } from "#src/code-agent/json-record";
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CLAUDE_CODE;
@@ -522,91 +524,24 @@ class ClaudeCodeAgentSession implements AgentSession {
       ) {
         this.#state = "running";
       }
-      const delta = asRecord(event?.delta);
-      const subagent =
-        typeof record.parent_tool_use_id === "string"
-          ? { parentToolUseId: record.parent_tool_use_id }
-          : undefined;
-      let renderedText = false;
-      if (
-        event?.type === "content_block_delta" &&
-        delta?.type === "text_delta" &&
-        typeof delta.text === "string"
-      ) {
-        renderedText = true;
-        this.#emit({
-          type: "text-delta",
-          text: delta.text,
-          ...(subagent ? { subagent } : {}),
-        });
-      }
-      if (
-        event?.type === "content_block_delta" &&
-        delta?.type === "thinking_delta" &&
-        typeof delta.thinking === "string"
-      ) {
-        renderedText = true;
-        this.#emit({
-          type: "thinking-delta",
-          text: delta.thinking,
-          ...(subagent ? { subagent } : {}),
-        });
-      }
-      // A partial stream event with no renderable text (message/content block
-      // start-stop, an input_json_delta, ...) still shows the turn is live.
-      if (!renderedText && typeof event?.type === "string" && record.parent_tool_use_id == null) {
-        this.#emit({
-          type: "progress",
-          source: "claude_stream_event",
-          occurredAt: eventTime(record),
-        });
-      }
+      for (const streamed of claudeStreamEvents(record)) this.#emit(streamed);
       return;
     }
     if (record.type === "assistant") {
+      const { ids, events } = claudeToolUses(record);
       if (record.parent_tool_use_id == null) {
         if (this.#state === "idle") this.#state = "running";
-        for (const block of messageContent(record)) {
-          if (block?.type === "tool_use" && typeof block.id === "string") {
-            this.#outstandingTools.add(block.id);
-          }
-        }
+        for (const id of ids) this.#outstandingTools.add(id);
       }
-      for (const block of messageContent(record)) {
-        if (
-          block?.type === "tool_use" &&
-          typeof block.id === "string" &&
-          typeof block.name === "string"
-        ) {
-          this.#emit({
-            type: "tool-start",
-            id: block.id,
-            name: block.name,
-            input: block.input,
-            occurredAt: eventTime(record),
-            ...(typeof record.parent_tool_use_id === "string"
-              ? { subagent: { parentToolUseId: record.parent_tool_use_id } }
-              : {}),
-          });
-        }
-      }
+      for (const event of events) this.#emit(event);
       return;
     }
     if (record.type === "user") {
+      const { ids, events } = claudeToolResults(record);
       let toolFinished = false;
-      for (const block of messageContent(record)) {
-        if (block?.type !== "tool_result" || typeof block.tool_use_id !== "string") continue;
-        if (record.parent_tool_use_id == null && this.#outstandingTools.delete(block.tool_use_id)) {
-          toolFinished = true;
-        }
-        const text = textContent(block.content);
-        if (text) this.#emit({ type: "tool-output", id: block.tool_use_id, text });
-        this.#emit({
-          type: "tool-end",
-          id: block.tool_use_id,
-          isError: block.is_error === true,
-        });
-      }
+      if (record.parent_tool_use_id == null)
+        for (const id of ids) if (this.#outstandingTools.delete(id)) toolFinished = true;
+      for (const event of events) this.#emit(event);
       if (toolFinished) this.#flushNotices();
       return;
     }
@@ -717,13 +652,6 @@ class ClaudeCodeAgentSession implements AgentSession {
   #rejectPendingInterrupt(error: Error): void {
     this.#interrupt.fail(error);
   }
-}
-
-function messageContent(
-  record: Readonly<Record<string, unknown>>,
-): Array<Record<string, unknown> | undefined> {
-  const content = asRecord(record.message)?.content;
-  return Array.isArray(content) ? content.map(asRecord) : [];
 }
 
 function claudeRateLimitWindow(info: Record<string, unknown> | undefined):

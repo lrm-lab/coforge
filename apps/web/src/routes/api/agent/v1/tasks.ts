@@ -7,6 +7,7 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 
 const taskOperations = [
   "list",
@@ -77,7 +78,7 @@ export async function handleAgentTaskPost(
   },
 ): Promise<Response> {
   try {
-    const command = taskRequestSchema.parse(await request.json().catch(() => undefined));
+    const command = taskRequestSchema.parse(await readAgentJsonBody(request));
     // Agent Task commands act as the agent, not its owner user.
     const result = await board.execute(
       { workspaceId: principal.workspaceId, agentId: principal.agentId },

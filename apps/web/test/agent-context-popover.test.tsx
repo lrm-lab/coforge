@@ -2,10 +2,11 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 
-import { AgentContextPopoverContent } from "#src/features/agents/agent-context-popover";
+import {
+  AgentContextPopoverContent,
+  type AgentContextPopoverData as PopoverData,
+} from "#src/features/agents/agent-context-popover";
 import { m } from "#src/paraglide/messages";
-
-type PopoverData = NonNullable<Parameters<typeof AgentContextPopoverContent>[0]["data"]>;
 
 const report = {
   provider: "claude-code" as RuntimeProvider,
@@ -26,7 +27,7 @@ const report = {
   ],
 };
 
-const fresh = (overrides: Partial<NonNullable<PopoverData>["result"]> = {}): PopoverData => ({
+const fresh = (overrides: Partial<PopoverData["result"]> = {}): PopoverData => ({
   state: "fresh",
   result: {
     scanId: "scan-1",
@@ -118,7 +119,9 @@ test("a missing reading shows the reading placeholder; a stale one shows the sta
   expect(stale).toContain(m.agent_context_stale());
 });
 
-test("the observed time and a Refresh button always close the popover body", () => {
+test("an icon-only Refresh names itself; the read time waits for hydration", () => {
+  // The read line is gated on useHydrated (RelativeTime is blank until then), so static markup
+  // shows the footer band and the named refresh, and the time renders on the client only.
   const markup = renderToStaticMarkup(
     <AgentContextPopoverContent
       data={fresh()}
@@ -127,6 +130,6 @@ test("the observed time and a Refresh button always close the popover body", () 
       onRefresh={() => {}}
     />,
   );
-  expect(markup).toContain(m.agent_context_updated());
-  expect(markup).toContain(m.agent_context_refresh());
+  expect(markup).toContain(`aria-label="${m.agent_context_refresh()}"`);
+  expect(markup).not.toMatch(/<button[^>]*\sdisabled(?=[\s>])/);
 });

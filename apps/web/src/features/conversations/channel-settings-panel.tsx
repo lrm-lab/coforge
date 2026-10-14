@@ -35,16 +35,13 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { useAppToast } from "#src/components/ui/toast";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
 import type { AgentProfileTab as AgentProfileTabId } from "#src/features/agents/profile-panel/profile-panel-search";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
-import {
-  ChannelMembersPage,
-  useChannelMembers,
-  type ChannelMembersView,
-} from "./channel-members-page";
+import { ChannelMembersPage, type ChannelMembersView } from "./channel-members-page";
+import { useChannelMembers } from "./channel-members-query";
 import {
   deletePublicChannel,
   leavePublicChannel,
@@ -74,11 +71,15 @@ type ConfirmedAction = "archive" | "leave" | "hide-general" | "delete";
 export function ChannelSettingsPanel({
   conversation,
   open,
+  initialMembersView = null,
   onOpenChange,
   onChanged,
 }: {
   conversation: ChannelConversationView;
   open: boolean;
+  /** Members page to land on when the panel opens. Null is the settings themselves. The header's
+   * invite button passes `"add"`; the face stack passes `"members"`. */
+  initialMembersView?: ChannelMembersView | null;
   onOpenChange: (open: boolean) => void;
   /** Refreshes the page and the sidebar after a write changed the channel or the membership. */
   onChanged: () => Promise<void>;
@@ -87,7 +88,7 @@ export function ChannelSettingsPanel({
   const capabilities = conversation.channelCapabilities;
   const isMember = Boolean(conversation.senderMemberId);
   // The members page (or its add view) shown in place of the settings; null shows the settings.
-  const [membersView, setMembersView] = useState<ChannelMembersView | null>(null);
+  const [membersView, setMembersView] = useState<ChannelMembersView | null>(initialMembersView);
   // An Agent's profile opened from the members page, shown in place of it; Back returns there.
   const [profileAgentId, setProfileAgentId] = useState<string | null>(null);
   const [profileTab, setProfileTab] = useState<AgentProfileTabId | undefined>(undefined);
@@ -100,10 +101,13 @@ export function ChannelSettingsPanel({
   // What to do once the panel has closed, held while unsaved edits are being confirmed.
   const afterClose = useRef<(() => void) | undefined>(undefined);
 
-  // Each opening starts on the settings; reset on open, so closing never flashes them.
+  // Each opening lands on the view the opener asked for (the settings, when it asked for none).
+  // Read through a ref so a parent that clears the request after close does not reopen the page.
+  const initialMembersViewRef = useRef(initialMembersView);
+  initialMembersViewRef.current = initialMembersView;
   useEffect(() => {
     if (!open) return;
-    setMembersView(null);
+    setMembersView(initialMembersViewRef.current);
     setProfileAgentId(null);
     setRosterSearch("");
     setReturnFocusAgentId(undefined);
@@ -966,9 +970,8 @@ function ChannelActionConfirmDialog({
       await onDone();
     } catch (cause) {
       // Already gone (deleted or hidden by someone else): finishing leaves for Chat all the same.
-      if (isAppError(cause) && cause.code === "NOT_FOUND") await onDone();
-      else if (isAppError(cause) && cause.code === "ACCESS_DENIED" && copy.denied)
-        setError(copy.denied());
+      if (isAppErrorCode(cause, "NOT_FOUND")) await onDone();
+      else if (isAppErrorCode(cause, "ACCESS_DENIED") && copy.denied) setError(copy.denied());
       else setError(copy.error());
     } finally {
       setBusy(false);

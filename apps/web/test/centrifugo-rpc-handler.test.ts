@@ -1122,7 +1122,12 @@ describe("CentrifugoRpcHandler", () => {
 
   describe("Daemon model refresh result method", () => {
     test("accepts the Daemon's terminal reply for a refresh it performed", async () => {
-      const method = createDaemonRuntimeProviderModelRefreshResultMethod();
+      const accepted: unknown[] = [];
+      const method = createDaemonRuntimeProviderModelRefreshResultMethod({
+        async accept(result) {
+          accepted.push(result);
+        },
+      });
       const payload = encodeDaemonRuntimeProviderModelRefreshResponse({
         protocolMajor: 1,
         requestId: "refresh-1",
@@ -1134,10 +1139,22 @@ describe("CentrifugoRpcHandler", () => {
       });
 
       expect(await method(payload, { principal: principal() })).toBeInstanceOf(Uint8Array);
+      expect(accepted).toEqual([
+        expect.objectContaining({
+          requestId: "refresh-1",
+          status: "refreshed",
+          catalogs: [{ provider: "codex", models: [] }],
+        }),
+      ]);
     });
 
     test("accepts a refresh error reply", async () => {
-      const method = createDaemonRuntimeProviderModelRefreshResultMethod();
+      const accepted: unknown[] = [];
+      const method = createDaemonRuntimeProviderModelRefreshResultMethod({
+        async accept(result) {
+          accepted.push(result);
+        },
+      });
       const payload = encodeDaemonRuntimeProviderModelRefreshResponse({
         protocolMajor: 1,
         requestId: "refresh-2",
@@ -1149,6 +1166,9 @@ describe("CentrifugoRpcHandler", () => {
       });
 
       expect(await method(payload, { principal: principal() })).toBeInstanceOf(Uint8Array);
+      expect(accepted).toEqual([
+        expect.objectContaining({ requestId: "refresh-2", accepted: false, status: "error" }),
+      ]);
     });
 
     test("rejects a principal from another Computer", async () => {

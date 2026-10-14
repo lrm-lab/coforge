@@ -9,7 +9,7 @@
 | 色值 | 使用场景 |
 | --- | --- |
 | `#101319` | 标题、对话正文、未选中的导航名称、未选中的 icon |
-| `#777D8D` | 对话预览行、tab 文字 |
+| `#777D8D` | 对话预览行、tab 文字、线程预览卡的「N 条回复」 |
 | `#E0E5F1` | 投影、边框、分割线 |
 | `#F4FAF6` | tab 背景、对话内容背景、对话选中背景 |
 
@@ -48,6 +48,7 @@
 | 在线 / 掉线 | `#1BB618` / `#AFBCCB` | `--color-online` / `--color-offline` | 一致 |
 | 标题、正文 | `#101319` | `text-primary` | 已对齐 |
 | 预览行、tab 文字 | `#777D8D` | `text-tertiary`、`text-quaternary`（`#525252`、`#737373`） | 未采用：见下，对比度不达标 |
+| 线程预览卡「N 条回复」 | `#777D8D` | `text-thread-reply-count`（`--color-thread-reply-count`） | 已采用：设计稿标注指定（task #98），见下 |
 | 边框、分割线 | `#E0E5F1` | `border-secondary` | 已对齐 |
 | 徽标、标签背景 | `#F3F1FF` | `bg-brand-primary` | 已对齐 |
 | 失败、警报、删除 | `#F15341` | `bg-error-solid`、`fg-error-primary`、`text-error-primary`（`#E7000B`） | 未采用：见下，对比度不达标；未读不用红，见上 |
@@ -70,6 +71,8 @@
 设计稿的红 `#F15341`、绿 `#1BB618` 会被当作文字色，或作为实心底色配白字，而它们不满足 WCAG AA 对小字的 4.5:1：白字配 `#F15341` 约 3.5:1，`#F15341` 红字在白底上同样约 3.5:1，绿字 `#1BB618` 在白底上约 2.7:1。代码因此保留 Untitled 的标准红（`#E7000B`，白字约 4.8:1）和绿，只对齐不涉及文字的颜色：在线点 `--color-online` 本来就是 `#1BB618`。
 
 设计稿的文字灰 `#777D8D` 在白底上约 4.1:1，同样低于 4.5:1，也不采用，`text-tertiary`、`text-quaternary` 保留 Untitled 的标准灰。
+
+例外（2026-10-13，task #98）：线程预览卡的「N 条回复」按设计稿标注用 `#777D8D`，只用这一处的专属 token `--color-thread-reply-count`，不改 `text-tertiary`。它在卡片底色 `bg-secondary`（`#FAFAFA`）上约 3.9:1，低于 AA 的 4.5:1；同一行的「N 条未读」仍是品牌紫，整张卡也有完整的可读名称（回复数、未读数、最近几条回复）。暗色沿用 Untitled 的 `text-tertiary`。
 
 ## 待办
 

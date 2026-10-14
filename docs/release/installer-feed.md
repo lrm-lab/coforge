@@ -96,8 +96,8 @@ Computer release uses (objects up and read back, the manifest last, the pointer
 saved, written, read back, and restored on failure); there is no second upload path.
 
 ```sh
-gh workflow run release-installer-staging.yml --repo LRM-Teams/coforge
-gh workflow run release-installer-staging.yml --repo LRM-Teams/coforge -f pointer_only=0.1.0
+gh workflow run release-installer-staging.yml --repo lrm-lab/coforge
+gh workflow run release-installer-staging.yml --repo lrm-lab/coforge -f pointer_only=0.1.0
 ```
 
 | Job           | What it does                                                                                                                                                                                                                                  |
@@ -146,14 +146,18 @@ gh workflow run release-installer-staging.yml --repo LRM-Teams/coforge -f pointe
   cancelled while it runs, but GitHub keeps one running run and one pending run: a
   newer dispatch replaces an older pending one, which then shows as cancelled. A
   queued rollback can be lost that way. Dispatch one run at a time: check
-  `gh run list --workflow release-installer-staging.yml --repo LRM-Teams/coforge`
+  `gh run list --workflow release-installer-staging.yml --repo lrm-lab/coforge`
   first, and after a dispatch that queued behind a running run, look again. If a
   pending `pointer_only` run was replaced, dispatch it again once the running run
   finishes, and confirm the pointer with the job summary or
   `curl -s https://releases-staging.coforge.cn/installer/latest`.
-- Only staging exists. A production installer follows the Computer's rule: the
-  approved commit is built again against the production feed, never copied
+- A production installer follows the Computer's rule: the approved commit is
+  built again against the production feed, never copied
   ([Staging to production](staging-to-production.md)).
+  `release-installer-production.yml` is this workflow with a `candidate` job in
+  place of `gates` (staging must have published that version from that commit),
+  the production role and bucket `coforge-releases`, and the group
+  `release-installer-production`.
 
 ## Product gate
 

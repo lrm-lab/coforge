@@ -14,7 +14,7 @@ import { AgentMark, heroGradient, supportedAgents, useWebGl2 } from "./landing-b
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
-export const repositoryUrl = "https://github.com/LRM-Teams/coforge";
+export const repositoryUrl = "https://github.com/lrm-lab/coforge";
 
 // Lucide dropped brand marks, so the GitHub octicon is inlined here.
 function GitHubMark({ className = "size-4 shrink-0" }: { className?: string }) {

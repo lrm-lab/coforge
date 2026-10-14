@@ -27,6 +27,11 @@ export function canLeaveWorkspace(role: string | undefined): boolean {
   return role !== undefined && role !== "owner";
 }
 
+/** Whether a Workspace member may change its URL (slug): its owner only. */
+export function canChangeWorkspaceSlug(role: string | undefined): boolean {
+  return role === "owner";
+}
+
 /** Whether a Workspace member may delete the Workspace for good: its owner only. */
 export function canDeleteWorkspace(role: string | undefined): boolean {
   return role === "owner";

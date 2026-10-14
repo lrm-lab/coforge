@@ -3,6 +3,7 @@ import {
   RUNNER_HOLD_REASONS,
   type DaemonConnectRejectionReason,
   type RunnerHoldReason,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { answeredWithin, holdRunnersUntilQuiescent, type RunnerHoldSnapshot } from "./runner-hold";
@@ -326,7 +327,7 @@ export class MachineSupervisor {
     error: unknown,
   ): void {
     const message =
-      (error instanceof Error ? error.message : String(error)) ||
+      thrownMessage(error) ||
       `The ${operation} failed without a reason; the Computer log has the details.`;
     if (error instanceof WorkspaceParkedError || error instanceof WorkspaceLifecycleSupersededError)
       return;
@@ -349,7 +350,7 @@ export class MachineSupervisor {
     }).catch((recordError: unknown) => {
       logger.warn("Recording a lifecycle failure for status failed", {
         event: "lifecycle:failure_record_failed",
-        error_message: recordError instanceof Error ? recordError.message : String(recordError),
+        error_message: thrownMessage(recordError),
       });
     });
   }
@@ -594,7 +595,7 @@ export class MachineSupervisor {
             event: "upgrade:pending_settle_check_failed",
             request_id: pending.requestId,
             workspace_id: workspaceId,
-            error_message: error instanceof Error ? error.message : String(error),
+            error_message: thrownMessage(error),
           });
           return undefined;
         });

@@ -45,14 +45,10 @@ const RETRYABLE_CODES: ReadonlySet<AttachmentUploadSessionErrorCode> = new Set([
   "UPLOAD_VERIFICATION_IN_PROGRESS",
 ]);
 
-/** A default backoff hint for the two retryable codes; the CLI also applies its own schedule. */
-const RETRY_AFTER_MS = 250;
-
 export class AttachmentUploadSessionError extends Error {
   readonly code: AttachmentUploadSessionErrorCode;
   readonly status: number;
   readonly retryable: boolean;
-  readonly retryAfterMs?: number;
 
   constructor(code: AttachmentUploadSessionErrorCode, message: string) {
     super(message);
@@ -60,7 +56,6 @@ export class AttachmentUploadSessionError extends Error {
     this.code = code;
     this.status = STATUS_BY_CODE[code];
     this.retryable = RETRYABLE_CODES.has(code);
-    if (this.retryable) this.retryAfterMs = RETRY_AFTER_MS;
   }
 }
 
@@ -271,6 +266,24 @@ async function replaySession(
   };
 }
 
+/** The session `uploadId` names, if it belongs to this Agent in this workspace. Another Agent's
+ * or workspace's session is indistinguishable from a missing one: both are
+ * `UPLOAD_SESSION_NOT_FOUND`. */
+async function findOwnedSession(
+  db: PrismaClient,
+  input: { agentId: string; workspaceId: string; uploadId: string },
+) {
+  const session = await db.attachmentUploadSession.findFirst({
+    where: { id: input.uploadId, workspaceId: input.workspaceId, agentId: input.agentId },
+  });
+  if (!session)
+    throw new AttachmentUploadSessionError(
+      "UPLOAD_SESSION_NOT_FOUND",
+      "upload session does not exist",
+    );
+  return session;
+}
+
 /**
  * Verifies the uploaded object and creates the reserved `Attachment` row. A concurrent complete
  * loses the race for the `pending` → `verifying` claim (a conditional update, not a separate
@@ -284,14 +297,7 @@ export async function completeAttachmentUploadSession(
   options: { now?: Date } = {},
 ): Promise<AttachmentUploadSessionCompleted> {
   const now = options.now ?? new Date();
-  const session = await db.attachmentUploadSession.findFirst({
-    where: { id: input.uploadId, workspaceId: input.workspaceId, agentId: input.agentId },
-  });
-  if (!session)
-    throw new AttachmentUploadSessionError(
-      "UPLOAD_SESSION_NOT_FOUND",
-      "upload session does not exist",
-    );
+  const session = await findOwnedSession(db, input);
   if (session.state === "completed") {
     const attachment = await db.attachment.findUnique({ where: { id: session.attachmentId } });
     if (!attachment)
@@ -397,14 +403,7 @@ export async function cancelAttachmentUploadSession(
   storage: FileStorage,
   input: { agentId: string; workspaceId: string; uploadId: string },
 ): Promise<AttachmentUploadSessionView> {
-  const session = await db.attachmentUploadSession.findFirst({
-    where: { id: input.uploadId, workspaceId: input.workspaceId, agentId: input.agentId },
-  });
-  if (!session)
-    throw new AttachmentUploadSessionError(
-      "UPLOAD_SESSION_NOT_FOUND",
-      "upload session does not exist",
-    );
+  const session = await findOwnedSession(db, input);
   if (session.state === "pending" || session.state === "verifying") {
     const claimed = await db.attachmentUploadSession.updateMany({
       where: { id: session.id, state: session.state },
@@ -423,14 +422,7 @@ export async function getAttachmentUploadSession(
   db: PrismaClient,
   input: { agentId: string; workspaceId: string; uploadId: string },
 ): Promise<AttachmentUploadSessionView> {
-  const session = await db.attachmentUploadSession.findFirst({
-    where: { id: input.uploadId, workspaceId: input.workspaceId, agentId: input.agentId },
-  });
-  if (!session)
-    throw new AttachmentUploadSessionError(
-      "UPLOAD_SESSION_NOT_FOUND",
-      "upload session does not exist",
-    );
+  const session = await findOwnedSession(db, input);
   const attachment =
     session.state === "completed"
       ? await db.attachment.findUnique({ where: { id: session.attachmentId } })

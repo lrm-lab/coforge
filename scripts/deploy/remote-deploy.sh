@@ -22,12 +22,16 @@
 set -euo pipefail
 
 usage() {
-	printf 'usage: %s --image IMAGE --compose-file FILE --secrets-dir DIR --state-file FILE --web-health-url URL --public-health-url URL [--project NAME] [--timeout SECONDS]\n' "$0" >&2
+	printf 'usage: %s --image IMAGE --compose-file FILE --secrets-dir DIR --state-file FILE --web-health-url URL --public-health-url URL [--project NAME] [--timeout SECONDS] [--public-health-timeout SECONDS]\n' "$0" >&2
 	exit 2
 }
 
 project=coforge-staging
 timeout=120
+# How long the public HTTPS check keeps trying once the stack is healthy. A first deployment has
+# no certificate when Caddy starts: it obtains one after it is up, and until then a TLS handshake
+# fails with an internal-error alert, so one attempt reads as a broken release.
+public_health_timeout=180
 image=
 compose_file=
 secrets_dir=
@@ -43,6 +47,10 @@ while [ "$#" -gt 0 ]; do
 		;;
 	--timeout)
 		timeout="${2:?}"
+		shift 2
+		;;
+	--public-health-timeout)
+		public_health_timeout="${2:?}"
 		shift 2
 		;;
 	--image)
@@ -102,6 +110,7 @@ load_compose_secrets() {
 	COFORGE_WEB_PUSH_PUBLIC_KEY="$(cat "$secrets_dir/coforge_web_push_public_key")"
 	COFORGE_WEB_PUSH_PRIVATE_KEY="$(cat "$secrets_dir/coforge_web_push_private_key")"
 	COFORGE_FILE_DELIVERY_KEY="$(cat "$secrets_dir/coforge_file_delivery_key")"
+	COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY="$(cat "$secrets_dir/centrifugo_token_hmac_secret_key")"
 	# Optional until the staging GitHub App has been configured.
 	COFORGE_GITHUB_CLIENT_SECRET=""
 	COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY=""
@@ -113,7 +122,7 @@ load_compose_secrets() {
 			printf -v "$name" '%s' "$(cat "$secrets_dir/${name,,}")"
 		fi
 	done
-	for name in AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY; do
+	for name in AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY; do
 		[ -n "${!name}" ] || {
 			printf '%s secret file is empty\n' "$name" >&2
 			exit 1
@@ -129,6 +138,7 @@ compose() {
 		COFORGE_WEB_PUSH_PUBLIC_KEY="$COFORGE_WEB_PUSH_PUBLIC_KEY" \
 		COFORGE_WEB_PUSH_PRIVATE_KEY="$COFORGE_WEB_PUSH_PRIVATE_KEY" \
 		COFORGE_FILE_DELIVERY_KEY="$COFORGE_FILE_DELIVERY_KEY" \
+		COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY="$COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY" \
 		COFORGE_GITHUB_CLIENT_SECRET="$COFORGE_GITHUB_CLIENT_SECRET" \
 		COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY="$COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY" \
 		COFORGE_GITHUB_APP_SLUG="$COFORGE_GITHUB_APP_SLUG" \
@@ -197,8 +207,18 @@ write_deploy_env() {
 	env_file_tmp="$(mktemp "${env_file}.XXXXXX")"
 	{
 			printf 'COFORGE_WEB_IMAGE=%s\n' "$web_image"
-		printf 'DATABASE_URL=postgresql://coforge:%s@postgres:5432/coforge\n' "$(cat "$secrets_dir/postgres_password")"
-		printf 'REDIS_URL=redis://:%s@redis:6379\n' "$(cat "$secrets_dir/redis_password")"
+		# A managed datastore supplies its whole URL as a secret file; the bundled
+		# postgres and redis services build it from their password files.
+		if [ -f "$secrets_dir/database_url" ]; then
+			printf 'DATABASE_URL=%s\n' "$(cat "$secrets_dir/database_url")"
+		else
+			printf 'DATABASE_URL=postgresql://coforge:%s@postgres:5432/coforge\n' "$(cat "$secrets_dir/postgres_password")"
+		fi
+		if [ -f "$secrets_dir/redis_url" ]; then
+			printf 'REDIS_URL=%s\n' "$(cat "$secrets_dir/redis_url")"
+		else
+			printf 'REDIS_URL=redis://:%s@redis:6379\n' "$(cat "$secrets_dir/redis_password")"
+		fi
 		printf 'COFORGE_CENTRIFUGO_API_URL=http://centrifugo:8000/api\n'
 		printf 'COFORGE_CENTRIFUGO_API_KEY=%s\n' "$(cat "$secrets_dir/centrifugo_http_api_key")"
 		printf 'COFORGE_CENTRIFUGO_PROXY_SECRET=%s\n' "$(cat "$secrets_dir/centrifugo_proxy_secret")"
@@ -252,8 +272,11 @@ restore_release_snapshot() {
 }
 
 compose_all_healthy() {
-	local service container
+	local service container services
+	services="$(compose config --services)" || return 1
 	for service in web centrifugo redis postgres; do
+		# Managed datastores (production) have no Compose service to check.
+		grep -qx "$service" <<<"$services" || continue
 		container="$(compose ps -q "$service")"
 		[ -n "$container" ] || return 1
 		[ "$(docker inspect --format '{{.State.Health.Status}}' "$container")" = healthy ] || return 1
@@ -274,6 +297,21 @@ wait_for_health() {
 
 public_health() {
 	curl --fail --silent --show-error --max-time 10 "$public_health_url" >/dev/null
+}
+
+# The public check after a candidate starts: retried until `public_health_timeout`, because Caddy
+# may still be obtaining the certificate (always so on a first deployment). Only the last
+# attempt's error is shown.
+wait_for_public_health() {
+	local deadline=$((SECONDS + public_health_timeout))
+	until curl --fail --silent --max-time 10 "$public_health_url" >/dev/null 2>&1; do
+		if [ "$SECONDS" -ge "$deadline" ]; then
+			public_health
+			return
+		fi
+		sleep 3
+	done
+	return 0
 }
 
 verify_running_digest() {
@@ -348,6 +386,37 @@ candidate_diagnostics() {
 	if [[ "$status" =~ ^[0-9]{3}$ ]]; then
 		printf 'candidate loopback health HTTP status: %s\n' "$status" >&2
 	fi
+	proxy_diagnostics || true
+	return 0
+}
+
+# The reverse proxy owns the public entry, so its certificate state is the
+# difference between "the application is up but 443 cannot complete a TLS
+# handshake" and "the application itself is broken". Classify it the way the
+# web container's startup signature is classified: read a bounded slice of the
+# proxy's log, print only a fixed vocabulary code, never the log itself.
+proxy_diagnostics() {
+	local container logs state
+	container="$(timeout --kill-after=1s 5s docker ps --filter "label=com.docker.compose.project=$project" \
+		--filter label=com.docker.compose.service=caddy --all --format '{{.ID}}' 2>/dev/null | head -n 1)" || true
+	[[ "$container" =~ ^[0-9a-f]{6,64}$ ]] || return 0
+	state="$(timeout --kill-after=1s 5s docker inspect --format '{{.State.Status}} {{.State.ExitCode}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null)" || true
+	if [[ "$state" =~ ^(created|running|paused|restarting|removing|exited|dead)\ [0-9]+\ [0-9]+\ (none|starting|healthy|unhealthy)$ ]]; then
+		printf 'proxy state/exit/restarts/health: %s\n' "$state" >&2
+	fi
+	logs="$(timeout --kill-after=1s 5s docker logs --tail 120 --since 10m "$container" 2>&1 | head -c 16384)" || true
+	case "$logs" in
+	*'certificate obtained successfully'*) printf 'proxy_signature=certificate_obtained\n' >&2 ;;
+	*'connection refused'* | *'i/o timeout'* | *'no route to host'*)
+		printf 'proxy_signature=acme_challenge_unreachable\n' >&2
+		;;
+	*'rate limit'* | *'too many certificates'*) printf 'proxy_signature=acme_rate_limited\n' >&2 ;;
+	*'permission denied'* | *'read-only file system'*)
+		printf 'proxy_signature=certificate_storage_denied\n' >&2
+		;;
+	*'could not get certificate'* | *'acme'* | *'obtain'*) printf 'proxy_signature=acme_failed\n' >&2 ;;
+	*) printf 'proxy_signature=unclassified_or_unavailable\n' >&2 ;;
+	esac
 	return 0
 }
 
@@ -411,8 +480,12 @@ if ! compose pull --quiet centrifugo >/dev/null; then
 fi
 # shellcheck disable=SC2016 # single-quoted on purpose: the $(...) below must
 # expand inside the centrifugo container's shell, not this host shell.
+# It reads every secret the service reads, as the image's own user, and fails on
+# one it cannot read or that is empty: on 2026-10-12 an unreadable secret came
+# through as an empty value, checkconfig still passed, and the first production
+# deploy migrated the database before Centrifugo failed to start.
 if ! compose run --rm --no-deps --entrypoint sh centrifugo \
-	-c 'export CENTRIFUGO_VAR_RPC_PROXY_SECRET="$(cat /run/secrets/centrifugo_proxy_secret)"; exec centrifugo checkconfig -c /centrifugo/config.yaml' \
+	-c 'set -e; secret() { value="$(cat "/run/secrets/$1")"; [ -n "$value" ] || { echo "centrifugo: secret $1 is unreadable or empty" >&2; return 1; }; printf "%s" "$value"; }; CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY="$(secret centrifugo_token_hmac_secret_key)"; CENTRIFUGO_HTTP_API_KEY="$(secret centrifugo_http_api_key)"; CENTRIFUGO_VAR_RPC_PROXY_SECRET="$(secret centrifugo_proxy_secret)"; CENTRIFUGO_ENGINE_REDIS_ADDRESS="$(secret redis_url)"; export CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY CENTRIFUGO_HTTP_API_KEY CENTRIFUGO_VAR_RPC_PROXY_SECRET CENTRIFUGO_ENGINE_REDIS_ADDRESS; exec centrifugo checkconfig -c /centrifugo/config.yaml' \
 	</dev/null 1>&2; then
 	discard_candidate_configuration
 	report "$current_image" "failed: Centrifugo configuration validation failed" "failed" ""
@@ -452,7 +525,7 @@ if ! verify_running_digest; then
 	fail_deployment "failed: running container digest mismatch"
 fi
 
-if ! public_health; then
+if ! wait_for_public_health; then
 	fail_deployment "failed: public readiness failed"
 fi
 

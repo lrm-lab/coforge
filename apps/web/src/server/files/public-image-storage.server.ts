@@ -62,8 +62,6 @@ export function getPublicImageStorage(): Promise<ManagedFileStorage> {
   return current;
 }
 
-export function createPublicImageStorage(
-  config: FileStorageConfig | null,
-): Promise<ManagedFileStorage> {
+function createPublicImageStorage(config: FileStorageConfig | null): Promise<ManagedFileStorage> {
   return config ? createFileStorage(config) : getFileStorage();
 }

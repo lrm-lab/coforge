@@ -27,8 +27,8 @@ function ExpandedItem({ href, icon: Icon, label, current, badge }: ExpandedItemT
       <Icon
         aria-hidden="true"
         className={cx(
-          "size-6 shrink-0 transition-colors duration-100 ease-linear",
-          current ? "text-brand-secondary" : "text-tertiary group-hover:text-secondary",
+          "size-6 shrink-0 stroke-[2px] transition-colors duration-100 ease-linear",
+          current ? "text-brand-secondary" : "text-nav-icon group-hover:text-secondary",
         )}
       />
       <span className="min-w-0 flex-1 truncate">{label}</span>

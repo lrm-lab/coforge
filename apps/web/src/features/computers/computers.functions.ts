@@ -3,7 +3,6 @@ import {
   encodeDaemonRuntimeProviderModelRefreshRequest,
   isValidReleaseVersion,
   requireRuntimeProvider,
-  WORKSPACE_PROTOCOL_MAJOR,
   type CodeAgentModelMetadata,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
@@ -14,10 +13,13 @@ import {
   readRestartStatusInputSchema,
   readUsageInputSchema,
   restartComputerInputSchema,
+  scanAgentWorkspacesInputSchema,
+  deleteAgentWorkspaceInputSchema,
   scanUsageInputSchema,
   setRuntimeVisibilityInputSchema,
   updateComputerDisplayNameInputSchema,
 } from "./computer.schemas";
+import { declareNoStore } from "#src/features/no-store-response.server";
 import {
   workspaceUserMiddleware,
   type WorkspaceUserContext,
@@ -26,9 +28,12 @@ import {
   createCentrifugoServerApi,
   createUsageScan,
   daemonControlChannel,
+  reconnectDaemon,
 } from "#src/server/centrifugo/server-api.server";
 import { getUsageCache } from "#src/server/centrifugo/usage-cache.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
+import { getModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
+import { ComputerModelCatalogRefresh } from "#src/server/computers/computer-model-catalog-refresh.server";
 import { computerCreatorAvatarUrl } from "#src/server/computers/computer-creator-avatar.server";
 import { isWorkspaceMemberComputer } from "#src/server/computers/computer-membership.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
@@ -38,6 +43,23 @@ import { getComputerRestartStore } from "#src/server/computers/computer-restart-
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { UpgradeComputer } from "#src/server/computers/upgrade-computer.server";
 import { resolveReleaseFeedUrl } from "#src/server/install/install-script.server";
+import {
+  computerWorkspaceFilesQuery,
+  findOwnedWorkspaceComputer,
+} from "#src/server/computers/computer-workspace-files.server";
+import { scanComputerAgentWorkspaces as scanWorkspaceInventory } from "#src/server/computers/computer-agent-workspaces.server";
+import {
+  parseAgentRuntimeConfig,
+  publicAgentRuntimeConfig,
+} from "#src/server/agents/agent-runtime-config.server";
+import {
+  agentVisibilityViewerForUser,
+  visibleAgentWhere,
+} from "#src/server/agents/agent-visibility.server";
+import { getAgentDisplay } from "#src/server/agents/agent-display.server";
+import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
 
 export const restartComputer = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -123,6 +145,7 @@ export const listComputers = createServerFn({ method: "GET" })
     const { user, db, workspaceId } = context;
     const visibility = runtimeVisibility(db);
     const computerStatus = getComputerStatusCache();
+    const agentViewer = await agentVisibilityViewerForUser(db, workspaceId, user.id);
     const [connections, runtimes] = await Promise.all([
       db.workspaceComputer.findMany({
         where: { workspaceId },
@@ -145,6 +168,17 @@ export const listComputers = createServerFn({ method: "GET" })
                   avatarObjectKey: true,
                 },
               },
+              agents: {
+                where: { workspaceId, ...ACTIVE_AGENT_WHERE, ...visibleAgentWhere(agentViewer) },
+                select: {
+                  id: true,
+                  name: true,
+                  displayName: true,
+                  avatarObjectKey: true,
+                  runtimeConfig: true,
+                },
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+              },
             },
           },
         },
@@ -155,6 +189,13 @@ export const listComputers = createServerFn({ method: "GET" })
     // One round trip for every Computer's online lease, not one per Computer.
     const statuses = await computerStatus.getMany(
       connections.map(({ computer }) => ({ workspaceId, computerId: computer.id })),
+    );
+    const agentScopes = connections.flatMap(({ computer }) =>
+      computer.agents.map((agent) => ({ workspaceId, computerId: computer.id, agentId: agent.id })),
+    );
+    const agentDisplays = await getAgentDisplay().snapshotMany(agentScopes);
+    const agentDisplayById = new Map(
+      agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
     );
     return Promise.all(
       connections.map(async ({ computer, createdAt }, index) => {
@@ -178,11 +219,75 @@ export const listComputers = createServerFn({ method: "GET" })
           },
           connectedAt: createdAt,
           ownedByCurrentUser: computer.ownerId === user.id,
+          canManageAgents: agentViewer.role === "owner" || agentViewer.role === "admin",
           online: statuses[index] ?? false,
+          agents: computer.agents.map((agent) => ({
+            id: agent.id,
+            name: agent.name,
+            displayName: agent.displayName,
+            avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+            provider: parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
+            runtimeConfig: publicAgentRuntimeConfig(parseAgentRuntimeConfig(agent.runtimeConfig)),
+            display: agentDisplayById.get(agent.id),
+          })),
           runtimes: computerRuntimes.map(({ ownerId: _ownerId, ...runtime }) => runtime),
         };
       }),
     );
+  });
+
+/** A Computer owner can ask the connected Daemon for a fresh local workspace inventory. */
+export const scanAgentWorkspaces = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(scanAgentWorkspacesInputSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    declareNoStore();
+    const computer = await findOwnedWorkspaceComputer(db, {
+      userId: user.id,
+      workspaceId,
+      computerId: data.computerId,
+    });
+
+    const agents = await db.agent.findMany({
+      where: { workspaceId, computerId: computer.id },
+      select: { id: true, name: true, displayName: true, deletedAt: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const query = computerWorkspaceFilesQuery(db, computer.id, { list: true });
+    const inventory = await scanWorkspaceInventory(agents, async (request) => {
+      const response = await query.list(
+        { userId: user.id, workspaceId },
+        request.agentId,
+        request.dirPath,
+        request.includeHidden,
+      );
+      if (response.status !== "ready")
+        return {
+          status: response.status === "offline" ? "unreadable" : "error",
+          rootPath: "",
+          entries: [],
+        };
+      return response.result;
+    });
+    return inventory;
+  });
+
+/** Computer owners may remove an Agent workspace's local contents. The Agent row is retained;
+ * deleted Agents remain eligible so their retained workspaces can be cleaned up. */
+export const deleteAgentWorkspace = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(deleteAgentWorkspaceInputSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    declareNoStore();
+    const computer = await findOwnedWorkspaceComputer(db, {
+      userId: user.id,
+      workspaceId,
+      computerId: data.computerId,
+    });
+    const query = computerWorkspaceFilesQuery(db, computer.id, { list: false });
+    const response = await query.delete({ userId: user.id, workspaceId }, data.agentId);
+    if (response.status !== "ready") return response;
+    return response.result;
   });
 
 export const readComputerUpgradeStatus = createServerFn({ method: "GET" })
@@ -313,32 +418,41 @@ export const getComputerRuntimeCatalog = createServerFn({ method: "GET" })
       .map((catalog) => ({ ...catalog, models: catalog.models! }));
   });
 
-/** Asks the Computer's daemon to re-run its model-catalog discovery now (the browser's model
- * selector refresh button / selector-open auto-refresh). Fire-and-forget on the wire: the daemon
- * re-reports through the ordinary `daemon:v1:provider:inventory_update` and answers via
- * `daemon:v1:provider:model_refresh_result`; the caller watches `getComputerRuntimeCatalog`'s
- * `observedAt` move to see the refresh land. Authorizes exactly like reading the catalog: the
- * Computer must belong to this Workspace. */
+/** Explicitly probes the Computer and waits for this request's terminal response. Like ordinary
+ * catalog reads, only this Workspace's Computer and visible runtimes may be returned. */
 export const refreshComputerRuntimeCatalog = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(computerIdInputSchema)
   .handler(async ({ context, data }) => {
-    const { db, workspaceId } = context;
+    const { user, db, workspaceId } = context;
+    declareNoStore();
     const connection = await db.workspaceComputer.findUnique({
       where: { workspaceId_computerId: { workspaceId, computerId: data.computerId } },
       select: { computerId: true },
     });
     if (!connection) throw new Error("Computer is not available");
-    await createCentrifugoServerApi().publish(
-      daemonControlChannel(workspaceId, data.computerId),
-      encodeDaemonRuntimeProviderModelRefreshRequest({
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId: crypto.randomUUID(),
-        workspaceId,
-        computerId: data.computerId,
-      }),
+    const api = createCentrifugoServerApi();
+    const refreshed = await new ComputerModelCatalogRefresh({
+      results: getModelCatalogRefreshResults(),
+      publish: (request) =>
+        api.publish(
+          daemonControlChannel(workspaceId, data.computerId),
+          encodeDaemonRuntimeProviderModelRefreshRequest(request),
+        ),
+    }).execute({ userId: user.id, workspaceId }, data.computerId);
+    if (refreshed.status !== "refreshed") return refreshed;
+    const runtimes = await runtimeVisibility(db).list({ workspaceId, userId: user.id });
+    const visibleProviders = new Set(
+      runtimes
+        .filter((runtime) => runtime.computerId === data.computerId)
+        .map((runtime) => runtime.provider),
     );
-    return { status: "pending" as const };
+    return {
+      ...refreshed,
+      catalogs: refreshed.catalogs.filter((catalog) =>
+        visibleProviders.has(runtimeProvider(catalog.provider)),
+      ),
+    };
   });
 
 export const setRuntimeVisibility = createServerFn({ method: "POST" })
@@ -365,6 +479,43 @@ export const updateComputerDisplayName = createServerFn({ method: "POST" })
     });
     if (result.count !== 1) throw new Error("Computer is not available");
     return { displayName: data.displayName };
+  });
+
+/** Permanently removes an owner's Computer record after all of its Agents are soft-deleted. */
+export const deleteComputer = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(computerIdInputSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    const computer = await db.computer.findFirst({
+      where: {
+        id: data.computerId,
+        ownerId: user.id,
+        workspaces: { some: { workspaceId } },
+      },
+      select: {
+        id: true,
+        agents: { where: { deletedAt: null }, select: { id: true }, take: 1 },
+        workspaces: { select: { workspaceId: true } },
+      },
+    });
+    if (!computer) throw new Error("Computer is not available");
+    if (computer.agents.length > 0)
+      throw new Error("Delete all Agents on this Computer before deleting the Computer");
+    await db.$transaction(async (tx) => {
+      for (const binding of computer.workspaces)
+        await DaemonCredentialRevocations.recordForComputer(tx, {
+          workspaceId: binding.workspaceId,
+          computerId: computer.id,
+        });
+      await tx.computer.delete({ where: { id: computer.id } });
+    });
+    const api = createCentrifugoServerApi();
+    await Promise.all(
+      computer.workspaces.map(({ workspaceId: boundWorkspaceId }) =>
+        reconnectDaemon(api, boundWorkspaceId, computer.id),
+      ),
+    );
+    return { deleted: true as const };
   });
 
 function modelMetadata(value: unknown): CodeAgentModelMetadata[] | undefined {

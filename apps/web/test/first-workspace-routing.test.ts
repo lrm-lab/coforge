@@ -1,4 +1,5 @@
-import { beforeEach, expect, mock, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
+import { mockModuleForFile } from "./helpers/file-module-mock";
 import { QueryClient } from "@tanstack/react-query";
 import { isNotFound, isRedirect } from "@tanstack/react-router";
 
@@ -12,25 +13,25 @@ let signedIn = false;
 let named = true;
 let startPage: string | null = null;
 
-mock.module("#src/features/auth/current-user.functions", () => ({
+await mockModuleForFile("#src/features/auth/current-user.functions", () => ({
   getAuthenticationStatus: async () => signedIn,
   // The signed-in person is one with no email address (a phone-number sign-up), named by their
   // name: having no email does not make them a signed-out visitor.
   getSignedInAccount: async () => (signedIn ? { account: "Ada Lovelace", named } : null),
 }));
-mock.module("#src/features/profiles/profile.functions", () => ({
+await mockModuleForFile("#src/features/profiles/profile.functions", () => ({
   getUserProfile: async () => ({ id: "user-1", name: "Ada Lovelace", named }),
 }));
-mock.module("#src/features/workspaces/last-location.functions", () => ({
+await mockModuleForFile("#src/features/workspaces/last-location.functions", () => ({
   getStartPage: async () => startPage,
 }));
-mock.module("#src/features/auth/logout-return.functions", () => ({
+await mockModuleForFile("#src/features/auth/logout-return.functions", () => ({
   // The switch-account resume read: the tests only judge the signed-in and plain signed-out
   // landings, so the cookie is always absent.
   takeLogoutReturn: async () => null,
 }));
 const workspaceFunctions = await import("#src/features/workspaces/workspaces.functions");
-mock.module("#src/features/workspaces/workspaces.functions", () => ({
+await mockModuleForFile("#src/features/workspaces/workspaces.functions", () => ({
   ...workspaceFunctions,
   openWorkspace: async () => {
     throw new AppError("NOT_FOUND");
@@ -50,18 +51,18 @@ const workspaceReads = {
 } as const;
 for (const [path, reads] of Object.entries(workspaceReads)) {
   const real = await import(path);
-  mock.module(path, () => ({
+  await mockModuleForFile(path, () => ({
     ...real,
     ...Object.fromEntries(Object.entries(reads).map(([name, value]) => [name, async () => value])),
   }));
 }
-mock.module("#src/features/settings/assumed-viewport.functions", () => ({
+await mockModuleForFile("#src/features/settings/assumed-viewport.functions", () => ({
   // Read from the request on a real server; nothing here is a phone.
   loadAssumedPhone: () => false,
 }));
 let joinPreview: unknown = null;
 const joinFunctions = await import("#src/features/workspaces/join-links.functions");
-mock.module("#src/features/workspaces/join-links.functions", () => ({
+await mockModuleForFile("#src/features/workspaces/join-links.functions", () => ({
   ...joinFunctions,
   inspectWorkspaceJoinLink: async () => joinPreview,
 }));

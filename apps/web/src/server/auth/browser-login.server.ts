@@ -297,7 +297,7 @@ export function readBrowserSession(input: {
   };
 }
 
-export function buildAuthingLogoutUrl(
+function buildAuthingLogoutUrl(
   config: AuthingConfig,
   postLogoutRedirectUri: string,
   idTokenHint?: string,

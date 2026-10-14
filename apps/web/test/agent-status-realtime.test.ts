@@ -7,10 +7,12 @@ const {
   applyAgentStatusEvent,
   decodeAgentStatusEvent,
   expireAgentStatuses,
+  isAgentDirectoryChangedEvent,
   isAgentVisibilityChangedEvent,
   mergeAgentStatusSnapshot,
   mergeExtraAgents,
   nextDisplayRefreshDelayMs,
+  shouldRefreshAgentDirectoryOnGap,
 } = await import("#src/features/agents/agent-status-realtime");
 import { ACTIVITY_PROBE_TIMEOUT_MS } from "#src/features/agents/activity-probe-timeout";
 import type { AgentStatusEvent, AgentStatusView } from "#src/features/agents/agent-status-realtime";
@@ -34,6 +36,49 @@ test("isAgentVisibilityChangedEvent recognizes the id-only visibility-change eve
   expect(isAgentVisibilityChangedEvent(null)).toBe(false);
   expect(isAgentVisibilityChangedEvent("agent:visibility_changed")).toBe(false);
   expect(isAgentVisibilityChangedEvent([])).toBe(false);
+});
+
+test("isAgentDirectoryChangedEvent accepts only id and supported change kinds", () => {
+  expect(
+    isAgentDirectoryChangedEvent({
+      type: "agent.changed.v1",
+      agentId: "agent-1",
+      kind: "created",
+    }),
+  ).toBe(true);
+  expect(
+    isAgentDirectoryChangedEvent({
+      type: "agent.changed.v1",
+      agentId: "agent-1",
+      kind: "updated",
+    }),
+  ).toBe(true);
+  expect(
+    isAgentDirectoryChangedEvent({
+      type: "agent.changed.v1",
+      agentId: "agent-1",
+      kind: "deleted",
+    }),
+  ).toBe(true);
+  expect(
+    isAgentDirectoryChangedEvent({
+      type: "agent.changed.v1",
+      agentId: "agent-1",
+      kind: "renamed",
+    }),
+  ).toBe(false);
+  expect(isAgentDirectoryChangedEvent({ type: "agent.changed.v1", agentId: "agent-1" })).toBe(
+    false,
+  );
+});
+
+test("does not invalidate Agent directories on the first subscription gap", () => {
+  expect(shouldRefreshAgentDirectoryOnGap(false, "unrecovered")).toBe(false);
+  expect(shouldRefreshAgentDirectoryOnGap(false, "recovered")).toBe(false);
+  expect(shouldRefreshAgentDirectoryOnGap(true, "none")).toBe(false);
+  expect(shouldRefreshAgentDirectoryOnGap(true, "recovered")).toBe(true);
+  expect(shouldRefreshAgentDirectoryOnGap(true, "unrecovered")).toBe(true);
+  expect(shouldRefreshAgentDirectoryOnGap(true, "lost")).toBe(true);
 });
 
 // Realtime gap: an owner/admin (or a private Agent's creator) can see private Agents

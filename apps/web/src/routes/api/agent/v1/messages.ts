@@ -1,4 +1,6 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
   AgentHistoryResponse,
   AgentMessage,
@@ -35,11 +37,15 @@ import {
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
 import { postingTargetRefusalResponse } from "#src/server/agents/agent-target-status.server";
 import { applyIncomingWeeklyReportBodyEdit } from "#src/server/records/weekly-report-body-restore.server";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
+import {
+  agentIdempotencyKeyFromQuery,
+  readAgentJsonBody,
+} from "#src/server/agents/agent-http-routes.server";
 
 export type AgentMessagesGetPrincipal = { workspaceId: string; agentId: string };
 
@@ -62,7 +68,7 @@ export async function handleAgentMessagesGet(
   repository: AgentMessageRepository,
 ): Promise<Response> {
   const query = new URL(request.url).searchParams;
-  const idempotencyKey = query.get("idempotencyKey") || crypto.randomUUID();
+  const idempotencyKey = agentIdempotencyKeyFromQuery(request);
   const scope = { workspaceId: principal.workspaceId, agentId: principal.agentId };
   try {
     if (query.has("query"))
@@ -235,7 +241,7 @@ export async function handleAgentMessagesPost(
     onMessageSent?: (input: { messageId: string; target: string; body: string }) => Promise<void>;
   },
 ): Promise<Response> {
-  const body = await request.json().catch(() => undefined);
+  const body = await readAgentJsonBody(request);
   if (body && typeof body === "object") {
     if (body.reconcileOnly !== undefined && typeof body.reconcileOnly !== "boolean")
       return Response.json({ error: "invalid reconcileOnly" }, { status: 400 });
@@ -278,7 +284,7 @@ export async function handleAgentMessagesPost(
       agentId: principal.agentId,
       target: channelTarget,
     });
-    if (offerRequired) return new Response(MEMORY_OFFER_REQUIRED_MESSAGE, { status: 400 });
+    if (offerRequired) return textResponse(MEMORY_OFFER_REQUIRED_MESSAGE, { status: 400 });
   }
   try {
     const result = await executeAgentSendMessageWithPolicy(dependencies, {
@@ -324,12 +330,12 @@ export async function handleAgentMessagesPost(
     // An archived channel refuses posting (AppError("CONFLICT") from PublicChannels.send /
     // sendAgentMessage); reported the same way the rest of this route family reports a plain
     // text failure.
-    if (isAppError(error) && error.code === "CONFLICT")
-      return new Response("channel is archived", { status: 409 });
+    if (isAppErrorCode(error, "CONFLICT"))
+      return textResponse("channel is archived", { status: 409 });
     // A private Agent's direct conversation stays scoped to its own creator: a stable
     // code with an explanation, the same rule this route already follows for the other named
     // failures above, rather than a bare 500.
-    if (isAppError(error) && error.code === "AGENT_DM_RESTRICTED")
+    if (isAppErrorCode(error, "AGENT_DM_RESTRICTED"))
       return errorResponse(
         error.code,
         "this direct message is private and read-only for this Agent",
@@ -342,38 +348,60 @@ export async function handleAgentMessagesPost(
   }
 }
 
+/**
+ * What one Agent send runs on, built per request. Its repository keeps the channel it resolves, so
+ * the Memory Offer check, the freshness check and the send itself look the channel up once.
+ */
+export function agentMessagesPostDependencies(db: PrismaClient) {
+  const repository = new PrismaDirectConversationRepository(db, { oneRequest: true });
+  const centrifugo = createCentrifugoServerApi();
+  const requestRecords = getMessageRequestIdempotency();
+  const directory = createPrismaMemoryAgentDirectory(db);
+  return {
+    repository,
+    requestRecords,
+    memoryOfferRequired: async ({
+      workspaceId,
+      agentId,
+      target,
+    }: {
+      workspaceId: string;
+      agentId: string;
+      target: string;
+    }) => {
+      try {
+        const conversation = await repository.getAgentChannel(workspaceId, agentId, target);
+        return explicitMemoryQuestionRequiresOffer(
+          db,
+          { workspaceId, agentId, conversationId: conversation.id },
+          (currentWorkspaceId, currentAgentId) =>
+            directory.isDesignated(currentWorkspaceId, currentAgentId),
+        );
+      } catch (error) {
+        if (isAppErrorCode(error, "ACCESS_DENIED", "INVALID_INPUT")) return false;
+        throw error;
+      }
+    },
+    sender: new SendDirectMessage(
+      repository,
+      requestRecords,
+      centrifugo,
+      new CentrifugoConversationRealtime(centrifugo),
+      bestEffortMessageNotifier(db),
+      new MentionDeliveryIssuer(new PrismaMentionDeliveryRepository(db)),
+    ),
+  };
+}
+
 export const Route = createFileRoute("/api/agent/v1/messages")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
       GET: ({ request, context: { principal, db } }) =>
         handleAgentMessagesGet(request, principal, new PrismaDirectConversationRepository(db)),
-      POST: ({ request, context: { principal, db } }) => {
-        const repository = new PrismaDirectConversationRepository(db);
-        const centrifugo = createCentrifugoServerApi();
-        const requestRecords = getMessageRequestIdempotency();
-        const directory = createPrismaMemoryAgentDirectory(db);
-        return handleAgentMessagesPost(request, principal, {
-          repository,
-          requestRecords,
-          memoryOfferRequired: async ({ workspaceId, agentId, target }) => {
-            try {
-              const conversation = await repository.getAgentChannel(workspaceId, agentId, target);
-              return explicitMemoryQuestionRequiresOffer(
-                db,
-                { workspaceId, agentId, conversationId: conversation.id },
-                (currentWorkspaceId, currentAgentId) =>
-                  directory.isDesignated(currentWorkspaceId, currentAgentId),
-              );
-            } catch (error) {
-              if (
-                isAppError(error) &&
-                (error.code === "ACCESS_DENIED" || error.code === "INVALID_INPUT")
-              )
-                return false;
-              throw error;
-            }
-          },
+      POST: ({ request, context: { principal, db } }) =>
+        handleAgentMessagesPost(request, principal, {
+          ...agentMessagesPostDependencies(db),
           onMessageSent: ({ messageId, target, body: messageBody }) =>
             applyIncomingWeeklyReportBodyEdit(db, {
               workspaceId: principal.workspaceId,
@@ -382,16 +410,7 @@ export const Route = createFileRoute("/api/agent/v1/messages")({
               messageId,
               body: messageBody,
             }),
-          sender: new SendDirectMessage(
-            repository,
-            requestRecords,
-            centrifugo,
-            new CentrifugoConversationRealtime(centrifugo),
-            bestEffortMessageNotifier(db),
-            new MentionDeliveryIssuer(new PrismaMentionDeliveryRepository(db)),
-          ),
-        });
-      },
+        }),
     },
   },
 });

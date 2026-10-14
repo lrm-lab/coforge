@@ -9,7 +9,7 @@ datasource db {
 }
 
 model Workspace {
-  id                     String                  @id @default(uuid()) @db.Uuid
+  id                     String                  @id @default(uuid(7)) @db.Uuid
   slug                   String                  @unique
   name                   String
   iconObjectKey          String?
@@ -58,12 +58,26 @@ model Workspace {
   memoryOfferCitations   MemoryOfferCitation[]
   memoryCleanupWork      WorkspaceMemoryCleanupWork[]
   workspaceMemoryAgent   WorkspaceMemoryAgent?
+  formerSlugs            WorkspaceFormerSlug[]
 
   @@map("workspaces")
 }
 
+/// A URL (slug) the Workspace had before its owner changed it. It keeps naming that Workspace, so
+/// old links and Computers set up with it still reach it, and no other Workspace can take it.
+model WorkspaceFormerSlug {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  slug        String    @unique
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("workspace_former_slugs")
+}
+
 model Project {
-  id                   String         @id @default(uuid()) @db.Uuid
+  id                   String         @id @default(uuid(7)) @db.Uuid
   workspaceId          String         @db.Uuid
   name                 String
   description          String         @default("")
@@ -89,7 +103,7 @@ model Project {
 }
 
 model User {
-  id                          String                          @id @default(uuid()) @db.Uuid
+  id                          String                          @id @default(uuid(7)) @db.Uuid
   username                    String                          @unique
   /// The latest email the identity provider reported at login. Not unique and never an identity key.
   email                       String?
@@ -97,6 +111,7 @@ model User {
   /// has none until it is asked, and is then labelled by `username`.
   displayName                 String?
   description                 String                          @default("")
+  /// An image object key, or `preset:<id>` for a platform picture the app serves itself.
   avatarObjectKey             String?
   avatarContentType           String?
   createdAt                   DateTime                        @default(now())
@@ -151,7 +166,7 @@ model UserPreference {
 }
 
 model WebPushSubscription {
-  id             String    @id @default(uuid()) @db.Uuid
+  id             String    @id @default(uuid(7)) @db.Uuid
   userId         String    @db.Uuid
   endpoint       String    @unique
   p256dh         String
@@ -166,7 +181,7 @@ model WebPushSubscription {
 }
 
 model UserIdentity {
-  id              String @id @default(uuid()) @db.Uuid
+  id              String @id @default(uuid(7)) @db.Uuid
   userId          String @db.Uuid
   provider        String
   providerSubject String
@@ -222,7 +237,7 @@ model GitHubUserInstallation {
 }
 
 model Agent {
-  id                        String                     @id @default(uuid()) @db.Uuid
+  id                        String                     @id @default(uuid(7)) @db.Uuid
   workspaceId               String                     @db.Uuid
   name                      String
   displayName               String
@@ -291,7 +306,7 @@ model Agent {
 
 /// One User's durable weekly-report Collector Agent on one owned Computer (ADR 0032).
 model WeeklyReportCollectorBinding {
-  id               String    @id @default(uuid()) @db.Uuid
+  id               String    @id @default(uuid(7)) @db.Uuid
   workspaceId      String    @db.Uuid
   userId           String    @db.Uuid
   computerId       String    @db.Uuid
@@ -313,7 +328,7 @@ model WeeklyReportCollectorBinding {
 
 /// One Collect Run for a member weekly report (ADR 0032). Not a generic job.
 model WeeklyReportCollectRun {
-  id          String                  @id @default(uuid()) @db.Uuid
+  id          String                  @id @default(uuid(7)) @db.Uuid
   workspaceId String                  @db.Uuid
   userId      String                  @db.Uuid
   reportId    String                  @db.Uuid
@@ -339,7 +354,7 @@ model WeeklyReportCollectRun {
 
 /// Per-Computer slot inside a Collect Run.
 model WeeklyReportCollectSlot {
-  id               String                 @id @default(uuid()) @db.Uuid
+  id               String                 @id @default(uuid(7)) @db.Uuid
   runId            String                 @db.Uuid
   computerId       String                 @db.Uuid
   collectorAgentId String                 @db.Uuid
@@ -366,7 +381,7 @@ model WeeklyReportCollectSlot {
 
 /// One User's fixed Agent identity for weekly-report AI in one Workspace.
 model WeeklyReportAssistant {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(uuid(7)) @db.Uuid
   workspaceId String    @db.Uuid
   userId      String    @db.Uuid
   agentId     String    @unique @db.Uuid
@@ -387,7 +402,7 @@ model WeeklyReportAssistant {
 
 /// Side-chat session scoped to one page subject (report/cycle).
 model WeeklyReportAssistantChatSession {
-  id          String          @id @default(uuid()) @db.Uuid
+  id          String          @id @default(uuid(7)) @db.Uuid
   workspaceId String          @db.Uuid
   userId      String          @db.Uuid
   /// report | cycle
@@ -410,7 +425,7 @@ model WeeklyReportAssistantChatSession {
 /// Agent-session reservation for one WeeklyReportAssistant and one Records
 /// page subject (ADR 0060). Not the side-chat thread and not Agent.currentSessionId.
 model WeeklyReportAssistantRuntimeSession {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String   @id @default(uuid(7)) @db.Uuid
   workspaceId String   @db.Uuid
   agentId     String   @db.Uuid
   /// report | cycle
@@ -431,7 +446,7 @@ model WeeklyReportAssistantRuntimeSession {
 /// A provider-native Session belongs to the Agent and the Computer/runtime that created it.
 /// Switching runtime creates another record; it never relabels or converts the old transcript.
 model AgentSession {
-  id              String   @id @default(uuid()) @db.Uuid
+  id              String   @id @default(uuid(7)) @db.Uuid
   agentId         String   @db.Uuid
   workspaceId     String   @db.Uuid
   computerId      String   @db.Uuid
@@ -447,7 +462,7 @@ model AgentSession {
 }
 
 model AgentActivity {
-  id                      String    @id @default(uuid()) @db.Uuid
+  id                      String    @id @default(uuid(7)) @db.Uuid
   workspaceId             String    @db.Uuid
   agentId                 String    @db.Uuid
   computerId              String    @db.Uuid
@@ -475,7 +490,7 @@ model AgentActivity {
 /// required intent/reason, and whether it hit. Written for both `hit` and `not_found`; an
 /// invalid-input 400 (bad topic slug, invalid query, invalid intent/reason) is never recorded.
 model AgentManualEvent {
-  id           String    @id @default(uuid()) @db.Uuid
+  id           String    @id @default(uuid(7)) @db.Uuid
   workspaceId  String    @db.Uuid
   agentId      String    @db.Uuid
   kind         String
@@ -494,7 +509,7 @@ model AgentManualEvent {
 }
 
 model AgentApiKey {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(uuid(7)) @db.Uuid
   apiKeyHash  String    @unique
   agentId     String    @db.Uuid
   workspaceId String    @db.Uuid
@@ -515,7 +530,7 @@ model AgentApiKey {
 }
 
 model DaemonApiKey {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(uuid(7)) @db.Uuid
   apiKeyHash  String    @unique @map("api_key_hash")
   workspaceId String    @map("workspace_id") @db.Uuid
   computerId  String    @map("computer_id") @db.Uuid
@@ -556,7 +571,7 @@ model DaemonCredentialRevocation {
 /// and the user code is short enough to be typed - and therefore short enough to be guessed - so
 /// both are looked up by hash, the same way daemon API keys are.
 model DeviceAuthorization {
-  id             String    @id @default(uuid()) @db.Uuid
+  id             String    @id @default(uuid(7)) @db.Uuid
   deviceCodeHash String    @unique @map("device_code_hash")
   userCodeHash   String    @unique @map("user_code_hash")
   /// Null until a signed-in browser approves this grant; the token is minted for this user.
@@ -608,7 +623,7 @@ model WorkspaceMemberPreference {
 /// A reusable link anyone signed in can open to join the Workspace as an ordinary member (no role).
 /// "Updating" a link revokes it and creates a new one, so the old URL stops working at once.
 model WorkspaceJoinLink {
-  id              String    @id @default(uuid()) @db.Uuid
+  id              String    @id @default(uuid(7)) @db.Uuid
   workspaceId     String    @db.Uuid
   /// 32 random bytes, base64url. Plaintext: owners and admins see the link again.
   token           String    @unique
@@ -628,7 +643,7 @@ model WorkspaceJoinLink {
 }
 
 model Computer {
-  id                String                 @id @default(uuid()) @db.Uuid
+  id                String                 @id @default(uuid(7)) @db.Uuid
   ownerId           String                 @db.Uuid
   machineId         String
   name              String                 @default("")
@@ -657,7 +672,7 @@ model Computer {
 }
 
 model ComputerRuntime {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(uuid(7)) @db.Uuid
   workspaceId String    @db.Uuid
   computerId  String    @db.Uuid
   provider    String
@@ -674,7 +689,7 @@ model ComputerRuntime {
 }
 
 model ComputerModelCatalog {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(uuid(7)) @db.Uuid
   workspaceId String    @db.Uuid
   computerId  String    @db.Uuid
   provider    String
@@ -689,7 +704,7 @@ model ComputerModelCatalog {
 }
 
 model WorkspaceComputer {
-  id          String     @id @default(uuid()) @db.Uuid
+  id          String     @id @default(uuid(7)) @db.Uuid
   workspaceId String     @db.Uuid
   computerId  String     @db.Uuid
   workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -702,7 +717,7 @@ model WorkspaceComputer {
 }
 
 model Conversation {
-  id             String                 @id @default(uuid()) @db.Uuid
+  id             String                 @id @default(uuid(7)) @db.Uuid
   workspaceId    String                 @db.Uuid
   projectId      String?                @db.Uuid
   coordinatorAgentId String?             @db.Uuid
@@ -740,7 +755,7 @@ model Conversation {
 }
 
 model ConversationMember {
-  id                       String            @id @default(uuid()) @db.Uuid
+  id                       String            @id @default(uuid(7)) @db.Uuid
   conversationId           String            @db.Uuid
   workspaceId              String            @db.Uuid
   userId                   String?           @db.Uuid
@@ -804,7 +819,7 @@ model ConversationMember {
 }
 
 model Message {
-  id             String                 @id @default(uuid()) @db.Uuid
+  id             String                 @id @default(uuid(7)) @db.Uuid
   conversationId String                 @db.Uuid
   workspaceId    String                 @db.Uuid
   senderMemberId String?                @db.Uuid
@@ -894,7 +909,7 @@ model Task {
 /// Disposable runtime context for one Agent's attempt at one Task. The Agent identity and
 /// permissions remain on `Agent`; this record only fences Task execution and retries.
 model TaskExecutionSession {
-  id             String    @id @default(uuid()) @db.Uuid
+  id             String    @id @default(uuid(7)) @db.Uuid
   taskMessageId  String    @db.Uuid
   conversationId String    @db.Uuid
   workspaceId    String    @db.Uuid
@@ -919,7 +934,7 @@ model TaskExecutionSession {
 }
 
 model TaskHistoryEvent {
-  id            String   @id @default(uuid()) @db.Uuid
+  id            String   @id @default(uuid(7)) @db.Uuid
   taskMessageId String   @db.Uuid
   seq           Int
   eventType     String
@@ -1033,7 +1048,7 @@ model MessageMention {
 /// client-side Ignore writes nothing). Resolving it records the action taken; the row is kept so
 /// a repeated action reads as no longer pending. `id` is the resolution id the sender acts with.
 model PendingMentionAction {
-  id             String             @id @default(uuid()) @db.Uuid
+  id             String             @id @default(uuid(7)) @db.Uuid
   messageId      String             @db.Uuid
   conversationId String             @db.Uuid
   workspaceId    String             @db.Uuid
@@ -1118,7 +1133,7 @@ model ConversationPin {
 }
 
 model Attachment {
-  id              String       @id @default(uuid()) @db.Uuid
+  id              String       @id @default(uuid(7)) @db.Uuid
   workspaceId     String       @db.Uuid
   conversationId  String       @db.Uuid
   /// Exactly one of `uploaderId` / `uploaderAgentId` is set; enforced in
@@ -1151,7 +1166,7 @@ model Attachment {
 /// reserves ahead of time. `attachmentId` is not a foreign key — that row does not exist until
 /// verification succeeds — only a unique reservation the eventual `Attachment.id` must match.
 model AttachmentUploadSession {
-  id             String       @id @default(uuid()) @db.Uuid
+  id             String       @id @default(uuid(7)) @db.Uuid
   workspaceId    String       @db.Uuid
   conversationId String       @db.Uuid
   agentId        String       @db.Uuid
@@ -1177,7 +1192,7 @@ model AttachmentUploadSession {
 }
 
 model AgentMessageDelivery {
-  deliveryId     String       @id @default(uuid()) @db.Uuid
+  deliveryId     String       @id @default(uuid(7)) @db.Uuid
   messageId      String       @db.Uuid
   workspaceId    String       @db.Uuid
   conversationId String       @db.Uuid
@@ -1224,7 +1239,7 @@ model AgentMessageDelivery {
 
 /// Canonical cloud scheduling state. Daemons only own volatile timers for these records.
 model Reminder {
-  id                String                     @id @default(uuid()) @db.Uuid
+  id                String                     @id @default(uuid(7)) @db.Uuid
   workspaceId       String                     @db.Uuid
   ownerAgentId      String                     @db.Uuid
   computerId        String                     @db.Uuid
@@ -1270,7 +1285,7 @@ model ReminderOperationReceipt {
 }
 
 model ReminderEvent {
-  id           String    @id @default(uuid()) @db.Uuid
+  id           String    @id @default(uuid(7)) @db.Uuid
   reminderId   String    @db.Uuid
   workspaceId  String    @db.Uuid
   type         String
@@ -1303,7 +1318,7 @@ model ReminderFireReceipt {
 
 /// ISO week bucket for Workspace Records (成员周报 grouping).
 model WeeklyReportCycle {
-  id          String                 @id @default(uuid()) @db.Uuid
+  id          String                 @id @default(uuid(7)) @db.Uuid
   workspaceId String                 @db.Uuid
   year        Int
   week        Int
@@ -1322,7 +1337,7 @@ model WeeklyReportCycle {
 
 /// Member or cycle-template weekly report document with Markdown JSON body.
 model WeeklyReport {
-  id               String                 @id @default(uuid()) @db.Uuid
+  id               String                 @id @default(uuid(7)) @db.Uuid
   workspaceId      String                 @db.Uuid
   cycleId          String                 @db.Uuid
   authorId         String                 @db.Uuid
@@ -1374,7 +1389,7 @@ model WeeklyReportFavorite {
 
 /// Per-user send configuration (周报设置); not shared across Workspace members.
 model WeeklyReportTemplate {
-  id              String                          @id @default(uuid()) @db.Uuid
+  id              String                          @id @default(uuid(7)) @db.Uuid
   workspaceId     String                          @db.Uuid
   /// Owning User; list/mutate/apply are private to this user within the Workspace.
   ownerId         String                          @db.Uuid
@@ -1416,7 +1431,7 @@ model WeeklyReportTemplateRecipient {
 }
 
 model RecordNote {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(uuid(7)) @db.Uuid
   workspaceId String    @db.Uuid
   authorId    String    @db.Uuid
   title       String
@@ -1432,7 +1447,7 @@ model RecordNote {
 
 /// Side-panel comments on Record subjects; assistant authorType reserved for future AI.
 model RecordComment {
-  id                 String                          @id @default(uuid()) @db.Uuid
+  id                 String                          @id @default(uuid(7)) @db.Uuid
   workspaceId        String                          @db.Uuid
   /// report | cycle
   subjectType        String
@@ -1509,7 +1524,7 @@ model OpenVikingBinding {
 }
 
 model OpenVikingMappedIdentity {
-  id               String            @id @default(uuid()) @db.Uuid
+  id               String            @id @default(uuid(7)) @db.Uuid
   workspaceId      String            @map("workspace_id") @db.Uuid
   actorKind        String            @map("actor_kind")
   actorSubject     String            @map("actor_subject")
@@ -1529,7 +1544,7 @@ model OpenVikingMappedIdentity {
 
 /// Immutable admitted PublicChannel segment lineage.
 model AdmittedPublicChannelSegment {
-  id                String                         @id @default(uuid()) @db.Uuid
+  id                String                         @id @default(uuid(7)) @db.Uuid
   workspaceId       String                         @map("workspace_id") @db.Uuid
   segmentId         String                         @map("segment_id")
   channelId         String                         @map("channel_id")
@@ -1550,7 +1565,7 @@ model AdmittedPublicChannelSegment {
 }
 
 model AdmittedSegmentSourceMessage {
-  id          String                       @id @default(uuid()) @db.Uuid
+  id          String                       @id @default(uuid(7)) @db.Uuid
   workspaceId String                       @map("workspace_id") @db.Uuid
   segmentId   String                       @map("segment_id")
   messageId   String                       @map("message_id")
@@ -1565,7 +1580,7 @@ model AdmittedSegmentSourceMessage {
 
 /// One-sink dispatch ledger for an admitted segment. Replay/no-op on the same operation.
 model AdmittedSegmentDispatch {
-  id                String                       @id @default(uuid()) @db.Uuid
+  id                String                       @id @default(uuid(7)) @db.Uuid
   workspaceId       String                       @map("workspace_id") @db.Uuid
   segmentId         String                       @map("segment_id")
   operationId       String                       @map("operation_id")
@@ -1586,7 +1601,7 @@ model AdmittedSegmentDispatch {
 }
 
 model OpenVikingCitationRecord {
-  id               String                @id @default(uuid()) @db.Uuid
+  id               String                @id @default(uuid(7)) @db.Uuid
   workspaceId      String                @map("workspace_id") @db.Uuid
   citationId       String                @map("citation_id")
   accountId        String                @map("account_id")
@@ -1609,7 +1624,7 @@ model OpenVikingCitationRecord {
 
 /// Profile-neutral Memory Offer. Typed citation refs live in MemoryOfferCitation.
 model MemoryOfferRecord {
-  id                 String                @id @default(uuid()) @db.Uuid
+  id                 String                @id @default(uuid(7)) @db.Uuid
   workspaceId        String                @map("workspace_id") @db.Uuid
   operationId        String                @map("operation_id")
   conversationId     String                @map("conversation_id")
@@ -1625,7 +1640,7 @@ model MemoryOfferRecord {
 }
 
 model MemoryOfferCitation {
-  id                   String                  @id @default(uuid()) @db.Uuid
+  id                   String                  @id @default(uuid(7)) @db.Uuid
   workspaceId          String                  @map("workspace_id") @db.Uuid
   offerOperationId     String                  @map("offer_operation_id")
   citationKind         String                  @map("citation_kind")
@@ -1643,7 +1658,7 @@ model MemoryOfferCitation {
 
 /// Durable, leaseable Workspace-memory cleanup. Survives remote failure; Restrict blocks silent Workspace delete.
 model WorkspaceMemoryCleanupWork {
-  id             String    @id @default(uuid()) @db.Uuid
+  id             String    @id @default(uuid(7)) @db.Uuid
   workspaceId    String    @map("workspace_id") @db.Uuid
   operationId    String    @map("operation_id")
   target         String

@@ -1,9 +1,42 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
+import { humanLabel } from "#src/lib/human-label";
+import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "#src/features/agents/agent.schemas";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 
 export const WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME = "周报助手";
+
+const WEEKLY_REPORT_ASSISTANT_NAME_SUFFIX = "的周报助手";
+
+/** The name members see: 「李健的周报助手」. A blank person name keeps the generic label. */
+export function weeklyReportAssistantDisplayName(personName: string): string {
+  const person = personName.trim();
+  if (person.length === 0) return WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
+  const room = AGENT_DISPLAY_NAME_MAX_LENGTH - WEEKLY_REPORT_ASSISTANT_NAME_SUFFIX.length;
+  const fitted = person.length > room ? person.slice(0, room).trimEnd() : person;
+  if (fitted.length === 0) return WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
+  return `${fitted}${WEEKLY_REPORT_ASSISTANT_NAME_SUFFIX}`;
+}
+
+async function assistantLabelForUser(
+  tx: {
+    user: {
+      findUnique: (args: {
+        where: { id: string };
+        select: { username: true; displayName: true };
+      }) => Promise<{ username: string; displayName: string | null } | null>;
+    };
+  },
+  userId: string,
+): Promise<string> {
+  const user = await tx.user.findUnique({
+    where: { id: userId },
+    select: { username: true, displayName: true },
+  });
+  if (!user) return WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
+  return weeklyReportAssistantDisplayName(humanLabel(user));
+}
 
 export function weeklyReportAssistantAgentName(userId: string): string {
   return `weekly-report-assistant-${userId}`;
@@ -44,7 +77,22 @@ export async function ensureWeeklyReportAssistant(
           },
         },
       });
-      if (existing) return existing;
+      if (existing) {
+        const label = await assistantLabelForUser(tx, input.userId);
+        const agent = await tx.agent.findUnique({
+          where: {
+            workspaceId_name: { workspaceId: input.workspaceId, name: agentName },
+          },
+          select: { id: true, displayName: true },
+        });
+        if (agent && agent.displayName !== label) {
+          await tx.agent.update({
+            where: { id_workspaceId: { id: agent.id, workspaceId: input.workspaceId } },
+            data: { displayName: label },
+          });
+        }
+        return existing;
+      }
 
       const orphan = await tx.agent.findUnique({
         where: {
@@ -63,7 +111,7 @@ export async function ensureWeeklyReportAssistant(
         } = {};
         if (orphan.deletedAt) {
           patch.deletedAt = null;
-          patch.displayName = WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
+          patch.displayName = await assistantLabelForUser(tx, input.userId);
         }
         if (orphan.visibility !== AGENT_VISIBILITY.PRIVATE) {
           patch.visibility = AGENT_VISIBILITY.PRIVATE;
@@ -81,7 +129,7 @@ export async function ensureWeeklyReportAssistant(
             workspaceId: input.workspaceId,
             ownerId: input.userId,
             name: agentName,
-            displayName: WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
+            displayName: await assistantLabelForUser(tx, input.userId),
             description: "",
             visibility: AGENT_VISIBILITY.PRIVATE,
             runtimeConfig: {

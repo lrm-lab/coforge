@@ -11,14 +11,14 @@ import {
   agentRouteErrorResponse,
   readAgentJsonBody,
 } from "#src/server/agents/agent-http-routes.server";
+import type { AgentChannelManagementPrincipal } from "#src/server/agents/agent-channel-routes.server";
 
-export type AgentChannelMutePrincipal = { workspaceId: string; agentId: string };
-
+/** Mutes (`muted`) or unmutes a channel for the calling Agent; `unmute` is this with `false`. */
 export async function handleAgentChannelMutePost(
   request: Request,
   channel: string,
   muted: boolean,
-  principal: AgentChannelMutePrincipal,
+  principal: AgentChannelManagementPrincipal,
   repository: AgentMessageRepository,
 ): Promise<Response> {
   const scope = { workspaceId: principal.workspaceId, agentId: principal.agentId };
@@ -32,7 +32,7 @@ export async function handleAgentChannelMutePost(
     };
     return Response.json(response);
   } catch (error) {
-    return agentRouteErrorResponse(error, "channel mute failed", [
+    return agentRouteErrorResponse(error, muted ? "channel mute failed" : "channel unmute failed", [
       "mute requires a channel target",
     ]);
   }

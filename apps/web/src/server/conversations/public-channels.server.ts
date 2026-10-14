@@ -65,7 +65,11 @@ import {
   releaseMentionActions,
   type MentionActionResult,
 } from "./pending-mention-actions.server";
-import { deliveryMentionsAgent, mentionAffinityScores } from "./mentions.server";
+import {
+  deliveryMentionsAgent,
+  mentionAffinityScores,
+  type RecentMentionRow,
+} from "./mentions.server";
 import { toggleUserMessageReaction } from "./user-message-reactions.server";
 import {
   announceChannelTasksDeleted,
@@ -87,6 +91,7 @@ import {
   visibleAgentWhere,
 } from "#src/server/agents/agent-visibility.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 
 /** A channel actor is either a human (by Workspace `userId`) or an Agent (by `agentId`); the
  * human/Web UI and the Agent CLI share `PublicChannels.members`/`addMembers` through this. */
@@ -402,6 +407,16 @@ function isClosedAndUnpinned(channel: {
 }): boolean {
   const member = channel.members[0];
   return member?.hiddenAt != null && member.pins.length === 0;
+}
+
+/** The Workspace's channels as every read here sees them: channels only (not DMs), and not hidden
+ * from the Workspace. A caller narrows it further (`id`, `archivedAt`) by spreading it. */
+function visibleChannelWhere(workspaceId: string) {
+  return {
+    workspaceId,
+    channelName: { not: null },
+    ...VISIBLE_CONVERSATION_WHERE,
+  } satisfies Prisma.ConversationWhereInput;
 }
 
 /** Workspace-visible history with per-Agent notification preferences. */
@@ -770,11 +785,8 @@ export class PublicChannels {
     return resolveChannelThreadRoot(this.db, conversationId, anchor);
   }
 
-  private async authorize(workspaceId: string, userId: string) {
-    const membership = await this.db.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-    });
-    if (!membership) throw new AppError("ACCESS_DENIED");
+  private authorize(workspaceId: string, userId: string) {
+    return requireWorkspaceMember(this.db, workspaceId, userId);
   }
 
   /** The `ChannelActor` equivalent of `authorize`: a human must be a Workspace member, an Agent
@@ -798,7 +810,7 @@ export class PublicChannels {
   async names(workspaceId: string, userId: string) {
     await this.authorize(workspaceId, userId);
     const channels = await this.db.conversation.findMany({
-      where: { workspaceId, channelName: { not: null }, ...VISIBLE_CONVERSATION_WHERE },
+      where: visibleChannelWhere(workspaceId),
       select: { id: true, channelName: true, description: true, archivedAt: true },
     });
     return channels.map((channel) => ({ id: channel.id, ...channelInfoOf(channel) }));
@@ -807,7 +819,7 @@ export class PublicChannels {
   async list(workspaceId: string, userId: string) {
     await this.authorize(workspaceId, userId);
     const channelRows = this.db.conversation.findMany({
-      where: { workspaceId, channelName: { not: null }, ...VISIBLE_CONVERSATION_WHERE },
+      where: visibleChannelWhere(workspaceId),
       orderBy: { channelName: "asc" },
       select: {
         id: true,
@@ -1079,16 +1091,26 @@ export class PublicChannels {
    * message, so message order is mention order. `memberId` is the viewer's member row, left or
    * not (someone who left still ranks by what they wrote); a reader with no member row has
    * mentioned no one here.
+   *
+   * Each message's mentions are a LATERAL read by its key, so the walk stops at the 50th mention.
+   * A relation filter (`mentions: { some: {} }`) let the planner hash every `message_mentions`
+   * row in the database to semi-join the viewer's messages against them.
    */
-  private async viewerRecentMentions(memberId: string | undefined) {
+  private async viewerRecentMentions(memberId: string | undefined): Promise<RecentMentionRow[]> {
     if (!memberId) return [];
-    const messages = await this.db.message.findMany({
-      where: { senderMemberId: memberId, mentions: { some: {} } },
-      orderBy: { sequence: "desc" },
-      take: 50,
-      select: { mentions: { select: { kind: true, actorId: true, createdAt: true } } },
-    });
-    return messages.flatMap((message) => message.mentions).slice(0, 50);
+    return this.db.$queryRaw<RecentMentionRow[]>`
+      SELECT mm."kind", mm."actorId"::text AS "actorId", mm."createdAt"
+      FROM "messages" m
+      CROSS JOIN LATERAL (
+        SELECT mm."kind", mm."actorId", mm."createdAt" FROM "message_mentions" mm
+        WHERE mm."messageId" = m."id" AND mm."conversationId" = m."conversationId"
+        -- No message contributes more than the outer LIMIT anyway; this one keeps PostgreSQL
+        -- from pulling the subquery up into the hash join the relation filter got.
+        LIMIT 50
+      ) mm
+      WHERE m."senderMemberId" = ${memberId}::uuid
+      ORDER BY m."sequence" DESC
+      LIMIT 50`;
   }
 
   /**
@@ -1296,12 +1318,7 @@ export class PublicChannels {
     const serverRole = await resolveActorServerRole(this.db, workspaceId, { userId });
     if (!canListArchivedChannels(serverRole)) throw new AppError("ACCESS_DENIED");
     const channels = await this.db.conversation.findMany({
-      where: {
-        workspaceId,
-        channelName: { not: null },
-        archivedAt: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
+      where: { ...visibleChannelWhere(workspaceId), archivedAt: { not: null } },
       orderBy: [{ archivedAt: "desc" }, { channelName: "asc" }],
       select: { id: true, channelName: true, archivedAt: true },
     });
@@ -1314,12 +1331,7 @@ export class PublicChannels {
 
   private async findChannelById(workspaceId: string, channelId: string) {
     const channel = await this.db.conversation.findFirst({
-      where: {
-        id: channelId,
-        workspaceId,
-        channelName: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
+      where: { id: channelId, ...visibleChannelWhere(workspaceId) },
       select: { id: true, channelName: true, description: true, archivedAt: true },
     });
     if (!channel) throw new AppError("NOT_FOUND");
@@ -1339,12 +1351,7 @@ export class PublicChannels {
         select: { role: true },
       }),
       this.db.conversation.findFirst({
-        where: {
-          id: channelId,
-          workspaceId,
-          channelName: { not: null },
-          ...VISIBLE_CONVERSATION_WHERE,
-        },
+        where: { id: channelId, ...visibleChannelWhere(workspaceId) },
         include: {
           project: {
             select: { id: true, name: true, slug: true, githubFullName: true, githubHtmlUrl: true },
@@ -1473,16 +1480,7 @@ export class PublicChannels {
     channelId: string,
     target: ChannelActor,
   ) {
-    const channel = await this.db.conversation.findFirst({
-      where: {
-        id: channelId,
-        workspaceId,
-        channelName: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
-      select: { id: true, channelName: true },
-    });
-    if (!channel) throw new AppError("NOT_FOUND");
+    const channel = await this.findChannelById(workspaceId, channelId);
     if (channel.channelName === "general") throw new AppError("CONFLICT");
     const authority = await resolveChannelAuthority(
       this.db,
@@ -1520,16 +1518,7 @@ export class PublicChannels {
    */
   async members(workspaceId: string, actor: ChannelActor, channelId: string) {
     await this.authorizeActor(workspaceId, actor);
-    const channel = await this.db.conversation.findFirst({
-      where: {
-        id: channelId,
-        workspaceId,
-        channelName: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
-      select: { id: true, channelName: true, archivedAt: true },
-    });
-    if (!channel) throw new AppError("NOT_FOUND");
+    const channel = await this.findChannelById(workspaceId, channelId);
     const isGeneral = channel.channelName === "general";
 
     const [memberRows, workspaceUsers, workspaceAgents, actorServerRole] = await Promise.all([
@@ -1691,16 +1680,7 @@ export class PublicChannels {
     input: { userIds: string[]; agentIds: string[] },
   ) {
     await this.authorizeActor(workspaceId, actor);
-    const channel = await this.db.conversation.findFirst({
-      where: {
-        id: channelId,
-        workspaceId,
-        channelName: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
-      select: { id: true, archivedAt: true },
-    });
-    if (!channel) throw new AppError("NOT_FOUND");
+    const channel = await this.findChannelById(workspaceId, channelId);
     // Nobody joins an archived channel, including by being added.
     if (channel.archivedAt) throw new AppError("CONFLICT");
 

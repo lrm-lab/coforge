@@ -63,7 +63,7 @@ export function assertCanDeleteAgents(actorRole: WorkspaceMemberRole): void {
 export const AGENT_CONTROL_CAPABILITIES = ["controlAgentRuntime", "resetAgentWorkspace"] as const;
 export type AgentControlCapability = (typeof AGENT_CONTROL_CAPABILITIES)[number];
 
-export function hasAgentControlCapability(
+function hasAgentControlCapability(
   actorRole: WorkspaceMemberRole,
   capability: AgentControlCapability,
 ): boolean {

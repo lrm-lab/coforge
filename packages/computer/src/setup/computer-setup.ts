@@ -1,6 +1,6 @@
 import type { AccessibleWorkspace, Credential } from "#src/login";
 import { loadBuildProfile, type ComputerConfig } from "#src/local-config";
-import { CliError, setupError } from "#src/errors";
+import { CliError, setupError, type SetupErrorCode } from "#src/errors";
 import type {
   ComputerRegisterRequest,
   ComputerRegistrationClient,
@@ -70,30 +70,23 @@ export class ComputerSetup {
       typeof this.options.launcher === "function"
         ? this.options.launcher(serverUrl)
         : this.options.launcher;
-    try {
-      await launcher.preflight?.();
-    } catch (error) {
-      if (error instanceof CliError) throw error;
-      throw setupError(
-        "SETUP_BUILD_ENVIRONMENT_MISMATCH",
-        "The existing Daemon belongs to another server environment.",
+    await setupStep(
+      "SETUP_BUILD_ENVIRONMENT_MISMATCH",
+      "The existing Daemon belongs to another server environment.",
+      async () => launcher.preflight?.(),
+    );
+    let credential: Credential | null = await setupStep(
+      "SETUP_CREDENTIALS_FAILED",
+      "Could not read the local login credential.",
+      () => this.options.credentials.load(serverUrl),
+    );
+    const authenticate = this.options.authenticate;
+    if (!credential && authenticate) {
+      credential = await setupStep(
+        "SETUP_OAUTH_FAILED",
+        "OAuth login could not be completed.",
+        () => authenticate.authenticate(serverUrl, input.json ?? false),
       );
-    }
-    let storedCredential: Credential | null;
-    try {
-      storedCredential = await this.options.credentials.load(serverUrl);
-    } catch (error) {
-      if (error instanceof CliError) throw error;
-      throw setupError("SETUP_CREDENTIALS_FAILED", "Could not read the local login credential.");
-    }
-    let credential: Credential | null = storedCredential;
-    if (!credential && this.options.authenticate) {
-      try {
-        credential = await this.options.authenticate.authenticate(serverUrl, input.json ?? false);
-      } catch (error) {
-        if (error instanceof CliError) throw error;
-        throw setupError("SETUP_OAUTH_FAILED", "OAuth login could not be completed.");
-      }
     }
     if (!credential)
       throw setupError("SETUP_NOT_LOGGED_IN", "No login credential exists for the current server.");
@@ -150,36 +143,33 @@ export class ComputerSetup {
       | undefined;
     try {
       const metadata = await this.options.metadataProvider.get();
-      let response: Awaited<ReturnType<ComputerRegistrationClient["register"]>>;
-      try {
-        response = await this.options.registrationFactory(serverUrl, credential).register({
-          protocolMajor: 1,
-          requestId: this.options.idempotencyKeyProvider.create(
-            serverUrl,
-            input.workspaceSlug ?? workspace.slug,
-          ),
-          workspaceSlug: workspace.slug,
-          name: metadata.name,
-          displayName: metadata.displayName,
-          machineId: metadata.machineId,
-          platform: metadata.platform,
-          osVersion: metadata.osVersion,
-          computerVersion: metadata.computerVersion,
-          // Runtime inventory is discovered and published by the Daemon after
-          // it owns the Workspace connection. Computer registration contains
-          // machine identity only; it must not snapshot provider installs.
-          registrationIdempotencyKey: this.options.idempotencyKeyProvider.create(
-            serverUrl,
-            `${input.workspaceSlug ?? workspace.slug}:${metadata.machineId}`,
-          ),
-        });
-      } catch (error) {
-        if (error instanceof CliError) throw error;
-        throw setupError(
-          "SETUP_COMPUTER_REGISTER_FAILED",
-          "Computer registration could not be completed.",
-        );
-      }
+      const registered = credential;
+      const response = await setupStep(
+        "SETUP_COMPUTER_REGISTER_FAILED",
+        "Computer registration could not be completed.",
+        () =>
+          this.options.registrationFactory(serverUrl, registered).register({
+            protocolMajor: 1,
+            requestId: this.options.idempotencyKeyProvider.create(
+              serverUrl,
+              input.workspaceSlug ?? workspace.slug,
+            ),
+            workspaceSlug: workspace.slug,
+            name: metadata.name,
+            displayName: metadata.displayName,
+            machineId: metadata.machineId,
+            platform: metadata.platform,
+            osVersion: metadata.osVersion,
+            computerVersion: metadata.computerVersion,
+            // Runtime inventory is discovered and published by the Daemon after
+            // it owns the Workspace connection. Computer registration contains
+            // machine identity only; it must not snapshot provider installs.
+            registrationIdempotencyKey: this.options.idempotencyKeyProvider.create(
+              serverUrl,
+              `${input.workspaceSlug ?? workspace.slug}:${metadata.machineId}`,
+            ),
+          }),
+      );
       workspace = { id: response.workspaceId, slug: workspace.slug, name: workspace.name };
       registeredRegistration = {
         id: response.workspaceId,
@@ -188,30 +178,27 @@ export class ComputerSetup {
       };
       // Start first: the Daemon must accept its credential before local
       // configuration advertises this registration as usable.
-      try {
-        // The Coordinator answers by its deadline: the configuration is taken even when the
-        // Workspace is still starting, so the registration below is still saved.
-        const started = await launcher.ensureStarted({
-          workspaceId: response.workspaceId,
-          computerId: response.computerId,
-          workspaceRoot: this.options.workspaceRoot,
-          daemonApiKey: response.daemonApiKey,
-          serverHttpUrl: serverUrl,
-        });
-        daemonStillStarting = started?.lifecycleUnderWay === true;
-      } catch (error) {
-        if (error instanceof CliError) throw error;
-        throw setupError("SETUP_DAEMON_START_FAILED", "The Daemon could not be started.");
-      }
-      try {
-        configPath = await this.options.config.saveRegistration(registeredRegistration);
-      } catch (error) {
-        if (error instanceof CliError) throw error;
-        throw setupError(
-          "SETUP_CONFIG_WRITE_FAILED",
-          "Could not save the Workspace configuration.",
-        );
-      }
+      // The Coordinator answers by its deadline: the configuration is taken even when the
+      // Workspace is still starting, so the registration below is still saved.
+      const started = await setupStep(
+        "SETUP_DAEMON_START_FAILED",
+        "The Daemon could not be started.",
+        () =>
+          launcher.ensureStarted({
+            workspaceId: response.workspaceId,
+            computerId: response.computerId,
+            workspaceRoot: this.options.workspaceRoot,
+            daemonApiKey: response.daemonApiKey,
+            serverHttpUrl: serverUrl,
+          }),
+      );
+      daemonStillStarting = started?.lifecycleUnderWay === true;
+      const registration = registeredRegistration;
+      configPath = await setupStep(
+        "SETUP_CONFIG_WRITE_FAILED",
+        "Could not save the Workspace configuration.",
+        () => this.options.config.saveRegistration(registration),
+      );
     } catch (error) {
       if (error instanceof CliError) throw error;
       throw setupError(
@@ -223,5 +210,23 @@ export class ComputerSetup {
     }
 
     return { workspace, configPath, ...(daemonStillStarting ? { daemonStillStarting: true } : {}) };
+  }
+}
+
+/**
+ * Runs one setup step, passing a `CliError` it throws through unchanged and reporting any other
+ * failure as the step's own setup error, so a user sees which step failed rather than a raw
+ * exception.
+ */
+async function setupStep<T>(
+  code: SetupErrorCode,
+  message: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    throw setupError(code, message);
   }
 }

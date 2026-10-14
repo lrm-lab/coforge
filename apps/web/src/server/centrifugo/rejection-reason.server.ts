@@ -1,3 +1,5 @@
+import { errorType } from "#src/server/errors/error-type.server";
+
 /**
  * What a rejected Agent RPC result logs as.
  *
@@ -12,5 +14,5 @@
 export function rejectionReason(error: unknown, known: ReadonlySet<string>): string {
   const message = error instanceof Error ? error.message : undefined;
   if (message && known.has(message)) return message;
-  return `unexpected: ${error instanceof Error ? error.name : typeof error}`;
+  return `unexpected: ${errorType(error)}`;
 }

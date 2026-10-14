@@ -4,7 +4,7 @@ import { getSignedInAccount } from "#src/features/auth/current-user.functions";
 import { nameStepRedirect } from "#src/features/auth/name-step-redirect";
 import { inspectWorkspaceJoinLink } from "#src/features/workspaces/join-links.functions";
 import { JoinWorkspacePage } from "#src/features/workspaces/join-workspace-page";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 
 /**
  * An invite link. Outside the Workspace layout on purpose: the visitor may be signed out or in no
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/join/$token")({
   loader: async ({ params }) => {
     const [preview, viewer] = await Promise.all([
       inspectWorkspaceJoinLink({ data: { token: params.token } }).catch((error: unknown) => {
-        if (isAppError(error) && error.code === "NOT_FOUND") return null;
+        if (isAppErrorCode(error, "NOT_FOUND")) return null;
         throw error;
       }),
       getSignedInAccount(),

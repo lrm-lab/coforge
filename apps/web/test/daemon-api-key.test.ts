@@ -5,17 +5,20 @@ import {
   computerRegistrationJwks,
   hashDaemonApiKey,
   verifyDaemonApiKey,
+  type DaemonApiKeyMint,
   type DaemonApiKeyRecord,
   type DaemonApiKeyRepository,
 } from "#src/server/auth/daemon-api-key.server";
 
 class MemoryDaemonApiKeys implements DaemonApiKeyRepository {
   records = new Map<string, DaemonApiKeyRecord>();
-  async replaceActive(record: DaemonApiKeyRecord) {
+  async replaceActive(record: DaemonApiKeyMint) {
+    // Emulate the Prisma client generating the uuid(7) default at create time.
+    const stored: DaemonApiKeyRecord = { id: crypto.randomUUID(), ...record };
     for (const [hash, value] of this.records)
       if (value.computerId === record.computerId)
         this.records.set(hash, { ...value, revokedAt: new Date() });
-    this.records.set(record.apiKeyHash, record);
+    this.records.set(stored.apiKeyHash, stored);
   }
   async findByHash(hash: string) {
     return this.records.get(hash);

@@ -4,6 +4,7 @@ import {
   type DeliveryUrlRule,
 } from "./delivery-base-url.server";
 import { readEnvSecret } from "./env-secret.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /**
  * Private CDN delivery for immutable object keys (chat attachment images today). Bytes still
@@ -184,10 +185,10 @@ function inlineFileDeliveryConfig(
 }
 
 function deliveryErrorStatus(error: unknown): FileDeliveryStatus {
-  const errorType = error instanceof Error ? error.name : typeof error;
+  const type = errorType(error);
   // Message text may name a file path; the type alone says whether the secret is the problem.
-  console.error(JSON.stringify({ event: "file_delivery_unavailable", errorType }));
-  return { state: "error", errorType };
+  console.error(JSON.stringify({ event: "file_delivery_unavailable", errorType: type }));
+  return { state: "error", errorType: type };
 }
 
 export function createFileDelivery(config: FileDeliveryConfig): FileDelivery | null {

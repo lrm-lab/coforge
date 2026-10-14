@@ -29,8 +29,7 @@ These rules apply to `src/features/conversations/`.
   a DM by its conversation id; only a "start" affordance knows just an Agent or
   a member.
   Every DM row, its pin, menu actions, unread badge and read-cursor key go by
-  conversation id (`dm:<conversationId>` for the cursor); only the live Agent
-  activity strip looks a DM up by its Agent.
+  conversation id (`dm:<conversationId>` for the cursor).
   Headers with creation actions stay visible even when their lists are empty.
 - The sidebar's channel and DM lists live in `sidebar-collections.ts` (collections and changes,
   tested without React) and `sidebar-lists.ts` (hooks). The chat layout's (`_chat`) loader fetches
@@ -169,8 +168,6 @@ These rules apply to `src/features/conversations/`.
   A channel send carries the pinned members as `mentions`; a direct conversation gets the rewritten
   text only. A member's name typed by hand offers `UnpinnedMentionHint`. Whether the viewer is
   mentioned, and which reaction is theirs, is decided by `viewerId`.
-- The live Agent activity strip shows one notable display (working, thinking,
-  or error; newest cloud revision). Idle and offline stay in the directory.
 - A channel's members are a page of its settings panel
   (`channel-members-page.tsx`): the Members summary opens the roster and its
   "+" the add view, both in place of the settings, with Back. An Agent row
@@ -199,7 +196,13 @@ These rules apply to `src/features/conversations/`.
 - Leaving a channel reuses the never-joined read-only conversation state and
   `joined: false` in the channel list. Do not add a separate "left" state.
 - A human commits an action card through `CreateChannelDialog`, `AgentCreateDialog`, or
-  `ChannelMembersDialog` with their preselect/commit props; the sidebar "+" is the dialog's
-  `memberPicker` mode (public Agents only). Do not build card-specific creation forms.
+  `ChannelAddMembersDialog` with their preselect/commit props; the sidebar "+" is the create
+  dialog's `memberPicker` mode (public Agents only). Do not build card-specific creation forms.
+  `ChannelAddMembersDialog` answers one question — who joins this channel now: the card's
+  proposal arrives picked and individually removable, with the same search over the Workspace's
+  people and Agents outside the channel. It does not show the roster; that is the settings
+  panel's members page. Both pickers compose `channel-member-picker.tsx` (the candidate model,
+  the picked chips and the ticked rows) and read the one `channelMembersQueryKey` query through
+  `channel-members-query.ts`, so neither grows its own candidate list.
 - The browser refreshes only the pending action cards it shows, through
   `loadActionCardStates` on the `messageAvailable` signal and on window focus.

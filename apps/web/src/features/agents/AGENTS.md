@@ -4,6 +4,10 @@ These rules apply to `src/features/agents/`.
 
 ## Agent state in the browser
 
+- Opening the runtime model list reads the stored catalog. Only the explicit
+  refresh button probes the Computer; it waits for that request's terminal
+  reply. A failed or timed-out probe retains the old list and shows an error.
+
 - `WorkspaceAgentsProvider` (`workspace-agents-realtime.tsx`) is the app
   shell's one Agent status subscription and one Activity subscription.
   Avatars, pages, and panels read through its hooks (`useLiveAgents`,
@@ -106,6 +110,13 @@ These rules apply to `src/features/agents/`.
   label.
 - `deleted-agent.tsx` owns deleted-sender rendering (grey avatar and `DELETED`
   badge) for every message-history surface. Use it rather than local styling.
+- `agent-avatar-dialog.tsx` is the creator's change-avatar dialog, opened by
+  clicking the avatar in the Profile tab: the pool's pictures
+  (`avatar-pictures/pictures.ts`, `?url` imports with content-hashed addresses,
+  preview only) plus an upload tile; nothing is saved before Save. A picture
+  chosen there is stored as the Agent's own avatar like an upload, never as a
+  platform assignment (see `src/server/agents/AGENTS.md`). The ids must match the
+  server's pool.
 - `agent-visibility.ts` holds the `AgentVisibility` vocabulary outside any
   `.server.ts` file so browser validators can import it.
 - The environment editor edits only user-declared Agent environment overrides.

@@ -6,7 +6,7 @@ const FIND_DEBOUNCE_MS = 120;
 const FIND_HIGHLIGHT = "pfv-find";
 const FIND_ACTIVE_HIGHLIGHT = "pfv-find-active";
 
-export function supportsFindHighlighting(): boolean {
+function supportsFindHighlighting(): boolean {
   return (
     typeof window !== "undefined" &&
     typeof Highlight !== "undefined" &&

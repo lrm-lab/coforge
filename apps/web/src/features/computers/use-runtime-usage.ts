@@ -5,7 +5,7 @@ import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { readUsage } from "./computers.functions";
 import { scanRuntimeUsage } from "./usage-scan";
 
-export function runtimeUsageQueryKey(computerId: string, provider: RuntimeProvider) {
+function runtimeUsageQueryKey(computerId: string, provider: RuntimeProvider) {
   return ["runtime-usage", computerId, provider] as const;
 }
 

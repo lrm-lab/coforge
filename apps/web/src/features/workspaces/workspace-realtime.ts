@@ -1,4 +1,4 @@
-import { utf8Decoder } from "@lrm/coforge-sdk/internal";
+import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
 import { z } from "zod";
 
 /**
@@ -15,14 +15,7 @@ const workspaceDeletedEvent = z.object({
 
 /** The event, or undefined for any other publication on the channel (most are messages). */
 export function decodeWorkspaceDeletedEvent(value: unknown): WorkspaceDeletedEvent | undefined {
-  let data = value;
-  if (value instanceof Uint8Array) {
-    try {
-      data = JSON.parse(utf8Decoder.decode(value)) as unknown;
-    } catch {
-      return undefined;
-    }
-  }
+  const data = publicationDataOrUndefined(value);
   // The channel carries every message signal: anything else leaves before the full parse.
   if (!data || typeof data !== "object" || Reflect.get(data, "type") !== "workspace.deleted.v1")
     return undefined;

@@ -526,6 +526,59 @@ describe("SendDirectMessage", () => {
     ]);
   });
 
+  test("reads an Agent channel send's mention report while its publications run, and answers after both", async () => {
+    // The report is released only once the notifier is waiting on it: a send that read the report
+    // after its publications would leave the notifier waiting, and the timeout rejects the send.
+    let releaseNotifier!: () => void;
+    const reportRead = new Promise<void>((resolve) => (releaseNotifier = resolve));
+    let notified = false;
+    const repository = {
+      async sendMessage() {
+        throw new Error("not used");
+      },
+      async getOrCreateUserAgent() {
+        throw new Error("not used");
+      },
+      async getAgentChannel() {
+        return { id: "channel-a" };
+      },
+      async sendAgentMessage() {
+        return { ...persisted, deliveryId: undefined, target: "#general" };
+      },
+      async agentMentionReport() {
+        releaseNotifier();
+        return { pendingMentionActions: [], unresolvedMentionHandles: ["nobody"] };
+      },
+    } satisfies DirectConversationRepository;
+    const useCase = new SendDirectMessage(
+      repository,
+      new MemoryMessageRequestIdempotency(),
+      { async publish() {} },
+      undefined,
+      {
+        async notifyMessage() {
+          await Promise.race([
+            reportRead,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("the report waited for the publications")), 500),
+            ),
+          ]);
+          notified = true;
+        },
+      },
+    );
+
+    const sent = await useCase.executeFromAgent({
+      idempotencyKey: "channel-request",
+      workspaceId: "workspace-a",
+      agentId: "agent-a",
+      target: "#general",
+      body: "Hi @nobody",
+    });
+    expect(sent).toMatchObject({ id: "message-a", unresolvedMentionHandles: ["nobody"] });
+    expect(notified).toBe(true);
+  });
+
   test("forwards attachmentIds and mentions from an Agent send to the repository, in order", async () => {
     const calls: unknown[] = [];
     const mentions = [{ type: "user" as const, id: "actor-1", name: "ada" }];

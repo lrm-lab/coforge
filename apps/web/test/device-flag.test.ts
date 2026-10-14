@@ -5,12 +5,10 @@ import {
   readDeviceFlag,
   writeDeviceFlag,
 } from "#src/features/settings/device-flag";
-import { RAIL_LABELS_BOOT } from "#src/features/settings/rail-labels";
 import { MESSAGE_WIDTH_BOOT } from "#src/features/settings/message-width";
 import { HIDE_EMPTY_SIDEBAR_SECTIONS_BOOT } from "#src/features/settings/hide-empty-sidebar-sections";
 import { readHideEmptySidebarSections } from "#src/features/settings/hide-empty-sidebar-sections";
 import { readMessageFullWidth } from "#src/features/settings/message-width";
-import { readRailLabels } from "#src/features/settings/rail-labels";
 import {
   SIDEBAR_EXPANDED_BOOT,
   readSidebarExpanded,
@@ -74,12 +72,6 @@ test("writes show/hide and stays quiet when storage refuses", () => {
   expect(() => writeDeviceFlag("coforge-x", true)).not.toThrow();
 });
 
-test("the rail-labels boot fragment agrees with the module about the hidden value", () => {
-  expect(RAIL_LABELS_BOOT).toContain("coforge-rail-labels");
-  expect(RAIL_LABELS_BOOT).toContain(`"${DEVICE_FLAG_HIDDEN}"`);
-  expect(RAIL_LABELS_BOOT).toContain("rail-labels-hidden");
-});
-
 test("the message-width boot fragment carries the same key, stored value and class the reader uses", () => {
   expect(MESSAGE_WIDTH_BOOT).toBe(
     'if(localStorage.getItem("coforge-message-width")==="full"){document.documentElement.classList.add("message-full-width")}',
@@ -111,14 +103,6 @@ function classAddedBy(fragment: string, seed: Record<string, string>): string[] 
  *  fragment is the SSR half of the same rule, so a disagreement shows up as a flash of the wrong
  *  layout, not as a failed read. */
 const PRE_PAINTING_SETTINGS = [
-  {
-    name: "rail labels",
-    fragment: RAIL_LABELS_BOOT,
-    key: "coforge-rail-labels",
-    className: "rail-labels-hidden",
-    // the class hides the captions, so it applies when the reader says "do not show"
-    classApplies: () => !readRailLabels(),
-  },
   {
     name: "expanded sidebar",
     fragment: SIDEBAR_EXPANDED_BOOT,

@@ -6,6 +6,44 @@ const MENTION_DELIVERIES_ROUTE = {
     `/api/agent/v1/messages/${encodeURIComponent(messageId)}/mention-deliveries`,
 } as const;
 
+/** `coforge user info`: one human or Agent by name. Same route under `proxy`, `local` and `cloud`. */
+const USERS_ROUTE = {
+  method: "GET",
+  path: (name: string) => `/api/agent/v1/users/${encodeURIComponent(name)}`,
+} as const;
+
+/** `coforge mention pending|execute`. Same routes under `proxy`, `local` and `cloud`. */
+const MENTION_ACTIONS_ROUTES = {
+  pending: { method: "GET", path: "/api/agent/v1/mention-actions/pending" },
+  execute: { method: "POST", path: "/api/agent/v1/mention-actions/execute" },
+} as const;
+
+/** `coforge profile show|update`. Same routes under `proxy`, `local` and `cloud`. */
+const PROFILE_ROUTES = {
+  get: { method: "GET", path: "/api/agent/v1/profile" },
+  update: { method: "POST", path: "/api/agent/v1/profile" },
+} as const;
+
+/** Resumable attachment uploads. Same routes under `local` and `cloud`. */
+const ATTACHMENT_UPLOAD_SESSION_ROUTES = {
+  create: { method: "POST", path: "/api/agent/v1/attachment-upload-sessions" },
+  complete: {
+    method: "POST",
+    path: (uploadId: string) =>
+      `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}/complete`,
+  },
+  cancel: {
+    method: "DELETE",
+    path: (uploadId: string) =>
+      `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}`,
+  },
+  get: {
+    method: "GET",
+    path: (uploadId: string) =>
+      `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}`,
+  },
+} as const;
+
 /** Public Agent API route contract shared by clients and HTTP adapters. */
 export const agentApiRoutes = {
   proxy: {
@@ -33,19 +71,10 @@ export const agentApiRoutes = {
     githubCommitTrailers: { method: "POST", path: "/api/agent/v1/github-commit-trailers" },
     channels: { method: "POST", path: "/api/agent/v1/channels" },
     openviking: { method: "POST", path: "/api/agent/v1/openviking" },
-    users: {
-      method: "GET",
-      path: (name: string) => `/api/agent/v1/users/${encodeURIComponent(name)}`,
-    },
-    mentionActions: {
-      pending: { method: "GET", path: "/api/agent/v1/mention-actions/pending" },
-      execute: { method: "POST", path: "/api/agent/v1/mention-actions/execute" },
-    },
+    users: USERS_ROUTE,
+    mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
-    profile: {
-      get: { method: "GET", path: "/api/agent/v1/profile" },
-      update: { method: "POST", path: "/api/agent/v1/profile" },
-    },
+    profile: PROFILE_ROUTES,
   },
   local: {
     messages: {
@@ -75,37 +104,11 @@ export const agentApiRoutes = {
         `/api/agent/v1/attachments/${encodeURIComponent(attachmentId)}`,
       upload: { method: "POST", path: "/api/agent/v1/attachments" },
     },
-    attachmentUploadSessions: {
-      create: { method: "POST", path: "/api/agent/v1/attachment-upload-sessions" },
-      complete: {
-        method: "POST",
-        path: (uploadId: string) =>
-          `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}/complete`,
-      },
-      cancel: {
-        method: "DELETE",
-        path: (uploadId: string) =>
-          `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}`,
-      },
-      get: {
-        method: "GET",
-        path: (uploadId: string) =>
-          `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}`,
-      },
-    },
-    users: {
-      method: "GET",
-      path: (name: string) => `/api/agent/v1/users/${encodeURIComponent(name)}`,
-    },
-    mentionActions: {
-      pending: { method: "GET", path: "/api/agent/v1/mention-actions/pending" },
-      execute: { method: "POST", path: "/api/agent/v1/mention-actions/execute" },
-    },
+    attachmentUploadSessions: ATTACHMENT_UPLOAD_SESSION_ROUTES,
+    users: USERS_ROUTE,
+    mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
-    profile: {
-      get: { method: "GET", path: "/api/agent/v1/profile" },
-      update: { method: "POST", path: "/api/agent/v1/profile" },
-    },
+    profile: PROFILE_ROUTES,
   },
   cloud: {
     workspace: { info: { method: "GET", path: "/api/agent/v1/workspace" } },
@@ -210,37 +213,11 @@ export const agentApiRoutes = {
         `/api/agent/v1/attachments/${encodeURIComponent(attachmentId)}`,
       upload: { method: "POST", path: "/api/agent/v1/attachments" },
     },
-    attachmentUploadSessions: {
-      create: { method: "POST", path: "/api/agent/v1/attachment-upload-sessions" },
-      complete: {
-        method: "POST",
-        path: (uploadId: string) =>
-          `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}/complete`,
-      },
-      cancel: {
-        method: "DELETE",
-        path: (uploadId: string) =>
-          `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}`,
-      },
-      get: {
-        method: "GET",
-        path: (uploadId: string) =>
-          `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}`,
-      },
-    },
-    users: {
-      method: "GET",
-      path: (name: string) => `/api/agent/v1/users/${encodeURIComponent(name)}`,
-    },
-    mentionActions: {
-      pending: { method: "GET", path: "/api/agent/v1/mention-actions/pending" },
-      execute: { method: "POST", path: "/api/agent/v1/mention-actions/execute" },
-    },
+    attachmentUploadSessions: ATTACHMENT_UPLOAD_SESSION_ROUTES,
+    users: USERS_ROUTE,
+    mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
-    profile: {
-      get: { method: "GET", path: "/api/agent/v1/profile" },
-      update: { method: "POST", path: "/api/agent/v1/profile" },
-    },
+    profile: PROFILE_ROUTES,
   },
   workspace: {
     info: {

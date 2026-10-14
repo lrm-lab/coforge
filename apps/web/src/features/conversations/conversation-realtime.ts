@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { utf8Decoder } from "@lrm/coforge-sdk/internal";
+import {
+  publicationData,
+  publicationDataOrUndefined,
+} from "#src/features/realtime/publication-data";
 export const conversationRealtimeChannel = (conversationId: string) => `chat:${conversationId}`;
 
 /**
@@ -56,9 +59,8 @@ export type MessageAvailableEvent = {
   senderUserId?: string;
 };
 
-export function decodeMessageAvailableEvent(value: unknown): MessageAvailableEvent {
-  if (value instanceof Uint8Array)
-    return decodeMessageAvailableEvent(JSON.parse(utf8Decoder.decode(value)) as unknown);
+export function decodeMessageAvailableEvent(input: unknown): MessageAvailableEvent {
+  const value = publicationData(input);
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("invalid conversation event");
   const type = Reflect.get(value, "type");
@@ -115,9 +117,8 @@ export type NotificationAvailableEvent = {
   workspaceId: string;
 };
 
-export function decodeNotificationAvailableEvent(value: unknown): NotificationAvailableEvent {
-  if (value instanceof Uint8Array)
-    return decodeNotificationAvailableEvent(JSON.parse(utf8Decoder.decode(value)) as unknown);
+export function decodeNotificationAvailableEvent(input: unknown): NotificationAvailableEvent {
+  const value = publicationData(input);
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("invalid conversation event");
   const type = Reflect.get(value, "type");
@@ -146,9 +147,8 @@ export type MemberChangedEvent = {
   workspaceId?: string;
 };
 
-export function decodeMemberChangedEvent(value: unknown): MemberChangedEvent {
-  if (value instanceof Uint8Array)
-    return decodeMemberChangedEvent(JSON.parse(utf8Decoder.decode(value)) as unknown);
+export function decodeMemberChangedEvent(input: unknown): MemberChangedEvent {
+  const value = publicationData(input);
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("invalid conversation event");
   const type = Reflect.get(value, "type");
@@ -172,9 +172,8 @@ export function decodeMemberChangedEvent(value: unknown): MemberChangedEvent {
  */
 export type ActivityChangedEvent = { type: "activity.changed.v1"; workspaceId: string };
 
-export function decodeActivityChangedEvent(value: unknown): ActivityChangedEvent {
-  if (value instanceof Uint8Array)
-    return decodeActivityChangedEvent(JSON.parse(utf8Decoder.decode(value)) as unknown);
+export function decodeActivityChangedEvent(input: unknown): ActivityChangedEvent {
+  const value = publicationData(input);
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("invalid conversation event");
   const type = Reflect.get(value, "type");
@@ -278,14 +277,7 @@ export type ViewerEvent = z.infer<typeof viewerEvent>;
 /** A publication's JSON (raw bytes or already parsed) read as `schema`, or undefined when it is
  * some other publication on the channel. */
 function decodeJsonPublication<T>(schema: z.ZodType<T>, value: unknown): T | undefined {
-  let data = value;
-  if (value instanceof Uint8Array) {
-    try {
-      data = JSON.parse(utf8Decoder.decode(value)) as unknown;
-    } catch {
-      return undefined;
-    }
-  }
+  const data = publicationDataOrUndefined(value);
   const parsed = schema.safeParse(data);
   return parsed.success ? parsed.data : undefined;
 }

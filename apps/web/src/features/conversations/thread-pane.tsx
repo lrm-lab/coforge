@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-demand";
 import { ConversationPane } from "./conversation-pane";
 import type { DirectConversationView } from "./conversation-types";
@@ -30,7 +30,7 @@ export function ThreadPane({
   const thread = useConversationThread(conversation.conversationId, root.id);
   if (!thread.data) {
     const load: ThreadRootLoad = thread.isError
-      ? isAppError(thread.error) && thread.error.code === "NOT_FOUND"
+      ? isAppErrorCode(thread.error, "NOT_FOUND")
         ? { status: "missing" }
         : { status: "failed", errorId: isAppError(thread.error) ? thread.error.errorId : undefined }
       : { status: "loading" };

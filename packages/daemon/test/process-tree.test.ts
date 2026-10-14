@@ -110,3 +110,66 @@ test("a group whose only remaining member is a zombie counts as exited", async (
   expect(await tree.waitForExit(1_000)).toBe(true);
   await tree.terminate(true);
 });
+
+/** A Job Object stand-in, so the Windows launch path's child adapter runs on any platform. */
+function fakeJobObject() {
+  const job = {
+    assigned: [] as number[],
+    closed: 0,
+    handle: 1n,
+    assign: (processId: number) => void job.assigned.push(processId),
+    terminate: () => {},
+    activeProcesses: () => 0,
+    close: () => void job.closed++,
+  };
+  return job;
+}
+
+/** Each call is a fresh owner, and on the Windows path a fresh Job Object to inspect. */
+const childAdapterOwners = [
+  { platform: "unix", create: () => ({ owner: new ProcessTreeOwner("linux"), job: undefined }) },
+  {
+    platform: "win32 (fake Job Object)",
+    create: () => {
+      const job = fakeJobObject();
+      return {
+        owner: new ProcessTreeOwner("win32", undefined, { createJobObject: () => job }),
+        job,
+      };
+    },
+  },
+] as const;
+
+for (const { platform, create } of childAdapterOwners) {
+  test(`${platform}: the owned child exposes the spawned process's pid, pipes and exit`, async () => {
+    const { owner, job } = create();
+    const tree = owner.spawn(["sh", "-c", 'read line; echo "got:$line"; exit 3'], tmpdir(), {
+      PATH: "/usr/bin:/bin",
+    });
+    const { child } = tree;
+    expect(child.pid).toBeGreaterThan(0);
+    if (job) expect(job.assigned).toEqual([child.pid!]);
+    expect(child.exitCode).toBeNull();
+    expect(child.stdin.write("hello\n")).toBe(true);
+    await child.stdin.flush();
+    child.stdin.end();
+    const stdout = await new Response(child.stdout as ReadableStream<Uint8Array>).text();
+    const stderr = await new Response(child.stderr as ReadableStream<Uint8Array>).text();
+    expect(await child.exited).toBe(3);
+    expect(child.exitCode).toBe(3);
+    expect(stdout).toBe("got:hello\n");
+    expect(stderr).toBe("");
+    expect(await tree.waitForExit(2_000)).toBe(true);
+    if (job) expect(job.closed).toBe(1);
+  });
+
+  test(`${platform}: kill on the owned child signals the spawned process`, async () => {
+    const { owner } = create();
+    const tree = owner.spawn(["sh", "-c", "exec sleep 30"], tmpdir(), { PATH: "/usr/bin:/bin" });
+    tree.child.kill("SIGKILL");
+    await tree.child.exited;
+    expect(tree.child.exitCode).not.toBe(0);
+    await tree.terminate(true);
+    expect(await tree.waitForExit(2_000)).toBe(true);
+  });
+}

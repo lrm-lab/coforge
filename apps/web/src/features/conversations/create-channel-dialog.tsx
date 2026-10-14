@@ -13,7 +13,7 @@ import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { loadWorkspaceDirectory } from "#src/features/workspaces/workspaces.functions";
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import {
@@ -204,9 +204,7 @@ function CreateChannelForm({
         onOpenChange(false);
       }
     } catch (cause) {
-      setError(
-        isAppError(cause) && cause.code === "CONFLICT" ? m.channel_conflict() : m.channel_error(),
-      );
+      setError(isAppErrorCode(cause, "CONFLICT") ? m.channel_conflict() : m.channel_error());
     } finally {
       busy.current = false;
       setSaving(false);

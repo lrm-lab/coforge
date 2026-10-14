@@ -1,4 +1,5 @@
 import { createCsrfMiddleware, createMiddleware, createStart } from "@tanstack/react-start";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 import { toPublicServerError } from "#src/server/errors/public-error.server";
 import { withServerTiming } from "#src/server/observability/server-timing.server";
@@ -53,7 +54,7 @@ const agentRequestLogger = createMiddleware().server(async ({ next, request }) =
         ...fields,
         duration_ms: Math.round(performance.now() - startedAt),
         error_type: error instanceof Error ? error.constructor.name : typeof error,
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: thrownMessage(error),
       }),
     );
     throw error;

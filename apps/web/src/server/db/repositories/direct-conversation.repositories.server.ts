@@ -7,7 +7,9 @@ import { lockConversation } from "#src/server/conversations/conversation-lock.se
 import { agentDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import {
   HELD_CONTEXT_LIMIT,
+  MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
+  type AgentMessageValidationMessage,
   type MessageSenderKind,
   type MessageTaskMetadata,
   type TaskStatus,
@@ -77,6 +79,7 @@ import {
   unreadAgentMessagesFragment,
   type AgentAttentionScope,
 } from "#src/server/db/repositories/agent-attention.repositories.server";
+import { clampPageLimit } from "#src/server/db/page-limit.server";
 
 /** The three Agent-visible sender facts, spread onto every Agent-facing message shape
  * in this file so they cannot drift into three different field sets. */
@@ -169,8 +172,9 @@ type AgentFacing<T extends { body: string }> = Omit<T, "body"> & { body: AgentRe
 
 const AGENT_RECOVERY_MESSAGE_LIMIT = 100;
 const PUBLIC_USERNAME_TARGET = new RegExp(`^@${STORED_USERNAME_SOURCE}$`);
-/** Eight-hex-character prefix or a full UUID; both address a Message. */
-const MESSAGE_ANCHOR = new RegExp(`^(?:[0-9a-f]{8}|${UUID_LIKE_SOURCE})$`);
+/** The message-id short forms (eight hex, dashed twelve hex) or a full UUID; both address a
+ * Message. */
+const MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`);
 
 const TASK_METADATA_SELECT = {
   select: {
@@ -230,6 +234,43 @@ function conversationTarget(conversation: {
   return conversation.channelName
     ? channelTarget(conversation.channelName)
     : `@${conversation.members[0]?.user?.username}`;
+}
+
+/** The one member `conversationTarget` names a direct conversation by: its user member. */
+const CONVERSATION_TARGET_MEMBERS = {
+  where: { userId: { not: null } },
+  select: { user: { select: { username: true } } },
+  take: 1,
+} satisfies Prisma.Conversation$membersArgs;
+
+/** `AGENT_MESSAGE_INCLUDE` plus what `messageDeliveryTarget` reads from the conversation. */
+const AGENT_MESSAGE_WITH_TARGET_INCLUDE = {
+  ...AGENT_MESSAGE_INCLUDE,
+  conversation: { include: { members: CONVERSATION_TARGET_MEMBERS } },
+} satisfies Prisma.MessageInclude;
+
+/** Where a Message is delivered: its conversation's target, with its thread root if it has one. */
+function messageDeliveryTarget(message: {
+  threadRootId: string | null;
+  conversation: Parameters<typeof conversationTarget>[0];
+}) {
+  return deliveryTarget(conversationTarget(message.conversation), message.threadRootId);
+}
+
+function assertMessageAnchor(anchor: string) {
+  if (!MESSAGE_ANCHOR.test(anchor))
+    throw new AgentMessageValidationError(
+      "message anchor must be eight hexadecimal characters or a full UUID",
+    );
+}
+
+/** The single row an anchor lookup (`take: 2`) found; `notFound` is the miss message. */
+function onlyAnchorMatch<T>(rows: T[], notFound: AgentMessageValidationMessage): T {
+  if (rows.length > 1)
+    throw new AgentMessageValidationError("ambiguous message prefix; use the full UUID");
+  const row = rows[0];
+  if (!row) throw new AgentMessageValidationError(notFound);
+  return row;
 }
 
 function toAgentMessage(
@@ -586,7 +627,21 @@ type ResolvedAgentTarget = {
 };
 
 export class PrismaDirectConversationRepository implements DirectConversationRepository {
-  constructor(private readonly db: PrismaClient) {}
+  /** Channel lookups this instance has made, kept only when it serves a single request. */
+  readonly #agentChannels?: Map<string, Promise<{ id: string }>>;
+
+  /**
+   * `oneRequest` keeps each Agent channel lookup for the instance's life, so the steps of one
+   * Agent send (its Memory Offer check, freshness and the send itself) resolve the channel once.
+   * Only for an instance created per request: a longer-lived one would keep a membership the
+   * Agent has since lost. The send re-reads the sender's membership when it writes the message.
+   */
+  constructor(
+    private readonly db: PrismaClient,
+    { oneRequest = false }: { oneRequest?: boolean } = {},
+  ) {
+    if (oneRequest) this.#agentChannels = new Map();
+  }
 
   async userIdForUsername(target: string) {
     const [parentTarget, root, extra] = target.split(":");
@@ -605,10 +660,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   private async resolveMessage(conversationId: string, anchor: string, rootOnly = false) {
-    if (!MESSAGE_ANCHOR.test(anchor))
-      throw new AgentMessageValidationError(
-        "message anchor must be eight hexadecimal characters or a full UUID",
-      );
+    assertMessageAnchor(anchor);
     const rows = await this.db.message.findMany({
       where: {
         conversationId,
@@ -617,11 +669,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       take: 2,
       select: { id: true, sequence: true, threadRootId: true, senderMemberId: true },
     });
-    if (rows.length > 1)
-      throw new AgentMessageValidationError("ambiguous message prefix; use the full UUID");
-    const row = rows[0];
-    if (!row)
-      throw new AgentMessageValidationError("message anchor not found in this conversation");
+    const row = onlyAnchorMatch(rows, "message anchor not found in this conversation");
     if (rootOnly && row.threadRootId)
       throw new AgentMessageValidationError("thread root must be a top-level message");
     return row;
@@ -633,7 +681,15 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   getAgentChannel(workspaceId: string, agentId: string, target: string) {
-    return getAgentChannel(this.db, workspaceId, agentId, target);
+    const lookups = this.#agentChannels;
+    if (!lookups) return getAgentChannel(this.db, workspaceId, agentId, target);
+    const key = `${workspaceId}:${agentId}:${target}`;
+    let lookup = lookups.get(key);
+    if (!lookup) {
+      lookup = getAgentChannel(this.db, workspaceId, agentId, target);
+      lookups.set(key, lookup);
+    }
+    return lookup;
   }
 
   setAgentChannelMuted(workspaceId: string, agentId: string, target: string, muted: boolean) {
@@ -649,11 +705,6 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     );
   }
 
-  /**
-   * Resolve an Agent-facing target (`#channel` or `@user`, optionally `:root` for a thread)
-   * to its conversation, thread root and canonical spelling. Public so other Agent HTTP routes
-   * (e.g. attachment upload) can reuse the same target grammar instead of duplicating it.
-   */
   /**
    * The target an Agent drains (`message check --target`): one it belongs to, or a channel it is
    * not in but was notified of a message in and has not read yet. The latter only reaches those
@@ -686,6 +737,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     }
   }
 
+  /**
+   * Resolve an Agent-facing target (`#channel` or `@user`, optionally `:root` for a thread)
+   * to its conversation, thread root and canonical spelling. Public so other Agent HTTP routes
+   * (e.g. attachment upload) can reuse the same target grammar instead of duplicating it.
+   */
   async resolveAgentTarget(
     workspaceId: string,
     agentId: string,
@@ -732,7 +788,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   async searchMessages(workspaceId: string, agentId: string, options: AgentMessageSearchOptions) {
-    const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+    const limit = clampPageLimit(options.limit ?? 20, 100);
     const offset = Math.max(options.offset ?? 0, 0);
     const scope = options.target
       ? await this.resolveAgentTarget(workspaceId, agentId, options.target)
@@ -794,33 +850,14 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       orderBy,
       skip: offset,
       take: limit,
-      include: {
-        ...AGENT_MESSAGE_INCLUDE,
-        conversation: {
-          include: {
-            members: {
-              where: { userId: { not: null } },
-              select: { user: { select: { username: true } } },
-              take: 1,
-            },
-          },
-        },
-      },
+      include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
     });
-    return rows.map((message) =>
-      toAgentMessage(
-        message,
-        deliveryTarget(conversationTarget(message.conversation), message.threadRootId),
-      ),
-    );
+    return rows.map((message) => toAgentMessage(message, messageDeliveryTarget(message)));
   }
 
   /** Looks a Message up by anchor across every conversation the Agent is a member of. */
   private async resolveAgentScopedMessage(workspaceId: string, agentId: string, anchor: string) {
-    if (!MESSAGE_ANCHOR.test(anchor))
-      throw new AgentMessageValidationError(
-        "message anchor must be eight hexadecimal characters or a full UUID",
-      );
+    assertMessageAnchor(anchor);
     const rows = await this.db.message.findMany({
       where: {
         workspaceId,
@@ -831,33 +868,14 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         id: messageAnchorWhere(anchor),
       },
       take: 2,
-      include: {
-        ...AGENT_MESSAGE_INCLUDE,
-        conversation: {
-          include: {
-            members: {
-              where: { userId: { not: null } },
-              select: { user: { select: { username: true } } },
-              take: 1,
-            },
-          },
-        },
-      },
+      include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
     });
-    if (rows.length > 1)
-      throw new AgentMessageValidationError("ambiguous message prefix; use the full UUID");
-    const row = rows[0];
-    if (!row)
-      throw new AgentMessageValidationError("message not found or not visible to this Agent");
-    return row;
+    return onlyAnchorMatch(rows, "message not found or not visible to this Agent");
   }
 
   async resolveAgentMessage(workspaceId: string, agentId: string, anchor: string) {
     const row = await this.resolveAgentScopedMessage(workspaceId, agentId, anchor);
-    return toAgentMessage(
-      row,
-      deliveryTarget(conversationTarget(row.conversation), row.threadRootId),
-    );
+    return toAgentMessage(row, messageDeliveryTarget(row));
   }
 
   async setAgentMessageReaction(
@@ -1485,16 +1503,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         deliveryId: true,
         messageId: true,
         conversationId: true,
-        conversation: {
-          select: {
-            channelName: true,
-            members: {
-              where: { userId: { not: null } },
-              select: { user: { select: { username: true } } },
-              take: 1,
-            },
-          },
-        },
+        conversation: { select: { channelName: true, members: CONVERSATION_TARGET_MEMBERS } },
         sequence: true,
         message: {
           select: {
@@ -1573,7 +1582,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         ? { deliveries: { some: { agentId } } }
         : {}),
     };
-    const limit = Math.min(Math.max(page.limit ?? 50, 1), 100);
+    const limit = clampPageLimit(page.limit ?? 50, 100);
     if ([page.before, page.after, page.around].filter(Boolean).length > 1)
       throw new Error("use only one range anchor");
     const anchorId = page.before ?? page.after ?? page.around;
@@ -1807,7 +1816,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     messages: (ReturnType<typeof toAgentMessage> & { nonMemberMention?: boolean })[];
     hasMore: boolean;
   }> {
-    const bounded = Math.min(Math.max(limit, 1), 100);
+    const bounded = clampPageLimit(limit, 100);
     const scope = target ? await this.drainScope(workspaceId, agentId, target) : undefined;
     return this.db.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<
@@ -1830,29 +1839,14 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       if (page.length === 0) return { messages: [], hasMore: false };
       const messageRows = await tx.message.findMany({
         where: { id: { in: page.map((row) => row.id) } },
-        include: {
-          ...AGENT_MESSAGE_INCLUDE,
-          conversation: {
-            include: {
-              members: {
-                where: { userId: { not: null } },
-                select: { user: { select: { username: true } } },
-                take: 1,
-              },
-            },
-          },
-        },
+        include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
       });
       const rowById = new Map(messageRows.map((row) => [row.id, row]));
       const messages = page.map((row) => {
         const message = rowById.get(row.id);
         if (!message) throw new Error(`drained Agent message is missing: ${row.id}`);
         return {
-          ...toAgentMessage(
-            message,
-            deliveryTarget(conversationTarget(message.conversation), message.threadRootId),
-            agentId,
-          ),
+          ...toAgentMessage(message, messageDeliveryTarget(message), agentId),
           // Reached the Agent outside the channel: readable, but it cannot reply there.
           ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
         };

@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { Outlet, createFileRoute, getRouteApi, useParams } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Outlet, createFileRoute, getRouteApi, useParams, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { latestComputerVersionQuery } from "#src/features/computers/latest-version.query";
 import { AddComputerDialog } from "#src/features/computers/add-computer-dialog";
@@ -9,6 +9,7 @@ import { listComputers } from "#src/features/computers/computers.functions";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { getInstallOrigin } from "#src/features/install/install.functions";
 import { getUserPreferences } from "#src/features/settings/settings.functions";
+import { computerLabel } from "#src/features/computers/computer-identity";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -39,6 +40,34 @@ function ComputersPage() {
     shouldThrow: false,
   });
   const [addComputerOpen, setAddComputerOpen] = useState(false);
+  const [connectedComputerName, setConnectedComputerName] = useState<string | null>(null);
+  const router = useRouter();
+  const computersWhenAddOpened = useRef<ReadonlySet<string> | null>(null);
+
+  useEffect(() => {
+    if (!addComputerOpen) {
+      computersWhenAddOpened.current = null;
+      setConnectedComputerName(null);
+      return;
+    }
+    if (connectedComputerName) return;
+
+    computersWhenAddOpened.current = new Set(computers.map((computer) => computer.id));
+    const refresh = () => void router.invalidate({ sync: true });
+    const interval = window.setInterval(refresh, 2000);
+    refresh();
+    return () => window.clearInterval(interval);
+  }, [addComputerOpen, connectedComputerName, router]);
+
+  useEffect(() => {
+    const initialComputerIds = computersWhenAddOpened.current;
+    if (!addComputerOpen || !initialComputerIds || connectedComputerName) return;
+    const connectedComputer = computers.find(
+      (computer) =>
+        !initialComputerIds.has(computer.id) && computer.ownedByCurrentUser && computer.online,
+    );
+    if (connectedComputer) setConnectedComputerName(computerLabel(connectedComputer));
+  }, [addComputerOpen, computers, connectedComputerName]);
   // The control that starts an upgrade lives on the detail panel behind the outlet; the list's
   // badge reflects the same operation. Several Computers may upgrade at once (each is serialized
   // on its own machine), so this keeps a set rather than a single slot — one flow finishing must
@@ -72,6 +101,7 @@ function ComputersPage() {
         onOpenChange={setAddComputerOpen}
         installOrigin={installOrigin}
         workspaceSlug={currentWorkspace?.slug ?? null}
+        connectedComputerName={connectedComputerName}
       />
     </>
   );

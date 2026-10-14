@@ -12,6 +12,12 @@ export type AppInboxDefinition = Readonly<{
   itemId(sourceRef: AppSourceRef): string;
 }>;
 
+/** The App Inbox item one fired reminder revision is shown as: one item per revision, so a later
+ * revision of the same reminder is a new item and acknowledging one clears only that one. */
+export function reminderDueItemId(reminderId: string, revision: string | number): string {
+  return `reminder:${reminderId}:${revision}`;
+}
+
 const reminderDue: AppInboxDefinition = {
   retention: "until_explicit_ack",
   action: { kind: "run_command", commandId: "reminder.ack" },
@@ -29,7 +35,7 @@ const reminderDue: AppInboxDefinition = {
     return { kind: "reminder", id: input.id, revision: input.revision };
   },
   itemId(sourceRef) {
-    return `reminder:${sourceRef.id}:${sourceRef.revision}`;
+    return reminderDueItemId(sourceRef.id, sourceRef.revision);
   },
 };
 

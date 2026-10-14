@@ -12,6 +12,7 @@ import {
   type TaskPrincipal,
   type TaskResult,
   type TaskView,
+  MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
   utf8Encoder,
 } from "@lrm/coforge-sdk/internal";
@@ -20,6 +21,10 @@ import { MentionDeliveryIssuer } from "#src/server/conversations/mention-deliver
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { channelThreadRootWhere } from "#src/server/db/message-anchor.server";
+
+/** The short forms a message id may be written in (the CLI prints `xxxxxxxx-xxxx`), which address
+ * a Message by anchor rather than by the whole id. */
+const MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE})$`, "i");
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import type { HumanNames } from "#src/lib/human-label";
@@ -83,6 +88,25 @@ type Dependencies = {
 };
 
 type Transaction = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
+
+/** The conversation's Task numbered `number`, read as `taskSelection`, or null. */
+function findTaskByNumber(
+  client: Transaction | PrismaClient,
+  conversationId: string,
+  number: number,
+) {
+  return client.task.findUnique({
+    where: { conversationId_number: { conversationId, number } },
+    select: taskSelection,
+  });
+}
+
+/** A command that names the revision it read is refused (`CONFLICT`) once the Task moved on. */
+function assertExpectedRevision(task: { revision: number }, expectedRevision?: number) {
+  if (expectedRevision !== undefined && task.revision !== expectedRevision)
+    throw new AppError("CONFLICT");
+}
+
 /** The acting conversation member; its user/Agent handle names it in Task history and notices. */
 type Member = {
   id: string;
@@ -1277,13 +1301,14 @@ export class TaskBoard {
   }
 
   private async findMessage(tx: Transaction, conversationId: string, messageId: string) {
-    // An eight-character id is the uuid range it names, so the lookup stays an index range on the
-    // message id instead of reading every top-level message in the conversation.
+    // A short anchor (eight hex, or the dashed twelve-hex display form from #88) is the uuid range
+    // it names, so the lookup stays an index range on the message id instead of reading every
+    // top-level message in the conversation.
+    const anchor = MESSAGE_ANCHOR.test(messageId) ? messageId : undefined;
     const messages = await tx.message.findMany({
-      where:
-        messageId.length === 8 && /^[0-9a-f]{8}$/i.test(messageId)
-          ? channelThreadRootWhere(conversationId, messageId)
-          : { conversationId, threadRootId: null, id: messageId },
+      where: anchor
+        ? channelThreadRootWhere(conversationId, anchor)
+        : { conversationId, threadRootId: null, id: messageId },
       take: 2,
       select: { id: true, body: true },
     });
@@ -1300,12 +1325,7 @@ export class TaskBoard {
     const { conversationId, workspaceId } = conversation;
     const task = await this.withNotices(conversation, async (tx, notices) => {
       let existing = command.number
-        ? await tx.task.findUnique({
-            where: {
-              conversationId_number: { conversationId, number: command.number },
-            },
-            select: taskSelection,
-          })
+        ? await findTaskByNumber(tx, conversationId, command.number)
         : undefined;
       let message: { id: string; body: string } | undefined;
       if (!existing && command.messageId) {
@@ -1450,12 +1470,7 @@ export class TaskBoard {
   }
 
   private async unclaim(conversationId: string, member: Member, command: TaskCommand) {
-    const task = await this.db.task.findUnique({
-      where: {
-        conversationId_number: { conversationId, number: command.number! },
-      },
-      select: taskSelection,
-    });
+    const task = await findTaskByNumber(this.db, conversationId, command.number!);
     if (!task) throw new AppError("NOT_FOUND");
     if (task.ownerMemberId !== member.id) throw new AppError("ACCESS_DENIED");
     if (task.status === "done") throw new AppError("CONFLICT");
@@ -1478,15 +1493,9 @@ export class TaskBoard {
 
   private async update(conversation: ConversationRef, member: Member, command: TaskCommand) {
     const { conversationId } = conversation;
-    const task = await this.db.task.findUnique({
-      where: {
-        conversationId_number: { conversationId, number: command.number! },
-      },
-      select: taskSelection,
-    });
+    const task = await findTaskByNumber(this.db, conversationId, command.number!);
     if (!task) throw new AppError("NOT_FOUND");
-    if (command.expectedRevision !== undefined && task.revision !== command.expectedRevision)
-      throw new AppError("CONFLICT");
+    assertExpectedRevision(task, command.expectedRevision);
     const isOwner = task.ownerMemberId === member.id;
     if (member.agentId && !isOwner) throw new AppError("ACCESS_DENIED");
     if (!isOwner && !member.userId) throw new AppError("ACCESS_DENIED");
@@ -1542,10 +1551,7 @@ export class TaskBoard {
     const result = await this.withNotices(conversation, async (tx, notices) => {
       const receipt = await tx.message.findUnique({ where: { id: receiptId } });
       if (receipt) {
-        const task = await tx.task.findUnique({
-          where: { conversationId_number: { conversationId, number: command.number! } },
-          select: taskSelection,
-        });
+        const task = await findTaskByNumber(tx, conversationId, command.number!);
         const assigned = await this.receiptAssignee(tx, receipt.id);
         return { task, receipt, assigneeHandle: assigned?.handle ?? null, changed: false };
       }
@@ -1553,20 +1559,14 @@ export class TaskBoard {
         ? await this.assigneeMember(tx, conversationId, workspaceId, command.assignee)
         : null;
       if (command.assignee && !owner) throw new AppError("NOT_FOUND");
-      const current = await tx.task.findUnique({
-        where: {
-          conversationId_number: { conversationId, number: command.number! },
-        },
-        select: taskSelection,
-      });
+      const current = await findTaskByNumber(tx, conversationId, command.number!);
       if (!current) throw new AppError("NOT_FOUND");
       if (
         (owner && owner.id !== member.id) ||
         (current.ownerMemberId && current.ownerMemberId !== member.id)
       )
         this.requireHuman(member);
-      if (command.expectedRevision !== undefined && current.revision !== command.expectedRevision)
-        throw new AppError("CONFLICT");
+      assertExpectedRevision(current, command.expectedRevision);
       if (current.ownerMemberId === (owner?.id ?? null))
         return { task: current, receipt: null, assigneeHandle: null, changed: false };
       const { task } = await this.commitTaskChange(
@@ -1623,15 +1623,11 @@ export class TaskBoard {
   ): Promise<TaskResult> {
     const { conversationId } = conversation;
     const result = await this.withNotices(conversation, async (tx, notices) => {
-      const current = await tx.task.findUnique({
-        where: { conversationId_number: { conversationId, number: command.number! } },
-        select: taskSelection,
-      });
+      const current = await findTaskByNumber(tx, conversationId, command.number!);
       if (!current) throw new AppError("NOT_FOUND");
       if (!current.ownerMemberId) return { task: current, changed: false };
       if (current.ownerMemberId !== member.id) this.requireHuman(member);
-      if (command.expectedRevision !== undefined && current.revision !== command.expectedRevision)
-        throw new AppError("CONFLICT");
+      assertExpectedRevision(current, command.expectedRevision);
       const { task } = await this.commitTaskChange(
         tx,
         member,
@@ -1656,15 +1652,9 @@ export class TaskBoard {
     if (command.title === undefined && command.description === undefined)
       throw new AppError("INVALID_INPUT");
     const result = await this.db.$transaction(async (tx) => {
-      const task = await tx.task.findUnique({
-        where: {
-          conversationId_number: { conversationId, number: command.number! },
-        },
-        select: taskSelection,
-      });
+      const task = await findTaskByNumber(tx, conversationId, command.number!);
       if (!task) throw new AppError("NOT_FOUND");
-      if (command.expectedRevision !== undefined && task.revision !== command.expectedRevision)
-        throw new AppError("CONFLICT");
+      assertExpectedRevision(task, command.expectedRevision);
       // An amended title is typed text. One that reads the same as the current title (whose stored
       // tokens read back as `@handle`, `task #N`, `#name`) is left as stored, tokens included.
       const title = command.title?.trim();

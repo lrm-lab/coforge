@@ -33,6 +33,8 @@ import {
 } from "#src/server/conversations/direct-conversation-peer.server";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { storedTaskStatus } from "#src/server/tasks/task-view.server";
+import { clampPageLimit } from "#src/server/db/page-limit.server";
+import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 
 /**
  * A person's Activity inbox: every joined channel, every direct message of theirs (with their own
@@ -110,7 +112,7 @@ export class ActivityInbox {
         right.latestSequence - left.latestSequence,
     );
     const offset = Math.max(0, options.offset ?? 0);
-    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, options.limit ?? DEFAULT_PAGE_SIZE));
+    const limit = clampPageLimit(options.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
     const end = offset + limit;
     return {
       items: await this.hydrate(workspaceId, userId, candidates.slice(offset, end)),
@@ -235,11 +237,10 @@ export class ActivityInbox {
          AND ${HUMAN_UNREAD_MESSAGE_SQL}
         WHERE ${conversationItemListedSql(userId)}
       ) + (
-        SELECT COUNT(*) FROM ${threadItemsSql(workspaceId, userId)}
-        JOIN "messages" m
-          ON m."conversationId" = threads."conversationId"
-         AND m."threadRootId" = threads."rootMessageId"
-         AND ${unreadReplySql}
+        -- Per thread, as the list counts it: an index range above that thread's read cursor. A
+        -- plain join let the planner read every reply of every followed thread before the cursor.
+        SELECT COALESCE(SUM(replies."unread"), 0) FROM ${threadItemsSql(workspaceId, userId)}
+        ${threadUnreadLateral}
         WHERE ${threadItemListedSql(userId)}
       ) + (
         -- Each notified mention is one unread item until the viewer reads it.
@@ -293,12 +294,8 @@ export class ActivityInbox {
     await this.announceMarked(workspaceId, userId, moved);
   }
 
-  private async authorize(workspaceId: string, userId: string) {
-    const membership = await this.db.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { userId: true },
-    });
-    if (!membership) throw new AppError("ACCESS_DENIED");
+  private authorize(workspaceId: string, userId: string) {
+    return requireWorkspaceMember(this.db, workspaceId, userId);
   }
 
   /**

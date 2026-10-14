@@ -1,9 +1,10 @@
 import { afterAll, expect, mock, test } from "bun:test";
+import { mockModuleForFile } from "./helpers/file-module-mock";
 
 const displaySnapshots = new Map<string, string>();
 // How many batched display reads the profile's Agent list needed; one per list, not per Agent.
 let displayBatchReads = 0;
-mock.module("#src/server/agents/agent-display.server", () => ({
+await mockModuleForFile("#src/server/agents/agent-display.server", () => ({
   getAgentDisplay: () => {
     const snapshotFor = async (scope: {
       workspaceId: string;

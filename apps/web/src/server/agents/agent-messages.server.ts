@@ -180,7 +180,7 @@ const HELD_SEND_AVAILABLE_ACTIONS = ["check_messages", "send_draft", "send_anywa
  * (`@lrm/coforge-sdk/internal`), because a daemon that decides a hold locally never reaches the
  * server's code path and still has to produce the same `freshness_decision_fact:` id. */
 
-export async function executeAgentSendMessage(
+async function executeAgentSendMessage(
   sender: {
     executeFromAgent(input: {
       idempotencyKey: string;

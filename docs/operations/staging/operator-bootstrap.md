@@ -3,6 +3,12 @@
 1. Provision one ECS host in an ICP-compliant region and install Docker plus
    the Compose plugin. Run Docker rootless under a dedicated non-root
    deployment user (for example `deploy`); do not deploy as `root`.
+   Rootless Docker binds only ports at or above
+   `net.ipv4.ip_unprivileged_port_start`, and Caddy publishes 80 and 443, so
+   set it to 80 in `/etc/sysctl.conf` (which `sysctl --system` applies last,
+   over any `/etc/sysctl.d/` file) and apply it with `sudo sysctl --system`.
+   With 443 there, the deploy fails with `cannot expose privileged port 80`
+   and rolls back.
 2. Create the release deployment identity on the host as a non-root user:
    ```
    sudo useradd -r -m -s /bin/bash deploy
@@ -28,9 +34,13 @@
    [staging GitHub Environment values](github-environment.md), and back it up in the
    approved secret store. A deploy synchronizes the public and private halves;
    the repository and this runbook intentionally contain no real key.
-   Compose file-type secrets keep their source permissions, so the rootless
-   daemon user must be able to read them inside the container; keep them
-   owner-readable (600) at minimum and never group/world writable.
+   Compose file-type secrets (`postgres_password`, `redis_password`,
+   `otel_traces_endpoint`) are bind mounts that keep their source permissions;
+   keep them owner-readable (600) and never group/world writable. Under the
+   rootless daemon a non-root container user cannot read such a 600 file, so
+   every secret a non-root image reads (Web, Centrifugo) is instead passed to
+   Compose by `remote-deploy.sh` and created with that user's uid
+   (`environment:` sources in the Compose file).
 4. Copy the tracked assets from [`infra/staging/`](../../../infra/staging) (`docker-compose.yml`,
    `caddy/Caddyfile`, `centrifugo/config.yaml`) to
    `~/coforge-staging/infra/staging/` preserving layout.
@@ -69,14 +79,14 @@
    the GitHub Environment secret to the new 主KEY, then clear 备KEY only after
    waiting at least 1800 seconds so no URL signed under the old key is still
    outstanding. Never paste the key into chat.
-7. Create the DNS record `staging.coforge.cn` → the ECS public address. TLS
-   uses an ACME certificate over 443 (TLS-ALPN); there is no HTTP-01 path by
-   design.
+7. Create the DNS record `staging.coforge.cn` → the ECS public address, and
+   open inbound TCP 80 and 443 in its security group. TLS uses an ACME
+   certificate; port 80 exists for the HTTPS redirect.
 8. Run the first bootstrap deployment by hand to provision PostgreSQL and
    Redis volumes and apply Prisma migrations:
    ```
    ssh deploy@staging-host 'bash -s' < scripts/deploy/remote-deploy.sh -- \
-     --image ghcr.io/lrm-teams/coforge/coforge-web@sha256:... \
+     --image ghcr.io/lrm-lab/coforge/coforge-web@sha256:... \
      --compose-file ~/coforge-staging/infra/staging/docker-compose.yml \
      --secrets-dir ~/coforge-staging/infra/staging/secrets \
      --state-file ~/coforge-staging/state.env \

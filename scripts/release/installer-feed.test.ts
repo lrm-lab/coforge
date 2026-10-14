@@ -92,9 +92,7 @@ test("a release that needs a newer protocol than installer/latest speaks is refu
   expect(message).toContain("installer protocol 2");
   expect(message).toContain("installer/latest (0.3.0) speaks protocol 1");
   // Publish an installer that speaks it, or - when one is already up - point at it.
-  expect(message).toContain(
-    "gh workflow run release-installer-staging.yml --repo LRM-Teams/coforge",
-  );
+  expect(message).toContain("gh workflow run release-installer-staging.yml --repo lrm-lab/coforge");
   expect(message).toContain("-f pointer_only=<installer version>");
 });
 

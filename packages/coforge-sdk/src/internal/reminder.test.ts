@@ -437,3 +437,92 @@ test("the shared default reminder timezone is the product's civil clock", () => 
   // pinned here rather than in either of them.
   expect(DEFAULT_REMINDER_TIMEZONE).toBe("Asia/Shanghai");
 });
+
+// A reminder summary (in an operation response) and a reminder job (in a sync) share the same
+// required core; each refusal is pinned to the exact message it raises.
+const reminderCore = {
+  reminderId,
+  ownerAgentId: scope.agentId,
+  version: 1,
+  title: "Review",
+  target: "#general",
+  messageId: reminderId,
+  fireAt: "2026-09-08T10:00:00Z",
+};
+const coreRefusals: [string, Partial<typeof reminderCore>, string][] = [
+  ["a short reminder ID", { reminderId: "deadbeef" }, "invalid reminder ID; full UUID required"],
+  ["an empty owner", { ownerAgentId: "" }, "invalid reminder"],
+  ["a zero version", { version: 0 }, "invalid reminder version"],
+  ["an empty title", { title: "" }, "invalid reminder title"],
+  ["an empty target", { target: "" }, "invalid reminder target"],
+  [
+    "an empty message",
+    { messageId: "" },
+    "invalid message anchor; use eight hexadecimal characters or a full UUID",
+  ],
+  ["a malformed fire time", { fireAt: "tomorrow" }, "invalid reminder fire time"],
+];
+
+function encodeSummary(overrides: Record<string, unknown>) {
+  return encodeAgentReminderOperationResponse({
+    ...operationScope,
+    accepted: true,
+    reminders: [
+      {
+        ...reminderCore,
+        status: "scheduled",
+        createdAt: "2026-09-08T09:00:00Z",
+        ...overrides,
+      } as never,
+    ],
+    events: [],
+  });
+}
+function encodeJob(overrides: Record<string, unknown>) {
+  return encodeReminderSync({
+    ...scope,
+    operation: "upsert",
+    jobs: [{ ...reminderCore, ...overrides } as never],
+    messageType: REMINDER_SYNC_MESSAGE_TYPE,
+  });
+}
+
+test("a reminder summary and a reminder job accept the shared core", () => {
+  expect(() => encodeSummary({})).not.toThrow();
+  expect(() => encodeJob({})).not.toThrow();
+});
+
+for (const [why, overrides, message] of coreRefusals)
+  test(`a reminder summary and a reminder job both refuse ${why}`, () => {
+    const exact = (kind: "summary" | "job") =>
+      message === "invalid reminder" ? `invalid reminder ${kind}` : message;
+    expect(() => encodeSummary(overrides)).toThrow(new Error(exact("summary")));
+    expect(() => encodeJob(overrides)).toThrow(new Error(exact("job")));
+  });
+
+test("a reminder summary also refuses a malformed creation time, a one-shot repeat and a bad fired time", () => {
+  expect(() => encodeSummary({ createdAt: "yesterday" })).toThrow(
+    new Error("invalid reminder created time"),
+  );
+  expect(() => encodeSummary({ repeat: "none" })).toThrow(new Error("invalid reminder summary"));
+  expect(() => encodeSummary({ firedAt: "later" })).toThrow(
+    new Error("invalid reminder fired time"),
+  );
+  expect(() => encodeSummary({ firedAt: "2026-09-08T10:00:01Z" })).not.toThrow();
+});
+
+// A malformed value is refused by `fields()` first (above); a *missing* one passes that pre-check
+// and is refused by the shared core check, with each record's own message.
+for (const field of Object.keys(reminderCore) as (keyof typeof reminderCore)[])
+  test(`a reminder summary and a reminder job both refuse a missing ${field}`, () => {
+    expect(() => encodeSummary({ [field]: undefined })).toThrow(
+      new Error("invalid reminder summary"),
+    );
+    expect(() => encodeJob({ [field]: undefined })).toThrow(new Error("invalid reminder job"));
+  });
+
+test("a reminder summary refuses a missing creation time", () => {
+  expect(() => encodeSummary({ createdAt: undefined })).toThrow(
+    new Error("invalid reminder summary"),
+  );
+});

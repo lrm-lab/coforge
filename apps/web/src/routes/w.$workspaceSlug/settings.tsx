@@ -8,7 +8,7 @@ import { SettingsContent } from "#src/components/settings-content";
 import { useAppToast } from "#src/components/ui/toast";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { SettingsPending } from "#src/features/settings/settings-pending";
-import { saveUserProfile } from "#src/features/profiles/profile.functions";
+import { chooseAvatarPreset, saveUserProfile } from "#src/features/profiles/profile.functions";
 import {
   browserNotificationPermission,
   showPageNotification,
@@ -26,22 +26,18 @@ import {
   saveDateTimePreferences,
 } from "#src/features/settings/settings.functions";
 import { loadWorkspaceMembers } from "#src/features/workspaces/members.functions";
+import { MEMBER_PAGE_SIZE } from "#src/features/workspaces/member-directory";
 import { getLocale, setLocale } from "#src/paraglide/runtime";
-import { readRailLabels, writeRailLabels } from "#src/features/settings/rail-labels";
 import {
   readHideEmptySidebarSections,
   writeHideEmptySidebarSections,
 } from "#src/features/settings/hide-empty-sidebar-sections";
 import { readMessageFullWidth, writeMessageFullWidth } from "#src/features/settings/message-width";
 import {
-  readLiveAgentActivity,
-  writeLiveAgentActivity,
-} from "#src/features/settings/live-agent-activity";
-import {
   conversationOpenMode,
   type ConversationOpenMode,
 } from "#src/features/settings/conversation-open-mode";
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import type { TimeFormat } from "#src/lib/time-format";
 import { m } from "#src/paraglide/messages";
 import {
@@ -54,6 +50,8 @@ import { useRefreshSidebarChannels } from "#src/features/conversations/sidebar-l
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { WorkspaceDangerZone } from "#src/features/workspaces/workspace-danger-zone";
 import {
+  changeWorkspaceSlug,
+  loadMemberAgentPage,
   renameWorkspace,
   uploadWorkspaceIcon,
 } from "#src/features/workspaces/workspaces.functions";
@@ -78,16 +76,25 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
   validateSearch: z.object({
     section: z.enum(settingsSections).optional().catch(undefined),
     github: z.enum(["connected", "error", "wrong_account"]).optional().catch(undefined),
+    // Settings → Account shows the platform avatar picker instead of the profile.
+    avatar: z.literal("choose").optional().catch(undefined),
   }),
   loader: async () => {
-    const [preferences, members, generalChannel, archivedChannels] = await Promise.all([
-      getUserPreferences(),
-      loadWorkspaceMembers(),
-      loadGeneralChannelHidden(),
-      loadArchivedChannels(),
-    ]);
+    const [preferences, members, generalChannel, archivedChannels, createdAgents] =
+      await Promise.all([
+        getUserPreferences(),
+        loadWorkspaceMembers(),
+        loadGeneralChannelHidden(),
+        loadArchivedChannels(),
+        loadMemberAgentPage({ data: { owner: "mine", query: "", limit: MEMBER_PAGE_SIZE } }),
+      ]);
     return {
       ...preferences,
+      createdAgents: createdAgents.items.map(({ id, name, avatarUrl }) => ({
+        id,
+        name,
+        avatarUrl,
+      })),
       generalChannelHidden: generalChannel?.hidden ?? null,
       archivedChannels,
       members: {
@@ -104,11 +111,9 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
 
 function SettingsPage() {
   const [theme, setTheme] = useState<Theme>("system");
-  const [railLabels, setRailLabels] = useState(true);
-  const [liveAgentActivity, setLiveAgentActivity] = useState(true);
   const [hideEmptySidebarSections, setHideEmptySidebarSections] = useState(false);
   const [messageFullWidth, setMessageFullWidth] = useState(false);
-  const { section, github } = Route.useSearch();
+  const { section, github, avatar } = Route.useSearch();
   const { workspaceSlug } = Route.useParams();
   const navigate = Route.useNavigate();
   const {
@@ -116,6 +121,7 @@ function SettingsPage() {
     timeFormat: savedTimeFormat,
     conversationOpenMode: savedOpenMode,
     members,
+    createdAgents,
     generalChannelHidden,
     archivedChannels,
   } = Route.useLoaderData();
@@ -130,9 +136,11 @@ function SettingsPage() {
   const subscribePush = useServerFn(subscribeBrowserPush);
   const sendTestNotification = useServerFn(sendTestBrowserNotification);
   const saveProfile = useServerFn(saveUserProfile);
+  const saveAvatarPreset = useServerFn(chooseAvatarPreset);
   const saveGeneralChannelHidden = useServerFn(setGeneralChannelHidden);
   const saveWorkspaceName = useServerFn(renameWorkspace);
   const saveWorkspaceIcon = useServerFn(uploadWorkspaceIcon);
+  const saveWorkspaceSlug = useServerFn(changeWorkspaceSlug);
   const refreshSidebarChannels = useRefreshSidebarChannels();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -144,11 +152,9 @@ function SettingsPage() {
     const initialTheme =
       storedTheme === "system" || storedTheme === "dark" || storedTheme === "light"
         ? storedTheme
-        : "system";
+        : "light";
     setTheme(initialTheme);
     applyTheme(initialTheme);
-    setRailLabels(readRailLabels());
-    setLiveAgentActivity(readLiveAgentActivity());
     setHideEmptySidebarSections(readHideEmptySidebarSections());
     setMessageFullWidth(readMessageFullWidth());
   }, []);
@@ -178,19 +184,9 @@ function SettingsPage() {
     document.documentElement.classList.toggle("dark-mode", dark);
   }
 
-  function changeRailLabels(show: boolean) {
-    setRailLabels(show);
-    writeRailLabels(show);
-  }
-
   function changeHideEmptySidebarSections(hide: boolean) {
     setHideEmptySidebarSections(hide);
     writeHideEmptySidebarSections(hide);
-  }
-
-  function changeLiveAgentActivity(show: boolean) {
-    setLiveAgentActivity(show);
-    writeLiveAgentActivity(show);
   }
 
   function changeMessageFullWidth(full: boolean) {
@@ -264,7 +260,7 @@ function SettingsPage() {
     } catch (cause) {
       // The server could not reach this browser's push service: notifications still
       // arrive while CoForge is open, so the test shows one from the page itself.
-      if (isAppError(cause) && cause.code === "PUSH_SERVICE_UNREACHABLE") {
+      if (isAppErrorCode(cause, "PUSH_SERVICE_UNREACHABLE")) {
         try {
           await showPageNotification({
             title: m.preferences_browser_notifications_test_title(),
@@ -302,6 +298,16 @@ function SettingsPage() {
     await router.invalidate({ sync: true });
   }
 
+  // The page moves to the Workspace's new URL; the loaders for that URL then read it fresh.
+  async function changeWorkspaceUrl(slug: string) {
+    const workspace = await saveWorkspaceSlug({ data: { slug } });
+    await navigate({
+      to: "/w/$workspaceSlug/settings",
+      params: { workspaceSlug: workspace.slug },
+      search: { section: "workspace-profile" },
+    });
+  }
+
   async function changeWorkspaceIcon(file: File) {
     const form = new FormData();
     form.set("file", file);
@@ -321,6 +327,12 @@ function SettingsPage() {
     await queryClient.invalidateQueries({ queryKey: ["conversation"] });
   }
 
+  async function choosePresetAvatar(presetId: string) {
+    await saveAvatarPreset({ data: { presetId } });
+    await router.invalidate({ sync: true });
+    await queryClient.invalidateQueries({ queryKey: ["conversation"] });
+  }
+
   async function removeAvatar() {
     const response = await fetch("/api/me/avatar", { method: "DELETE" });
     if (!response.ok) throw new Error("Profile image removal failed");
@@ -335,6 +347,7 @@ function SettingsPage() {
       section={section}
       onSectionChange={(next) => void navigate({ search: { section: next }, replace: true })}
       profile={profile}
+      createdAgents={createdAgents}
       members={members}
       locale={locale}
       theme={theme}
@@ -346,13 +359,16 @@ function SettingsPage() {
       showAddToHomeScreenGuide={showAddToHomeScreenGuide}
       onProfileSave={changeProfile}
       onAvatarUpload={uploadAvatar}
+      onAvatarPresetChoose={choosePresetAvatar}
       onAvatarRemove={removeAvatar}
+      avatarPicker={avatar === "choose"}
+      onAvatarPickerChange={(open) =>
+        void navigate({
+          search: { section: "account", avatar: open ? "choose" : undefined },
+        })
+      }
       onLocaleChange={setLocale}
       onThemeChange={changeTheme}
-      railLabels={railLabels}
-      onRailLabelsChange={changeRailLabels}
-      liveAgentActivity={liveAgentActivity}
-      onLiveAgentActivityChange={changeLiveAgentActivity}
       hideEmptySidebarSections={hideEmptySidebarSections}
       onHideEmptySidebarSectionsChange={changeHideEmptySidebarSections}
       messageFullWidth={messageFullWidth}
@@ -367,6 +383,7 @@ function SettingsPage() {
       onGeneralChannelHiddenSave={changeGeneralChannelHidden}
       workspace={currentWorkspace}
       onWorkspaceRename={changeWorkspaceName}
+      onWorkspaceSlugChange={changeWorkspaceUrl}
       onWorkspaceIconUpload={changeWorkspaceIcon}
       archivedChannelsGroup={
         <ArchivedChannelsGroup channels={archivedChannels} timeZone={savedTimeZone} />

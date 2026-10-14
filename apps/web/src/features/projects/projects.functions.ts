@@ -5,7 +5,7 @@ import { configuredGitHub } from "#src/server/integrations/github-config.server"
 import type { RepositorySelection } from "#src/server/integrations/github-connection.server";
 import { gitObjectIdSchema } from "#src/lib/git-object-id";
 import { linkedRepositoryOf } from "#src/server/projects/project-files.server";
-import { AppError, isAppError } from "#src/lib/app-error";
+import { AppError, isAppErrorCode } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { ProjectSettings } from "#src/server/projects/project-settings.server";
 import { z } from "zod";
@@ -13,7 +13,10 @@ import { createProjectInput, projectIconUploadInput, updateProjectInput } from "
 import { ProjectImages, withProjectIconUrl } from "#src/server/projects/project-images.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import {
+  PROJECT_DETAIL_SELECT,
+  readProjectChannelActivity,
+} from "#src/server/projects/project-detail.server";
 
 export const uploadProjectIcon = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -44,7 +47,7 @@ export const getProjectRepository = createServerFn({ method: "GET" })
       });
       return { status: "ready" as const, fullName: project.githubFullName, ...overview };
     } catch (error) {
-      if (isAppError(error) && error.code === "ACCESS_DENIED") return { status: "denied" as const };
+      if (isAppErrorCode(error, "ACCESS_DENIED")) return { status: "denied" as const };
       return { status: "unavailable" as const };
     }
   });
@@ -73,8 +76,8 @@ async function readLinkedRepository<T>(
     const result = await read(github.connection, repository);
     return { status: "ready" as const, fullName: repository.fullName, ...result };
   } catch (error) {
-    if (isAppError(error) && error.code === "ACCESS_DENIED") return { status: "denied" as const };
-    if (isAppError(error) && error.code === "NOT_FOUND") return { status: "not_found" as const };
+    if (isAppErrorCode(error, "ACCESS_DENIED")) return { status: "denied" as const };
+    if (isAppErrorCode(error, "NOT_FOUND")) return { status: "not_found" as const };
     return { status: "unavailable" as const };
   }
 }
@@ -125,53 +128,17 @@ export const getProject = createServerFn({ method: "GET" })
     const { db, workspaceId } = context;
     const project = await db.project.findFirst({
       where: { workspaceId, slug: data.slug },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true,
-        iconObjectKey: true,
-        githubFullName: true,
-        githubHtmlUrl: true,
-        commitCoAuthor: true,
-        conversations: {
-          select: {
-            id: true,
-            channelName: true,
-            createdAt: true,
-            // Who is in the channel now: not someone who left it, or left the Workspace.
-            _count: { select: { members: { where: ACTIVE_MEMBER_WHERE }, messages: true } },
-            messages: {
-              take: 1,
-              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              select: {
-                createdAt: true,
-                sender: {
-                  select: {
-                    user: {
-                      select: {
-                        id: true,
-                        displayName: true,
-                        fullName: true,
-                        username: true,
-                        avatarObjectKey: true,
-                      },
-                    },
-                    agent: { select: { displayName: true } },
-                  },
-                },
-              },
-            },
-          },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        },
-      },
+      select: PROJECT_DETAIL_SELECT,
     });
     if (!project) return null;
     const { conversations, ...view } = project;
+    const activity = await readProjectChannelActivity(
+      db,
+      conversations.map((conversation) => conversation.id),
+    );
     const mappedConversations = conversations
-      .map(({ _count, messages, ...conversation }) => {
-        const lastMessage = messages[0];
+      .map((conversation) => {
+        const { memberCount, messageCount, lastMessage } = activity.get(conversation.id)!;
         const sender = lastMessage?.sender;
         const lastSender = sender
           ? sender.user
@@ -189,8 +156,8 @@ export const getProject = createServerFn({ method: "GET" })
           : null;
         return {
           ...conversation,
-          memberCount: _count.members,
-          messageCount: _count.messages,
+          memberCount,
+          messageCount,
           lastActivityAt: (lastMessage?.createdAt ?? conversation.createdAt).toISOString(),
           lastSender,
         };

@@ -11,6 +11,7 @@ import {
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
 import { channelTarget } from "#src/server/conversations/agent-delivery.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 export type AgentInboxPurgeRequest = {
   workspaceId: string;
@@ -83,7 +84,7 @@ export class AgentInboxPurgePublisher {
           agent_id: request.agentId,
           reason: request.reason,
           conversation_count: request.conversationIds.length,
-          error_type: error instanceof Error ? error.name : typeof error,
+          error_type: errorType(error),
         }),
       );
     }

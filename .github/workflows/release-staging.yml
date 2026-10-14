@@ -21,7 +21,7 @@ permissions:
 env:
   # The release line staging dev builds belong to. Each line counts its own dev builds from 1
   # (scripts/release/publish.ts `nextDevVersion`); move it when a line ships as a stable version.
-  DEV_LINE: "0.1.1"
+  DEV_LINE: "0.1.2"
 
 concurrency:
   group: release-staging
@@ -86,7 +86,7 @@ jobs:
           payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
           printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"
 
-      # This role's trust policy grants only `repo:LRM-Teams@289986103/coforge@1345850229:environment:staging` -
+      # This role's trust policy grants only `repo:lrm-lab@340480458/coforge@1412896035:environment:staging` -
       # GitHub's OIDC token asserts the workflow's repo/ref/environment, and Alibaba Cloud checks
       # that assertion before issuing an STS token. No long-term AccessKey exists for this
       # publisher; a compromised token can only assume the role from this exact repo/environment,

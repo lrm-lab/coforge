@@ -7,10 +7,10 @@ import { join } from "path";
 import { resolveComputerInstallDirectory } from "@lrm/coforge-daemon";
 import { OAuthDeviceClient } from "./oauth-device-client";
 import { ComputerLogin } from "./login";
-import { CliError, loginError, safeErrorDetail, setupError } from "./errors";
+import { CliError, loginError, setupError } from "./errors";
 import { FileCredentialStore } from "./credential-store";
 import { resolveComputerStateDirectory, resolveDaemonSocketPath } from "./paths";
-import { ComputerUpdater, UpdateError } from "./updater";
+import { ComputerUpdater } from "./updater";
 import {
   resolveUpgradeRunnerPaths,
   runInstallerRecovery,
@@ -33,6 +33,7 @@ import {
   ComputerRegistrationClient,
   RUNNER_HOLD_REASONS,
   type HeldBusyAgent,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import {
   createDaemonHost,
@@ -46,6 +47,8 @@ import { createWorkspaceLookup } from "#src/workspace/lookup";
 import { isValidComputerWorkspaceSlug } from "#src/workspace/workspace-slug";
 import { registrationIdempotencyKey } from "#src/registration/idempotency-key";
 import { writeSetupResult } from "#src/cli/setup-output";
+import { writeCliFailure } from "#src/cli/failure-output";
+import { describeUpgradePlan, planUpgrade } from "#src/cli/upgrade-plan";
 import { createCommand as createClientCommand } from "./daemon-client";
 import { configureComputerLogger } from "#src/logging/computer-logger";
 import { followComputerLogs } from "#src/logging/computer-logs";
@@ -176,10 +179,22 @@ export async function runCli(
     )
     .option("--version <selector>", "latest|<version>", "latest")
     .option("--allow-downgrade", "Allow --version to be older than the installed Computer")
-    .action(async (options: { version: string; allowDowngrade?: boolean }) => {
+    .option(
+      "--dry-run",
+      "Show the version this would move to, and whether it would be refused, without changing anything",
+    )
+    .action(async (options: { version: string; allowDowngrade?: boolean; dryRun?: boolean }) => {
       const allowDowngrade = options.allowDowngrade === true;
       const updater = requireUpdater(dependencies);
       const target = await updater.resolveVersion(options.version);
+      if (options.dryRun) {
+        const report = describeUpgradePlan(
+          planUpgrade(await updater.getCurrentVersion(), target, allowDowngrade),
+        );
+        for (const line of report.lines) io.stdout(line);
+        exitCode = report.exitCode;
+        return;
+      }
       if ((await updater.getCurrentVersion()) === target) {
         io.stdout(`Already up to date: ${target}`);
         return;
@@ -266,41 +281,7 @@ export async function runCli(
       if (error.code === "commander.helpDisplayed" || error.code === "commander.version") return 0;
       return error.exitCode;
     }
-    // The login branch carries the underlying cause. Without it every unmapped login failure - a
-    // server with no device endpoint, a DNS failure, a malformed discovery document - collapses
-    // into one indistinguishable "Login failed." under a fixed hint about server configuration
-    // that is unrelated to most of them, leaving nothing to diagnose from.
-    // safeErrorDetail strips anything token-shaped out of the message.
-    const failure =
-      error instanceof CliError
-        ? error
-        : loginSelected
-          ? loginError("AUTH_FAILED", `Login failed: ${safeErrorDetail(error)}`)
-          : setupSelected
-            ? setupError("SETUP_FAILED", "Workspace setup failed.", "computer-registration", error)
-            : null;
-    if (failure) {
-      if (json) {
-        io.stdout(
-          JSON.stringify({
-            ok: false,
-            error: {
-              code: failure.code,
-              message: failure.message,
-              hint: failure.hint,
-            },
-          }),
-        );
-      } else {
-        io.stderr(`${failure.code}: ${failure.message}\nHint: ${failure.hint}`);
-      }
-    } else if (error instanceof CliError) {
-      io.stderr(`${error.code}: ${error.message}\nHint: ${error.hint}`);
-    } else if (error instanceof UpdateError) {
-      io.stderr(`${error.code}: ${error.message}`);
-    } else {
-      io.stderr(error instanceof Error ? error.message : "coforge-computer failed");
-    }
+    writeCliFailure(io, error, { json, login: loginSelected, setup: setupSelected });
     return 1;
   }
   return exitCode;
@@ -545,7 +526,7 @@ export async function restartSupervisor(
 ): Promise<void> {
   const foregroundRefusal = (cause: unknown): Error =>
     new Error(
-      `Cannot restart the supervisor of a foreground externally supervised Computer while it is running: ${cause instanceof Error ? cause.message : String(cause)} Restart it through its external supervisor, or install the supported user service with \`coforge-computer start\`.`,
+      `Cannot restart the supervisor of a foreground externally supervised Computer while it is running: ${thrownMessage(cause)} Restart it through its external supervisor, or install the supported user service with \`coforge-computer start\`.`,
       { cause },
     );
   // launchd only: refuse outright rather than silently falling back to bootstrapping a fresh

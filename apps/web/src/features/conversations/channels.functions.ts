@@ -5,7 +5,7 @@ import {
   workspaceUserMiddleware,
   type WorkspaceUserContext,
 } from "#src/features/auth/function-auth";
-import { AppError, isAppError } from "#src/lib/app-error";
+import { AppError, isAppErrorCode } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { ChannelAgentControl } from "#src/server/conversations/channel-agent-control.server";
@@ -291,8 +291,7 @@ export const loadGeneralChannelHidden = createServerFn({ method: "GET" })
     try {
       return { hidden: await channels.generalHidden(workspaceId, userId) };
     } catch (error) {
-      if (isAppError(error) && (error.code === "ACCESS_DENIED" || error.code === "NOT_FOUND"))
-        return null;
+      if (isAppErrorCode(error, "ACCESS_DENIED", "NOT_FOUND")) return null;
       throw error;
     }
   });
@@ -306,7 +305,7 @@ export const loadArchivedChannels = createServerFn({ method: "GET" })
     try {
       return await channels.archived(workspaceId, userId);
     } catch (error) {
-      if (isAppError(error) && error.code === "ACCESS_DENIED") return null;
+      if (isAppErrorCode(error, "ACCESS_DENIED")) return null;
       throw error;
     }
   });

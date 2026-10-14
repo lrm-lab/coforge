@@ -1,6 +1,7 @@
 import handler from "@tanstack/react-start/server-entry";
 
 import { paraglideMiddleware } from "#src/paraglide/server";
+import { publicOrigin } from "#src/server/http/public-origin.server";
 import { assertStartupConfig } from "#src/server/startup-config.server";
 import { ensureWorkspaceMemoryLifecycle } from "#src/server/workspace-memory/lifecycle.server";
 import { startWeeklyReportScheduleTickFromEnv } from "#src/server/records/weekly-report-schedule-tick.server";
@@ -33,10 +34,21 @@ export function isNonLocalizedRequest(request: Request): boolean {
   );
 }
 
+/** The URL the browser actually requested, for Paraglide's route matching and locale redirect.
+ * Behind the TLS-terminating proxy `request.url` is `http://`, and Paraglide builds its redirect
+ * as an absolute URL from it; production serves no plaintext. `effectiveRequestUrl` is the
+ * middleware's option for exactly this (https://paraglidejs.com/server). */
+function addressedUrl(request: Request): URL {
+  const url = new URL(request.url);
+  return new URL(`${url.pathname}${url.search}`, publicOrigin(request));
+}
+
 export default {
   async fetch(request: Request): Promise<Response> {
     return isNonLocalizedRequest(request)
       ? handler.fetch(request)
-      : paraglideMiddleware(request, () => handler.fetch(request));
+      : paraglideMiddleware(request, () => handler.fetch(request), {
+          effectiveRequestUrl: addressedUrl,
+        });
   },
 };

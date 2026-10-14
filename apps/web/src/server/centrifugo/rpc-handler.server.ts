@@ -31,6 +31,10 @@ import {
   type AgentContextReport,
 } from "./agent-context-cache.server";
 import { getUsageCache, type UsageCache, type UsageSnapshot } from "./usage-cache.server";
+import {
+  getModelCatalogRefreshResults,
+  type RedisModelCatalogRefreshResults,
+} from "./model-catalog-refresh-cache.server";
 import { PublishAgentRuntimeControl } from "#src/server/agents/agent-runtime-control.server";
 import {
   AgentDeliveryRejectionScopeError,
@@ -75,6 +79,7 @@ import {
   type ComputerObservation,
 } from "#src/server/computers/computer-metadata.server";
 import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
+import { errorType } from "#src/server/errors/error-type.server";
 export {
   createAgentSessionMethod,
   createAgentSessionInvalidateMethod,
@@ -118,43 +123,48 @@ export const createAgentReminderMethod =
     }
   };
 
-export const createReminderFireMethod =
-  (reminders: Reminders): CentrifugoRpcMethod =>
-  async (payload, metadata) => {
+/**
+ * A reminder RPC a Workspace daemon sends for its own Computer. A request for another scope, a
+ * malformed one, or any refusal from `run` answers 403 with the error's message.
+ */
+function daemonReminderMethod<Decoded extends { workspaceId: string; computerId: string }>(
+  decode: (payload: Uint8Array) => Decoded,
+  run: (request: Decoded) => Promise<Uint8Array>,
+  messages: { unauthorized: string; rejected: string },
+): CentrifugoRpcMethod {
+  return async (payload, metadata) => {
     try {
-      const request = decodeReminderFireRequest(payload);
+      const request = decode(payload);
       if (
         metadata.principal.workspaceId !== request.workspaceId ||
         metadata.principal.computerId !== request.computerId
       )
-        throw new Error("reminder fire is not authorized");
-      return await reminders.fireFromDaemon(request);
+        throw new Error(messages.unauthorized);
+      return await run(request);
     } catch (error) {
       return {
         code: 403,
-        message: error instanceof Error ? error.message : "reminder fire rejected",
+        message: error instanceof Error ? error.message : messages.rejected,
       };
     }
   };
+}
 
-export const createReminderSnapshotMethod =
-  (reminders: Reminders): CentrifugoRpcMethod =>
-  async (payload, metadata) => {
-    try {
-      const request = decodeReminderSnapshotRequest(payload);
-      if (
-        metadata.principal.workspaceId !== request.workspaceId ||
-        metadata.principal.computerId !== request.computerId
-      )
-        throw new Error("reminder snapshot is not authorized");
-      return await reminders.snapshotForDaemon(request);
-    } catch (error) {
-      return {
-        code: 403,
-        message: error instanceof Error ? error.message : "reminder snapshot rejected",
-      };
-    }
-  };
+export const createReminderFireMethod = (reminders: Reminders): CentrifugoRpcMethod =>
+  daemonReminderMethod(decodeReminderFireRequest, (request) => reminders.fireFromDaemon(request), {
+    unauthorized: "reminder fire is not authorized",
+    rejected: "reminder fire rejected",
+  });
+
+export const createReminderSnapshotMethod = (reminders: Reminders): CentrifugoRpcMethod =>
+  daemonReminderMethod(
+    decodeReminderSnapshotRequest,
+    (request) => reminders.snapshotForDaemon(request),
+    {
+      unauthorized: "reminder snapshot is not authorized",
+      rejected: "reminder snapshot rejected",
+    },
+  );
 
 /** Records a daemon's delivery ACK through `acks`; `MentionDeliveryReports` also settles the
  * tracked mention it answers. */
@@ -435,7 +445,7 @@ export const createDaemonRuntimeReadyMethod =
               request_id: request.requestId,
               workspace_id: request.workspaceId,
               computer_id: request.computerId,
-              error_type: error instanceof Error ? error.name : typeof error,
+              error_type: errorType(error),
             }),
           ),
         );
@@ -448,7 +458,7 @@ export const createDaemonRuntimeReadyMethod =
           request_id: request.requestId,
           workspace_id: request.workspaceId,
           computer_id: request.computerId,
-          error_type: error instanceof Error ? error.name : typeof error,
+          error_type: errorType(error),
         }),
       );
       // The stage travels in the error, not only in this server's console: the Daemon logs what it
@@ -520,7 +530,7 @@ export function createDaemonRuntimeShutdownMethod(
           request_id: notice.requestId,
           workspace_id: notice.workspaceId,
           computer_id: notice.computerId,
-          error_type: error instanceof Error ? error.name : typeof error,
+          error_type: errorType(error),
         }),
       );
       return { code: 503, message: "daemon shutdown notice was not recorded" };
@@ -669,16 +679,18 @@ export function createDaemonRuntimeUsageScanResultMethod(
  * The Daemon's terminal reply for one on-demand model-catalog refresh
  * (`daemon:v1:provider:model_refresh_result`). The fresh catalog itself already landed through the
  * ordinary `daemon:v1:provider:inventory_update` re-report before this reply; this method only
- * authenticates the sender and records the outcome for diagnosability — the browser's model
- * selector watches `observedAt`, so the reply carries no state the Web needs to keep.
+ * authenticates the sender and stores the terminal result for the matching refresh request.
  */
-export function createDaemonRuntimeProviderModelRefreshResultMethod(): CentrifugoRpcMethod {
+export function createDaemonRuntimeProviderModelRefreshResultMethod(
+  results?: Pick<RedisModelCatalogRefreshResults, "accept">,
+): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const response = decodeDaemonRuntimeProviderModelRefreshResponse(payload);
     const denied = requireDaemonPrincipal(metadata, response);
     if (denied) return denied;
     if (response.protocolMajor !== 1 || !response.requestId)
       return { code: 400, message: "invalid model refresh result" };
+    await (results ?? getModelCatalogRefreshResults()).accept(response);
     console.info(
       JSON.stringify({
         event: "code_agent_catalog:refresh_result",
@@ -1037,31 +1049,32 @@ function validModelCatalogs(catalogs: CodeAgentModelCatalog[]): boolean {
   );
 }
 
-export function createWorkspaceListMethod(useCase: WorkspaceQueryUseCase): CentrifugoRpcMethod {
+/** The signed-in user an RPC acts for, when its principal names one. */
+function userPrincipal({ principal }: CentrifugoRpcMetadata) {
+  return principal.userId ? { userId: principal.userId } : undefined;
+}
+
+/** A Workspace read: a `WorkspaceQueryError` answers with its own code; anything else throws. */
+function workspaceQueryMethod<Decoded>(
+  decode: (payload: Uint8Array) => Decoded,
+  query: (request: Decoded, principal: { userId: string } | undefined) => Promise<Uint8Array>,
+): CentrifugoRpcMethod {
   return (payload, metadata) =>
-    useCase
-      .list(
-        decodeWorkspaceListRequest(payload),
-        metadata.principal.userId ? { userId: metadata.principal.userId } : undefined,
-      )
-      .catch((error) => {
-        if (error instanceof WorkspaceQueryError)
-          return { code: error.code, message: error.message };
-        throw error;
-      });
+    query(decode(payload), userPrincipal(metadata)).catch((error) => {
+      if (error instanceof WorkspaceQueryError) return { code: error.code, message: error.message };
+      throw error;
+    });
+}
+
+export function createWorkspaceListMethod(useCase: WorkspaceQueryUseCase): CentrifugoRpcMethod {
+  return workspaceQueryMethod(decodeWorkspaceListRequest, (request, principal) =>
+    useCase.list(request, principal),
+  );
 }
 export function createWorkspaceGetMethod(useCase: WorkspaceQueryUseCase): CentrifugoRpcMethod {
-  return (payload, metadata) =>
-    useCase
-      .get(
-        decodeWorkspaceGetRequest(payload),
-        metadata.principal.userId ? { userId: metadata.principal.userId } : undefined,
-      )
-      .catch((error) => {
-        if (error instanceof WorkspaceQueryError)
-          return { code: error.code, message: error.message };
-        throw error;
-      });
+  return workspaceQueryMethod(decodeWorkspaceGetRequest, (request, principal) =>
+    useCase.get(request, principal),
+  );
 }
 
 export type CentrifugoRpcRequest = {
@@ -1118,10 +1131,7 @@ export function createComputerRegistrationMethod(useCase: {
   return async (payload, metadata) => {
     try {
       const request = decodeComputerRegisterRequest(payload);
-      const result = await useCase.register(
-        request,
-        metadata.principal.userId ? { userId: metadata.principal.userId } : undefined,
-      );
+      const result = await useCase.register(request, userPrincipal(metadata));
       return encodeComputerRegisterResponse(result);
     } catch (error) {
       if (error instanceof ComputerRegistrationError)
@@ -1185,6 +1195,7 @@ function decodePayload(request: CentrifugoRpcRequest) {
 export class CentrifugoRpcHandler {
   readonly #methods: ReadonlyMap<string, CentrifugoRpcMethod>;
   readonly #authenticateEnvelope?: CentrifugoRpcAuthenticate;
+  readonly #authorizeProxyRequest?: CentrifugoProxyAuthorizer;
 
   constructor(options: {
     methods: ReadonlyMap<string, CentrifugoRpcMethod> | Record<string, CentrifugoRpcMethod>;
@@ -1197,8 +1208,6 @@ export class CentrifugoRpcHandler {
     this.#authenticateEnvelope = options.authenticateEnvelope;
     this.#authorizeProxyRequest = options.authorizeProxyRequest;
   }
-
-  readonly #authorizeProxyRequest?: CentrifugoProxyAuthorizer;
 
   async handleRequest(request: Request, fixedMethod?: string): Promise<Response> {
     try {

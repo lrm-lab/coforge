@@ -9,7 +9,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
-import { isAppError } from "#src/lib/app-error";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { mergeMessages } from "./conversation-messages";
 import {
   createConversationReconciler,
@@ -39,7 +39,7 @@ import { loadActionCardStates } from "./action-cards.functions";
 import { channelMembersQueryKey, channelNamesQueryKey } from "./conversation-query-keys";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
 import { listSavedMessages } from "./saved-messages.functions";
-import type { ActionCardView } from "./action-card";
+import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { createReactionToggler, type ReactionSummary } from "./message-reactions";
 import {
   applyThreadRead,
@@ -236,18 +236,18 @@ export async function ensureConversationWindow<
   }
 }
 
+/** The conversation no longer exists for this viewer, such as a channel hidden from the
+ * Workspace: its page leaves for Chat instead of showing a load failure. */
+export function isConversationGone(error: unknown) {
+  return isAppErrorCode(error, "NOT_FOUND");
+}
+
 /**
  * A message route's conversation, read from the Query cache the loader populated.
  * Older history is more pages of the same infinite query; everything that arrives later
  * (polls, realtime, the user's own sends, an "around" jump) is written into the cache with
  * setQueryData, so every reader of the key sees the same conversation.
  */
-/** The conversation no longer exists for this viewer, such as a channel hidden from the
- * Workspace: its page leaves for Chat instead of showing a load failure. */
-export function isConversationGone(error: unknown) {
-  return isAppError(error) && error.code === "NOT_FOUND";
-}
-
 export function useConversationQuery<M extends PageMessage, T extends ConversationPage<M>>({
   query,
   loadInitialPage,

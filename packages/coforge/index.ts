@@ -3,6 +3,8 @@ import {
   DEFAULT_REMINDER_TIMEZONE,
   decodeLocalReminderRequest,
   encodeLocalReminderRequest,
+  MESSAGE_ANCHOR_SOURCE,
+  UUID_LIKE_SOURCE,
   UUID_LIKE_PATTERN,
   isReminderId,
   isValidReactionEmoji,
@@ -338,9 +340,12 @@ export type MessageTransport = {
   mentionDelivery?(messageId: string): Promise<AgentMentionDeliveryResponse>;
 };
 
-/** Eight-hex-character prefix or a full UUID; the server stores ids lowercase. */
-const MESSAGE_ANCHOR_PATTERN =
-  /^[0-9a-f]{8}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The message-id short forms (twelve hex, dashed, or eight hex) or a full UUID; the server stores
+ * ids lowercase. */
+const MESSAGE_ANCHOR_PATTERN = new RegExp(
+  `^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`,
+  "i",
+);
 /** A full UUID; `--attachment-id` never accepts an eight-hex short form. */
 const UUID_PATTERN = UUID_LIKE_PATTERN;
 
@@ -400,9 +405,10 @@ export function parseArgs(
     args[1] === "unfollow" &&
     args[2] === "--target" &&
     args.length === 4 &&
-    /^#[a-z0-9][a-z0-9_-]{0,31}:(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(
-      args[3] ?? "",
-    )
+    new RegExp(
+      `^#[a-z0-9][a-z0-9_-]{0,31}:(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`,
+      "i",
+    ).test(args[3] ?? "")
   )
     return { command: "thread-unfollow", target: args[3]! };
   if (args[0] === "inbox" && args[1] === "check" && args.length === 2)
@@ -1377,7 +1383,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
         message: "Prepare action response did not include a message id",
         retryable: false,
       });
-    const shortId = result.messageId.slice(0, 8);
+    const shortId = result.messageId.slice(0, 13);
     return `Action card posted to ${invocation.target} as message ${result.messageId} (short ${shortId}). The human can click the action verb to commit.`;
   }
   if (invocation.command === "mute" || invocation.command === "unmute") {
@@ -1781,7 +1787,7 @@ function formatMessageResolve(result: unknown): string {
 }
 
 function formatReaction(messageId: string, emoji: string, remove: boolean): string {
-  const shortId = messageId.slice(0, 8);
+  const shortId = messageId.slice(0, 13);
   return `Reaction ${emoji} ${remove ? "removed from" : "added to"} message ${shortId}.`;
 }
 

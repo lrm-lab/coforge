@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { AppError, isAppError } from "#src/lib/app-error";
+import { AppError } from "#src/lib/app-error";
+import { privateResourceRefusal } from "#src/server/http/private-resource-refusal.server";
 import { optionalBrowserUser } from "#src/server/auth/require-user.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { privateImageHeaders } from "#src/server/http/image-headers.server";
@@ -20,14 +21,7 @@ export const Route = createFileRoute("/api/projects/$projectId/icon")({
           );
           return new Response(image.body, { headers: privateImageHeaders(image.contentType) });
         } catch (error) {
-          if (!isAppError(error)) throw error;
-          return Response.json(
-            { code: error.code },
-            {
-              status: error.code === "ACCESS_DENIED" ? 401 : error.code === "NOT_FOUND" ? 404 : 503,
-              headers: { "cache-control": "no-store" },
-            },
-          );
+          return privateResourceRefusal(error);
         }
       },
     },

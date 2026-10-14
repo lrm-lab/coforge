@@ -30,8 +30,10 @@ asked for one, and `null` means not yet asked. A signed-in person with none is
 sent once to `/welcome` (a page outside the Workspace layout), from sign-in, from
 `/w/<slug>`, from `/workspaces/new` and from an invite link `/join/<token>`, but
 not from `/oauth/verify`. Sign-in still issues the session, but creates nothing
-until they answer: submitting the name saves it, then makes their personal
-Workspace, titled with it. A session whose user row is gone is sent to sign in
+until they answer. The same page asks for their personal Workspace's URL
+(slug), starting from the username unless that is only the fallback `user…`;
+submitting makes the Workspace at that URL, titled with the name, then saves the
+name, so a URL found taken leaves them unnamed and still asked. A session whose user row is gone is sent to sign in
 again instead. The name follows the one rule for a person's name
 (`apps/web/src/features/profiles/person-name.ts`), which the profile's own name
 shares: normalized and 1 to 80 characters, counted as code points, and refused
@@ -61,13 +63,25 @@ worded inline where it is typed.
 `avatarObjectKey` and `avatarContentType` identify the user's current private
 avatar in the shared user-files store; image bytes and delivery URLs are never
 stored in PostgreSQL. Replacing an avatar writes a new immutable object before
-the row points to it, then removes the previous object. `Agent` uses the same
-two columns for its own picture, in the same image store.
+the row points to it, then removes the previous object. A user who picks one of
+the platform's preset pictures stores `preset:<id>` in `avatarObjectKey` with a
+null `avatarContentType`: it names no object and resolves to the app's own
+`/avatars/<id>.webp`. `Agent` uses the same two columns for its own picture, in
+the same image store, and never holds a preset reference. A new Agent starts with
+a random platform picture copied into that store as its own object; the object
+key's version segment records it as `platform-<pool version>-<picture id>-<uuid>`
+(an upload's is a bare uuid), the only record of an avatar's origin, so a later
+replacement of every platform picture can find exactly those.
 
 Setup persistence consists of `User`, `UserIdentity`, `Workspace`,
 `WorkspaceMembership`, `Computer`, and `WorkspaceComputer`.
 `WorkspaceMembership.role` is `owner`, `admin`, or `member`. The Workspace creator
-is the immutable owner. `WorkspaceComputer`
+is the immutable owner. Only the owner changes the Workspace's slug (its URL); the
+slug it had goes into `WorkspaceFormerSlug`, which keeps naming that Workspace for
+good: `/w/<former>` redirects to the current slug, `workspace:get` and
+`computer:register` resolve it, and no other Workspace can take it. One advisory
+lock per slug serializes creating a Workspace and moving one, since uniqueness
+spans both tables. `WorkspaceComputer`
 is the durable binding and contains the workspace/computer foreign keys. Its
 database `id` is an internal storage primary key; the business identity is the
 composite `(workspaceId, computerId)` key. That unique constraint makes

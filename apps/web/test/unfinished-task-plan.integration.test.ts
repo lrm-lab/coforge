@@ -13,16 +13,43 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
  * `message-search-plan.integration.test.ts`.
  */
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
+/** Ten times the 4 open Tasks, and still two orders of magnitude below the finished history. */
+const UNFINISHED_ROW_BUDGET = 40;
 
 type PlanNode = {
   "Node Type": string;
   "Relation Name"?: string;
+  "Index Name"?: string;
   "Index Cond"?: string;
+  "Actual Rows"?: number;
+  "Actual Loops"?: number;
+  "Rows Removed by Filter"?: number;
+  "Rows Removed by Index Recheck"?: number;
   Plans?: PlanNode[];
 };
 
 function planNodes(node: PlanNode): PlanNode[] {
   return [node, ...(node.Plans ?? []).flatMap(planNodes)];
+}
+
+/**
+ * Task rows a scan read from the table: the ones it kept plus the ones it discarded afterwards.
+ * This, not the plan's shape, is what the reads must keep small. On a database that also holds
+ * other Workspaces' Tasks the planner may combine several Task indexes (a BitmapAnd), which is
+ * just as cheap.
+ */
+function taskRowsRead(nodes: PlanNode[]): number {
+  return nodes
+    .filter((node) => node["Relation Name"] === "tasks")
+    .reduce(
+      (sum, node) =>
+        sum +
+        ((node["Actual Rows"] ?? 0) +
+          (node["Rows Removed by Filter"] ?? 0) +
+          (node["Rows Removed by Index Recheck"] ?? 0)) *
+          (node["Actual Loops"] ?? 1),
+      0,
+    );
 }
 
 test.skipIf(!connectionString)(
@@ -96,12 +123,24 @@ test.skipIf(!connectionString)(
       for (const { query, params } of reads) {
         const [{ "QUERY PLAN": plan }] = await db.$queryRawUnsafe<
           [{ "QUERY PLAN": [{ Plan: PlanNode }] }]
-        >(`EXPLAIN (FORMAT JSON) ${query}`, ...params);
-        const taskScans = planNodes(plan[0].Plan).filter(
-          (node) => node["Relation Name"] === "tasks",
-        );
+        >(`EXPLAIN (ANALYZE, FORMAT JSON) ${query}`, ...params);
+        const nodes = planNodes(plan[0].Plan);
+        const taskScans = nodes.filter((node) => node["Relation Name"] === "tasks");
         expect(taskScans).toHaveLength(1);
-        expect(taskScans[0]!["Index Cond"]).toContain("status = ANY");
+        expect(taskScans[0]!["Node Type"]).not.toBe("Seq Scan");
+        // The 4 open Tasks, not the 4,000 finished ones. Checked before the index condition so a
+        // failure reports the rows read. Known to fail on a database already full of other
+        // Workspaces' Tasks: there the `--mine` read BitmapAnds both Task indexes without their
+        // `status` column and filters the finished history out of the heap, because the
+        // statistics do not know this owner's Tasks are nearly all finished. That costs about 1 ms
+        // at this test's extreme 4,000, and the fix (a partial index on open Tasks) is not worth a
+        // migration yet.
+        expect(taskRowsRead(nodes)).toBeLessThanOrEqual(UNFINISHED_ROW_BUDGET);
+        // A bitmap scan carries its index condition on the child Bitmap Index Scan.
+        const taskIndexConds = nodes.flatMap((node) =>
+          node["Index Name"]?.startsWith("tasks_") ? [node["Index Cond"] ?? ""] : [],
+        );
+        expect(taskIndexConds.some((cond) => cond.includes("status = ANY"))).toBe(true);
       }
     } finally {
       await db.workspace.delete({ where: { id: workspace.id } });

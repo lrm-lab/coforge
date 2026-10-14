@@ -1,5 +1,5 @@
-import { Bookmark, ChevronRight, Hash01 as Hash, Plus } from "@untitledui/icons";
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { Bookmark, ChevronRight, Hash01 as Hash, Pin01, Plus } from "@untitledui/icons";
+import { useEffect, useId, useMemo, useState, type FC, type ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { DndContext } from "@dnd-kit/core";
 import { Link as AriaLink } from "react-aria-components";
@@ -33,6 +33,7 @@ import {
   directorySectionHideable,
   readCollapsedSections,
   writeCollapsedSections,
+  type CollapsibleSectionId,
   type DirectorySectionId,
 } from "./directory-sections";
 import { EMPTY_SECTION_HIDDEN_CLASS } from "#src/features/settings/hide-empty-sidebar-sections";
@@ -117,6 +118,7 @@ function ConversationRow({
   target,
   current,
   card,
+  pinned,
   icon,
   muted,
   unreadCount,
@@ -129,6 +131,9 @@ function ConversationRow({
   current?: boolean;
   /** The selected row is a bordered card, as a channel's is. */
   card?: boolean;
+  /** The member pinned this row: its name draws the sidebar foreground colour (design spec),
+   * darker than an unpinned row's, until it is selected or muted. */
+  pinned?: boolean;
   icon: ReactNode;
   muted?: boolean;
   unreadCount?: number;
@@ -168,8 +173,8 @@ function ConversationRow({
         "flex w-full cursor-pointer items-center gap-2 p-2 outline-focus-ring transition duration-100 ease-linear select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
         card ? "rounded-xl border" : "rounded-md",
         !lastMessage && "max-h-9",
-        current ? "bg-sidebar-accent" : "hover:bg-primary_hover",
-        card && (current ? "border-secondary" : "border-transparent"),
+        current ? (card ? "bg-chat-selected-bg" : "bg-sidebar-accent") : "hover:bg-primary_hover",
+        card && (current ? "border-chat-selected-border" : "border-transparent"),
       )}
     >
       {lastMessage ? (
@@ -183,7 +188,13 @@ function ConversationRow({
             <span
               className={cx(
                 "min-w-0 flex-1 truncate text-sm font-medium",
-                current ? "text-brand-secondary" : muted ? "text-tertiary" : "text-secondary",
+                current
+                  ? "text-brand-secondary"
+                  : muted
+                    ? "text-tertiary"
+                    : pinned
+                      ? "text-sidebar-fg"
+                      : "text-secondary",
               )}
             >
               {children}
@@ -238,61 +249,99 @@ function ConversationRow({
   );
 }
 
+/** Every row, title and list in the directory shares one inset, so a title's chevron, the Saved
+ * entry's bookmark and a channel row's avatar all start on the same x: 0.75rem here plus the
+ * 0.5rem a row pads itself by is the 1.25rem the design asks for. */
+const DIRECTORY_INSET = "px-3";
+
 /**
- * A collapsible sidebar group (CHANNELS, DIRECT MESSAGES). The caption itself is the toggle,
- * like Slack's sidebar sections; the chevron sits in a 20px gutter so the caption keeps the exact
- * x position it has without a toggle, and the list below stays aligned with it.
+ * A sidebar group's title and its rows. A group that can collapse (Channels, Direct messages)
+ * makes the whole caption its toggle, like Slack's sidebar sections, and draws a chevron in the
+ * leading 20px gutter. A group that cannot (Pinned, per the design mockup) draws its own mark in
+ * that same gutter instead, so every title in the list keeps the same x either way.
  */
 function DirectorySection({
   label,
+  icon: Icon,
   expanded,
   onToggle,
   action,
   children,
 }: {
   label: string;
-  expanded: boolean;
-  onToggle: () => void;
+  /** A non-collapsible section's own mark, in the gutter a collapsible one gives its chevron —
+   * the way the Saved entry carries a bookmark. Ignored on a collapsible section: the mockup
+   * gives Channels and Direct messages a chevron and no second mark. */
+  icon?: FC<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
+  expanded?: boolean;
+  /** Absent on a section that cannot collapse: its rows are always shown, and its title row is
+   * not a control at all, so it draws no chevron and takes no hover highlight. */
+  onToggle?: () => void;
   /** Optional trailing control on the header row, e.g. a "+" that creates a channel. It sits
    * outside the toggle button so it is its own click target, not part of collapsing. */
   action?: ReactNode;
   children: ReactNode;
 }) {
   const listId = useId();
+  // The title carries its own size, weight and colour, so it reads as a title of the list rather
+  // than a caption above it (and beats the Button's own `font-semibold`, which belongs to a real
+  // button).
+  const title = <span className="truncate text-sm font-medium text-primary">{label}</span>;
   return (
     <>
       {/* One unified hover surface for the whole header row: the row itself carries the
           `hover:bg-primary_hover` (like a channel/DM row), and the toggle and the trailing `+`
           are transparent so they never paint a second, differently-shaped highlight. They stay
-          independent click targets. */}
-      <div className="group/section flex items-center gap-1 rounded-md pr-2 pl-1 transition-colors duration-100 ease-linear hover:bg-primary_hover">
-        {/* The whole caption row is the toggle. `size="sm"` gives it a ~36px tall target and
-            `flex-1` fills the row width, so the hit area is large both ways (the user reported
-            the old target was too small); `justify-start pl-0` keeps the caption's left edge on
-            the same x the channel rows' icons use. */}
-        <Button
-          color="tertiary"
-          size="sm"
-          aria-expanded={expanded}
-          aria-controls={listId}
-          onPress={onToggle}
-          className="min-w-0 flex-1 justify-start pr-2 pl-0 text-quaternary group-hover/section:text-tertiary hover:bg-transparent!"
-          iconLeading={
-            <ChevronRight
-              aria-hidden="true"
-              className={cx(
-                "size-3.5 shrink-0 transition-transform duration-100 ease-linear",
-                expanded && "rotate-90",
-              )}
-            />
-          }
+          independent click targets. `h-9` is the 2.25rem title row the list is built on: with no
+          margin between the sections, consecutive titles land exactly 2.25rem apart. */}
+      <div className={cx(DIRECTORY_INSET, "group/section")}>
+        <div
+          className={cx(
+            "flex h-9 items-center gap-1 rounded-md pr-2 pl-2 transition-colors duration-100 ease-linear",
+            onToggle && "group-hover/section:bg-primary_hover",
+          )}
         >
-          <span className="truncate text-xs tracking-wide uppercase">{label}</span>
-        </Button>
-        {action}
+          {onToggle ? (
+            // The whole caption row is the toggle, and `flex-1` fills the row width, so the hit
+            // area is large both ways (the user reported the old target was too small);
+            // `justify-start pl-0` puts the chevron on the same x as a row's own icon.
+            <Button
+              color="tertiary"
+              size="sm"
+              aria-expanded={expanded}
+              aria-controls={listId}
+              onPress={onToggle}
+              className="min-w-0 flex-1 justify-start pr-2 pl-0 hover:bg-transparent!"
+              iconLeading={
+                <ChevronRight
+                  aria-hidden="true"
+                  className={cx(
+                    "size-4 shrink-0 transition-transform duration-100 ease-linear",
+                    expanded && "rotate-90",
+                  )}
+                />
+              }
+            >
+              {title}
+            </Button>
+          ) : (
+            // Nothing to press: the mark takes the chevron's gutter and the title keeps its x, so
+            // this title line reads the same as the others without pretending to be a control.
+            // `gap-1.5`, not the Button's own `gap-1`: the Button's label span adds 2px of its
+            // own, so 6px here is what puts this title on the same x as a collapsible section's
+            // (measured in the browser, both at 262px in the 1440 layout).
+            <span className="flex min-w-0 flex-1 items-center gap-1.5 pr-2">
+              {Icon ? (
+                <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+              ) : null}
+              {title}
+            </span>
+          )}
+          {action}
+        </div>
       </div>
       {/* Kept mounted but hidden: collapsing must not throw away the rows' realtime state. */}
-      <div id={listId} hidden={!expanded}>
+      <div id={listId} hidden={onToggle ? !expanded : undefined}>
         {children}
       </div>
     </>
@@ -378,9 +427,9 @@ export function ConversationDirectory({
   });
   /** All groups start expanded so SSR and the first client render agree; the stored preference
    * is applied right after mount (`localStorage` is unavailable during SSR). */
-  const [collapsed, setCollapsed] = useState<DirectorySectionId[]>([]);
+  const [collapsed, setCollapsed] = useState<CollapsibleSectionId[]>([]);
   useEffect(() => setCollapsed(readCollapsedSections()), []);
-  const toggle = (id: DirectorySectionId) =>
+  const toggle = (id: CollapsibleSectionId) =>
     setCollapsed((current) => {
       const next = current.includes(id)
         ? current.filter((entry) => entry !== id)
@@ -397,6 +446,7 @@ export function ConversationDirectory({
           target={{ channelId: channel.id }}
           current={current}
           card
+          pinned={channel.pinned}
           muted={!channel.joined || channel.muted}
           unreadCount={unreadCounts[channel.id]}
           label={`#${channel.name}`}
@@ -448,6 +498,7 @@ export function ConversationDirectory({
       <ConversationRow
         target={{ dmId: conversationId }}
         current={conversationId === selectedDmId}
+        pinned={pinned}
         unreadCount={unreadCounts[conversationId]}
         label={self ? m.conversation_dm_self_name({ name }) : name}
         lastMessage={{
@@ -507,7 +558,7 @@ export function ConversationDirectory({
 
   return (
     <DndContext {...drag.context}>
-      <div className="mt-2 px-4">
+      <div className={cx("mt-2", DIRECTORY_INSET)}>
         <ConversationRow
           target={{ view: "saved" }}
           current={selectedSaved}
@@ -533,7 +584,6 @@ export function ConversationDirectory({
           a row is dragged. */}
       <div
         className={cx(
-          "mt-2",
           pinnedEmpty && "hidden any-pointer-fine:block",
           directorySectionHideable({
             itemCount: base.pinned.length,
@@ -542,12 +592,11 @@ export function ConversationDirectory({
           }) && EMPTY_SECTION_HIDDEN_CLASS,
         )}
       >
-        <DirectorySection
-          label={m.conversation_pinned_section()}
-          expanded={!collapsed.includes("pinned")}
-          onToggle={() => toggle("pinned")}
-        >
-          <div className="px-4">
+        {/* Pinned does not collapse (design mockup): it is the list's drop target, and a member
+            who pinned a handful of rows is saying those rows should stay in sight. Its pin takes
+            the gutter the other sections give their chevron. */}
+        <DirectorySection label={m.conversation_pinned_section()} icon={Pin01}>
+          <div className={DIRECTORY_INSET}>
             <DirectoryDropList
               section="pinned"
               keys={drag.layout.pinned}
@@ -564,7 +613,7 @@ export function ConversationDirectory({
           </div>
         </DirectorySection>
       </div>
-      <div className="mt-4">
+      <div>
         <DirectorySection
           label={m.channels_title()}
           expanded={!collapsed.includes("channels")}
@@ -583,7 +632,7 @@ export function ConversationDirectory({
             ) : undefined
           }
         >
-          <div className="px-4">
+          <div className={DIRECTORY_INSET}>
             <DirectoryDropList
               section="channels"
               keys={drag.layout.channels}
@@ -595,14 +644,14 @@ export function ConversationDirectory({
         </DirectorySection>
       </div>
 
-      <div className="mt-4">
+      <div>
         <DirectorySection
           label={m.messages_agents_action()}
           expanded={!collapsed.includes("agents")}
           onToggle={() => toggle("agents")}
           action={<StartDirectMessagePopover />}
         >
-          <div className="px-4 pb-3">
+          <div className={cx(DIRECTORY_INSET, "pb-3")}>
             <DirectoryDropList
               section="agents"
               keys={drag.layout.agents}

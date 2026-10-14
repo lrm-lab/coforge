@@ -12,7 +12,7 @@ import {
   SettingsGroup,
   type SaveError,
 } from "#src/components/settings-content";
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { m } from "#src/paraglide/messages";
@@ -26,7 +26,7 @@ type ArchivedChannel = NonNullable<ArchivedChannels>[number];
 
 /** The sentence for a failed unarchive, by what the server answered. */
 function unarchiveError(cause: unknown, name: string): string {
-  return isAppError(cause) && cause.code === "ACCESS_DENIED"
+  return isAppErrorCode(cause, "ACCESS_DENIED")
     ? m.settings_archived_channels_unarchive_denied()
     : m.settings_archived_channels_unarchive_error({ name });
 }

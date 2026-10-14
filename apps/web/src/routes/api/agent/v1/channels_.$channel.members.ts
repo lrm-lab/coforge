@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import {
@@ -31,9 +32,9 @@ function memberInputFrom(
   body: Record<string, unknown> | undefined,
 ): Response | { user?: string; agent?: string } {
   if (body?.user !== undefined && typeof body.user !== "string")
-    return new Response("user must be a string", { status: 400 });
+    return textResponse("user must be a string", { status: 400 });
   if (body?.agent !== undefined && typeof body.agent !== "string")
-    return new Response("agent must be a string", { status: 400 });
+    return textResponse("agent must be a string", { status: 400 });
   return {
     user: body?.user as string | undefined,
     agent: body?.agent as string | undefined,
