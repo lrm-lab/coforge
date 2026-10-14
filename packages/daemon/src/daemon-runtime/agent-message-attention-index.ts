@@ -262,21 +262,13 @@ export class AgentMessageAttentionIndex {
         await (attempt ?? this.#notify(message));
         if (this.#generations.get(message.agentId) !== generation) return;
       } else this.logDecision(message, "already_notified");
-      await this.sendAck({
-        ...message,
-        method: AGENT_MESSAGE_ACK_METHOD,
-        requestId: message.requestId,
-      });
+      await this.acknowledge(message);
       return;
     }
     this.#remember(generation, message.deliveryId);
     if (this.#consumed(message)) {
       this.logDecision(message, "consumed");
-      await this.sendAck({
-        ...message,
-        method: AGENT_MESSAGE_ACK_METHOD,
-        requestId: message.requestId,
-      });
+      await this.acknowledge(message);
       return;
     }
     const current = this.#recordAttention(message);
@@ -290,11 +282,7 @@ export class AgentMessageAttentionIndex {
     this.logDecision(message, "notified");
     await this.#notify(message, current);
     if (this.#generations.get(message.agentId) !== generation) return;
-    await this.sendAck({
-      ...message,
-      method: AGENT_MESSAGE_ACK_METHOD,
-      requestId: message.requestId,
-    });
+    await this.acknowledge(message);
   }
 
   /**

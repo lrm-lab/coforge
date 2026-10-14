@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   AgentMessageDelivery,
+  AgentMessageDeliveryAck,
   AgentRecoveryMessage,
   MessageSenderKind,
 } from "@lrm/coforge-sdk/internal";
@@ -407,6 +408,35 @@ test("ACK failure is retryable without repeating notification", async () => {
   expect(notifications).toBe(1);
   expect(attempts).toBe(2);
 });
+
+test.each(["new", "already_notified", "consumed"] as const)(
+  "%s delivery preserves the complete ACK and propagates its failure",
+  async (state) => {
+    const message = delivery("ack-fields", "human", "ada");
+    const failure = new Error("ACK transport rejected");
+    const acks: AgentMessageDeliveryAck[] = [];
+    let rejectAck = false;
+    let notifications = 0;
+    const index = new AgentMessageAttentionIndex(
+      "workspace-1",
+      { session: () => session(() => void notifications++) },
+      async (ack) => {
+        acks.push(ack);
+        if (rejectAck) throw failure;
+      },
+    );
+
+    if (state === "already_notified") await index.receive(message);
+    if (state === "consumed")
+      index.recordModelSeen(message.agentId, message.target!, message.sequence);
+    acks.length = 0;
+    rejectAck = true;
+
+    await expect(index.receive(message)).rejects.toBe(failure);
+    expect(acks).toEqual([{ ...message, method: "agent:v1:message:ack" }]);
+    expect(notifications).toBe(state === "consumed" ? 0 : 1);
+  },
+);
 
 test("clearing attention consumes only one Agent target", async () => {
   const index = new AgentMessageAttentionIndex(
