@@ -13,6 +13,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+from four_role_results import write_final_summary
 
 
 def main():
@@ -21,6 +22,9 @@ def main():
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--openviking', type=Path, required=True)
     parser.add_argument('--python', type=Path, required=True)
+    parser.add_argument('--attempts', type=int, default=3)
+    parser.add_argument('--attempt-policy', choices=['fixed', 'until-verified'], default='fixed')
+    parser.add_argument('--manifest', type=Path)
     parser.add_argument('--pool-url', default='http://127.0.0.1:18740')
     args = parser.parse_args()
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -49,7 +53,7 @@ def main():
         assert verdict['session_id'], 'missing_session_join'
         jobs.append({'index': index, 'episode_id': verdict['episode_id'], 'phase': 'queued', 'case_dir': str(case)})
         provenance.append({'index': index, 'source': str(source), 'sha256': hashes})
-    config = {'source': str(args.source), 'group_chat_reused': 20, 'group_chat_rerun': 0, 'model': 'gemma-4-31B-it', 'roles': ['builder', 'critic', 'refiner', 'reader'], 'attempts': 3, 'shared_http_limit': 20, 'pool_url': args.pool_url, 'workers': 20, 'source_revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=args.openviking, text=True).strip(), 'source_hashes': {name: hashlib.sha256((args.openviking/'benchmark/causal_memory'/name).read_bytes()).hexdigest() for name in ['aig0045_verdict_smoke.py', 'lenovo_gemma_provider.py', 'aig0045_gemma_roles.py']}}
+    config = {'source': str(args.source), 'group_chat_reused': 20, 'group_chat_rerun': 0, 'model': 'gemma-4-31B-it', 'roles': ['builder', 'critic', 'refiner', 'reader'], 'attempts': args.attempts, 'attempt_policy': args.attempt_policy, 'shared_http_limit': 20, 'pool_url': args.pool_url, 'workers': 20, 'source_revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=args.openviking, text=True).strip(), 'source_hashes': {name: hashlib.sha256((args.openviking/'benchmark/causal_memory'/name).read_bytes()).hexdigest() for name in ['aig0045_verdict_smoke.py', 'lenovo_gemma_provider.py', 'aig0045_gemma_roles.py']}}
     (run/'config.json').write_text(json.dumps(config, indent=2)+'\n')
     (run/'provenance.json').write_text(json.dumps(provenance, indent=2)+'\n')
     (run/'supervisor.json').write_text(json.dumps({'pid': os.getpid(), 'started_epoch': time.time()}, indent=2)+'\n')
@@ -78,7 +82,9 @@ def main():
     signal.signal(signal.SIGINT, stop)
     def replay(index):
         case = run/f'm{index:02d}'
-        command = [str(args.python), '-m', 'benchmark.causal_memory.aig0045_verdict_smoke', '--material', 'real', '--verdicts', str(case/'verdicts.jsonl'), '--sessions', str(case/'sessions'), '--builder', 'gemma', '--critic', 'gemma', '--refiner', 'gemma', '--reader', 'gemma', '--model', 'gemma-4-31B-it', '--url', args.pool_url+'/llm/v1/chat/completions', '--jobs', '1', '--attempts', '3', '--max-calls', '128', '--max-seconds', '1800', '--out', str(case/'four-roles.json'), '--work-root', str(case/'four-roles-work')]
+        command = [str(args.python), '-m', 'benchmark.causal_memory.aig0045_verdict_smoke', '--material', 'real', '--verdicts', str(case/'verdicts.jsonl'), '--sessions', str(case/'sessions'), '--builder', 'gemma', '--critic', 'gemma', '--refiner', 'gemma', '--reader', 'gemma', '--model', 'gemma-4-31B-it', '--url', args.pool_url+'/llm/v1/chat/completions', '--jobs', '1', '--attempts', str(args.attempts), '--attempt-policy', args.attempt_policy, '--max-calls', '128', '--max-seconds', '1800', '--out', str(case/'four-roles.json'), '--work-root', str(case/'four-roles-work')]
+        manifest = args.manifest or args.source/'manifest.jsonl'
+        if manifest.is_file(): command.extend(['--manifest', str(manifest)])
         try:
             with (case/'four-roles.log').open('wb') as log:
                 with lock:
@@ -97,7 +103,7 @@ def main():
             rows = report['materials']
             assert len(rows) == 1
             row = rows[0]
-            update(index, phase='done', finished_epoch=time.time(), submit=row.get('submit'), fallback=row.get('fallback_reason'), token_usage=report.get('token_usage'))
+            update(index, phase='done', finished_epoch=time.time(), submit=row.get('submit'), fallback=row.get('fallback_reason'), token_usage=report.get('token_usage'), **{key: row.get(key) for key in ['builder_submitted', 'graph_frozen', 'reader_verified', 'status']}, attempt_summary=report.get('attempt_summary'))
         except Exception as error:
             update(index, phase='failed', finished_epoch=time.time(), error=type(error).__name__+':'+str(error))
         finally:
@@ -113,8 +119,7 @@ def main():
             (run/'latest-status.json').write_text(json.dumps(status, indent=2)+'\n')
             print(json.dumps(status), flush=True)
             concurrent.futures.wait(futures, timeout=30)
-    summary = {'config': config, 'jobs': jobs, 'phase_counts': dict(collections.Counter(j['phase'] for j in jobs))}
-    (run/'summary.json').write_text(json.dumps(summary, indent=2)+'\n')
+    summary = write_final_summary(run, config, jobs)
     print(json.dumps({'run': str(run), 'phase_counts': summary['phase_counts']}), flush=True)
 
 

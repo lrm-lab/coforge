@@ -1,5 +1,6 @@
 import queue,concurrent.futures,collections,datetime,hashlib,json,os,re,shutil,signal,subprocess,threading,time,urllib.request
 from pathlib import Path
+from four_role_results import write_final_summary
 from pipeline_resources import EndpointPool, archive_owned_container, process_identity, stop_owned_process
 
 OPS=Path(__file__).resolve().parent;REPO=OPS.parents[3];ROOT=Path(os.environ.get('COFORGE_EVAL_RUN_ROOT','/tmp/coforge-swe-gemma-p20'));ROOT.mkdir(parents=True,exist_ok=True);FORK=Path(os.environ['COFORGE_EVAL_OPENVIKING_ROOT']);PYTHON=FORK/'.venv/bin/python';SOURCE=Path(os.environ.get('COFORGE_EVAL_MANIFEST',str(ROOT/'manifest-docker.jsonl')))
@@ -94,9 +95,9 @@ def post_case(index,adopt):
    checked(index,'export_ao',[PYTHON,MATERIAL,'export','--attempts',case/'attempts.jsonl','--manifest',MANIFEST,'--verdicts',case/'verdicts.jsonl','--sessions-out',case/'sessions'],case,timeout=180)
    verdict=json.loads((case/'verdicts.jsonl').read_text().splitlines()[0]);assert verdict.get('session_id'),'AO session join missing'
    update(index,session_id=verdict['session_id'],four_roles_started_epoch=time.time())
-   checked(index,'gemma_four_roles',[PYTHON,SMOKE,'--material','real','--verdicts',case/'verdicts.jsonl','--sessions',case/'sessions','--builder','gemma','--critic','gemma','--refiner','gemma','--reader','gemma','--model',MODEL,'--url',ENV['COFORGE_LLM_POOL_URL']+'/llm/v1/chat/completions','--jobs','1','--attempts','3','--max-calls','128','--max-seconds','1800','--out',case/'four-roles.json','--work-root',case/'four-roles-work'],case,timeout=9000)
+   checked(index,'gemma_four_roles',[PYTHON,SMOKE,'--material','real','--verdicts',case/'verdicts.jsonl','--sessions',case/'sessions','--manifest',MANIFEST,'--builder','gemma','--critic','gemma','--refiner','gemma','--reader','gemma','--model',MODEL,'--url',ENV['COFORGE_LLM_POOL_URL']+'/llm/v1/chat/completions','--jobs','1','--attempts','3','--max-calls','128','--max-seconds','1800','--out',case/'four-roles.json','--work-root',case/'four-roles-work'],case,timeout=9000)
   report=json.loads((case/'four-roles.json').read_text());materials=report.get('materials') or [];assert len(materials)==1,'expected one joined material';r=materials[0]
-  update(index,phase='done',finished_epoch=time.time(),aig_submit=r.get('submit'),aig_mode=r.get('mode'),aig_phi=r.get('phi_violations_after_refine'),aig_reader_ok=r.get('reader_schema_ok'),aig_fallback=r.get('fallback_reason'));emit('case_completed',index=index,submit=r.get('submit'),reader_ok=r.get('reader_schema_ok'),fallback=r.get('fallback_reason'))
+  update(index,phase='done',finished_epoch=time.time(),aig_submit=r.get('submit'),aig_mode=r.get('mode'),aig_phi=r.get('phi_violations_after_refine'),aig_reader_ok=r.get('reader_schema_ok'),aig_fallback=r.get('fallback_reason'),**{key:r.get(key) for key in ['builder_submitted','graph_frozen','reader_verified','status']},attempt_summary=report.get('attempt_summary'));emit('case_completed',index=index,submit=r.get('submit'),reader_ok=r.get('reader_schema_ok'),fallback=r.get('fallback_reason'))
  except Exception as exc:
   code=str(exc) if isinstance(exc,(RuntimeError,AssertionError)) else type(exc).__name__;update(index,phase='failed',finished_epoch=time.time(),error=code);emit('case_failed',index=index,error=code)
  finally:
@@ -184,4 +185,4 @@ if __name__=='__main__':
   if path.exists():roles+=json.loads(path.read_text()).get('materials',[])
  for filename,data in [('attempts.jsonl',attempts),('verdicts.jsonl',verdicts),('four-role-materials.jsonl',roles)]:
   (RUN/filename).write_text('\n'.join(json.dumps(r,ensure_ascii=False) for r in data)+'\n')
- summary={'config':CONFIG,'finished':True,'jobs':list(JOBS.values()),'attempts':len(attempts),'verdicts':len(verdicts),'four_role_materials':len(roles),'aig_submitted':sum(r.get('submit') is True for r in roles),'reader_schema_ok':sum(r.get('reader_schema_ok') is True for r in roles)};(RUN/'summary.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n');emit('batch_completed',attempts=len(attempts),four_role_materials=len(roles),aig_submitted=summary['aig_submitted'])
+ summary=write_final_summary(RUN,CONFIG,list(JOBS.values()),attempts=len(attempts),verdicts=len(verdicts),four_role_materials=len(roles),aig_submitted=sum(r.get('submit') is True for r in roles),reader_schema_ok=sum(r.get('reader_schema_ok') is True for r in roles));emit('batch_completed',attempts=len(attempts),four_role_materials=len(roles),aig_submitted=summary['aig_submitted'])

@@ -101,3 +101,21 @@ Copies all 20 verdict/AO inputs and records SHA256 provenance; does not rerun
 group chats. Each case has three attempts and its own role/token logs. The pool's
 `requests.jsonl` records actual upstream attempts, selected service and reported
 usage; role ledgers record logical requests. Do not add both ledgers as costs.
+
+## Health routing and four-role replay
+
+The shared limit remains Gateway 4 + dedicated services 8 + 8 = 20.
+Routing favors healthy endpoints with lower observed latency and load. Two consecutive
+transient failures open a 60-second circuit; after cooldown one probe is admitted,
+and a successful probe restores capacity. Backoff still releases its slot and the
+request's total queue/inference/retry budget remains 900 seconds. `/status` exposes
+per-endpoint successes, failures, latency, circuit and remaining cooldown.
+
+Replay defaults to `--attempts 3 --attempt-policy fixed`. For development use
+`--attempt-policy until-verified`; optional `--manifest` restores full original
+questions for old exports. `builder_submitted`, `graph_frozen`, `reader_verified`
+and `skipped_no_signal` are distinct. Final `summary.json` and `latest-status.json`
+are written from the same completed job snapshot.
+
+`four_role_results.py` owns final stage aggregation and atomic snapshots for both
+`pipeline.py` (live group chats) and `replay_four_roles.py` (saved trajectories).
