@@ -7919,7 +7919,10 @@ describe("DaemonRuntime", () => {
     const revokeAuthorizations: Array<string | null> = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = Object.assign(
-      async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        // Background requests from other runtimes must not enter this test's revoke records.
+        if (String(input) !== "https://server.example/api/agent-api-keys")
+          return new Response(null, { status: 503 });
         if (init?.method === "POST") return Response.json({ apiKey: credential });
         revokeAuthorizations.push(new Headers(init?.headers).get("authorization"));
         return new Response(null, { status: 503 });
@@ -7943,6 +7946,12 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(configuredConnection);
       await runtime.startAgent("agent-a", config);
+      // Neither another host nor another path on this host is an Agent key revocation.
+      for (const [url, method] of [
+        ["https://unrelated.example/resource", "GET"],
+        ["https://server.example/unrelated", "DELETE"],
+      ] as const)
+        await fetch(url, { method, headers: { authorization: "Bearer unrelated-fixture" } });
       // Revoke stays best-effort at shutdown: the 503 above never fails the
       // Stop. It is not retried either, so the second stop() sends nothing and
       // the transport is recreated regardless of the revoke outcome.
