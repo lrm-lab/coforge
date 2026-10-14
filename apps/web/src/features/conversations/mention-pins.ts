@@ -107,9 +107,14 @@ function findLabelMatches(
   found.sort((left, right) => left.start - right.start || right.end - left.end);
   const chosen: LabelMatch[] = [];
   let lastEnd = 0;
+  let blockedIndex = 0;
   for (const match of found) {
     if (match.start < lastEnd) continue;
-    if (blocked.some((each) => match.start < each.end && each.start < match.end)) continue;
+    // Claimed ranges are ordered and nonoverlapping, just like the matches being considered.
+    while (blockedIndex < blocked.length && blocked[blockedIndex]!.end <= match.start)
+      blockedIndex++;
+    const blocker = blocked[blockedIndex];
+    if (blocker && blocker.start < match.end) continue;
     chosen.push(match);
     lastEnd = match.end;
   }

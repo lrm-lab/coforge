@@ -304,3 +304,44 @@ test("a label containing an at sign still binds in prose and stays untouched in 
   expect(found).toEqual([{ label: "A@B", candidates: [person] }]);
   expect(found[0]!.candidates).toBe(byLabel.get("A@B")!);
 });
+
+test("hand-typed names before and after many claimed ranges retain text order and candidate references", () => {
+  const pins = Object.freeze([ZHANG]);
+  const body = "😀 @李四 " + "@张三 `@小侦察`\n".repeat(200) + "@小侦察 @李四";
+  const byLabel = mentionsByLabel(people);
+  const found = unpinnedLabelMentions(body, pins, byLabel);
+  expect(found.map((mention) => mention.label)).toEqual(["李四", "小侦察"]);
+  expect(found[0]!.candidates).toBe(byLabel.get("李四")!);
+  expect(found[1]!.candidates).toBe(byLabel.get("小侦察")!);
+  expect(pinsInText(body, pins)).toBe(pins);
+});
+
+test("a blocked longer candidate does not hide the unclaimed name beyond the pin", () => {
+  const pin = Object.freeze({ kind: "user" as const, id: "pair", handle: "pair", label: "A @B" });
+  const byLabel = mentionsByLabel([
+    candidate("user", "long", "long", "A @B @C"),
+    candidate("user", "a", "a", "A"),
+    candidate("user", "b", "b", "B"),
+    candidate("user", "c", "c", "C"),
+    candidate("user", "d", "d", "D"),
+  ]);
+  const found = unpinnedLabelMentions("@A @B @C,@D", Object.freeze([pin]), byLabel);
+  expect(found.map((mention) => mention.label)).toEqual(["C", "D"]);
+  expect(found[0]!.candidates).toBe(byLabel.get("C")!);
+  expect(found[1]!.candidates).toBe(byLabel.get("D")!);
+});
+
+test("an ambiguous picked name blocks nothing while a separate unambiguous pin still does", () => {
+  const other = Object.freeze({ ...ZHANG, id: "u-other", handle: "other" });
+  const pins = Object.freeze([ZHANG, other, SCOUT]);
+  const body = "@小侦察,@张三 @张三 @张三 @李四";
+  const byLabel = mentionsByLabel(people);
+  const found = unpinnedLabelMentions(body, pins, byLabel);
+  expect(found.map((mention) => mention.label)).toEqual(["张三", "李四"]);
+  expect(found[0]!.candidates).toBe(byLabel.get("张三")!);
+  expect(pinsInText(body, pins)).toEqual([SCOUT]);
+  expect(rewriteMentionPins(body, pins)).toEqual({
+    body: "@scout,@张三 @张三 @张三 @李四",
+    mentions: [binding(SCOUT)],
+  });
+});
