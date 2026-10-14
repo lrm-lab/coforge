@@ -31,7 +31,7 @@ def main():
     run.mkdir(parents=True)
     (args.root/'latest.txt').write_text(str(run)+'\n')
     providers = json.loads((Path.home()/'.pi/agent/models.json').read_text())['providers']
-    env = {**os.environ, 'LENOVO_GATEWAY_API_KEY': providers['lenovo-gemma']['apiKey'], 'NO_PROXY': 'localhost,127.0.0.1', 'no_proxy': 'localhost,127.0.0.1', 'SSL_CERT_FILE': str(Path.home()/'.pi/lenovo-ca-bundle.pem')}
+    env = {**os.environ, 'LENOVO_GATEWAY_API_KEY': providers['lenovo-gemma']['apiKey'], 'LENOVO_GATEWAY_TIMEOUT_SECONDS': '960', 'NO_PROXY': 'localhost,127.0.0.1', 'no_proxy': 'localhost,127.0.0.1', 'SSL_CERT_FILE': str(Path.home()/'.pi/lenovo-ca-bundle.pem')}
     env.pop('DEV_MEMORY_API_KEY', None)
     jobs, provenance = [], []
     for index in range(20):

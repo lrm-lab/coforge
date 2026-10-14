@@ -95,3 +95,28 @@ class PoolTests(unittest.TestCase):
                 self.assertLess(time.monotonic()-started, .4)
                 self.assertEqual(pool.snapshot()['active'], 0)
         finally: upstream.shutdown(); upstream.server_close()
+
+    def test_longer_backoff_releases_capacity_and_keeps_retry_budget(self):
+        class Retry(BaseHTTPRequestHandler):
+            def log_message(self, *args): pass
+            def do_POST(self):
+                self.rfile.read(int(self.headers['Content-Length']))
+                self.send_response(503); self.send_header('Content-Length', '0')
+                self.end_headers()
+        upstream = ThreadingHTTPServer(('127.0.0.1', 0), Retry)
+        threading.Thread(target=upstream.serve_forever, daemon=True).start()
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                delays = []
+                def sleep(delay):
+                    self.assertEqual(pool.snapshot()['active'], 0)
+                    delays.append(delay)
+                pool = LlmPool([{'name':'test', 'url':f'http://127.0.0.1:{upstream.server_port}', 'key':'test-key', 'capacity':1}], Path(temporary), proxy='', sleep=sleep)
+                self.assertEqual(pool.snapshot()['retry_policy']['budget_seconds'], 900)
+                self.assertEqual(pool.complete(b'{}', 'memory')[0], 424)
+                self.assertEqual(pool.snapshot()['http_attempts'], 7)
+                self.assertEqual(len(delays), 6)
+                for actual, minimum in zip(delays, [15,30,60,120,120,120]):
+                    self.assertGreaterEqual(actual, minimum)
+                    self.assertLessEqual(actual, min(120, minimum+5))
+        finally: upstream.shutdown(); upstream.server_close()

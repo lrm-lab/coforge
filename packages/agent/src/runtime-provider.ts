@@ -135,6 +135,13 @@ export function configureRuntimeEnvironment(
     const scoped = { ...options, env: { ...options?.env, ...environment } };
     return typeof model === "string" ? getAuth(model, scoped) : getAuth(model, scoped);
   };
+  const poolOptions = (model: { id: string; baseUrl: string }) =>
+    environment.COFORGE_LLM_POOL_URL &&
+    model.id.toLowerCase() === "gemma-4-31b-it" &&
+    (new URL(model.baseUrl).hostname === "modelfactory.lenovo.com" ||
+      environment.COFORGE_EVAL_BRIDGE_SOCKET)
+      ? { timeoutMs: 960_000, maxRetries: 0 }
+      : {};
   const stream = runtime.stream.bind(runtime);
   runtime.stream = (model, context, options) =>
     stream(
@@ -142,6 +149,7 @@ export function configureRuntimeEnvironment(
       context,
       Object.assign({}, options, {
         env: { ...options?.env, ...environment },
+        ...poolOptions(model),
         ...(model.api === "google-generative-ai" || model.api === "google-vertex" ? {} : { fetch }),
       }),
     );
@@ -150,6 +158,7 @@ export function configureRuntimeEnvironment(
     streamSimple(model, context, {
       ...options,
       env: { ...options?.env, ...environment },
+      ...poolOptions(model),
       ...(model.api === "google-generative-ai" || model.api === "google-vertex" ? {} : { fetch }),
     });
 }

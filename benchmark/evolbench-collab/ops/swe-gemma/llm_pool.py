@@ -25,7 +25,7 @@ CAPACITIES = {'lenovo-gemma': 4, 'gemma-4-31b-it-2gpu-1': 8, 'gemma-4-31b-it-2gp
 
 
 class LlmPool:
-    def __init__(self, endpoints, directory, *, sleep=time.sleep, proxy=None, budget_seconds=180):
+    def __init__(self, endpoints, directory, *, sleep=time.sleep, proxy=None, budget_seconds=900):
         self.endpoints = endpoints
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -47,7 +47,7 @@ class LlmPool:
         with self.condition:
             return {'limit': sum(e['capacity'] for e in self.endpoints), 'active': sum(self.active.values()),
                     'peak_active': self.peak, 'queued': self.waiting, 'http_attempts': self.started,
-                    'completed_attempts': self.finished, 'retries': self.retries,
+                    'completed_attempts': self.finished, 'retries': self.retries, 'retry_policy': {'max_retries': 6, 'budget_seconds': self.budget_seconds, 'base_delay_seconds': 15, 'max_delay_seconds': 120, 'jitter_seconds': 5},
                     'endpoints': {e['name']: {'limit': e['capacity'], 'active': self.active[e['name']]} for e in self.endpoints}}
 
     def record(self, event, **fields):
@@ -140,7 +140,7 @@ class LlmPool:
                 self.record('request_completed', request_id=request_id, client=client, endpoint=endpoint['name'], attempt=attempt,
                             http_status=status or None, elapsed_ms=round((time.monotonic()-started)*1000), usage=usage, retryable=retry)
             if not retry: return status, content_type, blob
-            delay = max(retry_after, min(60, 2**(attempt+1)+random.uniform(0, 1)))
+            delay = max(retry_after, min(120, 15*(2**attempt)+random.uniform(0, 5)))
             if attempt == 6 or time.monotonic()+delay >= deadline: break
             with self.condition: self.retries += 1
             self.record('retry', request_id=request_id, client=client, attempt=attempt, delay_seconds=delay)

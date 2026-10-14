@@ -31,6 +31,7 @@ export async function createDockerTaskSession(options: AgentSessionOptions, conf
   const bridgePath = join(runtimeDir, 'bridge.sock');
   const caFile = (Bun.env.HOME || '')+'/.pi/lenovo-ca-bundle.pem';
   const caContents = await Bun.file(caFile).text();
+  const poolURL = options.environment?.COFORGE_LLM_POOL_URL || Bun.env.COFORGE_LLM_POOL_URL;
   const relay = Bun.serve({unix: bridgePath, idleTimeout:0, async fetch(request) {
     const url = new URL(request.url);
     const modelRequest = url.pathname.startsWith('/model/');
@@ -38,7 +39,6 @@ export async function createDockerTaskSession(options: AgentSessionOptions, conf
     let target = modelRequest
       ? new URL(publicProvider.baseUrl.replace(/\/$/,'')+url.pathname.slice('/model'.length)+url.search)
       : new URL(url.pathname+url.search, agentProxyURL);
-    const poolURL = options.environment?.COFORGE_LLM_POOL_URL || Bun.env.COFORGE_LLM_POOL_URL;
     if (modelRequest && poolURL) target = new URL("/llm/v1/chat/completions", poolURL);
     const local = ['localhost','127.0.0.1'].includes(target.hostname);
     const headers = new Headers(request.headers);headers.delete('host');headers.delete('connection');
@@ -72,6 +72,7 @@ export async function createDockerTaskSession(options: AgentSessionOptions, conf
   for (const [key,value] of Object.entries(options.environment || {})) {
     if (key.startsWith('COFORGE_') || /^(HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy)$/.test(key)) environment[key]=value;
   }
+  if (poolURL) environment.COFORGE_LLM_POOL_URL = poolURL;
   environment.COFORGE_EVAL_BRIDGE_SOCKET = '/testbed/.builtin-runtime/bridge.sock';
   environment.COFORGE_CURRENT_AGENT_WORKSPACE_PATH = '/testbed';
   environment.NODE_EXTRA_CA_CERTS = INSIDE+'/ca.pem';

@@ -170,7 +170,7 @@ AO 导出有文本截断，且主要覆盖 Task 及其收到的 Offer；最终 R
 先运行 `python3 benchmark/evolbench-collab/ops/swe-gemma/llm_pool.py --directory /tmp/gemma-pool --port 18740`，读取私有 Pi 三个 provider；不要在命令行放 Key。
 群聊启动环境设置 `COFORGE_LLM_POOL_URL=http://127.0.0.1:18740`，Memory 在 runtimeFetch 路由到池，Docker Task 经宿主 relay 路由到同一池。
 四角色 CLI 设置 `--url http://127.0.0.1:18740/llm/v1/chat/completions`；现成重放命令见 ops README。
-池只绑定 loopback，校验现有 provider Key。瞬时网络故障、408/429/500/502/503/504 最多重试 6 次，退避从 2 秒指数增加到 60 秒并加抖动，尊重 Retry-After；单请求含排队总预算 180 秒。
+池只绑定 loopback，校验现有 provider Key。瞬时网络故障、408/429/500/502/503/504 最多重试 6 次，退避为 15、30、60、120 秒，之后以 120 秒封顶，加最多 5 秒抖动并尊重 Retry-After；单请求含排队总预算 900 秒（15 分钟）。四角色客户端通过 LENOVO_GATEWAY_TIMEOUT_SECONDS=960 等待 16 分钟；池内 Gemma 的 Memory/Task SDK 也等待 960 秒且关闭额外 SDK 网络重试。
 流式响应完整缓冲并检查 `[DONE]` 后交给 agent，避免半截输出或工具调用被重复执行；会牺牲逐 token 显示速度。重试耗尽明确记为失败，401/400 等配置错误不重试。
 
 ## 当前本地 main 部署
