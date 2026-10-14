@@ -1,5 +1,6 @@
 import installShSource from "../../../../../scripts/release/install.sh?raw";
 import installPs1Source from "../../../../../scripts/release/install.ps1?raw";
+import { textResponse } from "#src/server/http/text-response.server";
 
 /**
  * Serves the two bootstrap installer scripts (`curl ... | sh`, `irm ... | iex`) at
@@ -89,10 +90,9 @@ export function withDeploymentFeedUrl(source: string, anchor: string, feedUrl: s
   return source.replace(anchor, anchor.replace(PRODUCTION_FEED_URL, feedUrl));
 }
 
-function textResponse(body: string): Response {
-  return new Response(body, {
+function scriptResponse(body: string): Response {
+  return textResponse(body, {
     headers: {
-      "content-type": "text/plain; charset=utf-8",
       // These are bootstrap entry points: a stale copy held by an intermediary is how a user ends
       // up installing from a feed this deployment no longer uses.
       "cache-control": "no-cache",
@@ -102,16 +102,10 @@ function textResponse(body: string): Response {
 }
 
 function unconfiguredResponse(): Response {
-  return new Response(
+  return textResponse(
     "# COFORGE_RELEASE_FEED_URL is not configured for this deployment, so there is no release\n" +
       "# feed to install from. This is a server misconfiguration - see docs/operations/staging/github-environment.md.\n",
-    {
-      status: 503,
-      headers: {
-        "content-type": "text/plain; charset=utf-8",
-        "cache-control": "no-store",
-      },
-    },
+    { status: 503, headers: { "cache-control": "no-store" } },
   );
 }
 
@@ -122,7 +116,7 @@ function installScriptResponse(
 ): Response {
   const feedUrl = resolveReleaseFeedUrl(environment);
   if (feedUrl === null) return unconfiguredResponse();
-  return textResponse(withDeploymentFeedUrl(source, anchor, feedUrl));
+  return scriptResponse(withDeploymentFeedUrl(source, anchor, feedUrl));
 }
 
 export function installShHandler(environment?: Record<string, string | undefined>): Response {

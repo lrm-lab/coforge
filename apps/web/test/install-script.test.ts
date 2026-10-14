@@ -96,6 +96,10 @@ test("an unconfigured or unusable feed URL yields 503, never a 200 with the wron
     for (const handler of [installShHandler, installPs1Handler]) {
       const response = handler(environment);
       expect(response.status).toBe(503);
+      expect(Object.fromEntries(response.headers)).toEqual({
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store",
+      });
       const body = await response.text();
       // Even piped straight into a shell, every line of the failure body is a comment.
       expect(body.split("\n").every((line) => line === "" || line.startsWith("#"))).toBe(true);
