@@ -4151,17 +4151,17 @@ export class DaemonRuntime {
 
 function safeRuntimeActivityMessage(activity: string, level: string, message: string): string {
   if (level === "error") return truncateCodePoints(message, 512);
-  if (level === "warning") return scrubActivityText(message);
+  if (level === "warning") return scrubRuntimeErrorText(message);
   if (activity === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS) return "";
   if (activity === AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND)
-    return truncateCodePoints(scrubActivityText(message), 200);
+    return truncateCodePoints(scrubRuntimeErrorText(message), 200);
   if (
     activity === AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED ||
     activity === AGENT_ACTIVITY_DETAIL_KIND.CHECKING_MESSAGES ||
     activity === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING ||
     activity === AGENT_ACTIVITY_DETAIL_KIND.THINKING_END
   ) {
-    return scrubActivityText(message);
+    return scrubRuntimeErrorText(message);
   }
   // The content-free run-start announcement (ActivityTrajectory#startRun) carries no
   // message; let it through empty instead of falling to the generic sentence below.
@@ -4175,15 +4175,8 @@ function safeRuntimeActivityMessage(activity: string, level: string, message: st
   return "Agent activity observed.";
 }
 
-// Delegates to agent-runtime/runtime-error-activity.ts's shared scrubber/fingerprint so
-// warning-level Activity text and runtime-failure classification never drift from the single
-// redaction/fingerprint implementation the new `error`/`reconnecting` event path also uses.
-function scrubActivityText(message: string): string {
-  return scrubRuntimeErrorText(message);
-}
-
 function runtimeFailureDiagnostic(message: string) {
-  const safe = scrubActivityText(message);
+  const safe = scrubRuntimeErrorText(message);
   return {
     errorClass: "AgentRuntimeError",
     errorReason: "runtime_failure",

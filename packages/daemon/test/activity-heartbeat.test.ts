@@ -573,6 +573,39 @@ test("a progress event never flushes buffered text or ends thinking", async () =
   }
 });
 
+test.each([
+  ["warning", "runtime_progress", 463],
+  ["info", "running_command", 151],
+  ["info", "tool_started", 463],
+  ["info", "checking_messages", 463],
+  ["info", "runtime_reconnecting", 463],
+  ["info", "thinking_end", 463],
+] as const)(
+  "scrubs %s %s Activity text and preserves its Unicode cap",
+  async (level, detailKind, emojiCount) => {
+    const { runtime, activities, emit } = await harness();
+    try {
+      activities.length = 0;
+      emit({
+        detailKind,
+        level,
+        detail: `password=fixture-secret Bearer fixture-token sk-fixture-key ${"🙂".repeat(600)}`,
+      });
+      expect(activities).toHaveLength(1);
+      // The redacted prefix is 49 code points: 463 more fill the 512-point cap,
+      // while a command's 200-point cap leaves room for 151. Emoji must stay whole.
+      expect(activities[0]).toMatchObject({
+        agentId: "agent-a",
+        detailKind,
+        level,
+        detail: `password=[REDACTED] Bearer [REDACTED] [REDACTED] ${"🙂".repeat(emojiCount)}`,
+      });
+    } finally {
+      await runtime.stop();
+    }
+  },
+);
+
 test("compaction-started reports Compacting context once, and a repeat is deduped", async () => {
   const { runtime, activities, emitEvent } = await harness();
   try {

@@ -23,9 +23,9 @@ const MAX_VISIBLE_ERROR_CHARS = 512;
  * `key=value`-shaped credential assignments (`token=...`, `password=...`), not
  * just recognized token prefixes. Reused by every provider's `error`/
  * `reconnecting` event, so there is exactly one redaction implementation for
- * runtime-failure text (the pre-existing `scrubActivityText` in runtime.ts,
- * which still applies the same rules to warning-level and other error-adjacent
- * Activity text, delegates to this function so the two never drift apart).
+ * runtime-failure text. The daemon runtime also calls this function directly
+ * for warning-level and other error-adjacent Activity text, keeping those
+ * rules in the same implementation.
  *
  * The `key=value` pattern keeps its prefix via a real capturing group, matching
  * `redactTrajectoryText` in activity-trajectory.ts (`$1[REDACTED]`) — the
