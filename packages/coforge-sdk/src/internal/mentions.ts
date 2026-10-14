@@ -174,10 +174,11 @@ export function resolveMentionTargets(
 ): { mentions: ResolvedMention[]; target: (handle: string) => MentionTarget | undefined } {
   const byKey = new Map<string, ResolvedMention>();
   for (const binding of bindings) {
+    const bindingId = binding.id.toLowerCase();
     const match = targets.find(
       (target) =>
         target.type === binding.type &&
-        target.id.toLowerCase() === binding.id.toLowerCase() &&
+        target.id.toLowerCase() === bindingId &&
         target.handle === binding.name,
     );
     if (match) byKey.set(match.key, match);

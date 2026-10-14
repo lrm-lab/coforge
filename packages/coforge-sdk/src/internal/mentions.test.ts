@@ -6,6 +6,7 @@ import {
   mentionsInContent,
   parseMentionSelector,
   replaceMentionTokens,
+  resolveMentionTargets,
   splitCodeSpans,
 } from "./mentions";
 
@@ -218,4 +219,59 @@ test("splitCodeSpans retains escaped ticks, unmatched fences and line-boundary b
   ]);
   expect(splitCodeSpans("`a\nb`")).toEqual([{ text: "`a\nb`", code: false }]);
   expect(splitCodeSpans("`a\rb\u2028c`")).toEqual([{ text: "`a\rb\u2028c`", code: true }]);
+});
+
+test("binding UUIDs are case-insensitive while kind, handle and first matching target stay exact", () => {
+  const id = "AABBCCDD-EEFF-4111-8111-AABBCCDDEEFF";
+  const first = Object.freeze({
+    key: "first",
+    type: "user" as const,
+    id: id.toLowerCase(),
+    handle: "ada",
+  });
+  const targets = Object.freeze([
+    Object.freeze({ key: "agent", type: "agent" as const, id, handle: "ada" }),
+    Object.freeze({ key: "other", type: "user" as const, id, handle: "other" }),
+    first,
+    Object.freeze({ ...first, key: "second", id }),
+  ]);
+  const bindings = Object.freeze([
+    Object.freeze({ type: "user" as const, id, name: "ada" }),
+    Object.freeze({ type: "user" as const, id, name: "Ada" }),
+  ]);
+  const resolved = resolveMentionTargets([], targets, bindings);
+  expect(resolved.mentions).toEqual([first]);
+  expect(resolved.mentions[0]).toBe(first);
+  expect(resolved.target("ada")).toBe(first);
+  expect(resolved.target("other")).toBeUndefined();
+  expect(resolved.target("Ada")).toBeUndefined();
+});
+
+test("bindings precede text mentions, dedupe by member and retain target object identities", () => {
+  const targets = Object.freeze([Object.freeze(ADA), Object.freeze(HELPER)]);
+  const bindings = Object.freeze([
+    Object.freeze({ type: "agent" as const, id: HELPER.id, name: HELPER.handle }),
+    Object.freeze({ type: "agent" as const, id: HELPER.id, name: HELPER.handle }),
+    Object.freeze({ type: "user" as const, id: ADA.id, name: "unknown" }),
+  ]);
+  const handles = Object.freeze(["ada", "helper", "missing", "ada"]);
+  const resolved = resolveMentionTargets(handles, targets, bindings);
+  expect(resolved.mentions).toEqual([HELPER, ADA]);
+  expect(resolved.mentions[0]).toBe(HELPER);
+  expect(resolved.mentions[1]).toBe(ADA);
+  expect(resolved.target("helper")).toBe(HELPER);
+  expect(resolved.target("ada")).toBe(ADA);
+  expect(resolved.target("missing")).toBeUndefined();
+});
+
+test("unbound text selects the first Agent sharing a handle, and an empty directory binds nobody", () => {
+  const user = Object.freeze({ ...ADA, handle: "shared" });
+  const firstAgent = Object.freeze({ ...HELPER, handle: "shared" });
+  const secondAgent = Object.freeze({ ...firstAgent, key: "second-agent" });
+  const resolved = resolveMentionTargets(["shared"], [user, firstAgent, secondAgent]);
+  expect(resolved.mentions).toEqual([firstAgent]);
+  expect(resolved.target("shared")).toBe(firstAgent);
+  const empty = resolveMentionTargets(["ada"], [], [{ type: "user", id: ADA.id, name: "ada" }]);
+  expect(empty.mentions).toEqual([]);
+  expect(empty.target("ada")).toBeUndefined();
 });
