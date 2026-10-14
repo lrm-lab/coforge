@@ -59,6 +59,57 @@ function decodeStored(scope: Scope, bytes: Uint8Array) {
   return { ...value, computerId: scope.computerId };
 }
 
+type ReceiptClient = Pick<Prisma.TransactionClient, "reminderOperationReceipt">;
+
+/**
+ * The stored result of an operation that already ran under `requestId`, or `undefined` if none did.
+ * A receipt left by different input — another Workspace, another fingerprint or, when `reminderId`
+ * is given, another reminder — is a CONFLICT rather than a replay.
+ */
+async function replayedOperation(
+  client: ReceiptClient,
+  scope: Scope,
+  requestId: string,
+  fingerprint: string,
+  reminderId?: string,
+) {
+  const receipt = await client.reminderOperationReceipt.findUnique({
+    where: { agentId_requestId: { agentId: scope.agentId, requestId } },
+  });
+  if (!receipt) return undefined;
+  if (
+    receipt.workspaceId !== scope.workspaceId ||
+    receipt.fingerprint !== fingerprint ||
+    (reminderId !== undefined && receipt.reminderId !== reminderId)
+  )
+    throw new ReminderRefusal(
+      "CONFLICT",
+      "request ID was already used with different reminder input",
+    );
+  return decodeStored(scope, receipt.response);
+}
+
+/** Records `result` as the answer to `requestId`, so a retry replays it instead of running again. */
+async function recordOperation(
+  tx: ReceiptClient,
+  scope: Scope,
+  requestId: string,
+  fingerprint: string,
+  reminderId: string,
+  result: StoredReminder,
+) {
+  await tx.reminderOperationReceipt.create({
+    data: {
+      workspaceId: scope.workspaceId,
+      agentId: scope.agentId,
+      requestId,
+      fingerprint,
+      response: new Uint8Array(encodeStored(scope, requestId, result)),
+      reminderId,
+    },
+  });
+}
+
 export class PrismaReminderRepository implements ReminderRepository {
   constructor(private readonly db: PrismaClient) {}
 
@@ -95,20 +146,7 @@ export class PrismaReminderRepository implements ReminderRepository {
   }
 
   async replay(scope: Scope, requestId: string, fingerprint: string, reminderId?: string) {
-    const receipt = await this.db.reminderOperationReceipt.findUnique({
-      where: { agentId_requestId: { agentId: scope.agentId, requestId } },
-    });
-    if (!receipt) return undefined;
-    if (
-      receipt.workspaceId !== scope.workspaceId ||
-      receipt.fingerprint !== fingerprint ||
-      (reminderId !== undefined && receipt.reminderId !== reminderId)
-    )
-      throw new ReminderRefusal(
-        "CONFLICT",
-        "request ID was already used with different reminder input",
-      );
-    return decodeStored(scope, receipt.response);
+    return replayedOperation(this.db, scope, requestId, fingerprint, reminderId);
   }
 
   async resolveAnchor(scope: Scope, target: string, messageId: string) {
@@ -176,17 +214,8 @@ export class PrismaReminderRepository implements ReminderRepository {
     return this.db.$transaction(
       async (tx) => {
         await this.authorizeAndLock(tx, scope, "reminder operation is not authorized");
-        const replay = await tx.reminderOperationReceipt.findUnique({
-          where: { agentId_requestId: { agentId: scope.agentId, requestId } },
-        });
-        if (replay) {
-          if (replay.workspaceId !== scope.workspaceId || replay.fingerprint !== fingerprint)
-            throw new ReminderRefusal(
-              "CONFLICT",
-              "request ID was already used with different reminder input",
-            );
-          return decodeStored(scope, replay.response);
-        }
+        const replay = await replayedOperation(tx, scope, requestId, fingerprint);
+        if (replay) return replay;
         const active = await tx.reminder.count({
           where: {
             workspaceId: scope.workspaceId,
@@ -223,16 +252,7 @@ export class PrismaReminderRepository implements ReminderRepository {
           },
         });
         const result = summary(row);
-        await tx.reminderOperationReceipt.create({
-          data: {
-            workspaceId: scope.workspaceId,
-            agentId: scope.agentId,
-            requestId,
-            fingerprint,
-            response: new Uint8Array(encodeStored(scope, requestId, result)),
-            reminderId: row.id,
-          },
-        });
+        await recordOperation(tx, scope, requestId, fingerprint, row.id, result);
         return result;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
@@ -287,21 +307,8 @@ export class PrismaReminderRepository implements ReminderRepository {
       async (tx) => {
         await this.authorizeAndLock(tx, scope, "reminder operation is not authorized");
         await tx.$queryRaw`SELECT "id" FROM "reminders" WHERE "id" = ${id}::uuid AND "workspaceId" = ${scope.workspaceId}::uuid AND "ownerAgentId" = ${scope.agentId}::uuid AND "computerId" = ${scope.computerId}::uuid FOR UPDATE`;
-        const replay = await tx.reminderOperationReceipt.findUnique({
-          where: { agentId_requestId: { agentId: scope.agentId, requestId } },
-        });
-        if (replay) {
-          if (
-            replay.workspaceId !== scope.workspaceId ||
-            replay.reminderId !== id ||
-            replay.fingerprint !== fingerprint
-          )
-            throw new ReminderRefusal(
-              "CONFLICT",
-              "request ID was already used with different reminder input",
-            );
-          return decodeStored(scope, replay.response);
-        }
+        const replay = await replayedOperation(tx, scope, requestId, fingerprint, id);
+        if (replay) return replay;
         const existing = await tx.reminder.findFirst({
           where: {
             id,
@@ -397,16 +404,7 @@ export class PrismaReminderRepository implements ReminderRepository {
               },
             });
         const result = summary(row);
-        await tx.reminderOperationReceipt.create({
-          data: {
-            workspaceId: scope.workspaceId,
-            agentId: scope.agentId,
-            requestId,
-            fingerprint,
-            response: new Uint8Array(encodeStored(scope, requestId, result)),
-            reminderId: id,
-          },
-        });
+        await recordOperation(tx, scope, requestId, fingerprint, id, result);
         return result;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
