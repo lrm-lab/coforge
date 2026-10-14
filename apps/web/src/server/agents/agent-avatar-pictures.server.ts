@@ -62,6 +62,12 @@ const pictures: string[] = [
   ai24,
 ];
 
+/** The pool's picture ids in the order of `pictures`; the browser's list
+ * (`features/agents/avatar-pictures/pictures.ts`) must name the same ids. */
+export const AGENT_AVATAR_PICTURE_IDS: readonly string[] = pictures.map(
+  (_, index) => `ai-${String(index + 1).padStart(2, "0")}`,
+);
+
 /** The bytes of an inlined picture: a `data:` URL from the build, or an existing file path from
  * `bun test`. Anything else is a build that did not inline it, which must fail loudly rather than
  * create Agents with no picture. */
@@ -78,13 +84,22 @@ export async function decodeInlinedPicture(inlined: string): Promise<Uint8Array>
   return file.bytes();
 }
 
+async function pictureAt(index: number): Promise<{ id: string; file: File }> {
+  const id = AGENT_AVATAR_PICTURE_IDS[index]!;
+  const bytes = await decodeInlinedPicture(pictures[index]!);
+  return { id, file: new File([new Uint8Array(bytes)], `${id}.webp`, { type: "image/webp" }) };
+}
+
 /** One picture drawn at random. `random` is injectable so a test can walk the whole list; it must
  * return a value in [0, 1). */
 export async function randomAgentAvatarPicture(
   random: () => number = Math.random,
 ): Promise<{ id: string; file: File }> {
-  const index = Math.min(Math.floor(random() * pictures.length), pictures.length - 1);
-  const id = `ai-${String(index + 1).padStart(2, "0")}`;
-  const bytes = await decodeInlinedPicture(pictures[index]!);
-  return { id, file: new File([new Uint8Array(bytes)], `${id}.webp`, { type: "image/webp" }) };
+  return pictureAt(Math.min(Math.floor(random() * pictures.length), pictures.length - 1));
+}
+
+/** One picture by id, or null when the pool has no such id (the id comes from the browser). */
+export async function agentAvatarPictureById(id: string): Promise<File | null> {
+  const index = AGENT_AVATAR_PICTURE_IDS.indexOf(id);
+  return index < 0 ? null : (await pictureAt(index)).file;
 }

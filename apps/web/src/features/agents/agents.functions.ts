@@ -675,6 +675,25 @@ export const uploadAgentAvatar = createServerFn({ method: "POST" })
     return result;
   });
 
+/** The creator gives this Agent one of the platform's pictures, stored as its own copy. */
+export const chooseAgentAvatarPicture = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ agentId: agentIdSchema, pictureId: z.string().max(32) }))
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    const result = await new AgentAvatars(db).storeChosen(
+      workspaceId,
+      user.id,
+      data.agentId,
+      data.pictureId,
+    );
+    try {
+      await publishAgentDirectoryChanged(workspaceId, data.agentId, "updated");
+    } catch {
+      // The avatar write is already committed; a missed directory signal is repaired by reconnect/focus.
+    }
+    return result;
+  });
+
 export const removeAgentAvatar = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(agentIdInputSchema)

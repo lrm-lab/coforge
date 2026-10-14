@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
+import { agentAvatarPictures } from "#src/features/agents/avatar-pictures/pictures";
 import {
+  AGENT_AVATAR_PICTURE_IDS,
   AGENT_AVATAR_POOL_VERSION,
+  agentAvatarPictureById,
   decodeInlinedPicture,
   randomAgentAvatarPicture,
 } from "#src/server/agents/agent-avatar-pictures.server";
@@ -41,5 +44,22 @@ describe("Agent avatar pictures", () => {
       new Uint8Array([82, 73, 70, 70]),
     );
     await expect(decodeInlinedPicture("/assets/ai-01-4f2a9c.webp")).rejects.toThrow();
+  });
+
+  test("a picture is looked up by its id, and only the pool's own ids resolve", async () => {
+    const seventh = await agentAvatarPictureById("ai-07");
+
+    expect(seventh?.type).toBe("image/webp");
+    expect(await seventh?.bytes()).toEqual(
+      await (await randomAgentAvatarPicture(() => 6.5 / 24)).file.bytes(),
+    );
+    for (const id of ["ai-00", "ai-25", "ai-7", "../ai-07", "", "AI-07"])
+      expect(await agentAvatarPictureById(id)).toBeNull();
+  });
+
+  test("the browser's picture list and the server's pool are the same twenty-four ids", () => {
+    expect(AGENT_AVATAR_PICTURE_IDS).toHaveLength(24);
+    expect(agentAvatarPictures.map((picture) => picture.id)).toEqual([...AGENT_AVATAR_PICTURE_IDS]);
+    for (const picture of agentAvatarPictures) expect(picture.url).toContain(picture.id);
   });
 });

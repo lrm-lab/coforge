@@ -14,6 +14,7 @@ import { validateImage } from "#src/server/files/image-upload.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import {
   AGENT_AVATAR_POOL_VERSION,
+  agentAvatarPictureById,
   randomAgentAvatarPicture,
 } from "./agent-avatar-pictures.server";
 import { agentVisibilityViewerForUser, assertAgentVisible } from "./agent-visibility.server";
@@ -124,6 +125,19 @@ export class AgentAvatars {
       }
     }
     return { avatarUrl: agentAvatarUrl(workspaceId, agentId, objectKey) };
+  }
+
+  /**
+   * The creator picks one of the pool's pictures for their Agent. It is stored exactly like an
+   * upload (a bare-uuid key), not like a platform assignment, so replacing every platform avatar
+   * later leaves it alone.
+   */
+  async storeChosen(workspaceId: string, userId: string, agentId: string, pictureId: string) {
+    const file = await agentAvatarPictureById(pictureId);
+    // Authorization first, so a stranger learns nothing about which ids exist.
+    await this.#owned(workspaceId, userId, agentId);
+    if (!file) throw new AppError("INVALID_INPUT");
+    return this.store(workspaceId, userId, agentId, file);
   }
 
   async remove(workspaceId: string, userId: string, agentId: string) {

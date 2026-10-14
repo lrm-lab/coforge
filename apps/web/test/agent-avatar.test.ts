@@ -278,3 +278,50 @@ test("only a picture the platform assigned parses as one; an upload never does",
     ),
   ).toEqual({ version: "v2", pictureId: "ai-07" });
 });
+
+function chosenFixture(ownerKey: string | null = null) {
+  const { objects, storage } = memoryStorage();
+  const { db, row } = fakeDb({
+    id: "agent-1",
+    workspaceId: "workspace-1",
+    ownerId: "owner-1",
+    visibility: "public",
+    deletedAt: null,
+    avatarObjectKey: ownerKey,
+    avatarContentType: ownerKey ? "image/webp" : null,
+  });
+  if (ownerKey) objects.set(ownerKey, new Blob(["old"], { type: "image/webp" }));
+  return { objects, row, avatars: new AgentAvatars(db as never, async () => storage) };
+}
+
+// Frank, 2026-10-14: a picture the creator picks is theirs, not "platform-assigned", so a later
+// replacement of every platform avatar leaves it alone.
+test("a picture the creator chooses becomes their own avatar, not a platform-assigned one", async () => {
+  const platformKey =
+    "workspaces/workspace-1/agents/agent-1/avatars/platform-v1-ai-02-6f1c2a54-0b1e-4c53-9a8d-3a5b6c7d8e9f/original";
+  const { objects, row, avatars } = chosenFixture(platformKey);
+
+  const chosen = await avatars.storeChosen("workspace-1", "owner-1", "agent-1", "ai-07");
+
+  expect(chosen.avatarUrl).toStartWith("/api/workspaces/workspace-1/agents/agent-1/avatar?v=");
+  expect(row.avatarContentType).toBe("image/webp");
+  expect(parsePlatformAvatarKey(row.avatarObjectKey)).toBeNull();
+  expect(row.avatarObjectKey).toContain("workspaces/workspace-1/agents/agent-1/avatars/");
+  expect(objects.has(platformKey)).toBeFalse();
+  expect(objects.size).toBe(1);
+  expect(objects.get(row.avatarObjectKey!)?.type).toBe("image/webp");
+});
+
+test("only the creator can choose a picture, and only one of the pool's own", async () => {
+  const { objects, row, avatars } = chosenFixture();
+
+  await expect(avatars.storeChosen("workspace-1", "member-2", "agent-1", "ai-07")).rejects.toEqual(
+    new AppError("ACCESS_DENIED"),
+  );
+  for (const pictureId of ["ai-99", "../ai-07", ""])
+    await expect(
+      avatars.storeChosen("workspace-1", "owner-1", "agent-1", pictureId),
+    ).rejects.toEqual(new AppError("INVALID_INPUT"));
+  expect(objects.size).toBe(0);
+  expect(row.avatarObjectKey).toBeNull();
+});
