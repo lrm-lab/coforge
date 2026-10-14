@@ -56,7 +56,10 @@ export interface CodeAgentProbe {
   /** `env` is the discovery environment (`agentEnvironment` for the real probe): npm-style
    * launchers (`#!/usr/bin/env node`) only resolve when the found PATH reaches the probe.
    * Process implementations may keep their own process env as a fallback base. */
-  spawn(executable: string, env?: Readonly<Record<string, string>>): {
+  spawn(
+    executable: string,
+    env?: Readonly<Record<string, string>>,
+  ): {
     stdout: ReadableStream<Uint8Array>;
     exited: Promise<number>;
     kill?(): void;

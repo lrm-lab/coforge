@@ -83,7 +83,10 @@ describe("nvm discovery through the daemon seam", () => {
       { mode: 0o755 },
     );
     writeFileSync(join(bin, "node"), "#!/bin/sh\necho 'stub'\n", { mode: 0o755 });
-    const searchPath = codeAgentExecutableSearchPath({ HOME: home, PATH: "/no/node/here" }, "linux");
+    const searchPath = codeAgentExecutableSearchPath(
+      { HOME: home, PATH: "/no/node/here" },
+      "linux",
+    );
     const resolved = Bun.which("codex-launcher-probe", { PATH: searchPath });
     expect(resolved).toBeDefined();
     const child = Bun.spawn({
