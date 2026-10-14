@@ -13,7 +13,7 @@ export type ComputerRestartStatus =
     }
   | { requestId: string; status: "failed"; reason: "timeout" | "publication" };
 
-/** The client-side shape of one upgrade operation's status, mirroring the server's store. */
+/** One upgrade operation's status, as `computer-upgrade-store.server.ts` stores and returns it. */
 export type ComputerUpgradeStatus =
   | { requestId: string; status: "accepted"; expectedVersion: string; expiresAt: string }
   | {
@@ -28,6 +28,7 @@ export type ComputerUpgradeStatus =
   | {
       requestId: string;
       status: "failed";
+      /** "reported" is the Computer's own terminal receipt; the others are server inferences. */
       reason: "timeout" | "publication" | "evidence" | "reported";
       error?: string;
       /** See `UPGRADE_ERROR_CODE`; only ever set alongside `reason: "reported"`. */

@@ -3,28 +3,7 @@ import { redisUrlFor } from "#src/server/redis-url.server";
 import { sanitizeUpgradeErrorText } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
-
-export type ComputerUpgradeStatus =
-  | { requestId: string; status: "accepted"; expectedVersion: string; expiresAt: string }
-  | {
-      requestId: string;
-      status: "completed";
-      expectedVersion: string;
-      computerVersion: string;
-      daemonVersion: string;
-      workerInstanceId: string;
-      completedAt: string;
-    }
-  | {
-      requestId: string;
-      status: "failed";
-      /** "reported" is the Computer's own terminal receipt; the others are server inferences. */
-      reason: "timeout" | "publication" | "evidence" | "reported";
-      error?: string;
-      /** See `UPGRADE_ERROR_CODE`; only ever set alongside `reason: "reported"`. */
-      errorCode?: string;
-    }
-  | { requestId: string; status: "unknown"; reason: "corrupt" };
+import type { ComputerUpgradeStatus } from "#src/features/computers/computer.schemas";
 
 type Scope = { workspaceId: string; computerId: string };
 /** One Computer upgrade operation's terminal receipt, as the Daemon reported it. */

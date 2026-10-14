@@ -22,42 +22,7 @@ import {
 } from "#src/features/computers/computers.functions";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-
-export type ActionCardRef = { id: string; displayName: string };
-type ActionCardBase = {
-  messageId: string;
-  state: "pending" | "executed" | "cancelled";
-  draftHint?: string;
-  committedBy?: { displayName: string };
-  committedAt?: string;
-  canCommit: boolean;
-  canCancel: boolean;
-};
-export type ActionCardView =
-  | (ActionCardBase & {
-      kind: "channel:create";
-      name: string;
-      visibility: "public" | "private";
-      description?: string;
-      initialHumans: ActionCardRef[];
-      initialAgents: ActionCardRef[];
-      result?: { channelId: string };
-    })
-  | (ActionCardBase & {
-      kind: "agent:create";
-      name: string;
-      description?: string;
-      suggestedComputer?: ActionCardRef;
-      requiredComputer?: ActionCardRef;
-      result?: { agentId: string };
-    })
-  | (ActionCardBase & {
-      kind: "channel:add_member";
-      channel: ActionCardRef;
-      humans: ActionCardRef[];
-      agents: ActionCardRef[];
-      result?: { channelId: string; userIds: string[]; agentIds: string[] };
-    });
+import type { ActionCardRef, ActionCardView } from "#src/server/conversations/action-cards.server";
 
 function chipList(items: ActionCardRef[]) {
   if (!items.length) return null;

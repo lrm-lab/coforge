@@ -39,7 +39,7 @@ import { loadActionCardStates } from "./action-cards.functions";
 import { channelMembersQueryKey, channelNamesQueryKey } from "./conversation-query-keys";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
 import { listSavedMessages } from "./saved-messages.functions";
-import type { ActionCardView } from "./action-card";
+import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { createReactionToggler, type ReactionSummary } from "./message-reactions";
 import {
   applyThreadRead,
