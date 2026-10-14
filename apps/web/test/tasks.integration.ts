@@ -224,7 +224,7 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
         operation: "convert",
         idempotencyKey: crypto.randomUUID(),
         target: `#${channel.channelName}`,
-        messageId: ordinary.id.slice(0, 8),
+        messageId: ordinary.id,
       },
     );
     expect(converted.tasks[0]).toMatchObject({
