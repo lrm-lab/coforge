@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { posix, win32 } from "node:path";
 
 export function codeAgentExecutableSearchPath(
@@ -14,6 +15,17 @@ export function codeAgentExecutableSearchPath(
         paths.join(homeDirectory, ".volta", "bin"),
         paths.join(homeDirectory, ".local", "share", "mise", "shims"),
         paths.join(homeDirectory, ".asdf", "shims"),
+        // npm-installed code agents: a custom npm prefix, or one nvm-managed node per version.
+        // Each exists check is cheap; nvm versions are globbed only when the manager is present.
+        paths.join(homeDirectory, ".npm-global", "bin"),
+        ...(() => {
+          try {
+            const nvmRoot = paths.join(homeDirectory, ".nvm", "versions", "node");
+            return readdirSync(nvmRoot).map((version) => paths.join(nvmRoot, version, "bin"));
+          } catch {
+            return [];
+          }
+        })(),
       ]
     : [];
   const platformDirectories =
