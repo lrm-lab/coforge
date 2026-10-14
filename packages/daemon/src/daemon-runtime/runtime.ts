@@ -10,7 +10,6 @@ import { mkdirSync } from "node:fs";
 import { readOperatingSystem } from "#src/platform/operating-system";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
 import { CompactionTracker } from "#src/agent-runtime/compaction-tracker";
-import { RuntimeProgressTracker } from "#src/agent-runtime/runtime-progress";
 import {
   buildRuntimeErrorActivity,
   buildRuntimeCrashedActivity,
@@ -482,9 +481,6 @@ export class DaemonRuntime {
         ),
       );
   });
-  /** Liveness bookkeeping for the content-free "progress" signal - see
-   * agent-runtime/runtime-progress.ts. */
-  readonly #runtimeProgress = new RuntimeProgressTracker();
   readonly #codeAgentDiscovery: CodeAgentDiscovery;
 
   constructor(
@@ -2101,7 +2097,6 @@ export class DaemonRuntime {
     this.#currentActivityLaunches.set(agentId, launch);
     this.#activityPublisher.forgetBusy(agentId);
     this.#compactionTracker.dispose(agentId);
-    this.#runtimeProgress.dispose(agentId);
     // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
     // #deliveryQueue.shouldHold on every delivery for this Agent from now on.
     this.#deliveryQueue.setProvider(agentId, config.provider);
@@ -2643,16 +2638,12 @@ export class DaemonRuntime {
       return;
     }
     if (event.type === "progress") {
-      this.#runtimeProgress.observe(
-        agentId,
-        this.#activityPublisher.lastBusy(agentId)?.launch === launch,
-        () =>
-          this.#activityPublisher.publish(
-            agentId,
-            launch,
-            this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS, "info", ""),
-          ),
-      );
+      if (this.#activityPublisher.lastBusy(agentId)?.launch !== launch)
+        this.#activityPublisher.publish(
+          agentId,
+          launch,
+          this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS, "info", ""),
+        );
       return;
     }
     // Single conversion for every provider (agent-runtime/runtime-error-activity.ts): formatting,
@@ -3252,7 +3243,6 @@ export class DaemonRuntime {
   /** Forgets one ended launch's observation state without affecting another Agent. */
   #disposeLaunchObservations(agentId: string): void {
     this.#compactionTracker.dispose(agentId);
-    this.#runtimeProgress.dispose(agentId);
     this.#lastContextUsage.delete(agentId);
   }
 
@@ -4034,7 +4024,6 @@ export class DaemonRuntime {
     for (const launch of this.#currentActivityLaunches.values()) launch.startup?.dispose();
     this.#compactionTracker.disposeAll();
     this.#runtimeErrorHold.disposeAll();
-    this.#runtimeProgress.disposeAll();
     this.#lastContextUsage.clear();
     for (const agentId of this.#agentInputQueues.keys())
       this.#closeAgentInputQueue(agentId, new Error("daemon runtime is stopping"));

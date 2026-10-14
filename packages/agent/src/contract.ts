@@ -117,8 +117,8 @@ export type AgentRuntimeEvent =
   | { type: "tool-end"; id: string; isError: boolean }
   | { type: "completed"; status: "completed" | "interrupted" | "failed" }
   // Normalized signals a provider reports; the daemon core (not the provider) decides what
-  // Activity, if any, each one becomes - see agent-runtime/compaction-tracker.ts and
-  // agent-runtime/runtime-progress.ts.
+  // Activity, if any, each one becomes - see daemon-runtime/runtime.ts and
+  // agent-runtime/compaction-tracker.ts.
   | { type: "compaction-started"; occurredAt?: string }
   | { type: "compaction-finished"; occurredAt?: string }
   // Only providers that can observe an aborted compaction report this; a provider with no such

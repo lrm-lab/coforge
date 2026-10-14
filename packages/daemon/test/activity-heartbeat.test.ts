@@ -514,15 +514,15 @@ test("a progress event announces runtime_progress while the Agent is not yet vis
     emitEvent({ type: "progress" });
     expect(activities).toHaveLength(1);
     expect(activities[0]).toMatchObject({ detailKind: "runtime_progress", detail: "" });
-    // A second ping before anything else makes the Agent look busy still announces: the first
-    // progress activity itself is now the Agent's last busy signal, so this is the "already
-    // working" case exercised by the next test, not a rate-limit window.
+    // The first announcement makes this launch busy, so another ping stays silent.
+    emitEvent({ type: "progress" });
+    expect(activities).toHaveLength(1);
   } finally {
     await runtime.stop();
   }
 });
 
-test("a progress event is suppressed once the Agent already looks busy, but keeps refreshing liveness", async () => {
+test("a progress event is suppressed once the Agent already looks busy", async () => {
   const { runtime, activities, emitEvent } = await harness();
   try {
     activities.length = 0;
@@ -546,32 +546,54 @@ test("a progress event is suppressed once the Agent already looks busy, but keep
   }
 });
 
-test("a progress event never flushes buffered text or ends thinking", async () => {
+test("a progress event announces again after the turn becomes idle", async () => {
   const { runtime, activities, emitEvent } = await harness();
-  jest.useFakeTimers();
   try {
     activities.length = 0;
     emitEvent({ type: "progress" });
-    // Not yet busy: the ping announces runtime_progress.
-    expect(activities.map((a) => a.detailKind)).toEqual(["runtime_progress"]);
-    emitEvent({ type: "text-delta", text: "still writing" });
+    emitEvent({ type: "completed", status: "completed" });
+    expect(activities.map((a) => a.detailKind)).toEqual(["runtime_progress", "idle"]);
     emitEvent({ type: "progress" });
-    // Already busy (the run-start frame): the ping announces nothing and flushes nothing.
     expect(activities.map((a) => a.detailKind)).toEqual([
       "runtime_progress",
-      "model_response_started",
-    ]);
-    jest.advanceTimersByTime(350);
-    expect(activities.map((a) => a.detailKind)).toEqual([
+      "idle",
       "runtime_progress",
-      "model_response_started",
-      "model_response_started",
     ]);
-    expect(activities[2]?.entries).toMatchObject([{ kind: "text", text: "still writing" }]);
+    expect(activities[2]).toMatchObject({ agentId: "agent-a", level: "info", detail: "" });
   } finally {
     await runtime.stop();
   }
 });
+
+test.each([
+  ["text-delta", "model_response_started", "text"],
+  ["thinking-delta", "thinking_started", "thinking"],
+] as const)(
+  "a progress event never flushes buffered %s or ends its run",
+  async (type, detailKind, entryKind) => {
+    const { runtime, activities, emitEvent } = await harness();
+    jest.useFakeTimers();
+    try {
+      activities.length = 0;
+      emitEvent({ type: "progress" });
+      // Not yet busy: the ping announces runtime_progress.
+      expect(activities.map((a) => a.detailKind)).toEqual(["runtime_progress"]);
+      emitEvent({ type, text: "still writing" });
+      emitEvent({ type: "progress" });
+      // Already busy (the run-start frame): the ping announces nothing and flushes nothing.
+      expect(activities.map((a) => a.detailKind)).toEqual(["runtime_progress", detailKind]);
+      jest.advanceTimersByTime(350);
+      expect(activities.map((a) => a.detailKind)).toEqual([
+        "runtime_progress",
+        detailKind,
+        detailKind,
+      ]);
+      expect(activities[2]?.entries).toMatchObject([{ kind: entryKind, text: "still writing" }]);
+    } finally {
+      await runtime.stop();
+    }
+  },
+);
 
 test.each([
   ["warning", "runtime_progress", 463],
