@@ -41,12 +41,23 @@ describe("codeAgentExecutableSearchPath", () => {
     const home = newFakeHome();
     const paths = hostPlatform === "win32" ? winPath : posix;
     const ambient = paths.join(home, "ambient-bin");
-    const result = codeAgentExecutableSearchPath({ HOME: home, PATH: ambient }, hostPlatform);
+    // On windows the npm-prefix directory only comes from APPDATA; pass it so the assertion
+    // matches what this exact input produces.
+    const environment: Record<string, string> = { HOME: home, PATH: ambient };
+    if (hostPlatform === "win32") {
+      environment.APPDATA = "C:\\Users\\x\\npm";
+      expect(codeAgentExecutableSearchPath(environment, hostPlatform).split(hostDelimiter)).toContain(
+        winPath.join(environment.APPDATA, "npm"),
+      );
+    } else {
+      environment.APPDATA = home;
+    }
+    const result = codeAgentExecutableSearchPath(environment, hostPlatform);
     const directories = result.split(hostDelimiter);
     expect(directories[0]).toBe(ambient);
     expect(directories).toContain(hostJoin(home, ".local", "bin"));
     expect(result).toContain(
-      hostPlatform === "win32" ? winPath.join("C:\\Users\\x\\npm", "npm") : "/usr/local/bin",
+      hostPlatform === "win32" ? winPath.join(environment.APPDATA, "npm") : "/usr/local/bin",
     );
   });
 
@@ -121,17 +132,7 @@ describe("npm-installed Codex discovery through the public seam", () => {
       // launcher "exists" but reports no runtime. The new build's green: the probe runs with the
       // discovery environment whose PATH reaches the fixture.
       const home = newFakeHome();
-      const bin = posix.join(home, ".npm-global", "bin");
-      mkdirSync(bin, { recursive: true });
-      const stub = posix.join(bin, "codex-fake-node");
-      writeFileSync(
-        stub,
-        await Bun.file(posix.join("test", "fixtures", "codex-fake-node")).text(),
-        {
-          mode: 0o755,
-        },
-      );
-      writeFileSync(posix.join(bin, "codex"), "#!/usr/bin/env codex-fake-node", { mode: 0o755 });
+      await writeCodexFixture(home);
 
       const environment = { HOME: home, PATH: "/ambient-only-path" };
       const runtimes = await discoverExternalCodeAgents(
