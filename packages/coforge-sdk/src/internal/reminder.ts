@@ -350,16 +350,25 @@ export function decodeAgentReminderOperationRequest(
   );
 }
 
+/** Whether a reminder record (a response's summary or a sync's job) carries the core every one
+ * needs, checked in this order; `positive` and `instant` throw their own message for a malformed
+ * value. */
+function hasReminderCore(value: ReminderJob): boolean {
+  return Boolean(
+    isReminderId(value.reminderId) &&
+    isScopeId(value.ownerAgentId) &&
+    positive(value.version, "reminder version") &&
+    value.title &&
+    value.target &&
+    value.messageId &&
+    instant(value.fireAt, "reminder fire time"),
+  );
+}
+
 function summary(value: ReminderSummaryRecord): ReminderSummaryRecord {
   fields(value, true);
   if (
-    !isReminderId(value.reminderId) ||
-    !isScopeId(value.ownerAgentId) ||
-    !positive(value.version, "reminder version") ||
-    !value.title ||
-    !value.target ||
-    !value.messageId ||
-    !instant(value.fireAt, "reminder fire time") ||
+    !hasReminderCore(value) ||
     !instant(value.createdAt, "reminder created time") ||
     value.repeat === "none" ||
     (value.firedAt !== undefined && !instant(value.firedAt, "reminder fired time"))
@@ -405,16 +414,7 @@ export function decodeAgentReminderOperationResponse(
 
 function job(value: ReminderJob): ReminderJob {
   fields(value, true);
-  if (
-    !isReminderId(value.reminderId) ||
-    !isScopeId(value.ownerAgentId) ||
-    !positive(value.version, "reminder version") ||
-    !value.title ||
-    !value.target ||
-    !value.messageId ||
-    !instant(value.fireAt, "reminder fire time")
-  )
-    throw new Error("invalid reminder job");
+  if (!hasReminderCore(value)) throw new Error("invalid reminder job");
   return value;
 }
 function sync(value: ReminderSync): ReminderSync {
