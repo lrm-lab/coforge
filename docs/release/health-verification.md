@@ -37,6 +37,15 @@ Three Docker reads each have a five-second deadline plus one-second forced-kill
 grace period; the HTTP probe has a five-second timeout. Missing diagnostics do
 not prevent rollback or alter its outcome.
 
+Before rollback, it also runs one read-only Bun request in the candidate Web
+container as its ordinary user, with the same official feed and 3-second
+timeout as the update check. The Docker call has a 5-second deadline plus
+1-second forced-kill grace period. It reports only a fixed result code:
+available, unconfigured, unsupported feed, HTTP error, invalid version,
+timeout, DNS error, TLS error, network error, or unavailable. URLs, response
+bodies and arbitrary errors stay out of the report. The probe does not change
+the Web cache, network configuration, health verdict, or rollback behavior.
+
 After every healthy deployment, `remote-deploy.sh` snapshots the shipped
 Compose file, Caddyfile, and Centrifugo configuration to `$REMOTE_ROOT/last-healthy/`
 before recording the release healthy. Rollback restores those files from that

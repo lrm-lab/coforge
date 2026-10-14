@@ -386,8 +386,66 @@ candidate_diagnostics() {
 	if [[ "$status" =~ ^[0-9]{3}$ ]]; then
 		printf 'candidate loopback health HTTP status: %s\n' "$status" >&2
 	fi
+	if [[ "$container" =~ ^[0-9a-f]{6,64}$ ]]; then
+		release_feed_diagnostics "$container" || true
+	fi
 	proxy_diagnostics || true
 	return 0
+}
+
+# Probe the candidate's ordinary user, environment and Bun fetch, without
+# changing the running Web cache or network. The request gets the Web's 3s
+# budget; the Docker call gets 5s plus 1s forced-kill grace. Only fixed codes
+# leave the container, never a URL, body, or arbitrary error.
+release_feed_diagnostics() {
+	local result
+	result="$(timeout --kill-after=1s 5s docker exec "$1" bun -e '
+const feed = Bun.env.COFORGE_RELEASE_FEED_URL?.trim().replace(/\/$/, "");
+let result = "unconfigured";
+if (feed) {
+  result = "unsupported_feed";
+  if (["https://releases-staging.coforge.cn", "https://releases.coforge.cn"].includes(feed)) {
+    try {
+      const response = await fetch(feed + "/latest", { signal: AbortSignal.timeout(3000) });
+      result = "http_error";
+      if (response.ok) {
+        result = "invalid_version";
+        const reader = response.body?.getReader();
+        if (reader) {
+          let text = "", size = 0;
+          const decoder = new TextDecoder();
+          try {
+            while (true) {
+              const chunk = await reader.read();
+              if (chunk.done) break;
+              size += chunk.value.byteLength;
+              if (size > 128) break;
+              text += decoder.decode(chunk.value, { stream: true });
+            }
+            text += decoder.decode();
+            // Match the Web reader: SDK internal/release-version.ts isValidReleaseVersion.
+            const version = text.trim();
+            if (size <= 128 && /^[A-Za-z0-9.+-]{1,100}$/.test(version)
+                && version !== "." && !version.includes("..") && !version.startsWith("-")) result = "available";
+          } finally { await reader.cancel().catch(() => {}); }
+        }
+      } else { await response.body?.cancel(); }
+    } catch (error) {
+      const code = error?.code;
+      result = error?.name === "TimeoutError" || code === "ETIMEDOUT" ? "timeout"
+        : ["ENOTFOUND", "EAI_AGAIN", "EAI_FAIL", "DNS_LOOKUP_FAILED"].includes(code) ? "dns_error"
+        : typeof code === "string" && /^(CERT_|ERR_TLS_|SSL_|UNABLE_TO_VERIFY_LEAF_SIGNATURE|DEPTH_ZERO_SELF_SIGNED_CERT)/.test(code) ? "tls_error"
+        : "network_error";
+    }
+  }
+}
+console.log(result);
+' 2>/dev/null | head -c 64)" || true
+	case "$result" in
+	available | unconfigured | unsupported_feed | http_error | invalid_version | timeout | dns_error | tls_error | network_error) ;;
+	*) result=unavailable ;;
+	esac
+	printf 'candidate release feed: %s\n' "$result" >&2
 }
 
 # The reverse proxy owns the public entry, so its certificate state is the
