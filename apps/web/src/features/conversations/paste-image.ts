@@ -20,37 +20,28 @@
 /** Matches the server's inline-image whitelist in `attachment-response.server.ts`. */
 export const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
-/** Extracts absolute http(s) image URLs from a paste's uri-list / HTML / plain-text payloads. */
+/**
+ * The image URLs of a paste that carries an image but no file bytes (some web apps put only
+ * `text/html` with a single `<img>` on the clipboard). A paste the user can insert as text —
+ * a plain link copied to be pasted as a link — is never treated as an image: the composer
+ * leaves those to the browser's default paste, unprevented and unfetched.
+ */
 export function imageUrlsFromPaste(
-  clipboardData: {
-    getData(type: string): string;
-    types?: ArrayLike<string> | null;
-  } | null,
+  clipboardData: { getData(type: string): string; types?: ArrayLike<string> | null } | null,
 ): string[] {
   if (!clipboardData) return [];
-  const urls: string[] = [];
-  const push = (value: string | undefined | null) => {
-    const trimmed = value?.trim();
-    if (trimmed && /^https?:\/\//i.test(trimmed) && !urls.includes(trimmed)) urls.push(trimmed);
-  };
   const types = Array.from(clipboardData.types ?? []);
-  if (types.includes("text/uri-list")) {
-    // uri-list: newline-separated entries, `#` lines are comments; only the first entry matters.
-    const first = clipboardData
-      .getData("text/uri-list")
-      .split(/\r?\n/)
-      .find((line) => line && !line.startsWith("#"));
-    push(first);
+  // Any insertable text (a plain link, a caption, anything) wins: not our paste.
+  if (types.includes("text/plain") && clipboardData.getData("text/plain").trim() !== "") return [];
+  if (!types.includes("text/html")) return [];
+  const html = clipboardData.getData("text/html");
+  const urls: string[] = [];
+  for (const match of html.matchAll(/<img\b[^>]*\bsrc\s*=\s*("|')(.*?)\1/gi)) {
+    const src = match[2]?.trim();
+    if (src && /^https?:\/\//i.test(src) && !urls.includes(src)) urls.push(src);
   }
-  if (types.includes("text/html")) {
-    const html = clipboardData.getData("text/html");
-    for (const match of html.matchAll(/<img\b[^>]*\bsrc\s*=\s*("|')(.*?)\1/gi)) push(match[2]);
-    for (const match of html.matchAll(/src\s*=\s*"(https?:[^"\s]+)"/gi)) push(match[1]);
-  }
-  if (types.includes("text/plain")) {
-    for (const line of clipboardData.getData("text/plain").split(/\r?\n/)) push(line);
-  }
-  return urls;
+  // A paste meant as an image names one source; several `<img>`s read as normal rich text.
+  return urls.length === 1 ? urls : [];
 }
 
 /** Reads a pasted file's raster content as a PNG re-encode, or `undefined` when it cannot be decoded. */

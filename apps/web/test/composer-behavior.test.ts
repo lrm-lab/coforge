@@ -8,8 +8,7 @@ import {
   shouldSendOnEnter,
 } from "#src/features/conversations/composer-behavior";
 import { localId } from "#src/features/conversations/composer-behavior";
-import { INLINE_IMAGE_TYPES } from "#src/features/conversations/paste-image";
-import { imageUrlsFromPaste } from "#src/features/conversations/paste-image";
+import { INLINE_IMAGE_TYPES, imageUrlsFromPaste } from "#src/features/conversations/paste-image";
 
 const baseEnter = { key: "Enter", shiftKey: false, isComposing: false, keyCode: 13 };
 const noComposition = { lastCompositionEndAt: null, now: 0 };
@@ -159,44 +158,54 @@ describe("imageUrlsFromPaste", () => {
   test("returns [] for empty pastes and pastes without link payloads", () => {
     expect(imageUrlsFromPaste(null)).toEqual([]);
     expect(imageUrlsFromPaste({ getData: () => "", types: ["text/plain"] })).toEqual([]);
+    expect(imageUrlsFromPaste({ getData: () => "", types: ["text/html"] })).toEqual([]);
   });
 
-  test("takes the first non-comment entry of text/uri-list", () => {
-    const clipboard = makeClipboard({
-      "text/uri-list": "# comment\nhttps://example.com/a.png\nhttps://example.com/second.png",
-    });
-    expect(imageUrlsFromPaste(clipboard)).toEqual(["https://example.com/a.png"]);
+  test("never claims a plain-text link — those stay browser default, unprevented", () => {
+    expect(
+      imageUrlsFromPaste(
+        makeClipboard({ "text/plain": "https://github.com/lrm-lab/coforge/pull/1" }),
+      ),
+    ).toEqual([]);
+    expect(
+      imageUrlsFromPaste(
+        makeClipboard({
+          "text/plain": "https://github.com/lrm-lab/coforge/pull/1",
+          "text/html": '<a href="https://github.com/lrm-lab/coforge/pull/1">PR</a>',
+        }),
+      ),
+    ).toEqual([]);
   });
 
-  test("collects img src targets from text/html", () => {
-    const clipboard = makeClipboard({
-      "text/html": `<div><img alt="i" src="https://cdn.example.com/pic.jpg"><img src='https://cdn.example.com/other.webp'></div>`,
-    });
-    expect(imageUrlsFromPaste(clipboard)).toEqual([
-      "https://cdn.example.com/pic.jpg",
-      "https://cdn.example.com/other.webp",
-    ]);
+  test("takes the single <img> from html-only pastes (web apps that ship no file bytes)", () => {
+    expect(
+      imageUrlsFromPaste(
+        makeClipboard({
+          "text/html": '<div><img alt="i" src="https://cdn.example.com/pic.jpg"></div>',
+        }),
+      ),
+    ).toEqual(["https://cdn.example.com/pic.jpg"]);
   });
 
-  test("adds https lines from text/plain and dedupes across payloads", () => {
-    const clipboard = makeClipboard({
-      "text/plain": "https://example.com/only.png\nnot a url",
-    });
-    expect(imageUrlsFromPaste(clipboard)).toEqual(["https://example.com/only.png"]);
-    const withDupes = makeClipboard({
-      "text/uri-list": "https://example.com/x.png",
-      "text/html": '<img src="https://example.com/x.png">',
-      "text/plain": "https://example.com/x.png",
-    });
-    expect(imageUrlsFromPaste(withDupes)).toEqual(["https://example.com/x.png"]);
+  test("several <img> elements read as rich text, not an intended image", () => {
+    expect(
+      imageUrlsFromPaste(
+        makeClipboard({
+          "text/html":
+            '<div><img src="https://cdn.example.com/a.jpg"><img src="https://cdn.example.com/b.webp"></div>',
+        }),
+      ),
+    ).toEqual([]);
   });
 
-  test("ignores javascript: and data: payloads", () => {
-    const clipboard = makeClipboard({
-      "text/html": '<img src="data:image/png;base64,AAAA"><img src="javascript:alert(1)">',
-      "text/plain": "data:text/html,data",
-    });
-    expect(imageUrlsFromPaste(clipboard)).toEqual([]);
+  test("ignores javascript: and data: sources", () => {
+    expect(
+      imageUrlsFromPaste(
+        makeClipboard({
+          "text/html": '<img src="data:image/png;base64,AAAA"><img src="javascript:alert(1)">',
+        }),
+      ),
+    ).toEqual([]);
   });
 });
 
