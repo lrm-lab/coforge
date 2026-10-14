@@ -11,9 +11,8 @@
 //
 // 1. `--entry` (default): the static import closure of one chunk — the code a browser downloads
 //    before it can run that chunk. Boot-free and stable, so it works as a regression yardstick.
-//    Rolldown's `chunk.imports` for the entry is widened to this closure by
-//    `scripts/hoist-transitive-chunk-imports.ts`, so the closure is also what TanStack Start turns
-//    into the entry's `modulepreload` links.
+//    TanStack Start's manifest builder follows the same static import graph to produce
+//    the entry's `modulepreload` links.
 // 2. `--html <file>`: every `<script src>` and `rel="modulepreload"` in a page the built server
 //    rendered (`bun run .output/server/index.mjs`, then `curl -L http://127.0.0.1:<port>/en`). This
 //    is the honest first-paint set: it adds the lazy route chunks the current page preloads, which

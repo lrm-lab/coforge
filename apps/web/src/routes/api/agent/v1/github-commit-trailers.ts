@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/api/agent/v1/github-commit-trailers")({
           const trailers = await resolveGitHubCommitTrailers(db, principal.workspaceId, repository);
           return Response.json({ trailers }, { headers: { "cache-control": "no-store" } });
         } catch {
-          return new Response("GitHub commit trailers request failed", { status: 400 });
+          return textResponse("GitHub commit trailers request failed", { status: 400 });
         }
       },
     },

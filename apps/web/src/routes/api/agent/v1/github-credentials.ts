@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
@@ -14,14 +15,14 @@ export const Route = createFileRoute("/api/agent/v1/github-credentials")({
         try {
           const github = await configuredGitHub();
           if (!github)
-            return new Response("GitHub Agent credentials are unavailable", { status: 503 });
+            return textResponse("GitHub Agent credentials are unavailable", { status: 503 });
           requestSchema.parse(await request.json());
           const credential = await github.connection.credential(principal.userId);
           return Response.json(credential, { headers: { "cache-control": "no-store" } });
         } catch (error) {
           if (isAppErrorCode(error, "ACCESS_DENIED"))
-            return new Response("GitHub connection is not authorized", { status: 403 });
-          return new Response("GitHub credential request failed", { status: 503 });
+            return textResponse("GitHub connection is not authorized", { status: 403 });
+          return textResponse("GitHub credential request failed", { status: 503 });
         }
       },
     },

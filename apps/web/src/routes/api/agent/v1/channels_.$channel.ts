@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import {
@@ -36,9 +37,9 @@ export async function handleAgentChannelPatch(
   const body = await readJsonBody(request);
   const idempotencyKey = idempotencyKeyFrom(body);
   if (body?.name !== undefined && typeof body.name !== "string")
-    return new Response("name must be a string", { status: 400 });
+    return textResponse("name must be a string", { status: 400 });
   if (body?.description !== undefined && typeof body.description !== "string")
-    return new Response("description must be a string", { status: 400 });
+    return textResponse("description must be a string", { status: 400 });
   try {
     const info = await repository.update(principal.workspaceId, principal.agentId, channel, {
       name: body?.name as string | undefined,

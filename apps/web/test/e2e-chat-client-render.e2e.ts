@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectKey } from "#src/features/conversations/direct-key";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { referencedAssets, staticClosureOf } from "../scripts/bundle-size-report";
 
 /**
  * A chat page's server HTML is a loading screen, as Slack's is: the app's chrome and a skeleton, and
@@ -14,9 +15,10 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * direct message, where the messages were server-rendered before, and on the search page opened on a
  * conversation, whose loader read the conversation for the browser.
  *
- * Opt-in like the other browser E2Es: real local Web (a dev server, or a production build run with
- * `NODE_ENV=development` and `COFORGE_DEV_SKIP_AUTH` set to `1`/`true`/`yes`, so the dev sign-in bypass is on) + `agent-browser`, and the dev user
- * an owner of its Workspace (seed-dev). Each run seeds two channels and a direct message with
+ * Also checks that the built document preloads every transitive static JS dependency.
+ * Opt-in like the other browser E2Es: a local production build run with
+ * `NODE_ENV=development` and `COFORGE_DEV_SKIP_AUTH` set to `1`/`true`/`yes`, plus `agent-browser`
+ * and the seeded dev user as a Workspace owner. Each run seeds two channels and a direct message with
  * uniquely named content, saves one message, and removes them afterwards. The server HTML of each
  * page, a screenshot of each page in the browser, and the sizes measured are written under
  * `.amp/e2e/chat-client-render/`.
@@ -35,6 +37,14 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/chat-client-render");
 
 test("a chat page's server HTML holds no conversation, and the browser shows them", async () => {
+  const assets = join(import.meta.dir, "../.output/public/assets");
+  const contents = new Map(
+    await Promise.all(
+      (await readdir(assets))
+        .filter((name) => name.endsWith(".js"))
+        .map(async (name) => [name, await Bun.file(join(assets, name)).text()] as const),
+    ),
+  );
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `chat-client-render-${process.pid}`;
   async function browser(...args: string[]) {
@@ -158,11 +168,18 @@ test("a chat page's server HTML holds no conversation, and the browser shows the
         chat: false,
       },
     };
-    const sizes: Record<string, { bytes: number }> = {};
+    const sizes: Record<string, { bytes: number; preloadedJs: number; missingPreloads: string[] }> =
+      {};
     for (const [name, page] of Object.entries(pages)) {
       const html = await serverHtml(page.path);
       await writeFile(join(artifacts, `${name}.html`), html);
-      sizes[name] = { bytes: Buffer.byteLength(html) };
+      const linked = new Set([...referencedAssets(html)].filter((asset) => asset.endsWith(".js")));
+      const closure = new Set([...linked].flatMap((entry) => staticClosureOf(contents, entry)));
+      const missingPreloads = [...closure].filter((asset) => !linked.has(asset));
+      sizes[name] = { bytes: Buffer.byteLength(html), preloadedJs: linked.size, missingPreloads };
+      expect(linked.size).toBeGreaterThan(0);
+      expect([...linked].filter((asset) => !contents.has(asset))).toEqual([]);
+      expect(missingPreloads).toEqual([]);
       // The app's chrome is there (the rail's account card), and on Chat's pages the skeleton
       // where the sidebar and the conversation will be.
       expect(html).toContain(DEV_BROWSER_USER.name);

@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { PrismaWorkspaceAccess } from "#src/server/db/repositories/setup.repositories.server";
@@ -7,7 +8,7 @@ export const Route = createFileRoute("/api/e2e/workspaces/$slug")({
     handlers: {
       GET: async ({ request, params }) => {
         if (process.env.COFORGE_E2E_ALLOW_DEVICE_AUTH !== "1")
-          return new Response("not found", { status: 404 });
+          return textResponse("not found", { status: 404 });
         const auth = request.headers.get("authorization");
         if (!auth?.startsWith("Bearer "))
           return Response.json({ error: "unauthorized" }, { status: 401 });

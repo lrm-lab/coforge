@@ -42,6 +42,9 @@ These rules apply to `src/routes/`.
   `.lazy.tsx` route file, use `getRouteApi()` rather than importing `Route`.
 - Raw routes under `api/` and OAuth callbacks are thin adapters: parse the
   request, call the owning `src/server/` module, and map its result.
+- Declare response types explicitly. Use `textResponse()` from
+  `#src/server/http/text-response.server` for plain text; Start re-wraps bodies
+  as streams, dropping Bun's implicit string-body content type.
 - TanStack Router splits only `component`, `errorComponent` and
   `notFoundComponent` out of a route file. Everything else the file imports
   (`loader`, `beforeLoad`, search validation and `pendingComponent`) lands in

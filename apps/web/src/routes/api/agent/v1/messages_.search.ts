@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import type { AgentSearchResponse, AgentMessage } from "@lrm/coforge-sdk/agent";
 import type { AgentMessageValidationMessage } from "@lrm/coforge-sdk/internal";
@@ -23,7 +24,7 @@ export async function handleAgentMessagesSearchGet(
     const value = query.get(name);
     if (value && Number.isNaN(Date.parse(value))) {
       const message: AgentMessageValidationMessage = `search \`${name}\` must be an ISO time, such as 2026-09-01T00:00:00Z`;
-      return new Response(message, { status: 400 });
+      return textResponse(message, { status: 400 });
     }
   }
   const instant = (name: "before" | "after") => {

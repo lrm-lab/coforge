@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
 
 /** The optional request envelope shared by Agent POST endpoints. */
@@ -26,10 +27,10 @@ export function agentRouteErrorResponse(
   knownValidationMessages: readonly string[] = [],
 ): Response {
   if (error instanceof AgentMessageValidationError)
-    return new Response(error.message, { status: 400 });
+    return textResponse(error.message, { status: 400 });
   if (error instanceof Error && knownValidationMessages.includes(error.message))
-    return new Response(error.message, { status: 400 });
-  return new Response(fallbackMessage, { status: 400 });
+    return textResponse(error.message, { status: 400 });
+  return textResponse(fallbackMessage, { status: 400 });
 }
 
 /** Map standard domain refusals once for Agent HTTP adapters that expose JSON errors. */

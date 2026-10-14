@@ -70,9 +70,8 @@ live in nested `AGENTS.md` files listed at the end.
   required on every page. Check production chunk output after adding a large
   feature or dependency: every chunk a route needs to render (its static
   imports, transitively) needs a `modulepreload` link in its document, or it
-  loads in a request waterfall. The `hoist-transitive-chunk-imports` plugins in
-  `vite.config.ts` give Start's manifest the static closure; delete them when
-  `@tanstack/react-start` ships TanStack/router#8520.
+  loads in a request waterfall. TanStack Start's manifest builder follows the
+  static import graph to produce these links.
 
 ## PostgreSQL and Prisma
 
@@ -153,8 +152,8 @@ responsibility.
 - `server/db/` — the Prisma client, repositories (a DM's list preferences apart from its messages; the Agent attention rule in `agent-attention`), and the shared unique-violation check.
 - `server/errors/` — public error mapping and request error handling.
 - `server/files/` — file storage (per object, and bulk removal by keys or prefix), delivery, and uploaded-image validation.
-- `server/http/`, `server/install/`, `server/observability/` — public origin and
-  request timeouts, install scripts, tracing, and Server-Timing.
+- `server/http/`, `server/install/`, `server/observability/` — public origin,
+  response types and request timeouts, install scripts, tracing, and Server-Timing.
 - `server/inbox/` — the Activity inbox read model and its Done and read-all writes.
 - `server/integrations/` — GitHub connection, configuration, and webhooks.
 - `server/notifications/` — Web Push and in-page notification delivery.

@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { AgentChannelManagementError } from "#src/server/conversations/agent-channel-management-error.server";
 
 /** Who a channel-management route acts as: one Agent, in one Workspace. Declared once here because
@@ -27,7 +28,7 @@ export function channelManagementErrorResponse(error: unknown, fallbackMessage: 
         { ok: false, errorCode: error.errorCode, error: error.message },
         { status: error.status },
       );
-    return new Response(error.message, { status: error.status });
+    return textResponse(error.message, { status: error.status });
   }
-  return new Response(fallbackMessage, { status: 400 });
+  return textResponse(fallbackMessage, { status: 400 });
 }

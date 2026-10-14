@@ -1,3 +1,4 @@
+import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
@@ -283,7 +284,7 @@ export async function handleAgentMessagesPost(
       agentId: principal.agentId,
       target: channelTarget,
     });
-    if (offerRequired) return new Response(MEMORY_OFFER_REQUIRED_MESSAGE, { status: 400 });
+    if (offerRequired) return textResponse(MEMORY_OFFER_REQUIRED_MESSAGE, { status: 400 });
   }
   try {
     const result = await executeAgentSendMessageWithPolicy(dependencies, {
@@ -330,7 +331,7 @@ export async function handleAgentMessagesPost(
     // sendAgentMessage); reported the same way the rest of this route family reports a plain
     // text failure.
     if (isAppErrorCode(error, "CONFLICT"))
-      return new Response("channel is archived", { status: 409 });
+      return textResponse("channel is archived", { status: 409 });
     // A private Agent's direct conversation stays scoped to its own creator: a stable
     // code with an explanation, the same rule this route already follows for the other named
     // failures above, rather than a bare 500.
