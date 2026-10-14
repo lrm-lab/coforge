@@ -4,10 +4,7 @@ import {
   classifyRuntimeErrorText,
   type RuntimeErrorClassification,
 } from "./runtime-error-classification";
-import {
-  runtimeErrorFingerprintFenceDetail,
-  type RuntimeErrorFingerprintFenceState,
-} from "./runtime-error-recovery";
+import type { RuntimeErrorFingerprintFenceState } from "./runtime-error-recovery";
 
 /**
  * The single place a provider's error, crash or reconnect report becomes an Activity: a
@@ -103,7 +100,8 @@ export function buildRuntimeErrorFingerprintFenceActivity(
   built: ReturnType<typeof buildRuntimeErrorActivity>,
   fence: RuntimeErrorFingerprintFenceState,
 ): ReturnType<typeof buildRuntimeErrorActivity> {
-  const detail = runtimeErrorFingerprintFenceDetail(fence, built.detail);
+  const lastErrorMessage = built.detail;
+  const detail = `Runtime stopped retrying after ${fence.attempts} consecutive failures with the same underlying error. Last error: ${lastErrorMessage} Restart this Agent once the issue is fixed.`;
   return {
     ...built,
     detail,

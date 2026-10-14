@@ -7,7 +7,6 @@ import {
   runtimeErrorDeliveryBackoffDelayMs,
   RuntimeErrorDeliveryBackoff,
   RuntimeErrorFingerprintFence,
-  runtimeErrorFingerprintFenceDetail,
 } from "#src/agent-runtime/runtime-error-recovery";
 
 test("the first backoff delay is the base delay, with no jitter added when the random source returns 0", () => {
@@ -95,16 +94,6 @@ test("a different fingerprint restarts the streak instead of accumulating with t
   fence.note("agent-1", "aaaaaaaa");
   const changed = fence.note("agent-1", "bbbbbbbb");
   expect(changed).toEqual({ fingerprint: "bbbbbbbb", attempts: 1, fenced: false });
-});
-
-test("runtimeErrorFingerprintFenceDetail names the attempt count, the last error, and a recovery step", () => {
-  const detail = runtimeErrorFingerprintFenceDetail(
-    { fingerprint: "aaaaaaaa", attempts: 3, fenced: true },
-    "connect ECONNRESET",
-  );
-  expect(detail).toContain("3");
-  expect(detail).toContain("connect ECONNRESET");
-  expect(detail.toLowerCase()).toContain("restart");
 });
 
 test("fence.reset clears the streak for that Agent only", () => {

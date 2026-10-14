@@ -9461,6 +9461,28 @@ describe("Agent delivery queue", () => {
           expect(
             activities.filter((activity) => activity.detailKind === "runtime_error"),
           ).toHaveLength(1);
+
+          // Further failures still name the current streak, even after retrying stopped.
+          activities.length = 0;
+          fake.emit(error);
+          fake.emit({ type: "completed", status: "failed" });
+          const laterErrors = activities.filter(
+            (activity) => activity.detailKind === "runtime_error",
+          );
+          expect(laterErrors).toHaveLength(1);
+          const laterDetail =
+            "Runtime stopped retrying after 4 consecutive failures with the same underlying error. Last error: connect ECONNRESET Restart this Agent once the issue is fixed.";
+          expect(laterErrors[0]).toMatchObject({
+            agentId: "agent-a",
+            level: "error",
+            detail: laterDetail,
+            entries: [{ kind: "text", text: `Error: ${laterDetail}` }],
+            runtimeError: {
+              errorClass,
+              errorReason: "runtime_error_fenced",
+              fingerprint: initial!.runtimeError!.fingerprint,
+            },
+          });
         } finally {
           await runtime.stop();
         }
