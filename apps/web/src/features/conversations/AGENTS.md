@@ -10,11 +10,11 @@ These rules apply to `src/features/conversations/`.
   actions. `last-conversation.ts` owns which conversation Chat opens on a desktop (the remembered one while listed, else the first joined channel);
   `conversation-layout.tsx` only navigates there.
 - `chat-sections.ts` owns the personal section Query and writes; `chat-section-dialog.tsx` and `chat-section-menu.tsx` expose creation, editing, collapse and deletion.
-  Section data is scoped by Workspace and viewer, refreshed on focus and while visible. The row menu moves conversations; pinned rows take display priority.
+  Create sections from the Chat list's blank-space context menu, never from Channels/Direct messages. Section data is scoped by Workspace and viewer, refreshed on focus and while visible. The row menu moves conversations; pinned rows take display priority.
 - A pinned channel or DM appears only in the sidebar's Pinned section, which `pinned-conversations.ts` builds by merging both kinds by pin order; closing
   a chat never takes it out of Pinned. Rows drag between Pinned, custom groups, and their own default group. A pin drag saves only its changed pins,
   and a group move saves one conversation's destination and the next conversation there; unseen rows survive. Channels and Direct messages keep their natural order.
-- `directory-drag.tsx` owns row/group sensors, overlays and drop targets; `pinned-conversations.ts` owns the layout rules. Custom groups and their rows have saved orders.
+- `directory-drag.tsx` owns row/group sensors, overlays and drop targets; `pinned-conversations.ts` owns the layout rules. Drag conversations by the row and groups by the heading, without separate handles or tooltips. Custom groups and their rows have saved orders.
 - Direct messages list the viewer's existing DM conversations only, with Agents and members mixed in the order they started: a conversation starts
   from a "Message" affordance (`useOpenDirectConversation`, which opens or starts it and goes to `dm/<conversationId>`). The Direct messages "+" opens
   a searchable Agent and Human picker in Chat, using that same seam. Link to a DM by its conversation id; only a "start" affordance knows just an Agent or

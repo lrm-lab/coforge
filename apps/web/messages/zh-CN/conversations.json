@@ -651,8 +651,6 @@
   "chat_section_save": "保存",
   "chat_section_delete_description": "删除“{name}”？其中的会话会回到频道或私聊列表，消息会保留。",
   "chat_section_create_button": "创建分组",
-  "chat_drag_conversation": "拖动{name}",
-  "chat_drag_section": "调整{name}分组顺序",
   "chat_drag_instructions": "按空格键开始拖动，方向键移动，再按空格键放下，Escape 取消。",
   "chat_drag_start": "正在移动{name}。",
   "chat_drag_end": "移动完成。",

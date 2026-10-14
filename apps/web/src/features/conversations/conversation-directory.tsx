@@ -22,7 +22,7 @@ import { ConversationRowMenu } from "./conversation-row-menu";
 import { conversationRowMenuEnabled } from "./conversation-row-menu-model";
 import { useChatSections, useSidebarActions } from "./sidebar-lists";
 import { ChatSectionDialog } from "./chat-section-dialog";
-import { ChatSectionMenu } from "./chat-section-menu";
+import { ChatSectionCreateMenu, ChatSectionMenu } from "./chat-section-menu";
 import type { ChatSection } from "./chat-section.schemas";
 import type { DirectRow } from "./sidebar-rows";
 import {
@@ -31,6 +31,7 @@ import {
   DirectoryDropList,
   DirectorySortableSection,
   useDirectoryDrag,
+  type DirectoryDragActivation,
 } from "./directory-drag";
 import {
   channelRowKey,
@@ -277,6 +278,7 @@ function DirectorySection({
   saving,
   onToggle,
   action,
+  headingProps,
   children,
 }: {
   label: string;
@@ -292,6 +294,7 @@ function DirectorySection({
   /** Optional trailing control on the header row, e.g. a "+" that creates a channel. It sits
    * outside the toggle button so it is its own click target, not part of collapsing. */
   action?: ReactNode;
+  headingProps?: DirectoryDragActivation;
   children: ReactNode;
 }) {
   const listId = useId();
@@ -320,6 +323,7 @@ function DirectorySection({
             // area is large both ways (the user reported the old target was too small);
             // `justify-start pl-0` puts the chevron on the same x as a row's own icon.
             <Button
+              {...headingProps}
               color="tertiary"
               size="sm"
               aria-expanded={expanded}
@@ -477,9 +481,6 @@ export function ConversationDirectory({
   const [editingSection, setEditingSection] = useState<ChatSection | "new" | null>(null);
   const [deletingSection, setDeletingSection] = useState<ChatSection | null>(null);
   const newSection = () => setEditingSection("new");
-  const sectionMenu = (
-    <ChatSectionMenu onCreate={newSection} disabled={groups.isPending || groups.isError} />
-  );
   const drag = useDirectoryDrag({
     layout: base,
     natural,
@@ -743,9 +744,10 @@ export function ConversationDirectory({
               label={label}
               disabled={savingSections.has(section.id) || savingSections.has("section-order")}
             >
-              {(handle) => (
+              {(headingProps) => (
                 <DirectorySection
                   label={label}
+                  headingProps={headingProps}
                   expanded={
                     !drag.sortingSections &&
                     (!section.collapsed || drag.hoveredSection === sectionId)
@@ -758,16 +760,12 @@ export function ConversationDirectory({
                     )
                   }
                   action={
-                    <>
-                      {handle}
-                      <ChatSectionMenu
-                        section={section}
-                        disabled={savingSections.has(section.id) || drag.dragging}
-                        onCreate={newSection}
-                        onEdit={() => setEditingSection(section)}
-                        onDelete={() => setDeletingSection(section)}
-                      />
-                    </>
+                    <ChatSectionMenu
+                      section={section}
+                      disabled={savingSections.has(section.id) || drag.dragging}
+                      onEdit={() => setEditingSection(section)}
+                      onDelete={() => setDeletingSection(section)}
+                    />
                   }
                 >
                   <div className={DIRECTORY_INSET}>
@@ -793,20 +791,17 @@ export function ConversationDirectory({
           expanded={!collapsed.includes("channels")}
           onToggle={() => toggle("channels")}
           action={
-            <>
-              {onCreateChannel ? (
-                <ButtonUtility
-                  icon={Plus}
-                  size="xs"
-                  color="tertiary"
-                  tooltip={m.channel_create()}
-                  aria-label={m.channel_create()}
-                  onClick={onCreateChannel}
-                  className="shrink-0 hover:bg-transparent!"
-                />
-              ) : null}
-              {sectionMenu}
-            </>
+            onCreateChannel ? (
+              <ButtonUtility
+                icon={Plus}
+                size="xs"
+                color="tertiary"
+                tooltip={m.channel_create()}
+                aria-label={m.channel_create()}
+                onClick={onCreateChannel}
+                className="shrink-0 hover:bg-transparent!"
+              />
+            ) : null
           }
         >
           <div className={DIRECTORY_INSET}>
@@ -826,12 +821,7 @@ export function ConversationDirectory({
           label={m.messages_agents_action()}
           expanded={!collapsed.includes("agents")}
           onToggle={() => toggle("agents")}
-          action={
-            <>
-              <StartDirectMessagePopover />
-              {sectionMenu}
-            </>
-          }
+          action={<StartDirectMessagePopover />}
         >
           <div className={cx(DIRECTORY_INSET, "pb-3")}>
             <DirectoryDropList
@@ -844,6 +834,10 @@ export function ConversationDirectory({
           </div>
         </DirectorySection>
       </div>
+      <ChatSectionCreateMenu
+        onCreate={newSection}
+        disabled={groups.isPending || groups.isError || drag.dragging}
+      />
       {editingSection && (
         <ChatSectionDialog
           section={editingSection === "new" ? undefined : editingSection}

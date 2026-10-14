@@ -28,10 +28,11 @@ to NULL and keeps every conversation and message. Pinned conversations stay in P
 unpinning returns them to their assigned section. Moving a pinned conversation to a
 section unpins it. Unassigned conversations stay in Channels or Direct messages.
 
-The Chat list creates sections with a name and optional emoji, edits their names and
+The Chat list's blank-space context menu creates sections with a name and optional emoji;
+Channels and Direct messages headers keep only their own creation actions. Members edit section names and
 icons, collapses them, and moves conversations through each row's menu. A section's
 collapse state is saved with it. Section headings display uppercase without changing
 the saved name or its edit field, truncating with an ellipsis when space runs out.
-Members can drag conversations between groups and reorder custom groups; both orders
+Members drag conversation rows directly between groups and drag headings to reorder custom groups; both orders
 are saved. Other devices read changes when Chat opens, regains
 focus, and periodically while visible; this does not add a realtime wire event.

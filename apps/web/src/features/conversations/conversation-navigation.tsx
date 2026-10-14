@@ -241,7 +241,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
               )}
             >
               <PageHeader heading={m.navigation_chat()} />
-              <div className="min-h-0 flex-1 overflow-y-auto py-4">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4">
                 <ConversationDirectory
                   channels={visibleChannels}
                   agents={agents}

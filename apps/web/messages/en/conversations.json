@@ -671,8 +671,6 @@
   "chat_section_save": "Save",
   "chat_section_delete_description": "Delete “{name}”? Its conversations will return to Channels or Direct messages. Messages are kept.",
   "chat_section_create_button": "Create section",
-  "chat_drag_conversation": "Drag {name}",
-  "chat_drag_section": "Reorder {name} section",
   "chat_drag_instructions": "Press Space to pick up, use arrow keys to move, press Space to drop or Escape to cancel.",
   "chat_drag_start": "Moving {name}.",
   "chat_drag_end": "Move complete.",

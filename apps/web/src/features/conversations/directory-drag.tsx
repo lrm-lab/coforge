@@ -1,16 +1,18 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type DOMAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   closestCenter,
   DragOverlay,
   KeyboardSensor,
   MeasuringStrategy,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
   type CollisionDetection,
+  type DraggableSyntheticListeners,
   type DragEndEvent,
   type DragMoveEvent,
   type DragOverEvent,
@@ -22,8 +24,6 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { DotsGrid } from "@untitledui/icons";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import type { DirectorySectionId } from "./directory-sections";
@@ -69,8 +69,12 @@ export function useDirectoryDrag({
   const [hoveredSection, setHoveredSection] = useState<DirectorySectionId | null>(null);
   const start = useRef<DirectoryLayout | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: { start: ["Space"], end: ["Space"], cancel: ["Escape"] },
+    }),
   );
   const layout = dragging ?? base;
   const moved = (current: DirectoryLayout, { active: item, over }: DragMoveEvent) => {
@@ -220,8 +224,51 @@ export function DirectoryDropList({
   );
 }
 
-/** Mouse users can drag the whole row. Touch/keyboard users get a handle so scrolling, link
- * activation and the existing long-press menu keep their ordinary behavior. */
+/** Capture activates before React Aria handles the row/title press. A drag suppresses the
+ * following click; a normal press still navigates or collapses. Touch movement before the
+ * sensor's hold delay cancels activation, leaving list scrolling available. */
+export type DirectoryDragActivation = Pick<
+  DOMAttributes<HTMLElement>,
+  "onMouseDownCapture" | "onTouchStartCapture" | "onKeyDownCapture" | "onClickCapture"
+> & { "aria-describedby"?: string };
+
+function useItemDragActivation(
+  listeners: DraggableSyntheticListeners,
+  isDragging: boolean,
+): DirectoryDragActivation {
+  const dragged = useRef(false);
+  if (isDragging) dragged.current = true;
+  return {
+    onMouseDownCapture: (event) => {
+      if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+      dragged.current = false;
+      listeners?.onMouseDown?.(event);
+    },
+    onTouchStartCapture: (event) => {
+      if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+      dragged.current = false;
+      listeners?.onTouchStart?.(event);
+    },
+    onKeyDownCapture: (event) => {
+      if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+      if (event.target === event.currentTarget && event.key === "Enter") {
+        event.preventDefault();
+        event.currentTarget.querySelector<HTMLElement>("a[href], button[aria-controls]")?.click();
+        return;
+      }
+      listeners?.onKeyDown?.(event);
+      if (event.defaultPrevented) event.stopPropagation();
+    },
+    onClickCapture: (event) => {
+      if (!dragged.current || event.detail === 0) return;
+      dragged.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+  };
+}
+
+/** The conversation itself is draggable; it has no separate handle or tooltip. */
 export function DirectoryDragRow({
   id,
   section,
@@ -235,62 +282,32 @@ export function DirectoryDragRow({
   label: string;
   children: ReactNode;
 }) {
-  const {
-    setNodeRef,
-    setActivatorNodeRef,
-    attributes,
-    listeners,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id, disabled, data: { type: "row", section, label } satisfies DragData });
-  const dragged = useRef(false);
-  if (isDragging) dragged.current = true;
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
+    id,
+    disabled,
+    data: { type: "row", section, label } satisfies DragData,
+  });
+  const activation = useItemDragActivation(listeners, isDragging);
   return (
     <li
       ref={setNodeRef}
-      onPointerDownCapture={(event) => {
-        dragged.current = false;
-        if (
-          event.pointerType === "mouse" &&
-          (!(event.target instanceof Element) ||
-            !event.target.closest("[data-directory-drag-handle]"))
-        ) {
-          listeners?.onPointerDown?.(event);
-        }
-      }}
-      onClickCapture={(event) => {
-        if (!dragged.current || event.detail === 0) return;
-        dragged.current = false;
-        event.preventDefault();
-        event.stopPropagation();
-      }}
+      {...activation}
+      tabIndex={disabled ? undefined : 0}
+      aria-label={label}
+      aria-describedby={attributes["aria-describedby"]}
       data-dragging={isDragging || undefined}
-      className="group/drag-row relative flex items-center rounded-md py-px select-none data-dragging:bg-primary_hover data-dragging:opacity-30"
+      className="relative rounded-md py-px touch-manipulation outline-focus-ring select-none focus-visible:outline-2 focus-visible:outline-offset-2 data-dragging:bg-primary_hover data-dragging:opacity-30"
       style={{
         transform: !isDragging && transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
         transition,
       }}
     >
-      <div className="min-w-0 flex-1">{children}</div>
-      {!disabled && (
-        <ButtonUtility
-          ref={setActivatorNodeRef}
-          {...attributes}
-          {...listeners}
-          data-directory-drag-handle
-          icon={DotsGrid}
-          size="xs"
-          color="tertiary"
-          aria-label={m.chat_drag_conversation({ name: label })}
-          tooltip={m.chat_drag_conversation({ name: label })}
-          className="mr-1 shrink-0 touch-none cursor-grab opacity-0 group-hover/drag-row:opacity-100 group-focus-within/drag-row:opacity-100 any-pointer-coarse:opacity-100"
-        />
-      )}
+      {children}
     </li>
   );
 }
 
+/** The existing collapse button is also the section's drag activator. */
 export function DirectorySortableSection({
   id,
   label,
@@ -300,46 +317,35 @@ export function DirectorySortableSection({
   id: string;
   label: string;
   disabled: boolean;
-  children: (handle: ReactNode) => ReactNode;
+  children: (headingProps: DirectoryDragActivation) => ReactNode;
 }) {
-  const {
-    setNodeRef,
-    setActivatorNodeRef,
-    attributes,
-    listeners,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `group:${id}`,
     disabled,
     data: { type: "group", section: `custom:${id}`, label } satisfies DragData,
   });
-  const handle = (
-    <ButtonUtility
-      ref={setActivatorNodeRef}
-      {...attributes}
-      {...listeners}
-      isDisabled={disabled}
-      data-directory-drag-handle
-      icon={DotsGrid}
-      size="xs"
-      color="tertiary"
-      aria-label={m.chat_drag_section({ name: label })}
-      tooltip={m.chat_drag_section({ name: label })}
-      className="shrink-0 touch-none cursor-grab"
-    />
-  );
+  const { onKeyDownCapture, ...activation } = useItemDragActivation(listeners, isDragging);
   return (
     <div
       ref={setNodeRef}
-      className={cx("relative", isDragging && "opacity-30")}
+      role="group"
+      aria-label={label}
+      aria-describedby={attributes["aria-describedby"]}
+      tabIndex={disabled ? undefined : 0}
+      onKeyDownCapture={(event) => {
+        if (event.target === event.currentTarget) onKeyDownCapture?.(event);
+      }}
+      data-chat-section-sortable
+      className={cx(
+        "relative touch-manipulation outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2",
+        isDragging && "opacity-30",
+      )}
       style={{
         transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
         transition,
       }}
     >
-      {children(handle)}
+      {children({ ...activation, "aria-describedby": attributes["aria-describedby"] })}
     </div>
   );
 }
