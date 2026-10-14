@@ -1,8 +1,9 @@
 import { RedisClient } from "bun";
+import type { AgentRuntimeEvent } from "@coforge/agent";
 import { PublicChannels } from "../../../apps/web/src/server/conversations/public-channels.server";
 import { RedisMessageRequestIdempotency } from "../../../apps/web/src/server/conversations/redis-message-request-idempotency.server";
 import type { EvalEnv } from "./env";
-import type { ManifestEpisode } from "./types";
+import type { EpisodeTerminationReason, ManifestEpisode } from "./types";
 import type { EvalWorkspace } from "./workspace";
 
 function delay(ms: number): Promise<void> {
@@ -36,12 +37,15 @@ export async function postEpisodePrompt(input: {
   if (input.redisUrl) {
     const redis = new RedisClient(input.redisUrl);
     try {
-      const channels = new PublicChannels(input.workspace.db, new RedisMessageRequestIdempotency(redis));
+      const channels = new PublicChannels(
+        input.workspace.db,
+        new RedisMessageRequestIdempotency(redis),
+      );
       const sent = await channels.send({
         workspaceId: input.workspace.workspaceId,
         userId: input.workspace.evalUserId,
         channelId: input.workspace.channelId,
-        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
         body,
       });
       const triggerId = (sent as { id?: string }).id;
@@ -80,7 +84,65 @@ export type EpisodeResult = {
   memoryLeakMessageIds: string[];
   timedOut: boolean;
   elapsedMs: number;
+  terminationReason: EpisodeTerminationReason;
+  runtimeErrorCount: number;
+  /** Local observation timestamps, in Unix milliseconds. */
+  lastRuntimeErrorAt?: number;
+  lastProgressAt?: number;
 };
+
+/** Classifies an existing exit; does not change the channel-output budgets or final output. */
+export function episodeTerminationReason(
+  exit: Exclude<EpisodeTerminationReason, "runtime_failed">,
+  hasOffer: boolean,
+  runtime?: { taskFailed: boolean; memoryFailed: boolean },
+): EpisodeTerminationReason {
+  if (exit !== "final_settled" && (runtime?.taskFailed || (!hasOffer && runtime?.memoryFailed)))
+    return "runtime_failed";
+  return exit;
+}
+
+/** Local provider observations only. Error text and model/request metadata are never retained.
+ * Pi's normalized error events are terminal errors after SDK retries, not individual 502s. */
+export function createEpisodeRuntimeDiagnostics() {
+  let runtimeErrorCount = 0;
+  let lastRuntimeErrorAt: number | undefined;
+  let lastProgressAt: number | undefined;
+  const failed = { task: false, memory: false };
+  return {
+    reset() {
+      runtimeErrorCount = 0;
+      lastRuntimeErrorAt = undefined;
+      lastProgressAt = undefined;
+      failed.task = failed.memory = false;
+    },
+    observe(role: "task" | "memory", event: AgentRuntimeEvent, observedAt = Date.now()) {
+      if (event.type === "error") {
+        runtimeErrorCount += 1;
+        lastRuntimeErrorAt = observedAt;
+      }
+      if (event.type === "completed") failed[role] = event.status === "failed";
+      if (
+        event.type === "progress" ||
+        event.type === "text-delta" ||
+        event.type === "thinking-delta" ||
+        (event.type === "tool-end" && !event.isError)
+      ) {
+        failed[role] = false;
+        lastProgressAt = observedAt;
+      }
+    },
+    snapshot() {
+      return {
+        runtimeErrorCount,
+        ...(lastRuntimeErrorAt === undefined ? {} : { lastRuntimeErrorAt }),
+        ...(lastProgressAt === undefined ? {} : { lastProgressAt }),
+        taskFailed: failed.task,
+        memoryFailed: failed.memory,
+      };
+    },
+  };
+}
 
 /** One episode: the prompt goes to @memory; the Memory Agent publishes its
  * recall offer addressed to the Task Agent; the Task Agent executes and posts
@@ -92,8 +154,10 @@ export async function runEpisode(input: {
   reminder: string;
   episodeTimeoutMs: number;
   settleMs: number;
+  runtimeDiagnostics?: ReturnType<typeof createEpisodeRuntimeDiagnostics>;
 }): Promise<EpisodeResult> {
   const startedAt = Date.now();
+  input.runtimeDiagnostics?.reset();
   const posted = await postEpisodePrompt({
     workspace: input.workspace,
     redisUrl: input.env.redisUrl,
@@ -110,6 +174,20 @@ export async function runEpisode(input: {
     taskMessageCount: 0,
     memoryLeakMessageIds: [] as string[],
     timedOut: false,
+  };
+  const finish = (exit: Exclude<EpisodeTerminationReason, "runtime_failed">): EpisodeResult => {
+    const runtime = input.runtimeDiagnostics?.snapshot();
+    return {
+      ...snapshot,
+      timedOut: exit !== "final_settled",
+      elapsedMs: Date.now() - startedAt,
+      terminationReason: episodeTerminationReason(exit, snapshot.offerMessageId !== null, runtime),
+      runtimeErrorCount: runtime?.runtimeErrorCount ?? 0,
+      ...(runtime?.lastRuntimeErrorAt === undefined
+        ? {}
+        : { lastRuntimeErrorAt: runtime.lastRuntimeErrorAt }),
+      ...(runtime?.lastProgressAt === undefined ? {} : { lastProgressAt: runtime.lastProgressAt }),
+    };
   };
   while (Date.now() < deadline) {
     const offer = await input.workspace.db.memoryOfferRecord.findFirst({
@@ -150,14 +228,13 @@ export async function runEpisode(input: {
       timedOut: false,
     };
     const lastTaskAt = taskMessages.at(-1)?.createdAt?.getTime() ?? 0;
-    // Nothing observable is happening at all (no offer yet, no task message
-    // within the abort window) — the memory agent is stuck, so stop burning
-    // the full episode deadline.
+    // This is a channel-output budget, not a claim that the agents are inactive.
+    // Shell work or model generation does not extend the no-Offer budget.
     const deadQuiet =
       snapshot.offerMessageId === null &&
       Date.now() - Math.max(posted.createdAt.getTime(), lastTaskAt) >= abortQuietMs;
     if (deadQuiet) {
-      return { ...snapshot, timedOut: true, elapsedMs: Date.now() - startedAt };
+      return finish("quiet_no_offer");
     }
     const offeredAndQuiet =
       snapshot.offerMessageId !== null &&
@@ -167,9 +244,9 @@ export async function runEpisode(input: {
     // and an answer that arrived without recall is still recorded (the grader
     // judges it) while the mechanism columns expose the missing recall.
     if (offeredAndQuiet) {
-      return { ...snapshot, elapsedMs: Date.now() - startedAt };
+      return finish("final_settled");
     }
     await delay(input.env.pollMs);
   }
-  return { ...snapshot, timedOut: true, elapsedMs: Date.now() - startedAt };
+  return finish("deadline");
 }

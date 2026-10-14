@@ -1002,6 +1002,8 @@ function parseAgentRuntimeProviderConfig(
 }
 
 export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Array {
+  // Protobuf omits an empty string, and the daemon rejects a delivery with no request_id.
+  if (!value.requestId?.trim()) throw new Error("agent message delivery requires requestId");
   assertUint(value.sequence, Number.MAX_SAFE_INTEGER, "Agent message sequence");
   if (value.latestSenderKind !== undefined)
     assertValidMessageSender(

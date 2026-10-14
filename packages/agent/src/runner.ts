@@ -220,6 +220,7 @@ export function createMemoryFenceTools(
   profile: MemoryAgentToolProfile,
   budget: MemoryAgentTurnBudget,
   proxy: MemoryAgentProxy = defaultMemoryProxy(),
+  options: { memoryOfferOnly?: boolean } = {},
 ) {
   const openvikingTool = <Params extends Record<string, unknown>>(
     name: string,
@@ -457,21 +458,25 @@ export function createMemoryFenceTools(
         ),
       },
     ),
-    messageTool(
-      "send_channel_message",
-      "Send channel message",
-      "Send a visible public-channel message through CoForge. This cannot answer an explicit @memory question; use memory_offer. The body field name is content, not message.",
-      "send",
-      {
-        target: Type.String({
-          description: "Required. Public channel target starting with #. Example: #general.",
-        }),
-        content: Type.String({
-          description:
-            "Required. Message body. The field name is content, not message. Example: the deploy rolled back.",
-        }),
-      },
-    ),
+    ...(options.memoryOfferOnly
+      ? []
+      : [
+          messageTool(
+            "send_channel_message",
+            "Send channel message",
+            "Send a visible public-channel message through CoForge. This cannot answer an explicit @memory question; use memory_offer. The body field name is content, not message.",
+            "send",
+            {
+              target: Type.String({
+                description: "Required. Public channel target starting with #. Example: #general.",
+              }),
+              content: Type.String({
+                description:
+                  "Required. Message body. The field name is content, not message. Example: the deploy rolled back.",
+              }),
+            },
+          ),
+        ]),
   ];
 }
 
@@ -545,6 +550,8 @@ export async function createSession(options: {
   environment?: Readonly<Record<string, string>>;
   sessionKind?: "coforge" | "pi";
   toolProfile?: MemoryAgentToolProfile;
+  /** Eval-only Offer contract; ordinary product sessions retain channel send. */
+  memoryOfferOnly?: boolean;
 }) {
   const cwd = options.cwd;
   const environment = options.environment
@@ -635,7 +642,9 @@ export async function createSession(options: {
   const memoryBudget = memoryFence ? new MemoryAgentTurnBudget() : undefined;
   const memoryTools =
     memoryFence && memoryBudget
-      ? createMemoryFenceTools(memoryFence, memoryBudget, defaultMemoryProxy(environment))
+      ? createMemoryFenceTools(memoryFence, memoryBudget, defaultMemoryProxy(environment), {
+          memoryOfferOnly: options.memoryOfferOnly,
+        })
       : [];
   const customTools = [
     ...(options.environment && !extensionDefinesBash && !memoryBudget

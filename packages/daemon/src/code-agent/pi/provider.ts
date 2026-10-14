@@ -12,6 +12,7 @@ import {
   type CodeAgentProvider,
 } from "#src/code-agent/contract";
 import { agentEnvironment } from "#src/code-agent/environment";
+import { evalMemoryOfferOnly } from "#src/code-agent/agent-instructions";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import {
@@ -127,6 +128,7 @@ export class CoforgeProvider implements CodeAgentProvider {
       instructions: options.instructions,
       environment,
       toolProfile: runtime.toolProfile,
+      memoryOfferOnly: evalMemoryOfferOnly(),
     }).catch((error: unknown) => {
       throw typedLaunchError(error, runtime.model);
     });

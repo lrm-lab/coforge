@@ -1,9 +1,82 @@
 import { profileFor, reminderForEpisode } from "../src/benchmarks";
 import { classifyMechanism } from "../src/leak";
 import { summarizeArm } from "../src/report";
-import { episodePrompt } from "../src/eval-qa";
+import {
+  episodePrompt,
+  episodeTerminationReason,
+  createEpisodeRuntimeDiagnostics,
+} from "../src/eval-qa";
 import type { AttemptRow } from "../src/types";
 import type { EpisodeResult } from "../src/eval-qa";
+import { TASK_AGENT_DESCRIPTION } from "../src/workspace";
+
+test("Task role gates implementation on the current claim and verifies final submission", () => {
+  for (const term of [
+    "read the original channel prompt",
+    "prepare analysis",
+    "this episode's claim",
+    "claim fails",
+    "stop implementation",
+    "report the blocker",
+    "no intermediate progress",
+    "last Task channel message",
+    "accepted=true",
+    "--json",
+    "state=sent",
+    "messageId",
+    "Without a receipt",
+  ]) {
+    expect(TASK_AGENT_DESCRIPTION).toContain(term);
+  }
+});
+
+test("termination reasons preserve channel budgets and identify terminal blockers", () => {
+  expect(episodeTerminationReason("deadline", true)).toBe("deadline");
+  expect(episodeTerminationReason("quiet_no_offer", false)).toBe("quiet_no_offer");
+  expect(episodeTerminationReason("final_settled", true)).toBe("final_settled");
+  expect(
+    episodeTerminationReason("deadline", true, { taskFailed: true, memoryFailed: false }),
+  ).toBe("runtime_failed");
+  expect(
+    episodeTerminationReason("quiet_no_offer", false, { taskFailed: false, memoryFailed: true }),
+  ).toBe("runtime_failed");
+  expect(
+    episodeTerminationReason("deadline", true, { taskFailed: false, memoryFailed: true }),
+  ).toBe("deadline");
+  expect(
+    episodeTerminationReason("final_settled", true, { taskFailed: true, memoryFailed: true }),
+  ).toBe("final_settled");
+});
+
+test("runtime diagnostics wait for terminal settlement and reset per episode", () => {
+  const diagnostics = createEpisodeRuntimeDiagnostics();
+  diagnostics.observe(
+    "task",
+    { type: "error", message: "sensitive upstream body", retryable: true },
+    100,
+  );
+  expect(diagnostics.snapshot()).toEqual({
+    runtimeErrorCount: 1,
+    lastRuntimeErrorAt: 100,
+    taskFailed: false,
+    memoryFailed: false,
+  });
+  diagnostics.observe("task", { type: "completed", status: "failed" }, 110);
+  expect(diagnostics.snapshot().taskFailed).toBe(true);
+  diagnostics.observe("task", { type: "progress" }, 120);
+  expect(diagnostics.snapshot().taskFailed).toBe(false);
+  diagnostics.observe("task", { type: "tool-end", id: "ok", isError: false }, 130);
+  expect(diagnostics.snapshot().lastProgressAt).toBe(130);
+  diagnostics.observe("memory", { type: "completed", status: "failed" }, 140);
+  expect(diagnostics.snapshot().memoryFailed).toBe(true);
+  expect(JSON.stringify(diagnostics.snapshot())).not.toContain("sensitive");
+  diagnostics.reset();
+  expect(diagnostics.snapshot()).toEqual({
+    runtimeErrorCount: 0,
+    taskFailed: false,
+    memoryFailed: false,
+  });
+});
 
 describe("benchmark registry", () => {
   test("all five evol_bench manifests have profiles", () => {
@@ -29,12 +102,49 @@ describe("benchmark registry", () => {
   test("unknown benchmarks fall back to the generic reminder", () => {
     expect(profileFor("mystery").publishReminder).toContain("final answer");
   });
+
+  test("only EvoAgentBench SWE uses the source patch submission contract", () => {
+    const reminder = reminderForEpisode("evoagentbench", "software_engineering");
+    for (const term of [
+      "path specified by the task",
+      "nonempty",
+      "source-only",
+      "patch.diff",
+      "clean base",
+      "TASK_COMPLETE",
+      "channel send",
+      "actual validation",
+      "incomplete",
+      "blocker",
+    ]) {
+      expect(reminder).toContain(term);
+    }
+    expect(reminder).not.toContain("complete final code");
+    expect(reminderForEpisode("evoagentbench", "code_implementation")).toContain(
+      "complete final code",
+    );
+    expect(reminderForEpisode("agentstream", "software_engineering")).toContain(
+      "complete final code",
+    );
+  });
 });
 
 describe("episodePrompt", () => {
   test("addresses the memory agent and appends the reminder", () => {
     const prompt = episodePrompt(
-      { benchmark: "past_bench", episodeId: "e", taskId: "t", familyId: "f", domain: "", split: "test", role: "qa", order: 1, prompt: "Summarize the notes.", grader: { kind: "x" }, stageFiles: [] },
+      {
+        benchmark: "past_bench",
+        episodeId: "e",
+        taskId: "t",
+        familyId: "f",
+        domain: "",
+        split: "test",
+        role: "qa",
+        order: 1,
+        prompt: "Summarize the notes.",
+        grader: { kind: "x" },
+        stageFiles: [],
+      },
       reminderForEpisode("past_bench", ""),
     );
     expect(prompt.startsWith("@memory Summarize the notes.")).toBe(true);
@@ -51,6 +161,8 @@ describe("classifyMechanism", () => {
     memoryLeakMessageIds: [],
     timedOut: false,
     elapsedMs: 1000,
+    terminationReason: "final_settled",
+    runtimeErrorCount: 0,
   };
 
   test("cited offer plus posted answer is ok", () => {
@@ -90,7 +202,10 @@ describe("summarizeArm", () => {
       memory_leak_count: 0,
       error: null,
     };
-    const summary = summarizeArm("warm", [row, { ...row, episode_id: "e2", mechanism: "no_offer", recall_state: "empty" }]);
+    const summary = summarizeArm("warm", [
+      row,
+      { ...row, episode_id: "e2", mechanism: "no_offer", recall_state: "empty" },
+    ]);
     expect(summary.episodes).toBe(2);
     expect(summary.families).toBe(1);
     expect(summary.offeredRecall).toBe(1);

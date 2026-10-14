@@ -2197,6 +2197,9 @@ export class PublicChannels {
     mentions?: readonly MentionSelectorInput[];
   }) {
     const { workspaceId, userId, channelId, idempotencyKey, attachmentIds, threadRootId } = input;
+    // This key is also the daemon delivery's request_id. A missing one is omitted on the wire
+    // and the daemon drops the frame, so the Agent never sees the message.
+    if (!idempotencyKey?.trim()) throw new AppError("INVALID_INPUT");
     const channel = await this.channel(workspaceId, userId, channelId);
     if (channel.archivedAt) throw new AppError("CONFLICT");
     const member = await this.db.conversationMember.findFirst({

@@ -23,6 +23,7 @@ import {
 } from "../../../packages/coforge-sdk/src/internal/index.ts";
 import { type MemoryAgentToolProfile } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
 import { EVAL_DISABLE_HOST_PI_INJECTION } from "../../../packages/agent/src/runner.ts";
+import { EVAL_MEMORY_OFFER_ONLY } from "../../../packages/daemon/src/code-agent/agent-instructions";
 import { AgentControl } from "../../../apps/web/src/server/agents/agent-control.server";
 import { getAgentControlSignal } from "../../../apps/web/src/server/agents/agent-control-signal.server";
 import { getAgentRuntimeLock } from "../../../apps/web/src/server/agents/agent-runtime-lock.server";
@@ -32,12 +33,14 @@ import { PrismaDirectConversationRepository } from "../../../apps/web/src/server
 import { createCentrifugoServerApi } from "../../../apps/web/src/server/centrifugo/server-api.server";
 import type { EvalEnv } from "./env";
 import type { EvalWorkspace } from "./workspace";
+import { createEpisodeRuntimeDiagnostics } from "./eval-qa";
 
 export type EvalDaemon = {
   computerId: string;
   /** Daemon workspaces root; agent N's execution dir is
    * `<workspaceRoot>/<workspaceId>/agents/<agentId>`. */
   workspaceRoot: string;
+  runtimeDiagnostics: ReturnType<typeof createEpisodeRuntimeDiagnostics>;
   stop: () => Promise<void>;
 };
 
@@ -81,6 +84,7 @@ export async function startEvalDaemon(input: {
   workspace: EvalWorkspace;
   env: EvalEnv;
 }): Promise<EvalDaemon> {
+  Bun.env[EVAL_MEMORY_OFFER_ONLY] = "1";
   process.env[EVAL_DISABLE_HOST_PI_INJECTION] = "1";
   Bun.env[EVAL_DISABLE_HOST_PI_INJECTION] = "1";
   const webUrl = input.env.webUrl ?? "http://127.0.0.1:8788";
@@ -128,9 +132,8 @@ export async function startEvalDaemon(input: {
 
   const stateDirectory = join(tmpdir(), `evol-daemon-${input.workspace.workspaceId.slice(0, 8)}`);
   process.env.COFORGE_DAEMON_HOME = stateDirectory;
-  const { configureDaemonLogging } = await import(
-    "../../../packages/daemon/src/platform/daemon-logging"
-  );
+  const { configureDaemonLogging } =
+    await import("../../../packages/daemon/src/platform/daemon-logging");
   await configureDaemonLogging(stateDirectory);
   const workspaceRoot = join(stateDirectory, "workspaces");
   const credentials = new FileDaemonCredentialStore(stateDirectory);
@@ -179,12 +182,28 @@ export async function startEvalDaemon(input: {
         runtimeApi().agentAttachment(context, attachmentId, agentApiKey),
       inbox: (context, request) => runtimeApi().inbox(context, request),
       issueAgentContext: (agentId, context) => runtimeApi().issueAgentContext(agentId, context),
+      agentTask: (context, request, agentApiKey) =>
+        runtimeApi().agentTask(context, request, agentApiKey),
       agentOpenviking: (context, request, agentApiKey) =>
-        runtimeApi().agentOpenviking(context, request, agentApiKey),
+        runtimeApi().agentRequests.agentOpenviking(context, request, agentApiKey),
       memoryFence: (agentId) => runtimeApi().memoryFence(agentId),
     },
   });
-  const providerFactory: CodeAgentProviderFactory = (provider) => createCodeAgentProvider(provider);
+  const runtimeDiagnostics = createEpisodeRuntimeDiagnostics();
+  const diagnosticSubscriptions: Array<() => void> = [];
+  const providerFactory: CodeAgentProviderFactory = (provider) => {
+    const actual = createCodeAgentProvider(provider);
+    const create = actual.createAgentSession.bind(actual);
+    actual.createAgentSession = async (options) => {
+      const session = await create(options);
+      const role = options.agentId === input.workspace.memoryAgentId ? "memory" : "task";
+      diagnosticSubscriptions.push(
+        session.subscribe((event) => runtimeDiagnostics.observe(role, event)),
+      );
+      return session;
+    };
+    return actual;
+  };
   const daemonConfig = {
     workspaceId: input.workspace.workspaceId,
     computerId: registration.computerId,
@@ -286,7 +305,9 @@ export async function startEvalDaemon(input: {
   return {
     computerId: registration.computerId,
     workspaceRoot,
+    runtimeDiagnostics,
     async stop() {
+      for (const unsubscribe of diagnosticSubscriptions.splice(0)) unsubscribe();
       await runtime?.stop();
     },
   };
@@ -338,7 +359,9 @@ export async function controlAgent(
     action,
   });
   if (result.phase !== "completed") {
-    throw new Error(`Agent ${agentId} ${action} ${result.phase}${result.error ? `: ${result.error}` : ""}`);
+    throw new Error(
+      `Agent ${agentId} ${action} ${result.phase}${result.error ? `: ${result.error}` : ""}`,
+    );
   }
 }
 
@@ -364,6 +387,8 @@ export async function startAgent(
     action: "start",
   });
   if (result.phase !== "completed") {
-    throw new Error(`Agent ${agentId} start ${result.phase}${result.error ? `: ${result.error}` : ""}`);
+    throw new Error(
+      `Agent ${agentId} start ${result.phase}${result.error ? `: ${result.error}` : ""}`,
+    );
   }
 }

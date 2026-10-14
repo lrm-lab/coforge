@@ -36,7 +36,7 @@ export async function postTaskInstruction(input: {
         workspaceId: input.workspace.workspaceId,
         userId: input.workspace.evalUserId,
         channelId: input.workspace.channelId,
-        requestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
         body,
       });
       const triggerId = (sent as { id?: string }).id;

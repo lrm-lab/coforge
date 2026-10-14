@@ -13,7 +13,7 @@ test("ordinary requests do not require task creation or per-turn memory bookkeep
   expect(instructions).toContain("Answer ordinary questions freely");
   expect(instructions).toContain("Before implementing a shared channel request");
   expect(instructions).toContain(
-    "coforge task claim --target <channel> --message-id <root-message-id>",
+    "coforge task claim --target '<channel>' --message-id <root-message-id>",
   );
   expect(instructions).toContain("Only a successful claimant implements");
   expect(instructions).toContain("others may analyze or review in its thread");
@@ -38,7 +38,7 @@ test("retains reply instructions and thread addressing without provider tool nam
   expect(instructions).toContain("exact `target=`");
   expect(instructions).toContain("including its thread suffix");
   expect(instructions).toContain(
-    "Send the reply on stdin with `coforge message send --target <target>`",
+    "Send the reply on stdin with `coforge message send --target '<target>'`",
   );
   expect(instructions).not.toContain("Bash tool");
 });
@@ -147,6 +147,7 @@ test("the openviking-memory profile requires an @memory query and never mentions
   const fenced = buildCoforgeAgentInstructions({
     agentWorkspaceDirectory: AGENT_WORKSPACES[0],
     toolProfile: "openviking-memory",
+    memoryOfferOnly: false,
   });
   expect(fenced).toContain("## Team memory (Memory Agent)");
   expect(fenced).toContain("explicit @memory question requires a memory query");
@@ -215,6 +216,7 @@ function instructionsForFence(toolProfile: "openviking-memory"): string {
   return buildCoforgeAgentInstructions({
     agentWorkspaceDirectory: AGENT_WORKSPACES[0],
     toolProfile,
+    memoryOfferOnly: false,
   });
 }
 
@@ -266,4 +268,33 @@ test("the memory fence renders no credentials, tokens, or hidden endpoints", () 
   expect(section).not.toContain("/api/");
   expect(section).not.toMatch(/https?:\/\//);
   expect(section).not.toContain("localhost");
+});
+
+test("strict eval Memory instructions agree with the Offer-only toolset", () => {
+  const fenced = buildCoforgeAgentInstructions({
+    agentWorkspaceDirectory: directory,
+    toolProfile: "openviking-memory",
+    memoryOfferOnly: true,
+  });
+  expect(allowedToolsetListing(memoryAgentSection(fenced))).toContain(
+    "message_check, and message_read",
+  );
+  expect(fenced).not.toContain("send_channel_message");
+  expect(fenced).not.toContain("coforge message");
+  expect(fenced).not.toContain("coforge task");
+  expect(fenced).toContain("check/read → query → one memory_offer");
+  expect(fenced).toContain("published=true");
+  expect(fenced).toContain("400 or isError");
+  expect(fenced).toContain("end this turn");
+  expect(fenced).toContain("body, not content");
+});
+
+test("CLI instructions include a quoted stdin submission example", () => {
+  expect(instructions).toContain(`coforge message check --target '#channel'
+coforge message send --target '#channel' <<'COFORGE_MESSAGE'
+Your reply text, with literal \`backticks\` and $variables preserved.
+COFORGE_MESSAGE`);
+  expect(instructions).toContain("Targets starting with # must be quoted");
+  expect(instructions).toContain("never a positional argument");
+  expect(instructions).toContain("double quotes expand backticks and $");
 });

@@ -16,6 +16,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
+import { CLI_CHANNEL_MESSAGE_EXAMPLE } from "#src/code-agent/agent-instructions";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import type {
   AgentConsumedSeqEntry,
@@ -50,7 +51,8 @@ const PENDING_WINDOW_LIMIT = HELD_CONTEXT_LIMIT;
 /** Footer shared by live and recovery inbox notices. Names the targeted drain; does not claim
  * unread state, because a notice can race a check/read that already advanced the cursor. */
 const INBOX_DRAIN_HINT =
-  "Drain each listed target with `coforge message check --target <target>`, or inspect with `coforge message read --target <target>`. Either may return nothing, because a message can already have been read.";
+  "Drain each listed target with `coforge message check --target '<target>'`, or inspect with `coforge message read --target '<target>'`. Either may return nothing, because a message can already have been read.\n" +
+  CLI_CHANNEL_MESSAGE_EXAMPLE;
 
 /** One unreviewed delivery plus the moment this daemon learned about it. Deliveries carry no
  * message timestamp of their own (only the server knows when a message was written), so the
@@ -174,12 +176,13 @@ export class AgentMessageAttentionIndex {
    * it again. */
   readonly #hydrated = new Set<string>();
   readonly #workspaceId: string;
-  readonly #runtimes: Pick<AgentProcessManager, "session">;
+  readonly #runtimes: Pick<AgentProcessManager, "session"> &
+    Partial<Pick<AgentProcessManager, "runtime">>;
   readonly #memoryReminders = new Map<string, string>();
 
   constructor(
     workspaceId: string,
-    runtimes: Pick<AgentProcessManager, "session">,
+    runtimes: Pick<AgentProcessManager, "session"> & Partial<Pick<AgentProcessManager, "runtime">>,
     private readonly sendAck: (ack: AgentMessageDeliveryAck) => Promise<void>,
     private readonly messageReceived: (agentId: string) => void = () => {},
     /**
@@ -452,7 +455,7 @@ export class AgentMessageAttentionIndex {
       `[CoForge inbox notice (restart recovery):
 Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
 ${rows.join("\n")}
-${INBOX_DRAIN_HINT}]`,
+${this.#inboxDrainHint(agentId)}]`,
     );
     // Same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
     this.hold.busy(agentId);
@@ -481,6 +484,12 @@ ${INBOX_DRAIN_HINT}]`,
     if (!reminder) return notice;
     this.#memoryReminders.delete(agentId);
     return `${notice}\n\n${reminder}`;
+  }
+
+  #inboxDrainHint(agentId: string): string {
+    return this.#runtimes.runtime?.(agentId)?.config.toolProfile
+      ? "Drain each listed target with message_check or message_read using the exact target. Either may return nothing, because a message can already have been read."
+      : INBOX_DRAIN_HINT;
   }
 
   /**
@@ -591,7 +600,7 @@ ${INBOX_DRAIN_HINT}]`,
       `[CoForge inbox notice:
 Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
 ${rows.join("\n")}
-${INBOX_DRAIN_HINT}]`,
+${this.#inboxDrainHint(message.agentId)}]`,
     );
     // The session names these back if the notice never reaches the model (`notice-undelivered`).
     const trackedIds = announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId);

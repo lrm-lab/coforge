@@ -24,6 +24,23 @@ const MUTATION_TOOL_NAMES = [
 
 const CHANNEL_MESSAGE_TOOLS = ["message_check", "message_read", "send_channel_message"] as const;
 
+test("strict eval Memory exposes reads and Offer but no ordinary send", () => {
+  const tools = createMemoryFenceTools(
+    OPENVIKING_TOOL_PROFILE,
+    new MemoryAgentTurnBudget(),
+    fakeProxy(),
+    { memoryOfferOnly: true },
+  );
+  expect(tools.map((tool) => tool.name)).toEqual([
+    "ov_find",
+    "ov_search_context",
+    "ov_read",
+    "memory_offer",
+    "message_check",
+    "message_read",
+  ]);
+});
+
 function emptyItemsResponse(protocol: string, op: string, operationId: string) {
   return { protocol, op, operationId, duplicate: false, items: [] };
 }

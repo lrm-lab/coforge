@@ -3543,7 +3543,7 @@ describe("DaemonRuntime", () => {
     });
     expect(starts).toBe(2);
     expect(notices).toEqual([
-      "[CoForge inbox notice:\nInbox update: 1 message delivered or held for you\n@agent  new: 1 message\nDrain each listed target with `coforge message check --target <target>`, or inspect with `coforge message read --target <target>`. Either may return nothing, because a message can already have been read.]",
+      "[CoForge inbox notice:\nInbox update: 1 message delivered or held for you\n@agent  new: 1 message\nDrain each listed target with `coforge message check --target '<target>'`, or inspect with `coforge message read --target '<target>'`. Either may return nothing, because a message can already have been read.\nTargets starting with # must be quoted. Send bodies on stdin, never a positional argument; double quotes expand backticks and $, so use a single-quoted heredoc delimiter:\ncoforge message check --target '#channel'\ncoforge message send --target '#channel' <<'COFORGE_MESSAGE'\nYour reply text, with literal `backticks` and $variables preserved.\nCOFORGE_MESSAGE]",
     ]);
     expect(acknowledgements).toEqual(["delivery-1"]);
 

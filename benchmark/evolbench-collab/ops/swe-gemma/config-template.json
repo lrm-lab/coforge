@@ -1,0 +1,27 @@
+{
+  "episodes": 20,
+  "gemma_model": "gemma-4-31B-it",
+  "four_role_models": {
+    "builder": "GLM-5.3-Flash",
+    "critic": "GLM-5.3-Flash",
+    "refiner": "GLM-5.3-Flash",
+    "reader": "GLM-5.3-Flash"
+  },
+  "four_roles": {
+    "attempts": 3,
+    "max_calls": 128,
+    "max_seconds": 1800,
+    "jobs_per_case": 1
+  },
+  "episode_timeout_seconds": 2700,
+  "quiet_timeout_seconds": 1500,
+  "source_hashes": {
+    "benchmark/causal_memory/aig0045_verdict_smoke.py": "84baa130569bd0a5753d66eceb7a1a1beb0101df7f22538fa9b977b175e616a0",
+    "benchmark/causal_memory/aig0045_real_material.py": "490de2ae3a988989c6fa8638151c2433c60e98b81d0629cd0eb602e558c20e8c",
+    "benchmark/causal_memory/aig0045_gemma_roles.py": "dd32c5391169b52d3c7af0fc0e5d0df65bc98dd90069eaab3c2ec252a2bc8b77",
+    "openviking/session/aig_tool_surface.py": "bf895375c81278da9a1194ea4f5e60a2a620c437f705537fdf675b0867de37ad",
+    "openviking/session/aig_toolloop_builder.py": "b4b39b7bbc57b88665a825fe6c85acda81e508df0625cba64643fb9804d9c980",
+    "benchmark/causal_memory/model_usage.py": "47f37404c88e07c7405088b92f61f9b42d9ec1ff2369c028dd908022dccd6c66",
+    "benchmark/causal_memory/lenovo_gemma_provider.py": "7e4c883b6f515ac110c42050994bd90716b46c3b94858239c6f1b55759f87f9d"
+  }
+}

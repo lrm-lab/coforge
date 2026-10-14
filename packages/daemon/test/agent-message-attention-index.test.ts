@@ -76,6 +76,35 @@ const session = (notify: (notice: string) => void = () => {}) => ({
 });
 const runtime = { session: () => session() };
 
+test("fenced Memory inbox notices teach native reads and no CLI", async () => {
+  const notices: string[] = [];
+  const memorySession = session((notice) => notices.push(notice));
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    {
+      session: () => memorySession,
+      runtime: () => ({
+        session: memorySession,
+        config: {
+          provider: "coforge",
+          model: "eval",
+          reasoning: "",
+          toolProfile: "openviking-memory",
+        },
+      }),
+    },
+    async () => {},
+  );
+  await index.receive({ ...delivery("memory"), target: "#software-engineering" });
+  await index.recover("agent-1", [], { "#software-engineering": 1 });
+  expect(notices).toHaveLength(2);
+  for (const notice of notices) {
+    expect(notice).toContain("message_check or message_read");
+    expect(notice).not.toContain("coforge message");
+    expect(notice).not.toContain("COFORGE_MESSAGE");
+  }
+});
+
 test("server-authored assignment attention preserves system identity", async () => {
   const notices: string[] = [];
   const index = new AgentMessageAttentionIndex(
@@ -243,7 +272,7 @@ test("updates attention, sends only a body-free notice, and ACKs takeover", asyn
     }),
   ]);
   expect(notices).toEqual([
-    "[CoForge inbox notice:\nInbox update: 1 message delivered or held for you\n@ada  new: 1 message · latest sender @ada\nDrain each listed target with `coforge message check --target <target>`, or inspect with `coforge message read --target <target>`. Either may return nothing, because a message can already have been read.]",
+    "[CoForge inbox notice:\nInbox update: 1 message delivered or held for you\n@ada  new: 1 message · latest sender @ada\nDrain each listed target with `coforge message check --target '<target>'`, or inspect with `coforge message read --target '<target>'`. Either may return nothing, because a message can already have been read.\nTargets starting with # must be quoted. Send bodies on stdin, never a positional argument; double quotes expand backticks and $, so use a single-quoted heredoc delimiter:\ncoforge message check --target '#channel'\ncoforge message send --target '#channel' <<'COFORGE_MESSAGE'\nYour reply text, with literal `backticks` and $variables preserved.\nCOFORGE_MESSAGE]",
   ]);
   expect(notices[0]).not.toContain("private body");
   expect(acks).toEqual(["delivery-one"]);
@@ -504,8 +533,8 @@ test("recovery directs every target with messages beyond the batch to canonical 
   expect(notices[0]).toContain("[CoForge inbox notice (restart recovery):");
   expect(notices[0]).toContain("@ada  new: 1 message");
   expect(notices[0]).toContain("@grace  new: 1 message");
-  expect(notices[0]).toContain("coforge message check --target <target>");
-  expect(notices[0]).toContain("coforge message read --target <target>");
+  expect(notices[0]).toContain("coforge message check --target '<target>'");
+  expect(notices[0]).toContain("coforge message read --target '<target>'");
   expect(notices[0]).not.toContain("Please resume this work");
   expect(notices[0]).not.toContain("New message received:");
   expect(index.modelSeenSequence("agent-1", "@ada")).toBe(0);
@@ -1082,9 +1111,9 @@ test("a sender handle that fails the handle grammar never reaches the notice", a
   expect(notices[0]).toContain("#general  new: 1 message");
   expect(notices[0]).not.toContain("latest sender");
   // The notice's shape is fixed: the opening line, the headline, one line per target, then the
-  // one-line drain hint. A sender name cannot add a line to it.
+  // drain hint and fixed message example. A sender name cannot add a line to it.
   expect(notices).toHaveLength(1);
-  expect(notices[0]!.split("\n")).toHaveLength(4);
+  expect(notices[0]!.split("\n")).toHaveLength(9);
 });
 
 test("an unrecognized sender kind never reaches the notice", async () => {
@@ -1158,7 +1187,7 @@ test("a notice claims only what the daemon can establish, never the server's rea
   ])
     expect(notices[0]).not.toContain(readStateClaim);
   expect(notices[0]).toContain("delivered or held for you");
-  expect(notices[0]).toContain("coforge message check --target <target>");
+  expect(notices[0]).toContain("coforge message check --target '<target>'");
   expect(notices[0]).toContain("Either may return nothing");
 });
 

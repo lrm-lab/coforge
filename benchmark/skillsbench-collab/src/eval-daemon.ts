@@ -177,8 +177,10 @@ export async function startEvalDaemon(input: {
         runtimeApi().agentAttachment(context, attachmentId, agentApiKey),
       inbox: (context, request) => runtimeApi().inbox(context, request),
       issueAgentContext: (agentId, context) => runtimeApi().issueAgentContext(agentId, context),
+      agentTask: (context, request, agentApiKey) =>
+        runtimeApi().agentTask(context, request, agentApiKey),
       agentOpenviking: (context, request, agentApiKey) =>
-        runtimeApi().agentOpenviking(context, request, agentApiKey),
+        runtimeApi().agentRequests.agentOpenviking(context, request, agentApiKey),
       memoryFence: (agentId) => runtimeApi().memoryFence(agentId),
     },
   });

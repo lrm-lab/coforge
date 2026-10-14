@@ -19,6 +19,15 @@ const CODE_REMINDER = [
   "runs stay in your own workspace.",
 ].join(" ");
 
+const SWE_REMINDER = [
+  "Channel note: produce a nonempty source-only patch.diff at the path specified by the task;",
+  "exclude test edits and reproduction artifacts. Check that patch against the task's clean base",
+  "in a separate checkout/worktree, never against the already modified tree or by resetting it.",
+  "Finally use channel send to submit TASK_COMPLETE, the patch path, and an actual validation",
+  "summary reporting commands and their real results. Full source listings are not required in the channel.",
+  "If work or validation fails, explicitly report incomplete and the blocker; never claim completion.",
+].join(" ");
+
 const CALL_LIST_REMINDER = [
   "Channel note: respond with the exact function call(s) in the required single-line",
   "Python-call list syntax as your final channel message.",
@@ -37,26 +46,41 @@ const MCQ_REMINDER = [
 const REGISTRY: Record<string, BenchmarkProfile> = {
   evoagentbench: { publishReminder: CODE_REMINDER, episodeTimeoutMs: 900_000, settleMs: 120_000 },
   agentstream: { publishReminder: CODE_REMINDER, episodeTimeoutMs: 900_000, settleMs: 120_000 },
-  skilllearnbench: { publishReminder: GENERIC_REMINDER, episodeTimeoutMs: 900_000, settleMs: 180_000 },
+  skilllearnbench: {
+    publishReminder: GENERIC_REMINDER,
+    episodeTimeoutMs: 900_000,
+    settleMs: 180_000,
+  },
   past_bench: { publishReminder: GENERIC_REMINDER, episodeTimeoutMs: 360_000, settleMs: 60_000 },
   earthbench: { publishReminder: MCQ_REMINDER, episodeTimeoutMs: 1_200_000, settleMs: 120_000 },
   // LifelongAgentBench: one fixed sequential stream per task type; answer
   // formats are "Final Answer: ..." (SQL tuples / final variables), so the
   // generic reminder fits; environments are external sidecars.
-  lifelongagentbench: { publishReminder: GENERIC_REMINDER, episodeTimeoutMs: 900_000, settleMs: 120_000 },
+  lifelongagentbench: {
+    publishReminder: GENERIC_REMINDER,
+    episodeTimeoutMs: 900_000,
+    settleMs: 120_000,
+  },
   // SkillFlow: office/data workflow artifacts in the workspace; the verifier
   // inspects produced files, so the reminder must emphasize writing files.
   skillflow: { publishReminder: CODE_REMINDER, episodeTimeoutMs: 1_200_000, settleMs: 180_000 },
 };
 
 export function profileFor(benchmark: string): BenchmarkProfile {
-  return REGISTRY[benchmark] ?? { publishReminder: GENERIC_REMINDER, episodeTimeoutMs: 900_000, settleMs: 120_000 };
+  return (
+    REGISTRY[benchmark] ?? {
+      publishReminder: GENERIC_REMINDER,
+      episodeTimeoutMs: 900_000,
+      settleMs: 120_000,
+    }
+  );
 }
 
 /** AgentStream's function_calling domain wants the call-list contract rather
  * than the code-block one. */
 export function reminderForEpisode(benchmark: string, domain: string): string {
   const profile = profileFor(benchmark);
+  if (benchmark === "evoagentbench" && domain === "software_engineering") return SWE_REMINDER;
   if (benchmark === "agentstream" && domain === "function_calling") return CALL_LIST_REMINDER;
   return profile.publishReminder;
 }

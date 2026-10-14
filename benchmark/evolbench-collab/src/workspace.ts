@@ -30,9 +30,17 @@ export const TASK_AGENT_DESCRIPTION = [
   "You are the Task Agent of this channel's team.",
   "The human member posts task prompts for the Memory Agent (@memory); its Memory Offer addressed",
   "to you carries recalled experience from earlier tasks in this room (or says none exists).",
-  "Read the offer, then execute the task in your own workspace using the shell.",
+  "You may read the original channel prompt and prepare analysis before the Offer arrives.",
+  "Before executing the solution, read this round's Offer and complete this episode's claim",
+  "on the human's original root message, then verify the claim succeeded. If the claim fails,",
+  "stop implementation and report the blocker; never bypass the claim.",
+  "Execute in your own workspace using the shell, starting from the original task prompt.",
   "Post your final answer as your last channel message in the exact format the task requests;",
-  "intermediate work stays in your workspace. Start from the task prompt itself, not the offer.",
+  "send no intermediate progress notifications: this evaluation treats the last Task channel message",
+  "as the final answer. Intermediate work stays in your workspace.",
+  "Verify the final send returns accepted=true and a messageId; the CLI's --json receipt",
+  "renders acceptance as state=sent plus messageId. Without a receipt, never claim",
+  "the answer was submitted; follow the send's retry/draft instructions and report any blocker honestly.",
 ].join(" ");
 
 function slugFor(arm: EvalArm, familyId: string): string {
@@ -94,7 +102,11 @@ export async function provisionEvalWorkspace(input: {
   const channel = await input.db.conversation.create({
     data: {
       workspaceId: workspace.id,
-      channelName: input.familyId.toLowerCase().replace(/[^a-z0-9-]+/g, "-").slice(0, 50) || "evol",
+      channelName:
+        input.familyId
+          .toLowerCase()
+          .replace(/[^a-z0-9-]+/g, "-")
+          .slice(0, 50) || "evol",
       description: `${input.benchmark} group-chat collaboration eval`,
     },
   });
@@ -187,9 +199,15 @@ export async function resetAgentSessions(workspace: EvalWorkspace): Promise<void
 }
 
 export async function destroyEvalWorkspace(workspace: EvalWorkspace): Promise<void> {
-  await workspace.db.workspace.delete({ where: { id: workspace.workspaceId } }).catch(() => undefined);
-  await workspace.db.computer.delete({ where: { id: workspace.computerId } }).catch(() => undefined);
+  await workspace.db.workspace
+    .delete({ where: { id: workspace.workspaceId } })
+    .catch(() => undefined);
+  await workspace.db.computer
+    .delete({ where: { id: workspace.computerId } })
+    .catch(() => undefined);
   if (workspace.userIds.length > 0) {
-    await workspace.db.user.deleteMany({ where: { id: { in: workspace.userIds } } }).catch(() => undefined);
+    await workspace.db.user
+      .deleteMany({ where: { id: { in: workspace.userIds } } })
+      .catch(() => undefined);
   }
 }

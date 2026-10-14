@@ -24,6 +24,11 @@ export const EVAL_ARMS = ["warm", "cold"] as const;
 export type EvalArm = (typeof EVAL_ARMS)[number];
 
 export type EpisodeStatus = "success" | "failure";
+export type EpisodeTerminationReason =
+  | "quiet_no_offer"
+  | "deadline"
+  | "runtime_failed"
+  | "final_settled";
 
 /** Row schema aligned with the evol_bench python graders: they join on
  * episode/task ids and read `final_output`; everything else is additive. */
@@ -48,6 +53,11 @@ export type AttemptRow = {
   task_message_count: number;
   memory_leak_count: number;
   error: string | null;
+  /** Additive diagnostics; optional so earlier attempt rows remain readable. */
+  terminationReason?: EpisodeTerminationReason;
+  runtimeErrorCount?: number;
+  lastRuntimeErrorAt?: number;
+  lastProgressAt?: number;
   /** Set when the benchmark's env sidecar verified this episode (e.g.
    * SkillLearnBench official in-container verifier). */
   sidecar_verification?: {

@@ -172,6 +172,25 @@ test("round-trips an Agent direct message delivery", () => {
   expect(decodeAgentMessageDelivery(encodeAgentMessageDelivery(delivery))).toEqual(delivery);
 });
 
+test("refuses an Agent delivery with no request id", () => {
+  const delivery = {
+    protocolMajor: 1,
+    requestId: "",
+    messageId: "message-a",
+    deliveryId: "delivery-a",
+    sequence: 42,
+    workspaceId: "workspace-a",
+    conversationId: "conversation-a",
+    agentId: "agent-a",
+    body: "Please inspect the repository",
+    method: AGENT_MESSAGE_METHOD,
+  } as const;
+
+  expect(() => encodeAgentMessageDelivery(delivery)).toThrow(
+    "agent message delivery requires requestId",
+  );
+});
+
 test("round-trips mentionsAgent on an Agent delivery", () => {
   for (const mentionsAgent of [true, false] as const) {
     const delivery = {

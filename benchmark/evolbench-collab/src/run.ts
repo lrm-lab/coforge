@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
 import { controlAgent, startAgent, startEvalDaemon, type EvalDaemon } from "./eval-daemon";
-import { runEpisode } from "./eval-qa";
+import { runEpisode, type EpisodeResult } from "./eval-qa";
 import { createEvalDispatcher, drainEpisodeToMemory } from "./ingest";
 import { episodesForArm, groupFamilies, loadManifest } from "./manifest";
 import { profileFor, reminderForEpisode } from "./benchmarks";
@@ -47,7 +47,7 @@ const families = groupFamilies(manifest).filter(
 if (families.length === 0) throw new Error("no families selected");
 console.log(
   sanitizeDiagnostic(
-    `benchmark=${benchmark} manifest=${env.manifestPath} episodes=${manifest.length} mod=${env.episodeMod ?? "-"} families=${families.map((family) => family.familyId).join("|")} arms=${env.arms.join(",")} agents=${env.memoryAgentProvider}/${env.memoryAgentModel}+${env.taskAgentProvider}/${env.taskAgentModel} timeout=${episodeTimeoutMs}ms settle=${settleMs}ms closure=${env.episodeClosure}`,
+    `benchmark=${benchmark} manifest=${env.manifestPath} episodes=${manifest.length} mod=${env.episodeMod ?? "-"} families=${families.map((family) => family.familyId).join("|")} arms=${env.arms.join(",")} agents=${env.memoryAgentProvider}/${env.memoryAgentModel}+${env.taskAgentProvider}/${env.taskAgentModel} episodeTimeoutMs=${episodeTimeoutMs} abortQuietMs=${env.abortQuietMs} settleMs=${settleMs} closure=${env.episodeClosure}`,
   ),
 );
 Bun.env.OPENVIKING_PROTOTYPE_ENABLED = "1";
@@ -63,7 +63,11 @@ const writer = await createAttemptWriter(
   (Bun.env.COFORGE_EVAL_RESUME ?? "0") === "1",
 );
 if (writer.completedRunIds.size > 0) {
-  console.log(sanitizeDiagnostic(`resume: ${writer.completedRunIds.size} episodes already recorded, skipping them`));
+  console.log(
+    sanitizeDiagnostic(
+      `resume: ${writer.completedRunIds.size} episodes already recorded, skipping them`,
+    ),
+  );
 }
 const summaries: ArmSummary[] = [];
 
@@ -82,6 +86,10 @@ function attemptRow(input: {
   elapsedMs: number;
   mechanism: string;
   error: string | null;
+  diagnostics: Pick<
+    EpisodeResult,
+    "terminationReason" | "runtimeErrorCount" | "lastRuntimeErrorAt" | "lastProgressAt"
+  >;
 }): AttemptRow {
   const { episode } = input;
   return {
@@ -105,6 +113,7 @@ function attemptRow(input: {
     task_message_count: 0,
     memory_leak_count: 0,
     error: input.error,
+    ...input.diagnostics,
   };
 }
 
@@ -160,14 +169,20 @@ async function provisionFamily(
       }
       if (staleBindings.length > 0) {
         console.log(
-          sanitizeDiagnostic(`freed ${staleBindings.length} stale workspace(s) bound to ${accountId}`),
+          sanitizeDiagnostic(
+            `freed ${staleBindings.length} stale workspace(s) bound to ${accountId}`,
+          ),
         );
       }
     } catch (error) {
       // Account deleted server-side: its memory is unrecoverable, so a fresh
       // provision is the only option — but say so loudly, it silently breaks
       // warm comparability.
-      console.warn(sanitizeDiagnostic(`warm account reuse failed: ${String(error)}; provisioning fresh account`));
+      console.warn(
+        sanitizeDiagnostic(
+          `warm account reuse failed: ${String(error)}; provisioning fresh account`,
+        ),
+      );
       accountId = `evol-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
       users = await provisionDisposableAccount(runtime, root, accountId);
     }
@@ -258,6 +273,7 @@ async function executeEpisode(
     reminder,
     episodeTimeoutMs,
     settleMs,
+    runtimeDiagnostics: provisioned.daemon.runtimeDiagnostics,
   });
   const mechanism = classifyMechanism(result);
   let sidecarVerification: AttemptRow["sidecar_verification"] | undefined;
@@ -280,11 +296,15 @@ async function executeEpisode(
         graded: Boolean(verdict.graded),
         error: verdict.error ?? null,
       };
-      console.log(sanitizeDiagnostic(
-        `${arm} ${episode.episodeId} sidecar reward=${sidecarVerification.reward} graded=${sidecarVerification.graded}`,
-      ));
+      console.log(
+        sanitizeDiagnostic(
+          `${arm} ${episode.episodeId} sidecar reward=${sidecarVerification.reward} graded=${sidecarVerification.graded}`,
+        ),
+      );
     } catch (error) {
-      console.warn(sanitizeDiagnostic(`sidecar verify failed for ${episode.episodeId}: ${String(error)}`));
+      console.warn(
+        sanitizeDiagnostic(`sidecar verify failed for ${episode.episodeId}: ${String(error)}`),
+      );
     }
   }
   const row = attemptRow({
@@ -298,6 +318,12 @@ async function executeEpisode(
     elapsedMs: result.elapsedMs,
     mechanism,
     error: result.timedOut ? "episode timeout" : null,
+    diagnostics: {
+      terminationReason: result.terminationReason,
+      runtimeErrorCount: result.runtimeErrorCount,
+      lastRuntimeErrorAt: result.lastRuntimeErrorAt,
+      lastProgressAt: result.lastProgressAt,
+    },
   });
   row.task_message_count = result.taskMessageCount;
   row.memory_leak_count = result.memoryLeakMessageIds.length;
@@ -306,7 +332,11 @@ async function executeEpisode(
     const drained = await drainEpisodeToMemory({
       workspace: provisioned.workspace,
       dispatcher: provisioned.dispatcher,
-      channelName: family.familyId.toLowerCase().replace(/[^a-z0-9-]+/g, "-").slice(0, 50) || "evol",
+      channelName:
+        family.familyId
+          .toLowerCase()
+          .replace(/[^a-z0-9-]+/g, "-")
+          .slice(0, 50) || "evol",
     });
     console.log(
       sanitizeDiagnostic(
@@ -354,7 +384,11 @@ try {
     }
     summaries.push(summarizeArm(arm, armRows));
   }
-  const summaryPath = await writeSummary({ resultDir: env.resultDir, evaluationId: env.evaluationId, summaries });
+  const summaryPath = await writeSummary({
+    resultDir: env.resultDir,
+    evaluationId: env.evaluationId,
+    summaries,
+  });
   console.log(sanitizeDiagnostic(`wrote ${writer.path}`));
   console.log(sanitizeDiagnostic(`wrote ${summaryPath}`));
 } finally {
