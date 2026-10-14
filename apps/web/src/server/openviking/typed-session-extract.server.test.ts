@@ -224,16 +224,53 @@ test("typed session extract writes the session then commits then extracts with s
   expect(captured[0]?.headers["x-openviking-user"]).toBe("workspace-memory-sink");
   const createBody = JSON.parse(captured[0]!.body) as {
     session_id: string;
+    skill_trajectory_mode: string;
     memory_extraction_config: { events: { tags: string[] } };
   };
   expect(createBody.session_id).toBe(SAMPLE_WRITE.sessionId);
+  expect(createBody.skill_trajectory_mode).toBe("causal");
   expect(createBody.memory_extraction_config.events.tags).toEqual([...SAMPLE_WRITE.tags]);
-  expect(JSON.stringify(createBody)).not.toMatch(/causal|cm_fact|provenance|audit_id/);
+  expect(JSON.stringify(createBody)).not.toMatch(/cm_fact|provenance|audit_id/);
+  const commit = captured.find((row) => row.url.endsWith("/commit"));
+  expect(JSON.parse(commit!.body)).toMatchObject({
+    keep_recent_count: 0,
+    aig_question: "standup note",
+  });
   const batch = captured.find((row) => row.url.endsWith("/messages/batch"));
   const batchBody = JSON.parse(batch!.body) as {
     messages: Array<{ source_message_ids: string[] }>;
   };
   expect(batchBody.messages[0]?.source_message_ids).toEqual(["m-live"]);
+});
+
+test("an explicit agent diagnosis request focuses the commit AIG without claiming a verdict", async () => {
+  const commits: unknown[] = [];
+  const sessions = channel(async (input, init) => {
+    if (String(input).endsWith("/commit")) commits.push(JSON.parse(String(init?.body)));
+    return new Response(
+      JSON.stringify({ status: "ok", result: { session_id: SAMPLE_WRITE.sessionId } }),
+      { status: 200 },
+    );
+  });
+  const report = "@memory diagnose parser returned zero after the branch change";
+  const write = {
+    ...SAMPLE_WRITE,
+    messages: [
+      ...SAMPLE_WRITE.messages,
+      {
+        role: "assistant" as const,
+        content: report,
+        createdAt: "2026-09-21T12:06:00.000Z",
+        sourceMessageIds: ["m-report"],
+        peerId: "coforge__worker",
+      },
+    ],
+  };
+  expect(await sessions.writeCommitAndExtract({ owner: "sink-owner", write })).toEqual({
+    ok: true,
+    sessionId: SAMPLE_WRITE.sessionId,
+  });
+  expect(commits).toEqual([{ keep_recent_count: 0, aig_question: report }]);
 });
 
 test("typed session extract waits for the commit task and does not extract an archived session", async () => {
