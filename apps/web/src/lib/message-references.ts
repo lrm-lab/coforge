@@ -291,7 +291,10 @@ function proseReferences(body: string): { reference: Reference; start: number; e
     if (!aligned) continue;
     cursor = aligned.end;
     for (const match of matches) {
-      const from = aligned.starts[match.index]!;
+      const from =
+        typeof aligned.starts === "number"
+          ? aligned.starts + match.index
+          : aligned.starts[match.index]!;
       // Written exactly as matched: an escape or a character reference inside it means the
       // author wrote the characters literally. A reading whose exact prefix still means something
       // (a bare `#N` whose run goes on) falls back to that prefix.
@@ -331,6 +334,9 @@ function bodyOffsets(body: string, source: string): number[] {
 
 type SourceRange = { start: number; end: number };
 
+/** Positioned literal text maps from one start; other text maps each code unit. */
+type TextAlignment = { starts: number | number[]; end: number };
+
 /**
  * The prose `text` nodes of a tree, in document order, each with the source range of its nearest
  * positioned ancestor. GFM's autolink-literal transform splits text around a bare URL or email
@@ -359,10 +365,21 @@ function alignNode(
   node: Text,
   within: SourceRange | undefined,
   cursor: number,
-): { starts: number[]; end: number } | undefined {
+): TextAlignment | undefined {
   const start = node.position?.start.offset;
   const end = node.position?.end.offset;
-  if (start !== undefined && end !== undefined) return sourceStarts(source, node.value, start, end);
+  if (start !== undefined && end !== undefined) {
+    const value = node.value;
+    if (
+      value.length >= 128 &&
+      start + value.length <= end &&
+      source.startsWith(value, start) &&
+      !value.includes("&") &&
+      !value.includes("\\")
+    )
+      return { starts: start, end: start + value.length };
+    return sourceStarts(source, value, start, end);
+  }
   if (!within) return undefined;
   for (let from = Math.max(cursor, within.start); from < within.end; from += 1) {
     const aligned = sourceStarts(source, node.value, from, within.end);

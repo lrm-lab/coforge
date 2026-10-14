@@ -49,6 +49,40 @@ function storedBody(
   };
 }
 
+test("long unchanged Unicode prose keeps exact reference offsets and every surrounding byte", () => {
+  const prefix = "普通😀正文 ".repeat(300);
+  const body = `${prefix}@ada\n续行 #product task #68 尾文`;
+  const read = readMessageReferences(body);
+  expect(read.candidates).toEqual({
+    handles: ["ada"],
+    taskNumbers: [68],
+    channelNames: ["product"],
+    threads: [],
+  });
+  expect(read.resolve({ mention: () => ADA, channel, task: (number) => number === 68 })).toBe(
+    `${prefix}<@human:${ADA.id}>\n续行 ${channelReferenceToken(PRODUCT.id, PRODUCT.name)} ${taskReferenceToken(68)} 尾文`,
+  );
+});
+
+test("a recursive ampersand before an autolink keeps later unpositioned reference offsets", () => {
+  const body = "@ada &amp;amp; https://example.com @helper #product";
+  const read = readMessageReferences(body);
+  expect(read.candidates.handles).toEqual(["ada", "helper"]);
+  expect(read.resolve({ mention: (handle) => (handle === "ada" ? ADA : HELPER), channel })).toBe(
+    `<@human:${ADA.id}> &amp;amp; https://example.com <@agent:${HELPER.id}> ${channelReferenceToken(PRODUCT.id, PRODUCT.name)}`,
+  );
+});
+
+test("literal backslashes before an autolink and escaped channel text remain byte-for-byte", () => {
+  const body = String.raw`@ada \\https://example.com @helper \#product #random`;
+  const read = readMessageReferences(body);
+  expect(read.candidates.handles).toEqual(["ada", "helper"]);
+  expect(read.candidates.channelNames).toEqual(["random"]);
+  expect(read.resolve({ mention: (handle) => (handle === "ada" ? ADA : HELPER), channel })).toBe(
+    String.raw`<@human:${ADA.id}> \\https://example.com <@agent:${HELPER.id}> \#product ${channelReferenceToken(RANDOM.id, RANDOM.name)}`,
+  );
+});
+
 // Channels.
 
 test("a #name that names a channel becomes a token; any other #name stays byte-for-byte", () => {
