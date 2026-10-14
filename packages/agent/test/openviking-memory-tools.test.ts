@@ -277,3 +277,29 @@ test("openviking-memory ov_search_context forwards the native tokenBudget unchan
     },
   });
 });
+
+test("group Memory tools default to their own channel and reject another channel", async () => {
+  const proxy = fakeProxy();
+  const tools = createMemoryFenceTools(
+    OPENVIKING_TOOL_PROFILE,
+    new MemoryAgentTurnBudget(),
+    proxy,
+    { conversation: { conversationId: "group-alpha", target: "#alpha" } },
+  );
+  await executeTool(tools, "message_check", {});
+  expect(proxy.calls[0]!.body).toMatchObject({ operation: "check", target: "#alpha" });
+  await executeTool(tools, "message_check", { target: "#alpha:root" });
+  expect(proxy.calls[1]!.body).toMatchObject({ target: "#alpha:root" });
+  await expect(executeTool(tools, "message_read", { target: "#beta" })).rejects.toThrow(
+    "this conversation",
+  );
+  expect(proxy.calls).toHaveLength(2);
+});
+
+test("Memory control session exposes no tools that could consume another group's inbox", () => {
+  expect(
+    createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), fakeProxy(), {
+      controlSession: true,
+    }),
+  ).toEqual([]);
+});

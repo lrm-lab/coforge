@@ -6,10 +6,12 @@
 
 两层 session 不是同一种东西。
 
-- Agent session 是运行时收件箱。Daemon 拥有它，用来把频道投递交给正在跑的 agent。它不写入 OpenViking。
+- Memory Agent 的模型 session 按群聊隔离，同一群的线程沿用该群 session；所有群共享同一 Agent 身份和工作目录。Daemon 在工作目录外保存群聊与原生 session 的映射，重启继续恢复，重置 session 后使用新映射。不同群的模型回合依次执行，同群通知可继续当前回合。
+- 群聊路由按 Workspace Memory 身份启用，与模型及工具 profile 分开；显式 Memory 工具 profile 的评测也使用同一路由。控制 session 不读取群聊消息，群聊 session 的消息检查默认绑定本群。
+- 成员活动聚合该 Agent 在所有群的动态，并标明来源、提供群聊链接；已有无来源的历史活动不补猜。Agent session 不写入 OpenViking。
 - OV session 是一条频道分段。分段在 quiet-window 或 completed-task 关闭之后，整段 `POST /messages/batch`，再 `POST /commit`（`keep_recent_count: 0`）触发抽取。一个分段一个 session，id 为 `coforge-<segmentId>`。
 
-不按 agent 建 OV session。定向投递使 agent session 成为频道日志的有损子集：没投递给它的消息它看不到，而它自己的收件箱又会跨频道混在一起。按 agent 复制会得到 N 份拷贝，抽取窗口永远对不齐。
+不按 agent 建 OV session。定向投递使 agent session 成为频道日志的有损子集：没投递给它的消息它看不到，Memory 模型 session 虽按群隔离，收到的仍只是定向投递的子集。按 agent 复制会得到 N 份拷贝，抽取窗口永远对不齐。
 
 ## 借鉴 hermes 的决策
 
@@ -23,7 +25,7 @@
 | B4 peer | 借 | agent turn 写成 `role: assistant`，并带 `peerId: coforge__<senderHandle>`（batch 字段 `peer_id`）。human turn 不带。 |
 | B6 逐条降级 | 借 | batch POST 失败时改为逐条 `POST /messages`。逐条也失败才返回 `retryable_failure`。 |
 | turn-slice | 不借 | 只保留被 @ 到的消息会丢掉同段里其余发言。分段仍是整段频道窗口。 |
-| per-agent session | 不借 | 见上一节。定向投递是有损子集加跨频道混流。 |
+| per-agent session | 不借 | 见上一节。定向投递是有损子集，不能替代完整频道分段。 |
 | B5 trajectory | 不借，将来 | Daemon 以后收割 agent session transcript（含 tool calls），写入 OV trajectory。联邦场景（外部独立安装的 agent）另记，不在这条频道写线上做。 |
 
 Append 幂等：batch 之前 `GET /sessions/{id}`，用已有消息的 `source_message_ids` 判断。目标消息都在，就跳过 batch，直接 commit。GET 失败则仍走 batch，避免探测故障挡住第一次写入。

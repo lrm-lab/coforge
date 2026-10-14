@@ -772,6 +772,7 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
       unreadSummary: Object.entries(value.unreadSummary ?? {}).map(([target, count]) => ({
         target,
         count,
+        conversationId: value.unreadConversationIds?.[target],
       })),
     }),
   );
@@ -870,9 +871,19 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     ...(v.controlEpoch !== undefined ? { controlEpoch: v.controlEpoch } : {}),
     ...(v.launchId ? { launchId: v.launchId } : {}),
     ...(v.toolProfile ? { toolProfile: v.toolProfile as AgentStartIntent["toolProfile"] } : {}),
+    ...(v.memoryAgent === true ? { memoryAgent: true } : {}),
     ...(v.resumePrompt !== undefined ? { resumePrompt: v.resumePrompt } : {}),
     ...(v.wakeMessage ? { wakeMessage: recoveryMessage(v.wakeMessage) } : {}),
     ...(v.resumeMessages.length ? { resumeMessages: v.resumeMessages.map(recoveryMessage) } : {}),
+    ...(v.unreadSummary.some((entry) => entry.conversationId)
+      ? {
+          unreadConversationIds: Object.fromEntries(
+            v.unreadSummary
+              .filter((entry) => entry.conversationId)
+              .map((entry) => [entry.target, entry.conversationId!]),
+          ),
+        }
+      : {}),
     ...(v.unreadSummary.length
       ? {
           unreadSummary: Object.fromEntries(
@@ -1288,6 +1299,7 @@ export function decodeAgentActivity(bytes: Uint8Array): AgentActivity {
     ...(entries.length ? { entries } : {}),
     ...(v.messageId ? { messageId: v.messageId } : {}),
     ...(v.conversationId ? { conversationId: v.conversationId } : {}),
+    ...(v.conversationTarget ? { conversationTarget: v.conversationTarget } : {}),
     ...(v.runtimeErrorClass
       ? {
           runtimeError: {

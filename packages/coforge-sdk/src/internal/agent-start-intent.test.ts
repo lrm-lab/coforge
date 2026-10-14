@@ -150,3 +150,20 @@ test("rejects decoding a resume prompt that also carries message recovery", () =
     expect(() => decodeAgentStartIntent(encoded)).toThrow("resume prompt");
   }
 });
+
+test("summary recovery carries conversation ids without loading message bodies", () => {
+  const intent = {
+    ...base,
+    unreadSummary: { "#alpha": 200 },
+    unreadConversationIds: { "#alpha": "group-alpha" },
+  };
+  expect(decodeAgentStartIntent(encodeAgentStartIntent(intent)).unreadConversationIds).toEqual({
+    "#alpha": "group-alpha",
+  });
+});
+
+test("round-trips the server-authored Memory identity without changing its tool profile", () => {
+  expect(
+    decodeAgentStartIntent(encodeAgentStartIntent({ ...base, memoryAgent: true })).memoryAgent,
+  ).toBe(true);
+});

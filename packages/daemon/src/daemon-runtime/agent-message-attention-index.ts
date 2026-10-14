@@ -4,6 +4,8 @@ import type {
   AgentRecoveryMessage,
   MessageSenderKind,
 } from "@lrm/coforge-sdk/internal";
+import type { AgentConversationScope } from "@coforge/agent";
+import { isMemoryAgentRuntime } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import {
   AGENT_MESSAGE_ACK_METHOD,
@@ -208,7 +210,10 @@ export class AgentMessageAttentionIndex {
     workspaceId: string,
     runtimes: Pick<AgentProcessManager, "session"> & Partial<Pick<AgentProcessManager, "runtime">>,
     private readonly sendAck: (ack: AgentMessageDeliveryAck) => Promise<void>,
-    private readonly messageReceived: (agentId: string) => void = () => {},
+    private readonly messageReceived: (
+      agentId: string,
+      conversation?: AgentConversationScope,
+    ) => void = () => {},
     /**
      * The daemon-owned delivery queue (`agent-delivery-queue.ts`). `shouldHold` decides
      * whether this delivery must wait rather than reach `AgentSession.notify` now; `enqueue`
@@ -426,7 +431,18 @@ export class AgentMessageAttentionIndex {
     // One notice for the whole coalesced batch, carrying the batch itself: the queue is per Agent,
     // so a batch legitimately spans channels, DMs and threads, and each target needs its own line.
     if (announced.length) {
-      await this.#notify(announced[announced.length - 1]!, undefined, announced);
+      if (this.#isMemory(agentId)) {
+        const groups = new Map<string, AgentMessageDelivery[]>();
+        for (const message of announced) {
+          const batch = groups.get(message.conversationId) ?? [];
+          batch.push(message);
+          groups.set(message.conversationId, batch);
+        }
+        for (const batch of groups.values()) {
+          await this.#notify(batch.at(-1)!, undefined, batch);
+          if (this.#generations.get(agentId) !== generation) return;
+        }
+      } else await this.#notify(announced[announced.length - 1]!, undefined, announced);
       if (this.#generations.get(agentId) !== generation) return;
     }
     // Every held delivery was acknowledged when the daemon took it; a redelivery of one after this
@@ -438,7 +454,39 @@ export class AgentMessageAttentionIndex {
     agentId: string,
     messages: readonly AgentRecoveryMessage[],
     unreadSummary: Readonly<Record<string, number>>,
+    unreadConversationIds: Readonly<Record<string, string>> = {},
+    conversation?: AgentConversationScope,
   ): Promise<void> {
+    if (this.#isMemory(agentId) && !conversation) {
+      const scopes = new Map<string, string>();
+      for (const message of messages) scopes.set(message.conversationId, message.target);
+      for (const [target, count] of Object.entries(unreadSummary)) {
+        if (count < 1) continue;
+        const id =
+          unreadConversationIds[target] ??
+          messages.find((message) => message.target === target)?.conversationId ??
+          this.#cursorConversation.get(agentId)?.get(target);
+        if (!id) throw new Error("Memory recovery requires a canonical conversation id");
+        scopes.set(id, target);
+      }
+      for (const [conversationId, target] of scopes) {
+        await this.recover(
+          agentId,
+          messages.filter((message) => message.conversationId === conversationId),
+          Object.fromEntries(
+            Object.entries(unreadSummary).filter(
+              ([name]) =>
+                (unreadConversationIds[name] ??
+                  messages.find((message) => message.target === name)?.conversationId ??
+                  this.#cursorConversation.get(agentId)?.get(name)) === conversationId,
+            ),
+          ),
+          unreadConversationIds,
+          { conversationId, target },
+        );
+      }
+      return;
+    }
     const generation = this.#generation(agentId);
     const session = this.#runtimes.session(agentId);
     if (!session?.notify) throw new Error("Agent session cannot receive a wakeup notice");
@@ -525,7 +573,7 @@ export class AgentMessageAttentionIndex {
     // Same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
     this.hold.busy(agentId);
     try {
-      await session.notify(notice);
+      await session.notify(notice, conversation ? { conversation } : undefined);
     } finally {
       if (this.#runtimes.session(agentId) === session) this.hold.noticeSettled?.(agentId);
     }
@@ -541,7 +589,11 @@ export class AgentMessageAttentionIndex {
       pendingByTarget.set(message.target, pending);
       this.#pendingSequences.set(agentId, pendingByTarget);
     }
-    if (recoveredMessages.length) this.messageReceived(agentId);
+    if (recoveredMessages.length) this.messageReceived(agentId, conversation);
+  }
+
+  #isMemory(agentId: string): boolean {
+    return isMemoryAgentRuntime(this.#runtimes.runtime?.(agentId)?.config);
   }
 
   #withMemoryReminder(agentId: string, notice: string): string {
@@ -656,7 +708,10 @@ export class AgentMessageAttentionIndex {
     // these messages are unread — a delivery notice can race a `check` or `read` that already
     // advanced that cursor. Only those commands answer what is left, and either may answer
     // "nothing".
-    const queued = this.hold.queued?.(message.agentId) ?? [];
+    const queued = (this.hold.queued?.(message.agentId) ?? []).filter(
+      (delivery) =>
+        !this.#isMemory(message.agentId) || delivery.conversationId === message.conversationId,
+    );
     const view = this.#localViewRows(announced, queued);
     const rows = this.#renderLocalViewRows(view.rows);
     const totalCount = countDistinctMessages([...announced, ...queued]);
@@ -666,16 +721,22 @@ export class AgentMessageAttentionIndex {
     );
     // The session names these back if the notice never reaches the model (`notice-undelivered`).
     const trackedIds = announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId);
+    const conversation = this.#isMemory(message.agentId)
+      ? { conversationId: message.conversationId, target: message.target }
+      : undefined;
     const notification = Promise.resolve()
       .then(() =>
-        trackedIds.length
-          ? session.notify!(notice, { deliveryIds: trackedIds })
+        conversation || trackedIds.length
+          ? session.notify!(notice, {
+              ...(trackedIds.length ? { deliveryIds: trackedIds } : {}),
+              ...(conversation ? { conversation } : {}),
+            })
           : session.notify!(notice),
       )
       .then(() => {
         if (this.#generations.get(message.agentId) === generation) {
           generation.notified.add(message.deliveryId);
-          this.messageReceived(message.agentId);
+          this.messageReceived(message.agentId, conversation);
         }
         logger.info("Agent accepted inbox notice", {
           event: "agent.inbox_notice.accepted",

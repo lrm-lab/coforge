@@ -467,6 +467,8 @@ model AgentActivity {
   agentId                 String    @db.Uuid
   computerId              String    @db.Uuid
   launchId                String
+  conversationId          String?   @db.Uuid
+  conversationTarget      String?
   clientSeq               Int
   detailKind              String
   level                   String

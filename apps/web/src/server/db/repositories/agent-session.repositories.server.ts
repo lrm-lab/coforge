@@ -42,7 +42,7 @@ export class PrismaAgentSessionRepository implements AgentSessionRepository {
   async read(agentId: string) {
     const agent = await this.db.agent.findUnique({
       where: { id: agentId },
-      include: { currentSession: true },
+      include: { currentSession: true, workspaceMemoryAgent: { select: { agentId: true } } },
     });
     if (!agent) return undefined;
     const stored =
@@ -58,6 +58,7 @@ export class PrismaAgentSessionRepository implements AgentSessionRepository {
       workspaceId: agent.workspaceId,
       computerId: agent.computerId ?? undefined,
       provider: parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
+      ...(agent.workspaceMemoryAgent ? { memoryAgent: true } : {}),
       reference:
         stored === null
           ? null

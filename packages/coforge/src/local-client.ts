@@ -497,6 +497,7 @@ export function connectLocal(
   _socketPath: string,
   context: string,
   proxyUrl = Bun.env.COFORGE_AGENT_PROXY_URL ?? "",
+  conversationTarget = Bun.env.COFORGE_AGENT_CONVERSATION_TARGET,
 ) {
   const proxyEndpoint = (path: string) => {
     const endpoint = new URL(proxyUrl);
@@ -538,6 +539,11 @@ export function connectLocal(
       targetConfirmed?: boolean;
     },
   ) => {
+    if (conversationTarget) {
+      if (operation === "check" || operation === "search") target ??= conversationTarget;
+      if (target && target.split(":")[0] !== conversationTarget.split(":")[0])
+        throw preIssuanceError(operation, "Memory messages must stay within this conversation");
+    }
     if (!context) throw preIssuanceError(operation, "coforge agent context is not configured");
     if (!/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
       throw preIssuanceError(operation, "coforge agent context is invalid");

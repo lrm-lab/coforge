@@ -408,3 +408,34 @@ function sessionRace() {
     },
   };
 }
+
+test("cloud selects group sessions from the Workspace Memory identity, preserving ordinary Agents", async () => {
+  for (const memoryAgent of [true, false]) {
+    const sessions = new AgentSessions(
+      {
+        read: async () => ({
+          workspaceId: "w",
+          computerId: "c",
+          provider: "coforge",
+          reference: null,
+          memoryAgent,
+        }),
+        replace: async () => true,
+      },
+      async () => "daemon",
+      { resendForCurrentSession: async () => {} },
+    );
+    const selected = await sessions.prepare({
+      protocolMajor: 1,
+      requestId: "start",
+      workspaceId: "w",
+      computerId: "c",
+      agentId: "a",
+      provider: "coforge",
+      model: "m",
+      reasoning: "",
+      memoryAgent: true,
+    });
+    expect(selected.memoryAgent).toBe(memoryAgent ? true : undefined);
+  }
+});

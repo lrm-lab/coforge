@@ -23,9 +23,11 @@ export { getAgentDir, VERSION as PI_SDK_VERSION } from "@earendil-works/pi-codin
 export { COFORGE_PROVIDER_MODELS_GENERATED } from "#src/coforge-provider-models.generated";
 export { supportedReasoningEfforts } from "#src/reasoning-levels";
 export { getCoforgeAgentDir, getCoforgeSessionDir, prepareAgentSessionDirectory } from "#src/paths";
+export { isMemoryAgentRuntime } from "#src/contract";
 export type {
   AgentActivity,
   AgentActivityLevel,
+  AgentConversationScope,
   AgentNoticeOptions,
   AgentRuntimeConfig,
   AgentRuntimeEvent,

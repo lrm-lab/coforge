@@ -1785,3 +1785,23 @@ test("an action card refused without a code keeps the reason under the prepare c
   });
   expect(error.suggestedNextAction).toStartWith("No action card was posted");
 });
+
+test("a group session's CLI check defaults to its own target and rejects another group", async () => {
+  const fetch = spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(Response.json({ accepted: true, messages: [], attentionCount: 0 }))
+    .mockResolvedValueOnce(Response.json({ accepted: true, messages: [], attentionCount: 0 }));
+  const client = connectLocal(
+    "",
+    `sfp_${"a".repeat(43)}`,
+    proxyUrl(agentApiRoutes.local.messages),
+    "#alpha",
+  );
+  await client.check();
+  expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({
+    operation: "check",
+    target: "#alpha",
+  });
+  await client.check("#alpha:thread");
+  await expect(client.check("#beta")).rejects.toThrow("this conversation");
+  expect(fetch).toHaveBeenCalledTimes(2);
+});

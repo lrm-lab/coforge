@@ -57,7 +57,7 @@ export type MentionDeliveryPorts = {
    * the notice was accepted. Rejects when the session refused it. */
   announce(message: TrackedMentionDelivery): Promise<"told" | "gone">;
   /** Whether the Agent is mid-turn: a notice written now lands in the turn in progress. */
-  busy(agentId: string): boolean;
+  busy(agentId: string, conversationId?: string): boolean;
   blocked(agentId: string): MentionDeliveryBlock | undefined;
 };
 
@@ -149,7 +149,7 @@ export class MentionDeliveryTracker {
     const blocked = this.ports.blocked(message.agentId);
     if (blocked) return this.refuse(message, BLOCKED_CODES[blocked]);
     // Read before the notice: writing it marks the Agent busy.
-    const busy = this.ports.busy(message.agentId);
+    const busy = this.ports.busy(message.agentId, message.conversationId);
     let outcome: "told" | "gone";
     try {
       outcome = await this.ports.announce(message);
@@ -188,13 +188,14 @@ export class MentionDeliveryTracker {
    * waits for that notice's redelivery; any other (told to a process that has since exited) is
    * rejected.
    */
-  async settleTurnEnd(agentId: string): Promise<void> {
+  async settleTurnEnd(agentId: string, conversationId?: string): Promise<void> {
     const pending = this.#pending.get(agentId);
     if (!pending) return;
     for (const deliveryId of [...pending]) {
       const tracked = this.#tracked.get(deliveryId);
       if (!tracked || tracked.undelivered) continue;
       const { message } = tracked;
+      if (conversationId !== undefined && message.conversationId !== conversationId) continue;
       if (this.ports.told(message) || this.ports.consumed(message)) await this.#drain(message);
       else await this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
     }
@@ -241,7 +242,9 @@ export class MentionDeliveryTracker {
 
   /** Already told in the current session: pending while that turn runs, drained once idle. */
   #told(message: TrackedMentionDelivery): Promise<void> {
-    return this.ports.busy(message.agentId) ? this.#markPending(message) : this.#drain(message);
+    return this.ports.busy(message.agentId, message.conversationId)
+      ? this.#markPending(message)
+      : this.#drain(message);
   }
 
   /** Whether the mention is still between acceptance and its outcome: not settled meanwhile. */

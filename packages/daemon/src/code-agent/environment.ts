@@ -23,6 +23,7 @@ const CLI_BIN_DIRECTORIES = [
  * cannot let a same-named inherited or user-supplied value through. */
 const PROTECTED_COFORGE_ENV_KEYS = [
   "COFORGE_AGENT_CONTEXT",
+  "COFORGE_AGENT_CONVERSATION_TARGET",
   "COFORGE_AGENT_PROXY_URL",
   "COFORGE_DAEMON_SOCKET",
   "COFORGE_SUPERVISOR_SOCKET",

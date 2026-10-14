@@ -30,6 +30,7 @@ import {
   type OpenVikingAgentCommand,
   type OpenVikingAgentOperation,
 } from "@lrm/coforge-sdk/agent";
+import type { AgentConversationScope } from "./contract";
 import { Type } from "typebox";
 import { join, resolve } from "node:path";
 import { readdir, readFile } from "node:fs/promises";
@@ -220,8 +221,13 @@ export function createMemoryFenceTools(
   profile: MemoryAgentToolProfile,
   budget: MemoryAgentTurnBudget,
   proxy: MemoryAgentProxy = defaultMemoryProxy(),
-  options: { memoryOfferOnly?: boolean } = {},
+  options: {
+    memoryOfferOnly?: boolean;
+    conversation?: AgentConversationScope;
+    controlSession?: boolean;
+  } = {},
 ) {
+  if (options.controlSession) return [];
   const openvikingTool = <Params extends Record<string, unknown>>(
     name: string,
     label: string,
@@ -291,6 +297,12 @@ export function createMemoryFenceTools(
         // Integer `limit` as a numeric string; the daemon only accepts a number.
         // `message` is an alias of `content` only when content was omitted.
         const raw = { ...(params as Record<string, unknown>) };
+        if (options.conversation) {
+          const parent = options.conversation.target.split(":")[0]!;
+          raw.target ??= parent;
+          if (typeof raw.target !== "string" || raw.target.split(":")[0] !== parent)
+            throw new Error("Memory messages must stay within this conversation");
+        }
         if (operation === "send" && raw.content == null && typeof raw.message === "string")
           raw.content = raw.message;
         if (operation === "send") delete raw.message;
@@ -429,7 +441,13 @@ export function createMemoryFenceTools(
       "Check messages",
       "Check pending CoForge messages without shell or network access.",
       "check",
-      {},
+      {
+        target: Type.Optional(
+          Type.String({
+            description: "Optional. Exact target from this conversation or its threads.",
+          }),
+        ),
+      },
     ),
     messageTool(
       "message_read",
@@ -549,6 +567,8 @@ export async function createSession(options: {
   instructions: string;
   environment?: Readonly<Record<string, string>>;
   sessionKind?: "coforge" | "pi";
+  conversation?: AgentConversationScope;
+  memoryControlSession?: boolean;
   toolProfile?: MemoryAgentToolProfile;
   /** Eval-only Offer contract; ordinary product sessions retain channel send. */
   memoryOfferOnly?: boolean;
@@ -615,7 +635,7 @@ export async function createSession(options: {
     modelRuntime,
     resourceLoaderOptions: resourceLoaderOptionsForSession({
       instructions: options.instructions,
-      memoryFence: Boolean(memoryFence),
+      memoryFence: Boolean(memoryFence) || Boolean(options.memoryControlSession),
       disableHostPiInjection:
         evalDisablesHostPiInjection(options.environment) || evalDisablesHostPiInjection(),
     }),
@@ -644,10 +664,15 @@ export async function createSession(options: {
     memoryFence && memoryBudget
       ? createMemoryFenceTools(memoryFence, memoryBudget, defaultMemoryProxy(environment), {
           memoryOfferOnly: options.memoryOfferOnly,
+          conversation: options.conversation,
+          controlSession: options.memoryControlSession,
         })
       : [];
   const customTools = [
-    ...(options.environment && !extensionDefinesBash && !memoryBudget
+    ...(options.environment &&
+    !extensionDefinesBash &&
+    !memoryBudget &&
+    !options.memoryControlSession
       ? [
           createBashTool(cwd, {
             shellPath: services.settingsManager.getShellPath(),
@@ -656,6 +681,7 @@ export async function createSession(options: {
               const childEnv = { ...env };
               for (const key of [
                 "COFORGE_AGENT_CONTEXT",
+                "COFORGE_AGENT_CONVERSATION_TARGET",
                 "COFORGE_AGENT_PROXY_URL",
                 "COFORGE_DAEMON_SOCKET",
                 "COFORGE_SUPERVISOR_SOCKET",
@@ -696,7 +722,7 @@ export async function createSession(options: {
     sessionManager,
     ...(model ? { model } : {}),
     ...(options.reasoning ? { thinkingLevel: options.reasoning as never } : {}),
-    ...(memoryBudget
+    ...(memoryBudget || options.memoryControlSession
       ? {
           noTools: "all" as const,
           tools: memoryTools.map((tool) => tool.name),

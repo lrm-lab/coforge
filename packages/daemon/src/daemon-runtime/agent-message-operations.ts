@@ -120,7 +120,7 @@ export class AgentMessageOperations {
     agentApiKey: string,
   ): Promise<AgentMessageResponse> {
     const { operation } = request;
-    if (operation === "check") return this.#check(agentId, request, agentApiKey);
+    if (operation === "check") return this.#check(agentId, request, agentApiKey, target);
     if (operation === "send" && target) return this.#send(agentId, request, target, agentApiKey);
     return this.#forward(agentId, request, operation, target, agentApiKey);
   }
@@ -134,9 +134,12 @@ export class AgentMessageOperations {
     agentId: string,
     request: LocalAgentMessageRequest,
     agentApiKey: string,
+    target = request.target,
   ): Promise<AgentMessageResponse> {
     const startedAt = performance.now();
-    const attention = this.#ports.attention.check(agentId);
+    const attention = this.#ports.attention
+      .check(agentId)
+      .filter((item) => !target || item.target === target);
     const messages: AgentMessageRecord[] = [];
     let hasMore = false;
     let roundCount = 0;
@@ -148,7 +151,7 @@ export class AgentMessageOperations {
           agentId,
           workspaceId: this.#ports.connection.workspaceId,
           operation: "check",
-          target: request.target || "",
+          target: target || "",
           limit: request.limit,
         },
         agentApiKey,

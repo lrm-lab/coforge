@@ -190,3 +190,11 @@ Never disclose private DM contents or secrets to a public channel. Do not solici
 ${(options.extraCriticalRules ?? []).join("\n")}`.trim(),
   };
 }
+
+/** Scoped model histories retain the shared Agent identity and directory. */
+export function memoryConversationInstructions(
+  instructions: string,
+  scope: { conversationId: string; target: string },
+): string {
+  return `${instructions}\n\nThis model session belongs only to conversation ${scope.conversationId} (${scope.target}). Drain and respond only to this conversation and its threads. Other conversations have independent model sessions. The working directory is shared.`;
+}

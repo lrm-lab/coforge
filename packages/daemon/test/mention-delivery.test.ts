@@ -14,6 +14,7 @@ import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import { RUNNER_HOLD_REASONS } from "@lrm/coforge-sdk/internal";
 import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
+import { MentionDeliveryTracker } from "#src/daemon-runtime/mention-delivery-tracker";
 import { captureDaemonLogs } from "./log-capture";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
@@ -815,4 +816,90 @@ test("a mention left pending by a launch that exited is rejected when the next l
   } finally {
     await runtime.stop();
   }
+});
+
+test("group completion settles only that group's tracked mentions", async () => {
+  const acked: string[] = [];
+  const refused: string[] = [];
+  const tracker = new MentionDeliveryTracker("computer", {
+    transition: async () => {},
+    terminalError: async (report) => {
+      refused.push(report.deliveryId);
+    },
+    acknowledge: async (message) => {
+      acked.push(message.deliveryId);
+    },
+    running: () => ({ launchId: "launch", sessionId: "control" }),
+    consumed: () => false,
+    told: () => true,
+    announce: async () => "told",
+    busy: () => true,
+    blocked: () => undefined,
+  });
+  const message = (group: string) => ({
+    protocolMajor: 1,
+    requestId: group,
+    workspaceId: "workspace",
+    agentId: "memory",
+    messageId: group,
+    deliveryId: group,
+    conversationId: group,
+    sequence: 1,
+    body: "question",
+    method: "agent:v1:message:deliver" as const,
+    target: `#${group}`,
+    mentionDelivery: {
+      messageId: group,
+      launchId: "launch",
+      sessionId: "control",
+      computerId: "computer",
+    },
+  });
+  await tracker.deliver(message("alpha"));
+  await tracker.deliver(message("beta"));
+  await tracker.settleTurnEnd("memory", "alpha");
+  expect(acked).toEqual(["alpha"]);
+  expect(refused).toEqual([]);
+  await tracker.settleTurnEnd("memory", "beta");
+  expect(acked).toEqual(["alpha", "beta"]);
+});
+
+test("a new group can finish during notice admission without inheriting another group's busy state", async () => {
+  const acked: string[] = [];
+  const tracker = new MentionDeliveryTracker("computer", {
+    transition: async () => {},
+    terminalError: async () => {},
+    acknowledge: async (message) => {
+      acked.push(message.deliveryId);
+    },
+    running: () => ({ launchId: "launch", sessionId: "control" }),
+    consumed: () => false,
+    told: () => false,
+    announce: async () => {
+      await tracker.settleTurnEnd("memory", "beta");
+      return "told";
+    },
+    busy: (_agent, conversationId) => conversationId !== "beta",
+    blocked: () => undefined,
+  });
+  await tracker.deliver({
+    protocolMajor: 1,
+    requestId: "beta",
+    workspaceId: "workspace",
+    agentId: "memory",
+    messageId: "beta",
+    deliveryId: "beta",
+    conversationId: "beta",
+    sequence: 1,
+    body: "question",
+    method: "agent:v1:message:deliver",
+    target: "#beta",
+    mentionDelivery: {
+      messageId: "beta",
+      launchId: "launch",
+      sessionId: "control",
+      computerId: "computer",
+    },
+  });
+  expect(acked).toEqual(["beta"]);
 });

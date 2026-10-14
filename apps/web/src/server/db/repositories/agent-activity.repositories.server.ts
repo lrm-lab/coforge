@@ -16,6 +16,8 @@ type CompactActivity = {
   id: string;
   launchId: string;
   clientSeq: number;
+  conversationId: string | null;
+  conversationTarget: string | null;
   detailKind: string;
   level: string;
   detail: string;
@@ -108,6 +110,8 @@ export class AgentActivityRepository {
             activity."agentId",
             activity."launchId",
             activity."clientSeq",
+            activity."conversationId",
+            activity."conversationTarget",
             activity."detailKind",
             activity."level",
             activity."detail",
@@ -128,6 +132,8 @@ export class AgentActivityRepository {
         compact."id",
         compact."launchId",
         compact."clientSeq",
+        compact."conversationId",
+        compact."conversationTarget",
         compact."detailKind",
         compact."level",
         compact."detail",
@@ -156,6 +162,8 @@ export class AgentActivityRepository {
           id: activityId,
           launchId,
           clientSeq,
+          conversationId,
+          conversationTarget,
           detailKind,
           level,
           detail,
@@ -166,6 +174,7 @@ export class AgentActivityRepository {
           id: activityId,
           launchId,
           clientSeq,
+          ...(conversationId ? { conversationId, conversationTarget } : {}),
           detailKind,
           level,
           detail,
@@ -191,6 +200,8 @@ export class AgentActivityRepository {
         computerId: input.computerId,
         launchId: input.launchId,
         clientSeq: input.clientSeq,
+        conversationId: input.conversationId,
+        conversationTarget: input.conversationTarget,
         detailKind: input.detailKind,
         level: input.level,
         detail: input.detail,

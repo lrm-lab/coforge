@@ -11,3 +11,6 @@ Rules for durable local state in `src/persistence/`. They extend
   a workspace can never delete them.
 - A connection outbox is not durable storage, and nothing here is a jobs queue
   or a Message outbox.
+
+- `conversation-session-store.ts` atomically stores Memory conversation identities outside
+  Agent workspaces, namespaced by the control session so a Session Reset starts fresh.

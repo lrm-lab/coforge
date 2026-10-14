@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { encodeAgentActivity } from "@lrm/coforge-sdk/internal";
 import {
+  activityInConversation,
   agentActivityChannel,
   agentActivityChannelFor,
   agentActivityChannelForAgent,
@@ -9,6 +10,7 @@ import {
   mergeAgentActivity,
   type ActivityEntry,
 } from "#src/features/agents/agent-activity";
+import { presentActivityRows } from "#src/features/agents/agent-activity-presentation";
 import { agentStatusChannelFor } from "#src/features/agents/agent-status-realtime";
 
 test("agentActivityChannelForAgent names the per-Agent re-routing destination", () => {
@@ -237,4 +239,31 @@ test("tool_end/thinking_end/compaction_finished rows do not change latestActivit
   expect(latestActivityError(mergeAgentActivity([laterFailure], [recovery]))?.id).toEqual(
     latestActivityError(mergeAgentActivity([laterFailure], [recovery, ...noise]))?.id,
   );
+});
+
+test("activity preserves its group through decoding and never merges different groups", () => {
+  const decoded = decodeActivityObservation(
+    encodeAgentActivity({ ...baseWireActivity, conversationId: "group-a" }),
+    { workspaceId: "workspace-1" },
+  );
+  expect(decoded?.entry.conversationId).toBe("group-a");
+  const rows = presentActivityRows([
+    { ...entry(2), conversationId: "group-b", entries: [{ kind: "text", text: "beta" }] },
+    { ...entry(1), conversationId: "group-a", entries: [{ kind: "text", text: "alpha" }] },
+  ]);
+  expect(rows.map((r) => [r.conversationId, r.detail])).toEqual([
+    ["group-a", "alpha"],
+    ["group-b", "beta"],
+  ]);
+});
+
+test("group activity keeps its own records while the member feed aggregates all groups", () => {
+  const entries = [
+    { ...entry(3), conversationId: "beta" },
+    { ...entry(2), conversationId: "alpha" },
+    entry(1),
+  ];
+  expect(activityInConversation(entries, "alpha").map((row) => row.clientSeq)).toEqual([2]);
+  expect(activityInConversation(entries).map((row) => row.clientSeq)).toEqual([3, 2, 1]);
+  expect(activityInConversation([entry(1)], "alpha")).toEqual([entry(1)]);
 });

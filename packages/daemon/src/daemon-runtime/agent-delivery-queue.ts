@@ -1,4 +1,5 @@
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import type { AgentConversationScope } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 
 /**
@@ -19,7 +20,11 @@ export type AgentDeliveryMode = "steer" | "queue_until_idle";
 
 /** A notice a steer-mode session accepted but never showed the model, held for redelivery with
  * the tracked deliveries it carried. */
-export type FallbackNotice = Readonly<{ text: string; deliveryIds?: readonly string[] }>;
+export type FallbackNotice = Readonly<{
+  text: string;
+  deliveryIds?: readonly string[];
+  conversation?: AgentConversationScope;
+}>;
 
 /** Why deliveries to an Agent are explicitly held: a runtime-error backoff after a rate limit or
  * after another retryable error, or the fingerprint fence after the same failure repeated. */

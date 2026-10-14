@@ -67,12 +67,15 @@ These rules apply to `src/features/agents/`.
   display. Never extract hidden reasoning or copy raw tool arguments, outputs,
   or patches. Render that text as plain text, not HTML; redaction is best
   effort, not a guarantee that every sensitive statement can be recognized.
-- Merge consecutive text (or thinking) fragments of the same launch and
+- Merge consecutive text (or thinking) fragments of the same launch, conversation, and
   subagent into one row; the Daemon delivers one statement in several frames.
 - The Activity log is complete: show every persisted frame, including
   `tool_end`, `thinking_end`, and `compaction_finished` as status rows. The
   Daemon's `detail` wins; fall back to the "… finished" wording only when
   `detail` is empty.
+- Memory Activity retains conversation lineage: chat peeks filter to the current group,
+  while the member timeline aggregates groups and links each scoped row to its origin.
+  Unscoped historical rows keep their original meaning.
 - The Agent card (`agent-hover-card.tsx`) peeks from the avatars in a message
   stream only; conversation and profile headers show a plain avatar. Its
   Recent activity goes only to the viewers who get the panel's Activity tab

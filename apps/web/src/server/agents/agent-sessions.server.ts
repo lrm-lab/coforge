@@ -21,6 +21,7 @@ export interface AgentSessionRepository {
         workspaceId: string;
         computerId?: string;
         provider: string;
+        memoryAgent?: boolean;
         reference: RuntimeSessionReference | null;
       }
     | undefined
@@ -64,6 +65,8 @@ export class AgentSessions {
       agent.provider !== intent.provider
     )
       throw new Error("Agent session start scope is not authorized");
+    const { memoryAgent: _requestedMemoryIdentity, ...unscopedIntent } = intent;
+    intent = { ...unscopedIntent, ...(agent.memoryAgent ? { memoryAgent: true } : {}) };
     const daemonInstanceId = await this.currentDaemon(intent.workspaceId, intent.computerId);
     if (!daemonInstanceId) throw new Error("Workspace daemon identity is unavailable");
     const old = agent.reference;

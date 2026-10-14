@@ -160,6 +160,7 @@ export type AgentRecoveryContext = {
     } & LatestSenderFields
   >;
   unreadSummary: Readonly<Record<string, number>>;
+  unreadConversationIds?: Readonly<Record<string, string>>;
 };
 
 export type PendingAgentDelivery = AgentRecoveryContext["resumeMessages"][number] & {
@@ -1739,6 +1740,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       ORDER BY "globalRank"`;
     const resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[] = [];
     const unreadSummary: Record<string, number> = {};
+    const unreadConversationIds: Record<string, string> = {};
     // The raw statement cannot join the mention rows, so translate embedded tokens in a second
     // pass; Agents only ever read plain `@handle` text.
     const mentionRows = rows.length
@@ -1764,6 +1766,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         row.threadRootId,
       );
       unreadSummary[target] ??= row.unreadCount;
+      unreadConversationIds[target] = row.conversationId;
       if (row.globalRank > AGENT_RECOVERY_MESSAGE_LIMIT) continue;
       if (!row.deliveryId) throw new Error(`Unread Agent message has no delivery: ${row.id}`);
       // The author, read from the message in every conversation kind. A DM's other member is its
@@ -1798,7 +1801,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
       });
     }
-    return { resumeMessages, unreadSummary };
+    return {
+      resumeMessages,
+      unreadSummary,
+      ...(Object.keys(unreadConversationIds).length ? { unreadConversationIds } : {}),
+    };
   }
 
   /**

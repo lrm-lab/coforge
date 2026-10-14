@@ -294,7 +294,12 @@ export function presentActivity(observation: ActivityObservation): ActivityRow[]
   return activityAtoms(observation).flatMap((atom) => (atom.row ? [atom.row] : []));
 }
 
-export type PresentedActivityRow = ActivityRow & { observedAtMs: number; key: string };
+export type PresentedActivityRow = ActivityRow & {
+  observedAtMs: number;
+  key: string;
+  conversationId?: string | null;
+  conversationTarget?: string | null;
+};
 
 /**
  * `presentActivity` per activity frame, plus one merge: consecutive text (or thinking)
@@ -311,7 +316,11 @@ export function presentActivityRows(activity: readonly ActivityEntry[]): Present
   const chronological = [...activity].reverse().flatMap((entry) =>
     activityAtoms(entry).map((atom, itemIndex) => ({
       row: atom.row,
-      mergeGroup: atom.mergeGroup ? `${entry.launchId}:${atom.mergeGroup}` : undefined,
+      conversationId: entry.conversationId,
+      conversationTarget: entry.conversationTarget,
+      mergeGroup: atom.mergeGroup
+        ? `${entry.launchId}:${entry.conversationId ?? ""}:${atom.mergeGroup}`
+        : undefined,
       observedAtMs: entry.observedAtMs,
       key: `${entry.launchId}:${entry.clientSeq}:${itemIndex}`,
     })),
@@ -329,7 +338,13 @@ export function presentActivityRows(activity: readonly ActivityEntry[]): Present
         currentLabel: atom.row?.currentLabel ?? last.currentLabel,
       };
     } else if (atom.row) {
-      merged.push({ ...atom.row, observedAtMs: atom.observedAtMs, key: atom.key });
+      merged.push({
+        ...atom.row,
+        observedAtMs: atom.observedAtMs,
+        key: atom.key,
+        conversationId: atom.conversationId,
+        conversationTarget: atom.conversationTarget,
+      });
     }
     openGroup = atom.mergeGroup;
   }

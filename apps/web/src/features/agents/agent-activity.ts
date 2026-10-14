@@ -11,6 +11,8 @@ import { AGENT_VISIBILITY } from "./agent-visibility";
 
 export type ActivityEntry = {
   id?: string;
+  conversationId?: string | null;
+  conversationTarget?: string | null;
   launchId: string;
   clientSeq: number;
   activityKind?: AgentActivityKind;
@@ -102,6 +104,8 @@ export function decodeActivityObservation(
     return {
       agentId: event.agentId,
       entry: {
+        conversationId: event.conversationId,
+        conversationTarget: event.conversationTarget,
         launchId: event.launchId,
         clientSeq: event.clientSeq,
         activityKind: event.activityKind,
@@ -173,4 +177,14 @@ export function latestActivityError<T extends ActivityEntry>(activity: T[]) {
       entry.observedAtMs >= outcome.observedAtMs,
   );
   return recovered ? undefined : outcome;
+}
+
+/** Ordinary Agents and old observations have no group lineage. Scoped Memory history is
+ * filtered in chat; member history remains the aggregate, including old unscoped rows. */
+export function activityInConversation(
+  entries: ActivityEntry[],
+  conversationId?: string,
+): ActivityEntry[] {
+  if (!conversationId || !entries.some((entry) => entry.conversationId)) return entries;
+  return entries.filter((entry) => entry.conversationId === conversationId);
 }

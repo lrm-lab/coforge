@@ -30,7 +30,7 @@ import { errorType } from "#src/server/errors/error-type.server";
  * `recover()`'s) structurally satisfies this too. */
 type AgentRecoveryFields = Pick<
   AgentStartIntent,
-  "wakeMessage" | "resumeMessages" | "unreadSummary"
+  "wakeMessage" | "resumeMessages" | "unreadSummary" | "unreadConversationIds"
 >;
 /** Reads the surfaced-while-stopped recovery context for a user-initiated Start; the
  * same shape `WorkspaceAgentRecovery.recoverWorkspace` reads for Daemon-ready recovery. */
@@ -862,6 +862,7 @@ export class AgentControl {
             wakeMessage: recovery.wakeMessage,
             resumeMessages: recovery.resumeMessages,
             unreadSummary: recovery.unreadSummary,
+            unreadConversationIds: recovery.unreadConversationIds,
           }
         : {}),
       ...(resumePrompt !== undefined ? { resumePrompt } : {}),

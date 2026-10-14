@@ -1,5 +1,9 @@
 import { AgentStateMachine, type AgentStatus } from "./agent-state-machine";
-import type { AgentRuntimeConfig, AgentSession } from "@coforge/agent";
+import {
+  MemoryConversationSessions,
+  type ConversationSessionStore,
+} from "./memory-conversation-sessions";
+import type { AgentRuntimeConfig, AgentSession, AgentSessionOptions } from "@coforge/agent";
 import type { CodeAgentProviderFactory } from "#src/code-agent/contract";
 import { AgentProcessCleanupError } from "#src/code-agent/contract";
 import {
@@ -11,7 +15,7 @@ import { agentEnvironment } from "#src/code-agent/environment";
 import { resolveGitHookInjectionForLaunch } from "#src/code-agent/git-hooks";
 import { seedAgentMemory } from "./agent-memory-seed";
 import { isMemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
-import { evalDisablesHostPiInjection } from "@coforge/agent";
+import { isMemoryAgentRuntime, evalDisablesHostPiInjection } from "@coforge/agent";
 import { mkdir } from "node:fs/promises";
 
 export type { AgentStatus } from "./agent-state-machine";
@@ -59,6 +63,7 @@ export class AgentProcessManager {
   constructor(
     createProvider: CodeAgentProviderFactory,
     resolveGitHooks: typeof resolveGitHookInjectionForLaunch = resolveGitHookInjectionForLaunch,
+    private readonly conversationStore?: (agentId: string) => ConversationSessionStore,
   ) {
     this.#createProvider = createProvider;
     this.#resolveGitHooks = resolveGitHooks;
@@ -116,10 +121,12 @@ export class AgentProcessManager {
     );
     let session: AgentSession;
     try {
-      session = await this.#createProvider(config.provider).createAgentSession({
+      const provider = this.#createProvider(config.provider);
+      const options: AgentSessionOptions = {
         agentId,
         ...(runtimeId ? { runtimeId } : {}),
         agentWorkspaceDirectory,
+        ...(isMemoryAgentRuntime(config) ? { memoryControlSession: true } : {}),
         instructions: buildCoforgeAgentInstructions({
           agentWorkspaceDirectory,
           agentId,
@@ -132,7 +139,15 @@ export class AgentProcessManager {
         runtime: config,
         environment,
         gitHooks,
-      });
+      };
+      session = await provider.createAgentSession(options);
+      if (isMemoryAgentRuntime(config))
+        session = new MemoryConversationSessions({
+          primary: session,
+          options,
+          create: (options) => provider.createAgentSession(options),
+          store: this.conversationStore?.(agentId),
+        });
     } catch (error) {
       if (error instanceof AgentProcessCleanupError) this.#stopping.add(agentId);
       throw error;

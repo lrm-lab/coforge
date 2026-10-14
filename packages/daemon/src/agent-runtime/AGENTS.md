@@ -84,6 +84,9 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   `phase: "running"` so a later server Start rebinds instead of meeting a stale
   `"stopped"` record.
 
+- `memory-conversation-sessions.ts` owns Memory Agent conversation-scoped native sessions,
+  their shared workspace, admission serialization, and activity attribution.
+
 ## Session state and records
 
 - `agent-session.ts` owns current native Session snapshots, launch-scoped

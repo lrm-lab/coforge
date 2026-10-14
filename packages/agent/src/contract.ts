@@ -1,4 +1,4 @@
-import type { MemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
+import { isMemoryAgentToolProfile, type MemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
 import type {
   RuntimeProvider,
   ActivityTrajectoryEntry,
@@ -27,6 +27,7 @@ export type AgentRuntimeConfig = Readonly<{
   providerConfig?: AgentRuntimeProviderConfig;
   /** An explicitly fenced tool profile supplied by the versioned Agent start intent. */
   toolProfile?: MemoryAgentToolProfile;
+  memoryAgent?: boolean;
   envVars?: Readonly<Record<string, string>>;
 }>;
 /** Plan-usage window status (task #50): `limit_reached` once the window's ratio hits 1.0,
@@ -83,6 +84,9 @@ type AgentSessionCommonOptions = Readonly<{
   agentId?: string;
   runtimeId?: string;
   agentWorkspaceDirectory: string;
+  conversation?: AgentConversationScope;
+  /** Lifecycle-only Memory session; never consumes conversational work. */
+  memoryControlSession?: boolean;
   instructions: string;
   sessionId?: string;
   sessionMode?: "create" | "resume";
@@ -94,7 +98,8 @@ type AgentSessionCommonOptions = Readonly<{
   gitHooks?: AgentGitHookPlan;
 }>;
 export type AgentSessionOptions = AgentSessionCommonOptions;
-export type AgentRuntimeEvent =
+export type AgentConversationScope = Readonly<{ conversationId: string; target: string }>;
+export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope } & (
   | { type: "activity"; activity: AgentActivity }
   | { type: "usage"; snapshot: UsageSnapshot }
   // A provider-observed context-window reading, distinct from the plan-usage
@@ -158,15 +163,22 @@ export type AgentRuntimeEvent =
    * the provider does not retry on its own and does not know about ACK/attention state.
    * `deliveryIds` echoes the ones `notify` was given for this notice, unchanged, if any.
    */
-  | { type: "notice-undelivered"; text: string; deliveryIds?: readonly string[] };
+  | { type: "notice-undelivered"; text: string; deliveryIds?: readonly string[] }
+);
 /** What the daemon says about a notice beyond its text. `deliveryIds` names the tracked
  * deliveries the notice carries; a provider only echoes them on `notice-undelivered`. */
-export type AgentNoticeOptions = { deliveryIds?: readonly string[] };
+export type AgentNoticeOptions = {
+  deliveryIds?: readonly string[];
+  conversation?: AgentConversationScope;
+};
 export interface AgentSession {
   /** Provider-observed work, including pending admission and interruption.
    * Undefined means the adapter cannot determine it; never infer idle from silence. */
   readonly hasLiveTurn?: boolean;
   sendMessage(message: string): Promise<void>;
+  hasLiveTurnForConversation?(conversationId: string): boolean | undefined;
+  cancelPendingNotices?(): void;
+  purgeConversation?(conversationId: string): Promise<void>;
   readSessionIdentity?(): Promise<AgentSessionIdentity | undefined>;
   /**
    * Accept a notification in this session, including while work is in progress.
@@ -181,4 +193,9 @@ export interface AgentSession {
   interrupt(): Promise<void>;
   onExit(listener: () => void): () => void;
   dispose(): Promise<void>;
+}
+
+/** Workspace Memory identity and explicitly fenced eval Memory share conversation routing. */
+export function isMemoryAgentRuntime(config: AgentRuntimeConfig | undefined): boolean {
+  return config?.memoryAgent === true || isMemoryAgentToolProfile(config?.toolProfile);
 }

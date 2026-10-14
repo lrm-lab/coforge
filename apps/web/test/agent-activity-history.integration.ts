@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { PrismaAgentSessionRepository } from "#src/server/db/repositories/agent-session.repositories.server";
 import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
 
 function testDatabase() {
@@ -182,6 +183,79 @@ test("compact activity history reads the five newest rows, finished frames inclu
     await db.workspace.deleteMany({ where: { id: workspace.id } });
     await db.computer.deleteMany({ where: { ownerId: member.id } });
     await db.user.deleteMany({ where: { id: member.id } });
+    await db.$disconnect();
+  }
+});
+
+test("one member aggregates persisted activity from independent conversations", async () => {
+  const db = testDatabase();
+  const fixture = crypto.randomUUID();
+  const owner = await db.user.create({ data: { username: `memory-activity-${fixture}` } });
+  const workspace = await db.workspace.create({
+    data: {
+      slug: `memory-activity-${fixture}`,
+      name: "Memory activity",
+      members: { create: { userId: owner.id } },
+    },
+  });
+  const computer = await db.computer.create({ data: { ownerId: owner.id, machineId: fixture } });
+  try {
+    const agent = await db.agent.create({
+      data: {
+        workspaceId: workspace.id,
+        ownerId: owner.id,
+        computerId: computer.id,
+        name: "memory",
+        displayName: "Memory",
+        runtimeConfig: {
+          runtime: "coforge",
+          provider: { kind: "default" },
+          model: "test",
+          modelProvider: "test",
+          reasoning: "",
+        },
+      },
+    });
+    await db.workspaceMemoryAgent.create({
+      data: { workspaceId: workspace.id, agentId: agent.id },
+    });
+    expect((await new PrismaAgentSessionRepository(db).read(agent.id))?.memoryAgent).toBe(true);
+    const groupA = crypto.randomUUID();
+    const groupB = crypto.randomUUID();
+    const repository = new AgentActivityRepository(db);
+    for (const [clientSeq, conversationId, conversationTarget] of [
+      [1, groupA, "#alpha"],
+      [2, groupB, "#beta"],
+    ] as const) {
+      await repository.record({
+        protocolMajor: 1,
+        requestId: crypto.randomUUID(),
+        workspaceId: workspace.id,
+        agentId: agent.id,
+        computerId: computer.id,
+        launchId: fixture,
+        clientSeq,
+        conversationId,
+        conversationTarget,
+        detailKind: "message_received",
+        level: "info",
+        detail: "Message received",
+        observedAtMs: Date.now(),
+      });
+    }
+    expect(
+      (await repository.list(workspace.id, agent.id)).map((r) => r.conversationId).sort(),
+    ).toEqual([groupA, groupB].sort());
+    const members = await repository.listForMember(workspace.id, owner.id);
+    expect(members).toHaveLength(1);
+    expect(members[0]!.activity.map((r) => r.conversationTarget).sort()).toEqual([
+      "#alpha",
+      "#beta",
+    ]);
+  } finally {
+    await db.workspace.delete({ where: { id: workspace.id } });
+    await db.computer.delete({ where: { id: computer.id } });
+    await db.user.delete({ where: { id: owner.id } });
     await db.$disconnect();
   }
 });

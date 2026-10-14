@@ -9,6 +9,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import type { AgentNoticeOptions } from "@coforge/agent";
 import { captureDaemonLogs } from "./log-capture";
 
 const stateDirectories: string[] = [];
@@ -1617,4 +1618,42 @@ test("a persisted cursor of another conversation is reset, and one without a con
   expect(notices).toHaveLength(2);
   expect(index.modelSeenSequence("agent-1", "#general")).toBe(0);
   expect(index.modelSeenSequence("agent-1", "#legacy")).toBe(0);
+});
+
+test("Memory coalesced delivery separates conversations while preserving thread grouping", async () => {
+  const notices: { text: string; options?: AgentNoticeOptions }[] = [];
+  const native = {
+    ...session(),
+    notify: async (text: string, options?: AgentNoticeOptions) => {
+      notices.push({ text, options });
+    },
+  };
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    {
+      session: () => native,
+      runtime: () => ({
+        config: {
+          toolProfile: "openviking-memory",
+          provider: "coforge",
+          model: "test",
+          reasoning: "",
+        },
+        session: native,
+      }),
+    },
+    async () => {},
+  );
+  await index.flush("agent-1", [
+    { ...delivery("a", "human", "alice"), conversationId: "group-a", target: "#alpha" },
+    { ...delivery("b", "human", "bob"), conversationId: "group-b", target: "#beta" },
+    { ...delivery("thread", "human", "alice"), conversationId: "group-a", target: "#alpha:root" },
+  ]);
+  expect(notices).toHaveLength(2);
+  const alpha = notices.find((n) => n.options?.conversation?.conversationId === "group-a")!;
+  const beta = notices.find((n) => n.options?.conversation?.conversationId === "group-b")!;
+  expect(alpha.text).toContain("#alpha");
+  expect(alpha.text).not.toContain("#beta");
+  expect(beta.text).toContain("#beta");
+  expect(beta.text).not.toContain("#alpha");
 });

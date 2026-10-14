@@ -14,7 +14,11 @@ import {
   listVisiblePrivateAgentIds,
 } from "./agents.functions";
 import { useAgentStatuses, type AgentStatusView } from "./agent-status-realtime";
-import type { ActivityEntry } from "./agent-activity";
+import {
+  activityInConversation,
+  RECENT_ACTIVITY_LIMIT,
+  type ActivityEntry,
+} from "./agent-activity";
 import { AGENT_VISIBILITY, type AgentVisibility } from "./agent-visibility";
 import {
   agentActivityFeedQuery,
@@ -282,13 +286,20 @@ export function useLiveAgentDisplay(agentId: string): AgentDisplaySnapshot | und
 }
 
 /** One Agent's recent activity (≤5, newest first), for the Agent card. */
-export function useAgentRecentActivity(agentId: string): ActivityEntry[] {
+export function useAgentRecentActivity(agentId: string, conversationId?: string): ActivityEntry[] {
   const workspaceId = useContext(WorkspaceIdContext);
   const query = useQuery({
     ...workspaceActivityQuery(workspaceId),
     select: (data) => data[agentId] ?? EMPTY_ACTIVITY,
+    enabled: !conversationId,
   });
-  return query.data ?? EMPTY_ACTIVITY;
+  const scoped = useQuery({
+    ...agentActivityFeedQuery(agentId),
+    enabled: Boolean(conversationId),
+    select: (entries) =>
+      activityInConversation(entries, conversationId).slice(0, RECENT_ACTIVITY_LIMIT),
+  });
+  return (conversationId ? scoped.data : query.data) ?? EMPTY_ACTIVITY;
 }
 
 /** The profile panel's Activity tab feed, kept live by the shared subscription. */

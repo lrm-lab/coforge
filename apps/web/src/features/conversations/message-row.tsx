@@ -549,6 +549,7 @@ function MessageAgentAvatar({
  */
 export const MessageRow = memo(function MessageRow({
   message,
+  conversationId,
   showsTask = false,
   own,
   dayChanged,
@@ -570,6 +571,7 @@ export const MessageRow = memo(function MessageRow({
   onQuoteSelection,
 }: {
   message: MessageView;
+  conversationId?: string;
   own: boolean;
   dayChanged: boolean;
   grouped: boolean;
@@ -908,6 +910,7 @@ export const MessageRow = memo(function MessageRow({
           ) : openableAgentId && onOpenAgentProfile ? (
             <AgentHoverCard
               agentId={openableAgentId}
+              conversationId={conversationId}
               name={message.senderName}
               handle={message.senderHandle}
               src={message.senderAvatarUrl}

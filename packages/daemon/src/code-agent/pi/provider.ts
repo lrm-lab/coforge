@@ -68,6 +68,8 @@ export class PiProvider implements CodeAgentProvider {
       environment,
       sessionKind: "pi",
       toolProfile: runtime?.toolProfile,
+      conversation: options.conversation,
+      memoryControlSession: options.memoryControlSession,
     }).catch((error: unknown) => {
       throw typedLaunchError(error, runtime?.model);
     });
@@ -129,6 +131,8 @@ export class CoforgeProvider implements CodeAgentProvider {
       instructions: options.instructions,
       environment,
       toolProfile: runtime.toolProfile,
+      conversation: options.conversation,
+      memoryControlSession: options.memoryControlSession,
       memoryOfferOnly: evalMemoryOfferOnly(),
     }).catch((error: unknown) => {
       throw typedLaunchError(error, runtime.model);
