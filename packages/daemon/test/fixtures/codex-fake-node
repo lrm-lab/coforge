@@ -1,0 +1,26 @@
+#!/bin/sh
+# Test fixture: stands in for the interpreter an npm launcher requires. The name exists only
+# inside a test home — an ambient PATH never carries it, which is what makes the
+# probe-environment regression flip red/green:
+#   old build (probe spawns with the raw daemon env): `env codex-fake-node` fails -> no runtime.
+#   new build (probe spawns with the discovery env):  found via the augmented PATH -> runtime.
+# Dependency-free on purpose: the probe PATH reaches only CLI bin dirs plus the fixture, so no
+# sed/grep/cut — pure shell parameter expansion.
+set -u
+for arg in "$@"; do
+  if [ "$arg" = "--version" ]; then
+    echo "codex 0.0-seam"
+    exit 0
+  fi
+done
+while IFS= read -r line; do
+  case "$line" in
+    *'"initialize"'*)
+      rest=${line#*'"id"'}
+      rest=${rest#:}
+      rest=${rest#'"'}
+      id=${rest%%'"'*}
+      printf '{"id":"%s"}\n' "$id"
+      ;;
+  esac
+done
