@@ -65,7 +65,10 @@ export function ChannelHeaderFaces({
         >
           {shown.map((entry) => (
             <Tooltip key={entry.key} title={entry.displayName}>
-              <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
+              <TooltipTrigger
+                className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
+                onPress={onOpenMembers}
+              >
                 <Avatar
                   size="xs"
                   alt=""
@@ -80,7 +83,10 @@ export function ChannelHeaderFaces({
           ))}
           {more > 0 && (
             <Tooltip title={m.channel_settings_members_more({ count: more })}>
-              <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
+              <TooltipTrigger
+                className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
+                onPress={onOpenMembers}
+              >
                 <Avatar
                   size="xs"
                   alt=""
