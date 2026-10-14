@@ -9,10 +9,10 @@ if RESUME_RUN:
 else:
  STAMP=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ');PREFIX='evoswe-gemma-docker-p20-'+STAMP;RUN=ROOT/STAMP;RUN.mkdir();MANIFEST=RUN/'manifest.jsonl';shutil.copy2(SOURCE,MANIFEST)
 ROWS=[json.loads(l) for l in MANIFEST.read_text().splitlines() if l.strip()];assert len(ROWS)==20
-ENV=os.environ.copy();key=json.loads((Path.home()/'.pi/agent/models.json').read_text())['providers']['lenovo_gateway']['apiKey'];assert key;ENV.update(DEV_MEMORY_API_KEY=key,LENOVO_GATEWAY_API_KEY=key,NO_PROXY='localhost,127.0.0.1',no_proxy='localhost,127.0.0.1',HTTP_PROXY='http://127.0.0.1:7893',HTTPS_PROXY='http://127.0.0.1:7893',http_proxy='http://127.0.0.1:7893',https_proxy='http://127.0.0.1:7893');ca=Path.home()/'.pi/lenovo-ca-bundle.pem'
+ENV=os.environ.copy();key=json.loads((Path.home()/'.pi/agent/models.json').read_text())['providers']['lenovo-gemma']['apiKey'];assert key;ENV.pop('DEV_MEMORY_API_KEY',None);ENV.update(LENOVO_GATEWAY_API_KEY=key,COFORGE_LLM_POOL_URL=os.environ.get('COFORGE_LLM_POOL_URL','http://127.0.0.1:18740'),NO_PROXY='localhost,127.0.0.1',no_proxy='localhost,127.0.0.1',HTTP_PROXY='http://127.0.0.1:7893',HTTPS_PROXY='http://127.0.0.1:7893',http_proxy='http://127.0.0.1:7893',https_proxy='http://127.0.0.1:7893');ca=Path.home()/'.pi/lenovo-ca-bundle.pem'
 if ca.exists():ENV['SSL_CERT_FILE']=str(ca)
-LOCK=threading.RLock();LAUNCH=threading.Lock();JOBS={j['index']:j for j in json.loads((RUN/'jobs.json').read_text())} if RESUME_RUN else {};MODEL='GLM-5.3-Flash';MATERIAL=FORK/'benchmark/causal_memory/aig0045_real_material.py';SMOKE=FORK/'benchmark/causal_memory/aig0045_verdict_smoke.py';OPENER=urllib.request.build_opener(urllib.request.ProxyHandler({}));RESULTS=REPO/'benchmark/evolbench-collab/result'
-CONFIG=json.loads((RUN/'config.json' if RESUME_RUN else OPS/'config-template.json').read_text());CONFIG.update(prefix=PREFIX,stamp=STAMP,lane_policy='Independent Gemma pool (20: Gateway4,new1=8,new2=8) -> postprocessing pool (20), immediate enqueue',gemma_workers=20,postprocessing_workers=20,scheduler_revision='docker-p20-v3-idlefix',lanes=20,endpoint_episode_capacities={'lenovo-gemma':4,'gemma-4-31b-it-2gpu-1':8,'gemma-4-31b-it-2gpu-2':8},task_agent_location='per-task Docker',memory_agent_location='host',manifest_sha256=hashlib.sha256(MANIFEST.read_bytes()).hexdigest());CONFIG['source_hashes'].update({name:'' for name in ['benchmark/causal_memory/model_usage.py','benchmark/causal_memory/lenovo_gemma_provider.py']});CONFIG['source_hashes']={name:hashlib.sha256((FORK/name).read_bytes()).hexdigest() for name in CONFIG['source_hashes']};(RUN/'config.json').write_text(json.dumps(CONFIG,indent=2)+'\n');(ROOT/'latest.txt').write_text(str(RUN)+'\n')
+LOCK=threading.RLock();LAUNCH=threading.Lock();JOBS={j['index']:j for j in json.loads((RUN/'jobs.json').read_text())} if RESUME_RUN else {};MODEL='gemma-4-31B-it';MATERIAL=FORK/'benchmark/causal_memory/aig0045_real_material.py';SMOKE=FORK/'benchmark/causal_memory/aig0045_verdict_smoke.py';OPENER=urllib.request.build_opener(urllib.request.ProxyHandler({}));RESULTS=REPO/'benchmark/evolbench-collab/result'
+CONFIG=json.loads((RUN/'config.json' if RESUME_RUN else OPS/'config-template.json').read_text());CONFIG.update(prefix=PREFIX,stamp=STAMP,lane_policy='One shared 20-worker stage pool and 20-request Gemma pool (Gateway4,new1=8,new2=8), immediate enqueue',gemma_workers=20,postprocessing_workers=20,shared_workers=20,shared_llm_request_limit=20,llm_pool_url=ENV['COFORGE_LLM_POOL_URL'],scheduler_revision='docker-shared20-v4',lanes=20,endpoint_episode_capacities={'lenovo-gemma':4,'gemma-4-31b-it-2gpu-1':8,'gemma-4-31b-it-2gpu-2':8},task_agent_location='per-task Docker',memory_agent_location='host',manifest_sha256=hashlib.sha256(MANIFEST.read_bytes()).hexdigest());CONFIG['source_hashes'].update({name:'' for name in ['benchmark/causal_memory/model_usage.py','benchmark/causal_memory/lenovo_gemma_provider.py']});CONFIG['source_hashes']={name:hashlib.sha256((FORK/name).read_bytes()).hexdigest() for name in CONFIG['source_hashes']};(RUN/'config.json').write_text(json.dumps(CONFIG,indent=2)+'\n');(ROOT/'latest.txt').write_text(str(RUN)+'\n')
 
 def emit(event,**data):
  out={'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'event':event,**data}
@@ -28,7 +28,7 @@ def update(index,**fields):
 def checked(index,stage,args,case,timeout):
  update(index,phase=stage);emit('stage_started',index=index,stage=stage)
  with (case/(stage+'.log')).open('ab') as log:
-  p=subprocess.Popen([str(x) for x in args],cwd=FORK,env=ENV,stdout=log,stderr=subprocess.STDOUT)
+  p=subprocess.Popen([str(x) for x in args],cwd=FORK,env={**ENV,'COFORGE_EVAL_LLM_CLIENT':stage+':m%02d'%index},stdout=log,stderr=subprocess.STDOUT)
   update(index,stage_pid=p.pid,stage_process_identity=process_identity(p.pid))
   try:rc=p.wait(timeout=timeout)
   except subprocess.TimeoutExpired:
@@ -80,21 +80,21 @@ def post_case(index,adopt):
   if adopt:
    job=JOBS[index];pid=job['stage_pid'];identity=job.get('stage_process_identity');current=proc_identity(pid)
    if current is not None and (not identity or current!=identity):raise RuntimeError('adopted_process_identity_mismatch')
-   emit('glm_adopted',index=index,pid=pid,process_alive=current is not None)
-   deadline=job['glm_started_epoch']+9000
+   emit('gemma_roles_adopted',index=index,pid=pid,process_alive=current is not None)
+   deadline=job['four_roles_started_epoch']+9000
    while current is not None and proc_identity(pid)==identity:
     if time.time()>deadline:
-     stop_owned_process(pid,identity);raise RuntimeError('adopted_glm_four_roles_timeout')
+     stop_owned_process(pid,identity);raise RuntimeError('adopted_gemma_four_roles_timeout')
     time.sleep(2)
-   if not (case/'four-roles.json').exists():raise RuntimeError('adopted_glm_exited_without_report')
-   emit('stage_completed',index=index,stage='glm_four_roles',adopted=True)
+   if not (case/'four-roles.json').exists():raise RuntimeError('adopted_gemma_exited_without_report')
+   emit('stage_completed',index=index,stage='gemma_four_roles',adopted=True)
   else:
    attempt=json.loads((case/'attempts.jsonl').read_text().splitlines()[0])
    verify(index,attempt,case)
    checked(index,'export_ao',[PYTHON,MATERIAL,'export','--attempts',case/'attempts.jsonl','--manifest',MANIFEST,'--verdicts',case/'verdicts.jsonl','--sessions-out',case/'sessions'],case,timeout=180)
    verdict=json.loads((case/'verdicts.jsonl').read_text().splitlines()[0]);assert verdict.get('session_id'),'AO session join missing'
-   update(index,session_id=verdict['session_id'],glm_started_epoch=time.time())
-   checked(index,'glm_four_roles',[PYTHON,SMOKE,'--material','real','--verdicts',case/'verdicts.jsonl','--sessions',case/'sessions','--builder','gemma','--critic','gemma','--refiner','gemma','--reader','gemma','--model',MODEL,'--jobs','1','--attempts','3','--max-calls','128','--max-seconds','1800','--out',case/'four-roles.json','--work-root',case/'four-roles-work'],case,timeout=9000)
+   update(index,session_id=verdict['session_id'],four_roles_started_epoch=time.time())
+   checked(index,'gemma_four_roles',[PYTHON,SMOKE,'--material','real','--verdicts',case/'verdicts.jsonl','--sessions',case/'sessions','--builder','gemma','--critic','gemma','--refiner','gemma','--reader','gemma','--model',MODEL,'--url',ENV['COFORGE_LLM_POOL_URL']+'/llm/v1/chat/completions','--jobs','1','--attempts','3','--max-calls','128','--max-seconds','1800','--out',case/'four-roles.json','--work-root',case/'four-roles-work'],case,timeout=9000)
   report=json.loads((case/'four-roles.json').read_text());materials=report.get('materials') or [];assert len(materials)==1,'expected one joined material';r=materials[0]
   update(index,phase='done',finished_epoch=time.time(),aig_submit=r.get('submit'),aig_mode=r.get('mode'),aig_phi=r.get('phi_violations_after_refine'),aig_reader_ok=r.get('reader_schema_ok'),aig_fallback=r.get('fallback_reason'));emit('case_completed',index=index,submit=r.get('submit'),reader_ok=r.get('reader_schema_ok'),fallback=r.get('fallback_reason'))
  except Exception as exc:
@@ -158,19 +158,21 @@ def monitor():
   snap={'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'phase_counts':dict(counts),'jobs':jobs,'live_round_counts':details}
   (RUN/'latest-status.json').write_text(json.dumps(snap,ensure_ascii=False,indent=2)+'\n')
   with (RUN/'snapshots.jsonl').open('a') as f:f.write(json.dumps(snap,ensure_ascii=False)+'\n')
-  emit('progress',phase_counts=dict(counts),gemma_active=counts.get('gemma_group_chat',0),glm_active=counts.get('glm_four_roles',0),finished=counts.get('done',0)+counts.get('failed',0))
+  emit('progress',phase_counts=dict(counts),gemma_active=counts.get('gemma_group_chat',0),four_roles_active=counts.get('gemma_four_roles',0),finished=counts.get('done',0)+counts.get('failed',0))
   stop_monitor.wait(30)
 
 if __name__=='__main__':
- emit('batch_started',prefix=PREFIX,episodes=20,revision='docker-p20-v2',gemma_workers=20,postprocessing_workers=20,adopted_cases=sorted(JOBS))
+ with OPENER.open(ENV['COFORGE_LLM_POOL_URL']+'/status',timeout=5) as response:assert json.load(response)['limit']==20,'shared_llm_pool_must_have_20_slots'
+ emit('batch_started',prefix=PREFIX,episodes=20,revision='docker-shared20-v4',shared_workers=20,shared_llm_request_limit=20,adopted_cases=sorted(JOBS))
  POST=concurrent.futures.ThreadPoolExecutor(max_workers=20)
  for index,j in sorted(JOBS.items()):
-  if j['phase']=='glm_four_roles':POST.submit(post_case,index,True)
+  if j['phase']=='gemma_four_roles':POST.submit(post_case,index,True)
   elif j['phase'] in ['verify','export_ao','postprocessing_queued']:POST.submit(post_case,index,False)
   elif j['phase'] not in ['done','failed','retry_pending']:raise RuntimeError('unsupported_resume_phase')
  watch=threading.Thread(target=monitor,daemon=True);watch.start()
  pending=[i for i in range(20) if i not in JOBS or JOBS[i]['phase']=='retry_pending']
- with concurrent.futures.ThreadPoolExecutor(max_workers=20) as pool:list(pool.map(run_case,pending))
+ futures=[POST.submit(run_case,index) for index in pending]
+ for future in futures:future.result()
  POST.shutdown(wait=True)
  stop_monitor.set();watch.join();attempts=[];verdicts=[];roles=[]
  for index in range(20):

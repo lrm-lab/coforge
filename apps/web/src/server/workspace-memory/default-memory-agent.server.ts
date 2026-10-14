@@ -168,10 +168,7 @@ async function ownerComputerLinks(db: MemoryDb, workspaceId: string, ownerId: st
   }));
 }
 
-export async function liveMemoryAgentId(
-  db: MemoryDb,
-  workspaceId: string,
-): Promise<string | null> {
+export async function liveMemoryAgentId(db: MemoryDb, workspaceId: string): Promise<string | null> {
   const link = await db.workspaceMemoryAgent.findUnique({
     where: { workspaceId },
     select: { agentId: true, agent: { select: { deletedAt: true } } },
@@ -279,7 +276,11 @@ function cursorOf(row: {
   if (row.activationCursorKind === "time" && row.activationOccurredAt) {
     return { kind: "time", occurredAt: row.activationOccurredAt.toISOString() };
   }
-  if (row.activationCursorKind === "message" && row.activationOccurredAt && row.activationMessageId) {
+  if (
+    row.activationCursorKind === "message" &&
+    row.activationOccurredAt &&
+    row.activationMessageId
+  ) {
     return {
       kind: "message",
       occurredAt: row.activationOccurredAt.toISOString(),

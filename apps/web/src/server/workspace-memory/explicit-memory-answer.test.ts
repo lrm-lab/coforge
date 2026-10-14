@@ -62,7 +62,10 @@ test("FIFO binding answers the oldest unanswered question under a backlog", () =
   // Orphan offers (before every question, or duplicate within one gap) answer nothing.
   expect(fifoOldestUnansweredQuestion([q1, q2], [t("2026-09-23T02:30:00.000Z")])?.id).toBe("q1");
   expect(
-    fifoOldestUnansweredQuestion([q1, q2], [t("2026-09-23T02:40:10.000Z"), t("2026-09-23T02:40:20.000Z")])?.id,
+    fifoOldestUnansweredQuestion(
+      [q1, q2],
+      [t("2026-09-23T02:40:10.000Z"), t("2026-09-23T02:40:20.000Z")],
+    )?.id,
   ).toBe("q2");
 
   // Everything answered: no target.

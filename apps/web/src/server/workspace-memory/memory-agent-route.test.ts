@@ -319,7 +319,12 @@ test("an offer replay with the same operationId skips the per-trigger budget", a
     workspaceId: "ws-a",
     agentId: "mem-1",
     triggerMessageId: "msg-1",
-    command: { protocol: OPENVIKING_AGENT_PROTOCOL, op: "find", operationId: "find-r", query: "deploy" },
+    command: {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "find",
+      operationId: "find-r",
+      query: "deploy",
+    },
   });
   const offerCommand = {
     protocol: OPENVIKING_AGENT_PROTOCOL,

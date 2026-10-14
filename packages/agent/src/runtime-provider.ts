@@ -33,7 +33,14 @@ export function runtimeFetch(
 ): typeof fetch {
   const ca = extraCertificateAuthorities(environment.NODE_EXTRA_CA_CERTS, host.NODE_EXTRA_CA_CERTS);
   const request = (input: Request | string | URL, init?: RequestInit) => {
-    const target = new URL(input instanceof Request ? input.url : input);
+    const original = new URL(input instanceof Request ? input.url : input);
+    const pooled =
+      environment.COFORGE_LLM_POOL_URL &&
+      original.hostname === "modelfactory.lenovo.com" &&
+      original.pathname.endsWith("/chat/completions");
+    const target = pooled
+      ? new URL("/llm/v1/chat/completions", environment.COFORGE_LLM_POOL_URL)
+      : original;
     const port = target.port || (target.protocol === "https:" ? "443" : "80");
     const bypass = (environment.no_proxy || environment.NO_PROXY || "")
       .toLowerCase()
@@ -56,7 +63,17 @@ export function runtimeFetch(
         environment.all_proxy ||
         environment.ALL_PROXY ||
         "";
-    return fetch(input, { ...init, proxy, ...(ca ? { tls: { ca } } : {}) });
+    const routed = pooled
+      ? input instanceof Request
+        ? new Request(target.href, input)
+        : target
+      : input;
+    const headers = new Headers(
+      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+    );
+    if (pooled)
+      headers.set("X-Coforge-LLM-Client", environment.COFORGE_EVAL_LLM_CLIENT || "group_chat");
+    return fetch(routed, { ...init, headers, proxy, ...(ca ? { tls: { ca } } : {}) });
   };
   // Bun's optional optimization must not open a direct connection around this proxy.
   return Object.assign(request, { preconnect: () => {} });

@@ -64,9 +64,7 @@ export function profileForNewMemoryAgent(
     { type: "select_desired", desired: "openviking", at: now },
     gate,
   );
-  return applied.ok
-    ? applied.profile
-    : { ...current, sanitizedFailure: applied.failure };
+  return applied.ok ? applied.profile : { ...current, sanitizedFailure: applied.failure };
 }
 
 /**

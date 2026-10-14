@@ -18,3 +18,8 @@ bun run pack:check
 Installing it provides the `coforge-agent` executable. The runner finishes Pi
 resource discovery, including `.agents/skills` from its working directory and
 ancestors, before accepting JSONL commands on stdin.
+
+Local evaluation can set `COFORGE_LLM_POOL_URL` to route Lenovo model requests
+through the shared Gemma request pool. Session authentication is preserved and
+`COFORGE_EVAL_LLM_CLIENT` labels credential-free request auditing. The evaluation
+Docker Task relay uses the same pool; see the SWE Gemma ops README.

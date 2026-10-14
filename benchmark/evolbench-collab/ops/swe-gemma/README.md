@@ -5,10 +5,13 @@ local SWE evaluation. It is evaluation infrastructure, not a shipped Daemon adap
 The existing AgentSession provider runs inside each task's official SWE image;
 Memory stays on the host. No Pi or Daemon download is needed inside the image.
 
-Gemma uses 20 episode slots: `lenovo-gemma` 4, and the two
-`gemma-4-31b-it-2gpu-{1,2}` providers 8 each. Finished trajectories immediately
-enter a separate 20-worker verifier → AO export → GLM four-role pool. These are
-episode capacities, not HTTP request semaphores; Memory and Task may overlap.
+Task, Memory, Builder, Critic, Refiner and Reader all use Gemma and share one
+20-request HTTP pool: `lenovo-gemma` 4 and the two dedicated providers 8 each.
+The controller also shares one 20-worker stage executor. A finished group chat
+queues four roles immediately; every model request still takes a shared lease.
+Transient transport failures retry internally with exponential backoff and jitter,
+releasing the lease between attempts. Responses are buffered to completion before
+agents receive them. Permanent failures and exhausted retries remain explicit.
 
 ## Prepare
 
@@ -24,6 +27,7 @@ export SSL_CERT_FILE="$NODE_EXTRA_CA_CERTS"
 export COFORGE_EVAL_OPENVIKING_ROOT=/path/to/openviking-checkout
 export COFORGE_EVAL_RUN_ROOT=/tmp/coforge-swe-gemma-p20
 export COFORGE_EVAL_MANIFEST=/path/to/manifest-docker.jsonl
+export COFORGE_LLM_POOL_URL=http://127.0.0.1:18740
 mise exec -- bun benchmark/evolbench-collab/ops/swe-gemma/runtime/build-runtime.ts
 mise exec -- bun benchmark/evolbench-collab/ops/swe-gemma/runtime/preflight-delayed.ts
 ```
@@ -43,6 +47,9 @@ slow model requests. Model/episode deadlines still apply.
 ## Run and inspect
 
 ```bash
+# Start the shared pool first, in a separate supervised process:
+/usr/bin/python3 benchmark/evolbench-collab/ops/swe-gemma/llm_pool.py --directory /tmp/gemma-pool --port 18740
+# Then launch the full pipeline:
 /usr/bin/python3 benchmark/evolbench-collab/ops/swe-gemma/pipeline.py
 # After verifying the first real trajectory and its container runtime:
 touch "$(cat "$COFORGE_EVAL_RUN_ROOT/latest.txt")/allow-full-pool"
@@ -55,7 +62,7 @@ and a detached session. `latest.txt` points to a run directory containing
 verdicts, AO sessions, and four-role reports. `config-template.json` supplies
 budgets, and the controller records current OpenViking source hashes.
 
-`COFORGE_EVAL_RESUME_RUN` reuses a run directory and adopts existing GLM processes.
+`COFORGE_EVAL_RESUME_RUN` reuses a run directory and adopts existing Gemma role processes.
 It is for controlled recovery: stop the previous controller first, preserve old
 trajectory evidence, and mark interrupted jobs `retry_pending` with a new
 `runtime_retry` number. Do not run two controllers for one directory.
@@ -78,3 +85,19 @@ Docker stats may omit exec workers, so verify their PID namespaces as well.
 
 See [local Gemma evaluation guide](../../../../docs/local-gemma-evaluation.md)
 for service application/restart and this machine's operating procedure.
+
+## Replay saved trajectories only
+
+```bash
+python3 benchmark/evolbench-collab/ops/swe-gemma/replay_four_roles.py \
+  --source /path/to/completed-group-chat-run \
+  --root /tmp/gemma-four-role-replay \
+  --openviking /path/to/openviking-main \
+  --python /path/to/openviking-venv/bin/python \
+  --pool-url http://127.0.0.1:18740
+```
+
+Copies all 20 verdict/AO inputs and records SHA256 provenance; does not rerun
+group chats. Each case has three attempts and its own role/token logs. The pool's
+`requests.jsonl` records actual upstream attempts, selected service and reported
+usage; role ledgers record logical requests. Do not add both ledgers as costs.

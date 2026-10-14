@@ -1,6 +1,6 @@
 # EvoAgentBench 本地群聊评测说明
 
-维护日期：2026-10-14 07:14 UTC。本文随本轮运行、环境调整和验证结果更新；“待验证”不代表已生效。
+维护日期：2026-10-14 08:58 UTC。本文随本轮运行、环境调整和验证结果更新；“待验证”不代表已生效。
 
 ## 路径与服务
 
@@ -81,15 +81,15 @@ pi --provider gemma-4-31b-it-2gpu-1 --model gemma-4-31B-it \
 ## 调度、Agent 与隔离
 
 - 20 题来自 `manifests/evo-swe-pilot20.jsonl`。
-- Gemma 群聊独立 20 路池：旧 Lenovo gateway 4 路，两个专用 2GPU 服务各 8 路。容量按题目计；同题 Memory/Task 请求可能重叠，不是 HTTP 请求级信号量。
-- 完成的轨迹立即排入“验证 → AO 导出 → GLM-5.3-Flash 四角色”后台队列，独立最多 20 路，不占 Gemma 槽位。
+- 群聊 Task、Memory 与四角色全部用 `gemma-4-31B-it`，共用 HTTP 请求级 20 路池：旧 Lenovo gateway 4 路、两个专用 2GPU 服务各 8 路；Task/Memory 重叠也计入总量。
+- 完成轨迹立即排入“验证 → AO 导出 → Gemma 四角色”，与群聊使用同一个 20-worker 阶段执行器；实际模型请求还受上述共享 HTTP 池约束。
 - 四角色为 Builder、Critic、Refiner、Reader。CLI 里的 `gemma` 表示通用 Lenovo 适配器；`--model GLM-5.3-Flash` 才决定实际模型。
 - 每题四角色目前完整尝试 3 次、串行执行；`--max-seconds 1800` 仅限制 Builder，不是四角色整体时限。
 - 新布局：Memory 留在本地；Task 模型循环、读写与 bash 均在该题 SWE 容器，宿主机 Daemon 管理群聊。旧 r8 已停止，日志与容器差异保留。
 - Task 运行时复用本地打包的 Pi SDK、Bun 与 CoForge CLI，不在容器下载完整 Daemon 或 Pi。
 - Docker 离线预检已通过两次创建→工具调用→停止→再次创建，并验证停止后身份查询与通信桥。真实首题验证 Memory 的 ov_find/Offer、Task 的消息读取/认领/源码读写后，07:00:47 放行全部题；07:03:49 实查 20 题群聊、20 个容器内 Task worker。
 - rootless Docker 无法直接访问宿主机 loopback，容器通过每题目录中的 Unix socket 桥连接模型与原 Daemon 代理；目录挂载允许重启后解析新的 socket，不能单独绑定旧 socket inode。
-- 多服务评测不要设置共享 `DEV_MEMORY_API_KEY` 覆盖所有 provider；每题启动时移除此变量，按 Pi provider 读取各自 Key。后处理保留独立 GLM 凭据配置。
+- 多服务评测不要设置共享 `DEV_MEMORY_API_KEY` 覆盖所有 provider；每题启动时移除此变量，按 Pi provider 读取各自 Key。四角色也使用 Gemma provider 的私有凭据。
 
 每题独立 Workspace、Agent、会话目录及 OpenViking account。它们共享服务算力，不共享当前题记忆。
 目前每题从新账号开始，`warm` 标签不表示已加载 train 记忆。
@@ -122,7 +122,7 @@ Astropy-12907 的新增参数化案例未被“新增测试函数”提示识别
 
 07:12:31 应用到 r10：保留 9 条已进入 GLM 四角色的轨迹及其原进程，重跑 11 条尚未结束的群聊，evaluation ID 增加 `-runtimefix1`。
 旧轨迹会话与日志保留，未完成补丁和配置归档到本轮 `before-bridge-timeout-fix/`；这是重新运行，不把旧半条轨迹并入新轨迹。
-四角色池仍为独立 20 路，Gemma 服务分配保持原每题 endpoint；已进入后处理的题不占 Gemma 槽位。
+当前共享请求池取代旧独立后处理池，任何角色的请求都先领取共享容量；等待退避时释放容量。
 复现与延迟预检位于 `/tmp/swe-docker-task-runtime-20261014/bridge-timeout-reproduction.json`、`preflight-delayed/evidence.json`。
 部署清单、保留/重跑题号和新 supervisor PID 见本轮 `runtime-fix-rollout.json`。
 07:15:26 实查：11 条重跑轨迹已全部启动，共 179 次成功模型输出、0 次模型错误；另外 9 条四角色保持运行。此为短时观察，不等于之后不会发生上游错误。`runtime-fix-validation.json` 保存该观察和 GLM HTTP 状态统计。
@@ -142,7 +142,7 @@ Astropy-12907 的新增参数化案例未被“新增测试函数”提示识别
 - 旧批次中止前没有保存的四角色 usage 无法可靠补算。
 
 群聊 SDK 默认失败后最多重试 3 次，等待约 2/4/8 秒；网络错误留在原始日志，但不作为文本交给模型。工具错误会交给模型。
-四角色 Lenovo 适配器另有 240 秒网络超时、3 次网络重试和带抖动退避，两层不要混淆。
+单独直连时四角色适配器最多 6 次网络重试；连接中断、408、429 和临时 5xx 使用带抖动的指数退避并读取 Retry-After。共享池集中执行重试，耗尽返回不可重试的传输失败；角色不再将其反馈成格式修正提示。
 Critic 返回空违规时必须检查 provider_failures。当前驱动检测到 Critic 调用失败会停止进入 Reader、标记 submit=false；评分门禁拒绝有 provider_failures 的材料。空数组本身不代表审查通过。
 AO 导出有文本截断，且主要覆盖 Task 及其收到的 Offer；最终 Reader 结论必须与原始群聊核对。
 
@@ -151,7 +151,9 @@ AO 导出有文本截断，且主要覆盖 Task 及其收到的 Offer；最终 R
 - r7：已按用户指令停止，日志与容器差异保留。前 4 题群聊共 1,274,123 tokens，0 次网络错误，4 次超时取消；Django-10097 有补丁但最终发送被取消。
 - r8：已停止，8 题曾启动，17 个所属进程已停止，差异归档。
 - r9：仅启动首题，发现共享 Key 覆盖、socket 重启失效和停止后身份查询异常；已停止，日志保留。
-- r10：`/tmp/swe-r10-docker-p20-20261014/latest.txt` 指向当前批次，配置 Gemma 20＋四角色后处理 20；07:12 已按上文修复并接续，以 `latest-status.json` 的实际阶段计数为准。
+- r10 群聊 20 条已保存：`/tmp/swe-r10-docker-p20-20261014/20261014T065926Z`；剩余 GLM 已停止，旧结果保留。
+- r11 四角色重放：`/tmp/swe-r11-gemma-four-roles-shared20-20261014/latest.txt` 指向当前批次；输入 AO、verdict 与源 SHA256 保存在 `provenance.json`，不重跑群聊。
+- 共享池状态：`http://127.0.0.1:18740/status`；真实上游请求/token 审计：`/tmp/swe-shared-gemma-pool-20261014/requests.jsonl`。短跑被替换的四角色日志和 usage 也保留，成本统计应单列。
 - 请求错误按当前每题日志统计：`/usr/bin/python3 /tmp/swe-r10-docker-p20-20261014/request_error_audit.py`。归档的旧请求错误需单独统计，不能漏掉重跑前的 token 成本。
 - 四角色已观察到上游 HTTP 502，耗时集中在 120.023–120.033 秒，而客户端超时为 240 秒，表明上游存在约 120 秒的截止时间；具体平台原因尚未验证。适配器单独退避重试；它与 Docker 桥的无 HTTP 状态断连不同，不据此推断服务限额。
 - 两个 2GPU 服务 ID：`service-large-765-1791957477661`、`service-large-765-1791957477975`。
@@ -162,3 +164,11 @@ AO 导出有文本截断，且主要覆盖 Task 及其收到的 Offer；最终 R
 - 日志分析与 token 测试：`/tmp/swe-four-case-audit-20261014/`。
 
 维护要求：每次变更同时记录实际命令、UTC 时间、配置/源码哈希、批次路径、验证结果和仍未解决的限制。不要把旧批次结果算入新批次。
+
+## 共享池与退避的启动
+
+先运行 `python3 benchmark/evolbench-collab/ops/swe-gemma/llm_pool.py --directory /tmp/gemma-pool --port 18740`，读取私有 Pi 三个 provider；不要在命令行放 Key。
+群聊启动环境设置 `COFORGE_LLM_POOL_URL=http://127.0.0.1:18740`，Memory 在 runtimeFetch 路由到池，Docker Task 经宿主 relay 路由到同一池。
+四角色 CLI 设置 `--url http://127.0.0.1:18740/llm/v1/chat/completions`；现成重放命令见 ops README。
+池只绑定 loopback，校验现有 provider Key。瞬时网络故障、408/429/500/502/503/504 最多重试 6 次，退避从 2 秒指数增加到 60 秒并加抖动，尊重 Retry-After；单请求含排队总预算 180 秒。
+流式响应完整缓冲并检查 `[DONE]` 后交给 agent，避免半截输出或工具调用被重复执行；会牺牲逐 token 显示速度。重试耗尽明确记为失败，401/400 等配置错误不重试。

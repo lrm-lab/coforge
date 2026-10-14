@@ -2,10 +2,10 @@
   "episodes": 20,
   "gemma_model": "gemma-4-31B-it",
   "four_role_models": {
-    "builder": "GLM-5.3-Flash",
-    "critic": "GLM-5.3-Flash",
-    "refiner": "GLM-5.3-Flash",
-    "reader": "GLM-5.3-Flash"
+    "builder": "gemma-4-31B-it",
+    "critic": "gemma-4-31B-it",
+    "refiner": "gemma-4-31B-it",
+    "reader": "gemma-4-31B-it"
   },
   "four_roles": {
     "attempts": 3,
@@ -23,5 +23,7 @@
     "openviking/session/aig_toolloop_builder.py": "b4b39b7bbc57b88665a825fe6c85acda81e508df0625cba64643fb9804d9c980",
     "benchmark/causal_memory/model_usage.py": "47f37404c88e07c7405088b92f61f9b42d9ec1ff2369c028dd908022dccd6c66",
     "benchmark/causal_memory/lenovo_gemma_provider.py": "7e4c883b6f515ac110c42050994bd90716b46c3b94858239c6f1b55759f87f9d"
-  }
+  },
+  "shared_llm_request_limit": 20,
+  "llm_pool_url": "http://127.0.0.1:18740"
 }

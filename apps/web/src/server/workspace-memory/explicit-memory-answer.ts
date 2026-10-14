@@ -141,5 +141,8 @@ async function oldestUnansweredExplicitMemoryQuestion(
       select: { createdAt: true },
     })
   ).reverse();
-  return fifoOldestUnansweredQuestion(questions, offers.map((offer) => offer.createdAt));
+  return fifoOldestUnansweredQuestion(
+    questions,
+    offers.map((offer) => offer.createdAt),
+  );
 }

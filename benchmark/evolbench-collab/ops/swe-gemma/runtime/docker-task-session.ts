@@ -35,11 +35,14 @@ export async function createDockerTaskSession(options: AgentSessionOptions, conf
     const url = new URL(request.url);
     const modelRequest = url.pathname.startsWith('/model/');
     if (!modelRequest && !agentProxyURL) return new Response('Agent proxy unavailable',{status:503});
-    const target = modelRequest
+    let target = modelRequest
       ? new URL(publicProvider.baseUrl.replace(/\/$/,'')+url.pathname.slice('/model'.length)+url.search)
       : new URL(url.pathname+url.search, agentProxyURL);
+    const poolURL = options.environment?.COFORGE_LLM_POOL_URL || Bun.env.COFORGE_LLM_POOL_URL;
+    if (modelRequest && poolURL) target = new URL("/llm/v1/chat/completions", poolURL);
     const local = ['localhost','127.0.0.1'].includes(target.hostname);
     const headers = new Headers(request.headers);headers.delete('host');headers.delete('connection');
+    if (modelRequest && poolURL) headers.set('X-Coforge-LLM-Client', 'task');
     return fetch(target, {method: request.method, headers,
       body: request.method==='GET'||request.method==='HEAD'?undefined:await request.arrayBuffer(),
       proxy: local?'':(Bun.env.HTTPS_PROXY||'http://127.0.0.1:7893'),

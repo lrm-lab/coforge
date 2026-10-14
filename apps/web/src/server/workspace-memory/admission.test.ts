@@ -67,9 +67,9 @@ function admitted(overrides: Record<string, unknown> = {}) {
 test("the shared lineage comparator names every immutable field", () => {
   const stored = admitted();
   expect(sameAdmittedSegmentLineage(stored, admitted())).toBe(true);
-  expect(
-    sameAdmittedSegmentLineage(stored, admitted({ sourceMessageIds: ["m-2", "m-1"] })),
-  ).toBe(true);
+  expect(sameAdmittedSegmentLineage(stored, admitted({ sourceMessageIds: ["m-2", "m-1"] }))).toBe(
+    true,
+  );
   for (const overrides of [
     { kind: "completed_task" },
     { sourcePayloadHash: "sha256:def" },

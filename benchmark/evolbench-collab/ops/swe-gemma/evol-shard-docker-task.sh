@@ -3,7 +3,7 @@
 NAME=$1; MANIFEST=$2; EVALID=$3; ARMS=$4; FAMILIES=$5; MOD=$6; shift 6 || true
 OPS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 cd "$OPS_DIR/../../../.." || exit 1
-export PATH="$HOME/.local/share/mise/installs/bun/1.4.2/bin:$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH"
+export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH"
 export NODE_EXTRA_CA_CERTS="$HOME/.pi/lenovo-ca-bundle.pem"
 set -a
 eval "$(grep -E '^(DATABASE_URL|REDIS_URL|COFORGE_CENTRIFUGO_API_URL|COFORGE_CENTRIFUGO_API_KEY|COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY)=' apps/web/.env)"

@@ -133,8 +133,7 @@ export function composeWorkspaceMemoryLifecycle(input: {
       now: input.now,
       quietAfterMs: WORKSPACE_MEMORY_QUIET_WINDOW_MS,
       openVikingGate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
-      bindUnboundComputer: (workspaceId) =>
-        bindUnboundMemoryAgentComputer(input.db, workspaceId),
+      bindUnboundComputer: (workspaceId) => bindUnboundMemoryAgentComputer(input.db, workspaceId),
     }),
     switching,
   );
