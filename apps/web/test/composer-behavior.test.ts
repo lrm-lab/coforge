@@ -7,6 +7,9 @@ import {
   IME_ENTER_GUARD_MS,
   shouldSendOnEnter,
 } from "#src/features/conversations/composer-behavior";
+import { localId } from "#src/features/conversations/composer-behavior";
+import { INLINE_IMAGE_TYPES } from "#src/features/conversations/paste-image";
+import { imageUrlsFromPaste } from "#src/features/conversations/paste-image";
 
 const baseEnter = { key: "Enter", shiftKey: false, isComposing: false, keyCode: 13 };
 const noComposition = { lastCompositionEndAt: null, now: 0 };
@@ -141,5 +144,87 @@ describe("fileFromDropItems", () => {
     const first = new File(["a"], "first.txt");
     const second = new File(["b"], "second.txt");
     expect(fileFromDropItems({ files: [first, second], items: [] })).toBe(first);
+  });
+});
+
+describe("imageUrlsFromPaste", () => {
+  const makeClipboard = (
+    data: Record<string, string>,
+    types: string[] = Object.keys(data),
+  ): Parameters<typeof imageUrlsFromPaste>[0] => ({
+    getData: (type: string) => data[type] ?? "",
+    types,
+  });
+
+  test("returns [] for empty pastes and pastes without link payloads", () => {
+    expect(imageUrlsFromPaste(null)).toEqual([]);
+    expect(imageUrlsFromPaste({ getData: () => "", types: ["text/plain"] })).toEqual([]);
+  });
+
+  test("takes the first non-comment entry of text/uri-list", () => {
+    const clipboard = makeClipboard({
+      "text/uri-list": "# comment\nhttps://example.com/a.png\nhttps://example.com/second.png",
+    });
+    expect(imageUrlsFromPaste(clipboard)).toEqual(["https://example.com/a.png"]);
+  });
+
+  test("collects img src targets from text/html", () => {
+    const clipboard = makeClipboard({
+      "text/html": `<div><img alt="i" src="https://cdn.example.com/pic.jpg"><img src='https://cdn.example.com/other.webp'></div>`,
+    });
+    expect(imageUrlsFromPaste(clipboard)).toEqual([
+      "https://cdn.example.com/pic.jpg",
+      "https://cdn.example.com/other.webp",
+    ]);
+  });
+
+  test("adds https lines from text/plain and dedupes across payloads", () => {
+    const clipboard = makeClipboard({
+      "text/plain": "https://example.com/only.png\nnot a url",
+    });
+    expect(imageUrlsFromPaste(clipboard)).toEqual(["https://example.com/only.png"]);
+    const withDupes = makeClipboard({
+      "text/uri-list": "https://example.com/x.png",
+      "text/html": '<img src="https://example.com/x.png">',
+      "text/plain": "https://example.com/x.png",
+    });
+    expect(imageUrlsFromPaste(withDupes)).toEqual(["https://example.com/x.png"]);
+  });
+
+  test("ignores javascript: and data: payloads", () => {
+    const clipboard = makeClipboard({
+      "text/html": '<img src="data:image/png;base64,AAAA"><img src="javascript:alert(1)">',
+      "text/plain": "data:text/html,data",
+    });
+    expect(imageUrlsFromPaste(clipboard)).toEqual([]);
+  });
+});
+
+describe("INLINE_IMAGE_TYPES", () => {
+  test("matches the server's inline-image whitelist", () => {
+    expect(INLINE_IMAGE_TYPES.has("image/tiff")).toBe(false);
+    expect(INLINE_IMAGE_TYPES.has("image/png")).toBe(true);
+  });
+});
+
+describe("localId", () => {
+  test("returns a UUID shape when crypto.randomUUID is available (secure contexts, Bun tests)", () => {
+    const id = localId();
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(id).not.toBe(localId());
+  });
+
+  test("falls back to a unique non-UUID string when randomUUID throws", () => {
+    const original = globalThis.crypto.randomUUID;
+    try {
+      globalThis.crypto.randomUUID = () => {
+        throw new TypeError("randomUUID is not available in this secure context");
+      };
+      const id = localId();
+      expect(id).toMatch(/^local-[0-9a-z]+-[0-9a-z]+$/);
+      expect(id).not.toBe(localId());
+    } finally {
+      globalThis.crypto.randomUUID = original;
+    }
   });
 });
