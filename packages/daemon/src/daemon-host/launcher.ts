@@ -176,21 +176,16 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
       connection = await this.#connect(this.options.socketPath);
       await this.#verifyHandshake(connection);
       const method = `daemon:${operation}`;
-      const response = decodeLocalRpcResponse(
-        await connection.request(
-          frameLocalRpc(
-            encodeLocalRpcRequest({
-              method,
-              payload: encodeDaemonCommandRequest({
-                protocolMajor: 1,
-                requestId,
-                workspaceId,
-                expectedServerUrl: this.#serverUrl,
-                expectedVersion,
-              }),
-            }),
-          ),
-        ),
+      const response = await this.#request(
+        connection,
+        method,
+        encodeDaemonCommandRequest({
+          protocolMajor: 1,
+          requestId,
+          workspaceId,
+          expectedServerUrl: this.#serverUrl,
+          expectedVersion,
+        }),
       );
       const commandResponse = decodeDaemonCommandResponse(response.payload);
       if (response.method !== method || commandResponse.protocolMajor !== 1)
@@ -222,20 +217,15 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     let connection: LocalDaemonConnection | undefined;
     try {
       connection = await this.#connect(this.options.socketPath);
-      const envelope = decodeLocalRpcResponse(
-        await connection.request(
-          frameLocalRpc(
-            encodeLocalRpcRequest({
-              method,
-              payload: encodeDaemonHoldRequest({
-                protocolMajor: 1,
-                requestId,
-                expectedServerUrl: this.#serverUrl,
-                reason,
-              }),
-            }),
-          ),
-        ),
+      const envelope = await this.#request(
+        connection,
+        method,
+        encodeDaemonHoldRequest({
+          protocolMajor: 1,
+          requestId,
+          expectedServerUrl: this.#serverUrl,
+          reason,
+        }),
       );
       const response = decodeDaemonHoldResponse(envelope.payload);
       if (
@@ -282,18 +272,27 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
 
   async #requestHandshake(connection: LocalDaemonConnection, timeoutMs?: number) {
     const requestId = crypto.randomUUID();
-    const envelope = decodeLocalRpcResponse(
+    const envelope = await this.#request(
+      connection,
+      LOCAL_RPC_METHODS.HANDSHAKE,
+      encodeDaemonHandshakeRequest({ protocolMajor: 1, requestId }),
+      timeoutMs,
+    );
+    return { envelope, requestId };
+  }
+
+  async #request(
+    connection: LocalDaemonConnection,
+    method: string,
+    payload: Uint8Array,
+    timeoutMs?: number,
+  ) {
+    return decodeLocalRpcResponse(
       await connection.request(
-        frameLocalRpc(
-          encodeLocalRpcRequest({
-            method: LOCAL_RPC_METHODS.HANDSHAKE,
-            payload: encodeDaemonHandshakeRequest({ protocolMajor: 1, requestId }),
-          }),
-        ),
+        frameLocalRpc(encodeLocalRpcRequest({ method, payload })),
         timeoutMs,
       ),
     );
-    return { envelope, requestId };
   }
 
   /** False while the daemon does not answer; what it took once it did. */
@@ -310,24 +309,19 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
       await this.#verifyHandshake(connection);
       if (!config) return {};
       const configureId = crypto.randomUUID();
-      const responseEnvelope = decodeLocalRpcResponse(
-        await connection.request(
-          frameLocalRpc(
-            encodeLocalRpcRequest({
-              method: LOCAL_RPC_METHODS.CONFIGURE,
-              payload: encodeDaemonRuntimeConfigureRequest({
-                protocolMajor: 1,
-                requestId: configureId,
-                workspaceId: config.workspaceId,
-                computerId: config.computerId,
-                workspaceRoot: config.workspaceRoot,
-                daemonApiKey: config.daemonApiKey,
-                expectedServerUrl: this.#serverUrl,
-                serverHttpUrl: config.serverHttpUrl,
-              }),
-            }),
-          ),
-        ),
+      const responseEnvelope = await this.#request(
+        connection,
+        LOCAL_RPC_METHODS.CONFIGURE,
+        encodeDaemonRuntimeConfigureRequest({
+          protocolMajor: 1,
+          requestId: configureId,
+          workspaceId: config.workspaceId,
+          computerId: config.computerId,
+          workspaceRoot: config.workspaceRoot,
+          daemonApiKey: config.daemonApiKey,
+          expectedServerUrl: this.#serverUrl,
+          serverHttpUrl: config.serverHttpUrl,
+        }),
       );
       if (responseEnvelope.method !== LOCAL_RPC_METHODS.CONFIGURE)
         throw new Error("coforge-daemon returned an invalid configure response");
