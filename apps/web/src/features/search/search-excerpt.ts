@@ -22,6 +22,21 @@ export function searchExcerpt(text: string, terms: string[]): ExcerptPart[] {
   const start = first > LEAD ? first - LEAD : 0;
   const shown = start > 0 ? `…${flat.slice(start)}` : flat;
   const lowerTerms = terms.map((term) => term.toLowerCase());
+  // Unicode regexp case matching can differ from lowercase equality.
+  if (terms.every((term) => /^[\x20-\x7e]*$/.test(term))) {
+    const parts = shown.split(pattern);
+    const excerpt: ExcerptPart[] = [];
+    for (let index = 0; index < parts.length; index++) {
+      const part = parts[index]!;
+      if (!part) continue;
+      // One capture and ASCII literals under gi make odd split entries definite hits.
+      excerpt.push({
+        text: part,
+        match: index % 2 === 1 || lowerTerms.includes(part.toLowerCase()),
+      });
+    }
+    return excerpt;
+  }
   return shown
     .split(pattern)
     .filter(Boolean)
