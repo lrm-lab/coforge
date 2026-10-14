@@ -12,6 +12,10 @@ import {
 import { getPublicImageStorage } from "#src/server/files/public-image-storage.server";
 import { validateImage } from "#src/server/files/image-upload.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
+import {
+  AGENT_AVATAR_POOL_VERSION,
+  randomAgentAvatarPicture,
+} from "./agent-avatar-pictures.server";
 import { agentVisibilityViewerForUser, assertAgentVisible } from "./agent-visibility.server";
 
 /**
@@ -33,6 +37,29 @@ export function agentAvatarUrl(
   );
 }
 
+function avatarObjectKey(workspaceId: string, agentId: string, version = crypto.randomUUID()) {
+  return `workspaces/${workspaceId}/agents/${agentId}/avatars/${version}/original`;
+}
+
+/**
+ * A copy of a platform picture says so in its object key: the version segment (also the `?v=` of
+ * its URL) is `platform-<pool version>-<picture id>-<uuid>`, where an upload's is a bare uuid. That
+ * is the only record of where an avatar came from, and it is what lets a later job replace every
+ * platform-assigned avatar without touching one a creator uploaded. Keep the shape stable.
+ */
+const PLATFORM_AVATAR_SEGMENT =
+  /^platform-(v\d+)-(ai-\d{2})-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The pool version and picture a platform-assigned avatar key records; null for an upload, a
+ * missing key, or a malformed one. */
+export function parsePlatformAvatarKey(
+  objectKey: string | null,
+): { version: string; pictureId: string } | null {
+  const segments = objectKey?.split("/") ?? [];
+  const match = PLATFORM_AVATAR_SEGMENT.exec(segments.at(-2) ?? "");
+  return match ? { version: match[1]!, pictureId: match[2]! } : null;
+}
+
 /**
  * The creator's picture of one Agent. Workspace members may read it; only the creator may
  * replace or remove it. A deleted Agent has no picture to change.
@@ -43,10 +70,40 @@ export class AgentAvatars {
     private readonly storage: () => Promise<FileStorage> = getPublicImageStorage,
   ) {}
 
+  /**
+   * Stores the random AI picture a new Agent starts with, before the Agent row exists, so the
+   * create can write the key in one step. A picture is a nicety, so a failure is reported and
+   * answered with null (the Agent shows its initials) rather than failing the create.
+   */
+  async storeInitial(workspaceId: string, agentId: string) {
+    try {
+      const { id, file } = await randomAgentAvatarPicture();
+      const objectKey = avatarObjectKey(
+        workspaceId,
+        agentId,
+        `platform-${AGENT_AVATAR_POOL_VERSION}-${id}-${crypto.randomUUID()}`,
+      );
+      await (await this.storage()).put(objectKey, file, file.type);
+      return { objectKey, contentType: file.type };
+    } catch (error) {
+      toPublicServerError(error);
+      return null;
+    }
+  }
+
+  /** Removes a picture `storeInitial` stored for an Agent whose create then failed. */
+  async discard(objectKey: string) {
+    try {
+      await (await this.storage()).remove(objectKey);
+    } catch (error) {
+      toPublicServerError(error);
+    }
+  }
+
   async store(workspaceId: string, userId: string, agentId: string, file: File) {
     await validateImage(file);
     const current = await this.#owned(workspaceId, userId, agentId);
-    const objectKey = `workspaces/${workspaceId}/agents/${agentId}/avatars/${crypto.randomUUID()}/original`;
+    const objectKey = avatarObjectKey(workspaceId, agentId);
     const files = await this.storage();
     await files.put(objectKey, file, file.type);
     try {

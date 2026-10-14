@@ -12,6 +12,8 @@ function fixture(options?: {
   stopFails?: boolean;
   unavailable?: boolean;
   encryptionFails?: boolean;
+  noInitialAvatar?: boolean;
+  createFails?: boolean;
 }) {
   const records: AgentRecord[] = [];
   const starts: unknown[] = [];
@@ -19,6 +21,7 @@ function fixture(options?: {
   const controls: string[] = [];
   const selections: Array<{ hasApiKey?: boolean }> = [];
   const updates: Array<Parameters<AgentRepository["update"]>[1]> = [];
+  const avatarCalls: string[] = [];
   const repository: AgentRepository = {
     getById: async (id) => records.find((agent) => agent.id === id),
     listInWorkspace: async (workspaceId) =>
@@ -31,6 +34,7 @@ function fixture(options?: {
     listOwnedInWorkspace: async (workspaceId, ownerId) =>
       records.filter((agent) => agent.workspaceId === workspaceId && agent.ownerId === ownerId),
     create: async (input) => {
+      if (options?.createFails) throw new Error("database unavailable");
       const record = {
         ...input,
         id: input.id ?? `agent-${records.length + 1}`,
@@ -74,11 +78,80 @@ function fixture(options?: {
         return { keyId: "v1", ciphertext: `encrypted:${apiKey}`, nonce: "nonce", hint: "••••1234" };
       },
     }),
+    {
+      storeInitial: async (workspaceId, agentId) => {
+        avatarCalls.push(`store:${agentId}`);
+        if (options?.noInitialAvatar) return null;
+        return {
+          objectKey: `workspaces/${workspaceId}/agents/${agentId}/avatars/first/original`,
+          contentType: "image/webp",
+        };
+      },
+      discard: async (objectKey) => {
+        avatarCalls.push(`discard:${objectKey}`);
+      },
+    },
   );
-  return { agentManagement, records, starts, stops, controls, updates, selections };
+  return { agentManagement, records, starts, stops, controls, updates, selections, avatarCalls };
 }
 
 describe("ManageAgents", () => {
+  const principal = { userId: "user-1", workspaceId: "workspace-1", role: "admin" } as const;
+  const input = {
+    name: "builder",
+    description: "",
+    provider: RUNTIME_PROVIDER.CODEX,
+    computerId: "computer-1",
+  };
+
+  test("a new Agent is created with its first avatar picture stored as its own object", async () => {
+    const { agentManagement, records, avatarCalls } = fixture();
+
+    const { agent } = await agentManagement.create(principal, input);
+
+    expect(avatarCalls).toEqual([`store:${agent.id}`]);
+    expect(records[0]).toMatchObject({
+      avatarObjectKey: `workspaces/workspace-1/agents/${agent.id}/avatars/first/original`,
+      avatarContentType: "image/webp",
+    });
+  });
+
+  test("an Agent whose picture could not be stored is still created, without an avatar", async () => {
+    const { agentManagement, records } = fixture({ noInitialAvatar: true });
+
+    await agentManagement.create(principal, input);
+
+    expect(records).toHaveLength(1);
+    expect(records[0]?.avatarObjectKey ?? null).toBeNull();
+  });
+
+  test("a create that fails removes the picture it stored, and a refused create stores none", async () => {
+    const failed = fixture({ createFails: true });
+    await expect(failed.agentManagement.create(principal, input)).rejects.toThrow(
+      "database unavailable",
+    );
+    expect(failed.avatarCalls).toHaveLength(2);
+    expect(failed.avatarCalls[1]).toBe(
+      `discard:${failed.avatarCalls[0]!.replace("store:", "workspaces/workspace-1/agents/")}/avatars/first/original`,
+    );
+
+    const unavailable = fixture({ unavailable: true });
+    await expect(unavailable.agentManagement.create(principal, input)).rejects.toMatchObject({
+      errorId: "agent-runtime-unavailable",
+    });
+    const unencrypted = fixture({ encryptionFails: true });
+    await expect(
+      unencrypted.agentManagement.create(principal, {
+        ...input,
+        provider: RUNTIME_PROVIDER.COFORGE,
+        modelProvider: "openrouter",
+        apiKey: "sk-test",
+      }),
+    ).rejects.toThrow();
+    expect(unavailable.avatarCalls).toEqual([]);
+    expect(unencrypted.avatarCalls).toEqual([]);
+  });
+
   test("a member principal cannot create an Agent; an admin can", async () => {
     const { agentManagement, records } = fixture();
     await expect(

@@ -59,6 +59,15 @@ type RuntimeAvailability = {
   ): Promise<boolean>;
 };
 
+/** The first picture of a new Agent. `storeInitial` answers null when none could be stored. */
+type InitialAgentAvatars = {
+  storeInitial(
+    workspaceId: string,
+    agentId: string,
+  ): Promise<{ objectKey: string; contentType: string } | null>;
+  discard(objectKey: string): Promise<void>;
+};
+
 type AgentUpdateInput = Omit<AgentCreateInput, "computerId" | "name"> & {
   agentId: string;
   computerId?: string;
@@ -74,6 +83,7 @@ export class ManageAgents {
     private readonly credentials?: () =>
       | Pick<AgentRuntimeCredentials, "encrypt">
       | Promise<Pick<AgentRuntimeCredentials, "encrypt">>,
+    private readonly initialAvatars?: InitialAgentAvatars,
   ) {}
 
   list(principal: AgentPrincipal) {
@@ -129,23 +139,33 @@ export class ManageAgents {
             ...(encryptedApiKey ? { apiKey: encryptedApiKey } : {}),
           }
         : { kind: "default" as const };
-    const agent = await this.agents.create({
-      id: agentId,
-      workspaceId: principal.workspaceId,
-      ownerId: principal.userId,
-      name,
-      displayName: name,
-      description,
-      computerId: input.computerId,
-      visibility: input.visibility ?? AGENT_VISIBILITY.PUBLIC,
-      runtimeConfig: {
-        runtime: selection.provider,
-        provider: storedProvider,
-        model: selection.model,
-        modelProvider: selection.modelProvider,
-        reasoning: selection.reasoning,
-      },
-    });
+    // Stored last, so a refused create has stored nothing; removed again if the row is not written.
+    const avatar = await this.initialAvatars?.storeInitial(principal.workspaceId, agentId);
+    let agent: AgentRecord;
+    try {
+      agent = await this.agents.create({
+        id: agentId,
+        workspaceId: principal.workspaceId,
+        ownerId: principal.userId,
+        name,
+        displayName: name,
+        description,
+        computerId: input.computerId,
+        visibility: input.visibility ?? AGENT_VISIBILITY.PUBLIC,
+        avatarObjectKey: avatar?.objectKey ?? null,
+        avatarContentType: avatar?.contentType ?? null,
+        runtimeConfig: {
+          runtime: selection.provider,
+          provider: storedProvider,
+          model: selection.model,
+          modelProvider: selection.modelProvider,
+          reasoning: selection.reasoning,
+        },
+      });
+    } catch (error) {
+      if (avatar) await this.initialAvatars?.discard(avatar.objectKey);
+      throw error;
+    }
     try {
       await this.runtimeControl.start(agentStartIntent(agent, input.computerId), principal.userId);
       return { agent: publicAgent(agent), startPublished: true as const };

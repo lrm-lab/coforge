@@ -168,6 +168,7 @@ function manageAgents(db: Database) {
     },
     runtimeLock,
     () => runtimeCredentials(db, true),
+    new AgentAvatars(db),
   );
   return agentManagement;
 }

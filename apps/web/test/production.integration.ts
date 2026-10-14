@@ -55,3 +55,12 @@ test("production image serves health and both deployment-specific installers", a
     if (stderr) console.error(stderr.slice(-8_192));
   }
 }, 15_000);
+
+// A new Agent's first picture is read from the server bundle (the image has no `public/` or source
+// tree to read it from). If the build stops inlining them, `decodeInlinedPicture` throws at the
+// first Agent create; this fails the image before that.
+test("the server bundle embeds all twenty-four Agent avatar pictures", async () => {
+  const bundle = await Bun.file(".output/server/index.mjs").text();
+
+  expect(bundle.match(/data:image\/webp;base64,UklGR/g)?.length ?? 0).toBeGreaterThanOrEqual(24);
+});

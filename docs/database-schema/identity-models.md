@@ -67,7 +67,11 @@ the row points to it, then removes the previous object. A user who picks one of
 the platform's preset pictures stores `preset:<id>` in `avatarObjectKey` with a
 null `avatarContentType`: it names no object and resolves to the app's own
 `/avatars/<id>.webp`. `Agent` uses the same two columns for its own picture, in
-the same image store, and never holds a preset reference.
+the same image store, and never holds a preset reference. A new Agent starts with
+a random platform picture copied into that store as its own object; the object
+key's version segment records it as `platform-<pool version>-<picture id>-<uuid>`
+(an upload's is a bare uuid), the only record of an avatar's origin, so a later
+replacement of every platform picture can find exactly those.
 
 Setup persistence consists of `User`, `UserIdentity`, `Workspace`,
 `WorkspaceMembership`, `Computer`, and `WorkspaceComputer`.
