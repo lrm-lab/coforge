@@ -596,7 +596,14 @@ test("compaction-finished ends an open compaction, and without one is a no-op", 
     activities.length = 0;
     emitEvent({ type: "compaction-finished" });
     expect(activities).toHaveLength(1);
-    expect(activities[0]).toMatchObject({ detailKind: "compaction_finished" });
+    expect(activities[0]).toMatchObject({
+      agentId: "agent-a",
+      detailKind: "compaction_finished",
+      level: "info",
+      detail: "",
+    });
+    emitEvent({ type: "compaction-finished" });
+    expect(activities).toHaveLength(1);
   } finally {
     await runtime.stop();
   }
@@ -656,6 +663,13 @@ test("resumed text after an open compaction infers it finished, reported before 
       "model_response_started",
       "model_response_started",
     ]);
+    expect(activities[0]).toMatchObject({
+      agentId: "agent-a",
+      level: "info",
+      detail: "Compaction finished (inferred from resumed output).",
+    });
+    emitEvent({ type: "compaction-finished" });
+    expect(activities).toHaveLength(3);
   } finally {
     await runtime.stop();
   }
@@ -668,6 +682,13 @@ test("a started tool after an open compaction infers it finished, reported befor
     activities.length = 0;
     emitEvent({ type: "tool-start", id: "tool-1", name: "Bash", input: { command: "ls" } });
     expect(activities.map((a) => a.detailKind)).toEqual(["compaction_finished", "running_command"]);
+    expect(activities[0]).toMatchObject({
+      agentId: "agent-a",
+      level: "info",
+      detail: "Compaction finished (inferred from a new tool call).",
+    });
+    emitEvent({ type: "compaction-finished" });
+    expect(activities).toHaveLength(2);
   } finally {
     await runtime.stop();
   }
@@ -680,6 +701,13 @@ test("a turn ending after an open compaction infers it finished, reported before
     activities.length = 0;
     emitEvent({ type: "completed", status: "completed" });
     expect(activities.map((a) => a.detailKind)).toEqual(["compaction_finished", "idle"]);
+    expect(activities[0]).toMatchObject({
+      agentId: "agent-a",
+      level: "info",
+      detail: "Compaction finished (inferred from turn end).",
+    });
+    emitEvent({ type: "compaction-finished" });
+    expect(activities).toHaveLength(2);
   } finally {
     await runtime.stop();
   }

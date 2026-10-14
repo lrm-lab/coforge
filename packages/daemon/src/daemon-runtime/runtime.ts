@@ -2580,22 +2580,16 @@ export class DaemonRuntime {
       // Resumed output or a new tool call means a still-open compaction is done; report
       // that first.
       if (
-        (event.type === "tool-start" ||
-          activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_RESPONSE_STARTED ||
-          activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED) &&
-        this.#compactionTracker.finish(agentId) === "finished"
+        event.type === "tool-start" ||
+        activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_RESPONSE_STARTED ||
+        activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED
       )
-        this.#activityPublisher.publish(
+        this.#finishCompaction(
           agentId,
           launch,
-          this.#activity(
-            agentId,
-            AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED,
-            "info",
-            event.type === "tool-start"
-              ? "Compaction finished (inferred from a new tool call)."
-              : "Compaction finished (inferred from resumed output).",
-          ),
+          event.type === "tool-start"
+            ? "Compaction finished (inferred from a new tool call)."
+            : "Compaction finished (inferred from resumed output).",
         );
       const carriesEntries =
         activity.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING &&
@@ -2646,12 +2640,7 @@ export class DaemonRuntime {
       return;
     }
     if (event.type === "compaction-finished") {
-      if (this.#compactionTracker.finish(agentId) === "finished")
-        this.#activityPublisher.publish(
-          agentId,
-          launch,
-          this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED, "info", ""),
-        );
+      this.#finishCompaction(agentId, launch, "");
       return;
     }
     if (event.type === "compaction-interrupted") {
@@ -2740,17 +2729,7 @@ export class DaemonRuntime {
     void this.#mentionDeliveries.settleTurnEnd(agentId);
     // A turn ending means a still-open compaction is done; report that before the turn's own
     // idle/failed/interrupted Activity.
-    if (this.#compactionTracker.finish(agentId) === "finished")
-      this.#activityPublisher.publish(
-        agentId,
-        launch,
-        this.#activity(
-          agentId,
-          AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED,
-          "info",
-          "Compaction finished (inferred from turn end).",
-        ),
-      );
+    this.#finishCompaction(agentId, launch, "Compaction finished (inferred from turn end).");
     // A turn outcome (of any status) resolves any error observed mid-turn; a crash wording only
     // applies to a process exit with no such outcome in between. A failed turn that already
     // showed its own runtime_error Activity this turn (`crashDetail` set by the `error` event
@@ -2782,6 +2761,16 @@ export class DaemonRuntime {
     if (collectorFailReason && this.#collectSkillAgents.has(agentId))
       void this.#failCollectorRunningSlots(agentId, collectorFailReason).catch(() => {});
     void this.drainAppInboxNotices(agentId).catch(() => {});
+  }
+
+  /** Ends an open compaction once, before the Activity that established its completion. */
+  #finishCompaction(agentId: string, launch: ActivityLaunch, detail: string): void {
+    if (this.#compactionTracker.finish(agentId) !== "finished") return;
+    this.#activityPublisher.publish(
+      agentId,
+      launch,
+      this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED, "info", detail),
+    );
   }
 
   /**
