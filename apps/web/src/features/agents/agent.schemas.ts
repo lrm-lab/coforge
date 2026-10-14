@@ -133,12 +133,10 @@ export const deleteAgentInputSchema = z.object({
   agentId: agentIdSchema,
   confirmation: z.string().trim().min(1).max(64),
 });
-export type DeleteAgentInput = z.infer<typeof deleteAgentInputSchema>;
 export const updateAgentRoleInputSchema = z.object({
   agentId: agentIdSchema,
   role: z.enum(["admin", "member"]),
 });
-export type UpdateAgentRoleInput = z.infer<typeof updateAgentRoleInputSchema>;
 
 /** Changes an Agent's visibility, both directions. `changeAgentVisibility` is the only
  * server function that writes this field; `createAgentInputSchema.visibility` is create-time only. */
@@ -146,7 +144,6 @@ export const changeAgentVisibilityInputSchema = z.object({
   agentId: agentIdSchema,
   visibility: z.enum(AGENT_VISIBILITY_VALUES),
 });
-export type ChangeAgentVisibilityInput = z.infer<typeof changeAgentVisibilityInputSchema>;
 export const saveAgentRuntimeCredentialInputSchema = z.object({
   agentId: agentIdSchema,
   apiKey: z.string().trim().min(8).max(4096),
@@ -165,10 +162,8 @@ export const listAgentWorkspaceFilesInputSchema = z.object({
   dirPath: z.string().max(4096).default(""),
   includeHidden: z.boolean().default(false),
 });
-export type ListAgentWorkspaceFilesInput = z.infer<typeof listAgentWorkspaceFilesInputSchema>;
 
 export const readAgentWorkspaceFileInputSchema = z.object({
   agentId: agentIdSchema,
   path: z.string().min(1).max(4096),
 });
-export type ReadAgentWorkspaceFileInput = z.infer<typeof readAgentWorkspaceFileInputSchema>;

@@ -127,7 +127,6 @@ ${formatMemoryAgentToolset(profile)}.
 }
 
 export type CoforgeCliGuideOptions = Pick<CoforgeAgentPromptContext, "extraCriticalRules">;
-export type CoforgeCliGuideSections = ReturnType<typeof buildCoforgeCliGuideSections>;
 
 function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
   return {
