@@ -1,6 +1,6 @@
 # EvoAgentBench 本地群聊评测说明
 
-维护日期：2026-10-14 08:58 UTC。本文随本轮运行、环境调整和验证结果更新；“待验证”不代表已生效。
+维护日期：2026-10-14 09:12 UTC。本文随本轮运行、环境调整和验证结果更新；“待验证”不代表已生效。
 
 ## 路径与服务
 
@@ -172,3 +172,11 @@ AO 导出有文本截断，且主要覆盖 Task 及其收到的 Offer；最终 R
 四角色 CLI 设置 `--url http://127.0.0.1:18740/llm/v1/chat/completions`；现成重放命令见 ops README。
 池只绑定 loopback，校验现有 provider Key。瞬时网络故障、408/429/500/502/503/504 最多重试 6 次，退避从 2 秒指数增加到 60 秒并加抖动，尊重 Retry-After；单请求含排队总预算 180 秒。
 流式响应完整缓冲并检查 `[DONE]` 后交给 agent，避免半截输出或工具调用被重复执行；会牺牲逐 token 显示速度。重试耗尽明确记为失败，401/400 等配置错误不重试。
+
+## 当前本地 main 部署
+
+CoForge 已拉取并合并 `lrm-lab/coforge` main 的 `d7ac4fc8`；共享池实现提交 `8811f0dc`。OpenViking main 为 `a68b365da`。
+前端打开 `http://localhost:8788`，Nginx 同源转发至 main Web 8789，WebSocket 转发至 Centrifugo 18000；实际浏览器页面 HTTP 200、WebSocket 101、无页面错误。
+OpenViking main 容器 `coforge-openviking-main-1` 监听 `127.0.0.1:1933`，复用原数据卷；旧 Web/eval18888/代理进程已关闭，旧 OV 容器保持停止供回滚。
+部署备份与验证位于 `/tmp/swe-main-submit-20261014/deployment/`（目录私有）：数据库 SQL、OV 数据 tar、迁移日志、页面截图与验证 JSON。
+相关测试通过；完整仓库检查仍受用户未跟踪的 `apps/web/repro_tmp.ts` 格式问题影响，完整测试出现 Codex catalog fixture 超时和已有 installer shell 环境问题；未将它们记为通过。
