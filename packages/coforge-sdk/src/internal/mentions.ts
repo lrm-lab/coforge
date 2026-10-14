@@ -114,6 +114,8 @@ export type BodySegment = { text: string; code: boolean };
  * never applies inside code, and writers need the code text preserved.
  */
 export function splitCodeSpans(body: string): BodySegment[] {
+  // Neither code pattern can match a body without a backtick.
+  if (!body.includes("`")) return body ? [{ text: body, code: false }] : [];
   const fenced = new RegExp(FENCED_CODE.source, "g");
   const inline = new RegExp(INLINE_CODE.source, "g");
   const segments: BodySegment[] = [];

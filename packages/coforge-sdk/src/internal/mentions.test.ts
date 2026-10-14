@@ -158,3 +158,31 @@ test("splitCodeSpans preserves every byte and flags code", () => {
     { text: " e", code: false },
   ]);
 });
+
+test("splitCodeSpans keeps empty and backtick-free bodies exactly as written", () => {
+  expect(splitCodeSpans("")).toEqual([]);
+  for (const body of [" \n\t", "普通消息 😀 <@task:7>", "\u0000 plain \r\n text "])
+    expect(splitCodeSpans(body)).toEqual([{ text: body, code: false }]);
+});
+
+test("splitCodeSpans gives fenced blocks precedence over enclosing inline delimiters", () => {
+  expect(splitCodeSpans("`before ```f``` after`")).toEqual([
+    { text: "`before ", code: false },
+    { text: "```f```", code: true },
+    { text: " after`", code: false },
+  ]);
+});
+
+test("splitCodeSpans retains escaped ticks, unmatched fences and line-boundary behavior", () => {
+  expect(splitCodeSpans("before \\`x` after")).toEqual([
+    { text: "before \\", code: false },
+    { text: "`x`", code: true },
+    { text: " after", code: false },
+  ]);
+  expect(splitCodeSpans("``` unfinished")).toEqual([
+    { text: "``", code: true },
+    { text: "` unfinished", code: false },
+  ]);
+  expect(splitCodeSpans("`a\nb`")).toEqual([{ text: "`a\nb`", code: false }]);
+  expect(splitCodeSpans("`a\rb\u2028c`")).toEqual([{ text: "`a\rb\u2028c`", code: true }]);
+});
