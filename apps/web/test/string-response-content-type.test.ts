@@ -1,7 +1,6 @@
 import { parse } from "@babel/parser";
 import type { Expression, Node, ObjectExpression } from "@babel/types";
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Bun does not put the implicit `text/plain` of a string body into `new Response("…").headers`
@@ -17,26 +16,42 @@ import { join } from "node:path";
 // string-typed side, or a `JSON.stringify(…)` / `String(…)` call. A string held in a variable is out
 // of a syntactic scan's reach, which is what the helper is for.
 
-function isStringBody(node: Node): boolean {
+/** Strip TS-only wrappers (`x as T`, `x satisfies T`, `x!`, `<T>x`); none changes the runtime value. */
+function unwrap(node: Node): Node {
   switch (node.type) {
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSNonNullExpression":
+    case "TSTypeAssertion":
+      return unwrap(node.expression);
+    default:
+      return node;
+  }
+}
+
+/** The literal name `a` of `a` / `"a"` as a key or member: `x.a`, `x["a"]`, `{ a }`, `{ ["a"]: … }`. */
+function literalName(key: Node, computed: boolean): string | undefined {
+  if (key.type === "StringLiteral") return key.value;
+  if (key.type === "Identifier" && !computed) return key.name;
+  return undefined;
+}
+
+function isStringBody(node: Node): boolean {
+  const body = unwrap(node);
+  switch (body.type) {
     case "StringLiteral":
     case "TemplateLiteral":
       return true;
     case "BinaryExpression":
-      return node.operator === "+" && (isStringBody(node.left) || isStringBody(node.right));
-    case "TSAsExpression":
-    case "TSSatisfiesExpression":
-    case "TSNonNullExpression":
-      return isStringBody(node.expression);
+      return body.operator === "+" && (isStringBody(body.left) || isStringBody(body.right));
     case "CallExpression": {
-      const { callee } = node;
+      const callee = unwrap(body.callee);
       if (callee.type === "Identifier") return callee.name === "String";
       return (
         callee.type === "MemberExpression" &&
         callee.object.type === "Identifier" &&
         callee.object.name === "JSON" &&
-        callee.property.type === "Identifier" &&
-        callee.property.name === "stringify"
+        literalName(callee.property, callee.computed) === "stringify"
       );
     }
     default:
@@ -44,20 +59,19 @@ function isStringBody(node: Node): boolean {
   }
 }
 
-/** The literal key of an object-literal entry: `a` and `"a"` and `["a"]`, but not `[a]` or a spread. */
 function keyOf(entry: ObjectExpression["properties"][number]): string | undefined {
-  if (entry.type !== "ObjectProperty") return undefined;
-  if (entry.key.type === "StringLiteral") return entry.key.value;
-  if (entry.key.type === "Identifier" && !entry.computed) return entry.key.name;
-  return undefined;
+  return entry.type === "ObjectProperty" ? literalName(entry.key, entry.computed) : undefined;
 }
 
 /** True only when `init` is an object literal whose inline `headers` object names `content-type`. */
 function declaresContentType(init: Node | undefined): boolean {
-  if (init?.type !== "ObjectExpression") return false;
-  const headers = init.properties.find((entry) => keyOf(entry) === "headers");
-  if (headers?.type !== "ObjectProperty" || headers.value.type !== "ObjectExpression") return false;
-  return headers.value.properties.some((entry) => keyOf(entry)?.toLowerCase() === "content-type");
+  const options = init && unwrap(init);
+  if (options?.type !== "ObjectExpression") return false;
+  const headers = options.properties.find((entry) => keyOf(entry) === "headers");
+  if (headers?.type !== "ObjectProperty") return false;
+  const values = unwrap(headers.value);
+  if (values.type !== "ObjectExpression") return false;
+  return values.properties.some((entry) => keyOf(entry)?.toLowerCase() === "content-type");
 }
 
 function* nodes(node: unknown): Generator<Node> {
@@ -70,13 +84,12 @@ function* nodes(node: unknown): Generator<Node> {
   for (const value of Object.values(node)) yield* nodes(value);
 }
 
-const mentionsConstructor = /\bnew\s+Response\b/;
-
 /** `file:line` of every string-bodied `new Response(` that leaves its content-type to Bun. */
 function untypedStringResponses(files: Record<string, string>): string[] {
   return Object.entries(files).flatMap(([file, source]) => {
-    // Only a file that spells the constructor can contain the call; parsing the rest is waste.
-    if (!mentionsConstructor.test(source)) return [];
+    // A file without the word `Response` cannot hold an `Identifier(Response)` callee, however the
+    // call is spaced, commented or parenthesised; skipping it only saves the parse.
+    if (!/\bResponse\b/.test(source)) return [];
     const ast = parse(source, {
       sourceType: "module",
       plugins: file.endsWith(".tsx") ? ["typescript", "jsx"] : ["typescript"],
@@ -84,7 +97,8 @@ function untypedStringResponses(files: Record<string, string>): string[] {
     const found: string[] = [];
     for (const node of nodes(ast.program)) {
       if (node.type !== "NewExpression") continue;
-      if (node.callee.type !== "Identifier" || node.callee.name !== "Response") continue;
+      const callee = unwrap(node.callee);
+      if (callee.type !== "Identifier" || callee.name !== "Response") continue;
       const [body, init] = node.arguments;
       if (body && isStringBody(body as Expression) && !declaresContentType(init)) {
         found.push(`${file}:${node.loc?.start.line}`);
@@ -97,21 +111,20 @@ function untypedStringResponses(files: Record<string, string>): string[] {
 const repoRoot = join(import.meta.dir, "..", "..", "..");
 const SCANNED = ["apps/web/src/**/*.ts", "apps/web/src/**/*.tsx"];
 
-function webSources(): Record<string, string> {
+async function webSources(): Promise<Record<string, string>> {
   const files = SCANNED.flatMap((pattern) => [...new Bun.Glob(pattern).scanSync({ cwd: repoRoot })])
     .filter((file) => !file.includes("node_modules") && !/\.test\.tsx?$/.test(file))
     .sort();
-  return Object.fromEntries(
-    files.map((file) => [file, readFileSync(join(repoRoot, file), "utf8")]),
-  );
+  const sources = await Promise.all(files.map((file) => Bun.file(join(repoRoot, file)).text()));
+  return Object.fromEntries(files.map((file, index) => [file, sources[index]]));
 }
 
-test("no web source sends a string-bodied Response without declaring its content-type", () => {
-  expect(untypedStringResponses(webSources())).toEqual([]);
+test("no web source sends a string-bodied Response without declaring its content-type", async () => {
+  expect(untypedStringResponses(await webSources())).toEqual([]);
 });
 
-test("the scan reads the web sources, so an empty result above is not a broken glob", () => {
-  const sources = webSources();
+test("the scan reads the web sources, so an empty result above is not a broken glob", async () => {
+  const sources = await webSources();
   expect(Object.keys(sources)).toContain("apps/web/src/server/http/text-response.server.ts");
   // The one inline-typed string body in the tree today, so the accepting branch is live too.
   expect(sources["apps/web/src/server/centrifugo/rpc-handler.server.ts"]).toContain(
@@ -144,6 +157,12 @@ test("the scan flags each untyped string body", () => {
       'new Response("ok", { [headers]: { "content-type": "text/plain" } });',
     "satisfies.ts": 'new Response("ok" satisfies string);',
     "non-null.ts": 'new Response("ok"!);',
+    "type-assertion.ts": 'new Response(<string>"ok");',
+    "commented-callee.ts": 'new /* why */ Response("ok");',
+    "parenthesized-callee.ts": 'new (Response)("ok");',
+    "cast-callee.ts": 'new (Response as typeof globalThis.Response)("ok");',
+    "computed-json-stringify.ts": 'new Response(JSON["stringify"]({ ok: true }));',
+    "cast-string-call.ts": "new Response((String as (v: unknown) => string)(count));",
     "tsx.tsx": 'const el = <div />;\nnew Response("ok");',
   };
   expect(untypedStringResponses(flagged)).toEqual(
@@ -160,6 +179,11 @@ test("the scan accepts typed string bodies, non-string bodies, and non-code ment
     "quoted-headers-key.ts": 'new Response("ok", { "headers": { "content-type": "text/plain" } });',
     "computed-literal-key.ts":
       'new Response("ok", { headers: { ["content-type"]: "text/plain" } });',
+    "cast-init.ts":
+      'new Response("ok", { headers: { "content-type": "text/plain" } } as ResponseInit);',
+    "cast-headers.ts":
+      'new Response("ok", { headers: { "content-type": "text/plain" } satisfies HeadersInit });',
+    "computed-variable-stringify.ts": "new Response(JSON[stringify](value));",
     "stream.ts": "new Response(file.body, { headers: imageHeaders(type) });",
     "other-call.ts": 'new Response(render("x"));',
     "other-stringify.ts": "new Response(serializer.stringify(document));",
