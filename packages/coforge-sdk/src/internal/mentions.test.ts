@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   isValidMentionSelectorArray,
   mentionToken,
+  MENTION_PATTERN,
   mentionsInContent,
   parseMentionSelector,
   replaceMentionTokens,
@@ -78,6 +79,38 @@ test("MENTION_PATTERN is reusable across repeated matchAll calls (no shared last
   expect(mentionsInContent("@ada hi").has("ada")).toBe(true);
   expect(mentionsInContent("@bea hi").has("bea")).toBe(true);
   expect(mentionsInContent("@ada hi").has("ada")).toBe(true);
+});
+
+test("many repeated handles retain first-appearance order and the same handle boundaries", () => {
+  const body = "mail@ada @@helper @Ada @é 中文@helper " + "@ada @helper @0_1 @a-2 ".repeat(500);
+  expect([...mentionsInContent(body)]).toEqual(["helper", "ada", "0_1", "a-2"]);
+});
+
+test("code removal still joins surrounding handle text before scanning", () => {
+  expect([...mentionsInContent("@`hidden`ada @hel```\n@ignored\n```per `@code` @ada")]).toEqual([
+    "ada",
+    "helper",
+  ]);
+});
+
+test("each mention scan returns a fresh mutable set, including an empty result", () => {
+  const empty = mentionsInContent("ordinary prose");
+  empty.add("local");
+  expect([...mentionsInContent("ordinary prose")]).toEqual([]);
+  const found = mentionsInContent("@ada @helper");
+  found.delete("ada");
+  expect([...mentionsInContent("@ada @helper")]).toEqual(["ada", "helper"]);
+});
+
+test("mention scanning starts at the exported pattern cursor without changing it", () => {
+  const previous = MENTION_PATTERN.lastIndex;
+  try {
+    MENTION_PATTERN.lastIndex = 5;
+    expect([...mentionsInContent("@ada @helper")]).toEqual(["helper"]);
+    expect(MENTION_PATTERN.lastIndex).toBe(5);
+  } finally {
+    MENTION_PATTERN.lastIndex = previous;
+  }
 });
 
 test("isValidMentionSelectorArray accepts a well-formed array", () => {

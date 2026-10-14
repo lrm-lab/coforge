@@ -70,7 +70,9 @@ export const MENTION_PATTERN = /(?<![a-zA-Z0-9_@])@([a-z0-9][a-z0-9_-]*)(?![a-zA
 /** The set of `@handle` references present in `body` outside fenced/inline code. */
 export function mentionsInContent(body: string): Set<string> {
   const stripped = stripCodeSpans(body);
-  return new Set([...stripped.matchAll(MENTION_PATTERN)].map((match) => match[1]!));
+  const handles = new Set<string>();
+  for (const match of stripped.matchAll(MENTION_PATTERN)) handles.add(match[1]!);
+  return handles;
 }
 
 /**
