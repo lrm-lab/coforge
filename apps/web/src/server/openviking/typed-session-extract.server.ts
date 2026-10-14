@@ -28,6 +28,7 @@ const SANITIZED_ERROR = "openviking session extract failed";
 const UNAUTHORIZED_ERROR = "sink owner is not authorized";
 const DEFAULT_COMMIT_TIMEOUT_MS = 180_000;
 const COMMIT_POLL_MS = 500;
+const MEMORY_DIAGNOSE = /(?:^|\s)@memory\s+diagnose\b/i;
 
 export type OpenVikingAdmittedSessionMessage = {
   role: "user" | "assistant";
@@ -107,6 +108,7 @@ export function createOpenVikingTypedSessionExtract(deps: {
         path: OPENVIKING_TYPED_SESSION_CREATE_ROUTE.path,
         body: {
           session_id: sessionId,
+          skill_trajectory_mode: "causal",
           memory_extraction_config: {
             events: { tags: [...input.write.tags] },
           },
@@ -133,7 +135,10 @@ export function createOpenVikingTypedSessionExtract(deps: {
       const committed = await requestJson(deps, {
         method: OPENVIKING_TYPED_SESSION_COMMIT_ROUTE.method,
         path: `/api/v1/sessions/${sessionId}/commit`,
-        body: { keep_recent_count: 0 },
+        body: {
+          keep_recent_count: 0,
+          aig_question: aigQuestion(input.write.messages, segmentId),
+        },
       });
       if (!committed.ok) return committed;
       const taskId = commitTaskId(committed.json);
@@ -152,6 +157,18 @@ export function createOpenVikingTypedSessionExtract(deps: {
       return { ok: true, sessionId };
     },
   };
+}
+
+function aigQuestion(
+  messages: readonly OpenVikingAdmittedSessionMessage[],
+  segmentId: string,
+): string {
+  const report = messages.find((message) => MEMORY_DIAGNOSE.test(message.content));
+  return (
+    report?.content ??
+    messages.find((message) => message.role === "user")?.content ??
+    `Analyze public channel segment ${segmentId}`
+  );
 }
 
 function logSessionPhase(event: OpenVikingSessionPhaseEvent): void {
