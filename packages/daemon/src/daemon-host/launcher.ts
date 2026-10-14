@@ -265,18 +265,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
   async identity(timeoutMs?: number): Promise<DaemonHandshakeResponse> {
     const connection = await this.#connect(this.options.socketPath);
     try {
-      const requestId = crypto.randomUUID();
-      const envelope = decodeLocalRpcResponse(
-        await connection.request(
-          frameLocalRpc(
-            encodeLocalRpcRequest({
-              method: LOCAL_RPC_METHODS.HANDSHAKE,
-              payload: encodeDaemonHandshakeRequest({ protocolMajor: 1, requestId }),
-            }),
-          ),
-          timeoutMs,
-        ),
-      );
+      const { envelope, requestId } = await this.#requestHandshake(connection, timeoutMs);
       const result = decodeDaemonHandshakeResponse(envelope.payload);
       if (
         envelope.method !== LOCAL_RPC_METHODS.HANDSHAKE ||
@@ -289,6 +278,22 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     } finally {
       connection.close();
     }
+  }
+
+  async #requestHandshake(connection: LocalDaemonConnection, timeoutMs?: number) {
+    const requestId = crypto.randomUUID();
+    const envelope = decodeLocalRpcResponse(
+      await connection.request(
+        frameLocalRpc(
+          encodeLocalRpcRequest({
+            method: LOCAL_RPC_METHODS.HANDSHAKE,
+            payload: encodeDaemonHandshakeRequest({ protocolMajor: 1, requestId }),
+          }),
+        ),
+        timeoutMs,
+      ),
+    );
+    return { envelope, requestId };
   }
 
   /** False while the daemon does not answer; what it took once it did. */
@@ -339,17 +344,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
   }
 
   async #verifyHandshake(connection: LocalDaemonConnection): Promise<void> {
-    const requestId = crypto.randomUUID();
-    const envelope = decodeLocalRpcResponse(
-      await connection.request(
-        frameLocalRpc(
-          encodeLocalRpcRequest({
-            method: LOCAL_RPC_METHODS.HANDSHAKE,
-            payload: encodeDaemonHandshakeRequest({ protocolMajor: 1, requestId }),
-          }),
-        ),
-      ),
-    );
+    const { envelope, requestId } = await this.#requestHandshake(connection);
     if (envelope.method !== LOCAL_RPC_METHODS.HANDSHAKE)
       throw new Error("coforge-daemon returned an invalid handshake");
     const response = decodeDaemonHandshakeResponse(envelope.payload);
