@@ -126,7 +126,9 @@ async function probeRuntimeVersion(
     return version ? { provider, version, displayName: "Codex" } : undefined;
   }
   if (provider === RUNTIME_PROVIDER.CLAUDE_CODE) {
-    const version = await probeClaudeCodeVersion(executable, probe.spawn);
+    const version = await probeClaudeCodeVersion(executable, (child) =>
+      probe.spawn(child, probeEnvironment),
+    );
     return version ? { provider, version, displayName: "Claude Code" } : undefined;
   }
   const { output, exitCode } = await versionProbeOutput(probe.spawn(executable, probeEnvironment));
