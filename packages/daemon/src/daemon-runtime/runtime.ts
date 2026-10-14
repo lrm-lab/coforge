@@ -2281,11 +2281,11 @@ export class DaemonRuntime {
       runtime.session.onExit(() => {
         launch.startup?.dispose();
         trajectory.dispose();
+        if (this.#currentActivityLaunches.get(agentId) !== launch) return;
         // No leaked watchdog timer, and a later launch for this Agent starts clean.
         this.#disposeLaunchObservations(agentId);
         this.#contextHandoffs.delete(agentId);
         this.#collectSkillAgents.delete(agentId);
-        if (this.#currentActivityLaunches.get(agentId) !== launch) return;
         this.#messageAttention.clearAgent(agentId);
         // An unexpected exit only clears busy — whatever a queue_until_idle provider
         // was still holding stays queued for the next launch; only explicit Stop discards it
@@ -2506,6 +2506,8 @@ export class DaemonRuntime {
     controlled: boolean,
     event: AgentRuntimeEvent,
   ): void {
+    // A late trajectory flush must not mutate the replacement launch's Agent state.
+    if (this.#currentActivityLaunches.get(agentId) !== launch) return;
     // Runtime work marks busy unless the provider knows it has no live turn.
     // "completed" supplies the turn outcome below; native-state reconciliation
     // repairs observation and delivery gating without inventing that outcome.

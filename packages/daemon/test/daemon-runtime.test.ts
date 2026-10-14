@@ -7533,6 +7533,101 @@ describe("DaemonRuntime", () => {
     },
   );
 
+  test.each([
+    ["delayed", "empty"],
+    ["repeated", "empty"],
+    ["delayed", "text-delta"],
+    ["delayed", "thinking-delta"],
+  ] as const)(
+    "a %s old Session exit with %s output preserves the replacement launch's reading and compaction",
+    async (exitMode, pendingOutput) => {
+      const credentials = new InMemoryDaemonCredentialStore();
+      await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+      const sessions: ReturnType<typeof deliveryQueueSession>[] = [];
+      const readings: import("@lrm/coforge-sdk/internal").AgentContextUsage[] = [];
+      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+      const runtime = new DaemonRuntime(
+        connection,
+        () => ({
+          provider: "pi",
+          async createAgentSession() {
+            const fake = deliveryQueueSession();
+            sessions.push(fake);
+            return {
+              ...fake.session,
+              async dispose() {
+                if (exitMode === "repeated") fake.exit();
+              },
+            };
+          },
+        }),
+        credentials,
+        {
+          create: () => ({
+            async start() {},
+            async ready() {},
+            async stop() {},
+            async requestAgentLaunchConfig() {
+              return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+            },
+            async revokeAgentApiKey() {},
+            sendAgentContextUsage(message) {
+              readings.push(message);
+            },
+            sendAgentActivity(message) {
+              activities.push(message);
+            },
+          }),
+        },
+        undefined,
+        emptyCodeAgentDiscovery,
+      );
+      const reading = {
+        type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
+        usedTokens: 27_908,
+        windowTokens: 200_000,
+      } as const;
+      try {
+        await runtime.start(connection);
+        await runtime.startAgent("agent-a", config, "session-first");
+        sessions[0]!.emit(reading);
+        if (pendingOutput !== "empty") {
+          // Hold the old trajectory's 350ms buffer until its delayed exit flushes it.
+          jest.useFakeTimers();
+          sessions[0]!.emit({ type: pendingOutput, text: "Old launch output" });
+        }
+        await runtime.stopAgent("agent-a");
+        await runtime.startAgent("agent-a", config, "session-next");
+        activities.length = 0;
+        sessions[1]!.emit(reading);
+        sessions[1]!.emit({ type: "compaction-started" });
+        expect(readings.map(({ sessionId }) => sessionId)).toEqual([
+          "session-first",
+          "session-next",
+        ]);
+        expect(activities.map(({ detailKind }) => detailKind)).toEqual(["compacting_context"]);
+
+        // Stop has settled; only the previous Session's exit notification arrives late.
+        sessions[0]!.exit();
+        sessions[1]!.emit(reading);
+        sessions[1]!.emit({ type: "compaction-finished" });
+        expect({
+          readingSessions: readings.map(({ sessionId }) => sessionId),
+          compaction: activities.map(({ detailKind }) => detailKind),
+        }).toEqual({
+          readingSessions: ["session-first", "session-next"],
+          compaction: ["compacting_context", "compaction_finished"],
+        });
+      } finally {
+        try {
+          await runtime.stop();
+        } finally {
+          jest.useRealTimers();
+        }
+      }
+    },
+  );
+
   test("skips a context-window reading while the current native session id is not yet known", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
