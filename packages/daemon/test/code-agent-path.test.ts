@@ -66,7 +66,10 @@ describe("codeAgentExecutableSearchPath", () => {
 
   test("works without HOME: only the windows APPDATA branch remains", () => {
     const appData = "C:\\Users\\x\\npm";
-    const result = codeAgentExecutableSearchPath({ PATH: "C:\\ambient", APPDATA: appData }, "win32");
+    const result = codeAgentExecutableSearchPath(
+      { PATH: "C:\\ambient", APPDATA: appData },
+      "win32",
+    );
     expect(result.split(executablePathDelimiter("win32"))).toContain(winPath.join(appData, "npm"));
   });
 });
@@ -87,14 +90,14 @@ describe("npm-installed Codex discovery through the public seam", () => {
       const bin = posix.join(home, ".npm-global", "bin");
       mkdirSync(bin, { recursive: true });
       const stub = posix.join(bin, "codex-fake-node");
-      writeFileSync(stub, await Bun.file(posix.join("test", "fixtures", "codex-fake-node")).text(), {
-        mode: 0o755,
-      });
       writeFileSync(
-        posix.join(bin, "codex"),
-        "#!/usr/bin/env codex-fake-node",
-        { mode: 0o755 },
+        stub,
+        await Bun.file(posix.join("test", "fixtures", "codex-fake-node")).text(),
+        {
+          mode: 0o755,
+        },
       );
+      writeFileSync(posix.join(bin, "codex"), "#!/usr/bin/env codex-fake-node", { mode: 0o755 });
 
       const environment = { HOME: home, PATH: "/ambient-only-path" };
       const runtimes = await discoverExternalCodeAgents(
