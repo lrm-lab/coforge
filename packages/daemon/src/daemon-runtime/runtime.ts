@@ -2000,9 +2000,7 @@ export class DaemonRuntime {
     if (activityLaunch) activityLaunch.stopping = true;
     this.#interruptIfBusy(agentId, activityLaunch);
     this.#activityPublisher.forgetBusy(agentId);
-    this.#compactionTracker.dispose(agentId);
-    this.#runtimeProgress.dispose(agentId);
-    this.#lastContextUsage.delete(agentId);
+    this.#disposeLaunchObservations(agentId);
     this.#contextHandoffs.delete(agentId);
     this.#revokeLocalLaunch(agentId);
     try {
@@ -2289,9 +2287,7 @@ export class DaemonRuntime {
         launch.startup?.dispose();
         trajectory.dispose();
         // No leaked watchdog timer, and a later launch for this Agent starts clean.
-        this.#compactionTracker.dispose(agentId);
-        this.#runtimeProgress.dispose(agentId);
-        this.#lastContextUsage.delete(agentId);
+        this.#disposeLaunchObservations(agentId);
         this.#contextHandoffs.delete(agentId);
         this.#collectSkillAgents.delete(agentId);
         if (this.#currentActivityLaunches.get(agentId) !== launch) return;
@@ -2381,9 +2377,7 @@ export class DaemonRuntime {
       }
       if (this.#currentActivityLaunches.get(agentId) === launch) {
         this.#activityPublisher.forgetBusy(agentId);
-        this.#compactionTracker.dispose(agentId);
-        this.#runtimeProgress.dispose(agentId);
-        this.#lastContextUsage.delete(agentId);
+        this.#disposeLaunchObservations(agentId);
         this.#currentActivityLaunches.delete(agentId);
       }
       throw error;
@@ -3202,9 +3196,7 @@ export class DaemonRuntime {
     if (activityLaunch) activityLaunch.stopping = true;
     this.#interruptIfBusy(agentId, activityLaunch);
     this.#activityPublisher.forgetBusy(agentId);
-    this.#compactionTracker.dispose(agentId);
-    this.#runtimeProgress.dispose(agentId);
-    this.#lastContextUsage.delete(agentId);
+    this.#disposeLaunchObservations(agentId);
     this.#revokeLocalLaunch(agentId);
     const stopping = this.#stopAgent(agentId)
       .catch((error) => {
@@ -3255,6 +3247,13 @@ export class DaemonRuntime {
       this.#activityPublisher.publish(agentId, activityLaunch, this.#stoppedActivity(agentId));
     this.#activityPublisher.forgetBusy(agentId);
     this.#currentActivityLaunches.delete(agentId);
+  }
+
+  /** Forgets one ended launch's observation state without affecting another Agent. */
+  #disposeLaunchObservations(agentId: string): void {
+    this.#compactionTracker.dispose(agentId);
+    this.#runtimeProgress.dispose(agentId);
+    this.#lastContextUsage.delete(agentId);
   }
 
   #readyRunningAgentIds(): string[] {

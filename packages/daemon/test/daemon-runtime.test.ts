@@ -7464,6 +7464,75 @@ describe("DaemonRuntime", () => {
     }
   });
 
+  test.each(["stop", "exit"] as const)(
+    "%s resets context-window readings for a new launch without resetting another Agent",
+    async (ending) => {
+      const credentials = new InMemoryDaemonCredentialStore();
+      await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+      const sessions = new Map<string, ReturnType<typeof deliveryQueueSession>>();
+      const readings: import("@lrm/coforge-sdk/internal").AgentContextUsage[] = [];
+      const runtime = new DaemonRuntime(
+        connection,
+        () => ({
+          provider: "pi",
+          async createAgentSession(options) {
+            if (!options.agentId) throw new Error("Test session requires an Agent ID");
+            const fake = deliveryQueueSession();
+            sessions.set(options.agentId, fake);
+            return fake.session;
+          },
+        }),
+        credentials,
+        {
+          create: () => ({
+            async start() {},
+            async ready() {},
+            async stop() {},
+            async requestAgentLaunchConfig() {
+              return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+            },
+            async revokeAgentApiKey() {},
+            sendAgentContextUsage(message) {
+              readings.push(message);
+            },
+          }),
+        },
+        undefined,
+        emptyCodeAgentDiscovery,
+      );
+      const reading = {
+        type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
+        usedTokens: 27_908,
+        windowTokens: 200_000,
+      } as const;
+      try {
+        await runtime.start(connection);
+        await runtime.startAgent("agent-a", config, "session-a-first");
+        await runtime.startAgent("agent-b", config, "session-b");
+        sessions.get("agent-a")!.emit(reading);
+        sessions.get("agent-b")!.emit(reading);
+        expect(readings.map(({ agentId, sessionId }) => [agentId, sessionId])).toEqual([
+          ["agent-a", "session-a-first"],
+          ["agent-b", "session-b"],
+        ]);
+
+        if (ending === "stop") await runtime.stopAgent("agent-a");
+        else sessions.get("agent-a")!.exit();
+        await runtime.startAgent("agent-a", config, "session-a-next");
+        sessions.get("agent-a")!.emit(reading);
+        sessions.get("agent-b")!.emit(reading);
+        expect(readings.map(({ agentId, sessionId }) => [agentId, sessionId])).toEqual([
+          ["agent-a", "session-a-first"],
+          ["agent-b", "session-b"],
+          ["agent-a", "session-a-next"],
+        ]);
+        expect(readings.at(-1)).toMatchObject({ usedTokens: 27_908, windowTokens: 200_000 });
+      } finally {
+        await runtime.stop();
+      }
+    },
+  );
+
   test("skips a context-window reading while the current native session id is not yet known", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
