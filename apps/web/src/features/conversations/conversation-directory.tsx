@@ -233,12 +233,8 @@ function ConversationRow({
       ) : (
         <span
           className={cx(
-            "min-w-0 flex-1 truncate text-sm",
-            current
-              ? "font-semibold text-brand-secondary"
-              : muted
-                ? "text-tertiary"
-                : "text-secondary",
+            "min-w-0 flex-1 truncate text-sm font-semibold",
+            current ? "text-brand-secondary" : muted ? "text-tertiary" : "text-secondary",
           )}
         >
           {children}

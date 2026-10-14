@@ -1088,58 +1088,55 @@ export function ConversationPane({
           // and side margins, so the group sits right above the composer's edge at any width
           // rather than at the far pane edge beside the scrollbar.
           <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10">
-            <div
-              className={cn(
-                root ? undefined : MESSAGE_COLUMN_CLASS,
-                "flex justify-end px-4 md:px-6",
-              )}
-            >
-              <div
-                role="group"
-                aria-label={m.conversation_message_navigation()}
-                className={cn(
-                  "pointer-events-auto inline-flex items-center gap-0.5 rounded-full border border-secondary bg-primary p-0.5 shadow-xs transition-opacity",
-                  followingLatest &&
-                    !ownIndex.open &&
-                    "pointer-events-none opacity-0 group-hover/history:pointer-events-auto group-hover/history:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
-                )}
-              >
-                {ownMessages.length > 0 && (
-                  <OwnMessagesMenu
-                    messages={ownMessages}
-                    loading={ownIndex.loading}
-                    open={ownIndex.open}
-                    onOpenChange={ownIndex.setOpen}
-                    menuRef={ownIndex.menuRef}
-                    onLoadOlder={ownIndex.loadOlder}
-                    onSelect={(messageId) => void showMessage(messageId)}
-                    formatBody={formatIndexBody}
-                  />
-                )}
-                {ownMessages.length > 0 && !followingLatest && (
-                  <span aria-hidden="true" className="h-4 w-px bg-secondary" />
-                )}
-                {!followingLatest && (
-                  <span className="relative">
-                    <ButtonUtility
-                      icon={ArrowDown}
-                      size="xs"
-                      color="tertiary"
-                      onClick={() => void showLatestMessages()}
-                      aria-label={
-                        newMessageCount === 1
-                          ? m.conversation_one_new_message()
-                          : newMessageCount > 1
-                            ? m.conversation_new_messages({ count: newMessageCount })
-                            : m.conversation_back_to_bottom()
-                      }
-                      className="rounded-full"
+            <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
+              <div className="flex justify-end px-4 md:px-6">
+                <div
+                  role="group"
+                  aria-label={m.conversation_message_navigation()}
+                  className={cn(
+                    "pointer-events-auto inline-flex items-center gap-0.5 rounded-full border border-secondary bg-primary p-0.5 shadow-xs transition-opacity",
+                    followingLatest &&
+                      !ownIndex.open &&
+                      "pointer-events-none opacity-0 group-hover/history:pointer-events-auto group-hover/history:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
+                  )}
+                >
+                  {ownMessages.length > 0 && (
+                    <OwnMessagesMenu
+                      messages={ownMessages}
+                      loading={ownIndex.loading}
+                      open={ownIndex.open}
+                      onOpenChange={ownIndex.setOpen}
+                      menuRef={ownIndex.menuRef}
+                      onLoadOlder={ownIndex.loadOlder}
+                      onSelect={(messageId) => void showMessage(messageId)}
+                      formatBody={formatIndexBody}
                     />
-                    {newMessageCount > 0 && (
-                      <UnreadDot className="absolute -top-1 -right-1 size-2.5 border border-primary" />
-                    )}
-                  </span>
-                )}
+                  )}
+                  {ownMessages.length > 0 && !followingLatest && (
+                    <span aria-hidden="true" className="h-4 w-px bg-secondary" />
+                  )}
+                  {!followingLatest && (
+                    <span className="relative">
+                      <ButtonUtility
+                        icon={ArrowDown}
+                        size="xs"
+                        color="tertiary"
+                        onClick={() => void showLatestMessages()}
+                        aria-label={
+                          newMessageCount === 1
+                            ? m.conversation_one_new_message()
+                            : newMessageCount > 1
+                              ? m.conversation_new_messages({ count: newMessageCount })
+                              : m.conversation_back_to_bottom()
+                        }
+                        className="rounded-full"
+                      />
+                      {newMessageCount > 0 && (
+                        <UnreadDot className="absolute -top-1 -right-1 size-2.5 border border-primary" />
+                      )}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
