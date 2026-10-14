@@ -93,6 +93,54 @@ test("a caret before any @ finds nothing", () => {
   expect(activeReferenceQuery("@alice", 0)).toBeUndefined();
 });
 
+test("only the final trigger can form a query when mentions and channels compete", () => {
+  expect(activeReferenceQuery("@first @last", 12)).toEqual({
+    trigger: "@",
+    start: 7,
+    query: "last",
+  });
+  expect(activeReferenceQuery("#first @last", 12)).toEqual({
+    trigger: "@",
+    start: 7,
+    query: "last",
+  });
+  expect(activeReferenceQuery("@first #ops", 11)).toEqual({
+    trigger: "#",
+    start: 7,
+    query: "ops",
+  });
+  for (const text of ["@first abc@last", "@first#ops", "#old #UPPER", "@old @@last"]) {
+    expect(activeReferenceQuery(text, end(text))).toBeUndefined();
+  }
+});
+
+test("the trigger boundary keeps Unicode whitespace and UTF-16 offsets", () => {
+  expect(activeReferenceQuery("😀\u2003@张", 5)).toEqual({ trigger: "@", start: 3, query: "张" });
+  expect(activeReferenceQuery("text\u00a0#ops", 9)).toEqual({
+    trigger: "#",
+    start: 5,
+    query: "ops",
+  });
+  expect(activeReferenceQuery("text\ufeff@Ada", 9)).toEqual({
+    trigger: "@",
+    start: 5,
+    query: "Ada",
+  });
+  expect(activeReferenceQuery("text\u200b@Ada", 9)).toBeUndefined();
+});
+
+test("a trailing line break ends the query even when the preceding token is otherwise valid", () => {
+  for (const text of ["@ada\n", "#ops\r", "@ada\r\n", "@ada\u2028", "@ada\u2029"]) {
+    expect(activeReferenceQuery(text, end(text))).toBeUndefined();
+  }
+});
+
+test("another trigger after the caret does not change the active draft prefix", () => {
+  const text = "hi @Ada #ops";
+  expect(activeReferenceQuery(text, 7)).toEqual({ trigger: "@", start: 3, query: "Ada" });
+  expect(activeReferenceQuery(text, end(text))).toEqual({ trigger: "#", start: 8, query: "ops" });
+});
+
 test("a #query opens at the start of the text and after whitespace, like an @query", () => {
   expect(activeReferenceQuery("#", 1)).toEqual({ trigger: "#", start: 0, query: "" });
   expect(activeReferenceQuery("see #r", 6)).toEqual({ trigger: "#", start: 4, query: "r" });

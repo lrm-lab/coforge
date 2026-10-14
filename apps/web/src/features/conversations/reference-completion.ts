@@ -53,7 +53,8 @@ function caretInCode(beforeCaret: string): boolean {
 
 /** An `@query` (any run without whitespace, `@` or `#`) or a `#query` (channel-name characters),
  * at the text start or after whitespace, running to the caret. */
-const REFERENCE_QUERY = /(?:^|\s)(?:@([^\s@#]*)|#([a-z0-9_-]*))$/;
+// Keep the strict boundary as an assertion so matches can start at the trigger itself.
+const REFERENCE_QUERY = /(?<!\S)(?:@([^\s@#]*)|#([a-z0-9_-]*))$/;
 
 /**
  * The completion query at the caret: the in-progress token starts at `@` or `#` (at the text
