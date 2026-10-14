@@ -21,11 +21,12 @@ export function searchExcerpt(text: string, terms: string[]): ExcerptPart[] {
   const first = flat.search(pattern);
   const start = first > LEAD ? first - LEAD : 0;
   const shown = start > 0 ? `…${flat.slice(start)}` : flat;
+  const lowerTerms = terms.map((term) => term.toLowerCase());
   return shown
     .split(pattern)
     .filter(Boolean)
     .map((part) => ({
       text: part,
-      match: terms.some((t) => t.toLowerCase() === part.toLowerCase()),
+      match: lowerTerms.includes(part.toLowerCase()),
     }));
 }
