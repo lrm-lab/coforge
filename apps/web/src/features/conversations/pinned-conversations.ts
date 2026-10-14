@@ -49,7 +49,7 @@ export function splitPinnedConversations<
 export type DirectoryLayout = Record<DirectorySectionId, string[]>;
 
 /** The section a row lives in when it is not pinned. */
-export type HomeSection = Exclude<DirectorySectionId, "pinned">;
+export type HomeSection = "channels" | "agents";
 
 export function channelRowKey(channelId: string) {
   return `channel:${channelId}`;
@@ -77,15 +77,14 @@ function homeSection(key: string): HomeSection {
   return pinOfRowKey(key).kind === "channel" ? "channels" : "agents";
 }
 
-/** Pinned takes any row; Channels and Direct messages take back only their own kind. */
+/** Pins and custom groups accept either kind; default groups accept their own kind. */
 export function canDropInto(key: string, section: DirectorySectionId) {
-  return section === "pinned" || section === homeSection(key);
+  return section === "pinned" || section.startsWith("custom:") || section === homeSection(key);
 }
 
 /**
- * Moves one row to `to` while it is dragged. Pinned takes any row at `index`; a row's own section
- * takes it back at its natural place (each section keeps the order its own list gives, so it is
- * not reordered by hand); the other kind's section refuses it and the layout comes back unchanged.
+ * Previews one row at `index` in pins or a custom group. Default groups restore their natural
+ * order and reject the other conversation kind.
  */
 export function moveInDirectory(
   layout: DirectoryLayout,
@@ -94,16 +93,14 @@ export function moveInDirectory(
   to: DirectorySectionId,
   index: number,
 ): DirectoryLayout {
-  if (!canDropInto(key, to)) return layout;
+  if (!canDropInto(key, to) || !layout[to]) return layout;
   const home = homeSection(key);
-  const without: DirectoryLayout = {
-    pinned: layout.pinned.filter((entry) => entry !== key),
-    channels: layout.channels.filter((entry) => entry !== key),
-    agents: layout.agents.filter((entry) => entry !== key),
-  };
-  if (to === "pinned") {
-    const at = Math.max(0, Math.min(index, without.pinned.length));
-    without.pinned.splice(at, 0, key);
+  const without = { ...layout };
+  for (const section of Object.keys(layout) as DirectorySectionId[])
+    without[section] = layout[section].filter((entry) => entry !== key);
+  if (to === "pinned" || to.startsWith("custom:")) {
+    const at = Math.max(0, Math.min(index, without[to].length));
+    without[to].splice(at, 0, key);
   } else {
     const present = new Set([...without[home], key]);
     without[home] = natural[home].filter((entry) => present.has(entry));
@@ -111,6 +108,33 @@ export function moveInDirectory(
   // Called on every pointer move of a drag: a move that changes nothing keeps the same object, so
   // the sidebar does not re-render for it.
   return sameLayout(layout, without) ? layout : without;
+}
+
+/** The one conversation placement a drag changed. Pins retain their independent public seam. */
+export function sectionChangeAfterDrag(
+  before: DirectoryLayout,
+  after: DirectoryLayout,
+  key: string,
+) {
+  const destination = (Object.keys(after) as DirectorySectionId[]).find((section) =>
+    after[section].includes(key),
+  );
+  if (!destination || destination === "pinned") return null;
+  const origin = (Object.keys(before) as DirectorySectionId[]).find((section) =>
+    before[section].includes(key),
+  );
+  if (origin === destination && sameKeys(before[destination], after[destination])) return null;
+  const nextKey = after[destination][after[destination].indexOf(key) + 1];
+  const next = nextKey ? pinOfRowKey(nextKey) : null;
+  return {
+    target: pinOfRowKey(key),
+    sectionId: destination.startsWith("custom:") ? destination.slice("custom:".length) : null,
+    beforeConversationId: next
+      ? next.kind === "channel"
+        ? next.channelId
+        : next.conversationId
+      : null,
+  };
 }
 
 function sameKeys(left: readonly string[], right: readonly string[]) {

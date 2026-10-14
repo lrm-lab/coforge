@@ -4,37 +4,24 @@ These rules apply to `src/server/conversations/`.
 
 ## Ownership
 
-- `PublicChannels` (`public-channels.server.ts`) owns Workspace
-  authorization, default-channel enrollment, channel membership, canonical
-  read/write and ordering, human read positions, persistent follow state, and
-  mute/mention delivery eligibility. `channelAgentRecipients` is the one rule
-  for which Agents a sent channel message wakes, whether a person or an Agent
-  sent it; the Agent send path in the direct-conversation repository calls it too, and
-  `enrollThreadReplyFollowers`, the one rule for who a thread reply makes a follower. A Task and an action card keep their own rules.
-- `DirectConversations` (`direct-conversations.server.ts`) owns the viewer's
-  direct conversations by id: opening one by who it is with (only their own
-  live Agent, or a Workspace member), `authorize` (who may use a conversation
-  id and who it is with: a DM with an Agent is its creator's alone, and a
-  deleted Agent's DM is read-only), every page operation (read a window,
-  updates, read cursors, reactions, send) and the viewer's Direct messages
-  list (`list`, `unreadCounts`, pin, mark unread, close). A DM with an Agent
-  and one between members share each operation; only a send branches, to
-  `SendDirectMessage` or `UserDirectConversations`. Server Functions call it
-  and stay thin; do not key a new DM operation by Agent.
-- `viewerDirectConversationWhere` (`viewer-direct-conversations.server.ts`)
-  is the one filter for the DMs a viewer's list holds (the ones `authorize`
-  lets them open, less a deleted Agent's); the list and a pin drag both use
-  it, and the Activity inbox lists exactly these DMs through its raw SQL twin
-  `viewerDirectConversationSql` in the same file. Change the two together.
-  A DM the viewer closed comes back when someone other than them posts a
+- `chat-sections.server.ts` owns personal Chat groups, their saved collapse state, and assigning a member's conversations, scoped to that user and Workspace.
+  Deleting a group keeps its conversations; moving into one unpins that row. Group and row ordering takes the member pin lock before conversation locks.
+- `PublicChannels` (`public-channels.server.ts`) owns Workspace authorization, default-channel enrollment, channel membership, canonical read/write and ordering, human read positions, persistent follow state, and
+  mute/mention delivery eligibility. `channelAgentRecipients` is the one rule for which Agents a sent channel message wakes, whether a person or an Agent
+  sent it; the Agent send path in the direct-conversation repository calls it too, and `enrollThreadReplyFollowers`, the one rule for who a thread reply makes a follower. A Task and an action card keep their own rules.
+- `DirectConversations` (`direct-conversations.server.ts`) owns the viewer's direct conversations by id: opening one by who it is with (only their own
+  live Agent, or a Workspace member), `authorize` (who may use a conversation id and who it is with: a DM with an Agent is its creator's alone, and a
+  deleted Agent's DM is read-only), every page operation (read a window, updates, read cursors, reactions, send) and the viewer's Direct messages
+  list (`list`, `unreadCounts`, pin, mark unread, close). A DM with an Agent and one between members share each operation; only a send branches, to
+  `SendDirectMessage` or `UserDirectConversations`. Server Functions call it and stay thin; do not key a new DM operation by Agent.
+- `viewerDirectConversationWhere` (`viewer-direct-conversations.server.ts`) is the one filter for the DMs a viewer's list holds (the ones `authorize`
+  lets them open, less a deleted Agent's); the list and a pin drag both use it, and the Activity inbox lists exactly these DMs through its raw SQL twin
+  `viewerDirectConversationSql` in the same file. Change the two together. A DM the viewer closed comes back when someone other than them posts a
   top-level message after the close.
-- `PublicChannels.list` also returns each channel's last top-level message with its sender, its
-  first six active members by `joinedAt` (`channel-list-preview.server.ts`), and whether the viewer
+- `PublicChannels.list` also returns each channel's last top-level message with its sender, its first six active members by `joinedAt` (`channel-list-preview.server.ts`), and whether the viewer
   has an unread @mention there; each is one grouped query for all listed channels, never per channel.
-- A human's send in a DM with an Agent signals the viewer's own channel with
-  `senderUserId` set (`SendDirectMessage.execute`), for the same reason.
-- `direct-conversation-peer.server.ts` owns who a DM is with as every DM
-  surface shows it (the sidebar, the Activity inbox): an Agent, or a member by
+- A human's send in a DM with an Agent signals the viewer's own channel with `senderUserId` set (`SendDirectMessage.execute`), for the same reason.
+- `direct-conversation-peer.server.ts` owns who a DM is with as every DM surface shows it (the sidebar, the Activity inbox): an Agent, or a member by
   the DM's key, still named after they leave the Workspace.
 - `UserDirectConversations` (`user-direct-conversations.server.ts`) owns
   direct conversations between Workspace members (and a member with

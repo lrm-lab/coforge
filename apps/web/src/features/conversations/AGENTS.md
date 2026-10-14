@@ -2,39 +2,26 @@
 
 These rules apply to `src/features/conversations/`.
 
-- This feature does not own Agent state. Read Agent status and Activity
-  through the `features/agents/` hooks, and open, close, or switch the
-  right-hand Agent profile panel through
-  `features/agents/profile-panel/open-agent-profile.ts` instead of writing
-  `profile`/`agentTab` search params. The channel settings sheet embeds the
+- This feature does not own Agent state. Read Agent status and Activity through the `features/agents/` hooks, and open, close, or switch the
+  right-hand Agent profile panel through `features/agents/profile-panel/open-agent-profile.ts` instead of writing `profile`/`agentTab` search params. The channel settings sheet embeds the
   profile with its own state instead (see the members page below).
-- `conversation-navigation.tsx` owns Chat list/detail selection, retained
-  list scroll, and mounted conversation drafts on desktop and mobile. At `lg`
-  and above, list and detail stay side by side; narrower viewports switch
-  between them. Neither sidebar renders conversation lists or their creation
-  actions. `last-conversation.ts` owns which conversation Chat opens on a desktop
-  (the remembered one while listed, else the first joined channel);
+- `conversation-navigation.tsx` owns Chat list/detail selection, retained list scroll, and mounted conversation drafts on desktop and mobile. At `lg`
+  and above, list and detail stay side by side; narrower viewports switch between them. Neither sidebar renders conversation lists or their creation
+  actions. `last-conversation.ts` owns which conversation Chat opens on a desktop (the remembered one while listed, else the first joined channel);
   `conversation-layout.tsx` only navigates there.
-- A pinned channel or DM appears only in the sidebar's Pinned section, which
-  `pinned-conversations.ts` builds by merging both kinds by pin order; closing
-  a chat never takes it out of Pinned. A row can be dragged into Pinned or
-  back to its own section only. A drag saves the new pin order plus the rows
-  it unpinned, never a whole list, so pins it cannot see survive.
-  Channels and Direct messages are not reordered by hand.
-- Direct messages list the viewer's existing DM conversations only, with
-  Agents and members mixed in the order they started: a conversation starts
-  from a "Message" affordance (`useOpenDirectConversation`, which opens or
-  starts it and goes to `dm/<conversationId>`). The Direct messages "+" opens
-  a searchable Agent and Human picker in Chat, using that same seam. Link to
-  a DM by its conversation id; only a "start" affordance knows just an Agent or
-  a member.
-  Every DM row, its pin, menu actions, unread badge and read-cursor key go by
-  conversation id (`dm:<conversationId>` for the cursor).
+- `chat-sections.ts` owns the personal section Query and writes; `chat-section-dialog.tsx` and `chat-section-menu.tsx` expose creation, editing, collapse and deletion.
+  Section data is scoped by Workspace and viewer, refreshed on focus and while visible. The row menu moves conversations; pinned rows take display priority.
+- A pinned channel or DM appears only in the sidebar's Pinned section, which `pinned-conversations.ts` builds by merging both kinds by pin order; closing
+  a chat never takes it out of Pinned. Rows drag between Pinned, custom groups, and their own default group. A pin drag saves only its changed pins,
+  and a group move saves one conversation's destination and the next conversation there; unseen rows survive. Channels and Direct messages keep their natural order.
+- `directory-drag.tsx` owns row/group sensors, overlays and drop targets; `pinned-conversations.ts` owns the layout rules. Custom groups and their rows have saved orders.
+- Direct messages list the viewer's existing DM conversations only, with Agents and members mixed in the order they started: a conversation starts
+  from a "Message" affordance (`useOpenDirectConversation`, which opens or starts it and goes to `dm/<conversationId>`). The Direct messages "+" opens
+  a searchable Agent and Human picker in Chat, using that same seam. Link to a DM by its conversation id; only a "start" affordance knows just an Agent or
+  a member. Every DM row, its pin, menu actions, unread badge and read-cursor key go by conversation id (`dm:<conversationId>` for the cursor).
   Headers with creation actions stay visible even when their lists are empty.
-- The sidebar's channel and DM lists live in `sidebar-collections.ts` (collections and changes,
-  tested without React) and `sidebar-lists.ts` (hooks). The chat layout's (`_chat`) loader fetches
-  them, in the browser, into the TanStack Query cache (a later page load restores the browser's
-  copy first, `../cache-persistence/`); the same keys back TanStack DB
+- The sidebar's channel and DM lists live in `sidebar-collections.ts` (collections and changes, tested without React) and `sidebar-lists.ts` (hooks). The chat layout's (`_chat`) loader fetches
+  them, in the browser, into the TanStack Query cache (a later page load restores the browser's copy first, `../cache-persistence/`); the same keys back TanStack DB
   collections. Every channel's name (`channelNamesQuery`, for body channel links
   and the `#` list) lives in the same cache; the create-channel dialog reads projects on open.
 - Realtime keeps every Chat list live, so the loader (run on each navigation inside Chat) reads

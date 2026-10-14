@@ -40,6 +40,8 @@ import { directRowsOf, type DirectRow } from "./sidebar-rows";
 import { channelNamesAfter, type ChannelSignal } from "./channel-signals";
 import type { ChatList } from "./conversation-unread";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
+import { chatSectionsQuery, serverChatSectionsApi, type ChatSectionsApi } from "./chat-sections";
+import type { ChatSection } from "./chat-section.schemas";
 import {
   olderStreamPositions,
   type StreamPosition,
@@ -58,6 +60,7 @@ export type Arrangement = { pins: readonly PinRef[]; unpinned: readonly PinRef[]
 
 /** The server calls the sidebar makes; tests pass their own. */
 export type SidebarApi = {
+  sections: ChatSectionsApi;
   listChannels: () => Promise<ChannelList>;
   loadDirectPreferences: () => Promise<DirectPreferences>;
   loadDirectBadges: () => Promise<DirectBadges>;
@@ -68,6 +71,7 @@ export type SidebarApi = {
 };
 
 export const serverSidebarApi: SidebarApi = {
+  sections: serverChatSectionsApi,
   listChannels: () => listPublicChannels(),
   loadDirectPreferences: () => loadDirectConversationPreferences(),
   loadDirectBadges: () => loadDirectConversationBadges(),
@@ -298,6 +302,15 @@ export function createSidebar(
       ...LIST_OPTIONS,
     }),
   );
+  const sections = createCollection(
+    queryCollectionOptions({
+      id: `chat-sections:${workspaceId}`,
+      ...chatSectionsQuery(workspaceId, api.sections),
+      queryFn: api.sections.list,
+      queryClient,
+      getKey: (section: ChatSection) => section.id,
+    }),
+  );
 
   /** Changes one row on screen; a row that has left the list meanwhile is left alone. */
   const edit = (target: PinRef, change: (row: SidebarFields) => void) => {
@@ -310,7 +323,10 @@ export function createSidebar(
   const confirm = (transaction: Transaction) => {
     const write = (mutation: PendingMutation) => {
       const key = String(mutation.key);
-      if (mutation.collection.id === channels.id)
+      if (mutation.collection.id === sections.id) {
+        if (mutation.type === "delete") sections.utils.writeDelete(key);
+        else sections.utils.writeUpdate({ ...mutation.changes, id: key });
+      } else if (mutation.collection.id === channels.id)
         channels.utils.writeUpdate({ ...mutation.changes, id: key });
       else directs.utils.writeUpdate({ ...mutation.changes, conversationId: key });
     };
@@ -364,6 +380,86 @@ export function createSidebar(
       }),
     mutationFn: async (target, { transaction }) => {
       await api.close(target);
+      confirm(transaction);
+    },
+  });
+
+  const updateSection = createOptimisticAction<{
+    id: string;
+    patch: Parameters<ChatSectionsApi["update"]>[1];
+  }>({
+    onMutate: ({ id, patch }) => {
+      if (sections.has(id)) sections.update(id, (section) => Object.assign(section, patch));
+    },
+    mutationFn: async ({ id, patch }, { transaction }) => {
+      await api.sections.update(id, patch);
+      confirm(transaction);
+    },
+  });
+  const removeSection = createOptimisticAction<string>({
+    onMutate: (id) => {
+      if (sections.has(id)) sections.delete(id);
+    },
+    mutationFn: async (id, { transaction }) => {
+      await api.sections.remove(id);
+      confirm(transaction);
+    },
+  });
+  const reorderSections = createOptimisticAction<readonly string[]>({
+    onMutate: (ids) => {
+      const current = [...sections.toArray].sort((a, b) => a.sortOrder - b.sortOrder);
+      const order = [
+        ...ids,
+        ...current.map((section) => section.id).filter((id) => !ids.includes(id)),
+      ];
+      order.forEach((id, sortOrder) => {
+        if (sections.has(id))
+          sections.update(id, (section) => {
+            section.sortOrder = sortOrder;
+          });
+      });
+    },
+    mutationFn: async (ids, { transaction }) => {
+      await api.sections.reorder(ids);
+      confirm(transaction);
+    },
+  });
+  const moveToSection = createOptimisticAction<{
+    target: PinRef;
+    sectionId: string | null;
+    beforeConversationId?: string | null;
+  }>({
+    onMutate: ({ target, sectionId, beforeConversationId }) => {
+      const conversationId = target.kind === "channel" ? target.channelId : target.conversationId;
+      for (const section of sections.toArray) {
+        if (section.id !== sectionId && !section.conversationIds.includes(conversationId)) continue;
+        sections.update(section.id, (draft) => {
+          draft.conversationIds = draft.conversationIds.filter((id) => id !== conversationId);
+          if (section.id === sectionId) {
+            const index = beforeConversationId
+              ? draft.conversationIds.indexOf(beforeConversationId)
+              : -1;
+            draft.conversationIds.splice(
+              index < 0 ? draft.conversationIds.length : index,
+              0,
+              conversationId,
+            );
+            draft.collapsed = false;
+          }
+        });
+      }
+      edit(target, (row) => {
+        row.pinned = false;
+        row.pinSortOrder = null;
+        row.hidden = false;
+      });
+    },
+    mutationFn: async ({ target, sectionId, beforeConversationId }, { transaction }) => {
+      await api.sections.move(
+        target.kind === "channel" ? target.channelId : target.conversationId,
+        sectionId,
+        beforeConversationId,
+      );
       confirm(transaction);
     },
   });
@@ -431,6 +527,38 @@ export function createSidebar(
   const directsKey = sidebarDirectsQueryKey(workspaceId);
   const listOf = (target: PinRef) => [target.kind === "channel" ? channelsKey : directsKey];
   const actions = {
+    reorderSections: (ids: readonly string[]) =>
+      saved(reorderSections(ids), () => api.sections.reorder(ids), [
+        chatSectionsQuery(workspaceId).queryKey,
+      ]),
+    createSection: async (input: Parameters<ChatSectionsApi["create"]>[0]) => {
+      const section = await api.sections.create(input);
+      sections.utils.writeInsert(section);
+      return section;
+    },
+    updateSection: (id: string, patch: Parameters<ChatSectionsApi["update"]>[1]) =>
+      saved(updateSection({ id, patch }), () => api.sections.update(id, patch), [
+        chatSectionsQuery(workspaceId).queryKey,
+      ]),
+    removeSection: (id: string) =>
+      saved(removeSection(id), () => api.sections.remove(id), [
+        chatSectionsQuery(workspaceId).queryKey,
+      ]),
+    moveToSection: (
+      target: PinRef,
+      sectionId: string | null,
+      beforeConversationId?: string | null,
+    ) =>
+      saved(
+        moveToSection({ target, sectionId, beforeConversationId }),
+        () =>
+          api.sections.move(
+            target.kind === "channel" ? target.channelId : target.conversationId,
+            sectionId,
+            beforeConversationId,
+          ),
+        [chatSectionsQuery(workspaceId).queryKey, ...listOf(target)],
+      ),
     setPinned: (target: PinRef, pinned: boolean) =>
       saved(pin({ target, pinned }), () => api.pin(target, pinned), listOf(target)),
     markUnread: (target: PinRef) =>
@@ -479,7 +607,7 @@ export function createSidebar(
     return true;
   };
 
-  return { channels, directs, actions, applyChannelSignal };
+  return { channels, directs, sections, actions, applyChannelSignal };
 }
 
 export type Sidebar = ReturnType<typeof createSidebar>;

@@ -596,6 +596,7 @@ model WorkspaceMembership {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   preferences WorkspaceMemberPreference?
+  chatSections ChatSection[]
 
   @@id([workspaceId, userId])
   @@index([userId])
@@ -616,6 +617,23 @@ model WorkspaceMemberPreference {
 
   @@id([workspaceId, userId])
   @@map("workspace_member_preferences")
+}
+
+/// Personal Chat sidebar groups; deleting one keeps its conversations and messages.
+model ChatSection {
+  id            String               @id @default(uuid(7)) @db.Uuid
+  workspaceId   String               @db.Uuid
+  userId        String               @db.Uuid
+  name          String
+  emoji         String?
+  collapsed     Boolean              @default(false)
+  sortOrder     Int                  @default(0)
+  createdAt     DateTime             @default(now())
+  membership    WorkspaceMembership  @relation(fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
+  conversations ConversationMember[]
+
+  @@index([workspaceId, userId, createdAt])
+  @@map("chat_sections")
 }
 
 /// A reusable link anyone signed in can open to join the Workspace as an ordinary member (no role).
@@ -766,6 +784,9 @@ model ConversationMember {
   /// thread does not consume unread in the channel's main target.
   readThroughSequence      Int               @default(0)
   channelMuted             Boolean           @default(false)
+  chatSectionId            String?           @db.Uuid
+  chatSectionSortOrder     Int               @default(0)
+  chatSection              ChatSection?      @relation(fields: [chatSectionId], references: [id], onDelete: SetNull)
   /// This member's own display preference for this conversation: long messages fold behind
   /// "Show more". On unless they turn it off.
   collapseLongMessages     Boolean           @default(true)
@@ -813,6 +834,7 @@ model ConversationMember {
   @@unique([conversationId, agentId])
   @@index([workspaceId, userId])
   @@index([workspaceId, agentId])
+  @@index([chatSectionId])
   @@map("conversation_members")
 }
 

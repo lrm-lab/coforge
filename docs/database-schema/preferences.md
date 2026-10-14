@@ -17,11 +17,12 @@ order, first tab opens by default), each limited to its panel's ids by a `CHECK`
 ## `chat_sections`
 
 A member's personal Chat groups inside one Workspace. Each section has a UUIDv7 id,
-name, optional emoji, collapsed state and creation order. Its `(workspaceId, userId)`
+name (at most 18 characters), optional emoji, collapsed state and saved order. Its `(workspaceId, userId)`
 foreign key points to `workspace_memberships` with `ON DELETE CASCADE`.
 
 `conversation_members.chatSectionId` assigns a member's channel or direct conversation
-to one section. Section writes authorize the member and conversation in that Workspace;
+to one section; `chatSectionSortOrder` keeps its position there. `chat_sections.sortOrder`
+keeps the member's group order. Section writes authorize the member and conversation in that Workspace;
 they never change another member's grouping. Removing a section sets these references
 to NULL and keeps every conversation and message. Pinned conversations stay in Pinned;
 unpinning returns them to their assigned section. Moving a pinned conversation to a
@@ -29,5 +30,8 @@ section unpins it. Unassigned conversations stay in Channels or Direct messages.
 
 The Chat list creates sections with a name and optional emoji, edits their names and
 icons, collapses them, and moves conversations through each row's menu. A section's
-collapse state is saved with it. Other devices read changes when Chat opens, regains
+collapse state is saved with it. Section headings display uppercase without changing
+the saved name or its edit field, truncating with an ellipsis when space runs out.
+Members can drag conversations between groups and reorder custom groups; both orders
+are saved. Other devices read changes when Chat opens, regains
 focus, and periodically while visible; this does not add a realtime wire event.

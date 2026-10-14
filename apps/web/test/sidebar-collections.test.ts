@@ -43,6 +43,31 @@ const channel = (id: string, fields: Partial<Channel> = {}): Channel => ({
   ...fields,
 });
 
+const sectionApi = {
+  list: async () => [
+    {
+      id: "section-a",
+      name: "Project",
+      emoji: null,
+      collapsed: false,
+      sortOrder: 0,
+      conversationIds: [] as string[],
+    },
+  ],
+  create: async () => ({
+    id: "section-new",
+    name: "New",
+    emoji: null,
+    collapsed: false,
+    sortOrder: 0,
+    conversationIds: [] as string[],
+  }),
+  update: async () => {},
+  remove: async () => {},
+  reorder: async () => {},
+  move: async () => {},
+};
+
 async function sidebarWith(overrides: Partial<SidebarApi> = {}, { synced = true } = {}) {
   const saves: string[] = [];
   const server = {
@@ -74,6 +99,7 @@ async function sidebarWith(overrides: Partial<SidebarApi> = {}, { synced = true 
     channelReads: 0,
   };
   const api: SidebarApi = {
+    sections: sectionApi,
     listChannels: async () => {
       server.channelReads += 1;
       if (server.failReads) throw new Error("offline");
@@ -655,6 +681,7 @@ function serverlessApi(server: {
   preferences: Awaited<ReturnType<SidebarApi["loadDirectPreferences"]>>;
 }): SidebarApi {
   return {
+    sections: sectionApi,
     listChannels: async () => ({ streamPositions: {}, channels: server.channels }),
     loadDirectPreferences: async () => server.preferences,
     loadDirectBadges: async () => ({ viewerId: "viewer", unread: {}, streamPositions: {} }),
@@ -664,3 +691,67 @@ function serverlessApi(server: {
     arrange: async () => {},
   };
 }
+
+test("moving a pinned DM shows its section immediately and rolls back both changes on failure", async () => {
+  const gate = Promise.withResolvers<void>();
+  const { sidebar } = await sidebarWith({ sections: { ...sectionApi, move: () => gate.promise } });
+  await sidebar.sections.preload();
+  await sidebar.actions.close({ kind: "direct", conversationId: "dm-helper" });
+  const saving = sidebar.actions.moveToSection(
+    { kind: "direct", conversationId: "dm-helper" },
+    "section-a",
+  );
+  try {
+    expect(sidebar.directs.get("dm-helper")?.pinned).toBe(false);
+    expect(sidebar.directs.get("dm-helper")?.hidden).toBe(false);
+    expect(sidebar.sections.get("section-a")?.conversationIds).toEqual(["dm-helper"]);
+  } finally {
+    gate.reject(new Error("offline"));
+    await expect(saving).rejects.toThrow("offline");
+  }
+  expect(sidebar.directs.get("dm-helper")?.pinned).toBe(true);
+  expect(sidebar.sections.get("section-a")?.conversationIds).toEqual([]);
+});
+
+test("a section reorder and an insertion before another conversation show immediately and stay saved", async () => {
+  const { sidebar } = await sidebarWith({
+    sections: {
+      ...sectionApi,
+      list: async () => [
+        {
+          id: "section-a",
+          name: "First",
+          emoji: null,
+          collapsed: false,
+          sortOrder: 0,
+          conversationIds: ["general"],
+        },
+        {
+          id: "section-b",
+          name: "Second",
+          emoji: null,
+          collapsed: false,
+          sortOrder: 1,
+          conversationIds: [],
+        },
+      ],
+    },
+  });
+  await sidebar.sections.preload();
+  const order = () =>
+    [...sidebar.sections.toArray]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((section) => section.id);
+  const ordering = sidebar.actions.reorderSections(["section-b", "section-a"]);
+  expect(order()).toEqual(["section-b", "section-a"]);
+  await ordering;
+  const moving = sidebar.actions.moveToSection(
+    { kind: "direct", conversationId: "dm-helper" },
+    "section-a",
+    "general",
+  );
+  expect(sidebar.sections.get("section-a")?.conversationIds).toEqual(["dm-helper", "general"]);
+  await moving;
+  expect(order()).toEqual(["section-b", "section-a"]);
+  expect(sidebar.sections.get("section-a")?.conversationIds).toEqual(["dm-helper", "general"]);
+});

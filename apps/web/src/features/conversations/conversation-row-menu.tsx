@@ -1,11 +1,13 @@
 import { Fragment, useState, type ReactNode } from "react";
-import { MessageChatSquare, Pin01, XClose } from "@untitledui/icons";
+import { Folder, MessageChatSquare, Pin01, XClose } from "@untitledui/icons";
+import { SubmenuTrigger } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import type { PinRef } from "./pinned-conversations";
 import { useSidebarActions } from "./sidebar-lists";
+import type { ChatSection } from "./chat-section.schemas";
 import {
   conversationRowMenuEnabled,
   conversationRowMenuItems,
@@ -41,9 +43,15 @@ export type ConversationRowMenuTarget =
  */
 export function ConversationRowMenu({
   target,
+  sections,
+  sectionsReady,
+  onSectionError,
   children,
 }: {
   target: ConversationRowMenuTarget;
+  sections: readonly ChatSection[];
+  sectionsReady: boolean;
+  onSectionError: (retry: () => Promise<void>) => void;
   /** The row, whose link must be a React Aria link (`ConversationRow`): the trigger attaches to the
    * first pressable inside it. */
   children: ReactNode;
@@ -61,6 +69,12 @@ export function ConversationRowMenu({
   /** Applies the change to the row at once (the menu closes as it would for any choice) and saves
    * it; a failed save puts the row back, and the toast says it failed (§13). */
   function handleAction(key: unknown) {
+    if (String(key).startsWith("section:")) {
+      const id = String(key).slice("section:".length);
+      const save = () => actions.moveToSection(row, id === "home" ? null : id);
+      save().catch(() => onSectionError(save));
+      return;
+    }
     const run = {
       "mark-unread": () => actions.markUnread(row),
       pin: () => actions.setPinned(row, !target.pinned),
@@ -80,6 +94,34 @@ export function ConversationRowMenu({
       {children}
       <Dropdown.Popover placement="bottom start">
         <Dropdown.Menu aria-label={m.conversation_menu_label()} onAction={handleAction}>
+          <SubmenuTrigger>
+            <Dropdown.Item
+              id="move-section"
+              icon={Folder}
+              label={m.chat_section_move()}
+              isDisabled={!sectionsReady}
+              selectionIndicator="none"
+            />
+            <Dropdown.Popover placement="right top">
+              <Dropdown.Menu aria-label={m.chat_section_move()} onAction={handleAction}>
+                <Dropdown.Item
+                  id="section:home"
+                  label={
+                    target.kind === "channel" ? m.channels_title() : m.messages_agents_action()
+                  }
+                  selectionIndicator="none"
+                />
+                {sections.map((section) => (
+                  <Dropdown.Item
+                    key={section.id}
+                    id={`section:${section.id}`}
+                    label={`${section.emoji ? `${section.emoji} ` : ""}${section.name}`}
+                    selectionIndicator="none"
+                  />
+                ))}
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </SubmenuTrigger>
           {items.map((item) => (
             <Fragment key={item.id}>
               {item.id === "close-chat" && <Dropdown.Separator />}

@@ -5,7 +5,7 @@
  * `renderToReadableStream` throws.
  */
 const DIRECTORY_SECTION_IDS = ["pinned", "channels", "agents"] as const;
-export type DirectorySectionId = (typeof DIRECTORY_SECTION_IDS)[number];
+export type DirectorySectionId = (typeof DIRECTORY_SECTION_IDS)[number] | `custom:${string}`;
 
 /** The sections a member can collapse. Pinned is a section (it takes drops, it can be hidden when
  * empty) but not a collapsible one: the design mockup gives it a pin and no chevron. */
