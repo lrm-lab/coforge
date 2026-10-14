@@ -77,7 +77,7 @@ describe("codeAgentExecutableSearchPath", () => {
 describe("npm-installed Codex discovery through the public seam", () => {
   /** POSIX execution fixtures (shebang launchers) cannot run on Windows; every pure-path test
    * above runs everywhere. */
-  const seamTest = process.platform === "win32" ? test.skip : test;
+  const seamTest = test.skipIf(process.platform === "win32");
 
   seamTest(
     "an npm-style launcher resolves and probes through discoverExternalCodeAgents",
