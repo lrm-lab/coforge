@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { UUID_LIKE_PATTERN, MIME_TYPE_PATTERN } from "@lrm/coforge-sdk/internal";
-import { errorResponse } from "#src/server/agents/agent-http-error.server";
+import {
+  attachmentUploadSessionRefusal,
+  errorResponse,
+} from "#src/server/agents/agent-http-error.server";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import {
   createAttachmentUploadSession,
-  AttachmentUploadSessionError,
   type AttachmentUploadSessionCreated,
 } from "#src/server/attachments/attachment-upload-session.server";
 import { getFileStorage } from "#src/server/files/file-storage.server";
@@ -95,9 +97,7 @@ export async function handleAttachmentUploadSessionCreate(
     });
     return Response.json(session, { status: 201 });
   } catch (error) {
-    if (error instanceof AttachmentUploadSessionError)
-      return errorResponse(error.code, error.message, error.status, error.retryable);
-    throw error;
+    return attachmentUploadSessionRefusal(error);
   }
 }
 

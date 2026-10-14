@@ -45,14 +45,10 @@ const RETRYABLE_CODES: ReadonlySet<AttachmentUploadSessionErrorCode> = new Set([
   "UPLOAD_VERIFICATION_IN_PROGRESS",
 ]);
 
-/** A default backoff hint for the two retryable codes; the CLI also applies its own schedule. */
-const RETRY_AFTER_MS = 250;
-
 export class AttachmentUploadSessionError extends Error {
   readonly code: AttachmentUploadSessionErrorCode;
   readonly status: number;
   readonly retryable: boolean;
-  readonly retryAfterMs?: number;
 
   constructor(code: AttachmentUploadSessionErrorCode, message: string) {
     super(message);
@@ -60,7 +56,6 @@ export class AttachmentUploadSessionError extends Error {
     this.code = code;
     this.status = STATUS_BY_CODE[code];
     this.retryable = RETRYABLE_CODES.has(code);
-    if (this.retryable) this.retryAfterMs = RETRY_AFTER_MS;
   }
 }
 
