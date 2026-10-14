@@ -500,7 +500,7 @@ for (const [why, overrides, message] of coreRefusals)
     expect(() => encodeJob(overrides)).toThrow(new Error(exact("job")));
   });
 
-test("a reminder summary also refuses a missing creation time, a one-shot repeat and a bad fired time", () => {
+test("a reminder summary also refuses a malformed creation time, a one-shot repeat and a bad fired time", () => {
   expect(() => encodeSummary({ createdAt: "yesterday" })).toThrow(
     new Error("invalid reminder created time"),
   );
@@ -509,4 +509,20 @@ test("a reminder summary also refuses a missing creation time, a one-shot repeat
     new Error("invalid reminder fired time"),
   );
   expect(() => encodeSummary({ firedAt: "2026-09-08T10:00:01Z" })).not.toThrow();
+});
+
+// A malformed value is refused by `fields()` first (above); a *missing* one passes that pre-check
+// and is refused by the shared core check, with each record's own message.
+for (const field of Object.keys(reminderCore) as (keyof typeof reminderCore)[])
+  test(`a reminder summary and a reminder job both refuse a missing ${field}`, () => {
+    expect(() => encodeSummary({ [field]: undefined })).toThrow(
+      new Error("invalid reminder summary"),
+    );
+    expect(() => encodeJob({ [field]: undefined })).toThrow(new Error("invalid reminder job"));
+  });
+
+test("a reminder summary refuses a missing creation time", () => {
+  expect(() => encodeSummary({ createdAt: undefined })).toThrow(
+    new Error("invalid reminder summary"),
+  );
 });
