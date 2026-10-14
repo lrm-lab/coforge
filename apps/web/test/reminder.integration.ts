@@ -883,6 +883,15 @@ test("an operation receipt replays only the input it was recorded for", async ()
     first,
   );
   expect(await repository.replay(scope, "receipt-unused", "fp-first")).toBeUndefined();
+  // `replay` runs before any authorization, so only the receipt's own Workspace stops a request
+  // from another one reading it back.
+  await expect(
+    repository.replay(
+      { ...scope, workspaceId: fixture.otherWorkspaceId },
+      "receipt-create",
+      "fp-first",
+    ),
+  ).rejects.toMatchObject(conflict);
   await expect(repository.replay(scope, "receipt-create", "fp-other")).rejects.toMatchObject(
     conflict,
   );
