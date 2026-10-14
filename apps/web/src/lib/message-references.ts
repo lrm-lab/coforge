@@ -303,7 +303,7 @@ function proseReferences(body: string): { reference: Reference; start: number; e
       );
       if (!exact) continue;
       // Reference text holds no `<`, so it maps back to the body one character for one.
-      const start = toBody ? toBody[from]! : from;
+      const start = toBody ? toBody(from) : from;
       references.push({ reference: exact.reference, start, end: start + exact.text.length });
     }
   }
@@ -311,25 +311,24 @@ function proseReferences(body: string): { reference: Reference; start: number; e
 }
 
 /**
- * The body offset of each offset of its Markdown source. `escapeLiteralHtml` only ever turns a
- * `<` into `&lt;`, so the two differ exactly there: each of those four source characters maps to
- * the body's `<`.
+ * Maps source offsets in reading order back to the body. Only an escaped `<` adds source units;
+ * code spans, autolinks and literal entities keep their original lengths. Read the actual source
+ * instead of repeating the escaping rules, and retain only the next `<` and expansion so far.
  */
-function bodyOffsets(body: string, source: string): number[] {
-  const offsets: number[] = [];
-  let at = 0;
-  for (let index = 0; index < source.length;) {
-    if (body[at] === "<" && source.startsWith("&lt;", index)) {
-      offsets.push(at, at, at, at);
-      index += 4;
-    } else {
-      offsets.push(at);
-      index += 1;
+function bodyOffsets(body: string, source: string): (offset: number) => number {
+  let next = body.indexOf("<");
+  let expansion = 0;
+  return (offset) => {
+    while (next !== -1 && next + expansion < offset) {
+      const start = next + expansion;
+      if (source.startsWith("&lt;", start)) {
+        if (offset < start + 4) return next;
+        expansion += 3;
+      }
+      next = body.indexOf("<", next + 1);
     }
-    at += 1;
-  }
-  offsets.push(at);
-  return offsets;
+    return offset - expansion;
+  };
 }
 
 type SourceRange = { start: number; end: number };

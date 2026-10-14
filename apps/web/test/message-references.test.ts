@@ -192,6 +192,50 @@ test("HTML-looking lines are prose, the way the renderer shows them", () => {
   ).toBe(`hi <b><@human:${ADA.id}></b> and a < b ${channelReferenceToken(PRODUCT.id, "product")}`);
 });
 
+test("long HTML-looking Unicode prose maps references past unchanged code, autolinks and entities", () => {
+  const untouched =
+    "`<code @helper #random>` <https://example.com/@helper#random> <ada@example.com>";
+  const prefix = "普通😀 <section> &lt;aside> ".repeat(200);
+  const body = `@ada ${untouched}\n${prefix}@helper #product task #68 <tail> @ada`;
+  const read = readMessageReferences(body);
+  expect(read.candidates).toEqual({
+    handles: ["ada", "helper"],
+    taskNumbers: [68],
+    channelNames: ["product"],
+    threads: [],
+  });
+  expect(
+    read.resolve({
+      mention: (handle) => (handle === "ada" ? ADA : HELPER),
+      channel,
+      task: (number) => number === 68,
+    }),
+  ).toBe(
+    `<@human:${ADA.id}> ${untouched}\n${prefix}<@agent:${HELPER.id}> ${channelReferenceToken(PRODUCT.id, PRODUCT.name)} ${taskReferenceToken(68)} <tail> <@human:${ADA.id}>`,
+  );
+});
+
+test("HTML-looking quote lines keep reference order and every surrounding byte", () => {
+  const body =
+    "> <section> @ada\n> `<code @helper>`\n> &lt;aside> #product\n> <b>task #68</b>\n\n<tail> @helper";
+  const read = readMessageReferences(body);
+  expect(read.candidates).toEqual({
+    handles: ["ada", "helper"],
+    taskNumbers: [68],
+    channelNames: ["product"],
+    threads: [],
+  });
+  expect(
+    read.resolve({
+      mention: (handle) => (handle === "ada" ? ADA : HELPER),
+      channel,
+      task: (number) => number === 68,
+    }),
+  ).toBe(
+    `> <section> <@human:${ADA.id}>\n> \`<code @helper>\`\n> &lt;aside> ${channelReferenceToken(PRODUCT.id, PRODUCT.name)}\n> <b>${taskReferenceToken(68)}</b>\n\n<tail> <@agent:${HELPER.id}>`,
+  );
+});
+
 test("an @mention in a link's label is part of the link, not a mention", () => {
   const { handles } = messageReferenceCandidates("[ask @ada](https://example.com) or @ada");
   const resolution = resolveMentionTargets(handles, [ADA]);
