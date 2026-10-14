@@ -418,3 +418,76 @@ test("join/leave/archive/unarchive routes forward the target and return their de
   expect(unarchiveCalls).toEqual([["workspace-1", "agent-1", "#eng", false]]);
   expect(await unarchiveResult.json()).toMatchObject({ target: "#eng", archived: false });
 });
+
+const archiveOperations = [
+  { operation: "archive", handler: handleAgentChannelArchivePost, archived: true },
+  { operation: "unarchive", handler: handleAgentChannelUnarchivePost, archived: false },
+];
+
+test.each(archiveOperations)(
+  "$operation preserves its idempotency key, state and repository receiver",
+  async ({ operation, handler, archived }) => {
+    const calls: unknown[] = [];
+    const repository = fakeRepository({
+      async setArchived(...args) {
+        expect(this).toBe(repository);
+        calls.push(args);
+        return { target: "#eng", archived };
+      },
+    });
+    const result = await handler(
+      post(`/api/agent/v1/channels/%23eng/${operation}`, { idempotencyKey: "request-1" }),
+      "#eng",
+      principal,
+      repository,
+    );
+    expect(calls).toEqual([["workspace-1", "agent-1", "#eng", archived]]);
+    expect(result.status).toBe(200);
+    expect(result.headers.get("content-type")).toContain("application/json");
+    expect(await result.json()).toEqual({ idempotencyKey: "request-1", target: "#eng", archived });
+  },
+);
+
+test.each(archiveOperations)(
+  "$operation preserves declared refusals and hides unexpected failures",
+  async ({ operation, handler }) => {
+    for (const failure of [
+      {
+        error: new Error("private repository detail"),
+        status: 400,
+        type: "text/plain",
+        body: `channel ${operation} failed`,
+      },
+      {
+        error: new AgentChannelManagementError(403, "owner lacks admin authority"),
+        status: 403,
+        type: "text/plain",
+        body: "owner lacks admin authority",
+      },
+      {
+        error: new AgentChannelManagementError(404, "Agent is private", "agent_not_visible"),
+        status: 404,
+        type: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          errorCode: "agent_not_visible",
+          error: "Agent is private",
+        }),
+      },
+    ]) {
+      const result = await handler(
+        post(`/api/agent/v1/channels/%23eng/${operation}`),
+        "#eng",
+        principal,
+        fakeRepository({
+          async setArchived() {
+            throw failure.error;
+          },
+        }),
+      );
+      expect(result.status).toBe(failure.status);
+      expect(result.headers.get("content-type")).toContain(failure.type);
+      expect(await result.text()).toBe(failure.body);
+    }
+  },
+);
