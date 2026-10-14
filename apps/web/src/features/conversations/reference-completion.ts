@@ -26,11 +26,29 @@ export type ChannelSuggestion = {
  * is never recognized inside code, so completion does not open there.
  */
 function caretInCode(beforeCaret: string): boolean {
-  const fences = beforeCaret.split("```");
-  if (fences.length % 2 === 0) return true;
-  const afterLastFence = fences[fences.length - 1];
-  const line = afterLastFence.slice(afterLastFence.lastIndexOf("\n") + 1);
-  return line.split("`").length % 2 === 0;
+  let fenced = false;
+  let lastFenceEnd = 0;
+  for (
+    let fence = beforeCaret.indexOf("```");
+    fence !== -1;
+    fence = beforeCaret.indexOf("```", lastFenceEnd)
+  ) {
+    fenced = !fenced;
+    // Match split's nonoverlapping triples, including runs longer than three backticks.
+    lastFenceEnd = fence + 3;
+  }
+  if (fenced) return true;
+
+  const lineStart = Math.max(lastFenceEnd, beforeCaret.lastIndexOf("\n") + 1);
+  let inline = false;
+  for (
+    let tick = beforeCaret.indexOf("`", lineStart);
+    tick !== -1;
+    tick = beforeCaret.indexOf("`", tick + 1)
+  ) {
+    inline = !inline;
+  }
+  return inline;
 }
 
 /** An `@query` (any run without whitespace, `@` or `#`) or a `#query` (channel-name characters),

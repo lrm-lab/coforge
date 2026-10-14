@@ -154,6 +154,70 @@ test("a fenced code block keeps both triggers closed until it is fenced off agai
   expect(activeReferenceQuery("```\nx\n``` `y #r", end("```\nx\n``` `y #r"))).toBeUndefined();
 });
 
+test("backtick runs retain nonoverlapping triple-fence and remaining inline-tick parity", () => {
+  const cases: [number, boolean][] = [
+    [0, true],
+    [1, false],
+    [2, true],
+    [3, false],
+    [4, false],
+    [5, false],
+    [6, true],
+    [7, false],
+    [8, true],
+    [9, false],
+    [10, false],
+    [11, false],
+    [12, true],
+    [13, false],
+    [14, true],
+  ];
+  for (const [ticks, opens] of cases) {
+    const text = "`".repeat(ticks) + " @ada";
+    expect(activeReferenceQuery(text, end(text))).toEqual(
+      opens ? { trigger: "@", start: ticks + 1, query: "ada" } : undefined,
+    );
+  }
+});
+
+test("only ticks on the current line after the last closed fence affect inline-code parity", () => {
+  for (const text of ["`stray ```code``` @ada", "```code``` `open\n @ada"]) {
+    expect(activeReferenceQuery(text, end(text))).toEqual({
+      trigger: "@",
+      start: text.length - 4,
+      query: "ada",
+    });
+  }
+  const open = "```code``` `open @ada";
+  expect(activeReferenceQuery(open, end(open))).toBeUndefined();
+});
+
+test("inline-code line resets retain the distinction between LF and other whitespace", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    const text = "`open" + newline + " @张";
+    expect(activeReferenceQuery(text, end(text))).toEqual({
+      trigger: "@",
+      start: text.length - 2,
+      query: "张",
+    });
+  }
+  for (const whitespace of ["\r", "\u2028", "\u2029"]) {
+    const text = "`open" + whitespace + " @张";
+    expect(activeReferenceQuery(text, end(text))).toBeUndefined();
+  }
+});
+
+test("a closed fence after the caret does not close the draft prefix's code region", () => {
+  const text = "```ts\n @ada ``` #ops";
+  const caret = text.indexOf("@ada") + 4;
+  expect(activeReferenceQuery(text, caret)).toBeUndefined();
+  expect(activeReferenceQuery(text, end(text))).toEqual({
+    trigger: "#",
+    start: text.length - 4,
+    query: "ops",
+  });
+});
+
 test("channel suggestions keep every channel whose name contains the query", () => {
   const channels = [
     channel("all"),
