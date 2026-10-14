@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path, { posix, win32 as winPath } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -7,12 +7,10 @@ import {
   codeAgentExecutableSearchPath,
   executablePathDelimiter,
 } from "#src/platform/code-agent-path";
-import {
-  discoverExternalCodeAgents,
-  type ExternalCodeAgentProbe,
-} from "#src/code-agent/runtime-inventory";
+import { discoverExternalCodeAgents } from "#src/code-agent/runtime-inventory";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
+import { captureDaemonLogs } from "./log-capture";
 
 /** Every fixture lives in a per-test `mkdtemp` home: nothing is shared with the host's real
  * HOME (no racing installs), and cross-platform assertions are built from the same `path`
@@ -45,9 +43,9 @@ describe("codeAgentExecutableSearchPath", () => {
     const environment: Record<string, string> = { HOME: home, PATH: ambient };
     if (hostPlatform === "win32") {
       environment.APPDATA = "C:\\Users\\x\\npm";
-      expect(codeAgentExecutableSearchPath(environment, hostPlatform).split(hostDelimiter)).toContain(
-        winPath.join(environment.APPDATA, "npm"),
-      );
+      expect(
+        codeAgentExecutableSearchPath(environment, hostPlatform).split(hostDelimiter),
+      ).toContain(winPath.join(environment.APPDATA, "npm"));
     } else {
       environment.APPDATA = home;
     }
@@ -98,20 +96,19 @@ describe("codeAgentExecutableSearchPath", () => {
 });
 
 describe("npm-installed Codex discovery through the public seam", () => {
-  /** Windows twin: `codex.cmd` -> `codex-fake-node.cmd` (resolved by the child's PATH, so the
-   * property under test is the same). POSIX: shebang `codex` -> `codex-fake-node`. */
+  /** Both launchers need an interpreter available only on the discovered PATH. The Windows
+   * twin uses native executables so fixture startup needs no shell or PowerShell on PATH. */
   async function writeCodexFixture(home: string) {
     const bin = hostJoin(home, ".npm-global", "bin");
     mkdirSync(bin, { recursive: true });
     if (hostPlatform === "win32") {
-      writeFileSync(
-        hostJoin(bin, "codex.cmd"),
-        await Bun.file(path.join(import.meta.dir, "fixtures", "codex.cmd")).text(),
-      );
-      writeFileSync(
-        hostJoin(bin, "codex-fake-node.cmd"),
-        await Bun.file(path.join(import.meta.dir, "fixtures", "codex-fake-node.cmd")).text(),
-      );
+      const launcher = hostJoin(bin, "codex.exe");
+      const build = await Bun.build({
+        entrypoints: [path.join(import.meta.dir, "fixtures", "codex-discovery-windows.ts")],
+        compile: { outfile: launcher },
+      });
+      expect(build.success).toBe(true);
+      copyFileSync(launcher, hostJoin(bin, "codex-fake-node.exe"));
     } else {
       writeFileSync(hostJoin(bin, "codex"), "#!/usr/bin/env codex-fake-node", { mode: 0o755 });
       writeFileSync(
@@ -134,15 +131,23 @@ describe("npm-installed Codex discovery through the public seam", () => {
       await writeCodexFixture(home);
 
       const environment = { HOME: home, PATH: "/ambient-only-path" };
-      const runtimes = await discoverExternalCodeAgents(
-        undefined as unknown as ExternalCodeAgentProbe,
-        environment,
-        process.platform,
-        RUNTIME_PROVIDER.CODEX,
+      const searchPath = codeAgentExecutableSearchPath(environment);
+      expect(Bun.which("codex", { PATH: searchPath })).not.toBeNull();
+      const { result: runtimes, records } = await captureDaemonLogs(() =>
+        discoverExternalCodeAgents(
+          undefined,
+          environment,
+          process.platform,
+          RUNTIME_PROVIDER.CODEX,
+        ),
       );
-      expect(runtimes).toEqual([
-        { provider: RUNTIME_PROVIDER.CODEX, version: "0.0-seam", displayName: "Codex" },
-      ]);
+      const failures = records
+        .filter((record) => record.properties.event === "code_agent_runtime:probe_failed")
+        .map((record) => ({ errorCode: record.properties.error_code }));
+      expect({ runtimes, failures }).toEqual({
+        runtimes: [{ provider: RUNTIME_PROVIDER.CODEX, version: "0.0-seam", displayName: "Codex" }],
+        failures: [],
+      });
     },
     CATALOG_DISCOVERY_BUDGET_MS + 5_000,
   );
