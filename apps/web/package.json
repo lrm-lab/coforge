@@ -121,6 +121,8 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@babel/parser": "7.29.8",
+    "@babel/types": "7.29.8",
     "@coforge/agent": "workspace:*",
     "@inlang/paraglide-js": "2.25.4",
     "@inlang/plugin-message-format": "4.4.4",
