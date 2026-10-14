@@ -9386,39 +9386,86 @@ describe("Agent delivery queue", () => {
       expect(fake.notices).toHaveLength(1);
     });
 
-    test("three consecutive failures with the same fingerprint trip the fence, reporting it in CoForge's own words", async () => {
-      const acks = ackGate(2);
-      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { fake, deliver } = await deliveryQueueHarness("pi", acks, undefined, (activity) =>
-        activities.push(activity),
-      );
-      jest.useFakeTimers();
+    test.each([
+      ["classified", {}, "ProviderConnectionError", "provider_connection_error"],
+      [
+        "provider class",
+        {
+          providerErrorClass: "fixture_native_class",
+          providerErrorReason: "fixture_native_reason",
+        },
+        "fixture_native_class",
+        "fixture_native_reason",
+      ],
+      [
+        "provider code",
+        { providerErrorCode: "FIXTURE_NATIVE_CODE", providerErrorReason: "fixture_native_reason" },
+        "FIXTURE_NATIVE_CODE",
+        "fixture_native_reason",
+      ],
+    ] as const)(
+      "three consecutive failures with the same fingerprint trip the fence, reporting it in CoForge's own words (%s)",
+      async (_hint, hints, errorClass, errorReason) => {
+        const acks = ackGate(2);
+        const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+        const { runtime, fake, deliver } = await deliveryQueueHarness(
+          "pi",
+          acks,
+          undefined,
+          (activity) => activities.push(activity),
+        );
+        const error = { type: "error", message: "connect ECONNRESET", ...hints } as const;
+        jest.useFakeTimers();
+        try {
+          // Two failures back off and release normally.
+          fake.emit(error);
+          fake.emit({ type: "completed", status: "failed" });
+          const initial = activities.find((activity) => activity.detailKind === "runtime_error");
+          expect(initial).toMatchObject({
+            detail: "connect ECONNRESET",
+            runtimeError: { errorClass, errorReason },
+          });
+          expect(initial!.runtimeError!.fingerprint).toMatch(/^[0-9a-f]{8}$/);
+          await deliver(1);
+          jest.advanceTimersByTime(10_000 * 1.1 + 1);
+          await fake.waitForNotices(1);
 
-      // Two failures back off and release normally.
-      fake.emit({ type: "error", message: "connect ECONNRESET" });
-      fake.emit({ type: "completed", status: "failed" });
-      await deliver(1);
-      jest.advanceTimersByTime(10_000 * 1.1 + 1);
-      await fake.waitForNotices(1);
+          fake.emit(error);
+          fake.emit({ type: "completed", status: "failed" });
+          await deliver(2);
+          jest.advanceTimersByTime(20_000 * 1.1 + 1);
+          await fake.waitForNotices(2);
+          await acks.done;
 
-      fake.emit({ type: "error", message: "connect ECONNRESET" });
-      fake.emit({ type: "completed", status: "failed" });
-      await deliver(2);
-      jest.advanceTimersByTime(20_000 * 1.1 + 1);
-      await fake.waitForNotices(2);
-      await acks.done;
+          // The third consecutive failure with the same fingerprint trips the fence.
+          activities.length = 0;
+          fake.emit(error);
+          fake.emit({ type: "completed", status: "failed" });
 
-      // The third consecutive failure with the same fingerprint trips the fence.
-      activities.length = 0;
-      fake.emit({ type: "error", message: "connect ECONNRESET" });
-      fake.emit({ type: "completed", status: "failed" });
-
-      const fenced = activities.find((activity) => activity.detailKind === "runtime_error");
-      expect(fenced).toBeDefined();
-      expect(fenced!.runtimeError?.errorReason).toBe("runtime_error_fenced");
-      expect(fenced!.detail).toContain("3");
-      expect(fenced!.detail.toLowerCase()).toContain("restart");
-    });
+          const fenced = activities.find((activity) => activity.detailKind === "runtime_error");
+          expect(fenced).toBeDefined();
+          expect(fenced!.runtimeError?.errorReason).toBe("runtime_error_fenced");
+          expect(fenced!.detail).toContain("3");
+          expect(fenced!.detail.toLowerCase()).toContain("restart");
+          const detail =
+            "Runtime stopped retrying after 3 consecutive failures with the same underlying error. Last error: connect ECONNRESET Restart this Agent once the issue is fixed.";
+          expect(fenced).toMatchObject({
+            agentId: "agent-a",
+            detailKind: "runtime_error",
+            level: "error",
+            detail,
+            entries: [{ kind: "text", text: `Error: ${detail}` }],
+            runtimeError: { errorClass, errorReason: "runtime_error_fenced" },
+          });
+          expect(fenced!.runtimeError!.fingerprint).toBe(initial!.runtimeError!.fingerprint);
+          expect(
+            activities.filter((activity) => activity.detailKind === "runtime_error"),
+          ).toHaveLength(1);
+        } finally {
+          await runtime.stop();
+        }
+      },
+    );
 
     test("a fenced Agent stops delivering entirely: a new delivery is held, not notified, with no timer left to release it", async () => {
       const acks = ackGate(2);

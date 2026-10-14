@@ -4,6 +4,10 @@ import {
   classifyRuntimeErrorText,
   type RuntimeErrorClassification,
 } from "./runtime-error-classification";
+import {
+  runtimeErrorFingerprintFenceDetail,
+  type RuntimeErrorFingerprintFenceState,
+} from "./runtime-error-recovery";
 
 /**
  * The single place a provider's error, crash or reconnect report becomes an Activity: a
@@ -87,6 +91,26 @@ export function buildRuntimeErrorActivity(
       errorClass: event.providerErrorClass ?? event.providerErrorCode ?? classified.errorClass,
       errorReason: event.providerErrorReason ?? classified.errorReason,
       fingerprint: fingerprintRuntimeError(detail),
+    },
+  };
+}
+
+/** Overrides a runtime_error Activity's wording once the fingerprint fence has tripped: same
+ * detailKind/level (still an ordinary runtime_error, so nothing new appears in a client that
+ * does not yet know about fencing), but a distinguishable `errorReason` and a detail that names
+ * the repeat and how to recover — CoForge's own words, not the last raw provider message alone. */
+export function buildRuntimeErrorFingerprintFenceActivity(
+  built: ReturnType<typeof buildRuntimeErrorActivity>,
+  fence: RuntimeErrorFingerprintFenceState,
+): ReturnType<typeof buildRuntimeErrorActivity> {
+  const detail = runtimeErrorFingerprintFenceDetail(fence, built.detail);
+  return {
+    ...built,
+    detail,
+    entries: [{ kind: "text", text: `Error: ${detail}` }],
+    runtimeError: built.runtimeError && {
+      ...built.runtimeError,
+      errorReason: "runtime_error_fenced",
     },
   };
 }
