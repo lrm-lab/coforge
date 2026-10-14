@@ -10,11 +10,14 @@ import {
 import { createDaemonRuntimeProviderModelRefreshResultMethod } from "#src/server/centrifugo/rpc-handler.server";
 import { RedisPendingResults } from "#src/server/centrifugo/redis-pending-results.server";
 import { RedisModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
-import { ComputerModelCatalogRefresh } from "#src/server/computers/computer-model-catalog-refresh.server";
+import {
+  ComputerModelCatalogRefresh,
+  MODEL_CATALOG_REFRESH_TIMEOUT_MS,
+} from "#src/server/computers/computer-model-catalog-refresh.server";
 
-const redisUrl = Bun.env.INTEGRATION_REDIS_URL;
+const redisUrl = Bun.env.MODEL_CATALOG_TEST_REDIS_URL;
 if (!redisUrl || !["127.0.0.1", "localhost"].includes(new URL(redisUrl).hostname))
-  throw new Error("INTEGRATION_REDIS_URL must target isolated local Redis");
+  throw new Error("MODEL_CATALOG_TEST_REDIS_URL must target isolated local Redis");
 
 test("a model refresh makes its own terminal catalog observable to the waiting request", async () => {
   const redis = new RedisClient(redisUrl);
@@ -189,6 +192,7 @@ test("a refresh waits past another request's report and returns only its own fre
       principal: { userId: "user-1", workspaceId: "workspace-1", computerId: "computer-1" },
     });
   let waits = 0;
+  let now = 0;
   try {
     const refresh = new ComputerModelCatalogRefresh(
       {
@@ -206,10 +210,11 @@ test("a refresh waits past another request's report and returns only its own fre
         },
       },
       {
-        now: () => 0,
-        timeoutMs: 20_000,
+        now: () => now,
+        timeoutMs: MODEL_CATALOG_REFRESH_TIMEOUT_MS,
         async wait() {
           waits += 1;
+          now = 21_000;
           await reply({ ...request!, accepted: true, status: "refreshed", catalogs: fresh });
         },
       },
@@ -221,6 +226,27 @@ test("a refresh waits past another request's report and returns only its own fre
     expect(await results.read(request!.requestId)).toBeUndefined();
   } finally {
     if (request) await results.clear(request.requestId);
+    redis.close();
+  }
+});
+
+test("pending model refreshes outlive the normal slow-probe budget", async () => {
+  const redis = new RedisClient(redisUrl);
+  const results = new RedisModelCatalogRefreshResults(redis);
+  const request = {
+    protocolMajor: 1,
+    requestId: crypto.randomUUID(),
+    workspaceId: "workspace-1",
+    computerId: "computer-1",
+  };
+  try {
+    await results.begin({ request, userId: "user-1", revision: "" });
+    const ttl = Number(
+      await redis.send("TTL", [`coforge:model-catalog-refresh:v1:${request.requestId}:pending`]),
+    );
+    expect(ttl).toBeGreaterThan(45);
+  } finally {
+    await results.clear(request.requestId);
     redis.close();
   }
 });

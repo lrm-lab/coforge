@@ -13,6 +13,9 @@ type RefreshResults = {
   clear(requestId: string): Promise<void>;
 };
 
+/** Allows runtime version probes, sequential CLI listings, cleanup and the inventory report. */
+export const MODEL_CATALOG_REFRESH_TIMEOUT_MS = 45_000;
+
 /** Waits for this Computer's reply to this probe, rather than a newer inventory timestamp. */
 export class ComputerModelCatalogRefresh {
   constructor(
@@ -20,7 +23,11 @@ export class ComputerModelCatalogRefresh {
       publish(request: DaemonRuntimeProviderModelRefreshRequest): Promise<void>;
       results: RefreshResults;
     },
-    private readonly timing = { now: Date.now, wait: () => Bun.sleep(100), timeoutMs: 20_000 },
+    private readonly timing = {
+      now: Date.now,
+      wait: () => Bun.sleep(100),
+      timeoutMs: MODEL_CATALOG_REFRESH_TIMEOUT_MS,
+    },
   ) {}
 
   async execute(viewer: { userId: string; workspaceId: string }, computerId: string) {

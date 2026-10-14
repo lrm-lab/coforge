@@ -9,14 +9,16 @@ return redis.call('SET', KEYS[2], ARGV[2], 'EX', 30, 'NX') and 1 or 0`;
  * rule a result must match against the pending request it answers. */
 export type PendingResultsKind<Request extends { requestId: string }, Result> = {
   prefix: string;
+  /** Default 30 seconds; longer probes retain their pending scope until their own deadline. */
+  pendingTtlSeconds?: number;
   encode(result: Result): Uint8Array;
   decode(bytes: Uint8Array): Result;
   sameScope(pending: Request, result: Result): boolean;
 };
 
 /**
- * A browser query the Daemon answers over Centrifugo: `begin` records the pending request for 30
- * seconds, `accept` stores the first result whose scope matches it (base64 protobuf, also 30
+ * A browser query the Daemon answers over Centrifugo: `begin` records the pending request for the
+ * kind's lifetime (30 seconds by default), `accept` stores the first result whose scope matches it (base64 protobuf, 30
  * seconds), `read` returns that result and `clear` drops both. Keys are
  * `<prefix>:<requestId>:pending` and `<prefix>:<requestId>:result`.
  *
@@ -42,7 +44,7 @@ export class RedisPendingResults<
       this.keys(pending.request.requestId)[0]!,
       JSON.stringify(pending),
       "EX",
-      "30",
+      String(this.kind.pendingTtlSeconds ?? 30),
     );
   }
 

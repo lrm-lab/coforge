@@ -15,6 +15,7 @@ export class RedisModelCatalogRefreshResults extends RedisPendingResults<
   constructor(redis: Pick<RedisClient, "get" | "set" | "send">) {
     super(redis, {
       prefix: "coforge:model-catalog-refresh:v1",
+      pendingTtlSeconds: 60,
       encode: encodeDaemonRuntimeProviderModelRefreshResponse,
       decode: decodeDaemonRuntimeProviderModelRefreshResponse,
       sameScope: (pending, result) =>
