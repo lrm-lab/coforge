@@ -13,6 +13,7 @@ import {
   type ExternalCodeAgentProbe,
 } from "#src/code-agent/runtime-inventory";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
 
 /** Every fixture lives in a per-test `mkdtemp` home: nothing is shared with the host's real
  * HOME (no racing installs), and cross-platform assertions are built from the same `path`
@@ -28,40 +29,52 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
+/** Filesystem-backed cases always run against the host platform: the fixtures are real
+ * directories in a temp home, so the path module and delimiter must match what the code under
+ * test resolves at runtime. Pure-string cases (the windows APPDATA branch) hardcode their own. */
+const hostPlatform = process.platform;
+const hostJoin = hostPlatform === "win32" ? winPath.join.bind(winPath) : posix.join.bind(posix);
+const hostDelimiter = executablePathDelimiter(hostPlatform);
+
 describe("codeAgentExecutableSearchPath", () => {
   test("always keeps the ambient PATH first and appends user + platform directories", () => {
     const home = newFakeHome();
-    const result = codeAgentExecutableSearchPath({ HOME: home, PATH: "/ambient/bin" }, "linux");
-    expect(result.startsWith(`/ambient/bin${executablePathDelimiter("linux")}`)).toBe(true);
-    expect(result).toContain(posix.join(home, ".local", "bin"));
-    expect(result).toContain("/usr/local/bin");
+    const paths = hostPlatform === "win32" ? winPath : posix;
+    const ambient = paths.join(home, "ambient-bin");
+    const result = codeAgentExecutableSearchPath({ HOME: home, PATH: ambient }, hostPlatform);
+    const directories = result.split(hostDelimiter);
+    expect(directories[0]).toBe(ambient);
+    expect(directories).toContain(hostJoin(home, ".local", "bin"));
+    expect(result).toContain(
+      hostPlatform === "win32" ? winPath.join("C:\\Users\\x\\npm", "npm") : "/usr/local/bin",
+    );
   });
 
   test("an absent nvm root adds nothing and does not throw", () => {
     const home = newFakeHome();
-    const entries = codeAgentExecutableSearchPath({ HOME: home }, "linux").split(
-      executablePathDelimiter("linux"),
+    const entries = codeAgentExecutableSearchPath({ HOME: home }, hostPlatform).split(
+      hostDelimiter,
     );
-    expect(entries.some((entry) => entry.includes(".nvm"))).toBe(false);
+    expect(entries.some((entry) => /\.nvm\b/.test(entry))).toBe(false);
   });
 
   test("nvm-managed node bin directories enter the search path when present", () => {
     const home = newFakeHome();
-    const nvmRoot = posix.join(home, ".nvm", "versions", "node");
+    const nvmRoot = hostJoin(home, ".nvm", "versions", "node");
     for (const version of ["v20.11.0", "v22.14.0"]) {
-      mkdirSync(posix.join(nvmRoot, version, "bin"), { recursive: true });
+      mkdirSync(hostJoin(nvmRoot, version, "bin"), { recursive: true });
     }
-    const entries = codeAgentExecutableSearchPath({ HOME: home }, "linux").split(
-      executablePathDelimiter("linux"),
+    const entries = codeAgentExecutableSearchPath({ HOME: home }, hostPlatform).split(
+      hostDelimiter,
     );
-    expect(entries).toContain(posix.join(nvmRoot, "v20.11.0", "bin"));
-    expect(entries).toContain(posix.join(nvmRoot, "v22.14.0", "bin"));
+    expect(entries).toContain(hostJoin(nvmRoot, "v20.11.0", "bin"));
+    expect(entries).toContain(hostJoin(nvmRoot, "v22.14.0", "bin"));
   });
 
   test("searches the custom npm prefix directory unconditionally", () => {
     const home = newFakeHome();
-    const result = codeAgentExecutableSearchPath({ HOME: home }, "linux");
-    expect(result).toContain(posix.join(home, ".npm-global", "bin"));
+    const result = codeAgentExecutableSearchPath({ HOME: home }, hostPlatform);
+    expect(result).toContain(hostJoin(home, ".npm-global", "bin"));
   });
 
   test("works without HOME: only the windows APPDATA branch remains", () => {
@@ -75,11 +88,32 @@ describe("codeAgentExecutableSearchPath", () => {
 });
 
 describe("npm-installed Codex discovery through the public seam", () => {
-  /** POSIX execution fixtures (shebang launchers) cannot run on Windows; every pure-path test
-   * above runs everywhere. */
-  const seamTest = test.skipIf(process.platform === "win32");
+  /** Windows twin: `codex.cmd` -> `codex-fake-node.cmd` (resolved by the child's PATH, so the
+   * property under test is the same). POSIX: shebang `codex` -> `codex-fake-node`. */
+  async function writeCodexFixture(home: string) {
+    const bin = hostJoin(home, ".npm-global", "bin");
+    mkdirSync(bin, { recursive: true });
+    if (hostPlatform === "win32") {
+      writeFileSync(
+        hostJoin(bin, "codex.cmd"),
+        await Bun.file(posix.join("test", "fixtures", "codex.cmd")).text(),
+      );
+      writeFileSync(
+        hostJoin(bin, "codex-fake-node.cmd"),
+        await Bun.file(posix.join("test", "fixtures", "codex-fake-node.cmd")).text(),
+      );
+    } else {
+      writeFileSync(hostJoin(bin, "codex"), "#!/usr/bin/env codex-fake-node", { mode: 0o755 });
+      writeFileSync(
+        hostJoin(bin, "codex-fake-node"),
+        await Bun.file(posix.join("test", "fixtures", "codex-fake-node")).text(),
+        { mode: 0o755 },
+      );
+    }
+    return bin;
+  }
 
-  seamTest(
+  test(
     "an npm-style launcher resolves and probes through discoverExternalCodeAgents",
     async () => {
       // The old build's red: the version probe spawned with the daemon's raw env, whose PATH
@@ -103,13 +137,13 @@ describe("npm-installed Codex discovery through the public seam", () => {
       const runtimes = await discoverExternalCodeAgents(
         undefined as unknown as ExternalCodeAgentProbe,
         environment,
-        "linux",
+        process.platform,
         RUNTIME_PROVIDER.CODEX,
       );
       expect(runtimes).toEqual([
         { provider: RUNTIME_PROVIDER.CODEX, version: "0.0-seam", displayName: "Codex" },
       ]);
     },
-    15_000,
+    CATALOG_DISCOVERY_BUDGET_MS + 5_000,
   );
 });
