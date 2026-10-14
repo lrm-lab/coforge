@@ -52,6 +52,16 @@ function matchTier(entity: SearchEntity, lowerQuery: string): number | undefined
   }
 }
 
+type SearchMatch = { entity: SearchEntity; tier: number };
+
+function compareSearchMatches(left: SearchMatch, right: SearchMatch): number {
+  return (
+    left.tier - right.tier ||
+    KIND_ORDER[left.entity.kind] - KIND_ORDER[right.entity.kind] ||
+    left.entity.name.localeCompare(right.entity.name)
+  );
+}
+
 /**
  * The entities a query names, best first: closer name matches (`nameMatchTier`), then channels,
  * Computers and Agents in that order, then by name. A leading `#` keeps only channels and a
@@ -68,18 +78,18 @@ export function matchSearchEntities(
     .trim()
     .toLowerCase();
   if (!lowerQuery) return [];
-  return entities
-    .filter((entity) => !only || entity.kind === only)
-    .flatMap((entity) => {
-      const tier = matchTier(entity, lowerQuery);
-      return tier === undefined ? [] : [{ entity, tier }];
-    })
-    .sort(
-      (left, right) =>
-        left.tier - right.tier ||
-        KIND_ORDER[left.entity.kind] - KIND_ORDER[right.entity.kind] ||
-        left.entity.name.localeCompare(right.entity.name),
-    )
-    .slice(0, SEARCH_ENTITY_LIMIT)
-    .map(({ entity }) => entity);
+  // Keep only the five best matches; equal ranks retain their original input order.
+  const matches: SearchMatch[] = [];
+  for (const entity of entities) {
+    if (only && entity.kind !== only) continue;
+    const tier = matchTier(entity, lowerQuery);
+    if (tier === undefined) continue;
+    const match = { entity, tier };
+    const last = matches[SEARCH_ENTITY_LIMIT - 1];
+    if (last && compareSearchMatches(match, last) >= 0) continue;
+    const index = matches.findIndex((current) => compareSearchMatches(match, current) < 0);
+    matches.splice(index < 0 ? matches.length : index, 0, match);
+    if (matches.length > SEARCH_ENTITY_LIMIT) matches.pop();
+  }
+  return matches.map(({ entity }) => entity);
 }
