@@ -191,7 +191,7 @@ async function readResponse(
   throw new Error("Agent process closed before responding");
 }
 
-test("a second Pi launch inside the throttle window does not re-fetch the catalog", async () => {
+test("Pi launches reuse a recent catalog but explicit discovery fetches it again", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "coforge-agent-model-throttle-"));
   let catalogRequests = 0;
   const server = Bun.serve({
@@ -266,6 +266,54 @@ await created.dispose();
     // from hitting the network again, so an offline or slow network cannot stall every start.
     await runSession();
     expect(catalogRequests).toBe(1);
+    await Bun.write(
+      join(workspace, "discover.ts"),
+      `import { discoverPiModels } from ${JSON.stringify(new URL("../src/runner.ts", import.meta.url).pathname)};
+const models = await discoverPiModels(${JSON.stringify(workspace)}, {
+  agentDir: ${JSON.stringify(join(workspace, ".pi", "agent"))},
+  force: true,
+  environment: { HOME: ${JSON.stringify(workspace)}, ANTHROPIC_API_KEY: "managed-session-key" },
+});
+if (!models.some(model => model.id === "remote-throttle-model")) throw new Error("Model missing");
+`,
+    );
+    const discovery = Bun.spawn({
+      cmd: [process.execPath, "--preload", join(workspace, "catalog-preload.ts"), "discover.ts"],
+      cwd: workspace,
+      env: { HOME: workspace, PATH: Bun.env.PATH ?? "" },
+      stderr: "pipe",
+    });
+    const stderr = await new Response(discovery.stderr).text();
+    expect(await discovery.exited, stderr).toBe(0);
+    expect(catalogRequests).toBe(2);
+    await Bun.write(
+      join(workspace, "discover-offline.ts"),
+      `import { discoverPiModels } from ${JSON.stringify(new URL("../src/runner.ts", import.meta.url).pathname)};
+let rejected = false;
+try {
+  await discoverPiModels(${JSON.stringify(workspace)}, {
+    agentDir: ${JSON.stringify(join(workspace, ".pi", "agent"))},
+    force: true,
+    environment: { PI_OFFLINE: "1", ANTHROPIC_API_KEY: "managed-session-key" },
+  });
+} catch { rejected = true; }
+if (!rejected) throw new Error("Offline forced discovery incorrectly succeeded");
+`,
+    );
+    const offline = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "--preload",
+        join(workspace, "catalog-preload.ts"),
+        "discover-offline.ts",
+      ],
+      cwd: workspace,
+      env: { HOME: workspace, PATH: Bun.env.PATH ?? "" },
+      stderr: "pipe",
+    });
+    const offlineStderr = await new Response(offline.stderr).text();
+    expect(await offline.exited, offlineStderr).toBe(0);
+    expect(catalogRequests).toBe(2);
   } finally {
     server.stop(true);
     await rm(workspace, { recursive: true, force: true });

@@ -31,6 +31,10 @@ import {
   type AgentContextReport,
 } from "./agent-context-cache.server";
 import { getUsageCache, type UsageCache, type UsageSnapshot } from "./usage-cache.server";
+import {
+  getModelCatalogRefreshResults,
+  type RedisModelCatalogRefreshResults,
+} from "./model-catalog-refresh-cache.server";
 import { PublishAgentRuntimeControl } from "#src/server/agents/agent-runtime-control.server";
 import {
   AgentDeliveryRejectionScopeError,
@@ -675,16 +679,18 @@ export function createDaemonRuntimeUsageScanResultMethod(
  * The Daemon's terminal reply for one on-demand model-catalog refresh
  * (`daemon:v1:provider:model_refresh_result`). The fresh catalog itself already landed through the
  * ordinary `daemon:v1:provider:inventory_update` re-report before this reply; this method only
- * authenticates the sender and records the outcome for diagnosability — the browser's model
- * selector watches `observedAt`, so the reply carries no state the Web needs to keep.
+ * authenticates the sender and stores the terminal result for the matching refresh request.
  */
-export function createDaemonRuntimeProviderModelRefreshResultMethod(): CentrifugoRpcMethod {
+export function createDaemonRuntimeProviderModelRefreshResultMethod(
+  results?: Pick<RedisModelCatalogRefreshResults, "accept">,
+): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const response = decodeDaemonRuntimeProviderModelRefreshResponse(payload);
     const denied = requireDaemonPrincipal(metadata, response);
     if (denied) return denied;
     if (response.protocolMajor !== 1 || !response.requestId)
       return { code: 400, message: "invalid model refresh result" };
+    await (results ?? getModelCatalogRefreshResults()).accept(response);
     console.info(
       JSON.stringify({
         event: "code_agent_catalog:refresh_result",

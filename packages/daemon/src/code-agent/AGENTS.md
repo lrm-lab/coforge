@@ -38,9 +38,9 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   cap plus one wait (`PI_CATALOG_DISCOVERY_TIMEOUT_MS`, derived from `PI_MODEL_REFRESH_TIMEOUT_MS`
   in `@coforge/agent`) because that refresh is capped separately and the resource loader runs
   after it. A CLI that fetches its list over the network has its own deadline next to its catalog
-  reader (`opencode models --verbose`, `agy models`). A discovery that fails or times out leaves
-  its provider out of that pass, is logged as `code_agent_catalog:discovery_failed`, and is never
-  cached.
+  reader (`opencode models --verbose`, `agy models`). Explicit refreshes force Pi and forbid Codex's
+  disk fallback; offline or failed probes are omitted, logged as `code_agent_catalog:discovery_failed`,
+  and never cached. Ordinary inventory retains its existing cache fallback policy.
 - Report the maintained Claude Code model catalog when Claude Code is
   installed. Never launch the CLI to infer a dynamic catalog; its
   machine-readable initialization does not give a dependable list.

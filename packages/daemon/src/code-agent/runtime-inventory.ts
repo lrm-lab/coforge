@@ -283,6 +283,8 @@ type CatalogCommands = {
 };
 
 export type CodeAgentDiscoveryOptions = {
+  /** Explicit refreshes may not substitute a provider's local cache for a failed live probe. */
+  force?: boolean;
   probe?: ExternalCodeAgentProbe;
   commands?: CatalogCommands;
   /** Replaces the Pi SDK's in-process model discovery, as `commands` replaces the spawned CLIs. */
@@ -410,7 +412,7 @@ export async function discoverCodeAgentCatalogs(
   const discoveries: Array<Promise<Discovered>> = [];
   discoveries.push(Promise.resolve({ catalog: discoverCoforgeCatalog() }));
   discoveries.push(
-    discoverPiCatalog(cwd, environment, options.piModels).then((catalog) => ({
+    discoverPiCatalog(cwd, environment, options.piModels, options.force).then((catalog) => ({
       provider: RUNTIME_PROVIDER.PI,
       keyPaths: piCacheKeyPaths(environment),
       catalog,
@@ -420,9 +422,16 @@ export async function discoverCodeAgentCatalogs(
     const executable = probe.which(externalCodeAgentExecutable[RUNTIME_PROVIDER.CODEX], searchPath);
     if (executable)
       discoveries.push(
-        discoverCodexCatalog(commands.codex ?? [executable, "app-server"], cwd, environment).then(
-          (catalog) => ({ provider: RUNTIME_PROVIDER.CODEX, keyPaths: [executable], catalog }),
-        ),
+        discoverCodexCatalog(
+          commands.codex ?? [executable, "app-server"],
+          cwd,
+          environment,
+          options.force,
+        ).then((catalog) => ({
+          provider: RUNTIME_PROVIDER.CODEX,
+          keyPaths: [executable],
+          catalog,
+        })),
       );
   }
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.CLAUDE_CODE)) {
@@ -576,11 +585,13 @@ export async function discoverCodexCatalog(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  force = false,
 ): Promise<CodeAgentModelCatalog | undefined> {
   const live = await discoverCodexCatalogFromProcess(command, cwd, environment).catch(
     () => undefined,
   );
   if (live) return live;
+  if (force) return undefined;
   // Match the home inherited by the provider; CODEX_HOME is not in its allowlist.
   const home = environment.HOME ?? environment.USERPROFILE;
   if (!home) return undefined;
@@ -800,6 +811,7 @@ export async function discoverPiCatalog(
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
   discover: PiModelDiscovery = discoverPiModels,
+  force = false,
 ): Promise<CodeAgentModelCatalog | undefined> {
   const startedAt = performance.now();
   try {
@@ -808,6 +820,7 @@ export async function discoverPiCatalog(
       discover(cwd, {
         agentDir,
         environment: definedEnvironment(environment),
+        ...(force ? { force: true } : {}),
       }),
       PI_CATALOG_DISCOVERY_TIMEOUT_MS,
     );

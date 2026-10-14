@@ -1,0 +1,54 @@
+import type {
+  DaemonRuntimeProviderModelRefreshRequest,
+  DaemonRuntimeProviderModelRefreshResponse,
+} from "@lrm/coforge-sdk/internal";
+
+type RefreshResults = {
+  begin(pending: {
+    request: DaemonRuntimeProviderModelRefreshRequest;
+    userId: string;
+    revision: string;
+  }): Promise<void>;
+  read(requestId: string): Promise<DaemonRuntimeProviderModelRefreshResponse | undefined>;
+  clear(requestId: string): Promise<void>;
+};
+
+/** Waits for this Computer's reply to this probe, rather than a newer inventory timestamp. */
+export class ComputerModelCatalogRefresh {
+  constructor(
+    private readonly dependencies: {
+      publish(request: DaemonRuntimeProviderModelRefreshRequest): Promise<void>;
+      results: RefreshResults;
+    },
+    private readonly timing = { now: Date.now, wait: () => Bun.sleep(100), timeoutMs: 20_000 },
+  ) {}
+
+  async execute(viewer: { userId: string; workspaceId: string }, computerId: string) {
+    const request: DaemonRuntimeProviderModelRefreshRequest = {
+      protocolMajor: 1,
+      requestId: crypto.randomUUID(),
+      workspaceId: viewer.workspaceId,
+      computerId,
+    };
+    const { results, publish } = this.dependencies;
+    const deadline = this.timing.now() + this.timing.timeoutMs;
+    try {
+      await results.begin({ request, userId: viewer.userId, revision: "" });
+      await publish(request);
+      do {
+        const result = await results.read(request.requestId);
+        if (result) {
+          if (!result.accepted || result.status !== "refreshed" || !result.catalogs)
+            return { status: "error" as const };
+          return { status: "refreshed" as const, catalogs: result.catalogs };
+        }
+        await this.timing.wait();
+      } while (this.timing.now() < deadline);
+      return { status: "timeout" as const };
+    } catch {
+      return { status: "error" as const };
+    } finally {
+      await results.clear(request.requestId).catch(() => {});
+    }
+  }
+}

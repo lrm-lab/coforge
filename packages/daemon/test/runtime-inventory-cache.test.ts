@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverCodeAgentInventory } from "#src/code-agent/runtime-inventory";
 
-async function discover(mode: string, cache?: string) {
+async function discover(mode: string, cache?: string, force = false) {
   const home = await mkdtemp(join(tmpdir(), "codex-catalog-"));
   try {
     if (cache !== undefined) await Bun.write(join(home, ".codex", "models_cache.json"), cache);
     return await discoverCodeAgentInventory({
+      force,
       environment: { HOME: home, PATH: Bun.env.PATH },
       probe: {
         which: (name) => (name === "codex" ? "/fixture/codex" : undefined),
@@ -83,4 +84,9 @@ test("uses cached models when the live provider returns an error", async () => {
   expect(inventory.catalogs.find((catalog) => catalog.provider === "codex")?.models[0]?.id).toBe(
     "cached-model",
   );
+});
+
+test("a forced discovery omits Codex when its live probe fails instead of returning cache", async () => {
+  const inventory = await discover("catalog-error", cache, true);
+  expect(inventory.catalogs.some((catalog) => catalog.provider === "codex")).toBe(false);
 });

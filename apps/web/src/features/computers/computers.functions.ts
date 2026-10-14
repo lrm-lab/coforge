@@ -3,7 +3,6 @@ import {
   encodeDaemonRuntimeProviderModelRefreshRequest,
   isValidReleaseVersion,
   requireRuntimeProvider,
-  WORKSPACE_PROTOCOL_MAJOR,
   type CodeAgentModelMetadata,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
@@ -33,6 +32,8 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import { getUsageCache } from "#src/server/centrifugo/usage-cache.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
+import { getModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
+import { ComputerModelCatalogRefresh } from "#src/server/computers/computer-model-catalog-refresh.server";
 import { computerCreatorAvatarUrl } from "#src/server/computers/computer-creator-avatar.server";
 import { isWorkspaceMemberComputer } from "#src/server/computers/computer-membership.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
@@ -417,32 +418,41 @@ export const getComputerRuntimeCatalog = createServerFn({ method: "GET" })
       .map((catalog) => ({ ...catalog, models: catalog.models! }));
   });
 
-/** Asks the Computer's daemon to re-run its model-catalog discovery now (the browser's model
- * selector refresh button / selector-open auto-refresh). Fire-and-forget on the wire: the daemon
- * re-reports through the ordinary `daemon:v1:provider:inventory_update` and answers via
- * `daemon:v1:provider:model_refresh_result`; the caller watches `getComputerRuntimeCatalog`'s
- * `observedAt` move to see the refresh land. Authorizes exactly like reading the catalog: the
- * Computer must belong to this Workspace. */
+/** Explicitly probes the Computer and waits for this request's terminal response. Like ordinary
+ * catalog reads, only this Workspace's Computer and visible runtimes may be returned. */
 export const refreshComputerRuntimeCatalog = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(computerIdInputSchema)
   .handler(async ({ context, data }) => {
-    const { db, workspaceId } = context;
+    const { user, db, workspaceId } = context;
+    declareNoStore();
     const connection = await db.workspaceComputer.findUnique({
       where: { workspaceId_computerId: { workspaceId, computerId: data.computerId } },
       select: { computerId: true },
     });
     if (!connection) throw new Error("Computer is not available");
-    await createCentrifugoServerApi().publish(
-      daemonControlChannel(workspaceId, data.computerId),
-      encodeDaemonRuntimeProviderModelRefreshRequest({
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId: crypto.randomUUID(),
-        workspaceId,
-        computerId: data.computerId,
-      }),
+    const api = createCentrifugoServerApi();
+    const refreshed = await new ComputerModelCatalogRefresh({
+      results: getModelCatalogRefreshResults(),
+      publish: (request) =>
+        api.publish(
+          daemonControlChannel(workspaceId, data.computerId),
+          encodeDaemonRuntimeProviderModelRefreshRequest(request),
+        ),
+    }).execute({ userId: user.id, workspaceId }, data.computerId);
+    if (refreshed.status !== "refreshed") return refreshed;
+    const runtimes = await runtimeVisibility(db).list({ workspaceId, userId: user.id });
+    const visibleProviders = new Set(
+      runtimes
+        .filter((runtime) => runtime.computerId === data.computerId)
+        .map((runtime) => runtime.provider),
     );
-    return { status: "pending" as const };
+    return {
+      ...refreshed,
+      catalogs: refreshed.catalogs.filter((catalog) =>
+        visibleProviders.has(runtimeProvider(catalog.provider)),
+      ),
+    };
   });
 
 export const setRuntimeVisibility = createServerFn({ method: "POST" })

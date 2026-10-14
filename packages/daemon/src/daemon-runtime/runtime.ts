@@ -186,14 +186,17 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 /**
  * The injectable half of Code Agent discovery. `runtimes` is the fast, always-awaited probe;
  * `cachedCatalogs` is a disk-only read (no spawning) used for the same report; `catalogs` is the
- * live, possibly-spawning discovery used only for the background refresh.
+ * live, possibly-spawning discovery. Explicit refreshes forbid cached fallback.
  */
 export type CodeAgentDiscovery = {
   runtimes(): Promise<RuntimeMetadata[]>;
   cachedCatalogs(
     runtimes: RuntimeMetadata[],
   ): Promise<{ catalogs: CodeAgentModelCatalog[]; needsRefresh: boolean }>;
-  catalogs(runtimes: RuntimeMetadata[]): Promise<CodeAgentModelCatalog[]>;
+  catalogs(
+    runtimes: RuntimeMetadata[],
+    options?: { force: boolean },
+  ): Promise<CodeAgentModelCatalog[]>;
 };
 
 function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDiscovery {
@@ -201,7 +204,8 @@ function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDiscovery {
     runtimes: () => discoverCodeAgentRuntimes({ cacheDirectory: stateDirectory }),
     cachedCatalogs: (runtimes) =>
       loadCachedCodeAgentCatalogs(runtimes, { cacheDirectory: stateDirectory }),
-    catalogs: (runtimes) => discoverCodeAgentCatalogs(runtimes, { cacheDirectory: stateDirectory }),
+    catalogs: (runtimes, options) =>
+      discoverCodeAgentCatalogs(runtimes, { cacheDirectory: stateDirectory, ...options }),
   };
 }
 
@@ -1463,7 +1467,7 @@ export class DaemonRuntime {
     };
     try {
       const runtimes = await this.#codeAgentDiscovery.runtimes();
-      const catalogs = await this.#codeAgentDiscovery.catalogs(runtimes);
+      const catalogs = await this.#codeAgentDiscovery.catalogs(runtimes, { force: true });
       if (this.#stopping || this.#transport !== transport) return;
       await transport.updateCodeAgents?.({
         protocolMajor: WORKSPACE_PROTOCOL_MAJOR,

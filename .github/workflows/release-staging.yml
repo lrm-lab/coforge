@@ -21,7 +21,7 @@ permissions:
 env:
   # The release line staging dev builds belong to. Each line counts its own dev builds from 1
   # (scripts/release/publish.ts `nextDevVersion`); move it when a line ships as a stable version.
-  DEV_LINE: "0.1.1"
+  DEV_LINE: "0.1.2"
 
 concurrency:
   group: release-staging

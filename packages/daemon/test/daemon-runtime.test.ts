@@ -4883,6 +4883,7 @@ describe("DaemonRuntime", () => {
         }) => Promise<void>)
       | undefined;
     let discoveryCalls = 0;
+    let discoveryOptions: unknown;
     const runtime = new DaemonRuntime(
       connection,
       () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
@@ -4908,7 +4909,8 @@ describe("DaemonRuntime", () => {
       {
         runtimes: async () => [{ provider: "codex", version: "0.151.0", displayName: "Codex" }],
         cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-        catalogs: async () => {
+        catalogs: async (_runtimes, options) => {
+          discoveryOptions = options;
           discoveryCalls++;
           return [{ provider: "codex", models: [] }];
         },
@@ -4927,6 +4929,7 @@ describe("DaemonRuntime", () => {
     });
 
     expect(discoveryCalls).toBe(1);
+    expect(discoveryOptions).toEqual({ force: true });
     expect(updates).toHaveLength(2);
     expect(updates[1]).toMatchObject({
       workspaceId: connection.workspaceId,

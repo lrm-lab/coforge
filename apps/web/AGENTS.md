@@ -146,7 +146,7 @@ responsibility.
 - `server/centrifugo/` — Centrifugo proxies, RPC receivers, and short-lived
   result caches.
 - `server/computers/` — Computer registration, metadata, restart and upgrade
-  operations, runtime visibility, and what the server remembers across a
+  operations, runtime visibility, explicit model catalog refresh, and what the server remembers across a
   daemon's shutdown and return.
 - `server/conversations/` — public channels, channel authority, stopping and resuming a channel's Agents, direct messages, history, message search, action cards, reactions, tracked @mention delivery outcomes (`mention-deliveries`), and conversation realtime.
 - `server/db/` — the Prisma client, repositories (a DM's list preferences apart from its messages; the Agent attention rule in `agent-attention`), and the shared unique-violation check.

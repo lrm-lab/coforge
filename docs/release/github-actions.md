@@ -95,7 +95,7 @@ Each release line counts its own staging builds, as semver pre-releases do
 line; leaving the version input empty publishes the smallest
 `<line>-dev.<N>`, counting from 1, whose `manifest.json` the feed does not yet
 have (`nextDevVersion` in `scripts/release/publish.ts`), so the builds read
-`0.1.1-dev.1`, `0.1.1-dev.2`, and so on. A number already published is skipped
+`0.1.2-dev.1`, `0.1.2-dev.2`, and so on. A number already published is skipped
 (`0.1.1-dev.82`, published under the earlier run-number naming, is one). A
 number whose earlier publication failed before its manifest is reused by the
 next publication, which overwrites the leftover objects: without a manifest
@@ -104,7 +104,7 @@ still refused once its manifest exists. The `release-staging` concurrency group 
 choosing a number at the same time. Move `DEV_LINE` when a line ships as a
 stable version. The source SHA and build time remain in the manifest rather
 than the version string. There is no nightly schedule or date-based version
-convention. Use only two routine forms: staging builds such as `0.1.1-dev.2`
+convention. Use only two routine forms: staging builds such as `0.1.2-dev.2`
 and stable versions such as `0.1.1`, selected through the explicit version
 input. No beta or release-candidate stage is required. Previously published
 versions, including historical `rc` versions, remain immutable and available
