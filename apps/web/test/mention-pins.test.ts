@@ -266,3 +266,41 @@ test("a person in both lists while they refetch is one candidate, and a name tha
   expect(byLabel.get("张三")).toEqual([people[0]]);
   expect(byLabel.has("bob")).toBe(false);
 });
+
+test("code-only names across plain segments claim no pins or hand-typed mentions", () => {
+  const pins = Object.freeze([ZHANG, SCOUT]);
+  const body = "普通段 😀 `@张三` 间隔\n```\n@小侦察\n```\n普通末段";
+  expect(rewriteMentionPins(body, pins)).toEqual({ body, mentions: [] });
+  expect(pinsInText(body, pins)).toBe(NO_PINS);
+  expect(unpinnedLabelMentions(body, pins, mentionsByLabel(people))).toEqual([]);
+});
+
+test("prose names after plain and code segments keep offsets, binding order and references", () => {
+  const pins = Object.freeze([ZHANG, SCOUT]);
+  const body = "前言 😀 `@张三` 间隔\n```\n@小侦察\n```\nplain before @小侦察 and @张三 done";
+  expect(rewriteMentionPins(body, pins)).toEqual({
+    body: "前言 😀 `@张三` 间隔\n```\n@小侦察\n```\nplain before @scout and @zhangsan done",
+    mentions: [binding(SCOUT), binding(ZHANG)],
+  });
+  expect(pinsInText(body, pins)).toBe(pins);
+  const byLabel = mentionsByLabel(people);
+  const found = unpinnedLabelMentions(body, [], byLabel);
+  expect(found.map((mention) => mention.label)).toEqual(["小侦察", "张三"]);
+  expect(found[0]!.candidates).toBe(byLabel.get("小侦察")!);
+  expect(found[1]!.candidates).toBe(byLabel.get("张三")!);
+});
+
+test("a label containing an at sign still binds in prose and stays untouched in code", () => {
+  const person = candidate("user", "u-nested", "nested", "A@B");
+  const pins = Object.freeze([mentionPinFor(person)]);
+  const body = "gap `@A@B` plain @A@B ok";
+  expect(rewriteMentionPins(body, pins)).toEqual({
+    body: "gap `@A@B` plain @nested ok",
+    mentions: [{ type: "user", id: "u-nested", name: "nested" }],
+  });
+  expect(pinsInText(body, pins)).toBe(pins);
+  const byLabel = mentionsByLabel([person]);
+  const found = unpinnedLabelMentions(body, [], byLabel);
+  expect(found).toEqual([{ label: "A@B", candidates: [person] }]);
+  expect(found[0]!.candidates).toBe(byLabel.get("A@B")!);
+});

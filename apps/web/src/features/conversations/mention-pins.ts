@@ -87,7 +87,7 @@ function findLabelMatches(
   const found: LabelMatch[] = [];
   let offset = 0;
   for (const segment of splitCodeSpans(body)) {
-    if (!segment.code) {
+    if (!segment.code && segment.text.includes("@")) {
       for (const label of distinct) {
         const needle = `@${label}`;
         for (
