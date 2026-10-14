@@ -180,3 +180,9 @@ CoForge 已拉取并合并 `lrm-lab/coforge` main 的 `d7ac4fc8`；共享池实�
 OpenViking main 容器 `coforge-openviking-main-1` 监听 `127.0.0.1:1933`，复用原数据卷；旧 Web/eval18888/代理进程已关闭，旧 OV 容器保持停止供回滚。
 部署备份与验证位于 `/tmp/swe-main-submit-20261014/deployment/`（目录私有）：数据库 SQL、OV 数据 tar、迁移日志、页面截图与验证 JSON。
 相关测试通过；完整仓库检查仍受用户未跟踪的 `apps/web/repro_tmp.ts` 格式问题影响，完整测试出现 Codex catalog fixture 超时和已有 installer shell 环境问题；未将它们记为通过。
+
+四角色优化：整段读取最多 20,000 字符，按完整 AO 边界截断并提示续读索引。
+默认固定三次；调试可用 `--attempt-policy until-verified`，旧素材可传 `--manifest`。
+每次 Reader 报告和读取证据保存为 `reader-report.json`，汇总区分提交、冻结和校验。
+池路由按健康度及延迟选服务，连续两次瞬态失败冷却 60 秒，恢复时只放一个探测。
+完整命令和状态字段见 [运行脚本说明](../benchmark/evolbench-collab/ops/swe-gemma/README.md)。

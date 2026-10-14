@@ -108,10 +108,12 @@ class PoolTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as temporary:
                 delays = []
+                now = [100.0]
                 def sleep(delay):
                     self.assertEqual(pool.snapshot()['active'], 0)
                     delays.append(delay)
-                pool = LlmPool([{'name':'test', 'url':f'http://127.0.0.1:{upstream.server_port}', 'key':'test-key', 'capacity':1}], Path(temporary), proxy='', sleep=sleep)
+                    now[0] += delay
+                pool = LlmPool([{'name':'test', 'url':f'http://127.0.0.1:{upstream.server_port}', 'key':'test-key', 'capacity':1}], Path(temporary), proxy='', sleep=sleep, clock=lambda: now[0])
                 self.assertEqual(pool.snapshot()['retry_policy']['budget_seconds'], 900)
                 self.assertEqual(pool.complete(b'{}', 'memory')[0], 424)
                 self.assertEqual(pool.snapshot()['http_attempts'], 7)
@@ -120,3 +122,87 @@ class PoolTests(unittest.TestCase):
                     self.assertGreaterEqual(actual, minimum)
                     self.assertLessEqual(actual, min(120, minimum+5))
         finally: upstream.shutdown(); upstream.server_close()
+
+
+class HealthRoutingTests(unittest.TestCase):
+    def test_circuit_avoids_failed_endpoint_and_probes_recovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            now=[100.0]
+            endpoints=[{"name":name,"capacity":2,"url":"http://unused","key":"test"}
+                       for name in ["bad","good"]]
+            pool=LlmPool(endpoints,directory,clock=lambda:now[0])
+            for _ in range(2):
+                acquired=pool.acquire(110)
+                if acquired["name"]!="bad":
+                    pool.release(acquired,status=200,elapsed_ms=5)
+                    acquired=pool.acquire(110)
+                pool.release(acquired,status=503,elapsed_ms=50,retryable=True)
+            self.assertEqual(pool.snapshot()["endpoints"]["bad"]["circuit"],"open")
+            acquired=pool.acquire(110)
+            self.assertEqual(acquired["name"],"good")
+            pool.release(acquired,status=200,elapsed_ms=5)
+            now[0]+=61
+            probe=pool.acquire(180)
+            self.assertEqual(probe["name"],"bad")
+            other=pool.acquire(180)
+            self.assertEqual(other["name"],"good")
+            pool.release(other,status=200,elapsed_ms=5)
+            pool.release(probe,status=200,elapsed_ms=4)
+            self.assertEqual(pool.snapshot()["endpoints"]["bad"]["circuit"],"closed")
+            self.assertEqual(pool.snapshot()["active"],0)
+
+    def test_latency_routing_and_expired_queue_deadline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pool=LlmPool([{"name":name,"capacity":1,"url":"http://unused","key":"test"}
+                          for name in ["slow","fast"]],directory,clock=lambda:100)
+            first=pool.acquire(110);second=pool.acquire(110)
+            pool.release(first,status=200,elapsed_ms=50)
+            pool.release(second,status=200,elapsed_ms=5)
+            chosen=pool.acquire(110)
+            self.assertEqual(chosen["name"],"fast")
+            pool.release(chosen,status=200,elapsed_ms=5)
+            with self.assertRaises(TimeoutError):pool.acquire(99)
+
+
+class BufferedTransportTests(unittest.TestCase):
+    def test_retry_is_hidden_capacity_released_and_audit_complete_without_socket(self):
+        import io
+        import urllib.error
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            now=[100.0]
+            pool=LlmPool([{'name':'test','capacity':1,'url':'http://test','key':'private-test-key'}],
+                         directory,clock=lambda:now[0],proxy='')
+            delays=[]
+            def sleep(delay):
+                self.assertEqual(pool.snapshot()['active'],0)
+                delays.append(delay);now[0]+=delay
+            pool.sleep=sleep
+            body=b'{"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":2}}'
+            class Response:
+                status=200
+                headers={'Content-Type':'application/json'}
+                def __init__(self):
+                    self.length=len(body)
+                    self.fp=SimpleNamespace(raw=SimpleNamespace(_sock=SimpleNamespace(settimeout=lambda _:None)))
+                def __enter__(self):return self
+                def __exit__(self,*args):pass
+                def isclosed(self):return self.length==0
+                def read1(self,size):self.length=0;return body
+            attempts=[]
+            def open_request(request,timeout):
+                attempts.append(request)
+                if len(attempts)==1:
+                    raise urllib.error.HTTPError('http://test',503,'temporary',{},io.BytesIO())
+                return Response()
+            pool.opener=SimpleNamespace(open=open_request)
+            status,_,result=pool.complete(b'{}','reader')
+            self.assertEqual(status,200)
+            self.assertEqual(json.loads(result)['usage']['completion_tokens'],2)
+            self.assertEqual(len(attempts),2)
+            self.assertEqual(len(delays),1)
+            self.assertEqual(pool.snapshot()['active'],0)
+            events=[json.loads(line) for line in (Path(directory)/'requests.jsonl').read_text().splitlines()]
+            self.assertEqual(sum(x['event']=='request_completed' for x in events),2)
+            self.assertEqual(sum(x['event']=='retry' for x in events),1)
+            self.assertNotIn('private-test-key',json.dumps(events))
