@@ -1,7 +1,6 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { posix, win32 as winPath } from "node:path";
+import path, { posix, win32 as winPath } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
@@ -20,7 +19,7 @@ import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
  * module the code under test uses for the platform being passed. */
 const roots: string[] = [];
 function newFakeHome(): string {
-  const root = mkdtempSync(join(tmpdir(), "coforge-code-agent-path-"));
+  const root = mkdtempSync(path.join(tmpdir(), "coforge-code-agent-path-"));
   roots.push(root);
   return root;
 }
@@ -107,17 +106,17 @@ describe("npm-installed Codex discovery through the public seam", () => {
     if (hostPlatform === "win32") {
       writeFileSync(
         hostJoin(bin, "codex.cmd"),
-        await Bun.file(posix.join("test", "fixtures", "codex.cmd")).text(),
+        await Bun.file(path.join(import.meta.dir, "fixtures", "codex.cmd")).text(),
       );
       writeFileSync(
         hostJoin(bin, "codex-fake-node.cmd"),
-        await Bun.file(posix.join("test", "fixtures", "codex-fake-node.cmd")).text(),
+        await Bun.file(path.join(import.meta.dir, "fixtures", "codex-fake-node.cmd")).text(),
       );
     } else {
       writeFileSync(hostJoin(bin, "codex"), "#!/usr/bin/env codex-fake-node", { mode: 0o755 });
       writeFileSync(
         hostJoin(bin, "codex-fake-node"),
-        await Bun.file(posix.join("test", "fixtures", "codex-fake-node")).text(),
+        await Bun.file(path.join(import.meta.dir, "fixtures", "codex-fake-node")).text(),
         { mode: 0o755 },
       );
     }
