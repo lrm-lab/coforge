@@ -186,6 +186,74 @@ test("an Agent candidate ranks and sorts the same way as a person candidate", ()
   expect(ranked.map((item) => item.handle)).toEqual(["ada", "scout"]);
 });
 
+test("the best text and score matches still win after a large earlier candidate list", () => {
+  const earlier = Array.from({ length: 140 }, (_, index) =>
+    person(`earlier-${index}`, `Ada member ${index}`, "", 100),
+  );
+  const ties = Array.from({ length: 10 }, (_, index) => ({
+    ...person("same-handle", "Ada duplicate", "", 200),
+    id: `tie-${index}`,
+  }));
+  const exact = person("exact", "Ada");
+  const ranked = filterMentionables([...earlier, ...ties, exact], "ada");
+
+  expect(ranked).toEqual([exact, ...ties.slice(0, 7)]);
+  expect(ranked[0]).toBe(exact);
+  expect(ranked[7]).toBe(ties[6]);
+});
+
+test("equal candidates retain input order at the limit without mutating candidates or recency", () => {
+  const items = Object.freeze(
+    Array.from({ length: 160 }, (_, index) =>
+      Object.freeze({ ...person("same", "Same"), id: `same-${index}` }),
+    ),
+  );
+  const recentHandles = Object.freeze(["@@SAME", "unrelated", "same"]);
+  const ranked = filterMentionables(items, "", { recentHandles });
+
+  expect(ranked.map((item) => item.id)).toEqual([
+    "same-0",
+    "same-1",
+    "same-2",
+    "same-3",
+    "same-4",
+    "same-5",
+    "same-6",
+    "same-7",
+  ]);
+  for (let index = 0; index < ranked.length; index++) expect(ranked[index]).toBe(items[index]);
+  expect(items[159]?.id).toBe("same-159");
+  expect(recentHandles).toEqual(["@@SAME", "unrelated", "same"]);
+});
+
+test("limit retains truncation, negative-end, and nonfinite behavior for a large candidate list", () => {
+  const sorted = Array.from({ length: 140 }, (_, index) =>
+    person(`person-${index}`, `Person ${String(index).padStart(3, "0")}`),
+  );
+  const items = [...sorted].reverse();
+  const cases: [number | undefined, number][] = [
+    [undefined, 8],
+    [0, 0],
+    [-0, 0],
+    [1, 1],
+    [2, 2],
+    [8, 8],
+    [9, 9],
+    [200, 140],
+    [Infinity, 140],
+    [-Infinity, 0],
+    [NaN, 0],
+    [2.9, 2],
+    [-1, 139],
+    [-1.8, 139],
+  ];
+  for (const [limit, count] of cases) {
+    const ranked = filterMentionables(items, "", { limit });
+    expect(ranked).toHaveLength(count);
+    expect(ranked).toEqual(sorted.slice(0, count));
+  }
+});
+
 const AGENT_UUID = "bf69603b-642b-40d7-b877-0080e29f4306";
 const USER_UUID = "11111111-2222-4333-8444-555555555555";
 
