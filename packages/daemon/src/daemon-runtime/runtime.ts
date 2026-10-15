@@ -1143,7 +1143,13 @@ export class DaemonRuntime {
       );
       const migrations = this.#migrations;
       if (migrations) {
-        void migrations.pruneLeftovers().catch(() => {});
+        // Before any lease is taken, so nothing it clears can belong to a run.
+        await migrations.pruneLeftovers().catch((error: unknown) =>
+          logger.warn("Clearing what Agent migrations left behind failed", {
+            event: "agent_migration:prune_failed",
+            error_code: diagnosticErrorName(error),
+          }),
+        );
         this.#subscribe(
           this.#transport.onAgentMigrationLease?.((lease) => {
             void migrations.lease(lease);

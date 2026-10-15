@@ -1,8 +1,12 @@
-import { lstat, readdir, rm, stat } from "node:fs/promises";
+import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { getLogger } from "@logtape/logtape";
 import type { AgentMigrationCancel, AgentMigrationLease } from "@lrm/coforge-sdk/internal";
-import { commitAgentMigrationBundle, rollBackAgentMigrationPlacement } from "./bundle-commit";
+import {
+  agentWorkspacePlacement,
+  commitAgentMigrationBundle,
+  rollBackAgentMigrationPlacement,
+} from "./bundle-commit";
 import { AgentMigrationBundleLimitError, writeAgentMigrationBundle } from "./bundle-writer";
 import {
   downloadAgentMigrationChunks,
@@ -22,16 +26,11 @@ import {
 import { AgentMigrationTransferError } from "./transfer-error";
 import { selectAgentMigrationWorkspace } from "./workspace-selection";
 import {
+  exists,
   moveWorkspaceToBackup,
   pruneWorkspaceBackups,
   sourceBackupName,
 } from "./workspace-backups";
-
-const exists = (path: string) =>
-  lstat(path).then(
-    () => true,
-    () => false,
-  );
 
 /**
  * This Computer's part in its Agents' migrations, one run per lease. As the source it stops the
@@ -65,7 +64,13 @@ export type AgentMigrationRunnerOptions = {
   outcomePollMs?: number;
 };
 
-type Run = { owner: symbol; stop: AbortController; done: Promise<void> };
+type Run = {
+  owner: symbol;
+  agentId: string;
+  role: "source" | "target";
+  stop: AbortController;
+  done: Promise<void>;
+};
 
 /** The route's grammar for a failure code. */
 const ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/;
@@ -125,6 +130,8 @@ export class AgentMigrationRunner {
     }
     const run: Run = {
       owner,
+      agentId: lease.agentId,
+      role: lease.role,
       stop,
       done: (current?.done ?? Promise.resolve())
         .then(() => this.#run(owner, lease, stop.signal))
@@ -148,6 +155,8 @@ export class AgentMigrationRunner {
     stop.abort();
     const barrier: Run = {
       owner: Symbol(key),
+      agentId: cancel.agentId,
+      role: cancel.role,
       stop,
       done: (current?.done ?? Promise.resolve())
         .finally(async () => {
@@ -190,7 +199,7 @@ export class AgentMigrationRunner {
       signal,
     };
     try {
-      if (lease.role === "source") await this.#source(lease, transfer);
+      if (lease.role === "source") await this.#source(lease, transfer, owner);
       else await this.#target(lease, transfer);
       logger.info("agent_migration:run_finished", fields);
     } catch (error) {
@@ -243,17 +252,21 @@ export class AgentMigrationRunner {
     return result.migration.revision;
   }
 
-  async #source(lease: AgentMigrationLeaseGrant, transfer: AgentMigrationTransfer) {
+  async #source(lease: AgentMigrationLeaseGrant, transfer: AgentMigrationTransfer, owner: symbol) {
     const { bucket, agents } = this.options;
     const view = await this.#view(transfer);
     const { state } = view.migration;
-    if (!UNDECIDED.has(state)) return this.#archiveSource(lease, state);
+    // A run that did not upload the workspace cannot tell it from one placed here since, so it
+    // leaves it where it is.
+    if (!UNDECIDED.has(state)) return;
     // Whatever the state, an Agent this Computer is still the source for stays stopped.
     await agents.stop(lease.agentId);
+    let uploaded: string | undefined;
     if (state === "requested" || state === "source_stopped") {
       let revision = view.migration.revision;
       if (state === "requested") revision = await this.#step(transfer, revision, "source_stopped");
       const workspaceDirectory = this.options.workspaceDirectory(lease.agentId);
+      uploaded = await agentWorkspacePlacement(workspaceDirectory);
       await ensureAgentMigrationIgnoreFile(workspaceDirectory);
       const selection = await selectAgentMigrationWorkspace(workspaceDirectory);
       const server = this.options.server();
@@ -284,8 +297,8 @@ export class AgentMigrationRunner {
     }
     const decided = await this.#untilDecided(transfer);
     // Let go first: archiving can take a while, and nothing here may run the Agent again anyway.
-    this.#release(lease.agentId, runKey(lease.migrationId, lease.generation, "source"));
-    await this.#archiveSource(lease, decided);
+    this.#release(lease.agentId, owner);
+    if (uploaded !== undefined) await this.#archiveSource(lease, decided, uploaded);
   }
 
   /**
@@ -307,20 +320,39 @@ export class AgentMigrationRunner {
   /**
    * The Agent has moved away: what it left in its workspace here becomes a backup, so the Agents'
    * tree holds only Agents that run here and the move can still be undone by hand for a while.
+   * Only the very workspace this run uploaded is archived: a later migration may have placed the
+   * Agent back here meanwhile, and a placement still in flight is never touched. The migration has
+   * already succeeded, so a failure here is logged, never reported as the migration's.
    */
-  async #archiveSource(lease: AgentMigrationLeaseGrant, state: AgentMigrationState) {
+  async #archiveSource(
+    lease: AgentMigrationLeaseGrant,
+    state: AgentMigrationState,
+    uploaded: string,
+  ) {
     if (state !== "switched" && state !== "completed") return;
     const workspaceDirectory = this.options.workspaceDirectory(lease.agentId);
     const backupDirectory = this.#backupDirectory(lease.agentId);
-    if (!(await exists(workspaceDirectory))) return;
-    if (await exists(join(backupDirectory, sourceBackupName(lease.migrationId)))) return;
-    await moveWorkspaceToBackup(
-      workspaceDirectory,
-      backupDirectory,
-      sourceBackupName(lease.migrationId),
-    );
-    await pruneWorkspaceBackups(backupDirectory);
-    logger.info("agent_migration:source_archived", { migration_id: lease.migrationId });
+    try {
+      const placing = [...this.#runs.values()].some(
+        (run) => run.agentId === lease.agentId && run.role === "target",
+      );
+      if (placing || !(await exists(workspaceDirectory))) return;
+      if ((await agentWorkspacePlacement(workspaceDirectory)) !== uploaded) return;
+      // Already archived by an earlier run of this same migration.
+      if (await exists(join(backupDirectory, sourceBackupName(lease.migrationId)))) return;
+      await moveWorkspaceToBackup(
+        workspaceDirectory,
+        backupDirectory,
+        sourceBackupName(lease.migrationId),
+      );
+      await pruneWorkspaceBackups(backupDirectory);
+      logger.info("agent_migration:source_archived", { migration_id: lease.migrationId });
+    } catch (error) {
+      logger.warn("agent_migration:source_archive_failed", {
+        migration_id: lease.migrationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   #backupDirectory(agentId: string) {
@@ -328,8 +360,10 @@ export class AgentMigrationRunner {
   }
 
   /**
-   * Clears what runs that never finished left behind: attempt directories untouched for a week,
-   * and every Agent's backups past what is kept. Called once as the daemon starts.
+   * Clears what runs that never finished left behind: attempt directories created more than a
+   * week ago (an attempt's lease is an hour, so none is still in use), and every Agent's backups
+   * past what is kept. Called as the daemon starts, before it takes any lease; an Agent with a run
+   * in flight is passed over all the same.
    */
   async pruneLeftovers(now = Date.now()) {
     const attempts = join(this.options.stateDirectory, "migrations");
@@ -341,8 +375,15 @@ export class AgentMigrationRunner {
         await rm(path, { recursive: true, force: true });
     }
     const backups = join(this.options.stateDirectory, "migration-workspace-backups");
-    for (const agentId of await readdir(backups).catch(() => [] as string[]))
-      await pruneWorkspaceBackups(join(backups, agentId), now);
+    for (const agentId of await readdir(backups).catch(() => [] as string[])) {
+      if ([...this.#runs.values()].some((run) => run.agentId === agentId)) continue;
+      await pruneWorkspaceBackups(join(backups, agentId), now).catch((error: unknown) =>
+        logger.warn("agent_migration:backup_prune_failed", {
+          agent_id: agentId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
   }
 
   async #target(lease: AgentMigrationLeaseGrant, transfer: AgentMigrationTransfer) {

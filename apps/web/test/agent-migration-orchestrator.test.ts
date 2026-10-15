@@ -354,3 +354,19 @@ test("a migration's objects leave the bucket once it completes, fails or is canc
     `workspaces/${workspaceId}/agents/agent-2/migrations/${canceled.migration.id}/`,
   ]);
 });
+
+test("a migration that fails leaves its objects in the bucket no longer", async () => {
+  const context = setup();
+  const started = await context.orchestrator.request(context.request);
+  if (started.status !== "created") throw new Error(started.status);
+  const failed = await context.migrations.fail(target, {
+    migrationId: started.migration.id,
+    generation: 1,
+    errorCode: "download_failed",
+  });
+  if (failed.status !== "failed") throw new Error(failed.status);
+  await context.orchestrator.ended(failed.migration);
+  expect(context.removed).toEqual([
+    `workspaces/${workspaceId}/agents/agent-1/migrations/${started.migration.id}/`,
+  ]);
+});

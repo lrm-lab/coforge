@@ -31,7 +31,8 @@ export const AGENT_WORKSPACE_BACKUP_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 export const preexistingBackupName = (migrationId: string) => `preexisting-${migrationId}`;
 export const sourceBackupName = (migrationId: string) => `source-${migrationId}`;
 
-const exists = (path: string) =>
+/** Whether anything, even a dangling link, is at the path. */
+export const exists = (path: string) =>
   lstat(path).then(
     () => true,
     () => false,
@@ -136,11 +137,16 @@ export async function moveWorkspaceToBackup(
  */
 export async function pruneWorkspaceBackups(backupDirectory: string, now = Date.now()) {
   const names = await readdir(backupDirectory).catch(() => [] as string[]);
-  const backups = await Promise.all(
+  const found = await Promise.all(
     names
       .filter((name) => !name.includes(".partial-"))
-      .map(async (name) => ({ name, madeAt: (await stat(join(backupDirectory, name))).mtimeMs })),
+      .map(async (name) => {
+        // One removed meanwhile is simply not there to prune.
+        const made = await stat(join(backupDirectory, name)).catch(() => null);
+        return made ? { name, madeAt: made.mtimeMs } : null;
+      }),
   );
+  const backups = found.filter((backup) => backup !== null);
   backups.sort((left, right) => right.madeAt - left.madeAt);
   await Promise.all(
     backups

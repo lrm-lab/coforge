@@ -1,20 +1,10 @@
-import {
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, open, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, posix, sep } from "node:path";
 import { extract } from "tar-stream";
 import { AGENT_MIGRATION_BUNDLE_ROOT, type AgentMigrationBundleManifest } from "./bundle-writer";
 import { readVerifiedAgentMigrationChunk } from "./chunk-store";
 import { AgentMigrationCommitError } from "./commit-error";
-import { moveWorkspaceToBackup, preexistingBackupName } from "./workspace-backups";
+import { exists, moveWorkspaceToBackup, preexistingBackupName } from "./workspace-backups";
 import {
   AGENT_MIGRATION_COMMIT_DIRECTORY,
   isSafeRelativePath,
@@ -66,11 +56,17 @@ function isThisCommit(marker: CommitMarker | null, identity: MigrationIdentity, 
   );
 }
 
-const exists = (path: string) =>
-  lstat(path).then(
-    () => true,
-    () => false,
-  );
+/**
+ * Which placement the workspace is, by its commit marker: `<migrationId>:<generation>`, or `""`
+ * for a workspace no migration placed. Lets a source tell the workspace it uploaded from one a
+ * later migration has since placed in the same directory.
+ */
+export async function agentWorkspacePlacement(workspaceDirectory: string) {
+  const marker = await readMarker(workspaceDirectory);
+  return marker?.schema === COMMIT_MARKER_SCHEMA
+    ? `${marker.migrationId}:${marker.generation}`
+    : "";
+}
 
 /**
  * What the archive has placed so far, keyed by case-folded, NFC-normalized path: a
