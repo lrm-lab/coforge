@@ -209,6 +209,12 @@ export async function prepareKnowledge(input: {
       (indexed.experience ?? 0) !== experiences
     )
       throw new Error("knowledge index count mismatch");
+    if (
+      Object.keys(indexed).some(
+        (kind) => !["retrieval_mode", "document", "experience"].includes(kind),
+      )
+    )
+      throw new Error("frozen knowledge contains untracked resource kinds");
     if (documents !== input.expectedDocuments || experiences !== input.expectedExperiences)
       throw new Error("knowledge count mismatch");
     const ready: KnowledgeReady = validateKnowledgeReady({

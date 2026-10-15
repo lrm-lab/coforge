@@ -10,12 +10,16 @@ const identity = userIdentity("prepared", "owner", "test-key", "admin");
 test("BM25 preparation uploads projected raw documents and resumes without embedding jobs", async () => {
   const dir = await mkdtemp(join(tmpdir(), "lexical-ready-"));
   const posted: { uri: string; text: string; kind: string }[] = [];
+  let extraCounts = {};
   const server = Bun.serve({
     port: 0,
     async fetch(request) {
       expect(new URL(request.url).pathname).toBe("/api/v1/search/index_lexical");
       if (request.method === "GET")
-        return Response.json({ status: "ok", result: { retrieval_mode: "bm25", document: 1 } });
+        return Response.json({
+          status: "ok",
+          result: { retrieval_mode: "bm25", document: 1, ...extraCounts },
+        });
       const body = (await request.json()) as {
         resources: { uri: string; text: string; kind: string }[];
       };
@@ -53,6 +57,10 @@ test("BM25 preparation uploads projected raw documents and resumes without embed
     };
     expect((await prepareKnowledge(input)).arm).toBe("cold");
     await prepareKnowledge(input);
+    extraCounts = { native_block: 1 };
+    await expect(prepareKnowledge(input)).rejects.toThrow("untracked resource kinds");
+    expect(await Bun.file(readyPath).exists()).toBe(false);
+    extraCounts = {};
     expect(posted).toEqual([
       { uri: "viking://resources/evo-ir/documents/d1.md", text: "Evidence", kind: "document" },
     ]);

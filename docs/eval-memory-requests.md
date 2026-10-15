@@ -45,7 +45,7 @@ mise exec -- bun run --cwd benchmark/evolbench-collab prepare:knowledge
 cold 使用同一文档输入、空 ledger，并显式设置 `COFORGE_KNOWLEDGE_EXPERIENCE_COUNT=0`；warm 使用 89 条冻结训练经验。
 每批核对返回 URI、原文 SHA256 和 BM25 标识。checkpoint 保存源文件 SHA256、账号创建时间、处理模式和已完成 URI；同名重建账号不能复用。恢复时去掉
 `COFORGE_KNOWLEDGE_CREATE_ACCOUNT=1`，使用相同输入和账号。
-全部完成且服务器实际文档/经验数量吻合后才写 v2 ready 文件；旧语义 ready 文件不能复用。
+全部完成且服务器实际文档/经验数量吻合后才写 v2 ready 文件；旧语义 ready 文件不能复用。冻结评测账号不允许残留未纳入输入来源的 AIG/Fork 或其他资源类型；图检索能力在独立集成测试中验证。
 
 ## 冻结 test
 
