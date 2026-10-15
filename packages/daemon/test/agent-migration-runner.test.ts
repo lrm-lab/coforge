@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
+import * as fileSystem from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +9,7 @@ import { AGENT_MIGRATION_IGNORE_FILE } from "#src/agent-migration/selection-rule
 import { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
 import { AgentMigrationRemoteError } from "#src/agent-migration/transfer-ports";
 import { cloud } from "./fixtures/agent-migration-cloud";
+import { captureDaemonLogs } from "./log-capture";
 
 const roots: string[] = [];
 const runners: AgentMigrationRunner[] = [];
@@ -249,6 +251,108 @@ test("a transient server failure is asked again; a transfer that fails is report
   // Local paths and messages stay on this Computer.
   expect(shared.details).toEqual([undefined]);
   expect(source.runner.holds(agentId)).toBe(false);
+});
+
+test("a failed run logs its code without the remote error's detail", async () => {
+  const shared = cloud();
+  const detail = "fixture-private-remote-detail";
+  shared.faults.view = [new AgentMigrationRemoteError("bucket_refused", false, detail)];
+  const source = await computer("source", shared, "source");
+
+  const { records } = await captureDaemonLogs(() => source.runner.lease(lease("source", 0)));
+
+  const failure = records.find((record) => record.rawMessage === "agent_migration:run_failed");
+  expect(failure?.properties).toEqual({
+    migration_id: migrationId,
+    role: "source",
+    agent_id: agentId,
+    error_code: "bucket_refused",
+  });
+  expect(JSON.stringify(records)).not.toContain(detail);
+  expect(shared.reports).toEqual(["source:fail:bucket_refused"]);
+  expect(source.runner.holds(agentId)).toBe(false);
+});
+
+test("a failed failure report logs a normalized code and still releases the Agent", async () => {
+  const shared = cloud();
+  shared.faults.view = [new AgentMigrationRemoteError("bucket_refused", false)];
+  const invalidCode = "fixture-invalid-code/private-detail";
+  const reported: unknown[] = [];
+  const serverFor = shared.serverFor;
+  shared.serverFor = (role) => ({
+    ...serverFor(role),
+    fail: async (input) => {
+      reported.push(input);
+      throw new AgentMigrationRemoteError(invalidCode, false);
+    },
+  });
+  const source = await computer("source", shared, "source");
+
+  const { records } = await captureDaemonLogs(() => source.runner.lease(lease("source", 0)));
+
+  const failure = records.find(
+    (record) => record.rawMessage === "agent_migration:fail_report_failed",
+  );
+  expect(failure?.properties).toEqual({
+    migration_id: migrationId,
+    role: "source",
+    agent_id: agentId,
+    error_code: "unexpected",
+  });
+  expect(JSON.stringify(records)).not.toContain(invalidCode);
+  expect(reported).toEqual([{ migrationId, generation: 1, errorCode: "bucket_refused" }]);
+  expect(source.runner.holds(agentId)).toBe(false);
+});
+
+test("a source archive failure logs its code and keeps the completed migration and workspace", async () => {
+  const shared = cloud();
+  const { result: source, records } = await captureDaemonLogs(async () => {
+    const { source, run } = await uploaded(shared, { "MEMORY.md": "stays here" });
+    const backups = join(source.state, "migration-workspace-backups", agentId);
+    await mkdir(dirname(backups), { recursive: true });
+    await Bun.write(backups, "a file prevents the backup directory from being created");
+    shared.record.state = "completed";
+    await run;
+    return source;
+  });
+
+  const failure = records.find(
+    (record) => record.rawMessage === "agent_migration:source_archive_failed",
+  );
+  expect(failure?.properties).toEqual({ migration_id: migrationId, error_code: "unexpected" });
+  expect(JSON.stringify(records)).not.toContain(source.root);
+  expect(shared.record.state).toBe("completed");
+  expect(shared.reports).toEqual(["source:source_stopped", "source:upload_complete"]);
+  expect(source.runner.holds(agentId)).toBe(false);
+  expect(await Bun.file(join(source.workspace, "MEMORY.md")).text()).toBe("stays here");
+});
+
+test("a backup cleanup failure logs its code without discarding the backup", async () => {
+  const shared = cloud();
+  const source = await computer("source", shared, "source");
+  const expired = join(source.state, "migration-workspace-backups", agentId, "expired");
+  await mkdir(expired, { recursive: true });
+  await Bun.write(join(expired, "MEMORY.md"), "recoverable backup");
+  await utimes(expired, new Date(0), new Date(0));
+  const detail = "fixture-private-prune-detail";
+  const remove = fileSystem.rm;
+  const removal = spyOn(fileSystem, "rm").mockImplementation(async (path, options) => {
+    if (String(path) === expired) throw new Error(detail);
+    await remove(path, options);
+  });
+  try {
+    const { records } = await captureDaemonLogs(() => source.runner.pruneLeftovers());
+
+    const failure = records.find(
+      (record) => record.rawMessage === "agent_migration:backup_prune_failed",
+    );
+    expect(failure?.properties).toEqual({ agent_id: agentId, error_code: "unexpected" });
+    expect(JSON.stringify(records)).not.toContain(detail);
+    expect(await Bun.file(join(expired, "MEMORY.md")).text()).toBe("recoverable backup");
+    expect(shared.reports).toEqual([]);
+  } finally {
+    removal.mockRestore();
+  }
 });
 
 test("a switch the server refuses puts the target's previous workspace back", async () => {

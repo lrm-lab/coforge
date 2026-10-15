@@ -226,7 +226,6 @@ export class AgentMigrationRunner {
       logger.warn("agent_migration:run_failed", {
         ...fields,
         error_code: errorCode,
-        error: error instanceof Error ? error.message : String(error),
       });
       await this.options
         .server()
@@ -234,8 +233,7 @@ export class AgentMigrationRunner {
         .catch((reportError: unknown) =>
           logger.warn("agent_migration:fail_report_failed", {
             ...fields,
-            error_code:
-              reportError instanceof AgentMigrationRemoteError ? reportError.code : "unexpected",
+            error_code: failureCode(reportError),
           }),
         );
     } finally {
@@ -367,7 +365,7 @@ export class AgentMigrationRunner {
       } catch (error) {
         logger.warn("agent_migration:source_archive_failed", {
           migration_id: lease.migrationId,
-          error: error instanceof Error ? error.message : String(error),
+          error_code: failureCode(error),
         });
       }
     });
@@ -398,7 +396,7 @@ export class AgentMigrationRunner {
       await pruneWorkspaceBackups(join(backups, agentId), now).catch((error: unknown) =>
         logger.warn("agent_migration:backup_prune_failed", {
           agent_id: agentId,
-          error: error instanceof Error ? error.message : String(error),
+          error_code: failureCode(error),
         }),
       );
     }
