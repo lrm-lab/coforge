@@ -4,6 +4,7 @@ import {
   agentMigrationStatusLine,
   isAgentMigrationInProgress,
   isAgentMigrationShown,
+  agentMigrationSteps,
 } from "#src/features/agents/agent-migration";
 import { AppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
@@ -66,4 +67,20 @@ test("a move that ended stays shown for a day, and one still going always", () =
   expect(isAgentMigrationShown({ state: "completed", updatedAt: at(23) }, now)).toBe(true);
   expect(isAgentMigrationShown({ state: "completed", updatedAt: at(25) }, now)).toBe(false);
   expect(isAgentMigrationShown({ state: "placing", updatedAt: at(48) }, now)).toBe(true);
+});
+
+test("a move reads as four steps: those behind it done, the one under way current", () => {
+  const steps = (state: string) => agentMigrationSteps(state).map((step) => step.status);
+  expect(agentMigrationSteps("requested").map((step) => step.label)).toEqual([
+    m.agent_migration_step_stop(),
+    m.agent_migration_step_upload(),
+    m.agent_migration_step_place(),
+    m.agent_migration_step_start(),
+  ]);
+  expect(steps("requested")).toEqual(["current", "pending", "pending", "pending"]);
+  expect(steps("source_stopped")).toEqual(["done", "current", "pending", "pending"]);
+  expect(steps("uploaded")).toEqual(["done", "done", "current", "pending"]);
+  expect(steps("placing")).toEqual(["done", "done", "current", "pending"]);
+  expect(steps("switched")).toEqual(["done", "done", "done", "current"]);
+  expect(steps("completed")).toEqual(["done", "done", "done", "done"]);
 });

@@ -42,6 +42,8 @@ export class AgentMigrationRequests {
       isWorkspaceAdmin(workspaceId: string, userId: string): Promise<boolean>;
       /** A Computer's name as people see it, or null when it has none. */
       computerName(computerId: string): Promise<string | null>;
+      /** Whether the Computer can run the Agent's runtime for its owner. */
+      canRunAgent(workspaceId: string, agentId: string, computerId: string): Promise<boolean>;
       /** Whether this deployment has the migration bucket a move needs. */
       available(): Promise<boolean>;
     },
@@ -80,6 +82,11 @@ export class AgentMigrationRequests {
     await this.#assertOwner(principal, input.agentId);
     if (!(await this.deps.available()))
       throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "agent-migration-unavailable" });
+    // Before anything stops: an Agent moved where its runtime is missing could not start there.
+    if (
+      !(await this.deps.canRunAgent(principal.workspaceId, input.agentId, input.targetComputerId))
+    )
+      throw new AppError("INVALID_INPUT", { errorId: "agent-migration-runtime-unavailable" });
     let started: Awaited<ReturnType<AgentMigrationOrchestrator["request"]>>;
     try {
       started = await this.deps.orchestrator.request({

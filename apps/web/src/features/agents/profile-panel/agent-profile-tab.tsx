@@ -459,6 +459,9 @@ export function AgentProfileTab({
         <section className="px-6 py-5">
           <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_actions()}</p>
           <div className="mt-3 flex flex-col gap-2">
+            {/* Moving comes first, as in the reference Computer: it is the action that changes
+                where the Agent lives, and its progress belongs at the top while it runs. */}
+            {migration}
             <Button
               color="secondary"
               className="w-full justify-center"
@@ -476,7 +479,6 @@ export function AgentProfileTab({
             >
               {m.agent_control_restart_reset_tooltip()}
             </Button>
-            {migration}
             {onStartDelete && (
               /* A danger entry button is still a button (`docs/design/color-status-typography.md` §11 危险操作), so it
                * gets the bordered red rather than bare red text. The one solid red belongs to the

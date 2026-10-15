@@ -11,6 +11,34 @@ export function isAgentMigrationInProgress(state: string) {
   return IN_PROGRESS.has(state);
 }
 
+/** The four steps a move goes through, in order, and the states in which each is under way. */
+const STEPS: { label: () => string; under: readonly string[] }[] = [
+  { label: m.agent_migration_step_stop, under: ["requested"] },
+  { label: m.agent_migration_step_upload, under: ["source_stopped"] },
+  { label: m.agent_migration_step_place, under: ["uploaded", "placing"] },
+  { label: m.agent_migration_step_start, under: ["switched"] },
+];
+
+export type AgentMigrationStepStatus = "done" | "current" | "pending";
+
+function stepStatus(index: number, reached: number): AgentMigrationStepStatus {
+  if (reached < 0 || index > reached) return "pending";
+  return index < reached ? "done" : "current";
+}
+
+/**
+ * A move as its four steps: those it has passed are done, the one it is in is current. A move
+ * that ended before completing shows none as done; its status line says how it ended.
+ */
+export function agentMigrationSteps(state: string) {
+  const reached =
+    state === "completed" ? STEPS.length : STEPS.findIndex((step) => step.under.includes(state));
+  return STEPS.map((step, index) => ({
+    label: step.label(),
+    status: stepStatus(index, reached),
+  }));
+}
+
 /** How long a move that ended stays shown; after that the profile shows no move at all. */
 const SHOWN_AFTER_END_MS = 24 * 60 * 60 * 1000;
 
@@ -63,6 +91,7 @@ export function agentMigrationStatusLine(migration: AgentMigrationSummary, compu
 const REFUSALS: Record<string, () => string> = {
   "agent-migrating": m.agent_migration_error_already_moving,
   "agent-migration-unplaced": m.agent_migration_error_unplaced,
+  "agent-migration-runtime-unavailable": m.agent_migration_error_runtime_unavailable,
   "agent-migration-same-computer": m.agent_migration_error_same_computer,
   "agent-migration-target-unavailable": m.agent_migration_error_target_unavailable,
   "agent-migration-source-unreachable": m.agent_migration_error_source_unreachable,

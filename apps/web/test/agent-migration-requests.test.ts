@@ -8,7 +8,9 @@ const owner = { userId: "user-1", workspaceId: "workspace-1" };
 const stranger = { userId: "user-2", workspaceId: "workspace-1" };
 const admin = { userId: "user-3", workspaceId: "workspace-1" };
 
-function setup(options: { available?: boolean; fails?: "stop" | "lease" } = {}) {
+function setup(
+  options: { available?: boolean; fails?: "stop" | "lease"; runtimeMissing?: boolean } = {},
+) {
   const fixture = memoryStore();
   const migrations = new AgentMigrations(fixture.store);
   const requested: string[] = [];
@@ -27,6 +29,7 @@ function setup(options: { available?: boolean; fails?: "stop" | "lease" } = {}) 
     agentOwner: async (_workspaceId, agentId) => (agentId === "agent-1" ? "user-1" : undefined),
     isWorkspaceAdmin: async (_workspaceId, userId) => userId === "user-3",
     computerName: async (computerId) => (computerId === "computer-b" ? "Studio Mac" : null),
+    canRunAgent: async () => !options.runtimeMissing,
     available: async () => options.available ?? true,
   });
   return { requests, requested, fixture };
@@ -117,4 +120,15 @@ test("a failure after the source stopped is not reported as a source that never 
       targetComputerId: "computer-b",
     }),
   ).rejects.toThrow("centrifugo is unreachable");
+});
+
+test("a Computer that cannot run the Agent's runtime is refused before anything stops", async () => {
+  const { requests, requested } = setup({ runtimeMissing: true });
+  await expect(
+    requests.request(owner, { agentId: "agent-1", targetComputerId: "computer-b" }),
+  ).rejects.toMatchObject({
+    code: "INVALID_INPUT",
+    errorId: "agent-migration-runtime-unavailable",
+  });
+  expect(requested).toEqual([]);
 });

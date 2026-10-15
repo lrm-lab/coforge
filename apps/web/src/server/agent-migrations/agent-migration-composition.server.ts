@@ -1,5 +1,8 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
+import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
+import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
+import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { agentStartIntent, agentStopIntent } from "#src/server/agents/manage-agents.server";
@@ -107,6 +110,18 @@ export function agentMigrationRequests(db: PrismaClient) {
         select: { displayName: true, name: true },
       });
       return computer?.displayName || computer?.name || null;
+    },
+    canRunAgent: async (workspaceId, agentId, computerId) => {
+      const agent = await db.agent.findFirst({
+        where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+        select: { ownerId: true, runtimeConfig: true },
+      });
+      if (!agent) return false;
+      return new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db)).canSelect(
+        { userId: agent.ownerId, workspaceId },
+        computerId,
+        parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
+      );
     },
     // A misconfigured bucket reads as "not set up" here; the daemons' route reports the error.
     available: async () =>
