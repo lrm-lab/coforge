@@ -77,9 +77,10 @@ export function ChatSectionEmojiPicker({
           aria-labelledby={labelId}
           aria-description={value ?? m.chat_section_emoji_none()}
           iconTrailing={ChevronDown}
-          className="h-10 w-24 justify-between"
+          // `md` is the Name input's height (both 2.5rem); height comes from `size` alone.
+          className="w-24 justify-between"
         >
-          <span aria-hidden="true" className="text-lg leading-none">
+          <span aria-hidden="true" className="inline-block align-top text-lg/5">
             {value ?? "—"}
           </span>
         </Button>
@@ -97,18 +98,16 @@ export function ChatSectionEmojiPicker({
                       key={emoji}
                       color="tertiary"
                       size="sm"
-                      noTextPadding
                       aria-pressed={emoji === value}
                       onPress={() => {
                         onChange(emoji);
                         close();
                       }}
-                      className={cx(
-                        "h-auto rounded-md p-1 text-xl leading-none",
-                        emoji === value && "bg-active",
-                      )}
+                      className={cx(emoji === value && "bg-active")}
                     >
-                      {emoji}
+                      {/* A larger glyph on the button's own 1.25rem line, so the height stays
+                          the `sm` size's. */}
+                      <span className="inline-block align-top text-lg/5">{emoji}</span>
                     </Button>
                   ))}
                 </div>

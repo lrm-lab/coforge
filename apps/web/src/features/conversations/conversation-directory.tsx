@@ -176,6 +176,8 @@ function ConversationRow({
       // `href` is always set, so React Aria renders an `<a>`; the check narrows the props type.
       render={(props) => ("href" in props ? <Link {...props} {...route} /> : <span {...props} />)}
       aria-current={current ? "page" : undefined}
+      // Lets the section list measure its bottom space from a bordered card's avatar.
+      data-row-card={card || undefined}
       aria-label={
         rowLabel(unreadCount, label, lastMessage?.mentioned) ??
         (count ? `${label}, ${count.label}` : lastMessage ? label : undefined)
@@ -378,11 +380,15 @@ function DirectorySection({
       </div>
       {/* Kept mounted but hidden: collapsing must not throw away the rows' realtime state. A
           section that cannot collapse still folds while the sections are being reordered. */}
-      {/* Design spec: 36px from the last row's avatar to the next section's title. A channel row
-          pads its avatar by 0.5rem inside a 1px card border, and its list item adds 1px, so the
-          list adds the 26px left (1.625rem; a borderless DM row lands 1px closer). A folded
-          section adds nothing: folded titles stay one 2.25rem row apart. */}
-      <div id={listId} hidden={expanded === false} className="pb-[1.625rem]">
+      {/* Design spec: 36px from the last row's avatar to the next section's title. A row pads its
+          avatar by 0.5rem and its list item by 1px, so the list adds the 27px left (1.6875rem);
+          when the last row is a channel's bordered card, its 1px border takes one of those
+          (1.625rem). A folded section adds nothing: folded titles stay one 2.25rem row apart. */}
+      <div
+        id={listId}
+        hidden={expanded === false}
+        className="pb-[1.6875rem] has-[>div>ul>li:last-child_[data-row-card]]:pb-[1.625rem]"
+      >
         {children}
       </div>
     </>
