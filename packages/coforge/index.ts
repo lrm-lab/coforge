@@ -64,7 +64,11 @@ import {
   mentionDeliveryFailure,
   MENTION_DELIVERY_MESSAGE_ID_HINT,
 } from "#src/mention-format";
-import { parseActionCardInput, toActionCardAction } from "#src/action-prepare-input";
+import {
+  ACTION_HEREDOC_DELIMITER,
+  parseActionCardInput,
+  toActionCardAction,
+} from "#src/action-prepare-input";
 import {
   formatAttachmentDownloadSuccess,
   formatAttachmentUploadSuccess,
@@ -93,6 +97,7 @@ import {
 } from "#src/channel-format";
 import {
   CliError,
+  type CliErrorInit,
   NO_MESSAGE_SENT_NEXT_ACTION,
   unknownDeliveryNextAction,
   withOutputMode,
@@ -1375,6 +1380,11 @@ export async function run(args: readonly string[], transport: MessageTransport):
   }
   if (invocation.command === "action-prepare") {
     if (!transport.actionPrepare) throw new Error("Action transport is unavailable");
+    refuseForeignStdinFile([
+      `coforge action prepare --target "${invocation.target}" <<'${ACTION_HEREDOC_DELIMITER}'`,
+      '{"type":"channel:create","name":"demo","visibility":"public"}',
+      ACTION_HEREDOC_DELIMITER,
+    ]);
     const raw = await new Response(Bun.stdin.stream()).text();
     const action = toActionCardAction(parseActionCardInput(raw));
     const result = await transport.actionPrepare(invocation.target, action);
@@ -1468,7 +1478,15 @@ export async function run(args: readonly string[], transport: MessageTransport):
         outputMode,
       );
     }
-    if (!invocation.sendDraft) refuseForeignStdinFile(invocation.target, outputMode);
+    if (!invocation.sendDraft)
+      refuseForeignStdinFile(
+        [
+          `coforge message send --target "${invocation.target}" <<'COFORGE_MESSAGE'`,
+          "reply body",
+          "COFORGE_MESSAGE",
+        ],
+        { draftSaved: false, suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION, outputMode },
+      );
     const body = invocation.sendDraft ? undefined : await readPipedSendContent();
     // With `--send-draft`, the body (and thus content presence) is only known to the daemon, which
     // already re-sends the draft's own saved mentions when no explicit override is given.
@@ -1966,11 +1984,15 @@ async function readPipedSendContent(): Promise<string> {
   }
 }
 
-/** Refuses a body the shell redirected from a regular file another user owns. Such a file is not
- * this Agent's reply: when writing the reply to a shared path fails, the file still holds its
- * owner's earlier content, and sending it would post that under this Agent's name. Pipes,
- * here-documents (which the shell creates as the caller) and platforms without uids pass. */
-function refuseForeignStdinFile(target: string, outputMode: "text" | "json"): void {
+/** Refuses stdin the shell redirected from a regular file another user owns. Such a file is not
+ * this Agent's content: when writing it to a shared path fails, the file still holds its owner's
+ * earlier content, and posting it would put that under this Agent's name. Pipes, here-documents
+ * (which the shell creates as the caller) and platforms without uids pass. `heredoc` is the
+ * command, as a quoted here-document, the Agent should run instead. */
+function refuseForeignStdinFile(
+  heredoc: readonly string[],
+  init: Pick<CliErrorInit, "draftSaved" | "suggestedNextAction" | "outputMode"> = {},
+): void {
   const callerUid = process.getuid?.();
   if (callerUid === undefined) return;
   let stdin;
@@ -1980,23 +2002,17 @@ function refuseForeignStdinFile(target: string, outputMode: "text" | "json"): vo
     return;
   }
   if (!stdin.isFile() || stdin.uid === callerUid) return;
-  throw withOutputMode(
-    new CliError({
-      code: "STDIN_FILE_NOT_OWNED",
-      message: [
-        `stdin is redirected from a file owned by uid ${stdin.uid}, not by you (uid ${callerUid}). Nothing was sent.`,
-        "That file is not your reply: if writing your reply to it failed, it still holds its owner's earlier content.",
-        "Send the reply body as a quoted heredoc instead of through a file:",
-        `  coforge message send --target "${target}" <<'COFORGE_MESSAGE'`,
-        "  reply body",
-        "  COFORGE_MESSAGE",
-      ].join("\n"),
-      retryable: false,
-      draftSaved: false,
-      suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
-    }),
-    outputMode,
-  );
+  throw new CliError({
+    code: "STDIN_FILE_NOT_OWNED",
+    message: [
+      `stdin is redirected from a file owned by uid ${stdin.uid}, not by you (uid ${callerUid}). Nothing was sent.`,
+      "That file is not your content: if writing your content to it failed, it still holds its owner's earlier content.",
+      "Pass the content as a quoted heredoc instead of through a file:",
+      ...heredoc.map((line) => `  ${line}`),
+    ].join("\n"),
+    retryable: false,
+    ...init,
+  });
 }
 
 async function sendDraftStdinHasContent(): Promise<boolean> {
