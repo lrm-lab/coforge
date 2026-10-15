@@ -16,6 +16,13 @@ const PAIRS = Array.from(
 const DIGITS = new Int16Array(128).fill(-1);
 for (let digit = 0; digit < ALPHABET.length; digit++) DIGITS[ALPHABET.charCodeAt(digit)] = digit;
 
+const DECODE_PAIRS = new Int16Array(128 * 128).fill(-1);
+for (let first = 0; first < ALPHABET.length; first++) {
+  for (let second = 0; second < ALPHABET.length; second++)
+    DECODE_PAIRS[(ALPHABET.charCodeAt(first) << 7) | ALPHABET.charCodeAt(second)] =
+      (first << 6) | second;
+}
+
 export function encodeBase64(bytes: Uint8Array): string {
   let encoded = "";
   for (let index = 0; index < bytes.length; index += 3) {
@@ -39,12 +46,25 @@ export function decodeBase64(value: string): Uint8Array {
   const bytes = new Uint8Array((value.length / 4) * 3);
   let offset = 0;
   const trailingPadding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
-  for (let index = 0; index < value.length; index += 4) {
-    const lastGroup = index + 4 === value.length;
-    // Padding is only ever the tail of the final group; `=` anywhere else is not base64.
-    const padding = lastGroup ? trailingPadding : 0;
-    if (!lastGroup && (value[index + 2] === "=" || value[index + 3] === "="))
-      throw new Error("Invalid base64 padding");
+  let index = 0;
+  for (; index + 4 < value.length; index += 4) {
+    const first = value.charCodeAt(index);
+    const second = value.charCodeAt(index + 1);
+    const third = value.charCodeAt(index + 2);
+    const fourth = value.charCodeAt(index + 3);
+    // Earlier groups cannot contain padding, even when another character is invalid.
+    if (third === 61 || fourth === 61) throw new Error("Invalid base64 padding");
+    if ((first | second | third | fourth) > 127) throw new Error("Invalid base64 character");
+    const high = DECODE_PAIRS[(first << 7) | second]!;
+    const low = DECODE_PAIRS[(third << 7) | fourth]!;
+    if ((high | low) < 0) throw new Error("Invalid base64 character");
+    const group = (high << 12) | low;
+    bytes[offset++] = (group >> 16) & 0xff;
+    bytes[offset++] = (group >> 8) & 0xff;
+    bytes[offset++] = group & 0xff;
+  }
+  if (index < value.length) {
+    const padding = trailingPadding;
     let group = 0;
     for (let position = 0; position < 4 - padding; position++) {
       const digit = DIGITS[value.charCodeAt(index + position)];

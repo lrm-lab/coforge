@@ -97,3 +97,40 @@ test("base64 encoding preserves complete groups and both tails within a bounded 
     expect(backing).toEqual(original);
   }
 });
+
+test("base64 decoding retains character and padding errors in earlier complete groups", () => {
+  for (const prefix of ["", "Zm9v".repeat(128)]) {
+    for (const character of ["!", "-", "_", "\u0000", "\u0080", "\u4e2d", "\ud800", "\uffff"]) {
+      for (let position = 0; position < 4; position++) {
+        const group = "A".repeat(position) + character + "A".repeat(3 - position);
+        for (const suffix of ["AAAA", "Zg==", "Zm8="])
+          expect(() => decodeBase64(prefix + group + suffix)).toThrow("Invalid base64 character");
+      }
+    }
+    // Padding in an earlier group wins over a bad character in that same group. A bad character
+    // in an earlier group still wins over invalid padding in a later one.
+    for (const group of ["!A==", "!AA=", "\ud800A==", "A\uffffA="])
+      expect(() => decodeBase64(prefix + group + "AAAA")).toThrow("Invalid base64 padding");
+    expect(() => decodeBase64(prefix + "!AAA" + "Zh==")).toThrow("Invalid base64 character");
+    expect(() => decodeBase64(prefix + "AAAA" + "Zh==")).toThrow("Invalid base64 padding");
+  }
+});
+
+test("base64 decoding preserves every alphabet pair in earlier complete groups", () => {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  for (const trailingPair of [false, true]) {
+    let encoded = "";
+    for (const first of alphabet) {
+      for (const second of alphabet) {
+        const pair = first + second;
+        encoded += trailingPair ? "AA" + pair : pair + "AA";
+      }
+    }
+    encoded += "Zm8=";
+    const expected = new Uint8Array(Buffer.from(encoded, "base64"));
+    const decoded = decodeBase64(encoded);
+    expect(decoded).toEqual(expected);
+    decoded.fill(0);
+    expect(decodeBase64(encoded)).toEqual(expected);
+  }
+});
