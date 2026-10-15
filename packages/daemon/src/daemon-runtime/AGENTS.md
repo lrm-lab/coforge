@@ -34,6 +34,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 
 - `agent-message-attention-index.ts` owns full-target thread attention,
   model-visible positions, and the accepted-Message observation hook.
+- `memory-channel-updates.ts` coalesces ordinary Memory Agent channel deliveries per target: five updates or 30 seconds trigger a notice, whose body is read through `message_read`. Personal mentions remain immediate.
 - A create or resume launch opens one startup turn. Real recovery input or an explicit
   `resumePrompt` takes precedence; an empty fresh launch gets `Start.`, an empty resume gets a
   no-work turn, and summary-only recovery reads each listed target once and acts only on work

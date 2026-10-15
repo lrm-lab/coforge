@@ -113,6 +113,9 @@ export async function provisionEvalWorkspace(input: {
         runtimeConfig: {},
       },
     });
+    await input.db.workspaceMemoryAgent.create({
+      data: { workspaceId: workspace.id, agentId: memoryAgent.id },
+    });
     const channel = await input.db.conversation.create({
       data: {
         workspaceId: workspace.id,

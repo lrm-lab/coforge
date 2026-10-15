@@ -294,8 +294,10 @@ export async function resolveChannelThreadRoot(
  * and an action card keep their own rules: `server/tasks/task-board.server.ts` and
  * `action-cards.server.ts`.)
  *
- * Directed delivery: a message that @mentions at least one Agent wakes exactly those Agents (a
- * mention pierces mute), and no others. Mentioning only humans never narrows Agent delivery.
+ * Directed delivery wakes the mentioned Agents immediately (a mention pierces mute).
+ * The active Workspace Memory Agent additionally observes channel Messages through batched
+ * notices; its daemon coalesces ordinary updates and reads their bodies with message_read.
+ * Mentioning only humans never narrows ordinary Agent delivery.
  *
  * Without an Agent mention the audience depends on what the message *is*: a top-level message
  * belongs to the channel, so every unmuted Agent member receives it; a reply belongs to its
@@ -358,7 +360,25 @@ export async function channelAgentRecipients(
             select: { agentId: true },
           })
         ).map(({ agentId }) => agentId!);
-  return [...new Set(ids)].filter((id) => id !== message.senderAgentId);
+  const observers = await tx.conversationMember.findMany({
+    where: {
+      conversationId: message.conversationId,
+      ...ACTIVE_MEMBER_WHERE,
+      agent: {
+        ...ACTIVE_AGENT_WHERE,
+        stoppedAt: null,
+        workspaceMemoryAgent: { isNot: null },
+        workspace: { memoryProfile: { is: { desired: "openviking" } } },
+      },
+    },
+    select: { agentId: true },
+  });
+  return [
+    ...new Set([
+      ...ids,
+      ...observers.flatMap((member) => (member.agentId ? [member.agentId] : [])),
+    ]),
+  ].filter((id) => id !== message.senderAgentId);
 }
 
 /**

@@ -43,6 +43,7 @@ test("failed identity provisioning releases the frozen account and owned rows", 
       },
     },
     conversationMember: { async create() {} },
+    workspaceMemoryAgent: { async create() {} },
     workspaceMemoryProfile: {
       async findUnique() {
         return null;
