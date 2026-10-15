@@ -47,7 +47,7 @@ export function getAgentMigrationStorage(): Promise<AgentMigrationObjectStore | 
 }
 
 async function createAgentMigrationStorage(): Promise<AgentMigrationObjectStore | null> {
-  const config = await readAgentMigrationStorageConfig(process.env);
+  const config = await readAgentMigrationStorageConfig(Bun.env);
   if (!config) return null;
   const storage = await createFileStorage(config);
   if (!storage.presignPut || !storage.presignGet)

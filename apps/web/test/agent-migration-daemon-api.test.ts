@@ -31,8 +31,8 @@ async function setup() {
     },
     presignGet: async (key) => `https://oss.test/${key}`,
   });
-  const answer = (participant: typeof source, body: unknown) => {
-    const input = agentMigrationDaemonRequestSchema.safeParse(body);
+  const answer = (participant: typeof source, body: Record<string, unknown>) => {
+    const input = agentMigrationDaemonRequestSchema.safeParse({ version: 1, ...body });
     if (!input.success) throw new Error("request did not parse");
     return answerAgentMigrationDaemonRequest(transport, dispatch, participant, input.data);
   };
@@ -84,7 +84,7 @@ test("a daemon views, steps and fails a migration through one HTTPS operation", 
 
 test("refusals map to HTTP statuses a daemon can act on, never to a 200", async () => {
   const { id, answer } = await setup();
-  expect(await answer(target, { operation: "view", migrationId: "missing" })).toEqual({
+  expect(await answer(target, { operation: "view", migrationId: crypto.randomUUID() })).toEqual({
     status: 404,
     body: { error: "not_found" },
   });
@@ -109,7 +109,7 @@ test("refusals map to HTTP statuses a daemon can act on, never to a 200", async 
 });
 
 test("the request schema refuses upload_complete as a plain step and unknown operations", () => {
-  const base = { migrationId: "m", generation: 1, expectedRevision: 0 };
+  const base = { version: 1, migrationId: crypto.randomUUID(), generation: 1, expectedRevision: 0 };
   expect(
     agentMigrationDaemonRequestSchema.safeParse({
       ...base,
@@ -176,4 +176,27 @@ test("a completed upload leases the target, again on a retry whose reply was los
   });
   expect(await answer(source, complete)).toMatchObject({ body: { status: "already_applied" } });
   expect(published).toHaveLength(2);
+});
+
+test("an unrelated Computer cannot distinguish a step from a missing migration", async () => {
+  const { id, answer } = await setup();
+  expect(
+    await answer(
+      { workspaceId, computerId: "computer-z" },
+      {
+        operation: "step",
+        migrationId: id,
+        generation: 1,
+        expectedRevision: 0,
+        step: "source_stopped",
+      },
+    ),
+  ).toEqual({ status: 404, body: { error: "not_found" } });
+});
+
+test("the daemon protocol requires its explicit supported version", () => {
+  const view = { operation: "view", migrationId: crypto.randomUUID() };
+  expect(agentMigrationDaemonRequestSchema.safeParse({ ...view, version: 1 }).success).toBe(true);
+  for (const version of [undefined, 0, 2, "1"])
+    expect(agentMigrationDaemonRequestSchema.safeParse({ ...view, version }).success).toBe(false);
 });

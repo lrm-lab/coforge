@@ -5,7 +5,7 @@ import type { AgentMigrationTransport } from "./agent-migration-transport.server
 
 /**
  * The one HTTPS operation a Computer's daemon calls, with its daemon API key, while an Agent
- * migration moves its workspace (`/api/daemon/agent-migrations`). Each body names an `operation`;
+ * migration moves its workspace (`/api/daemon/agent-migrations`). Each body names `version: 1` and an `operation`;
  * the answer is an HTTP status the daemon can act on and a JSON body. Refusals never read as 200:
  * `404` when the migration is not this Computer's, `422` for a manifest or chunk the writer could
  * not have produced, `503` when the deployment has no migration bucket, and `409` for every
@@ -13,14 +13,18 @@ import type { AgentMigrationTransport } from "./agent-migration-transport.server
  * chunk is already uploaded; a 409 from this route is a refusal to read by its `error`.
  */
 
+const migrationReference = {
+  version: z.literal(1),
+  migrationId: z.uuid(),
+};
 const ids = {
-  migrationId: z.string().min(1).max(64),
+  ...migrationReference,
   generation: z.number().int().positive(),
 };
 const revision = { expectedRevision: z.number().int().min(0) };
 
 export const agentMigrationDaemonRequestSchema = z.discriminatedUnion("operation", [
-  z.object({ operation: z.literal("view"), migrationId: ids.migrationId }),
+  z.object({ operation: z.literal("view"), ...migrationReference }),
   z.object({
     operation: z.literal("step"),
     ...ids,

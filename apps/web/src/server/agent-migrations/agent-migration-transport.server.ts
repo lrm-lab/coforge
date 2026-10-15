@@ -210,11 +210,18 @@ export class AgentMigrationTransport {
     participant: MigrationParticipant,
     input: { migrationId: string; generation: number; expectedRevision: number; manifest: unknown },
   ) {
+    const migration = await this.migrations.view(participant, input.migrationId);
+    if (!migration) return { status: "refused" as const, code: "not_found" as const };
     const manifest = agentMigrationManifestSchema.safeParse(input.manifest);
     if (!manifest.success) return { status: "refused" as const, code: "invalid_manifest" as const };
-    const migration = await this.migrations.view(participant, input.migrationId);
-    // Anything else the state machine refuses below, with its own code.
-    if (migration && roleOf(migration, participant) === "source") {
+    // Only a pending completion needs storage. Let the state machine answer refusals and applied
+    // retries independently of the bucket, and recheck its revision after the HEADs.
+    if (
+      roleOf(migration, participant) === "source" &&
+      input.generation === migration.generation &&
+      input.expectedRevision === migration.revision &&
+      migration.state === "source_stopped"
+    ) {
       if (!this.objects) return { status: "refused" as const, code: "unavailable" as const };
       if (!(await this.#allUploaded(migration, manifest.data)))
         return { status: "refused" as const, code: "chunks_missing" as const };
@@ -238,6 +245,8 @@ export class AgentMigrationTransport {
       step: Exclude<AgentMigrationStep, "upload_complete">;
     },
   ) {
+    if (!(await this.migrations.view(participant, input.migrationId)))
+      return { status: "refused" as const, code: "not_found" as const };
     return this.migrations.advance(participant, input);
   }
 

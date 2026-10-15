@@ -26,7 +26,7 @@ export function memoryStore(
       );
       if (active) return "active_exists";
       const row: AgentMigrationRecord = {
-        id: `migration-${rows.size + 1}`,
+        id: crypto.randomUUID(),
         workspaceId: input.workspaceId,
         agentId: input.agentId,
         sourceComputerId: input.sourceComputerId,
