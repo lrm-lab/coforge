@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getLocale } from "#src/paraglide/runtime";
 
-import type { EmojiClickData, Theme } from "emoji-picker-react";
+import type { EmojiClickData, PickerLabels, Theme } from "emoji-picker-react";
 
 /**
  * The one emoji grid: the third-party `emoji-picker-react` (v5), loaded as a real dynamic import —
@@ -16,13 +16,25 @@ import type { EmojiClickData, Theme } from "emoji-picker-react";
  * field renders its own "no emoji" action inside the same `Dialog`, where `Dialog`'s render prop
  * supplies `close`). Used by `features/conversations/chat-section-emoji-picker.tsx`.
  */
+/** Every user-facing string in the app's language, so the grid's controls read like the app:
+ * search input name, clear, result announcements, loading, skin tones. Omitted keys keep the
+ * library's English defaults, so the English call sites pass nothing. */
+const zhLabels: Partial<PickerLabels> = {
+  searchPlaceholder: "搜索表情",
+  searchLabel: "搜索表情",
+  searchClear: "清除搜索",
+  searchResultsNone: "没有结果",
+  searchResultsOne: "找到 1 个结果",
+  searchResultsMany: "找到 %n 个结果",
+  loading: "加载中…",
+  loadingError: "加载失败",
+  retryLoading: "重试",
+};
+
 export function EmojiPicker({
-  searchPlaceholder,
   pickerHostClassName,
   onPick,
 }: {
-  /** The search input's placeholder, in the call site's locale. */
-  searchPlaceholder?: string;
   /** Extra class for the host element that carries the epr token mappings (see styles.css). */
   pickerHostClassName?: string;
   onPick: (emoji: string) => void;
@@ -63,7 +75,7 @@ export function EmojiPicker({
           theme={dark ? ("dark" as Theme) : ("light" as Theme)}
           lazyLoadEmojis
           previewConfig={{ showPreview: false }}
-          searchPlaceholder={searchPlaceholder ?? (zh ? "搜索表情" : "Search emoji")}
+          labels={zh ? zhLabels : { searchPlaceholder: "Search emoji" }}
           emojiData={libAndData.data as never}
           onEmojiClick={(emoji: EmojiClickData) => onPick(emoji.emoji)}
         />

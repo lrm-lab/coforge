@@ -265,3 +265,10 @@ input[type="search"]::-webkit-search-cancel-button {
   --epr-emoji-variation-picker-bg-color: var(--color-bg-primary);
   --epr-skin-tone-picker-menu-color: var(--color-bg-primary);
 }
+
+/* Narrow screens: six columns instead of eight keeps the grid inside a 320px pane. */
+@media (max-width: 380px) {
+  [data-epr-host] {
+    --epr-columns: 6;
+  }
+}
