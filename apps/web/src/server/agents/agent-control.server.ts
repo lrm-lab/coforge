@@ -119,6 +119,11 @@ export type AgentControlAgent = {
   state: AgentControlState | null;
   currentSessionId?: string | null;
   identity?: SessionIdentity;
+  /**
+   * Set while a migration that has not switched yet holds the Agent: its workspace is moving off
+   * the Computer, so nothing may start it there. Read model only, not part of the CAS fence.
+   */
+  migrating?: boolean;
   /** Set when a user stopped this Agent; read model only, not part of the CAS fence. */
   stoppedAt?: Date | null;
   /** Set when a user deleted this Agent; read model only, not part of the CAS fence.
@@ -325,6 +330,8 @@ export class AgentControl {
     // deleted Agents separately and stops them instead, so this is the last line of defence for a
     // Daemon `ready` that races a delete.
     assertAgentLive(agent);
+    // The migration starts it itself once it has moved, or once the attempt has ended.
+    if (agent.migrating) return;
     if (agent.state && !terminal(agent.state)) {
       await this.advance(agent.id, agent.state.requestId, intent);
       return;
@@ -574,6 +581,9 @@ export class AgentControl {
      * except `execute()` — `recover`, and `begin`'s own CAS retries, must never touch it). */
     stoppedAt?: Date | null,
   ): Promise<AgentControlState> {
+    // Every Start, Restart and Reset begins here; a Stop is what a migration itself needs.
+    if (action !== "stop" && agent.migrating)
+      throw new AppError("CONFLICT", { errorId: "agent-migrating" });
     const old = agent.state;
     if (old?.requestId === requestId) {
       if (old.action !== action || !current(agent, old)) throw new Error("Operation scope changed");
@@ -662,6 +672,7 @@ export class AgentControl {
     // environment mutation funnels its restart through here, so this is the one place that has to
     // hold; `execute()` refuses it earlier, with a user-facing message.
     assertAgentLive(agent);
+    if (agent.migrating) throw new AppError("CONFLICT", { errorId: "agent-migrating" });
     let state = agent.state;
     let began = false;
     if (state && !terminal(state)) {

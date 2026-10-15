@@ -14,6 +14,7 @@ function fixture(options?: {
   encryptionFails?: boolean;
   noInitialAvatar?: boolean;
   createFails?: boolean;
+  migrating?: boolean;
 }) {
   const records: AgentRecord[] = [];
   const starts: unknown[] = [];
@@ -31,6 +32,7 @@ function fixture(options?: {
         (agent) => agent.workspaceId === workspaceId && agent.computerId === computerId,
       ),
     listDeletedForComputer: async () => [],
+    hasActiveMigration: async () => options?.migrating ?? false,
     listOwnedInWorkspace: async (workspaceId, ownerId) =>
       records.filter((agent) => agent.workspaceId === workspaceId && agent.ownerId === ownerId),
     create: async (input) => {
@@ -288,6 +290,36 @@ describe("ManageAgents", () => {
         userId: "user-1",
       }),
     ]);
+  });
+
+  test("refuses to move an Agent a migration is already moving, before stopping anything", async () => {
+    const { agentManagement, records, starts, stops } = fixture({ migrating: true });
+    records.push({
+      id: "moving-agent",
+      workspaceId: "workspace-1",
+      ownerId: "user-1",
+      name: "moving-agent",
+      displayName: "Mover",
+      computerId: "computer-1",
+      runtimeConfig: {
+        runtime: RUNTIME_PROVIDER.PI,
+        provider: { kind: "default" },
+        model: "",
+        modelProvider: "",
+        reasoning: "",
+      },
+      createdAt: new Date(),
+    });
+    await expect(
+      agentManagement.update(principal, {
+        agentId: "moving-agent",
+        description: "",
+        provider: RUNTIME_PROVIDER.PI,
+        computerId: "computer-2",
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT", errorId: "agent-migrating" });
+    expect(records[0]?.computerId).toBe("computer-1");
+    expect([...stops, ...starts]).toEqual([]);
   });
 
   test("profile runtime edits preserve encrypted environment while list and starts omit it", async () => {

@@ -128,6 +128,7 @@
   "agent_env_too_many": "An Agent can have at most {max} environment variables. Remove some and save again.",
   "agent_env_too_large": "The environment variables are too large. Shorten or remove some values and save again.",
   "agent_form_api_key_required": "CoForge runtime requires an API key.",
+  "agent_form_migrating": "This Agent is moving to another Computer. Wait for the move to finish, or cancel it, before changing its Computer.",
   "agent_form_runtime_unavailable": "That runtime is not available on the selected Computer in this Workspace. Confirm the Computer is bound here, choose CoForge (or Pi with a concrete model), and keep the Daemon online.",
   "agent_form_computer_required": "Select a Computer that is connected to the current Workspace.",
   "agent_form_name_required": "Enter a name for this Agent.",

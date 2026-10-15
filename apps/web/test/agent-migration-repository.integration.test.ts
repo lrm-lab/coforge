@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
 import { PrismaAgentMigrationStore } from "#src/server/db/repositories/agent-migration.repositories.server";
 
 /**
@@ -246,6 +247,44 @@ test.skipIf(!connectionString)(
       ]);
       await store.transition({ id: created.id, expectedRevision: 0, to: "failed", at: new Date() });
       expect(await store.activeFor(input.workspaceId, source.id)).toEqual([]);
+    } finally {
+      await cleanup();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "Agent control sees a migrating Agent until the switch moves it",
+  async () => {
+    const { db, store, input, agent, source, target, cleanup } = await setup();
+    try {
+      // Agent control reads only an Agent whose runtime config parses.
+      await db.agent.update({
+        where: { id: agent.id },
+        data: {
+          runtimeConfig: {
+            runtime: "pi",
+            provider: { kind: "default" },
+            model: "",
+            modelProvider: "",
+            reasoning: "",
+          },
+        },
+      });
+      const control = new PrismaAgentControlStore(db);
+      expect((await control.get(agent.id))?.migrating).toBeUndefined();
+      const created = await store.create(input);
+      if (created === "active_exists") throw new Error("unreachable");
+      expect((await control.get(agent.id))?.migrating).toBe(true);
+      const switched = await store.transition({
+        id: created.id,
+        expectedRevision: 0,
+        to: "switched",
+        at: new Date(),
+        move: { agentId: agent.id, fromComputerId: source.id, toComputerId: target.id },
+      });
+      expect(switched).toMatchObject({ state: "switched" });
+      expect((await control.get(agent.id))?.migrating).toBeUndefined();
     } finally {
       await cleanup();
     }

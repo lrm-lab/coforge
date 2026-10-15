@@ -128,6 +128,7 @@
   "agent_env_too_many": "一个智能体最多只能设置 {max} 个环境变量，请删掉一些后再保存。",
   "agent_env_too_large": "环境变量总大小超出上限，请缩短或删掉一些值后再保存。",
   "agent_form_api_key_required": "CoForge 运行时需要填写 API 密钥。",
+  "agent_form_migrating": "这个 Agent 正在迁移到其他电脑。请等迁移完成或取消迁移后，再修改它所在的电脑。",
   "agent_form_runtime_unavailable": "所选电脑在当前工作区没有该运行时。请确认：1) 当前工作区已绑定这台电脑；2) 运行时选 CoForge（或 Pi 并选定具体模型）；3) Daemon 在线。",
   "agent_form_computer_required": "请先选择一台已接入当前工作区的电脑。",
   "agent_form_name_required": "请为这个智能体填一个名字。",

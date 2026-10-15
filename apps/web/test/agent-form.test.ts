@@ -101,7 +101,7 @@ test("a refused environment save shows the broken rule instead of asking to try 
 test("a refused Agent save names the reason instead of only asking to try again", () => {
   const refusal = (
     errorId: string,
-    code: "INVALID_INPUT" | "ACCESS_DENIED" | "INTERNAL_ERROR" = "INVALID_INPUT",
+    code: "INVALID_INPUT" | "ACCESS_DENIED" | "INTERNAL_ERROR" | "CONFLICT" = "INVALID_INPUT",
   ) => agentUpdateErrorMessage(new AppError(code, { errorId }));
   // The server's save path has no other wording for these: each throw carries its own id, so the
   // dialog can say which rule refused instead of the generic retry line.
@@ -116,6 +116,7 @@ test("a refused Agent save names the reason instead of only asking to try again"
   expect(refusal("agent-api-key-required")).toBe(m.agent_form_api_key_required());
   expect(refusal("agent-runtime-unavailable")).toBe(m.agent_form_runtime_unavailable());
   expect(refusal("agent-name-taken")).toBe(m.agent_form_name_taken());
+  expect(refusal("agent-migrating", "CONFLICT")).toBe(m.agent_form_migrating());
   // Anything unmapped still asks to retry: a plain Error, or a 5xx during a deploy, carries no
   // rule to name - and "try again" is the honest copy for a request that never reached the rule.
   expect(agentUpdateErrorMessage(new Error("provider is not supported"))).toBe(

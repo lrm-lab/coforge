@@ -57,6 +57,7 @@ const AGENT_ENVIRONMENT_ERROR_MESSAGES: Record<AgentEnvironmentViolation, () => 
 const AGENT_FORM_ERROR_MESSAGES = new Map<string, () => string>([
   ["agent-api-key-required", m.agent_form_api_key_required],
   ["agent-runtime-unavailable", m.agent_form_runtime_unavailable],
+  ["agent-migrating", m.agent_form_migrating],
   ["agent-computer-required", m.agent_form_computer_required],
   ["agent-name-taken", m.agent_form_name_taken],
   ["agent-name-required", m.agent_form_name_required],
