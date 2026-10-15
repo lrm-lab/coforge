@@ -8,12 +8,6 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { createAgentActivity } from "./agent-activity";
 
-/** Detail kinds that, like an error, mean the model moved on from thinking. */
-const THINKING_TRIGGER_DETAIL_KINDS = new Set<AgentActivityDetailKind>([
-  AGENT_ACTIVITY_DETAIL_KIND.COMPACTING_CONTEXT,
-  AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED,
-]);
-
 /**
  * True when `event` means the model moved on from an open thinking run: a rendered
  * response resuming, a tool call starting or ending, context compaction, the turn
@@ -27,12 +21,12 @@ function endsThinking(event: AgentRuntimeEvent): boolean {
     case "tool-end":
     case "completed":
     case "error":
+    case "compaction-started":
+    case "compaction-finished":
+    case "compaction-interrupted":
       return true;
     case "activity":
-      return (
-        event.activity.level === "error" ||
-        THINKING_TRIGGER_DETAIL_KINDS.has(event.activity.detailKind)
-      );
+      return event.activity.level === "error";
     default:
       return false;
   }

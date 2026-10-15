@@ -263,26 +263,27 @@ test("a thinking run ends before a tool-end", () => {
   trajectory.dispose();
 });
 
-test("a thinking run ends before a compaction activity", () => {
-  const output: AgentRuntimeEvent[] = [];
-  const trajectory = new ActivityTrajectory((event) => output.push(event));
-  trajectory.accept({ type: "thinking-delta", text: "Plan" });
-  trajectory.accept({
-    type: "activity",
-    activity: {
-      detailKind: "compacting_context",
-      level: "info",
-      detail: "Compacting context…",
-      observedAtMs: Date.now(),
-    },
-  });
-  expect(kinds(output)).toEqual([
-    "thinking_started",
-    "thinking_started",
-    "thinking_end",
-    "compacting_context",
-  ]);
-  trajectory.dispose();
+test("context compaction ends a thinking run, and the next thinking run announces itself again", () => {
+  for (const type of [
+    "compaction-started",
+    "compaction-finished",
+    "compaction-interrupted",
+  ] as const) {
+    const output: AgentRuntimeEvent[] = [];
+    const trajectory = new ActivityTrajectory((event) => output.push(event));
+    trajectory.accept({ type: "thinking-delta", text: "Plan" });
+    trajectory.accept({ type });
+    trajectory.accept({ type: "thinking-delta", text: "Replan" });
+    trajectory.dispose();
+    expect(kinds(output)).toEqual([
+      "thinking_started",
+      "thinking_started",
+      "thinking_end",
+      type,
+      "thinking_started",
+      "thinking_started",
+    ]);
+  }
 });
 
 test("a thinking run ends before an error activity", () => {
