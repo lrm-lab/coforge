@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { decodeAgentMigrationCancel, decodeAgentMigrationLease } from "@lrm/coforge-sdk/internal";
 import { AgentMigrations } from "#src/server/agent-migrations/agent-migrations.server";
 import {
@@ -133,4 +133,50 @@ test("a lease carries only what is left of the migration's lease, and none once 
   expect(decodeAgentMigrationLease(published[0]!.data).expiresInMs).toBe(15 * 60 * 1000);
   await dispatch.lease(created.migration, "source", since + AGENT_MIGRATION_LEASE_MS);
   expect(published).toHaveLength(1);
+});
+
+test("reissuing skips a lease that expires while an earlier publication is pending", async () => {
+  const migrations = new AgentMigrations(memoryStore().store);
+  const first = await migrations.request(request);
+  const second = await migrations.request({ ...request, agentId: "agent-2" });
+  if (first.status !== "created" || second.status !== "created") throw new Error("setup");
+  let now = Date.now();
+  const later = {
+    ...second.migration,
+    updatedAt: new Date(now - AGENT_MIGRATION_LEASE_MS + 30_000),
+  };
+  let entered = () => {};
+  let release = () => {};
+  const publishing = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const clock = spyOn(Date, "now").mockImplementation(() => now);
+  const sent: string[] = [];
+  const dispatch = new AgentMigrationDispatch({
+    publish: async (_channel, data) => {
+      sent.push(decodeAgentMigrationLease(data).migrationId);
+      if (sent.length === 1) {
+        entered();
+        await gate;
+      }
+    },
+  });
+  const reissued = dispatch.reissue([first.migration, later], "computer-a");
+  try {
+    await publishing;
+    now += 120_000;
+    release();
+    await reissued;
+    expect(sent).toEqual([first.migration.id]);
+  } finally {
+    release();
+    try {
+      await reissued;
+    } finally {
+      clock.mockRestore();
+    }
+  }
 });

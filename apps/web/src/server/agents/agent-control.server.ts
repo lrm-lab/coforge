@@ -406,6 +406,8 @@ export class AgentControl {
         input.agentId,
         input.action,
       );
+      if (input.action !== "stop" && agent.migrating)
+        throw new AppError("CONFLICT", { errorId: "agent-migrating" });
       // A Start that meets an Agent already starting joins that launch, it never issues
       // a second one. Superseding here would publish Start at epoch + 1 while the Daemon is
       // still launching the previous epoch; the Daemon answers that with `agent_already_running`

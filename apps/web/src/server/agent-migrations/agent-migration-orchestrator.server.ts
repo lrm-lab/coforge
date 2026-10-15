@@ -177,7 +177,7 @@ export class AgentMigrationOrchestrator {
       else if (migration.state === "switched") await attempt(() => this.switched(migration));
       else leased.push(migration);
     }
-    await attempt(() => dispatch.reissue(leased, computerId, now));
+    await attempt(() => dispatch.reissue(leased, computerId));
     if (failures.length) throw failures[0];
   }
 

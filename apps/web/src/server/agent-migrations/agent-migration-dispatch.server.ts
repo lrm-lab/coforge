@@ -91,7 +91,7 @@ export class AgentMigrationDispatch {
    * needs work from it: a lease published while it was offline is not kept for it. One that cannot
    * be published does not keep the others from being tried; the first failure is then reported.
    */
-  async reissue(migrations: readonly AgentMigrationRecord[], computerId: string, now = Date.now()) {
+  async reissue(migrations: readonly AgentMigrationRecord[], computerId: string) {
     const failures: unknown[] = [];
     for (const migration of migrations)
       for (const role of ["source", "target"] as const)
@@ -100,7 +100,7 @@ export class AgentMigrationDispatch {
           LEASED_STATES[role].includes(migration.state)
         ) {
           try {
-            await this.lease(migration, role, now);
+            await this.lease(migration, role);
           } catch (error) {
             failures.push(error);
           }

@@ -3153,3 +3153,53 @@ test("an Agent a migration is moving is never started, but can still be stopped"
   );
   expect(published).toEqual(["stop"]);
 });
+
+test("a migrating Agent refuses a user Start even when another Start is in flight", async () => {
+  const { store, current } = pendingOpStore({
+    id: "a",
+    ownerId: "owner",
+    visibility: "public",
+    workspaceId: "w",
+    computerId: "c",
+    runtimeConfig: pendingRuntimeConfig,
+    state: null,
+  });
+  const published: Uint8Array[] = [];
+  const control = new AgentControl(
+    store,
+    {
+      publish: async (_channel, bytes) => {
+        published.push(bytes);
+      },
+    },
+    { run: async (_id, work) => work() },
+    { timeoutMs: 0 },
+  );
+  await control.publishStart(
+    {
+      protocolMajor: 1,
+      requestId: "first",
+      workspaceId: "w",
+      computerId: "c",
+      agentId: "a",
+      provider: "pi",
+      model: pendingRuntimeConfig.model,
+      modelProvider: pendingRuntimeConfig.modelProvider,
+      reasoning: pendingRuntimeConfig.reasoning,
+    },
+    "owner",
+  );
+  expect(current().state?.phase).toBe("starting");
+  current().migrating = true;
+  await expect(
+    control.execute({
+      userId: "owner",
+      workspaceId: "w",
+      agentId: "a",
+      requestId: "second",
+      action: "start",
+    }),
+  ).rejects.toMatchObject({ code: "CONFLICT", errorId: "agent-migrating" });
+  expect(published).toHaveLength(1);
+  expect(current().state?.requestId).toBe("first");
+});
