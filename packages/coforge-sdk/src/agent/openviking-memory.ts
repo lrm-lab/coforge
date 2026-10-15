@@ -518,9 +518,13 @@ function optionalOfferRationale(value: unknown): string | undefined {
   return value;
 }
 
-function decodeOpenVikingCitationList(value: unknown, label: string): OpenVikingCitation[] {
+function decodeOpenVikingCitationList(
+  value: unknown,
+  label: string,
+  enforceCandidateLimit = true,
+): OpenVikingCitation[] {
   if (!Array.isArray(value)) throw new Error(`invalid ${label} citations`);
-  if (value.length > OPENVIKING_CANDIDATE_LIMIT_MAX)
+  if (enforceCandidateLimit && value.length > OPENVIKING_CANDIDATE_LIMIT_MAX)
     throw new Error("openviking candidate limit exceeded");
   return value.map(decodeOpenVikingCitation);
 }
@@ -669,7 +673,8 @@ export function decodeOpenVikingAgentResponse(
     duplicate: offer.duplicate,
     ...(offer.messageId === undefined ? {} : { messageId: offer.messageId }),
     ...(offer.recipientAgentId === undefined ? {} : { recipientAgentId: offer.recipientAgentId }),
-    citations: decodeOpenVikingCitationList(offer.citations, "openviking offer"),
+    // Offers can cite the union of multiple bounded reads already accepted by the server.
+    citations: decodeOpenVikingCitationList(offer.citations, "openviking offer", false),
   };
 }
 

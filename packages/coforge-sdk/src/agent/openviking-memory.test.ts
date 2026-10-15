@@ -422,3 +422,27 @@ test("BM25 discovery preserves the chain and typed graph navigation", () => {
   };
   expect(decodeOpenVikingAgentResponse("find", response)).toEqual(response);
 });
+
+// An Offer may cite the union of several successful, individually bounded reads.
+test("decodes published offers containing citations from three full reads", () => {
+  const citations = Array.from({ length: 30 }, (_, index) => ({
+    ...citation,
+    citationId: `ov:item-${index}`,
+  }));
+  const response = decodeOpenVikingAgentResponse("offer", {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "offer",
+    operationId: "offer-union",
+    duplicate: false,
+    published: true,
+    messageId: "message-union",
+    citations,
+  });
+  expect(response).toMatchObject({ published: true, citations });
+  expect(() =>
+    decodeOpenVikingAgentResponse("offer", {
+      ...response,
+      citations: [...citations, { ...citation, kind: "untrusted" }],
+    }),
+  ).toThrow("invalid memory citation kind");
+});
