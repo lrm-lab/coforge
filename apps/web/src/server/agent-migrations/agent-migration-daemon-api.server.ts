@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentMigrationRecord, MigrationParticipant } from "./agent-migrations.server";
-import type { AgentMigrationDispatch } from "./agent-migration-dispatch.server";
+import type { AgentMigrationOrchestrator } from "./agent-migration-orchestrator.server";
 import type { AgentMigrationTransport } from "./agent-migration-transport.server";
 
 /**
@@ -83,7 +83,7 @@ function answer(
 
 export async function answerAgentMigrationDaemonRequest(
   transport: AgentMigrationTransport,
-  dispatch: AgentMigrationDispatch,
+  orchestrator: Pick<AgentMigrationOrchestrator, "uploaded" | "switched" | "ended" | "endedById">,
   participant: MigrationParticipant,
   input: AgentMigrationDaemonRequest,
 ): Promise<Answer> {
@@ -92,8 +92,22 @@ export async function answerAgentMigrationDaemonRequest(
       const view = await transport.view(participant, input.migrationId);
       return view ? { status: 200, body: view } : refused("not_found");
     }
-    case "step":
-      return answer(await transport.step(participant, input));
+    case "step": {
+      const stepped = await transport.step(participant, input);
+      if (stepped.status === "refused") {
+        // The state machine failed the migration itself (the Agent had already left the source,
+        // or the target is no longer the Workspace's), or a retried step found it already ended.
+        if (
+          stepped.code === "agent_moved" ||
+          stepped.code === "target_unavailable" ||
+          stepped.code === "finished"
+        )
+          await orchestrator.endedById(participant, input.migrationId);
+      } else if (input.step === "switch" && stepped.migration.state === "switched")
+        // Also on a retry whose reply was lost: the start may be what never happened.
+        await orchestrator.switched(stepped.migration);
+      return answer(stepped);
+    }
     case "upload_url": {
       const issued = await transport.uploadUrl(participant, input);
       return issued.status === "ok"
@@ -112,10 +126,16 @@ export async function answerAgentMigrationDaemonRequest(
       // target's lease may be what went missing. A failed publish fails the request, and the
       // source's retry publishes again.
       if (completed.status !== "refused" && completed.migration.state === "uploaded")
-        await dispatch.lease(completed.migration, "target");
+        await orchestrator.uploaded(completed.migration);
       return answer(completed);
     }
-    case "fail":
-      return answer(await transport.fail(participant, input));
+    case "fail": {
+      const failed = await transport.fail(participant, input);
+      if (failed.status === "failed") await orchestrator.ended(failed.migration);
+      // A retried report whose first reply was lost: end the attempt again.
+      else if (failed.code === "finished")
+        await orchestrator.endedById(participant, input.migrationId);
+      return answer(failed);
+    }
   }
 }

@@ -1,11 +1,7 @@
 import { expect, test } from "bun:test";
 import { decodeAgentMigrationCancel, decodeAgentMigrationLease } from "@lrm/coforge-sdk/internal";
 import { AgentMigrations } from "#src/server/agent-migrations/agent-migrations.server";
-import {
-  AGENT_MIGRATION_LEASE_MS,
-  AgentMigrationDispatch,
-  startAgentMigration,
-} from "#src/server/agent-migrations/agent-migration-dispatch.server";
+import { AgentMigrationDispatch } from "#src/server/agent-migrations/agent-migration-dispatch.server";
 import { memoryStore } from "./helpers/agent-migration-memory-store";
 
 const workspaceId = "workspace-1";
@@ -28,40 +24,6 @@ const request = {
   targetComputerId: "computer-b",
   requestedByUserId: "user-1",
 };
-
-test("starting a migration leases the source Computer to stop the Agent and upload", async () => {
-  const { api, published } = publisher();
-  const migrations = new AgentMigrations(memoryStore().store);
-  const started = await startAgentMigration(
-    { migrations, dispatch: new AgentMigrationDispatch(api) },
-    request,
-  );
-  if (started.status !== "created") throw new Error(started.status);
-  expect(published.map((entry) => entry.channel)).toEqual([`daemon:${workspaceId}:computer-a`]);
-  expect(decodeAgentMigrationLease(published[0]!.data)).toMatchObject({
-    workspaceId,
-    computerId: "computer-a",
-    agentId: "agent-1",
-    migrationId: started.migration.id,
-    generation: 1,
-    role: "source",
-    expectedRevision: started.migration.revision,
-    expiresInMs: AGENT_MIGRATION_LEASE_MS,
-  });
-});
-
-test("a refused request leases nobody", async () => {
-  const { api, published } = publisher();
-  const migrations = new AgentMigrations(memoryStore().store);
-  const dispatch = new AgentMigrationDispatch(api);
-  await startAgentMigration({ migrations, dispatch }, request);
-  published.length = 0;
-  expect(await startAgentMigration({ migrations, dispatch }, request)).toMatchObject({
-    status: "refused",
-    code: "already_migrating",
-  });
-  expect(published).toEqual([]);
-});
 
 test("a cancel reaches both Computers, saying whether the Agent had already switched", async () => {
   const { api, published } = publisher();

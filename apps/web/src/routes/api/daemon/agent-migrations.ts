@@ -1,15 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { authenticateLinkedDaemon, parseBody } from "#src/server/auth/daemon-request.server";
-import { AgentMigrations } from "#src/server/agent-migrations/agent-migrations.server";
-import { AgentMigrationTransport } from "#src/server/agent-migrations/agent-migration-transport.server";
+import { agentMigrationServices } from "#src/server/agent-migrations/agent-migration-composition.server";
 import {
   agentMigrationDaemonRequestSchema,
   answerAgentMigrationDaemonRequest,
 } from "#src/server/agent-migrations/agent-migration-daemon-api.server";
-import { getAgentMigrationStorage } from "#src/server/agent-migrations/agent-migration-storage.server";
-import { AgentMigrationDispatch } from "#src/server/agent-migrations/agent-migration-dispatch.server";
-import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { PrismaAgentMigrationStore } from "#src/server/db/repositories/agent-migration.repositories.server";
 
 export const Route = createFileRoute("/api/daemon/agent-migrations")({
   server: {
@@ -20,13 +15,10 @@ export const Route = createFileRoute("/api/daemon/agent-migrations")({
         const { principal, db } = daemon;
         const input = await parseBody(request, agentMigrationDaemonRequestSchema);
         if (input instanceof Response) return input;
-        const transport = new AgentMigrationTransport(
-          new AgentMigrations(new PrismaAgentMigrationStore(db)),
-          await getAgentMigrationStorage(),
-        );
+        const { transport, orchestrator } = await agentMigrationServices(db);
         const answer = await answerAgentMigrationDaemonRequest(
           transport,
-          new AgentMigrationDispatch(createCentrifugoServerApi()),
+          orchestrator,
           principal,
           input,
         );

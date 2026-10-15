@@ -19,20 +19,12 @@ await mockModuleForFile("#src/server/auth/daemon-api-key.server", () => ({
     return { computerId: "computer-1", workspaceId: "workspace-1", userId: "owner-1" };
   },
 }));
-await mockModuleForFile("#src/server/centrifugo/server-api.server", () => ({
-  createCentrifugoServerApi: () => ({ publish: async () => {} }),
-  daemonControlChannel: (workspaceId: string, computerId: string) =>
-    `daemon:${workspaceId}:${computerId}`,
-}));
-await mockModuleForFile("#src/server/agent-migrations/agent-migration-storage.server", () => ({
-  getAgentMigrationStorage: async () => null,
-}));
-await mockModuleForFile("#src/server/db/repositories/agent-migration.repositories.server", () => ({
-  PrismaAgentMigrationStore: class {
-    async find() {
-      return null;
-    }
-  },
+// No migration exists in this fake, so every operation past authentication finds nothing.
+await mockModuleForFile("#src/server/agent-migrations/agent-migration-composition.server", () => ({
+  agentMigrationServices: async () => ({
+    transport: { view: async () => null },
+    orchestrator: {},
+  }),
 }));
 const { Route } = await import("#src/routes/api/daemon/agent-migrations");
 const handlers = Route.options.server!.handlers;

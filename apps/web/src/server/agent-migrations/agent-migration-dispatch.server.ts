@@ -102,13 +102,3 @@ export class AgentMigrationDispatch {
     if (failures.length) throw failures[0];
   }
 }
-
-/** A user's request to move an Agent to another Computer: recorded, then the source is leased. */
-export async function startAgentMigration(
-  deps: { migrations: AgentMigrations; dispatch: AgentMigrationDispatch },
-  input: Parameters<AgentMigrations["request"]>[0],
-) {
-  const started = await deps.migrations.request(input);
-  if (started.status === "created") await deps.dispatch.lease(started.migration, "source");
-  return started;
-}

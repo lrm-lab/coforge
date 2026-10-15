@@ -7,6 +7,7 @@ import {
 } from "#src/server/agent-migrations/agent-migration-daemon-api.server";
 import { decodeAgentMigrationLease } from "@lrm/coforge-sdk/internal";
 import { AgentMigrationDispatch } from "#src/server/agent-migrations/agent-migration-dispatch.server";
+import { AgentMigrationOrchestrator } from "#src/server/agent-migrations/agent-migration-orchestrator.server";
 import { memoryStore } from "./helpers/agent-migration-memory-store";
 
 const workspaceId = "workspace-1";
@@ -34,15 +35,27 @@ async function setup() {
   const answer = (participant: typeof source, body: Record<string, unknown>) => {
     const input = agentMigrationDaemonRequestSchema.safeParse({ version: 1, ...body });
     if (!input.success) throw new Error("request did not parse");
-    return answerAgentMigrationDaemonRequest(transport, dispatch, participant, input.data);
+    return answerAgentMigrationDaemonRequest(transport, orchestrator, participant, input.data);
   };
   const published: { channel: string; data: Uint8Array }[] = [];
-  const dispatch = new AgentMigrationDispatch({
-    publish: async (channel, data) => {
-      published.push({ channel, data });
+  const runtime: string[] = [];
+  const orchestrator = new AgentMigrationOrchestrator({
+    migrations,
+    dispatch: new AgentMigrationDispatch({
+      publish: async (channel, data) => {
+        published.push({ channel, data });
+      },
+    }),
+    runtime: {
+      stoppedByUser: async () => false,
+      stop: async () => {},
+      start: async (agent) => {
+        runtime.push(`start:${agent.agentId}`);
+      },
     },
+    lock: { run: (_agentId, callback) => callback() },
   });
-  return { id: created.migration.id, answer, published };
+  return { id: created.migration.id, answer, published, runtime, migrations };
 }
 
 test("a daemon views, steps and fails a migration through one HTTPS operation", async () => {
@@ -199,4 +212,29 @@ test("the daemon protocol requires its explicit supported version", () => {
   expect(agentMigrationDaemonRequestSchema.safeParse({ ...view, version: 1 }).success).toBe(true);
   for (const version of [undefined, 0, 2, "1"])
     expect(agentMigrationDaemonRequestSchema.safeParse({ ...view, version }).success).toBe(false);
+});
+
+test("a reported failure ends the attempt on both Computers and restarts the Agent on the source", async () => {
+  const { id, answer, published, runtime } = await setup();
+  expect(
+    await answer(target, {
+      operation: "fail",
+      migrationId: id,
+      generation: 1,
+      errorCode: "download_failed",
+    }),
+  ).toMatchObject({ status: 200, body: { status: "failed" } });
+  expect(published.map((entry) => entry.channel)).toEqual([
+    `daemon:${workspaceId}:computer-a`,
+    `daemon:${workspaceId}:computer-b`,
+  ]);
+  expect(runtime).toEqual(["start:agent-1"]);
+  // The report is retried after a lost reply: the migration is already failed, so it ends again.
+  await answer(target, {
+    operation: "fail",
+    migrationId: id,
+    generation: 1,
+    errorCode: "download_failed",
+  });
+  expect(runtime).toEqual(["start:agent-1", "start:agent-1"]);
 });

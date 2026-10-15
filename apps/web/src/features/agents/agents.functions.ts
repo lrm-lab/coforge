@@ -28,17 +28,11 @@ import { listVisibleAgentModels } from "#src/server/agents/agent-models.server";
 import { AgentAvatars, agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
-import {
-  PrismaAgentRepository,
-  RepositoryAgentAuthorization,
-} from "#src/server/db/repositories/agent.repositories.server";
+import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { ManageAgents } from "#src/server/agents/manage-agents.server";
 import { AgentDeletion } from "#src/server/agents/agent-deletion.server";
 import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
-import { PublishAgentRuntimeControl } from "#src/server/agents/agent-runtime-control.server";
-import { AgentControl } from "#src/server/agents/agent-control.server";
-import { getAgentControlSignal } from "#src/server/agents/agent-control-signal.server";
-import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
+import { userAgentRuntimeControl } from "#src/server/agents/user-agent-control.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import {
   workspaceUserMiddleware,
@@ -72,10 +66,6 @@ import {
 } from "#src/server/agents/agent-runtime-config.server";
 import { getAgentStatusCache } from "#src/server/agents/agent-status.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
-import { createAgentSessions } from "#src/server/db/repositories/agent-session.repositories.server";
-import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
-import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { AgentEnvironment } from "#src/server/agents/agent-environment.server";
 import {
@@ -87,32 +77,6 @@ import {
 
 type Database = ReturnType<typeof requireDatabaseClient>;
 
-/** Runtime start/stop publisher wired to one database and Agent repository. */
-function runtimeControl(db: Database, agents: PrismaAgentRepository) {
-  const centrifugo = createCentrifugoServerApi();
-  const conversations = new PrismaDirectConversationRepository(db);
-  const mentions = new MentionDeliveryReports(
-    new PrismaMentionDeliveryRepository(db),
-    centrifugo,
-    conversations,
-  );
-  const sessions = createAgentSessions(db, mentions);
-  return new PublishAgentRuntimeControl(
-    new RepositoryAgentAuthorization(agents),
-    centrifugo,
-    async () => {},
-    sessions,
-    new AgentControl(
-      new PrismaAgentControlStore(db),
-      centrifugo,
-      getAgentRuntimeLock(),
-      undefined,
-      sessions,
-      getAgentControlSignal(),
-    ),
-  );
-}
-
 function manageAgents(db: Database) {
   const agents = new PrismaAgentRepository(db);
   const runtimeLock = getAgentRuntimeLock();
@@ -120,8 +84,8 @@ function manageAgents(db: Database) {
   const agentManagement = new ManageAgents(
     agents,
     {
-      start: (intent, ownerId) => runtimeControl(db, agents).start(intent, ownerId),
-      stop: (intent, ownerId) => runtimeControl(db, agents).stop(intent, ownerId),
+      start: (intent, ownerId) => userAgentRuntimeControl(db, agents).start(intent, ownerId),
+      stop: (intent, ownerId) => userAgentRuntimeControl(db, agents).stop(intent, ownerId),
     },
     {
       canRun: async (workspaceId, userId, computerId, config) => {
@@ -185,7 +149,7 @@ async function changeRuntimeCredential(db: Database, decrypt = false) {
   return new ChangeAgentRuntimeCredential(
     agents,
     await runtimeCredentials(db, decrypt),
-    runtimeControl(db, agents),
+    userAgentRuntimeControl(db, agents),
     getAgentRuntimeLock(),
   );
 }
@@ -195,7 +159,7 @@ async function agentEnvironment(db: Database) {
   return new AgentEnvironment(
     new PrismaAgentRuntimeCredentialRepository(db),
     agents,
-    runtimeControl(db, agents),
+    userAgentRuntimeControl(db, agents),
     getAgentRuntimeLock(),
     await readAgentRuntimeCredentialEncryptionKey(process.env),
   );
@@ -206,7 +170,7 @@ function agentDeletion(db: Database) {
   return new AgentDeletion(
     agents,
     new PrismaAgentDeletionStore(db),
-    runtimeControl(db, agents),
+    userAgentRuntimeControl(db, agents),
     getAgentRuntimeLock(),
   );
 }

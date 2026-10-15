@@ -138,7 +138,7 @@ responsibility.
 - `features/search/` — the Workspace search page (`search`): filters, matching channels, Agents and Computers, message results with their preview, and the browser-local search history and frequently used places.
 - `features/tasks/` — Task board, list, overview, and message task actions.
 - `features/workspaces/` — Workspace switcher and creation (the switcher dialog and the page a signed-in person in no Workspace lands on, `/workspaces/new`), the Workspace a page URL names (`/w/<slug>`) and the one each QueryClient last showed, member directory reads, member presence (`presence:workspace:<workspace_id>`), join links and the invite-link page (`/join/<token>`), human roles, the Settings → Workspace profile Danger zone (leave, or delete for its owner), leaving a page whose Workspace was deleted (`workspace.deleted.v1`), and the last page `/` returns to.
-- `server/agent-migrations/` — moving an Agent and its workspace files to another Computer: state machine, step roles, fencing, the transfer leases and cancels pushed to each Computer, and the daemons' HTTPS steps with presigned chunk URLs (`/api/daemon/agent-migrations`).
+- `server/agent-migrations/` — moving an Agent and its workspace files to another Computer: state machine, step roles, fencing, stopping and starting the Agent around the transfer, the leases and cancels pushed to each Computer, and the daemons' HTTPS steps with presigned chunk URLs (`/api/daemon/agent-migrations`).
 - `server/agents/` — Agent lifecycle, control, sessions, display reduction,
   Activity (Computer lifecycle rows included), visibility, deletion, and the
   Agent HTTPS API.
