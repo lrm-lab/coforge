@@ -79,7 +79,6 @@ export function EmojiPicker({
         if (alive) setLibrary({ picker: epr.default, data: data.default });
       } catch (cause) {
         if (alive) setFailed(true);
-        console.error("emoji picker could not be loaded", cause);
       }
     })();
     return () => {
