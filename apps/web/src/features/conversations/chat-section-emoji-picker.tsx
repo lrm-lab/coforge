@@ -1,57 +1,21 @@
 import { useId } from "react";
-import { ChevronDown } from "@untitledui/icons";
+import { ChevronDown, FolderPlus } from "@untitledui/icons";
 import { Popover as AriaPopover } from "react-aria-components";
 
 import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
 import { Button } from "#src/components/base/buttons/button";
-import { cx } from "#src/utils/cx";
+import { EmojiPicker } from "#src/components/ui/emoji-picker";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 
 /** A new section starts with this mark, so it reads as a folder before the member picks one. */
 export const DEFAULT_SECTION_EMOJI = "📁";
 
-/** The marks a section can carry. Each is one emoji grapheme, as `chatSectionFields` requires;
- * a section saved with another one (from before this picker) keeps it until it is changed. */
-export const SECTION_EMOJIS = [
-  "📁",
-  "📂",
-  "🗂️",
-  "📌",
-  "⭐",
-  "🔥",
-  "🚀",
-  "🎯",
-  "💡",
-  "🧪",
-  "🛠️",
-  "🐛",
-  "📣",
-  "💬",
-  "🤖",
-  "👥",
-  "🏠",
-  "📚",
-  "📝",
-  "✅",
-  "🎨",
-  "💼",
-  "🌱",
-  "⚡",
-  "🔒",
-  "📦",
-  "🧭",
-  "🏁",
-  "🎉",
-  "❤️",
-  "👀",
-  "🌍",
-] as const;
-
 /**
- * The section dialog's emoji field: a button showing the current mark that opens a grid to pick
- * another, or none. Built from the official Button and React Aria's Popover/Dialog, as the
- * message reaction picker is; the grid is a group of buttons, so it is reachable by Tab and each
- * mark is announced by its own character.
+ * The section dialog's emoji field: a button showing the current mark (a folder-plus glyph and
+ * "No emoji" when there is none) that opens the shared `EmojiPicker`, or clears from the action
+ * under the grid. The button and popover are the official Button and React Aria, as the message
+ * reaction picker builds theirs.
  */
 export function ChatSectionEmojiPicker({
   value,
@@ -76,52 +40,45 @@ export function ChatSectionEmojiPicker({
           isDisabled={isDisabled}
           aria-labelledby={labelId}
           aria-description={value ?? m.chat_section_emoji_none()}
+          iconLeading={value ? undefined : FolderPlus}
           iconTrailing={ChevronDown}
-          // `md` is the Name input's height (both 2.5rem); height comes from `size` alone.
-          className="w-24 justify-between"
+          className={cx("w-24 justify-between", value && "px-3")}
         >
-          <span aria-hidden="true" className="inline-block align-top text-lg/5">
-            {value ?? "—"}
-          </span>
+          {value ? (
+            <span aria-hidden="true" className="inline-block align-top text-lg/5">
+              {value}
+            </span>
+          ) : (
+            <span className="text-placeholder">{m.chat_section_emoji_none()}</span>
+          )}
         </Button>
         <AriaPopover
           placement="bottom start"
           offset={6}
-          className="rounded-xl bg-primary p-2 shadow-lg ring-1 ring-secondary_alt outline-none"
+          className="overflow-hidden rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
         >
           <Dialog aria-label={label} className="outline-none">
             {({ close }) => (
-              <div className="flex flex-col gap-1">
-                <div role="group" aria-label={label} className="grid grid-cols-8 gap-0.5">
-                  {SECTION_EMOJIS.map((emoji) => (
-                    <Button
-                      key={emoji}
-                      color="tertiary"
-                      size="sm"
-                      aria-pressed={emoji === value}
-                      onPress={() => {
-                        onChange(emoji);
-                        close();
-                      }}
-                      className={cx(emoji === value && "bg-active")}
-                    >
-                      {/* A larger glyph on the button's own 1.25rem line, so the height stays
-                          the `sm` size's. */}
-                      <span className="inline-block align-top text-lg/5">{emoji}</span>
-                    </Button>
-                  ))}
-                </div>
-                <Button
-                  color="link-gray"
-                  size="sm"
-                  onPress={() => {
-                    onChange(null);
+              <div>
+                <EmojiPicker
+                  onPick={(emoji) => {
+                    onChange(emoji);
                     close();
                   }}
-                  className="self-start px-1"
-                >
-                  {m.chat_section_emoji_none()}
-                </Button>
+                />
+                {/* The grid has no "none"; a section keeps its no-mark option here. */}
+                <div className="border-t border-secondary_alt p-2">
+                  <Button
+                    color="link-gray"
+                    size="sm"
+                    onPress={() => {
+                      onChange(null);
+                      close();
+                    }}
+                  >
+                    {m.chat_section_emoji_none()}
+                  </Button>
+                </div>
               </div>
             )}
           </Dialog>

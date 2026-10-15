@@ -1,13 +1,16 @@
 import { expect, test } from "bun:test";
 import { chatSectionFields } from "#src/features/conversations/chat-section.schemas";
-import {
-  DEFAULT_SECTION_EMOJI,
-  SECTION_EMOJIS,
-} from "#src/features/conversations/chat-section-emoji-picker";
 
-test("every mark the picker offers, and the default, is one the server accepts", () => {
-  expect(SECTION_EMOJIS).toContain(DEFAULT_SECTION_EMOJI);
-  expect(new Set(SECTION_EMOJIS).size).toBe(SECTION_EMOJIS.length);
-  for (const emoji of SECTION_EMOJIS)
-    expect(chatSectionFields.shape.emoji.safeParse(emoji).success).toBe(true);
+/**
+ * The picker is emoji-picker-react now, so the marks it can produce are whatever a full emoji
+ * set contains. The contract to guard is the server schema: any one-grapheme emoji — including
+ * the folder the dialog starts new sections with — is accepted, and non-emoji strings are not.
+ */
+test("the section schema accepts one-grapheme emoji marks and rejects text", () => {
+  expect(chatSectionFields.shape.emoji.safeParse("📁").success).toBe(true);
+  expect(chatSectionFields.shape.emoji.safeParse("🚀").success).toBe(true);
+  expect(chatSectionFields.shape.emoji.safeParse("❤️").success).toBe(true);
+  expect(chatSectionFields.shape.emoji.safeParse("folder").success).toBe(false);
+  expect(chatSectionFields.shape.emoji.safeParse("").success).toBe(false);
+  expect(chatSectionFields.shape.emoji.safeParse(null).success).toBe(true);
 });

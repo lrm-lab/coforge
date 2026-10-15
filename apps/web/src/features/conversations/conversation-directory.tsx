@@ -367,10 +367,20 @@ function DirectorySection({
             // (measured in the browser, both at 262px in the 1440 layout).
             <span
               {...headingProps}
-              className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"
+              // `cursor-pointer`: a hoverable title with drag activation (Pinned) — the hand
+              // says this row is grabbable, as the rows around it are pressable.
+              className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 pr-2"
             >
               {Icon ? (
-                <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+                // Pinned's mark matches the section title's ink (`--color-sidebar-fg`, #101319 in
+                // light mode): the generic `text-fg-quaternary` resolves through Untitled's
+                // utility-scoped namespace to gray-400, which read as fainter than the Saved
+                // row's bookmark next to it. Pinned is the only non-collapsible section, so the
+                // only icon that reaches this branch.
+                <Icon
+                  aria-hidden="true"
+                  className="size-4 cursor-pointer shrink-0 text-sidebar-fg"
+                />
               ) : null}
               {title}
             </span>
