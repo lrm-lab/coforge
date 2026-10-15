@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { lstat, readdir, readFile, readlink, realpath } from "node:fs/promises";
+import { lstat, readdir, readlink, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { COFORGE_RUNTIME_STORAGE_DIRS, PI_SESSION_DIR } from "@coforge/agent";
 import {
@@ -59,7 +59,9 @@ async function readIgnoredPaths(root: string): Promise<Set<string>> {
   const path = join(root, AGENT_MIGRATION_IGNORE_FILE);
   try {
     if (!(await lstat(path)).isFile()) return new Set();
-    return parseIgnoredPaths(await readFile(path, "utf8"), root);
+    const bytes = await Bun.file(path).arrayBuffer();
+    // BunFile.text() detects UTF-16 BOMs; ignore files have always been decoded as UTF-8.
+    return parseIgnoredPaths(Buffer.from(bytes).toString("utf8"), root);
   } catch {
     return new Set();
   }

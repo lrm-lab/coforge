@@ -168,6 +168,53 @@ test("accepts an absolute ignore path inside the workspace", async () => {
   expect(paths(selection)).toEqual([AGENT_MIGRATION_IGNORE_FILE, "keep.txt"]);
 });
 
+for (const example of [
+  {
+    name: "UTF-8 BOM, CRLF and a non-ASCII path",
+    bytes: new TextEncoder().encode("\ufeff数据\r\n"),
+    ignoredPath: "数据",
+    file: "数据/日志.txt",
+  },
+  {
+    name: "a malformed UTF-8 byte replaced in a literal path",
+    bytes: new Uint8Array([0xff, 0x2e, 0x74, 0x78, 0x74, 0x0a]),
+    ignoredPath: "\ufffd.txt",
+    file: "\ufffd.txt",
+  },
+]) {
+  test(`reads migration ignore text with ${example.name}`, async () => {
+    const root = await workspace({ "keep.txt": "k", [example.file]: "drop" });
+    await Bun.write(join(root, AGENT_MIGRATION_IGNORE_FILE), example.bytes);
+    const selection = await selectAgentMigrationWorkspace(root);
+    expect(paths(selection)).toEqual([AGENT_MIGRATION_IGNORE_FILE, "keep.txt"]);
+    expect(selection.excluded.ignored).toEqual([
+      { path: example.ignoredPath, fileCount: 1, sizeBytes: 4 },
+    ]);
+    expect(selection.excluded.unreadable).toEqual([]);
+  });
+}
+
+test("an ignore path that is a directory provides no ignore rules", async () => {
+  const root = await workspace({
+    "keep.txt": "k",
+    [`${AGENT_MIGRATION_IGNORE_FILE}/list.txt`]: "keep.txt\n",
+  });
+  const selection = await selectAgentMigrationWorkspace(root);
+  expect(paths(selection)).toEqual([`${AGENT_MIGRATION_IGNORE_FILE}/list.txt`, "keep.txt"]);
+  expect(selection.excluded.ignored).toEqual([]);
+});
+
+test("an ignore file with a UTF-16LE BOM is still interpreted as UTF-8", async () => {
+  const root = await workspace({ drop: "d", "keep.txt": "k" });
+  await Bun.write(
+    join(root, AGENT_MIGRATION_IGNORE_FILE),
+    new Uint8Array([0xff, 0xfe, 0x64, 0, 0x72, 0, 0x6f, 0, 0x70, 0, 0x0a, 0]),
+  );
+  const selection = await selectAgentMigrationWorkspace(root);
+  expect(paths(selection)).toEqual([AGENT_MIGRATION_IGNORE_FILE, "drop", "keep.txt"]);
+  expect(selection.excluded.ignored).toEqual([]);
+});
+
 test("carries symlinks that stay inside the workspace and drops ones that escape it", async () => {
   const root = await workspace({ "notes/today.md": "t" });
   await symlink("notes/today.md", join(root, "today"));
