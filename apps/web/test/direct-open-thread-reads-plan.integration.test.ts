@@ -47,7 +47,9 @@ test.skipIf(!connectionString)(
         reads.push({ query: event.query, params: JSON.parse(event.params) });
     });
     const handle = crypto.randomUUID().slice(0, 8);
-    const user = await db.user.create({ data: { username: `open-reads-${handle}` } });
+    const user = await db.user.create({
+      data: { displayName: `open-reads-${handle}`, username: `open-reads-${handle}` },
+    });
     const workspace = await db.workspace.create({
       data: {
         slug: `open-reads-${handle}`,

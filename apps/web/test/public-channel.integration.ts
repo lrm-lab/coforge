@@ -54,10 +54,14 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `alice-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `bob-${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `alice-${suffix}`, username: `alice-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `bob-${suffix}`, username: `bob-${suffix}` },
+  });
   const outsider = await db.user.create({
-    data: { username: `other-${suffix}` },
+    data: { displayName: `other-${suffix}`, username: `other-${suffix}` },
   });
   const workspace = await db.workspace.create({
     data: {
@@ -410,7 +414,10 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const user = await db.user.create({
-    data: { username: `u${crypto.randomUUID().slice(0, 8)}` },
+    data: {
+      displayName: `u${crypto.randomUUID().slice(0, 8)}`,
+      username: `u${crypto.randomUUID().slice(0, 8)}`,
+    },
   });
   const workspace = await db.workspace.create({
     data: {
@@ -708,7 +715,10 @@ test("a channel @mention persists as a token and wakes only the mentioned Agent,
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const user = await db.user.create({
-    data: { username: `u${crypto.randomUUID().slice(0, 8)}` },
+    data: {
+      displayName: `u${crypto.randomUUID().slice(0, 8)}`,
+      username: `u${crypto.randomUUID().slice(0, 8)}`,
+    },
   });
   const workspace = await db.workspace.create({
     data: {
@@ -838,7 +848,10 @@ test("an Agent's channel message reaches other Agents without an @mention: unmut
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const user = await db.user.create({
-    data: { username: `u${crypto.randomUUID().slice(0, 8)}` },
+    data: {
+      displayName: `u${crypto.randomUUID().slice(0, 8)}`,
+      username: `u${crypto.randomUUID().slice(0, 8)}`,
+    },
   });
   const workspace = await db.workspace.create({
     data: {
@@ -919,10 +932,17 @@ test("a channel send reads only the members its @handles name, however large the
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const sender = await db.user.create({ data: { username: `big-sender-${suffix}` } });
-  const reviewer = await db.user.create({ data: { username: `big-reviewer-${suffix}` } });
+  const sender = await db.user.create({
+    data: { displayName: `big-sender-${suffix}`, username: `big-sender-${suffix}` },
+  });
+  const reviewer = await db.user.create({
+    data: { displayName: `big-reviewer-${suffix}`, username: `big-reviewer-${suffix}` },
+  });
   await db.user.createMany({
-    data: Array.from({ length: 200 }, (_, index) => ({ username: `big-${index}-${suffix}` })),
+    data: Array.from({ length: 200 }, (_, index) => ({
+      username: `big-${index}-${suffix}`,
+      displayName: `big-${index}-${suffix}`,
+    })),
   });
   const crowd = await db.user.findMany({
     where: { username: { endsWith: `-${suffix}`, startsWith: "big-" } },
@@ -1013,10 +1033,17 @@ test("an Agent's channel send reads only its own member row and the members it n
   if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `abig-owner-${suffix}` } });
-  const reviewer = await db.user.create({ data: { username: `abig-reviewer-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `abig-owner-${suffix}`, username: `abig-owner-${suffix}` },
+  });
+  const reviewer = await db.user.create({
+    data: { displayName: `abig-reviewer-${suffix}`, username: `abig-reviewer-${suffix}` },
+  });
   await db.user.createMany({
-    data: Array.from({ length: 200 }, (_, index) => ({ username: `abig-${index}-${suffix}` })),
+    data: Array.from({ length: 200 }, (_, index) => ({
+      username: `abig-${index}-${suffix}`,
+      displayName: `abig-${index}-${suffix}`,
+    })),
   });
   const crowd = await db.user.findMany({
     where: { username: { endsWith: `-${suffix}`, startsWith: "abig-" } },
@@ -1134,8 +1161,12 @@ test("a channel send reports the @handles that name nobody the sender can see, a
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `ua${suffix}` } });
-  const bob = await db.user.create({ data: { username: `ub${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `ua${suffix}`, username: `ua${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `ub${suffix}`, username: `ub${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: crypto.randomUUID(),
@@ -1205,9 +1236,15 @@ test("a channel send names a member by id beside the @handles in its body, and a
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `ua${suffix}` } });
-  const bob = await db.user.create({ data: { username: `ub${suffix}` } });
-  const carol = await db.user.create({ data: { username: `uc${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `ua${suffix}`, username: `ua${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `ub${suffix}`, username: `ub${suffix}` },
+  });
+  const carol = await db.user.create({
+    data: { displayName: `uc${suffix}`, username: `uc${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: crypto.randomUUID(),
@@ -1292,9 +1329,15 @@ test("a channel @mention of someone outside the channel becomes the sender's pen
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `pa${suffix}` } });
-  const bob = await db.user.create({ data: { username: `pb${suffix}` } });
-  const carol = await db.user.create({ data: { username: `pc${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `pa${suffix}`, username: `pa${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `pb${suffix}`, username: `pb${suffix}` },
+  });
+  const carol = await db.user.create({
+    data: { displayName: `pc${suffix}`, username: `pc${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: crypto.randomUUID(),
@@ -1386,8 +1429,12 @@ test("an Agent's channel @mention of someone outside the channel becomes that Ag
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `ga${suffix}` } });
-  const bob = await db.user.create({ data: { username: `gb${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `ga${suffix}`, username: `ga${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `gb${suffix}`, username: `gb${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: crypto.randomUUID(),
@@ -1520,8 +1567,12 @@ test("the sender notifies a mentioned outsider once: an Agent gets the message a
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `na${suffix}` } });
-  const bob = await db.user.create({ data: { username: `nb${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `na${suffix}`, username: `na${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `nb${suffix}`, username: `nb${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: crypto.randomUUID(),
@@ -1648,9 +1699,15 @@ test("the sender adds a mentioned outsider to the channel once; another member's
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `xa${suffix}` } });
-  const bob = await db.user.create({ data: { username: `xb${suffix}` } });
-  const carol = await db.user.create({ data: { username: `xc${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `xa${suffix}`, username: `xa${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `xb${suffix}`, username: `xb${suffix}` },
+  });
+  const carol = await db.user.create({
+    data: { displayName: `xc${suffix}`, username: `xc${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: crypto.randomUUID(),
@@ -1727,8 +1784,12 @@ test("the sender adds a mentioned outsider to the channel once; another member's
     expect(announced).toEqual([[triage.id]]);
     // Someone who left the Workspace after the send cannot be added, and does not sink the others
     // added in the same request; nor can a target already in the channel, nor another Workspace.
-    const dave = await db.user.create({ data: { username: `xe${suffix}` } });
-    const frank = await db.user.create({ data: { username: `xf${suffix}` } });
+    const dave = await db.user.create({
+      data: { displayName: `xe${suffix}`, username: `xe${suffix}` },
+    });
+    const frank = await db.user.create({
+      data: { displayName: `xf${suffix}`, username: `xf${suffix}` },
+    });
     const elsewhere = await db.workspace.create({
       data: {
         slug: crypto.randomUUID(),
@@ -1796,7 +1857,9 @@ test("the sender adds a mentioned outsider to the channel once; another member's
       body: `@xa${suffix} is here already; @helper too`,
     });
     expect(later.pendingMentionActions).toEqual([]);
-    const outsider = await db.user.create({ data: { username: `xd${suffix}` } });
+    const outsider = await db.user.create({
+      data: { displayName: `xd${suffix}`, username: `xd${suffix}` },
+    });
     try {
       await db.workspaceMembership.create({
         data: { workspaceId: workspace.id, userId: outsider.id },
@@ -1874,7 +1937,10 @@ test("a #channel reference is stored as a channel token on every send path, and 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const user = await db.user.create({
-    data: { username: `u${crypto.randomUUID().slice(0, 8)}` },
+    data: {
+      displayName: `u${crypto.randomUUID().slice(0, 8)}`,
+      username: `u${crypto.randomUUID().slice(0, 8)}`,
+    },
   });
   const workspace = await db.workspace.create({
     data: {
@@ -2099,7 +2165,10 @@ test("a body's thread references are read in one query per channel, and only the
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const user = await db.user.create({
-    data: { username: `u${crypto.randomUUID().slice(0, 8)}` },
+    data: {
+      displayName: `u${crypto.randomUUID().slice(0, 8)}`,
+      username: `u${crypto.randomUUID().slice(0, 8)}`,
+    },
   });
   const workspace = await db.workspace.create({
     data: {
@@ -2221,7 +2290,10 @@ test("a #name:shortid naming a channel thread is stored as a thread token, and e
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const user = await db.user.create({
-    data: { username: `u${crypto.randomUUID().slice(0, 8)}` },
+    data: {
+      displayName: `u${crypto.randomUUID().slice(0, 8)}`,
+      username: `u${crypto.randomUUID().slice(0, 8)}`,
+    },
   });
   const workspace = await db.workspace.create({
     data: {
@@ -2398,8 +2470,12 @@ test("channel threads enforce channel scope and isolate reads, recovery, notific
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `ta${suffix.slice(0, 8)}` } });
-  const bob = await db.user.create({ data: { username: `tb${suffix.slice(0, 8)}` } });
+  const alice = await db.user.create({
+    data: { displayName: `ta${suffix.slice(0, 8)}`, username: `ta${suffix.slice(0, 8)}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `tb${suffix.slice(0, 8)}`, username: `tb${suffix.slice(0, 8)}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `thread-${suffix}`,
@@ -2775,8 +2851,12 @@ test("reads never enroll: general membership comes from write points and the bac
   if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `ea${suffix}` } });
-  const bob = await db.user.create({ data: { username: `eb${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `ea${suffix}`, username: `ea${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `eb${suffix}`, username: `eb${suffix}` },
+  });
   // A pre-backfill Workspace: humans and an Agent exist, general does not.
   const workspace = await db.workspace.create({
     data: {
@@ -2845,7 +2925,9 @@ test("reads never enroll: general membership comes from write points and the bac
     expect(await db.conversationMember.count({ where: { conversationId: general.id } })).toBe(3);
 
     // A membership row written outside the write points is not repaired by reads.
-    const carol = await db.user.create({ data: { username: `ec${suffix}` } });
+    const carol = await db.user.create({
+      data: { displayName: `ec${suffix}`, username: `ec${suffix}` },
+    });
     try {
       await db.workspaceMembership.create({
         data: { workspaceId: workspace.id, userId: carol.id },
@@ -2885,12 +2967,20 @@ test("channel members add humans and Agents; a Workspace member outside the chan
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `mo${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `mo${suffix}`, username: `mo${suffix}` },
+  });
   // A plain `member` role who joins the channel; Slack lets any channel member add people.
-  const channelMember = await db.user.create({ data: { username: `mc${suffix}` } });
+  const channelMember = await db.user.create({
+    data: { displayName: `mc${suffix}`, username: `mc${suffix}` },
+  });
   // A plain `member` role who never joins the channel.
-  const outsideMember = await db.user.create({ data: { username: `mm${suffix}` } });
-  const newcomer = await db.user.create({ data: { username: `mn${suffix}` } });
+  const outsideMember = await db.user.create({
+    data: { displayName: `mm${suffix}`, username: `mm${suffix}` },
+  });
+  const newcomer = await db.user.create({
+    data: { displayName: `mn${suffix}`, username: `mn${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `members-${suffix}`,
@@ -3046,8 +3136,12 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
   if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `mo${suffix}` } });
-  const outsider = await db.user.create({ data: { username: `mu${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `mo${suffix}`, username: `mo${suffix}` },
+  });
+  const outsider = await db.user.create({
+    data: { displayName: `mu${suffix}`, username: `mu${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `manage-${suffix}`,
@@ -3371,9 +3465,15 @@ test("Channel roles: creator is channel admin, a plain member cannot archive, pr
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const creator = await db.user.create({ data: { username: `rc${suffix}` } });
-  const plainMember = await db.user.create({ data: { username: `rp${suffix}` } });
-  const serverAdmin = await db.user.create({ data: { username: `ra${suffix}` } });
+  const creator = await db.user.create({
+    data: { displayName: `rc${suffix}`, username: `rc${suffix}` },
+  });
+  const plainMember = await db.user.create({
+    data: { displayName: `rp${suffix}`, username: `rp${suffix}` },
+  });
+  const serverAdmin = await db.user.create({
+    data: { displayName: `ra${suffix}`, username: `ra${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `roles-${suffix}`,
@@ -3530,9 +3630,15 @@ test("channel leave and member removal: owner/admin removes a human and an Agent
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `lo${suffix}` } });
-  const admin = await db.user.create({ data: { username: `la${suffix}` } });
-  const plain = await db.user.create({ data: { username: `lp${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `lo${suffix}`, username: `lo${suffix}` },
+  });
+  const admin = await db.user.create({
+    data: { displayName: `la${suffix}`, username: `la${suffix}` },
+  });
+  const plain = await db.user.create({
+    data: { displayName: `lp${suffix}`, username: `lp${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `leave-${suffix}`,
@@ -3729,7 +3835,9 @@ test("Agent channel info exposes a bound Project scoped to the Agent's own Works
   if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `pio${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `pio${suffix}`, username: `pio${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `proj-info-${suffix}`,
@@ -3860,8 +3968,12 @@ test("channel unread: list counts other-authored top-level messages past the cur
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `alice-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `bob-${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `alice-${suffix}`, username: `alice-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `bob-${suffix}`, username: `bob-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: suffix,
@@ -3919,7 +4031,9 @@ test("channel unread: list counts other-authored top-level messages past the cur
     expect(list.find((c) => c.id === engineering.id)?.unreadCount).toBe(1);
 
     // A non-member has no unread badge even though history is readable.
-    const carol = await db.user.create({ data: { username: `carol-${suffix}` } });
+    const carol = await db.user.create({
+      data: { displayName: `carol-${suffix}`, username: `carol-${suffix}` },
+    });
     await db.workspaceMembership.create({
       data: { workspaceId: workspace.id, userId: carol.id },
     });
@@ -3964,8 +4078,12 @@ test("channel unread: marking unread counts from the newest message someone else
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `alice-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `bob-${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `alice-${suffix}`, username: `alice-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `bob-${suffix}`, username: `bob-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: suffix,
@@ -4050,8 +4168,12 @@ test("a thread's root author starts following that thread, so later replies reac
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `ra${suffix.slice(0, 8)}` } });
-  const bob = await db.user.create({ data: { username: `rb${suffix.slice(0, 8)}` } });
+  const alice = await db.user.create({
+    data: { displayName: `ra${suffix.slice(0, 8)}`, username: `ra${suffix.slice(0, 8)}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `rb${suffix.slice(0, 8)}`, username: `rb${suffix.slice(0, 8)}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `root-follow-${suffix}`,
@@ -4127,9 +4249,15 @@ test("an Agent's thread reply enrolls exactly the members its stored mention row
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `ea${suffix}` } });
-  const bob = await db.user.create({ data: { username: `eb${suffix}` } });
-  const carol = await db.user.create({ data: { username: `ec${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `ea${suffix}`, username: `ea${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `eb${suffix}`, username: `eb${suffix}` },
+  });
+  const carol = await db.user.create({
+    data: { displayName: `ec${suffix}`, username: `ec${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `agent-enroll-${suffix}`,
@@ -4200,11 +4328,21 @@ test("a thread reply from a person or an Agent enrolls its sender, the members i
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `fa${suffix}` } });
-  const bob = await db.user.create({ data: { username: `fb${suffix}` } });
-  const carol = await db.user.create({ data: { username: `fc${suffix}` } });
-  const dave = await db.user.create({ data: { username: `fd${suffix}` } });
-  const erin = await db.user.create({ data: { username: `fe${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `fa${suffix}`, username: `fa${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `fb${suffix}`, username: `fb${suffix}` },
+  });
+  const carol = await db.user.create({
+    data: { displayName: `fc${suffix}`, username: `fc${suffix}` },
+  });
+  const dave = await db.user.create({
+    data: { displayName: `fd${suffix}`, username: `fd${suffix}` },
+  });
+  const erin = await db.user.create({
+    data: { displayName: `fe${suffix}`, username: `fe${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `reply-enroll-${suffix}`,
@@ -4318,8 +4456,12 @@ test("a channel member can list and unfollow Agents following a thread; a privat
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `fa${suffix}` } });
-  const bob = await db.user.create({ data: { username: `fb${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `fa${suffix}`, username: `fa${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `fb${suffix}`, username: `fb${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `follow-agents-${suffix}`,
@@ -4455,12 +4597,15 @@ test("a channel member without a browser push subscription is still a notificati
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `na${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `na${suffix}`, username: `na${suffix}` },
+  });
   // Notifications enabled, but this user never registered a browser subscription — the in-page
   // path must still treat them as a recipient so a later realtime signal reaches them,
   // even though the old flat `subscriptions` field would have silently dropped them.
   const carol = await db.user.create({
     data: {
+      displayName: `nc${suffix}`,
       username: `nc${suffix}`,
       preferences: { create: { browserNotificationsEnabled: true } },
     },
@@ -4512,9 +4657,12 @@ test("a mention pierces a muted member's push only through the message's stored 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `pa${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `pa${suffix}`, username: `pa${suffix}` },
+  });
   const bob = await db.user.create({
     data: {
+      displayName: `pb${suffix}`,
       username: `pb${suffix}`,
       preferences: { create: { browserNotificationsEnabled: true } },
     },
@@ -4573,8 +4721,12 @@ test("a closed channel stays closed until someone else posts a top-level message
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `ca${suffix.slice(0, 8)}` } });
-  const bob = await db.user.create({ data: { username: `cb${suffix.slice(0, 8)}` } });
+  const alice = await db.user.create({
+    data: { displayName: `ca${suffix.slice(0, 8)}`, username: `ca${suffix.slice(0, 8)}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `cb${suffix.slice(0, 8)}`, username: `cb${suffix.slice(0, 8)}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: suffix,
@@ -4633,7 +4785,9 @@ test("pins keep one order across the member's channels and DMs: a new pin goes l
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `pa${suffix.slice(0, 8)}` } });
+  const alice = await db.user.create({
+    data: { displayName: `pa${suffix.slice(0, 8)}`, username: `pa${suffix.slice(0, 8)}` },
+  });
   const workspace = await db.workspace.create({
     data: { slug: suffix, name: "Pins", members: { create: [{ userId: alice.id }] } },
   });
@@ -4711,8 +4865,12 @@ test("arranging a member's pins sets their order in one step, pins what is new, 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `ra${suffix.slice(0, 8)}` } });
-  const bob = await db.user.create({ data: { username: `rb${suffix.slice(0, 8)}` } });
+  const alice = await db.user.create({
+    data: { displayName: `ra${suffix.slice(0, 8)}`, username: `ra${suffix.slice(0, 8)}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `rb${suffix.slice(0, 8)}`, username: `rb${suffix.slice(0, 8)}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: suffix,
@@ -4853,10 +5011,16 @@ test("@-completion offers the Workspace's people and public Agents outside the c
   if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `oa${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `oa${suffix}`, username: `oa${suffix}` },
+  });
   const bob = await db.user.create({ data: { username: `ob${suffix}`, displayName: "Bob" } });
-  const carol = await db.user.create({ data: { username: `oc${suffix}` } });
-  const stranger = await db.user.create({ data: { username: `os${suffix}` } });
+  const carol = await db.user.create({
+    data: { displayName: `oc${suffix}`, username: `oc${suffix}` },
+  });
+  const stranger = await db.user.create({
+    data: { displayName: `os${suffix}`, username: `os${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: crypto.randomUUID(),
@@ -4936,7 +5100,9 @@ test("@-completion scores count only the viewer's own mentions in the channel, t
   const suffix = crypto.randomUUID().slice(0, 8);
   const [alice, bob, carol, dana] = await Promise.all(
     ["ma", "mb", "mc", "md"].map((prefix) =>
-      db.user.create({ data: { username: `${prefix}${suffix}` } }),
+      db.user.create({
+        data: { displayName: `${prefix}${suffix}`, username: `${prefix}${suffix}` },
+      }),
     ),
   );
   const workspace = await db.workspace.create({

@@ -38,8 +38,12 @@ function recordingRealtime() {
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `mc-owner-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `mc-bob-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `mc-owner-${suffix}`, username: `mc-owner-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `mc-bob-${suffix}`, username: `mc-bob-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `mc-${suffix}`,

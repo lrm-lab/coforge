@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { SYSTEM_SENDER_LABEL } from "#src/features/profiles/person-name";
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
 
 type Sender = {
   agent: { name: string } | null;
-  user: { username: string; displayName: string | null } | null;
+  user: { username: string; displayName: string } | null;
 };
 
 /** The notification `notificationForRecipient` builds for a message from `sender`. */
@@ -35,34 +36,34 @@ async function notificationFor(input: {
   return new PrismaWebPushSubscriptionStore(db).notificationForRecipient("message-1", "user-1");
 }
 
-const frank = (names: { displayName: string | null }) => ({
+const frank = (names: { displayName: string }) => ({
   agent: null,
   user: { username: "frank-an-4k2", ...names },
 });
 
 describe("the sender a Web Push notification names", () => {
-  test("a person in a direct conversation is the notification title, by their label", async () => {
+  test("a person in a direct conversation is the notification title, by their label, never their username", async () => {
     expect(
       await notificationFor({
         sender: frank({ displayName: "Frankie" }),
         channelName: null,
       }),
     ).toMatchObject({ title: "Frankie", body: "Build finished" });
-    expect(
-      await notificationFor({
-        sender: frank({ displayName: null }),
-        channelName: null,
-      }),
-    ).toMatchObject({ title: "frank-an-4k2" });
+    const unnamed = await notificationFor({
+      sender: frank({ displayName: "  " }),
+      channelName: null,
+    });
+    expect(unnamed).toMatchObject({ title: UNNAMED_PERSON_NAME });
+    expect(JSON.stringify(unnamed)).not.toContain("frank-an-4k2");
   });
 
   test("a person in a channel prefixes the preview with their label", async () => {
     expect(
       await notificationFor({
-        sender: frank({ displayName: null }),
+        sender: frank({ displayName: "Frankie" }),
         channelName: "general",
       }),
-    ).toMatchObject({ title: "#general", body: "frank-an-4k2: Build finished" });
+    ).toMatchObject({ title: "#general", body: "Frankie: Build finished" });
   });
 
   test("an Agent keeps its @handle", async () => {

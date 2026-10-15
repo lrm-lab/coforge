@@ -30,7 +30,9 @@ beforeAll(async () => {
   alice = await db.user.create({
     data: { username: `notice-alice-${handle}`, displayName: "Alice An" },
   });
-  bob = await db.user.create({ data: { username: `notice-bob-${handle}` } });
+  bob = await db.user.create({
+    data: { displayName: `notice-bob-${handle}`, username: `notice-bob-${handle}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `task-notices-${handle}`,

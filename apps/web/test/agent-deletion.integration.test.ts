@@ -30,8 +30,12 @@ const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `del-owner-${suffix}` } });
-  const member = await db.user.create({ data: { username: `del-member-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `del-owner-${suffix}`, username: `del-owner-${suffix}` },
+  });
+  const member = await db.user.create({
+    data: { displayName: `del-member-${suffix}`, username: `del-member-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `del-${suffix}`,
@@ -437,7 +441,10 @@ test.skipIf(!connectionString)(
   async () => {
     const { db, workspace, owner, member } = await setup();
     const outsider = await db.user.create({
-      data: { username: `del-outsider-${crypto.randomUUID().slice(0, 8)}` },
+      data: {
+        displayName: `del-outsider-${crypto.randomUUID().slice(0, 8)}`,
+        username: `del-outsider-${crypto.randomUUID().slice(0, 8)}`,
+      },
     });
     try {
       // Usernames are global; only the Workspace's own members can clash with its Agents.

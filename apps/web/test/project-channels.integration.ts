@@ -11,7 +11,9 @@ test("one project owns multiple discussion channels without crossing Workspace b
 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  const user = await db.user.create({ data: { username: `project-${suffix}` } });
+  const user = await db.user.create({
+    data: { displayName: `project-${suffix}`, username: `project-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `project-${suffix}`,

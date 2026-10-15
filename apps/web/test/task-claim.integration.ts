@@ -12,8 +12,12 @@ test("A claim answers every selector, naming why a refused one failed and who ho
     throw new Error("TASK_TEST_DATABASE_URL or DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const handle = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `claim-alice-${handle}` } });
-  const bob = await db.user.create({ data: { username: `claim-bob-${handle}` } });
+  const alice = await db.user.create({
+    data: { displayName: `claim-alice-${handle}`, username: `claim-alice-${handle}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `claim-bob-${handle}`, username: `claim-bob-${handle}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `task-claim-${handle}`,

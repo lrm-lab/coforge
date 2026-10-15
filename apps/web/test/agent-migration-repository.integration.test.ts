@@ -15,7 +15,9 @@ const connectionString = Bun.env.AGENT_MIGRATION_TEST_DATABASE_URL;
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `mig-owner-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `mig-owner-${suffix}`, username: `mig-owner-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `mig-${suffix}`,

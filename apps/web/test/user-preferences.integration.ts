@@ -16,7 +16,10 @@ function database() {
 test("a user who never saved a preference reads the defaults, and saving keeps the rest", async () => {
   const db = database();
   const user = await db.user.create({
-    data: { username: `preferences-${crypto.randomUUID()}` },
+    data: {
+      displayName: `preferences-${crypto.randomUUID()}`,
+      username: `preferences-${crypto.randomUUID()}`,
+    },
   });
   try {
     const preferences = new UserPreferences(new PrismaUserPreferencesRepository(db));
@@ -59,7 +62,10 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
 test("preferences are removed with their user and reject values outside their set", async () => {
   const db = database();
   const user = await db.user.create({
-    data: { username: `preferences-${crypto.randomUUID()}` },
+    data: {
+      displayName: `preferences-${crypto.randomUUID()}`,
+      username: `preferences-${crypto.randomUUID()}`,
+    },
   });
   try {
     const insert = (mode: string) =>

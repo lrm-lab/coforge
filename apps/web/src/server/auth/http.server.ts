@@ -61,10 +61,10 @@ export async function handleLoginCallback(input: {
       resolveUser: input.resolveUser ?? persistedIdentityResolver(),
     });
     const cookies = [completed.sessionCookie, completed.clearStateCookie];
-    const { displayName } = completed;
-    // A person who has not been asked for a name is signed in, but nothing is made for them until
-    // they answer: their personal Workspace is titled with it (`completeFirstSignIn`).
-    if (displayName === null) {
+    const { displayName, welcomed } = completed;
+    // A person who has not finished first sign-in is signed in, but nothing is made for them until
+    // they confirm their name: their personal Workspace is titled with it (`completeFirstSignIn`).
+    if (!welcomed) {
       return redirect(welcomeHref(completed.returnTo), {
         "set-cookie": cookies,
         "cache-control": "no-store",

@@ -109,9 +109,13 @@ model User {
   username                    String                          @unique
   /// The latest email the identity provider reported at login. Not unique and never an identity key.
   email                       String?
-  /// The name teammates see, asked for at first sign-in. Nullable: an account created before it
-  /// has none until it is asked, and is then labelled by `username`.
-  displayName                 String?
+  /// The name teammates see. Required, as Slack requires a name: an account starts with the name
+  /// its sign-in provider reported (`initialDisplayName`), and a person confirms it at first
+  /// sign-in. A person is never shown by `username`.
+  displayName                 String
+  /// When the person finished first sign-in (confirmed their name and made their Workspace); null
+  /// until then, which is what sends them to that step.
+  welcomedAt                  DateTime?
   description                 String                          @default("")
   /// An image object key, or `preset:<id>` for a platform picture the app serves itself.
   avatarObjectKey             String?

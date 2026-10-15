@@ -203,7 +203,8 @@ export function RecordSidePanel({
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
   const { user: viewer } = appRoute.useLoaderData();
-  const viewerName = viewer.name?.trim() || viewer.username?.trim() || m.records_side_chat_user();
+  // The viewer's name, never their username.
+  const viewerName = viewer.name?.trim() || m.records_side_chat_user();
   const countdown = useSendWindowCountdown(countdownUntil);
   const post = useServerFn(addRecordComment);
   const ensureIntro = useServerFn(ensureRecordAssistantIntro);

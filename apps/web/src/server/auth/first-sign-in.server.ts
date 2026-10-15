@@ -15,10 +15,11 @@ import {
 
 /** Where a person's display name lives. */
 export type FirstSignInNames = {
-  /** The person's stored display name (null until they have been asked for one), or null when
-   * there is no such person: a session can outlive its user. */
+  /** The name the person confirmed at first sign-in (null until they have), or null when there is
+   * no such person: a session can outlive its user. */
   lookup(userId: string): Promise<{ displayName: string | null } | null>;
-  /** Stores `displayName` unless the person already has one; resolves with the name stored after. */
+  /** Stores `displayName` and marks first sign-in done, unless it already is; resolves with the
+   * name stored after. */
   setDisplayNameOnce(userId: string, displayName: string): Promise<string>;
 };
 
@@ -110,22 +111,27 @@ export class FirstSignIn {
 class PrismaFirstSignInNames implements FirstSignInNames {
   constructor(private readonly db: PrismaClient) {}
 
-  lookup(userId: string) {
-    return this.db.user.findUnique({ where: { id: userId }, select: { displayName: true } });
+  async lookup(userId: string) {
+    const row = await this.db.user.findUnique({
+      where: { id: userId },
+      select: { displayName: true, welcomedAt: true },
+    });
+    // Every account has a name; it counts as confirmed once first sign-in is done.
+    return row && { displayName: row.welcomedAt ? row.displayName : null };
   }
 
   async setDisplayNameOnce(userId: string, displayName: string) {
     // One statement decides who was first, so two tabs cannot each believe theirs was saved.
     const { count } = await this.db.user.updateMany({
-      where: { id: userId, displayName: null },
-      data: { displayName },
+      where: { id: userId, welcomedAt: null },
+      data: { displayName, welcomedAt: new Date() },
     });
     if (count === 1) return displayName;
     const row = await this.db.user.findUniqueOrThrow({
       where: { id: userId },
       select: { displayName: true },
     });
-    return row.displayName ?? displayName;
+    return row.displayName;
   }
 }
 

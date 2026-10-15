@@ -15,10 +15,10 @@ test("compact activity history preserves launch sequence across clock rollback a
   const db = testDatabase();
   const fixture = crypto.randomUUID();
   const member = await db.user.create({
-    data: { username: `activity-member-${fixture}` },
+    data: { displayName: `activity-member-${fixture}`, username: `activity-member-${fixture}` },
   });
   const outsider = await db.user.create({
-    data: { username: `activity-outsider-${fixture}` },
+    data: { displayName: `activity-outsider-${fixture}`, username: `activity-outsider-${fixture}` },
   });
   const workspace = await db.workspace.create({
     data: {
@@ -124,7 +124,9 @@ test("compact activity history preserves launch sequence across clock rollback a
 test("compact activity history reads the five newest rows, finished frames included, from the newest launch", async () => {
   const db = testDatabase();
   const fixture = crypto.randomUUID();
-  const member = await db.user.create({ data: { username: `activity-deep-${fixture}` } });
+  const member = await db.user.create({
+    data: { displayName: `activity-deep-${fixture}`, username: `activity-deep-${fixture}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `activity-deep-${fixture}`,

@@ -19,7 +19,7 @@ afterAll(async () => {
 
 test("a Workspace named in the URL is the User's own or not found, never another one", async () => {
   const [ada, grace] = await Promise.all(
-    usernames.map((username) => db.user.create({ data: { username } })),
+    usernames.map((username) => db.user.create({ data: { displayName: username, username } })),
   );
   const [adaWorkspace] = await Promise.all([
     db.workspace.create({

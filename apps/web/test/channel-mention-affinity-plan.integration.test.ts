@@ -49,9 +49,15 @@ test.skipIf(!connectionString)(
         reads.push({ query: event.query, params: JSON.parse(event.params) });
     });
     const handle = crypto.randomUUID().slice(0, 8);
-    const viewer = await db.user.create({ data: { username: `affinity-viewer-${handle}` } });
-    const talker = await db.user.create({ data: { username: `affinity-talker-${handle}` } });
-    const target = await db.user.create({ data: { username: `affinity-target-${handle}` } });
+    const viewer = await db.user.create({
+      data: { displayName: `affinity-viewer-${handle}`, username: `affinity-viewer-${handle}` },
+    });
+    const talker = await db.user.create({
+      data: { displayName: `affinity-talker-${handle}`, username: `affinity-talker-${handle}` },
+    });
+    const target = await db.user.create({
+      data: { displayName: `affinity-target-${handle}`, username: `affinity-target-${handle}` },
+    });
     const workspace = await db.workspace.create({
       data: {
         slug: `affinity-${handle}`,
@@ -156,8 +162,18 @@ test.skipIf(!connectionString)(
         reads.push({ query: event.query, params: JSON.parse(event.params) });
     });
     const handle = crypto.randomUUID().slice(0, 8);
-    const viewer = await db.user.create({ data: { username: `affinity-mentioner-${handle}` } });
-    const target = await db.user.create({ data: { username: `affinity-mentioned-${handle}` } });
+    const viewer = await db.user.create({
+      data: {
+        displayName: `affinity-mentioner-${handle}`,
+        username: `affinity-mentioner-${handle}`,
+      },
+    });
+    const target = await db.user.create({
+      data: {
+        displayName: `affinity-mentioned-${handle}`,
+        username: `affinity-mentioned-${handle}`,
+      },
+    });
     const workspace = await db.workspace.create({
       data: {
         slug: `affinity-mentioner-${handle}`,

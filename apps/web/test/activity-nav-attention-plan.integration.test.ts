@@ -49,8 +49,12 @@ test.skipIf(!connectionString)(
       }
     });
     const handle = crypto.randomUUID().slice(0, 8);
-    const viewer = await db.user.create({ data: { username: `nav-viewer-${handle}` } });
-    const writer = await db.user.create({ data: { username: `nav-writer-${handle}` } });
+    const viewer = await db.user.create({
+      data: { displayName: `nav-viewer-${handle}`, username: `nav-viewer-${handle}` },
+    });
+    const writer = await db.user.create({
+      data: { displayName: `nav-writer-${handle}`, username: `nav-writer-${handle}` },
+    });
     const workspace = await db.workspace.create({
       data: {
         slug: `nav-attention-${handle}`,

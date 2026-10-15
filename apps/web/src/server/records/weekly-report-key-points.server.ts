@@ -1,3 +1,4 @@
+import { humanLabel } from "#src/lib/human-label";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -222,7 +223,7 @@ export async function startPersonalKeyPointExtraction(
     extraction: { status: "generating", promptSnapshot },
   });
 
-  const authorDisplayName = report.author.displayName?.trim() || report.author.username;
+  const authorDisplayName = humanLabel(report.author);
   const wakeBody = buildPersonalKeyPointWakeText({
     reportId: report.id,
     prompt: promptSnapshot,
@@ -393,7 +394,7 @@ export async function startTeamKeyPointExtraction(
     week: overview.cycle.week,
     submitted: submitted.map((row) => ({
       reportId: row.id,
-      displayName: row.author.displayName?.trim() || row.author.username,
+      displayName: humanLabel(row.author),
     })),
   });
 
@@ -657,7 +658,7 @@ export async function loadSubmittedTeamKeyPointSources(
   });
   return submitted.map((row) => ({
     reportId: row.id,
-    displayName: row.author.displayName?.trim() || row.author.username,
+    displayName: humanLabel(row.author),
   }));
 }
 

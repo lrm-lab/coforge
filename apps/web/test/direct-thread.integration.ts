@@ -11,7 +11,7 @@ test("thread send and unread ranges stay separate from the main conversation", a
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const id = crypto.randomUUID();
   const username = `t${id.slice(0, 8)}`;
-  const user = await db.user.create({ data: { username } });
+  const user = await db.user.create({ data: { displayName: username, username } });
   const workspace = await db.workspace.create({
     data: {
       slug: id,
@@ -382,7 +382,7 @@ test("an Agent history page reports the boundary it joins and the conversation i
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const id = crypto.randomUUID();
   const username = `b${id.slice(0, 8)}`;
-  const user = await db.user.create({ data: { username } });
+  const user = await db.user.create({ data: { displayName: username, username } });
   const workspace = await db.workspace.create({
     data: { slug: id, name: "Boundary test", members: { create: { userId: user.id } } },
   });

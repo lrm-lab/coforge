@@ -15,9 +15,13 @@ test("DM unread counts are keyed by conversation id and survive a zero count", a
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `alice-${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `alice-${suffix}`, username: `alice-${suffix}` },
+  });
   // A second user with no direct conversation at all: the badge read must return nothing.
-  const bob = await db.user.create({ data: { username: `bob-${suffix}` } });
+  const bob = await db.user.create({
+    data: { displayName: `bob-${suffix}`, username: `bob-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: suffix,
@@ -89,7 +93,9 @@ test("a closed DM with an Agent stays closed until the Agent posts a top-level m
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `alice-${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `alice-${suffix}`, username: `alice-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: { slug: suffix, name: "Closed DM", members: { create: [{ userId: alice.id }] } },
   });
@@ -139,7 +145,9 @@ test("a DM marked unread counts from the newest message someone else sent until 
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `alice-${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `alice-${suffix}`, username: `alice-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: { slug: suffix, name: "DM marker", members: { create: [{ userId: alice.id }] } },
   });

@@ -19,7 +19,9 @@ afterAll(async () => {
  */
 test("the overview lists every open Task; finished ones are read latest first, a page at a time", async () => {
   const short = crypto.randomUUID().slice(0, 8);
-  const user = await db.user.create({ data: { username: `finished-${short}` } });
+  const user = await db.user.create({
+    data: { displayName: `finished-${short}`, username: `finished-${short}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `task-finished-${short}`,

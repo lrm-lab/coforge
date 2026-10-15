@@ -23,10 +23,11 @@ const config = {
 const persistedAda = {
   id: "11111111-1111-4111-8111-111111111111",
   username: "ada",
-  // Named: sign-in goes on to the person's Workspace. See `unnamedAda` for the name step.
-  displayName: "Ada Lovelace" as string | null,
+  displayName: "Ada Lovelace",
+  // Welcomed: sign-in goes on to the person's Workspace. See `unnamedAda` for the name step.
+  welcomedAt: new Date("2026-10-01T00:00:00Z") as Date | null,
 };
-const unnamedAda = { ...persistedAda, displayName: null };
+const unnamedAda = { ...persistedAda, welcomedAt: null };
 
 function fakeAuthing() {
   return {
@@ -144,7 +145,7 @@ test("login callback signs in an Authing account that has no email, and /api/me 
       },
       resolveUser: async (input) => {
         resolved.push(input);
-        return { id: persistedAda.id, username: "user-0a1b2c3d", displayName: "Ada Lovelace" };
+        return { ...persistedAda, username: "user-0a1b2c3d" };
       },
       enrollUser: async () => {},
     });

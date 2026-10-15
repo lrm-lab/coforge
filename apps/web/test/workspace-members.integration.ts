@@ -28,7 +28,11 @@ test("lists only the requested Workspace directory and denies outsiders", async 
       },
     });
     const outsider = await db.user.create({
-      data: { username: `member-outsider-${suffix}`, description: "Outside member" },
+      data: {
+        displayName: `member-outsider-${suffix}`,
+        username: `member-outsider-${suffix}`,
+        description: "Outside member",
+      },
     });
     const workspace = await db.workspace.create({
       data: {
@@ -189,12 +193,12 @@ test("the directory lists people in the order of the names they are shown by", a
 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  // The usernames sort amy < mia < zed; the names they are shown by sort Alice < mia < Zoe.
+  // The usernames sort amy < mia < zed; the names they are shown by sort Alice < Mia < Zoe.
   const usernames = ["amy", "mia", "zed"].map((name) => `label-${name}-${suffix}`);
   try {
     const [amy, mia, zed] = await Promise.all(
       usernames.map((username, index) =>
-        db.user.create({ data: { username, displayName: ["Zoe", null, "Alice"][index] } }),
+        db.user.create({ data: { username, displayName: ["Zoe", "Mia", "Alice"][index]! } }),
       ),
     );
     const workspace = await db.workspace.create({
@@ -206,7 +210,7 @@ test("the directory lists people in the order of the names they are shown by", a
     });
 
     const directory = await new WorkspaceMembers(db).directory(workspace.id, amy!.id);
-    expect(directory.people.map((person) => person.name)).toEqual(["Alice", usernames[1], "Zoe"]);
+    expect(directory.people.map((person) => person.name)).toEqual(["Alice", "Mia", "Zoe"]);
   } finally {
     await db.workspace.deleteMany({ where: { slug: `label-${suffix}` } });
     await db.user.deleteMany({ where: { username: { in: usernames } } });
@@ -214,20 +218,19 @@ test("the directory lists people in the order of the names they are shown by", a
   }
 });
 
-test("a person with no display name is listed by the username", async () => {
+test("a person with a blank display name is listed as unnamed, never by the username", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
   if (!connectionString)
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  // The usernames sort amy < mia < zed; the names they are shown by sort Alice < mia < Zoe:
-  // amy and zed have a display name, mia has none and is shown by her username.
+  // The usernames sort amy < mia < zed; the names they are shown by sort Alice < Unnamed < Zoe.
   const usernames = ["amy", "mia", "zed"].map((name) => `full-${name}-${suffix}`);
   try {
     const [amy, mia, zed] = await Promise.all([
       db.user.create({ data: { username: usernames[0]!, displayName: "Zoe" } }),
-      db.user.create({ data: { username: usernames[1]! } }),
+      db.user.create({ data: { username: usernames[1]!, displayName: "  " } }),
       db.user.create({ data: { username: usernames[2]!, displayName: "Alice" } }),
     ]);
     const workspace = await db.workspace.create({
@@ -239,13 +242,13 @@ test("a person with no display name is listed by the username", async () => {
     });
 
     const directory = await new WorkspaceMembers(db).directory(workspace.id, amy!.id);
-    expect(directory.people.map((person) => person.name)).toEqual(["Alice", usernames[1], "Zoe"]);
+    expect(directory.people.map((person) => person.name)).toEqual(["Alice", "Unnamed", "Zoe"]);
 
     const listed = await workspaceMemberDirectory(db).listMembers({
       workspaceId: workspace.id,
       actorUserId: amy!.id,
     });
-    expect(listed.map(humanLabel)).toEqual(["Alice", usernames[1]!, "Zoe"]);
+    expect(listed.map(humanLabel)).toEqual(["Alice", "Unnamed", "Zoe"]);
 
     // The page shows the same label and finds a person by it.
     const page = await new WorkspaceMembers(db).peoplePage(workspace.id, amy!.id, {

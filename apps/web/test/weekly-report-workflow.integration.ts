@@ -10,7 +10,9 @@ if (!connectionString)
 
 test("disabled schedule configuration updates the format used by an immediate send", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-  const user = await db.user.create({ data: { username: `edit-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: { displayName: `edit-${crypto.randomUUID()}`, username: `edit-${crypto.randomUUID()}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `edit-${crypto.randomUUID()}`,
@@ -62,7 +64,9 @@ test("disabled schedule configuration updates the format used by an immediate se
 
 test("template creation reports initialization failures and retries the complete configuration", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-  const user = await db.user.create({ data: { username: `retry-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: { displayName: `retry-${crypto.randomUUID()}`, username: `retry-${crypto.randomUUID()}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `retry-${crypto.randomUUID()}`,
@@ -159,8 +163,12 @@ test("template creation reports initialization failures and retries the complete
 test("conversation configures, sends once, collects a member submission and writes the team summary", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  const owner = await db.user.create({ data: { username: `weekly-owner-${suffix}` } });
-  const member = await db.user.create({ data: { username: `weekly-member-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `weekly-owner-${suffix}`, username: `weekly-owner-${suffix}` },
+  });
+  const member = await db.user.create({
+    data: { displayName: `weekly-member-${suffix}`, username: `weekly-member-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `weekly-${suffix}`,
@@ -306,7 +314,10 @@ test("assignment invitations persist once in each recipient's own private assist
     await import("#src/server/db/repositories/direct-conversation.repositories.server");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const user = await db.user.create({
-    data: { username: `wn-${crypto.randomUUID().slice(0, 8)}` },
+    data: {
+      displayName: `wn-${crypto.randomUUID().slice(0, 8)}`,
+      username: `wn-${crypto.randomUUID().slice(0, 8)}`,
+    },
   });
   const workspace = await db.workspace.create({
     data: {
@@ -356,7 +367,10 @@ test("configured weekly schedule retries failed invitations without creating a s
   const { RecordCatalog } = await import("#src/server/records/record-catalog.server");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const user = await db.user.create({
-    data: { username: `ws-${crypto.randomUUID().slice(0, 8)}` },
+    data: {
+      displayName: `ws-${crypto.randomUUID().slice(0, 8)}`,
+      username: `ws-${crypto.randomUUID().slice(0, 8)}`,
+    },
   });
   const workspace = await db.workspace.create({
     data: {

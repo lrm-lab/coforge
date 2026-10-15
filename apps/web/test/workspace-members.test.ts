@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { WorkspaceMembers } from "#src/server/workspaces/members.server";
 import { withFakePagination } from "./helpers/fake-paginated";
 
@@ -87,7 +88,7 @@ describe("WorkspaceMembers", () => {
               owner: {
                 id: "another-user",
                 username: "ada",
-                displayName: null,
+                displayName: "Ada Lovelace",
                 avatarObjectKey: null,
               },
               weeklyReportAssistant: { id: "assistant-1" },
@@ -175,13 +176,13 @@ describe("WorkspaceMembers", () => {
         {
           id: "detached-agent",
           name: "reviewer",
-          displayName: "ada的周报助手",
+          displayName: "Ada Lovelace的周报助手",
           description: "Reviews changes",
           avatarUrl: null,
           computerId: null,
           computerName: null,
           createdAt: new Date("2026-08-01T00:00:00.000Z"),
-          owner: { id: "another-user", displayName: "ada", avatarUrl: null },
+          owner: { id: "another-user", displayName: "Ada Lovelace", avatarUrl: null },
           deletable: false,
         },
       ],
@@ -274,21 +275,23 @@ describe("WorkspaceMembers", () => {
         {
           id: "user-2",
           username: "ada-9d3",
-          displayName: null,
+          displayName: "  ",
           avatarObjectKey: null,
         },
       ]);
-      // Listed by the name shown, so the person with no names sorts by their username label.
+      // Listed by the name shown; a person with a blank name is shown as unnamed, never by
+      // their username.
       expect(people).toEqual([
-        { id: "user-2", name: "ada-9d3", avatarUrl: null, dmId: null },
         {
           id: "user-1",
           name: "Amazing Grace",
           avatarUrl: null,
           dmId: null,
         },
+        { id: "user-2", name: UNNAMED_PERSON_NAME, avatarUrl: null, dmId: null },
       ]);
       expect(JSON.stringify(people)).not.toContain("grace-hopper-4k2");
+      expect(JSON.stringify(people)).not.toContain("ada-9d3");
     });
 
     test("an Agent keeps its @handle", async () => {
@@ -408,7 +411,7 @@ describe("WorkspaceMembers", () => {
           user: {
             id: "viewer",
             username: "viewer",
-            displayName: null,
+            displayName: "Vera Viewer",
             description: "",
             email: null,
             avatarObjectKey: null,
@@ -416,7 +419,7 @@ describe("WorkspaceMembers", () => {
           },
         },
       }).person("workspace-1", "viewer", "viewer");
-      expect(result).toMatchObject({ id: "viewer", displayName: "viewer", isViewer: true });
+      expect(result).toMatchObject({ id: "viewer", displayName: "Vera Viewer", isViewer: true });
     });
 
     test("offers an owner or admin the role change and removal Settings → Members allows", async () => {
@@ -426,7 +429,7 @@ describe("WorkspaceMembers", () => {
         user: {
           id,
           username: id,
-          displayName: null,
+          displayName: `Person ${id}`,
           description: "",
           email: null,
           avatarObjectKey: null,

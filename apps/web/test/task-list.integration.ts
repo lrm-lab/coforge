@@ -12,7 +12,9 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
     throw new Error("TASK_TEST_DATABASE_URL or DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const handle = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `list-alice-${handle}` } });
+  const alice = await db.user.create({
+    data: { displayName: `list-alice-${handle}`, username: `list-alice-${handle}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `task-list-${handle}`,

@@ -47,9 +47,15 @@ test.skipIf(!connectionString)(
   async () => {
     const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
     const suffix = crypto.randomUUID().slice(0, 8);
-    const owner = await db.user.create({ data: { username: `resume-owner-${suffix}` } });
-    const member = await db.user.create({ data: { username: `resume-member-${suffix}` } });
-    const outsider = await db.user.create({ data: { username: `resume-outsider-${suffix}` } });
+    const owner = await db.user.create({
+      data: { displayName: `resume-owner-${suffix}`, username: `resume-owner-${suffix}` },
+    });
+    const member = await db.user.create({
+      data: { displayName: `resume-member-${suffix}`, username: `resume-member-${suffix}` },
+    });
+    const outsider = await db.user.create({
+      data: { displayName: `resume-outsider-${suffix}`, username: `resume-outsider-${suffix}` },
+    });
     const workspace = await new PrismaWorkspaceCatalogStore(db).createForUser({
       slug: `resume-${suffix}`,
       name: "Resume channel Agents",

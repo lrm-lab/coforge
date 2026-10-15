@@ -51,13 +51,10 @@ export function browserMessageMention(row: BrowserMessageMentionRow) {
     kind: row.kind as "user" | "agent",
     actorId: row.actorId,
     handle: row.handle,
-    // A person's handle is their username, so it is the fallback `humanLabel` names them by.
+    // A person is labelled by their name, never by their handle (their username).
     label:
       row.kind === "user"
-        ? humanLabel({
-            displayName: row.member.user?.displayName,
-            username: row.handle,
-          })
+        ? humanLabel({ displayName: row.member.user?.displayName })
         : row.member.agent?.displayName?.trim() || row.handle,
   };
 }

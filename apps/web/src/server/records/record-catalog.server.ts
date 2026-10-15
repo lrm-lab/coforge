@@ -1,3 +1,4 @@
+import { humanLabel } from "#src/lib/human-label";
 import {
   distributeWeeklyReport,
   retryWeeklyReportInvitations,
@@ -98,7 +99,7 @@ const REPORT_PERSON_SELECT = {
   avatarObjectKey: true,
 } as const;
 
-/** A person as a weekly-report view names them: the display name falls back to the username. */
+/** A person as a weekly-report view names them: by their name (`humanLabel`), never their username. */
 function reportPersonView(
   workspaceId: string,
   person: {
@@ -111,7 +112,7 @@ function reportPersonView(
   return {
     userId: person.id,
     username: person.username,
-    displayName: person.displayName ?? person.username,
+    displayName: humanLabel(person),
     avatarUrl: workspaceUserAvatarUrl(workspaceId, person.id, person.avatarObjectKey),
   };
 }
@@ -148,7 +149,7 @@ function templateListItem(template: {
     recipients: template.recipients.map((row) => ({
       userId: row.user.id,
       username: row.user.username,
-      displayName: row.user.displayName ?? row.user.username,
+      displayName: humanLabel(row.user),
     })),
   };
 }
@@ -518,7 +519,7 @@ export class RecordCatalog {
           continue;
         }
         if (week.submissions.some((row) => row.id === candidate.id)) continue;
-        const displayName = candidate.author.displayName ?? candidate.author.username;
+        const displayName = humanLabel(candidate.author);
         week.submissions.push({
           id: candidate.id,
           title: memberReportTitle(displayName, cycle.year, cycle.week),
@@ -538,7 +539,7 @@ export class RecordCatalog {
       actorUserId: input.userId,
       actorRole: membership.role,
       canManageWeeklyReports: true,
-      actorDisplayName: me?.displayName ?? me?.username ?? "",
+      actorDisplayName: me ? humanLabel(me) : "",
       actorAvatarUrl: me
         ? workspaceUserAvatarUrl(input.workspaceId, me.id, me.avatarObjectKey)
         : null,
@@ -547,7 +548,7 @@ export class RecordCatalog {
         .map((row) => ({
           id: row.report.id,
           title: memberReportTitle(
-            row.report.author.displayName ?? row.report.author.username,
+            humanLabel(row.report.author),
             row.report.cycle.year,
             row.report.cycle.week,
           ),
@@ -563,11 +564,7 @@ export class RecordCatalog {
           )
           .map((report) => ({
             id: report.id,
-            title: memberReportTitle(
-              me?.displayName ?? me?.username ?? report.title,
-              cycle.year,
-              cycle.week,
-            ),
+            title: memberReportTitle(me ? humanLabel(me) : report.title, cycle.year, cycle.week),
             status: report.status,
             unread: isAssignmentUnread(asReportContent(report.content)),
             sourceTemplateId: report.sourceTemplateId,
@@ -1000,7 +997,7 @@ export class RecordCatalog {
       where: { id: input.userId },
       select: { displayName: true, username: true },
     });
-    const displayName = author?.displayName ?? author?.username ?? "Member";
+    const displayName = author ? humanLabel(author) : "Member";
     const title = memberReportTitle(displayName, template.cycle.year, template.cycle.week);
     const report = await this.db.weeklyReport.create({
       data: {
@@ -1650,7 +1647,7 @@ export class RecordCatalog {
         name: template.name,
         sections: parseTemplateSections(template.dimensions),
         active: template.applied,
-        owner: template.owner.displayName ?? template.owner.username,
+        owner: humanLabel(template.owner),
         updatedAt: template.updatedAt.toISOString(),
         canManage: template.ownerId === input.userId,
         ...(template.ownerId === input.userId
@@ -1712,7 +1709,7 @@ export class RecordCatalog {
         updatedAt: row.updatedAt.toISOString(),
         author: {
           username: row.author.username,
-          displayName: row.author.displayName ?? row.author.username,
+          displayName: humanLabel(row.author),
         },
         cycle: row.cycle,
         source: {
@@ -1855,7 +1852,7 @@ export class RecordCatalog {
             ).map((child) => ({
               id: child.id,
               title: memberReportTitle(
-                child.author.displayName ?? child.author.username,
+                humanLabel(child.author),
                 report.cycle.year,
                 report.cycle.week,
               ),
@@ -1871,11 +1868,7 @@ export class RecordCatalog {
           kind: report.kind,
           title:
             report.kind === "member"
-              ? memberReportTitle(
-                  report.author.displayName ?? report.author.username,
-                  report.cycle.year,
-                  report.cycle.week,
-                )
+              ? memberReportTitle(humanLabel(report.author), report.cycle.year, report.cycle.week)
               : report.title,
           status: report.status,
           content,
@@ -1950,7 +1943,7 @@ export class RecordCatalog {
           author: {
             userId: note.author.id,
             username: note.author.username,
-            displayName: note.author.displayName ?? note.author.username,
+            displayName: humanLabel(note.author),
           },
         },
       };
@@ -2858,7 +2851,7 @@ export class RecordCatalog {
         return {
           userId: member.userId,
           username: member.user.username,
-          displayName: member.user.displayName ?? member.user.username,
+          displayName: humanLabel(member.user),
           avatarUrl: workspaceUserAvatarUrl(
             input.workspaceId,
             member.userId,
@@ -2911,7 +2904,7 @@ export class RecordCatalog {
         return {
           id: report.id,
           authorId: report.authorId,
-          displayName: author?.displayName ?? author?.username ?? "Unknown member",
+          displayName: author ? humanLabel(author) : "Unknown member",
           summary: summary ? summary.slice(0, 280) : "",
           status: report.status,
           submittedAt: report.submittedAt?.toISOString() ?? null,
@@ -2922,7 +2915,7 @@ export class RecordCatalog {
       weeks,
       members: members.map((member) => ({
         userId: member.user.id,
-        displayName: member.user.displayName ?? member.user.username,
+        displayName: humanLabel(member.user),
       })),
     };
   }
@@ -2962,7 +2955,7 @@ export class RecordCatalog {
       members: overview.submissions.map((submission) => {
         const content = reportContentForRecipient(asReportContent(submission.content));
         return {
-          displayName: submission.author.displayName ?? submission.author.username,
+          displayName: humanLabel(submission.author),
           sections: Object.fromEntries(
             Object.entries(content.tabs ?? {}).map(([name, tab]) => [name, tab.markdown]),
           ),
@@ -3080,7 +3073,7 @@ export class RecordCatalog {
         },
       });
       if (report) {
-        const displayName = report.author.displayName ?? report.author.username;
+        const displayName = humanLabel(report.author);
         await this.writeAssistantComment({
           workspaceId: input.workspaceId,
           subjectType: "report",
@@ -3260,10 +3253,10 @@ export class RecordCatalog {
     const recipients = people
       .filter((user) => user.id !== input.userId)
       .map((user) => ({
-        displayName: user.displayName ?? user.username,
+        displayName: humanLabel(user),
         avatarUrl: workspaceUserAvatarUrl(input.workspaceId, user.id, user.avatarObjectKey),
       }));
-    const displayName = report.author.displayName ?? report.author.username;
+    const displayName = humanLabel(report.author);
     return {
       body: `hi，${displayName}，${year} W${week}的工作周报模板已生成，请确认是否发送。`,
       payload: {

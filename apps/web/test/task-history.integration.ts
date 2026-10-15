@@ -22,7 +22,9 @@ test("Task changes record history events with their before and after state", asy
   const alice = await db.user.create({
     data: { username: `history-alice-${handle}`, displayName: "Alice" },
   });
-  const bob = await db.user.create({ data: { username: `history-bob-${handle}` } });
+  const bob = await db.user.create({
+    data: { displayName: `history-bob-${handle}`, username: `history-bob-${handle}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `task-history-${suffix}`,

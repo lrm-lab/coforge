@@ -37,7 +37,9 @@ const fixture = {} as { workspaceId: string; agentId: string; conversationId: st
 
 beforeAll(async () => {
   const suffix = crypto.randomUUID().slice(0, 8);
-  const user = await db.user.create({ data: { username: `upload_${suffix}` } });
+  const user = await db.user.create({
+    data: { displayName: `upload_${suffix}`, username: `upload_${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `upload-${suffix}`,
@@ -156,7 +158,9 @@ test("enforces the (agentId, idempotencyKey) unique constraint at the database l
 
 test("cascades delete when the owning workspace is removed", async () => {
   const suffix = crypto.randomUUID().slice(0, 8);
-  const user = await db.user.create({ data: { username: `cascade_${suffix}` } });
+  const user = await db.user.create({
+    data: { displayName: `cascade_${suffix}`, username: `cascade_${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: { slug: `cascade-${suffix}`, name: "Cascade", members: { create: { userId: user.id } } },
   });

@@ -247,10 +247,7 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
           senderKind: "user" as const,
           senderMemberId: message.senderMemberId,
           // Reads exactly like the same message after a reload: display name, handle separately.
-          senderName: humanLabel({
-            displayName: profile?.displayName,
-            username: user.username,
-          }),
+          senderName: humanLabel({ displayName: profile?.displayName }),
           senderHandle: user.username,
           // A human-sent echo never carries an Agent id, and a human sender is never deleted.
           senderAgentId: undefined,

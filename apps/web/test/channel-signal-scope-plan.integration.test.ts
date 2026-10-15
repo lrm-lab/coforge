@@ -47,7 +47,9 @@ test.skipIf(!connectionString)(
         reads.push({ query: event.query, params: JSON.parse(event.params) });
     });
     const handle = crypto.randomUUID().slice(0, 8);
-    const user = await db.user.create({ data: { username: `signal-scope-${handle}` } });
+    const user = await db.user.create({
+      data: { displayName: `signal-scope-${handle}`, username: `signal-scope-${handle}` },
+    });
     const workspace = await db.workspace.create({
       data: {
         slug: `signal-scope-${handle}`,
@@ -75,8 +77,8 @@ test.skipIf(!connectionString)(
       });
       await db.$executeRaw`
         WITH people AS (
-          INSERT INTO users (id, username)
-          SELECT gen_random_uuid(), ${`signal-scope-${handle}-`} || n
+          INSERT INTO users (id, username, "displayName")
+          SELECT gen_random_uuid(), ${`signal-scope-${handle}-`} || n, ${`signal-scope-${handle}-`} || n
           FROM generate_series(1, 2000) AS n
           RETURNING id
         )

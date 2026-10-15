@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { initialDisplayName } from "#src/features/auth/name-prefill";
 import { UsernameAllocator, type UsernameProfile } from "./username-allocation.server";
 
 export class UserIdentityRepository {
@@ -31,6 +32,9 @@ export class UserIdentityRepository {
           data: {
             id,
             username,
+            // Every account has a name from the start, never its username; the person confirms
+            // it at first sign-in (`welcomedAt`).
+            displayName: initialDisplayName(profile),
             email,
             identities: { create: { provider, providerSubject } },
           },

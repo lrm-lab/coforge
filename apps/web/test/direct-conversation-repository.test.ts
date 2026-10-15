@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { buildUserAgentConversationCreateInput } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import {
   PrismaDirectConversationRepository,
@@ -614,10 +615,10 @@ describe("PrismaDirectConversationRepository", () => {
     ).toBe(undefined);
   });
 
-  test("a Task's person owner is named by the label teammates see: display name, then username", async () => {
+  test("a Task's person owner is named by the label teammates see: display name, never username", async () => {
     const owners = [
       { username: "ada", displayName: "Countess" },
-      { username: "grace", displayName: null },
+      { username: "grace", displayName: "  " },
       { username: "alan", displayName: null },
     ];
     let read = 0;
@@ -664,8 +665,8 @@ describe("PrismaDirectConversationRepository", () => {
 
     expect(ownerLabels).toEqual([
       { displayName: "Countess", handle: "ada" },
-      { displayName: "grace", handle: "grace" },
-      { displayName: "alan", handle: "alan" },
+      { displayName: UNNAMED_PERSON_NAME, handle: "grace" },
+      { displayName: UNNAMED_PERSON_NAME, handle: "alan" },
     ]);
   });
 

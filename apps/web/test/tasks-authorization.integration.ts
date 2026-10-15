@@ -25,7 +25,9 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
   const short = suffix.slice(0, 8);
   const users = await Promise.all(
     ["alice", "bob", "mallory"].map((name) =>
-      db.user.create({ data: { username: `ta-${name}-${short}` } }),
+      db.user.create({
+        data: { displayName: `ta-${name}-${short}`, username: `ta-${name}-${short}` },
+      }),
     ),
   );
   const [alice, bob, mallory] = users;
@@ -662,7 +664,9 @@ test("TaskBoard lets any human member reassign or unassign a Task and enforces r
   const short = suffix.slice(0, 8);
   const [alice, bob, carol] = await Promise.all(
     ["alice", "bob", "carol"].map((name) =>
-      db.user.create({ data: { username: `tu-${name}-${short}` } }),
+      db.user.create({
+        data: { displayName: `tu-${name}-${short}`, username: `tu-${name}-${short}` },
+      }),
     ),
   );
   const workspace = await db.workspace.create({

@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { utf8Encoder, utf8Decoder } from "@lrm/coforge-sdk/internal";
 
+import { initialDisplayName } from "#src/features/auth/name-prefill";
 import { safeReturnTo } from "#src/features/auth/return-to";
 import { atLoginStage, LoginCallbackError } from "./login-failure.server";
 export type BrowserUser = {
@@ -27,8 +28,10 @@ export type InternalUserResolver = (input: {
 }) => Promise<{
   id: string;
   username: string;
-  /** The person's stored display name; null until they have been asked for one. */
-  displayName: string | null;
+  /** The person's stored display name; every account has one. */
+  displayName: string;
+  /** When the person finished first sign-in; null sends them to it. */
+  welcomedAt: Date | null;
 }>;
 
 export type AuthingConfig = {
@@ -163,9 +166,11 @@ export async function completeBrowserLogin(input: {
   now?: () => number;
 }): Promise<{
   user: BrowserUser;
-  /** The person's stored display name, or null when they have none yet: sign-in then continues at
-   * the name step rather than creating anything for them. */
-  displayName: string | null;
+  /** The person's stored display name; every account has one. */
+  displayName: string;
+  /** Whether the person finished first sign-in; when not, sign-in continues at the name step
+   * rather than creating anything for them. */
+  welcomed: boolean;
   sessionCookie: string;
   clearStateCookie: string;
   /** Where sign-in started, when that was a page of this site. */
@@ -204,7 +209,8 @@ export async function completeBrowserLogin(input: {
     : {
         id: testOnlyStableInternalUserId("authing", profile.sub),
         username: `user-${testOnlyStableInternalUserId("authing", profile.sub).replaceAll("-", "")}`,
-        displayName: null,
+        displayName: initialDisplayName({ name: profile.name, nickname: profile.nickname, email }),
+        welcomedAt: null,
       };
   const user: BrowserUser = {
     id: resolved.id,
@@ -221,6 +227,7 @@ export async function completeBrowserLogin(input: {
   return {
     user,
     displayName: resolved.displayName,
+    welcomed: resolved.welcomedAt !== null,
     sessionCookie: serializeCookie(
       SESSION_COOKIE,
       sign("session", session, input.sessionSecret),

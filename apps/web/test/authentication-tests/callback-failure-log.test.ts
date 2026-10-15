@@ -71,7 +71,12 @@ type Callback = {
   config?: AuthingConfig;
   /** `forged` sends a state no sign-in started. */
   state?: "started" | "forged";
-  resolveUser?: () => Promise<{ id: string; username: string; displayName: string | null }>;
+  resolveUser?: () => Promise<{
+    id: string;
+    username: string;
+    displayName: string;
+    welcomedAt: Date | null;
+  }>;
   enrollUser?: () => Promise<void>;
   /** Leaves user resolution and enrollment to the database the callback ships with. */
   persisted?: boolean;
@@ -108,7 +113,12 @@ async function failedCallback(options: Callback = {}) {
         : {
             resolveUser:
               options.resolveUser ??
-              (async () => ({ id: "user-1", username: "ada", displayName: "Ada Lovelace" })),
+              (async () => ({
+                id: "user-1",
+                username: "ada",
+                displayName: "Ada Lovelace",
+                welcomedAt: new Date("2026-10-01T00:00:00Z"),
+              })),
             enrollUser: options.enrollUser ?? (async () => {}),
           }),
     });

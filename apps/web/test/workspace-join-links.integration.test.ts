@@ -23,9 +23,15 @@ const passThrough: MessageRequestIdempotency = { execute: (_scope, persist) => p
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `jl-owner-${suffix}` } });
-  const ada = await db.user.create({ data: { username: `jl-ada-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `jl-bob-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `jl-owner-${suffix}`, username: `jl-owner-${suffix}` },
+  });
+  const ada = await db.user.create({
+    data: { displayName: `jl-ada-${suffix}`, username: `jl-ada-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `jl-bob-${suffix}`, username: `jl-bob-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `jl-${suffix}`,

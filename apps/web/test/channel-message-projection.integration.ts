@@ -22,7 +22,9 @@ test("a channel message reaches the browser in one shape from open, updates and 
       avatarObjectKey: `avatars/alice/v7/avatar.png`,
     },
   });
-  const bob = await db.user.create({ data: { username: `pb${suffix}` } });
+  const bob = await db.user.create({
+    data: { displayName: `pb${suffix}`, username: `pb${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `projection-${suffix}`,
@@ -261,7 +263,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
           kind: "user",
           actorId: bob.id,
           handle: bob.username,
-          member: { user: { displayName: null }, agent: null },
+          member: { user: { displayName: bob.username }, agent: null },
         },
       ],
       reactions: [],

@@ -13,7 +13,7 @@ test("events drain returns unread rows in canonical order, advances read boundar
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const id = crypto.randomUUID();
   const username = `e${id.slice(0, 8)}`;
-  const user = await db.user.create({ data: { username } });
+  const user = await db.user.create({ data: { displayName: username, username } });
   const workspace = await db.workspace.create({
     data: {
       slug: id,
@@ -178,7 +178,7 @@ test("events drain and recovery keep the unread rule across channels, direct mes
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const id = crypto.randomUUID();
   const username = `e${id.slice(0, 8)}`;
-  const user = await db.user.create({ data: { username } });
+  const user = await db.user.create({ data: { displayName: username, username } });
   const workspace = await db.workspace.create({
     data: { slug: id, name: "Events rule test", members: { create: { userId: user.id } } },
   });
@@ -377,7 +377,9 @@ test("events drain returns only an Agent's channel deliveries above its read bou
   if (!connectionString) throw new Error("EVENTS_TEST_DATABASE_URL is required (local PostgreSQL)");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const id = crypto.randomUUID();
-  const user = await db.user.create({ data: { username: `e${id.slice(0, 8)}` } });
+  const user = await db.user.create({
+    data: { displayName: `e${id.slice(0, 8)}`, username: `e${id.slice(0, 8)}` },
+  });
   const workspace = await db.workspace.create({
     data: { slug: id, name: "Events history test", members: { create: { userId: user.id } } },
   });
@@ -494,7 +496,9 @@ test("an Agent's channel send freshness reads count only its delivered messages 
   if (!connectionString) throw new Error("EVENTS_TEST_DATABASE_URL is required (local PostgreSQL)");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const id = crypto.randomUUID();
-  const user = await db.user.create({ data: { username: `f${id.slice(0, 8)}` } });
+  const user = await db.user.create({
+    data: { displayName: `f${id.slice(0, 8)}`, username: `f${id.slice(0, 8)}` },
+  });
   const workspace = await db.workspace.create({
     data: { slug: id, name: "Freshness test", members: { create: { userId: user.id } } },
   });

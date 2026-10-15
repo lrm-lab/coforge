@@ -191,7 +191,7 @@ test.skipIf(!connectionString)(
 );
 
 test.skipIf(!connectionString)(
-  "a first login gets a readable username from the email's local part, and no display name yet",
+  "a first login gets a readable username and a name from the email's local part, not yet confirmed",
   async () => {
     const { suffix, login, teardown } = await setup();
     try {
@@ -202,7 +202,9 @@ test.skipIf(!connectionString)(
 
       expect(plain.username).toBe(`grace-${suffix}`);
       expect(tagged.username).toBe(`ada-${suffix}`);
-      expect(plain.displayName).toBeNull();
+      // Every account has a name from the start (never the username); first sign-in confirms it.
+      expect(plain.displayName).toBe(`Grace-${suffix}`);
+      expect(plain.welcomedAt).toBeNull();
     } finally {
       await teardown();
     }
@@ -217,7 +219,7 @@ test.skipIf(!connectionString)(
       const email = `lee-${suffix}@example.com`;
       // Names that merely start with the base, or carry the older hex suffix, do not block it.
       for (const username of [`lee-${suffix}-d9956ab1`, `lee-${suffix}x`, `lee-${suffix}-2x`]) {
-        userIds.push((await db.user.create({ data: { username } })).id);
+        userIds.push((await db.user.create({ data: { displayName: username, username } })).id);
       }
 
       const first = await login(`sub-lee-1-${suffix}`, { email });

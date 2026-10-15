@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { saveUserProfileInputSchema } from "#src/features/profiles/profile.schemas";
 import { AppError } from "#src/lib/app-error";
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import {
   chooseUserAvatarPreset,
   PROFILE_IMAGE_MAX_BYTES,
@@ -117,7 +118,11 @@ describe("saveUserProfileInputSchema", () => {
 
 describe("PrismaUserProfileRepository", () => {
   test("names the person by the name teammates see", async () => {
-    const named = profileRepository({ username: "ada", displayName: "Countess" });
+    const named = profileRepository({
+      username: "ada",
+      displayName: "Countess",
+      welcomedAt: new Date("2026-07-23T01:05:00.000Z"),
+    });
     expect(await named.repository.get("user-1")).toMatchObject({
       name: "Countess",
       displayName: "Countess",
@@ -125,28 +130,43 @@ describe("PrismaUserProfileRepository", () => {
   });
 
   test("says when the person joined, as an ISO instant", async () => {
-    const joined = profileRepository({ username: "ada", displayName: "Countess" });
+    const joined = profileRepository({
+      username: "ada",
+      displayName: "Countess",
+      welcomedAt: new Date("2026-07-23T01:05:00.000Z"),
+    });
     expect((await joined.repository.get("user-1")).joinedAt).toBe("2026-07-23T01:02:03.000Z");
   });
 
   test("says whether the person has been asked for a name", async () => {
-    const unasked = profileRepository({ username: "ada", displayName: null });
+    const unasked = profileRepository({
+      username: "ada",
+      displayName: "Ada Lovelace",
+      welcomedAt: null,
+    });
     expect((await unasked.repository.get("user-1")).named).toBe(false);
 
-    const asked = profileRepository({ username: "ada", displayName: "Countess" });
+    const asked = profileRepository({
+      username: "ada",
+      displayName: "Countess",
+      welcomedAt: new Date("2026-07-23T01:05:00.000Z"),
+    });
     expect((await asked.repository.get("user-1")).named).toBe(true);
   });
 
-  test("a person who has not given a name is still named, by the username fallback", async () => {
-    const unnamed = profileRepository({ username: "ada", displayName: null });
-    expect(await unnamed.repository.get("user-1")).toMatchObject({
-      name: "ada",
-      displayName: null,
-    });
+  test("a person with a blank name is shown as unnamed, never by their username", async () => {
+    const unnamed = profileRepository({ username: "ada", displayName: "  ", welcomedAt: null });
+    const profile = await unnamed.repository.get("user-1");
+    expect(profile).toMatchObject({ name: UNNAMED_PERSON_NAME, displayName: "  " });
+    expect(profile.name).not.toContain("ada");
   });
 
   test("saving stores the name and the description", async () => {
-    const { repository, updates } = profileRepository({ username: "ada", displayName: null });
+    const { repository, updates } = profileRepository({
+      username: "ada",
+      displayName: "Ada Lovelace",
+      welcomedAt: null,
+    });
     const saved = await repository.set("user-1", {
       displayName: "Countess",
       description: "Building CoForge.",
@@ -327,7 +347,11 @@ test("profile image HTTP boundary rejects unauthenticated requests", async () =>
   expect(response.headers.get("cache-control")).toBe("no-store");
 });
 
-function profileRepository(row: { username: string; displayName: string | null }) {
+function profileRepository(row: {
+  username: string;
+  displayName: string;
+  welcomedAt: Date | null;
+}) {
   const updates: unknown[] = [];
   const stored = {
     ...row,

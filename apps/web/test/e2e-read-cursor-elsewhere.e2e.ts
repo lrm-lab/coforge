@@ -174,7 +174,9 @@ beforeAll(async () => {
   });
   workspacePath = `/en/w/${membership.workspace.slug}`;
   workspaceId = membership.workspaceId;
-  const writer = await db.user.create({ data: { username: `e2erc${suffix}` } });
+  const writer = await db.user.create({
+    data: { displayName: `e2erc${suffix}`, username: `e2erc${suffix}` },
+  });
   writerUserId = writer.id;
   await db.workspaceMembership.create({ data: { workspaceId, userId: writer.id } });
   const read = await db.conversation.create({

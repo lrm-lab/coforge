@@ -185,9 +185,15 @@ async function bindMemory(db: PrismaClient, workspaceId: string) {
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `wd-owner-${suffix}` } });
-  const admin = await db.user.create({ data: { username: `wd-admin-${suffix}` } });
-  const member = await db.user.create({ data: { username: `wd-member-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `wd-owner-${suffix}`, username: `wd-owner-${suffix}` },
+  });
+  const admin = await db.user.create({
+    data: { displayName: `wd-admin-${suffix}`, username: `wd-admin-${suffix}` },
+  });
+  const member = await db.user.create({
+    data: { displayName: `wd-member-${suffix}`, username: `wd-member-${suffix}` },
+  });
   const catalog = new PrismaWorkspaceCatalogStore(db);
   const workspace = await catalog.createForUser({
     slug: `wd-${suffix}`,
@@ -489,7 +495,10 @@ test.skipIf(!connectionString)(
       memory: unboundMemory(db).memory,
     });
     const stranger = await db.user.create({
-      data: { username: `wd-stranger-${crypto.randomUUID().slice(0, 8)}` },
+      data: {
+        displayName: `wd-stranger-${crypto.randomUUID().slice(0, 8)}`,
+        username: `wd-stranger-${crypto.randomUUID().slice(0, 8)}`,
+      },
     });
     const messages = () => db.message.count({ where: { workspaceId: workspace.id } });
     const messagesBefore = await messages();

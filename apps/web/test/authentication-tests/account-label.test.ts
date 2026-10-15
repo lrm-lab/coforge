@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { accountLabel } from "#src/features/auth/account-label";
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 
 // "Signed in as ..." names the account by the email its sign-in reported. An account without one
 // (a phone-number sign-up) is named the way everyone is (`humanLabel`), never by a phone number
@@ -18,8 +19,9 @@ test("an account with no email is named by the person's name", () => {
   );
 });
 
-test("an account with no email and no name yet is named by its username, without an @", () => {
-  expect(accountLabel({ email: null, displayName: null, username: "user-0a1b2c3d" })).toBe(
-    "user-0a1b2c3d",
-  );
+test("an account with no email and a blank name is shown as unnamed, never by its username", () => {
+  const label = accountLabel({ email: null, displayName: "  ", username: "user-0a1b2c3d" });
+
+  expect(label).toBe(UNNAMED_PERSON_NAME);
+  expect(label).not.toContain("user-0a1b2c3d");
 });

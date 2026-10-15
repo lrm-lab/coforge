@@ -14,11 +14,14 @@ export async function signedInAccount(
 ): Promise<{ account: string; named: boolean }> {
   const row = await db.user.findUnique({
     where: { id: user.id },
-    select: { displayName: true, username: true },
+    select: { displayName: true, username: true, welcomedAt: true },
   });
-  const names = row ?? { displayName: null, username: user.username };
   return {
-    account: accountLabel({ email: user.email, ...names }),
-    named: names.displayName !== null,
+    account: accountLabel({
+      email: user.email,
+      displayName: row?.displayName ?? null,
+      username: row?.username ?? user.username,
+    }),
+    named: Boolean(row?.welcomedAt),
   };
 }

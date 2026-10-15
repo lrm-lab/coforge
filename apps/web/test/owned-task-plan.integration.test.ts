@@ -66,7 +66,9 @@ test.skipIf(!connectionString)(
         taskReads.push({ query: event.query, params: JSON.parse(event.params) });
     });
     const handle = crypto.randomUUID().slice(0, 8);
-    const user = await db.user.create({ data: { username: `owned-plan-${handle}` } });
+    const user = await db.user.create({
+      data: { displayName: `owned-plan-${handle}`, username: `owned-plan-${handle}` },
+    });
     const workspace = await db.workspace.create({
       data: {
         slug: `owned-plan-${handle}`,

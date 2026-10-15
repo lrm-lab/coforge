@@ -50,9 +50,11 @@ const fixture = {} as {
 beforeAll(async () => {
   const suffix = crypto.randomUUID().slice(0, 8);
   const user = await db.user.create({
-    data: { username: `reminder_${suffix}` },
+    data: { displayName: `reminder_${suffix}`, username: `reminder_${suffix}` },
   });
-  const other = await db.user.create({ data: { username: `other_${suffix}` } });
+  const other = await db.user.create({
+    data: { displayName: `other_${suffix}`, username: `other_${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `reminder-${suffix}`,

@@ -1,4 +1,5 @@
 import { m } from "#src/paraglide/messages";
+import { humanLabel } from "#src/lib/human-label";
 
 export type TemplateMemberOption = {
   userId: string;
@@ -12,7 +13,7 @@ export function memberLabel(member: {
   username?: string;
   role?: string;
 }) {
-  const name = member.displayName || member.username || "";
+  const name = humanLabel(member);
   const role =
     member.role === "owner"
       ? m.workspace_role_owner()

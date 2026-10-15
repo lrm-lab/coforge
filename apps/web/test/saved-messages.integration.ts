@@ -124,7 +124,9 @@ test("requires active membership to save; a soft-left member still unsaves; bad 
   const username = `saved-left-${suffix}`;
   try {
     const user = await db.user.create({ data: { username, displayName: "Lefty" } });
-    const outsider = await db.user.create({ data: { username: `saved-out-${suffix}` } });
+    const outsider = await db.user.create({
+      data: { displayName: `saved-out-${suffix}`, username: `saved-out-${suffix}` },
+    });
     const workspace = await db.workspace.create({
       data: { slug: `saved-left-${suffix}`, name: "Saved after leave" },
     });

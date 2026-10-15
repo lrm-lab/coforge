@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
-import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
+import { compareHumanLabels, humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { weeklyReportAssistantDisplayName } from "#src/server/records/weekly-report-assistant.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
@@ -40,10 +40,10 @@ function shownAgentName(agent: {
   return agent.displayName.trim() || agent.name;
 }
 
-/** `humanLabel` as SQL over the `users` row aliased `alias`: the display name, else the username,
- * a blank name counting as none. */
+/** `humanLabel` as SQL over the `users` row aliased `alias`: the display name, a blank one reading
+ * as `UNNAMED_PERSON_NAME`; never the username. */
 const personLabelSql = (alias: Prisma.Sql) =>
-  Prisma.sql`COALESCE(NULLIF(btrim(${alias}."displayName"), ''), ${alias}."username")`;
+  Prisma.sql`COALESCE(NULLIF(btrim(${alias}."displayName"), ''), ${UNNAMED_PERSON_NAME})`;
 
 /** The Agents a person created that the viewer may see, as a nested `agents` select. The Members
  * directory and a person's profile share it, so both apply one visibility and naming rule. */
@@ -417,13 +417,9 @@ export class WorkspaceMembers {
   ): Promise<string[]> {
     const query = input.query.trim();
     const label = personLabelSql(Prisma.raw("u"));
-    // A person is found by the name they are shown by; a username only when that name is blank.
+    // A person is found by the name they are shown by, never by their username.
     const matches = query
-      ? Prisma.sql`AND (
-          strpos(lower(u."displayName"), lower(${query})) > 0
-          OR (NULLIF(btrim(u."displayName"), '') IS NULL
-              AND strpos(lower(u."username"), lower(${query})) > 0)
-        )`
+      ? Prisma.sql`AND strpos(lower(${label}), lower(${query})) > 0`
       : Prisma.empty;
     const afterCursor = input.cursor
       ? Prisma.sql`AND (lower(${label}), u."username") > (

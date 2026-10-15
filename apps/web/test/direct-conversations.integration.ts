@@ -30,7 +30,7 @@ let channel: { id: string };
 
 beforeAll(async () => {
   [ada, grace] = await Promise.all(
-    usernames.map((username) => db.user.create({ data: { username } })),
+    usernames.map((username) => db.user.create({ data: { displayName: username, username } })),
   );
   const workspace = await db.workspace.create({
     data: { slug, name: "Direct", members: { create: [{ userId: ada.id }, { userId: grace.id }] } },
@@ -276,7 +276,9 @@ test("a send in a DM with an Agent is stored as the viewer's and read back", asy
 
 test("a DM names the member on the other side after they left the Workspace", async () => {
   const conversations = new DirectConversations(db);
-  const lin = await db.user.create({ data: { username: `dc-lin-${suffix}` } });
+  const lin = await db.user.create({
+    data: { displayName: `dc-lin-${suffix}`, username: `dc-lin-${suffix}` },
+  });
   await db.workspaceMembership.create({ data: { workspaceId, userId: lin.id } });
   const { conversationId } = await conversations.open(workspaceId, ada.id, { userId: lin.id });
   // Leaving the Workspace ends their side of it; the conversation stays Ada's to read.

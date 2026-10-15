@@ -19,9 +19,15 @@ async function setup() {
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const alice = await db.user.create({ data: { username: `ac-alice-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `ac-bob-${suffix}` } });
-  const dave = await db.user.create({ data: { username: `ac-dave-${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `ac-alice-${suffix}`, username: `ac-alice-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `ac-bob-${suffix}`, username: `ac-bob-${suffix}` },
+  });
+  const dave = await db.user.create({
+    data: { displayName: `ac-dave-${suffix}`, username: `ac-dave-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `ac-${suffix}`,
@@ -699,7 +705,9 @@ test("agent:create guard/mark: pending precheck, workspace scoping, and marking 
 
     // A viewer who cannot read the conversation (not a Workspace member of this Workspace) is
     // rejected before any Agent would be created.
-    const stranger = await ctx.db.user.create({ data: { username: `ac-stranger-${ctx.suffix}` } });
+    const stranger = await ctx.db.user.create({
+      data: { displayName: `ac-stranger-${ctx.suffix}`, username: `ac-stranger-${ctx.suffix}` },
+    });
     try {
       await expectAppErrorCode(
         ctx.actionCards.assertAgentCreateCommittable(

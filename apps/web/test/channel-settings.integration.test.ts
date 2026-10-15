@@ -39,9 +39,15 @@ function recordingRealtime() {
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `cs-owner-${suffix}` } });
-  const creator = await db.user.create({ data: { username: `cs-creator-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `cs-bob-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `cs-owner-${suffix}`, username: `cs-owner-${suffix}` },
+  });
+  const creator = await db.user.create({
+    data: { displayName: `cs-creator-${suffix}`, username: `cs-creator-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `cs-bob-${suffix}`, username: `cs-bob-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `cs-${suffix}`,
@@ -381,7 +387,9 @@ test.skipIf(!connectionString)(
   "Workspace settings list the archived channels, newest archive first, to an owner or admin only; unarchiving one takes it off the list",
   async () => {
     const { db, channels, suffix, workspace, owner, creator, bob, team } = await setup();
-    const admin = await db.user.create({ data: { username: `cs-admin-${suffix}` } });
+    const admin = await db.user.create({
+      data: { displayName: `cs-admin-${suffix}`, username: `cs-admin-${suffix}` },
+    });
     try {
       await db.workspaceMembership.create({
         data: { workspaceId: workspace.id, userId: admin.id, role: "admin" },

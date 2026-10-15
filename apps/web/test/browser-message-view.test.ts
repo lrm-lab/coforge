@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
+
 import {
   mapBrowserMessage,
   type BrowserMessageRow,
@@ -258,26 +260,7 @@ test("a person's message is attributed to their display name, not their @usernam
   expect(view.senderName).toBe("Ada Lovelace");
 });
 
-test("a person with no display name falls back to their username, without an @", () => {
-  const view = mapBrowserMessage(
-    row({
-      sender: {
-        userId: "user-1",
-        agentId: null,
-        agent: null,
-        user: {
-          username: "ada",
-          displayName: null,
-          avatarObjectKey: null,
-        },
-      },
-    }),
-    WORKSPACE_ID,
-  );
-  expect(view.senderName).toBe("ada");
-});
-
-test("a blank display name is treated as unset rather than shown as an empty name", () => {
+test("a blank display name reads as the placeholder, never as the username", () => {
   const view = mapBrowserMessage(
     row({
       sender: {
@@ -293,7 +276,7 @@ test("a blank display name is treated as unset rather than shown as an empty nam
     }),
     WORKSPACE_ID,
   );
-  expect(view.senderName).toBe("ada");
+  expect(view.senderName).toBe(UNNAMED_PERSON_NAME);
 });
 
 test("an Agent's message is attributed to its display name, falling back to its handle", () => {

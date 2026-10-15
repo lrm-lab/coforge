@@ -199,9 +199,9 @@ test("ensureWeeklyReportAssistant creates one assistant per User in a Workspace"
   }> = [];
   const agents: Array<Record<string, unknown>> = [];
   let agentSequence = 0;
-  const users: Record<string, { username: string; displayName: string | null }> = {
+  const users: Record<string, { username: string; displayName: string }> = {
     "user-1": { username: "lijian", displayName: "李健" },
-    "user-2": { username: "ada", displayName: null },
+    "user-2": { username: "ada", displayName: "Ada Lovelace" },
   };
   const tx = {
     user: {
@@ -318,7 +318,7 @@ test("ensureWeeklyReportAssistant creates one assistant per User in a Workspace"
       provider: { kind: "default" },
     },
   });
-  expect(agents[1]).toMatchObject({ displayName: "ada的周报助手" });
+  expect(agents[1]).toMatchObject({ displayName: "Ada Lovelace的周报助手" });
 
   agents[0]!.displayName = WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
   await ensureWeeklyReportAssistant(db as never, {
