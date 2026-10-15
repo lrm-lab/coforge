@@ -38,3 +38,19 @@ test("weekly report HTML export is self-contained and escapes report content", (
   expect(html).not.toContain("<script>alert(1)</script>");
   expect(html).toContain("@media print");
 });
+
+test("weekly report presentation strips control bytes but keeps tabs from report text", async () => {
+  const bytes = await buildWeeklyReportPresentation({
+    title: "W41\u0000Report",
+    period: "2026 W41\u0007",
+    members: [{ displayName: "Alice", sections: { Summary: "shipped\u0001the fix\tand more" } }],
+  });
+  const xml = Object.entries(unzipSync(bytes))
+    .filter(([name]) => name.endsWith(".xml"))
+    .map(([, file]) => new TextDecoder().decode(file))
+    .join("\n");
+  expect(xml).toContain("W41Report");
+  expect(xml).toContain("2026 W41");
+  expect(xml).toContain("shippedthe fix\tand more");
+  for (const byte of ["\u0000", "\u0001", "\u0007"]) expect(xml).not.toContain(byte);
+});
