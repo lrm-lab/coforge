@@ -1,3 +1,5 @@
+import { MentionDeliveryReports } from "../../../apps/web/src/server/conversations/mention-deliveries.server";
+import { PrismaMentionDeliveryRepository } from "../../../apps/web/src/server/db/repositories/mention-delivery.repositories.server";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -47,7 +49,8 @@ export type EvalDaemon = {
 function memoryApiKey(provider: string): string {
   const inline = Bun.env.DEV_MEMORY_API_KEY?.trim();
   if (inline) return inline;
-  const modelsPath = `${process.env.HOME}/.pi/agent/models.json`;
+  const modelsPath =
+    Bun.env.COFORGE_EVAL_MODELS_PATH ?? `${process.env.HOME}/.pi/agent/models.json`;
   const models = JSON.parse(readFileSync(modelsPath, "utf8")) as {
     providers?: Record<string, { apiKey?: string }>;
   };
@@ -84,7 +87,8 @@ export async function startEvalDaemon(input: {
   workspace: EvalWorkspace;
   env: EvalEnv;
 }): Promise<EvalDaemon> {
-  Bun.env[EVAL_MEMORY_OFFER_ONLY] = "1";
+  // Use the production Memory toolset, including its normal channel reply tool.
+  delete Bun.env[EVAL_MEMORY_OFFER_ONLY];
   process.env[EVAL_DISABLE_HOST_PI_INJECTION] = "1";
   Bun.env[EVAL_DISABLE_HOST_PI_INJECTION] = "1";
   const webUrl = input.env.webUrl ?? "http://127.0.0.1:8788";
@@ -98,7 +102,7 @@ export async function startEvalDaemon(input: {
   let probeError = "not started";
   for (let attempt = 0; attempt < 8; attempt += 1) {
     try {
-      const probe = await fetch(webUrl);
+      const probe = await fetch(webUrl, { redirect: "manual" });
       probeStatus = probe.status;
       if (probe.ok || probe.status === 307 || probe.status === 302) break;
       probeError = `status ${probe.status}`;
@@ -145,7 +149,10 @@ export async function startEvalDaemon(input: {
 
   const isolatedPiHost = join(stateDirectory, "pi-host");
   mkdirSync(isolatedPiHost, { recursive: true });
-  copyFileSync(`${process.env.HOME}/.pi/agent/models.json`, join(isolatedPiHost, "models.json"));
+  copyFileSync(
+    Bun.env.COFORGE_EVAL_MODELS_PATH ?? `${process.env.HOME}/.pi/agent/models.json`,
+    join(isolatedPiHost, "models.json"),
+  );
   writeFileSync(join(isolatedPiHost, "settings.json"), `${JSON.stringify({ skills: [] })}\n`, {
     mode: 0o600,
   });
@@ -179,13 +186,15 @@ export async function startEvalDaemon(input: {
       agentMessage: (context, request, agentApiKey) =>
         runtimeApi().agentMessage(context, request, agentApiKey),
       agentAttachment: (context, attachmentId, agentApiKey) =>
-        runtimeApi().agentAttachment(context, attachmentId, agentApiKey),
+        runtimeApi().agentRequests.agentAttachment(context, attachmentId, agentApiKey),
       inbox: (context, request) => runtimeApi().inbox(context, request),
       issueAgentContext: (agentId, context) => runtimeApi().issueAgentContext(agentId, context),
       agentTask: (context, request, agentApiKey) =>
         runtimeApi().agentTask(context, request, agentApiKey),
       agentOpenviking: (context, request, agentApiKey) =>
         runtimeApi().agentRequests.agentOpenviking(context, request, agentApiKey),
+      agentMemoryDisposition: (context, request, agentApiKey) =>
+        runtimeApi().agentRequests.agentMemoryDisposition(context, request, agentApiKey),
       memoryFence: (agentId) => runtimeApi().memoryFence(agentId),
     },
   });
@@ -253,64 +262,76 @@ export async function startEvalDaemon(input: {
       console.error("[startEvalDaemon:real-error]", inspect(error, { depth: 6 }));
     }
     await runtime.stop().catch(() => undefined);
+    proxy.close();
     throw new Error(error instanceof Error ? error.message : String(error));
   }
-  const memoryApiKey_ = memoryApiKey(input.env.memoryAgentProvider);
-  const taskApiKey = memoryApiKey(input.env.taskAgentProvider);
-  await input.workspace.db.agent.update({
-    where: { id: input.workspace.memoryAgentId },
-    data: {
-      computerId: registration.computerId,
-      stoppedAt: null,
-      runtimeConfig: {
-        runtime: RUNTIME_PROVIDER.COFORGE,
-        provider: {
-          kind: "coforge" as const,
-          providerId: input.env.memoryAgentProvider,
-          apiKey: await encryptApiKey(
-            input.workspace.memoryAgentId,
-            input.env.memoryAgentProvider,
-            memoryApiKey_,
-          ),
+  try {
+    const memoryApiKey_ = memoryApiKey(input.env.memoryAgentProvider);
+    const taskApiKey = memoryApiKey(input.env.taskAgentProvider);
+    await input.workspace.db.agent.update({
+      where: { id: input.workspace.memoryAgentId },
+      data: {
+        computerId: registration.computerId,
+        stoppedAt: null,
+        runtimeConfig: {
+          runtime: RUNTIME_PROVIDER.COFORGE,
+          provider: {
+            kind: "coforge" as const,
+            providerId: input.env.memoryAgentProvider,
+            apiKey: await encryptApiKey(
+              input.workspace.memoryAgentId,
+              input.env.memoryAgentProvider,
+              memoryApiKey_,
+            ),
+          },
+          model: input.env.memoryAgentModel,
+          modelProvider: input.env.memoryAgentProvider,
+          reasoning: "",
         },
-        model: input.env.memoryAgentModel,
-        modelProvider: input.env.memoryAgentProvider,
-        reasoning: "",
       },
-    },
-  });
-  await input.workspace.db.agent.update({
-    where: { id: input.workspace.taskAgentId },
-    data: {
-      computerId: registration.computerId,
-      stoppedAt: null,
-      runtimeConfig: {
-        runtime: RUNTIME_PROVIDER.COFORGE,
-        provider: {
-          kind: "coforge" as const,
-          providerId: input.env.taskAgentProvider,
-          apiKey: await encryptApiKey(
-            input.workspace.taskAgentId,
-            input.env.taskAgentProvider,
-            taskApiKey,
-          ),
+    });
+    await input.workspace.db.agent.update({
+      where: { id: input.workspace.taskAgentId },
+      data: {
+        computerId: registration.computerId,
+        stoppedAt: null,
+        runtimeConfig: {
+          runtime: RUNTIME_PROVIDER.COFORGE,
+          provider: {
+            kind: "coforge" as const,
+            providerId: input.env.taskAgentProvider,
+            apiKey: await encryptApiKey(
+              input.workspace.taskAgentId,
+              input.env.taskAgentProvider,
+              taskApiKey,
+            ),
+          },
+          model: input.env.taskAgentModel,
+          modelProvider: input.env.taskAgentProvider,
+          reasoning: "",
         },
-        model: input.env.taskAgentModel,
-        modelProvider: input.env.taskAgentProvider,
-        reasoning: "",
       },
-    },
-  });
-  input.workspace.computerId = registration.computerId;
-  return {
-    computerId: registration.computerId,
-    workspaceRoot,
-    runtimeDiagnostics,
-    async stop() {
-      for (const unsubscribe of diagnosticSubscriptions.splice(0)) unsubscribe();
-      await runtime?.stop();
-    },
-  };
+    });
+    input.workspace.computerId = registration.computerId;
+    return {
+      computerId: registration.computerId,
+      workspaceRoot,
+      runtimeDiagnostics,
+      async stop() {
+        for (const unsubscribe of diagnosticSubscriptions.splice(0)) unsubscribe();
+        try {
+          await runtime?.stop();
+        } finally {
+          proxy.close();
+        }
+      },
+    };
+  } catch (error) {
+    for (const unsubscribe of diagnosticSubscriptions.splice(0)) unsubscribe();
+    await runtime.stop().catch(() => undefined);
+    proxy.close();
+    throw error;
+  }
 }
 
 /** Product Start: server publishes AgentStart over Centrifugo. Message delivery cannot wake an
@@ -342,14 +363,22 @@ export async function controlAgent(
   action: "start" | "stop" | "restart" | "reset-session" | "full-reset",
   fence?: MemoryAgentToolProfile,
 ): Promise<void> {
+  const centrifugo = centrifugoApiWithFence(fence);
+  const conversations = new PrismaDirectConversationRepository(workspace.db);
+  const mentions = new MentionDeliveryReports(
+    new PrismaMentionDeliveryRepository(workspace.db),
+    centrifugo,
+    conversations,
+  );
   const control = new AgentControl(
     new PrismaAgentControlStore(workspace.db),
-    centrifugoApiWithFence(fence),
+    centrifugo,
     getAgentRuntimeLock(),
     { timeoutMs: 120_000, fallbackMs: 1_000 },
-    createAgentSessions(workspace.db),
+    createAgentSessions(workspace.db, mentions),
     getAgentControlSignal(),
-    new PrismaDirectConversationRepository(workspace.db),
+    conversations,
+    mentions,
   );
   const result = await control.execute({
     userId: workspace.evalUserId,
@@ -370,14 +399,22 @@ export async function startAgent(
   agentId: string,
   fence?: MemoryAgentToolProfile,
 ): Promise<void> {
+  const centrifugo = centrifugoApiWithFence(fence);
+  const conversations = new PrismaDirectConversationRepository(workspace.db);
+  const mentions = new MentionDeliveryReports(
+    new PrismaMentionDeliveryRepository(workspace.db),
+    centrifugo,
+    conversations,
+  );
   const control = new AgentControl(
     new PrismaAgentControlStore(workspace.db),
-    centrifugoApiWithFence(fence),
+    centrifugo,
     getAgentRuntimeLock(),
     { timeoutMs: 90_000, fallbackMs: 1_000 },
-    createAgentSessions(workspace.db),
+    createAgentSessions(workspace.db, mentions),
     getAgentControlSignal(),
-    new PrismaDirectConversationRepository(workspace.db),
+    conversations,
+    mentions,
   );
   const result = await control.execute({
     userId: workspace.evalUserId,

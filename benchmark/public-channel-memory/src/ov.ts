@@ -80,6 +80,7 @@ export async function provisionDisposableAccount(
   runtime: OpenVikingRuntimeClient,
   root: ServerOpenVikingIdentity,
   accountId: string,
+  settings?: Record<string, unknown>,
 ): Promise<OvUsers> {
   const created = await readRuntimeJson(
     await runtime.request({
@@ -87,7 +88,7 @@ export async function provisionDisposableAccount(
       path: "/api/v1/admin/accounts",
       identity: root,
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ account_id: accountId, admin_user_id: "eval-admin" }),
+      body: JSON.stringify({ account_id: accountId, admin_user_id: "eval-admin", settings }),
     }),
   );
   if (created.status >= 300) throw new Error(`typed account create failed status=${created.status}`);

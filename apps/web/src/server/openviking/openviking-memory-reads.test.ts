@@ -195,3 +195,20 @@ test("read refuses an episode uri before the upstream read", async () => {
   ).rejects.toBeInstanceOf(RetiredFromMemoryDiscoveryError);
   expect(calls).toEqual([]);
 });
+
+test("read binds the real OpenViking content response envelope", async () => {
+  const { reads } = harness({
+    status: "ok",
+    accountId: "acct-a",
+    result: "The observatory opened in 2041.",
+  });
+  const result = await reads.read({
+    workspaceId: "ws-a",
+    agentId: "mem-1",
+    operationId: "read-envelope",
+    uri: "viking://resources/docs/observatory.md",
+  });
+  expect(result.content).toBe("The observatory opened in 2041.");
+  expect(result.citation.accountId).toBe("acct-a");
+  expect(result.citation.contentHash).toMatch(/^sha256:/);
+});

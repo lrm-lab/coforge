@@ -21,6 +21,7 @@ import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manag
 import { CLI_CHANNEL_MESSAGE_EXAMPLE } from "#src/code-agent/agent-instructions";
 import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
 import { isTrackedMention } from "./mention-delivery-tracker";
+import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
 import type {
   AgentConsumedSeqEntry,
   AgentConsumedSeqPort,
@@ -205,6 +206,7 @@ export class AgentMessageAttentionIndex {
   readonly #runtimes: Pick<AgentProcessManager, "session"> &
     Partial<Pick<AgentProcessManager, "runtime">>;
   readonly #memoryReminders = new Map<string, string>();
+  readonly #memoryUpdates: MemoryChannelUpdates;
 
   constructor(
     workspaceId: string,
@@ -241,10 +243,30 @@ export class AgentMessageAttentionIndex {
        * exactly as volatile as it was: the cursor then only lives as long as this process. */
       consumedSeqs?: AgentConsumedSeqPort;
     } = { shouldHold: () => false, enqueue: () => {}, busy: () => {} },
+    updateOptions: { schedule?: MemoryChannelUpdateSchedule } = {},
   ) {
     this.#workspaceId = workspaceId;
     this.#runtimes = runtimes;
     this.#consumedSeqs = hold.consumedSeqs;
+    this.#memoryUpdates = new MemoryChannelUpdates(
+      async (messages) => {
+        const pending = messages
+          .filter(hasDeliveryScope)
+          .filter((message) => !this.#consumed(message));
+        const agentId = pending[0]?.agentId;
+        if (!agentId) return;
+        if (this.hold.shouldHold(agentId)) return false;
+        await this.flush(agentId, pending);
+      },
+      {
+        ...updateOptions,
+        onError: (error) =>
+          logger.warn("Memory channel update notice failed", {
+            event: "agent.memory_channel_updates.failed",
+            error_type: diagnosticErrorName(error),
+          }),
+      },
+    );
   }
 
   /** Appended once to the next notice; the daemon never edits the Agent's MEMORY.md. */
@@ -259,6 +281,11 @@ export class AgentMessageAttentionIndex {
     const generation = this.#generation(message.agentId);
     if (generation.seenDeliveryIds.has(message.deliveryId)) {
       if (!generation.notified.has(message.deliveryId)) {
+        if (this.#isOrdinaryMemoryUpdate(message)) {
+          this.acknowledgeCustody(message);
+          await this.#memoryUpdates.add(message);
+          return;
+        }
         if (this.hold.shouldHold(message.agentId)) {
           this.logDecision(message, "held");
           this.hold.enqueue(message.agentId, message);
@@ -281,6 +308,12 @@ export class AgentMessageAttentionIndex {
       return;
     }
     const current = this.#recordAttention(message);
+    if (this.#isOrdinaryMemoryUpdate(message)) {
+      this.logDecision(message, "held");
+      this.acknowledgeCustody(message);
+      await this.#memoryUpdates.add(message);
+      return;
+    }
     if (this.hold.shouldHold(message.agentId)) {
       this.logDecision(message, "held");
       this.hold.enqueue(message.agentId, message);
@@ -404,6 +437,10 @@ export class AgentMessageAttentionIndex {
     for (const message of held) {
       if (!hasDeliveryScope(message)) continue;
       settled.push(message);
+      if (this.#consumed(message)) {
+        this.logDecision(message, "consumed");
+        continue;
+      }
       if (generation.seenDeliveryIds.has(message.deliveryId)) {
         announced.push(message);
         continue;
@@ -584,6 +621,15 @@ export class AgentMessageAttentionIndex {
     return isMemoryAgentRuntime(this.#runtimes.runtime?.(agentId)?.config);
   }
 
+  #isOrdinaryMemoryUpdate(message: AgentMessageDelivery): boolean {
+    return (
+      this.#isMemory(message.agentId) &&
+      Boolean(message.target?.startsWith("#")) &&
+      !message.mentionsAgent &&
+      !isTrackedMention(message)
+    );
+  }
+
   #withMemoryReminder(agentId: string, notice: string): string {
     const reminder = this.#memoryReminders.get(agentId);
     if (!reminder) return notice;
@@ -593,7 +639,7 @@ export class AgentMessageAttentionIndex {
 
   #inboxDrainHint(agentId: string): string {
     return this.#runtimes.runtime?.(agentId)?.config.toolProfile
-      ? "Drain each listed target with message_check or message_read using the exact target. Either may return nothing, because a message can already have been read."
+      ? "Read each listed target with message_read using the exact target and no range anchor. It returns channel messages after your server read cursor, including messages that did not mention you. Repeat while hasNewer is true. Do not use message_check for this update: it only drains eligible deliveries. Read first, then decide whether retrieval or a revised Offer is useful; otherwise stay silent. A notice is not a user request or proof that its messages remain unread."
       : INBOX_DRAIN_HINT;
   }
 
@@ -1277,6 +1323,7 @@ export class AgentMessageAttentionIndex {
   }
 
   clearAgent(agentId: string): void {
+    this.#memoryUpdates.clearAgent(agentId);
     this.#hydrated.delete(agentId);
     this.#generations.delete(agentId);
     this.#attention.delete(agentId);
@@ -1308,6 +1355,7 @@ export class AgentMessageAttentionIndex {
   }
 
   clear(agentId: string, target: string): void {
+    this.#memoryUpdates.clearTarget(agentId, target);
     this.#forgetConversation(agentId, target);
     this.#pendingSequences.get(agentId)?.delete(target);
     this.#pendingWindow.get(agentId)?.delete(target);

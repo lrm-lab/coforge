@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { readKnowledgeAccountCreatedAt, validateKnowledgeReady } from "./knowledge";
 import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
 import { controlAgent, startAgent, startEvalDaemon, type EvalDaemon } from "./eval-daemon";
@@ -38,6 +39,21 @@ Bun.env.COFORGE_EVAL_DISABLE_HOST_PI_INJECTION = "1";
 process.env.COFORGE_EVAL_DISABLE_HOST_PI_INJECTION = "1";
 const manifest = await loadManifest(env.manifestPath, env.episodeMod);
 const benchmark = env.manifestBenchmark ?? manifest[0]!.benchmark;
+const knowledgePath = Bun.env.COFORGE_EVAL_KNOWLEDGE_READY;
+const frozenKnowledge = knowledgePath
+  ? validateKnowledgeReady(await Bun.file(knowledgePath).json())
+  : null;
+if (manifest.some((episode) => episode.domain === "information_retrieval") && !frozenKnowledge) {
+  throw new Error(
+    "IR requires COFORGE_EVAL_KNOWLEDGE_READY; direct BM25/GMS evaluation is disabled",
+  );
+}
+if (
+  frozenKnowledge &&
+  (env.arms.some((arm) => arm !== "warm") || manifest.some((episode) => episode.split !== "test"))
+) {
+  throw new Error("prepared knowledge evaluation requires warm arm and a test-only manifest");
+}
 const profile = profileFor(benchmark);
 const episodeTimeoutMs = env.episodeTimeoutMs ?? profile.episodeTimeoutMs;
 const settleMs = env.settleMs ?? profile.settleMs;
@@ -100,7 +116,11 @@ function attemptRow(input: {
     family_id: episode.familyId,
     domain: episode.domain,
     arm: input.arm,
-    memory_policy: input.arm === "warm" ? "read_write" : "no_shared_memory",
+    memory_policy: frozenKnowledge
+      ? "frozen_readonly"
+      : input.arm === "warm"
+        ? "read_write"
+        : "no_shared_memory",
     seed: env.seed,
     attempt: 1,
     status: input.finalOutput?.trim() ? "success" : "failure",
@@ -150,7 +170,25 @@ async function provisionFamily(
   const reuseId = arm === "warm" ? await warmReuseAccountId() : "";
   let accountId: string;
   let users: OvUsers;
-  if (reuseId.length > 0) {
+  if (frozenKnowledge) {
+    accountId = frozenKnowledge.accountId;
+    if (
+      (await readKnowledgeAccountCreatedAt(runtime, root, accountId)) !==
+      frozenKnowledge.accountCreatedAt
+    )
+      throw new Error(
+        "prepared knowledge account was recreated; rebuild knowledge before evaluation",
+      );
+    const bindings = await db.openVikingBinding.findMany({
+      where: { accountId },
+      select: { workspaceId: true },
+    });
+    if (bindings.length > 0)
+      throw new Error(
+        "prepared knowledge account is already bound; refusing to delete another workspace",
+      );
+    users = await rotateEvalAdminKey(runtime, root, accountId);
+  } else if (reuseId.length > 0) {
     try {
       users = await rotateEvalAdminKey(runtime, root, reuseId);
       accountId = reuseId;
@@ -191,7 +229,7 @@ async function provisionFamily(
     users = await provisionDisposableAccount(runtime, root, accountId);
   }
   await rememberEvalAccountKey(accountId, users.adminKey);
-  if (arm === "warm") await Bun.write(warmReuseStatePath, accountId);
+  if (arm === "warm" && !frozenKnowledge) await Bun.write(warmReuseStatePath, accountId);
   const workspace = await provisionEvalWorkspace({
     db,
     arm,
@@ -199,22 +237,31 @@ async function provisionFamily(
     benchmark: family.benchmark || benchmark,
     ovAccountId: accountId,
   });
-  const dispatcher = createEvalDispatcher({ workspace, runtime, accountId, users });
-  const daemon = await startEvalDaemon({ workspace, env });
-  await startAgent(workspace, workspace.memoryAgentId, workspaceProfileToToolFence("openviking"));
-  await startAgent(workspace, workspace.taskAgentId);
-  return {
-    accountId,
-    workspace,
-    daemon,
-    dispatcher,
-    agentWorkspaceDir: join(
-      daemon.workspaceRoot,
-      workspace.workspaceId,
-      "agents",
-      workspace.taskAgentId,
-    ),
-  };
+  let daemon: EvalDaemon | undefined;
+  try {
+    const dispatcher = createEvalDispatcher({ workspace, runtime, accountId, users });
+    daemon = await startEvalDaemon({ workspace, env });
+    await startAgent(workspace, workspace.memoryAgentId, workspaceProfileToToolFence("openviking"));
+    await startAgent(workspace, workspace.taskAgentId);
+    return {
+      accountId,
+      workspace,
+      daemon,
+      dispatcher,
+      agentWorkspaceDir: join(
+        daemon.workspaceRoot,
+        workspace.workspaceId,
+        "agents",
+        workspace.taskAgentId,
+      ),
+    };
+  } catch (error) {
+    await daemon?.stop().catch(() => undefined);
+    await destroyEvalWorkspace(workspace);
+    if (arm === "cold")
+      await deleteDisposableAccount(runtime, root, accountId).catch(() => undefined);
+    throw error;
+  }
 }
 
 async function releaseFamily(arm: "warm" | "cold", provisioned: FamilyWorkspace): Promise<void> {
@@ -325,10 +372,46 @@ async function executeEpisode(
       lastProgressAt: result.lastProgressAt,
     },
   });
+  row.knowledge = frozenKnowledge ?? undefined;
+  row.memory_request_count = result.memoryRequestCount;
+  row.memory_request_message_ids = result.memoryRequestMessageIds;
+  row.memory_offer_message_ids = result.offerMessageIds;
+  row.memory_dispositions = result.dispositions;
+  row.memory_hint_ids = result.memoryHintIds;
+  row.memory_reply_message_ids = result.memoryReplyMessageIds;
   row.task_message_count = result.taskMessageCount;
   row.memory_leak_count = result.memoryLeakMessageIds.length;
+  row.trajectory_path = join(env.resultDir, `${encodeURIComponent(row.run_id)}-conversation.json`);
+  const messages = await provisioned.workspace.db.message.findMany({
+    where: { conversationId: provisioned.workspace.channelId },
+    orderBy: { sequence: "asc" },
+    select: {
+      id: true,
+      sequence: true,
+      createdAt: true,
+      body: true,
+      sender: { select: { agentId: true, userId: true } },
+      mentions: { select: { kind: true, actorId: true } },
+    },
+  });
+  await Bun.write(
+    row.trajectory_path,
+    JSON.stringify(
+      {
+        episodeId: episode.episodeId,
+        workspaceId: provisioned.workspace.workspaceId,
+        channelId: provisioned.workspace.channelId,
+        messages,
+        hintIds: result.memoryHintIds,
+        offerMessageIds: result.offerMessageIds,
+        dispositions: result.dispositions,
+      },
+      null,
+      2,
+    ),
+  );
   if (sidecarVerification) row.sidecar_verification = sidecarVerification;
-  if (arm === "warm") {
+  if (arm === "warm" && !frozenKnowledge) {
     const drained = await drainEpisodeToMemory({
       workspace: provisioned.workspace,
       dispatcher: provisioned.dispatcher,
@@ -360,7 +443,7 @@ try {
     for (const family of families) {
       const episodes = episodesForArm(family, arm);
       if (episodes.length === 0) continue;
-      if (arm === "warm") {
+      if (arm === "warm" && !frozenKnowledge) {
         const provisioned = await provisionFamily(arm, family);
         try {
           for (const episode of episodes) {

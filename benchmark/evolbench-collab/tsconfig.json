@@ -1,0 +1,5 @@
+{
+  "extends": "../../apps/web/tsconfig.json",
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "compilerOptions": { "types": ["bun", "vite/client"] }
+}

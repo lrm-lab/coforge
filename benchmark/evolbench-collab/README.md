@@ -13,10 +13,13 @@ schema 的 manifest（不重新发明判分）。
 | family → Room + Shared/Private Space | family → 一个 workspace + 频道 + task/memory 双 agent |
 | episode = fresh Pi 进程（上下文=recall+prompt） | episode 间对两个 agent `reset-session`（stop+clear+start），上下文=offer 召回+prompt；频道历史可读是产品自身行为，记为协议差异 |
 | episode 后 evidence drain → GMS | episode 后 harness 显式 drain：新频道消息 → quiet-window 检测（短窗口，已沉淀判定幂等）→ Admitted Segment → OpenViking |
-| pre-turn Recall 注入 | `@memory <prompt>` → memory agent ov_find/read → 带 citation 的 Memory Offer 路由给 task agent（mention 唤醒） |
+| pre-turn Recall 注入 | `@task @memory <prompt>` → Memory 根据题目检索经验及文档，Task 按需继续 @memory → cited Memory Offer → Task 原生 adopt/reject/defer |
 | warm 臂：全量按 order，记忆跨 episode | 同：一个 workspace 跑完 family 全部 episode，OV 账号随 workspace 累积 |
 | cold 臂：fresh tenant 只跑 test split | 同：每个 test episode 全新 workspace + 全新 OV 账号（零状态） |
-| final_output = room_send 发布 | final_output = task agent 最后一条频道消息 |
+| final_output = room_send 发布 | final_output = task agent 最后一条非检索请求频道消息 |
+
+IR 的冻结 test 采用每题新 workspace，经验与文档先准备到 OpenViking，test 不写回。
+详见 [Task 与 Memory 协作评测](../../docs/eval-memory-requests.md)。
 
 判分不移植：runner 产出与 evol_bench python grader 兼容的 `attempts.jsonl`（join on
 episode/task id，读 `final_output`），用它们已 pin 的 grader 离线判分（见下）。

@@ -189,11 +189,13 @@ function asReadHit(
 ): Record<string, unknown> & { content: string } {
   const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
   const content =
-    typeof record.content === "string"
-      ? record.content
-      : typeof record.body === "string"
-        ? record.body
-        : "";
+    record.status === "ok" && typeof record.result === "string"
+      ? record.result
+      : typeof record.content === "string"
+        ? record.content
+        : typeof record.body === "string"
+          ? record.body
+          : "";
   const uri = typeof record.uri === "string" ? record.uri : input.uri;
   return {
     ...record,

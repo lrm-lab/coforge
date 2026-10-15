@@ -3,10 +3,7 @@ import { join } from "node:path";
 import { sanitizeDiagnostic } from "../../public-channel-memory/src/sanitize";
 import type { ArmSummary, AttemptRow } from "./types";
 
-export function summarizeArm(
-  arm: ArmSummary["arm"],
-  rows: readonly AttemptRow[],
-): ArmSummary {
+export function summarizeArm(arm: ArmSummary["arm"], rows: readonly AttemptRow[]): ArmSummary {
   const benchmarks = new Set(rows.map((row) => row.benchmark));
   return {
     arm,
@@ -16,7 +13,10 @@ export function summarizeArm(
     succeeded: rows.filter((row) => row.status === "success").length,
     offeredRecall: rows.filter((row) => row.recall_state !== "empty").length,
     leaks: rows.filter((row) => row.mechanism === "leak").length,
-    mechanismFails: rows.filter((row) => row.mechanism !== "ok" && row.mechanism !== "leak").length,
+    mechanismFails: rows.filter(
+      (row) =>
+        row.mechanism !== "ok" && row.mechanism !== "not_requested" && row.mechanism !== "leak",
+    ).length,
   };
 }
 

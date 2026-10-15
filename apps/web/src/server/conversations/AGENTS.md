@@ -9,6 +9,7 @@ These rules apply to `src/server/conversations/`.
 - `PublicChannels` (`public-channels.server.ts`) owns Workspace authorization, default-channel enrollment, channel membership, canonical read/write and ordering, human read positions, persistent follow state, and
   mute/mention delivery eligibility. `channelAgentRecipients` is the one rule for which Agents a sent channel message wakes, whether a person or an Agent
   sent it; the Agent send path in the direct-conversation repository calls it too, and `enrollThreadReplyFollowers`, the one rule for who a thread reply makes a follower. A Task and an action card keep their own rules.
+- The active registered Workspace Memory Agent also receives channel Message observations, including messages addressed to another Agent. These ordinary observations are coalesced by the daemon (five updates or 30 seconds); personal mentions remain immediate. Only `message_read` consumes the full channel increment. Memory's own sends are excluded, and stopped Agents, departed members and a disabled memory profile are not observers.
 - `DirectConversations` (`direct-conversations.server.ts`) owns the viewer's direct conversations by id: opening one by who it is with (only their own
   live Agent, or a Workspace member), `authorize` (who may use a conversation id and who it is with: a DM with an Agent is its creator's alone, and a
   deleted Agent's DM is read-only), every page operation (read a window, updates, read cursors, reactions, send) and the viewer's Direct messages

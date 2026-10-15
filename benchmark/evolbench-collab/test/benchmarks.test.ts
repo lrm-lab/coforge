@@ -1,3 +1,4 @@
+import { describe, expect, test } from "bun:test";
 import { profileFor, reminderForEpisode } from "../src/benchmarks";
 import { classifyMechanism } from "../src/leak";
 import { summarizeArm } from "../src/report";
@@ -19,7 +20,7 @@ test("Task role gates implementation on the current claim and verifies final sub
     "stop implementation",
     "report the blocker",
     "no intermediate progress",
-    "last Task channel message",
+    "last non-request Task channel message",
     "accepted=true",
     "--json",
     "state=sent",
@@ -60,6 +61,8 @@ test("runtime diagnostics wait for terminal settlement and reset per episode", (
     lastRuntimeErrorAt: 100,
     taskFailed: false,
     memoryFailed: false,
+    taskRunning: false,
+    memoryRunning: false,
   });
   diagnostics.observe("task", { type: "completed", status: "failed" }, 110);
   expect(diagnostics.snapshot().taskFailed).toBe(true);
@@ -75,6 +78,8 @@ test("runtime diagnostics wait for terminal settlement and reset per episode", (
     runtimeErrorCount: 0,
     taskFailed: false,
     memoryFailed: false,
+    taskRunning: false,
+    memoryRunning: false,
   });
 });
 
@@ -130,7 +135,7 @@ describe("benchmark registry", () => {
 });
 
 describe("episodePrompt", () => {
-  test("addresses the memory agent and appends the reminder", () => {
+  test("addresses both agents so Memory can retrieve from the initial task", () => {
     const prompt = episodePrompt(
       {
         benchmark: "past_bench",
@@ -147,7 +152,7 @@ describe("episodePrompt", () => {
       },
       reminderForEpisode("past_bench", ""),
     );
-    expect(prompt.startsWith("@memory Summarize the notes.")).toBe(true);
+    expect(prompt.startsWith("@task @memory Summarize the notes.")).toBe(true);
     expect(prompt).toContain("Channel note:");
   });
 });
@@ -211,4 +216,22 @@ describe("summarizeArm", () => {
     expect(summary.offeredRecall).toBe(1);
     expect(summary.mechanismFails).toBe(1);
   });
+});
+
+test("a cited Hint without the Task's native disposition is a mechanism failure", () => {
+  const result: EpisodeResult = {
+    finalOutput: "answer",
+    offerMessageId: "offer",
+    citationCount: 1,
+    taskMessageCount: 1,
+    memoryLeakMessageIds: [],
+    timedOut: false,
+    elapsedMs: 1,
+    terminationReason: "final_settled",
+    runtimeErrorCount: 0,
+    memoryHintIds: ["hint-1"],
+    dispositions: [],
+  };
+  expect(classifyMechanism(result)).toBe("missing_disposition");
+  expect(result.finalOutput).toBe("answer");
 });

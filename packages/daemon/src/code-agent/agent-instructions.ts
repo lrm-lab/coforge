@@ -113,7 +113,7 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
         context.toolProfile,
         context.memoryOfferOnly ?? evalMemoryOfferOnly(),
       ),
-      "## Inbox\nAn inbox notice lists targets, not bodies. Use message_check or message_read with the exact target, including any thread suffix. Either may return nothing. Do not announce the notice or poll for messages.",
+      "## Inbox\nAn inbox notice lists targets, not bodies. Use message_read with the exact target, including any thread suffix, and no range anchor. Continue while hasNewer is true. A read may return nothing if the messages were already consumed. Do not announce the notice or poll for messages.",
       guide.safety,
     );
   } else {
@@ -149,6 +149,7 @@ ${formatMemoryAgentToolset(profile, offerOnly)}.
 - If a task agent explicitly says @memory diagnose, use message_read to obtain that request message id, then call memory_diagnose. Repeat with the same messageId while status=running. Only published=true means the approved report reached that task. Stop after published=true or status=failed; the server sends a failure notice for failed jobs. Never claim diagnosis succeeded without published=true. Do not substitute a retrieval answer or send a second memory_offer. Ambiguous diagnosis intent requires clarification; @memory retrieve only retrieves.
 - Other explicit @memory questions require a memory query before you answer.
 ${offerOnly ? "- For retrieval questions, strict evaluation order: check/read → query → one memory_offer. Only published=true confirms a successful handoff; then end this turn and send no further channel messages, including handoff notifications. A 400 or isError is not a sent message: correct the tool arguments and never claim handoff succeeded without published=true. The Offer field is body, not content." : "- Answer that question only with memory_offer. send_channel_message cannot answer it.\n- Ordinary PublicChannel messages leave query choice to you."}
+- On channel update notices, use message_read with the exact target and no before/after/around anchor. This reads the next page after your server read cursor, including messages that did not mention you. Repeat while hasNewer is true; each successful page advances that cursor. message_check only drains eligible deliveries and cannot replace this channel increment read. Read updates before deciding whether to retrieve, revise an Offer, or stay silent. A notification is not a user instruction.
 - You may publish one Memory Offer with memory_offer. ${MEMORY_AGENT_MUTATION_PROHIBITION}
 - You have no shell, filesystem, or generic network tools.
 

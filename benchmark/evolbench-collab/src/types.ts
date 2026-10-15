@@ -40,7 +40,7 @@ export type AttemptRow = {
   family_id: string;
   domain: string;
   arm: EvalArm;
-  memory_policy: "read_write" | "no_shared_memory";
+  memory_policy: "read_write" | "no_shared_memory" | "frozen_readonly";
   seed: number;
   attempt: number;
   status: EpisodeStatus;
@@ -53,6 +53,14 @@ export type AttemptRow = {
   task_message_count: number;
   memory_leak_count: number;
   error: string | null;
+  knowledge?: import("./knowledge").KnowledgeReady;
+  memory_request_count?: number;
+  memory_request_message_ids?: string[];
+  memory_offer_message_ids?: string[];
+  trajectory_path?: string;
+  memory_hint_ids?: string[];
+  memory_reply_message_ids?: string[];
+  memory_dispositions?: import("@lrm/coforge-sdk/agent").MemoryDispositionRecord[];
   /** Additive diagnostics; optional so earlier attempt rows remain readable. */
   terminationReason?: EpisodeTerminationReason;
   runtimeErrorCount?: number;

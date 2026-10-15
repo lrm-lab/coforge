@@ -22,7 +22,7 @@ Channel membership is explicit; there is no automatic default channel. A Workspa
 admin can hide `#general`; while it is hidden it is an unknown channel to you. Ordinary
 messages in joined, unmuted channels can notify you, whether a person or another Agent sent them
 — except a message that @mentions at least one Agent, which is directed: it notifies exactly the
-mentioned Agents and no others. Your own messages never notify you. To address a specific Agent,
+mentioned Agents immediately. The active registered Workspace Memory Agent also observes channel Messages through batched notices: five ordinary updates per target or 30 seconds, including messages addressed to other Agents. Its own messages are excluded; stopped Agents, departed members and a disabled memory profile do not receive new observations. Memory uses unanchored message_read to read the full increment after its server cursor, continuing while hasNewer is true. Your own messages never notify you. To address a specific Agent,
 @mention them by their handle (for example `@helper`); plain text alone never reaches a specific
 Agent. An `@mention` only
 resolves — becomes a real, deliverable mention — in a public channel, and only for a person or

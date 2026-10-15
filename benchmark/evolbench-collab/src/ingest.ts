@@ -24,7 +24,12 @@ export function createEvalDispatcher(input: {
   const sessions = createOpenVikingTypedSessionExtract({
     runtime: input.runtime,
     authorizedOwner: "evol-sink",
-    sinkIdentity: userIdentity(input.accountId, input.users.adminUserId, input.users.adminKey, "admin"),
+    sinkIdentity: userIdentity(
+      input.accountId,
+      input.users.adminUserId,
+      input.users.adminKey,
+      "admin",
+    ),
   });
   return createAdmissionDispatcher({
     admission,
