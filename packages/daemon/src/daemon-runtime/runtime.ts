@@ -3102,7 +3102,6 @@ export class DaemonRuntime {
       silentForMs: progress.silentForMs(),
       hasOpenToolCall: progress.hasOpenToolCall,
       resumable: this.#runningMentionIdentity(agentId) !== undefined,
-      hasUnsettledMention: () => this.#mentionDeliveries.hasUnsettled(agentId),
     });
     return stalled ? { launch, session, restart, silentForMs: progress.silentForMs() } : undefined;
   }
@@ -3117,6 +3116,8 @@ export class DaemonRuntime {
     this.#stalledRecoveries.add(agentId);
     try {
       if (!(await this.#endStalledRuntime(agentId, stalled))) return;
+      // Before the relaunch reports its session, which is what makes the server issue them again.
+      await this.#mentionDeliveries.handBackForRelaunch(agentId);
       const sessionId =
         this.#sessionReferences.get(agentId)?.sessionId ?? stalled.restart.sessionId;
       // A relaunch that fails reports its own launch error; the waiting messages stay queued,

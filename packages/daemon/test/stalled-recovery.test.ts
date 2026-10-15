@@ -42,7 +42,6 @@ test("a busy turn with no provider event for 15 minutes, no open tool call and a
     silentForMs: STALLED_RECOVERY_SILENCE_MS,
     hasOpenToolCall: false,
     resumable: true,
-    hasUnsettledMention: () => false,
   };
   expect(STALLED_RECOVERY_SILENCE_MS).toBe(15 * 60_000);
   expect(shouldRecoverStalledRuntime(stalled)).toBe(true);
@@ -54,8 +53,6 @@ test("a busy turn with no provider event for 15 minutes, no open tool call and a
   expect(shouldRecoverStalledRuntime({ ...stalled, hasOpenToolCall: true })).toBe(false);
   // A restart that cannot resume the session would start the conversation over.
   expect(shouldRecoverStalledRuntime({ ...stalled, resumable: false })).toBe(false);
-  // A tracked @mention told to this turn would be settled wrongly across the restart.
-  expect(shouldRecoverStalledRuntime({ ...stalled, hasUnsettledMention: () => true })).toBe(false);
 });
 
 test("provider progress counts every provider event and tracks open tool calls by id", () => {
@@ -100,6 +97,8 @@ async function harness(
   const reportedLaunchIds: string[] = [];
   const acks: string[] = [];
   const terminals: Array<{ deliveryId: string; code: string }> = [];
+  /** What the daemon told the cloud, in order. */
+  const cloud: string[] = [];
   const runtime = new DaemonRuntime(
     connection,
     () => ({
@@ -167,6 +166,7 @@ async function harness(
         async sendAgentControlResult() {},
         async reportAgentSession(report) {
           reportedLaunchIds.push(report.launchId);
+          cloud.push(`session ${report.launchId}`);
         },
         async sendAgentDeliveryAck(ack) {
           acks.push(ack.deliveryId);
@@ -175,6 +175,7 @@ async function harness(
         async sendAgentMentionDeliveryTransition() {},
         async sendAgentMentionDeliveryTerminalError(report) {
           terminals.push({ deliveryId: report.deliveryId, code: report.code });
+          cloud.push(`terminal ${report.deliveryId} ${report.code}`);
         },
       }),
     },
@@ -212,7 +213,17 @@ async function harness(
     sessionId: "native-1",
     computerId: connection.computerId,
   });
-  return { runtime, sessions, activities, reportedLaunchIds, acks, terminals, deliver, mention };
+  return {
+    runtime,
+    sessions,
+    activities,
+    reportedLaunchIds,
+    acks,
+    terminals,
+    cloud,
+    deliver,
+    mention,
+  };
 }
 
 test("a message for a turn silent for 15 minutes restarts the provider, resuming its session, and reaches the new one", async () => {
@@ -265,16 +276,19 @@ test("a turn that is silent for less than 15 minutes, or inside an open tool cal
   }
 });
 
-test("a pending tracked @mention in the silent turn keeps it from being restarted", async () => {
+test("a tracked @mention pending in the stalled turn is handed back as unknown before the relaunch reports its session", async () => {
   const h = await harness();
   try {
     h.sessions[0]!.emit({ type: "progress" });
     await h.deliver(1, h.mention(1));
     setSystemTime(minutes(20));
+    h.cloud.length = 0;
     await h.deliver(2);
 
-    expect(h.sessions).toHaveLength(1);
-    expect(h.sessions[0]!.notices).toHaveLength(2);
+    // Nothing settles a mention when its process exits; refused as unknown, the server keeps it
+    // pending and issues it again for the relaunch's session report.
+    expect(h.sessions).toHaveLength(2);
+    expect(h.cloud).toEqual(["terminal delivery-1 IDENTITY_UNKNOWN", "session launch-1"]);
   } finally {
     await h.runtime.stop();
   }

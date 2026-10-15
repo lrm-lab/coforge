@@ -49,22 +49,18 @@ export type StalledRecoveryFacts = Readonly<{
   hasOpenToolCall: boolean;
   /** The session reported a native session id the relaunch can resume. */
   resumable: boolean;
-  /** A tracked @mention told to this session is not settled yet; a restart would lose it. Asked
-   * last, and only when everything else says to restart: it scans the remembered mentions. */
-  hasUnsettledMention: () => boolean;
 }>;
 
 /**
  * Whether a message arriving now should restart the Agent's provider instead of being steered
  * into its turn: the turn has been silent for `STALLED_RECOVERY_SILENCE_MS`, nothing it is waiting
- * on is still running, and the restart can resume the same session without losing a mention.
+ * on is still running, and the restart can resume the same session.
  */
 export function shouldRecoverStalledRuntime(facts: StalledRecoveryFacts): boolean {
   return (
     facts.turnBusy &&
     facts.silentForMs >= STALLED_RECOVERY_SILENCE_MS &&
     !facts.hasOpenToolCall &&
-    facts.resumable &&
-    !facts.hasUnsettledMention()
+    facts.resumable
   );
 }

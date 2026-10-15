@@ -137,8 +137,9 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   of being steered into its turn; `runtime.ts` only performs it. Count only raw
   provider events and turn-starting input as progress, never published
   Activity, and never let it touch `hasLiveTurn`. Do not restart over an open
-  tool call, an unresumable session, or an unsettled tracked mention (nothing
-  settles it on exit); refuse a tracked mention during a restart.
+  tool call or an unresumable session. Nothing settles a tracked mention on
+  exit, so hand the old turn's back as unknown before the relaunch reports its
+  session, and refuse one that arrives during the restart.
 - Thread follow state is cloud-persisted. The Daemon only forwards the Agent's
   explicit unfollow operation.
 
