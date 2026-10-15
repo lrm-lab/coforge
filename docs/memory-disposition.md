@@ -34,6 +34,11 @@ task sessions. Other provider adapters do not yet have a native-tool injection
 surface; their adapter integration remains outstanding. There is no CLI receipt
 subcommand, and a channel reply cannot stand in for the native tool.
 
+Q196 delivery suppression (`defer-all`, type filters, and user silence) also
+remains outstanding: the current product has no persisted controls for these
+policies. This branch does not treat an Agent's `defer` receipt as such a control.
+Those delivery controls must gate publication before Hint creation and exposure.
+
 Set `COFORGE_MEMORY_HINT_TTL_SECONDS` explicitly on the Web/backend. No default
 is selected here: the design left the TTL duration open. Invalid/missing values
 prevent new Hint creation. Delivery sets the expiry once; replay never extends
@@ -48,7 +53,18 @@ The IR benchmark's separate Go harness is unchanged by this product branch.
 Public behavior tests cover the native tool, authenticated local proxy,
 state transitions, authority failures, source ACL changes, and delivery/recovery
 codec round trips. PostgreSQL integration exercises the actual migration,
-cross-process row locking, append-only history, and per-source citation roles.
+cross-process row locking (including mixed-case Hint UUIDs), append-only
+history, and per-source citation roles. The six PostgreSQL cases also verify
+no partial write on an ACL outage and receipt rights after leaving the channel;
+five repetitions passed (30/30).
+
+Run repository gates with `mise run test`, `mise run check`, and `mise run build`.
+Run the database cases explicitly after migrations against a disposable database:
+
+```sh
+MEMORY_DISPOSITION_TEST_DATABASE_URL=postgresql://USER@127.0.0.1:PORT/DATABASE \
+  mise exec -- bun test ./apps/web/test/memory-disposition.integration.ts --rerun-each 5
+```
 
 Design source: `skill-node-design-grill/cycles/002-memory-disposition-receipt.md`
 (Q190–Q216), supplied in the local design archive. This delivery was authorized

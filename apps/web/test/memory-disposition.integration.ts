@@ -147,7 +147,11 @@ test("two separate PostgreSQL clients serialize conflicting terminal receipts", 
   const request = { hint_id: hint.hint_id, reason: "candidate applicability" };
   const results = await Promise.all([
     service().submit(workspace.id, targetAgentId, { ...request, decision: "adopt" }),
-    service(otherDb).submit(workspace.id, targetAgentId, { ...request, decision: "reject" }),
+    service(otherDb).submit(workspace.id, targetAgentId, {
+      ...request,
+      hint_id: hint.hint_id.toUpperCase(),
+      decision: "reject",
+    }),
   ]);
   expect(results.filter((result) => result.ok)).toHaveLength(1);
   expect(results.filter((result) => !result.ok && result.error.code === "terminal")).toHaveLength(

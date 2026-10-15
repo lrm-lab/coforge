@@ -90,7 +90,7 @@ export class PrismaMemoryDispositionStore implements MemoryDispositionStore {
         // PostgreSQL row locking is required: separate daemon/server processes must
         // serialize authentication, replay/TTL checks, ACL checks, and append together.
         await tx.$queryRaw`SELECT id FROM memory_hint_records
-        WHERE workspace_id = ${workspaceId}::uuid AND id::text = ${hintId} FOR UPDATE`;
+        WHERE workspace_id = ${workspaceId}::uuid AND id = ${hintId}::uuid FOR UPDATE`;
         const row = await tx.memoryHintRecord.findFirst({ where: { workspaceId, id: hintId } });
         const latest = row
           ? await tx.memoryDispositionEvent.findFirst({

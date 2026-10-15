@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
-import {
-  createMemorySourceAccess,
-  handleMemoryDispositionHttp,
-} from "./memory-disposition-http.server";
+import { handleMemoryDispositionHttp } from "./memory-disposition-http.server";
+import { createMemorySourceAccess } from "#src/server/openviking/memory-source-access.server";
 import type { OpenVikingGatewayResult } from "#src/server/openviking/policy-gateway.server";
 
 test("source authorization uses the current target identity and distinguishes ACL denial from outage", async () => {

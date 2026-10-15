@@ -34,24 +34,28 @@ test("native receipt forwards only target-authored intent to the authenticated p
 test("a fresh ordinary Pi task session has the native receipt tool before any Hint arrives", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "coforge-memory-receipt-tool-"));
   const agentDir = join(cwd, ".pi", "agent");
-  await mkdir(agentDir, { recursive: true });
-  const created = await createSession({
-    cwd,
-    agentDir,
-    sessionDir: join(cwd, ".pi-sessions"),
-    sessionKind: "pi",
-    instructions: "Test only.",
-    environment: {
-      PI_OFFLINE: "1",
-      COFORGE_EVAL_DISABLE_HOST_PI_INJECTION: "1",
-      HOME: cwd,
-    },
-  });
+  let created: Awaited<ReturnType<typeof createSession>> | undefined;
   try {
+    await mkdir(agentDir, { recursive: true });
+    created = await createSession({
+      cwd,
+      agentDir,
+      sessionDir: join(cwd, ".pi-sessions"),
+      sessionKind: "pi",
+      instructions: "Test only.",
+      environment: {
+        PI_OFFLINE: "1",
+        COFORGE_EVAL_DISABLE_HOST_PI_INJECTION: "1",
+        HOME: cwd,
+      },
+    });
     expect(created.session.getActiveToolNames()).toContain("memory_disposition");
     expect(created.session.getActiveToolNames()).toContain("bash");
   } finally {
-    await created.dispose();
-    await rm(cwd, { recursive: true, force: true });
+    try {
+      await created?.dispose();
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   }
 });

@@ -2301,7 +2301,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       let hint;
       if (memoryHintId) {
         await tx.$queryRaw`SELECT id FROM memory_hint_records
-          WHERE workspace_id = ${conversation.workspaceId}::uuid AND id::text = ${memoryHintId} FOR UPDATE`;
+          WHERE workspace_id = ${conversation.workspaceId}::uuid AND id = ${memoryHintId}::uuid FOR UPDATE`;
         hint = await tx.memoryHintRecord.findUniqueOrThrow({
           where: { workspaceId_id: { workspaceId: conversation.workspaceId, id: memoryHintId } },
         });
