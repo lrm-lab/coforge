@@ -1,8 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { ensureAgentMigrationIgnoreFile } from "#src/agent-migration/ignore-file";
+import { AGENT_MIGRATION_IGNORE_SEED } from "#src/agent-migration/selection-rules";
 import {
   AGENT_MIGRATION_IGNORE_FILE,
   selectAgentMigrationWorkspace,
@@ -235,4 +237,32 @@ asUser("records an unreadable directory under an ignored path and carries on", a
   expect(paths(selection)).toEqual([AGENT_MIGRATION_IGNORE_FILE, "a.txt"]);
   expect(selection.excluded.ignored).toEqual([{ path: "scratch", fileCount: 1, sizeBytes: 1 }]);
   expect(selection.excluded.unreadable).toEqual(["scratch/locked"]);
+});
+
+test("before a migration, a workspace without an ignore file gets the default one", async () => {
+  const root = await workspace({ "MEMORY.md": "m", "work/repo/a.ts": "code" });
+  await ensureAgentMigrationIgnoreFile(root);
+  expect(await readFile(join(root, AGENT_MIGRATION_IGNORE_FILE), "utf8")).toBe(
+    AGENT_MIGRATION_IGNORE_SEED,
+  );
+  expect(paths(await selectAgentMigrationWorkspace(root))).toEqual([
+    AGENT_MIGRATION_IGNORE_FILE,
+    "MEMORY.md",
+  ]);
+});
+
+test("before a migration, an existing ignore file is left exactly as the Agent wrote it", async () => {
+  const root = await workspace({
+    [AGENT_MIGRATION_IGNORE_FILE]: "big-data\n",
+    "work/a.ts": "code",
+  });
+  await ensureAgentMigrationIgnoreFile(root);
+  expect(await readFile(join(root, AGENT_MIGRATION_IGNORE_FILE), "utf8")).toBe("big-data\n");
+  expect(paths(await selectAgentMigrationWorkspace(root))).toContain("work/a.ts");
+});
+
+test("never carries a migration's own commit marker from an earlier move", async () => {
+  const root = await workspace({ "MEMORY.md": "m", ".coforge-migration/commit-v1.json": "{}" });
+  const selection = await selectAgentMigrationWorkspace(root);
+  expect(paths(selection)).toEqual(["MEMORY.md"]);
 });

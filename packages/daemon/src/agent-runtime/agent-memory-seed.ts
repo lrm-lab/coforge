@@ -1,8 +1,5 @@
 import { getLogger } from "@logtape/logtape";
-import {
-  AGENT_MIGRATION_IGNORE_FILE,
-  AGENT_MIGRATION_IGNORE_SEED,
-} from "#src/agent-migration/selection-rules";
+import { ensureAgentMigrationIgnoreFile } from "#src/agent-migration/ignore-file";
 import { AGENT_MEMORY_FILE, AGENT_WORK_DIRECTORY } from "#src/agent-runtime/agent-workspace-path";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -124,10 +121,7 @@ export async function seedAgentMemory(
     await writeNewFile(join(notesDirectory, "active-context.md"), ACTIVE_CONTEXT_SEED);
     await writeNewFile(join(notesDirectory, "work-log.md"), WORK_LOG_SEED);
     await writeNewFile(join(agentWorkspaceDirectory, ".gitignore"), GITIGNORE_SEED);
-    await writeNewFile(
-      join(agentWorkspaceDirectory, AGENT_MIGRATION_IGNORE_FILE),
-      AGENT_MIGRATION_IGNORE_SEED,
-    );
+    await ensureAgentMigrationIgnoreFile(agentWorkspaceDirectory);
   } catch (error) {
     if ((error as { code?: string }).code === "EEXIST") return;
     logger.error("Agent memory seed did not complete", {

@@ -13,6 +13,9 @@ import { AGENT_MEMORY_FILE, AGENT_WORK_DIRECTORY } from "#src/agent-runtime/agen
 
 export const AGENT_MIGRATION_IGNORE_FILE = ".coforgemigrateignore";
 
+/** Where the target writes a migration's commit marker; never carried on to a later move. */
+export const AGENT_MIGRATION_COMMIT_DIRECTORY = ".coforge-migration";
+
 /**
  * What a new workspace's ignore file starts with. The Agent's code in `work/` stays behind by
  * default and is cloned again on the target; the Agent or its owner removes the line to carry it.

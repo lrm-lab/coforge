@@ -3,6 +3,7 @@ import { lstat, readdir, readFile, readlink, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { COFORGE_RUNTIME_STORAGE_DIRS, PI_SESSION_DIR } from "@coforge/agent";
 import {
+  AGENT_MIGRATION_COMMIT_DIRECTORY,
   AGENT_MIGRATION_IGNORE_FILE,
   ALWAYS_MOVED,
   isSecretName,
@@ -119,7 +120,9 @@ export async function selectAgentMigrationWorkspace(
     for (const dirent of dirents) {
       const path = directoryPath ? `${directoryPath}/${dirent.name}` : dirent.name;
       // Only the root holds the runtime's storage; a same-named folder deeper down is the Agent's.
-      if (!directoryPath && RUNTIME_STORAGE.has(dirent.name)) {
+      if (!directoryPath && dirent.name === AGENT_MIGRATION_COMMIT_DIRECTORY) {
+        // The migration's own state from an earlier move, not the Agent's.
+      } else if (!directoryPath && RUNTIME_STORAGE.has(dirent.name)) {
         excluded.runtimeStorage.push(path);
       } else if (!ALWAYS_MOVED.has(path) && isSecretName(dirent.name)) {
         // Before the ignore list, so an ignored secret is still on the copy-by-hand list.
