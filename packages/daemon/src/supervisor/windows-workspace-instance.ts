@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-health-journal";
@@ -131,7 +131,9 @@ export class WindowsWorkspaceInstance implements WorkspaceInstance {
 
   async #readRecord(): Promise<InstanceRecord | null> {
     try {
-      const value = JSON.parse(await readFile(this.#recordPath, "utf8")) as Partial<InstanceRecord>;
+      const bytes = await Bun.file(this.#recordPath).arrayBuffer();
+      // Keep UTF-8 bytes explicit: BunFile.text() strips BOMs and detects UTF-16 records.
+      const value = JSON.parse(Buffer.from(bytes).toString("utf8")) as Partial<InstanceRecord>;
       if (
         !Number.isSafeInteger(value.mainPid) ||
         (value.mainPid as number) <= 0 ||
