@@ -1,8 +1,9 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
-  agentReadableBody,
-  MESSAGE_MENTIONS_SELECT,
+  BROWSER_MESSAGE_MENTIONS_SELECT,
+  browserMessageMention,
 } from "#src/server/conversations/mentions.server";
+import { peopleReadableBody } from "#src/server/conversations/message-preview-line.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { messageNotificationTag } from "./web-push-notifications.server";
 import type {
@@ -70,7 +71,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
             user: { select: { username: true, displayName: true } },
           },
         },
-        mentions: MESSAGE_MENTIONS_SELECT,
+        mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
         conversation: {
           include: { workspace: { select: { slug: true } } },
         },
@@ -78,10 +79,14 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
     });
     if (!message) return null;
     const channelName = message.conversation.channelName;
-    // Stored bodies carry mentions as embedded-UUID tokens; the preview reads them back as
-    // `@handle` text. Mention-pierce reads the stored mention rows themselves, the same rows the
-    // renderer chips, so an `@handle` in code or a link label pierces nothing.
-    const readableBody = agentReadableBody(message.body, message.mentions);
+    // Stored bodies carry mentions as embedded-UUID tokens; the preview reads a person's back as
+    // their name, never their username, and an Agent's as its `@handle`. Mention-pierce reads the
+    // stored mention rows themselves, the same rows the renderer chips, so an `@handle` in code or
+    // a link label pierces nothing.
+    const readableBody = peopleReadableBody(
+      message.body,
+      message.mentions.map(browserMessageMention),
+    );
     const mentionedUserIds = channelName
       ? message.mentions
           .filter((mention) => mention.kind === "user")

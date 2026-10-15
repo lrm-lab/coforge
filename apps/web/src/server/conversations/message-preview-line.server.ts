@@ -12,6 +12,20 @@ export const MESSAGE_PREVIEW_MAX_LENGTH = 120;
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 /**
+ * A stored message body as text for people: a person's mention reads as their name (never their
+ * username), an Agent's as its `@handle`, and the other tokens as the text a person writes. The
+ * people-facing counterpart of `agentReadableBody`, for previews and notifications.
+ */
+export function peopleReadableBody(body: string, mentions: readonly PreviewMentionRef[]): string {
+  return readableBody(body, {
+    mention: (type, id) => {
+      const mention = mentions.find((row) => row.kind === type && row.actorId.toLowerCase() === id);
+      return mention && (mention.kind === "user" ? mention.label : mention.handle);
+    },
+  });
+}
+
+/**
  * A stored message body as one line of plain text for a list preview: a person's mention reads as
  * their name (never their username), an Agent's as its `@handle`, other tokens as the text a person
  * writes, every run of whitespace (newlines included) becomes one space,
@@ -20,13 +34,7 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
  * Markdown stays as written.
  */
 export function messagePreviewLine(body: string, mentions: readonly PreviewMentionRef[]): string {
-  const readable = readableBody(body, {
-    mention: (type, id) => {
-      const mention = mentions.find((row) => row.kind === type && row.actorId.toLowerCase() === id);
-      return mention && (mention.kind === "user" ? mention.label : mention.handle);
-    },
-  });
-  const line = readable.replace(/\s+/gu, " ").trim();
+  const line = peopleReadableBody(body, mentions).replace(/\s+/gu, " ").trim();
   const characters = Array.from(graphemes.segment(line), (part) => part.segment);
   if (characters.length <= MESSAGE_PREVIEW_MAX_LENGTH) return line;
   return `${characters.slice(0, MESSAGE_PREVIEW_MAX_LENGTH - 1).join("")}…`;
