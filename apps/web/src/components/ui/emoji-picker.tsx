@@ -64,6 +64,8 @@ export function EmojiPicker({
             : import("emoji-picker-react/dist/data/emojis-en"),
         ]);
         if (alive) {
+          // TEMP DEBUG
+          console.log("[epr-debug]", typeof eprModule.default, eprModule.default?.name, Object.keys(eprModule).slice(0, 8), typeof eprModule);
           setEpr(eprModule.default);
           setData(dataModule.default);
         }
