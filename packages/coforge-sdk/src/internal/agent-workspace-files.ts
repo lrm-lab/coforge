@@ -208,6 +208,11 @@ function listResult(value: {
  * `contentType`, so anything else is a payload the sender did not mean to send. */
 const MEDIA_TYPE = /^[a-z]+\/[a-z0-9.+-]+$/i;
 
+function validateReadResultContentType(contentType: string, hasContent: boolean): void {
+  if (hasContent ? !MEDIA_TYPE.test(contentType) : contentType !== "")
+    throw new Error("Invalid Workspace File read result");
+}
+
 function bounded(bytes: Uint8Array, max = RPC_PAYLOAD_MAX_BYTES) {
   if (bytes.length > max) throw new Error("Workspace Files payload too large");
   return bytes;
@@ -223,13 +228,9 @@ function readResultContent(value: { contentType: string; contentBase64: string }
   content: Uint8Array;
 } {
   const contentType = text(value.contentType, 255);
-  if (value.contentBase64 === "") {
-    if (contentType !== "") throw new Error("Invalid Workspace File read result");
-    return { contentType: "", content: new Uint8Array() };
-  }
-  // The two fields are set together: bytes with no media type to name them are not a payload this
-  // protocol produces, and a reader could not tell what to do with them.
-  if (!MEDIA_TYPE.test(contentType)) throw new Error("Invalid Workspace File read result");
+  const hasContent = value.contentBase64 !== "";
+  validateReadResultContentType(contentType, hasContent);
+  if (!hasContent) return { contentType: "", content: new Uint8Array() };
   if (value.contentBase64.length > MAX_CONTENT_BASE64_LENGTH)
     throw new Error("Invalid Workspace File read result");
   const content = decodeBase64(value.contentBase64);
@@ -431,11 +432,12 @@ export function decodeAgentWorkspaceFileReadResult(
     throw new Error("Invalid Workspace File read result");
   const text_ = text(value.text, MAX_TEXT_BYTES);
   const contentBase64 = value.content.length > 0 ? encodeBase64(value.content) : "";
-  const { contentType, content } = readResultContent({
-    contentType: value.contentType,
-    contentBase64,
-  });
-  if (text_ !== "" && content.length > 0) throw new Error("Invalid Workspace File read result");
+  const contentType = text(value.contentType, 255);
+  validateReadResultContentType(contentType, value.content.length > 0);
+  if (value.content.length > MAX_CONTENT_BYTES)
+    throw new Error("Invalid Workspace File read result");
+  if (text_ !== "" && value.content.length > 0)
+    throw new Error("Invalid Workspace File read result");
   return {
     ...readRequest(value),
     status: value.status as AgentWorkspaceFileReadResult["status"],
