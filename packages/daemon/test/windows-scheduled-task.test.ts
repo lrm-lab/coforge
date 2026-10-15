@@ -10,6 +10,37 @@ import {
 } from "#src/platform/windows-scheduled-task";
 
 describe("windowsTaskUserId", () => {
+  test("reads the current default environment while keeping explicit values independent", () => {
+    const previousDomain = Bun.env.USERDOMAIN;
+    const previousUsername = Bun.env.USERNAME;
+    try {
+      Bun.env.USERDOMAIN = " FIRST ";
+      Bun.env.USERNAME = " ada ";
+      expect(windowsTaskUserId()).toBe("FIRST\\ada");
+
+      Bun.env.USERDOMAIN = " SECOND ";
+      Bun.env.USERNAME = " grace ";
+      expect(windowsTaskUserId()).toBe("SECOND\\grace");
+      expect(windowsTaskUserId({ USERDOMAIN: " EXPLICIT ", USERNAME: " lin " }, "fallback")).toBe(
+        "EXPLICIT\\lin",
+      );
+      expect(windowsTaskUserId({}, "fallback")).toBe("fallback");
+
+      delete Bun.env.USERDOMAIN;
+      expect(windowsTaskUserId(undefined, "fallback")).toBe("fallback");
+      Bun.env.USERDOMAIN = "SECOND";
+      delete Bun.env.USERNAME;
+      expect(windowsTaskUserId(undefined, "fallback")).toBe("fallback");
+      Bun.env.USERNAME = "   ";
+      expect(windowsTaskUserId(undefined, "fallback")).toBe("fallback");
+    } finally {
+      if (previousDomain === undefined) delete Bun.env.USERDOMAIN;
+      else Bun.env.USERDOMAIN = previousDomain;
+      if (previousUsername === undefined) delete Bun.env.USERNAME;
+      else Bun.env.USERNAME = previousUsername;
+    }
+  });
+
   test("prefers DOMAIN\\user when the environment supplies both halves", () => {
     expect(windowsTaskUserId({ USERDOMAIN: "ACME", USERNAME: "ada" }, "fallback")).toBe(
       "ACME\\ada",
