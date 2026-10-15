@@ -1,9 +1,9 @@
 /**
- * Agent-facing OpenViking read-only command/response contract (C2 freeze).
+ * Agent-facing OpenViking reads and server-owned memory control commands.
  *
  * Framework-free JSON that travels Agent → local Daemon proxy → Web gateway.
  * Tenant credentials never appear here. The Memory Agent may find, expand
- * hierarchical context, read, or offer; it cannot write files, commit sessions,
+ * hierarchical context, read, offer, or request scoped diagnosis; it cannot write files, commit sessions,
  * or mutate skills or ACLs.
  */
 
@@ -18,7 +18,13 @@ export const MEMORY_READ_BUDGET_PER_TRIGGER = 3 as const;
 export const MEMORY_OFFER_BUDGET_PER_TRIGGER = 1 as const;
 export const OPENVIKING_CANDIDATE_LIMIT_MAX = 10 as const;
 
-export const OPENVIKING_AGENT_OPERATIONS = ["find", "search_context", "read", "offer"] as const;
+export const OPENVIKING_AGENT_OPERATIONS = [
+  "find",
+  "search_context",
+  "read",
+  "offer",
+  "diagnose",
+] as const;
 export type OpenVikingAgentOperation = (typeof OPENVIKING_AGENT_OPERATIONS)[number];
 
 export const OPENVIKING_AGENT_READ_OPERATIONS = ["find", "search_context", "read"] as const;
@@ -30,6 +36,7 @@ export const OPENVIKING_TOOL_NAMES = {
   searchContext: "ov_search_context",
   read: "ov_read",
   offer: "memory_offer",
+  diagnose: "memory_diagnose",
 } as const;
 
 export const OPENVIKING_AGENT_ERROR_CODES = [
@@ -79,11 +86,30 @@ export type OpenVikingOfferCommand = {
   body: string;
 };
 
+export type OpenVikingDiagnoseCommand = {
+  protocol: typeof OPENVIKING_AGENT_PROTOCOL;
+  op: "diagnose";
+  operationId: string;
+  messageId: string;
+};
+
+export type OpenVikingDiagnoseResponse = {
+  protocol: typeof OPENVIKING_AGENT_PROTOCOL;
+  op: "diagnose";
+  operationId: string;
+  duplicate: boolean;
+  status: "running" | "completed" | "failed";
+  published: boolean;
+  reason?: string;
+  messageId?: string;
+};
+
 export type OpenVikingAgentCommand =
   | OpenVikingFindCommand
   | OpenVikingSearchContextCommand
   | OpenVikingReadCommand
-  | OpenVikingOfferCommand;
+  | OpenVikingOfferCommand
+  | OpenVikingDiagnoseCommand;
 
 export type OpenVikingFindResponse = {
   protocol: typeof OPENVIKING_AGENT_PROTOCOL;
@@ -134,7 +160,8 @@ export type OpenVikingAgentResponse =
   | OpenVikingFindResponse
   | OpenVikingSearchContextResponse
   | OpenVikingReadResponse
-  | OpenVikingOfferResponse;
+  | OpenVikingOfferResponse
+  | OpenVikingDiagnoseResponse;
 
 /** Client-invented idempotency handle. Same pattern the server rejects with 400. */
 export const OPENVIKING_OPERATION_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$";
@@ -145,6 +172,7 @@ export const OPENVIKING_OPERATION_ID_RULE =
 
 /** One complete arguments object per operation. Placeholders are meant to be copied. */
 export const OPENVIKING_ARGUMENT_EXAMPLES: Record<OpenVikingAgentOperation, string> = {
+  diagnose: '{"operationId":"diagnose-1","messageId":"<求助消息 id>"}',
   find: '{"operationId": "find-1", "query": "<检索词>", "limit": 10}',
   search_context: '{"operationId": "search-1", "query": "<检索词>", "limit": 10}',
   read: '{"operationId": "read-1", "uri": "<document uri>"}',
@@ -159,6 +187,7 @@ export const CHANNEL_ARGUMENT_EXAMPLES = {
 } as const;
 
 export const OPENVIKING_REQUIRED_FIELDS: Record<OpenVikingAgentOperation, readonly string[]> = {
+  diagnose: ["operationId", "messageId"],
   find: ["operationId", "query"],
   search_context: ["operationId", "query"],
   read: ["operationId", "uri"],
@@ -255,11 +284,14 @@ export function listMissingOpenVikingFields(
     uri?: unknown;
     body?: unknown;
     citationRefs?: unknown;
+    messageId?: unknown;
   };
   const missing: string[] = [];
   for (const field of OPENVIKING_REQUIRED_FIELDS[command.op]) {
     if (field === "operationId") {
       if (typeof raw.operationId !== "string" || raw.operationId.trim() === "") missing.push(field);
+    } else if (field === "messageId") {
+      if (isMissingText(raw.messageId)) missing.push(field);
     } else if (field === "uri") {
       if (typeof raw.uri !== "string" || raw.uri.length === 0) missing.push(field);
     } else if (field === "citationRefs") {
@@ -343,6 +375,20 @@ export function decodeOpenVikingAgentCommand(value: unknown): OpenVikingAgentCom
       op: "read",
       operationId,
       uri: command.uri,
+    };
+  }
+
+  if (command.op === "diagnose") {
+    if (
+      typeof command.messageId !== "string" ||
+      !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(command.messageId)
+    )
+      throw new Error("invalid diagnosis messageId");
+    return {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "diagnose",
+      operationId,
+      messageId: command.messageId,
     };
   }
 
@@ -434,6 +480,27 @@ export function decodeOpenVikingAgentResponse(
       duplicate: read.duplicate,
       citation: decodeOpenVikingCitation(read.citation),
       content: read.content,
+    };
+  }
+
+  if (response.op === "diagnose") {
+    if (
+      !["running", "completed", "failed"].includes(response.status) ||
+      typeof response.published !== "boolean" ||
+      (response.published && response.status !== "completed") ||
+      (response.reason !== undefined && typeof response.reason !== "string") ||
+      (response.messageId !== undefined && typeof response.messageId !== "string")
+    )
+      throw new Error("invalid diagnosis response");
+    return {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "diagnose",
+      operationId: response.operationId,
+      duplicate: response.duplicate,
+      status: response.status,
+      published: response.published,
+      ...(response.reason === undefined ? {} : { reason: response.reason }),
+      ...(response.messageId === undefined ? {} : { messageId: response.messageId }),
     };
   }
 

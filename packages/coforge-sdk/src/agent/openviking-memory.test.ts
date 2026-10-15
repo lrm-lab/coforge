@@ -36,8 +36,15 @@ test("freezes the OpenViking agent protocol, fence, tools, and turn budget", () 
     searchContext: "ov_search_context",
     read: "ov_read",
     offer: "memory_offer",
+    diagnose: "memory_diagnose",
   });
-  expect(OPENVIKING_AGENT_OPERATIONS).toEqual(["find", "search_context", "read", "offer"]);
+  expect(OPENVIKING_AGENT_OPERATIONS).toEqual([
+    "find",
+    "search_context",
+    "read",
+    "offer",
+    "diagnose",
+  ]);
   expect(MEMORY_READ_BUDGET_PER_TRIGGER).toBe(3);
   expect(MEMORY_OFFER_BUDGET_PER_TRIGGER).toBe(1);
   expect(OPENVIKING_CANDIDATE_LIMIT_MAX).toBe(10);
@@ -339,4 +346,30 @@ test("keeps agent errors sanitized and enumerated", () => {
       error: { code: "internal-db", message: "password=secret" },
     }),
   ).toBe(false);
+});
+
+test("diagnosis commands bind to a real message UUID and reject false successful status", () => {
+  const command = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "diagnose" as const,
+    operationId: "diagnose-1",
+    messageId: "00000000-0000-4000-8000-000000000001",
+  };
+  expect(decodeOpenVikingAgentCommand(command)).toEqual(command);
+  expect(() =>
+    decodeOpenVikingAgentCommand({ ...command, messageId: "------------------------------------" }),
+  ).toThrow();
+  expect(decodeOpenVikingAgentCommand({ ...command, tenantToken: "secret" })).not.toHaveProperty(
+    "tenantToken",
+  );
+  expect(() =>
+    decodeOpenVikingAgentResponse("diagnose", {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "diagnose",
+      operationId: "diagnose-1",
+      duplicate: false,
+      status: "running",
+      published: true,
+    }),
+  ).toThrow();
 });

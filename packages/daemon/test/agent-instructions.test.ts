@@ -150,7 +150,7 @@ test("the openviking-memory profile requires an @memory query and never mentions
     memoryOfferOnly: false,
   });
   expect(fenced).toContain("## Team memory (Memory Agent)");
-  expect(fenced).toContain("explicit @memory question requires a memory query");
+  expect(fenced).toContain("Other explicit @memory questions require a memory query");
   expect(fenced).not.toContain("Bearer");
   expect(fenced).not.toContain("CAUSAL_MEMORY_TOKENS");
   expect(
@@ -220,12 +220,12 @@ function instructionsForFence(toolProfile: "openviking-memory"): string {
   });
 }
 
-test("the openviking-memory fence names only its read tools and memory_offer", () => {
+test("the openviking-memory fence names reads and server-owned memory controls", () => {
   const section = memoryAgentSection(instructionsForFence("openviking-memory"));
   const listing = allowedToolsetListing(section);
   for (const name of OPENVIKING_FENCE_TOOLS) expect(listing).toContain(name);
   for (const name of CAUSAL_ONLY_TOOLS) expect(listing).not.toContain(name);
-  expect(section).toContain("explicit @memory question requires a memory query");
+  expect(section).toContain("Other explicit @memory questions require a memory query");
   expect(section).toContain("cannot write files");
   expect(section).toContain("commit sessions");
   expect(section).toContain("skills or ACLs");

@@ -8,6 +8,8 @@ import {
   OPENVIKING_AGENT_PROTOCOL,
   OPENVIKING_TOOL_PROFILE,
   decodeOpenVikingAgentCommand,
+  decodeOpenVikingAgentResponse,
+  type OpenVikingDiagnoseCommand,
   isOpenVikingAgentError,
   isOpenVikingOperationId,
   type OpenVikingAgentError,
@@ -24,7 +26,10 @@ export type OpenVikingAgentReadCommand =
   | OpenVikingSearchContextCommand
   | OpenVikingReadCommand;
 
-export type OpenVikingAgentProxyCommand = OpenVikingAgentReadCommand | OpenVikingOfferCommand;
+export type OpenVikingAgentProxyCommand =
+  | OpenVikingAgentReadCommand
+  | OpenVikingOfferCommand
+  | OpenVikingDiagnoseCommand;
 
 const OPENVIKING_READ_FENCES = [OPENVIKING_TOOL_PROFILE] as const;
 const FORBIDDEN_PAYLOAD_KEYS = [
@@ -73,7 +78,7 @@ export function admitOpenVikingRead(input: {
       ),
     };
   }
-  if (decoded.op === "offer") {
+  if (decoded.op === "offer" || decoded.op === "diagnose") {
     return {
       ok: false,
       status: 400,
@@ -138,15 +143,15 @@ export async function forwardOpenVikingRead(input: {
   return payload;
 }
 
-export type OpenVikingOfferAdmission =
-  | { ok: true; command: OpenVikingOfferCommand }
+export type OpenVikingControlAdmission =
+  | { ok: true; command: OpenVikingOfferCommand | OpenVikingDiagnoseCommand }
   | { ok: false; status: number; body: OpenVikingAgentError };
 
-/** Memory Offer is a CoForge channel publish, not an OpenViking write. The read proxy still refuses it. */
-export function admitOpenVikingOffer(input: {
+/** Offers and diagnosis are server-owned control operations; neither grants Memory direct write tools. */
+export function admitOpenVikingControl(input: {
   body: unknown;
   fence: string | undefined;
-}): OpenVikingOfferAdmission {
+}): OpenVikingControlAdmission {
   let decoded;
   try {
     decoded = decodeOpenVikingAgentCommand(input.body);
@@ -161,7 +166,7 @@ export function admitOpenVikingOffer(input: {
       ),
     };
   }
-  if (decoded.op !== "offer") {
+  if (decoded.op !== "offer" && decoded.op !== "diagnose") {
     return {
       ok: false,
       status: 400,
@@ -186,9 +191,9 @@ export function admitOpenVikingOffer(input: {
   return { ok: true, command: decoded };
 }
 
-export async function forwardOpenVikingOffer(input: {
+export async function forwardOpenVikingControl(input: {
   url: string;
-  command: OpenVikingOfferCommand;
+  command: OpenVikingOfferCommand | OpenVikingDiagnoseCommand;
   agentApiKey: string;
   daemonApiKey: string;
   fetch?: OpenVikingReadFetch;
@@ -216,6 +221,15 @@ export async function forwardOpenVikingOffer(input: {
   if (isOpenVikingAgentError(payload))
     throw new OpenVikingReadProxyError(payload, response.ok ? 200 : response.status);
   if (!response.ok) throw unavailable(input.command.operationId, sanitizeStatus(response.status));
+  if (input.command.op === "diagnose") {
+    try {
+      const decoded = decodeOpenVikingAgentResponse("diagnose", payload);
+      if (decoded.operationId !== input.command.operationId) throw new Error("mismatch");
+      return decoded;
+    } catch {
+      throw unavailable(input.command.operationId, 502);
+    }
+  }
   if (!isTrustedOpenVikingOfferEnvelope(input.command, payload))
     throw unavailable(input.command.operationId, 502);
   return payload;

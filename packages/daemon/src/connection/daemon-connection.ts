@@ -25,7 +25,7 @@ import type {
   AgentSendReconciliationResponse,
 } from "@lrm/coforge-sdk/agent";
 import {
-  forwardOpenVikingOffer,
+  forwardOpenVikingControl,
   forwardOpenVikingRead,
   type OpenVikingAgentProxyCommand,
 } from "../openviking-read-proxy";
@@ -1524,8 +1524,8 @@ export class DaemonConnection implements DaemonConnectionClient {
   ): Promise<unknown> {
     this.#assertConnected();
     const url = this.#serverEndpoint("Agent OpenViking HTTP", agentApiRoutes.cloud.openviking.path);
-    if (request.op === "offer") {
-      return forwardOpenVikingOffer({
+    if (request.op === "offer" || request.op === "diagnose") {
+      return forwardOpenVikingControl({
         url,
         command: request,
         agentApiKey,

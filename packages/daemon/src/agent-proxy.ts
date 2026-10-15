@@ -76,7 +76,7 @@ import {
 } from "#src/connection/weekly-report-memory";
 import { getLogger } from "@logtape/logtape";
 import {
-  admitOpenVikingOffer,
+  admitOpenVikingControl,
   admitOpenVikingRead,
   OpenVikingReadProxyError,
   type OpenVikingAgentProxyCommand,
@@ -927,8 +927,8 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     handler: "agentOpenviking",
     parse: ({ fields, binding }) => {
       const admitted =
-        fields.op === "offer"
-          ? admitOpenVikingOffer({ body: fields, fence: binding.memoryFence })
+        fields.op === "offer" || fields.op === "diagnose"
+          ? admitOpenVikingControl({ body: fields, fence: binding.memoryFence })
           : admitOpenVikingRead({ body: fields, fence: binding.memoryFence });
       return admitted.ok
         ? admitted.command

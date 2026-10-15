@@ -247,7 +247,8 @@ export function createMemoryFenceTools(
           args,
           emptyError: openVikingEmptyArgumentsError(op),
         }) as never,
-      execute: async (_toolCallId, params) => {
+      execute: async (_toolCallId, params, signal) => {
+        signal?.throwIfAborted();
         // Decode throws before consume, so an empty or invalid ov_* call does not
         // spend the triggering message's read budget and never reaches OpenViking.
         const command = decodeOpenVikingAgentCommand({
@@ -256,8 +257,24 @@ export function createMemoryFenceTools(
           ...coerceNumericToolParams(params as Params),
         });
         budget.consume(command);
-        const response = await proxy.post(agentApiRoutes.proxy.openviking.path, command);
-        return toolResult(decodeOpenVikingAgentResponse(command.op, response));
+        let decoded = decodeOpenVikingAgentResponse(
+          command.op,
+          await proxy.post(agentApiRoutes.proxy.openviking.path, command),
+        );
+        // Poll inside the native tool, avoiding a model turn for every status check.
+        for (
+          let poll = 0;
+          poll < 10 && decoded.op === "diagnose" && decoded.status === "running";
+          poll++
+        ) {
+          await Bun.sleep(5000);
+          signal?.throwIfAborted();
+          decoded = decodeOpenVikingAgentResponse(
+            command.op,
+            await proxy.post(agentApiRoutes.proxy.openviking.path, command),
+          );
+        }
+        return toolResult(decoded);
       },
     });
 
@@ -326,6 +343,19 @@ export function createMemoryFenceTools(
     });
 
   const openvikingByName: Record<string, ReturnType<typeof defineTool>> = {
+    [OPENVIKING_TOOL_NAMES.diagnose]: openvikingTool(
+      OPENVIKING_TOOL_NAMES.diagnose,
+      "Diagnose with four roles",
+      "Start or poll four-role AIG diagnosis for a task agent message containing @memory diagnose. Read messages to get messageId. The server binds evidence and recipient and publishes the approved report. Repeat the same messageId while running; stop after published=true or failed. This never dispatches remediation.",
+      "diagnose",
+      {
+        operationId: Type.String(),
+        messageId: Type.String({
+          description:
+            "Full UUID of the task agent’s saved @memory diagnose message, obtained with message_read.",
+        }),
+      },
+    ),
     [OPENVIKING_TOOL_NAMES.find]: openvikingTool(
       OPENVIKING_TOOL_NAMES.find,
       "OpenViking find",

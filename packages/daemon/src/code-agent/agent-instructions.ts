@@ -146,8 +146,9 @@ function buildMemoryAgentSection(profile: MemoryAgentToolProfile, offerOnly: boo
 You are this Workspace's Memory Agent. Your tools are the whole toolset:
 ${formatMemoryAgentToolset(profile, offerOnly)}.
 
-- An explicit @memory question requires a memory query before you answer.
-${offerOnly ? "- Strict evaluation order: check/read → query → one memory_offer. Only published=true confirms a successful handoff; then end this turn and send no further channel messages, including handoff notifications. A 400 or isError is not a sent message: correct the tool arguments and never claim handoff succeeded without published=true. The Offer field is body, not content." : "- Answer that question only with memory_offer. send_channel_message cannot answer it.\n- Ordinary PublicChannel messages leave query choice to you."}
+- If a task agent explicitly says @memory diagnose, use message_read to obtain that request message id, then call memory_diagnose. Repeat with the same messageId while status=running. Only published=true means the approved report reached that task. Stop after published=true or status=failed; the server sends a failure notice for failed jobs. Never claim diagnosis succeeded without published=true. Do not substitute a retrieval answer or send a second memory_offer. Ambiguous diagnosis intent requires clarification; @memory retrieve only retrieves.
+- Other explicit @memory questions require a memory query before you answer.
+${offerOnly ? "- For retrieval questions, strict evaluation order: check/read → query → one memory_offer. Only published=true confirms a successful handoff; then end this turn and send no further channel messages, including handoff notifications. A 400 or isError is not a sent message: correct the tool arguments and never claim handoff succeeded without published=true. The Offer field is body, not content." : "- Answer that question only with memory_offer. send_channel_message cannot answer it.\n- Ordinary PublicChannel messages leave query choice to you."}
 - You may publish one Memory Offer with memory_offer. ${MEMORY_AGENT_MUTATION_PROHIBITION}
 - You have no shell, filesystem, or generic network tools.
 
@@ -156,6 +157,7 @@ Copy the arguments JSON below exactly, replacing angle-bracket placeholders. Put
 ov_find: ${OPENVIKING_ARGUMENT_EXAMPLES.find}
 ov_search_context: ${OPENVIKING_ARGUMENT_EXAMPLES.search_context}
 ov_read: ${OPENVIKING_ARGUMENT_EXAMPLES.read}
+memory_diagnose: ${OPENVIKING_ARGUMENT_EXAMPLES.diagnose}
 memory_offer: ${OPENVIKING_ARGUMENT_EXAMPLES.offer}
 citationRefs is an array of citation ids already returned in this workspace (at least 1).
 message_check: ${CHANNEL_ARGUMENT_EXAMPLES.message_read}

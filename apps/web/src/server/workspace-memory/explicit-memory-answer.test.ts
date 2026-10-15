@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   channelSendNeedsMemoryOffer,
+  isExplicitMemoryDiagnosis,
   fifoOldestUnansweredQuestion,
   isExplicitMemoryQuestion,
 } from "./explicit-memory-answer";
@@ -76,4 +77,13 @@ test("FIFO binding answers the oldest unanswered question under a backlog", () =
     ),
   ).toBeNull();
   expect(fifoOldestUnansweredQuestion([], [])).toBeNull();
+});
+
+test("diagnosis requires explicit intent addressed to the designated memory identity", () => {
+  const id = "40892ec7-004d-4a0c-89bf-ed4e2e79ab0e";
+  expect(isExplicitMemoryDiagnosis("@memory diagnose search failure", id)).toBe(true);
+  expect(isExplicitMemoryDiagnosis(`<@agent:${id}> diagnose search failure`, id)).toBe(true);
+  expect(isExplicitMemoryDiagnosis("@memory retrieve search history", id)).toBe(false);
+  expect(isExplicitMemoryDiagnosis("@memory something looks wrong", id)).toBe(false);
+  expect(isExplicitMemoryDiagnosis("<@agent:another> diagnose failure", id)).toBe(false);
 });

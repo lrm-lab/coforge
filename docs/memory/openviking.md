@@ -57,3 +57,30 @@ Append 幂等：batch 之前 `GET /sessions/{id}`，用已有消息的 `source_m
 - OpenViking-only、Causal Memory 移除、完整访问走策略网关（0061、0062）：规则本身就是代码与 `apps/web/AGENTS.md` 的模块分工，这里不再复述。
 - 轨迹索引、跨 lane 桥分型、ForkRevision 生命周期、消费记账（0072–0075）：尚未实现的设计记录，正文留在 git 历史（`git log -- docs/adr/`）。其中轨迹索引对应上面 B5 这条 open question。
 - Causal Memory 的三份（0058–0060）已被 0062 取代，不再有效。
+
+
+## 显式四角色诊断
+
+任务 Agent 在公开群聊发送 `@memory diagnose <问题和错误证据>`。Memory
+读取该消息的 UUID，调用 `memory_diagnose({operationId, messageId})`。普通
+`@memory retrieve` 继续走检索；模糊意图先澄清，不隐式启动诊断。
+
+Web 按已保存的求助消息绑定原群与发送任务 Agent，重新检查双方群成员身份、
+当前 workspace profile 与 OpenViking binding。模型不能指定任意 session、
+接收者或原始轨迹。证据是截至求助消息的连续尾部：最多 64 条、64,000 字符；
+不包含 task 的完整私有工具轨迹。Memory 重命名后的存储 mention token 也可识别。
+
+服务端在任务 Agent 自己的命名空间创建独立 causal session，禁用自动 commit，
+通过私有 typed control 调用 OpenViking 的 session diagnosis API。现有
+Builder → Critic/Refiner → Reader 核心基于冻结 AO 快照运行；不依赖频道静默
+归档，不 commit 仍在运行的原任务，也不自动执行 remediation 或发布 Skill。
+
+请求以求助消息 UUID 去重，状态持久化为 running/completed/failed，最多运行
+600 秒。进程中断后可读取已完成结果；未完成尝试到期返回失败，不自动重跑。
+原生工具内部有界轮询，返回 running 时可继续用同一 messageId 查询。
+
+仅完整 Reader 报告会登记为引用，并通过 Memory Offer 发给求助的任务 Agent，
+携带 `hint_id`，由其调用 `memory_disposition` 判断接受、拒绝或暂缓。
+失败/fallback 不发布成功 Offer。必须明确配置 `COFORGE_MEMORY_HINT_TTL_SECONDS`，
+配置缺失时在启动模型前拒绝请求。CoForge Web、Daemon/Agent 和 OpenViking
+必须一起更新；独立 IR Go harness 尚未接入此工具。

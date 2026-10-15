@@ -23,6 +23,7 @@ test("exposes only ov_* tools on the openviking fence", () => {
     OPENVIKING_TOOL_NAMES.searchContext,
     OPENVIKING_TOOL_NAMES.read,
     OPENVIKING_TOOL_NAMES.offer,
+    OPENVIKING_TOOL_NAMES.diagnose,
   ]);
   expect(
     toolsForMemoryFence(OPENVIKING_TOOL_PROFILE).some((name) => name.startsWith("causal_")),

@@ -522,7 +522,9 @@
     "#src/server/agents/manual/topics/manual.md": "./src/server/agents/manual/topics/manual.md",
     "#src/server/agents/manual/topics/reminders.md": "./src/server/agents/manual/topics/reminders.md",
     "#src/server/agents/manual/topics/tasks.md": "./src/server/agents/manual/topics/tasks.md",
-    "#src/styles.css": "./src/styles.css"
+    "#src/styles.css": "./src/styles.css",
+    "#src/server/workspace-memory/explicit-diagnosis": "./src/server/workspace-memory/explicit-diagnosis.ts",
+    "#src/server/openviking/explicit-diagnosis.server": "./src/server/openviking/explicit-diagnosis.server.ts"
   },
   "scripts": {
     "dev": "bun --bun vite dev --port 8788 --host 127.0.0.1 --strictPort",

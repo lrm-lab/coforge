@@ -19,6 +19,14 @@ export function isExplicitMemoryQuestion(body: string, memoryAgentId?: string): 
   );
 }
 
+/** The stored identity token also works after the workspace Memory Agent is renamed. */
+export function isExplicitMemoryDiagnosis(body: string, memoryAgentId: string): boolean {
+  return (
+    /(?:^|\s)@memory\s+diagnose\b/i.test(body) ||
+    new RegExp(`(?:^|\\s)<@agent:${memoryAgentId}>\\s+diagnose\\b`, "i").test(body)
+  );
+}
+
 export function channelSendNeedsMemoryOffer(input: {
   latestQuestionAt: Date | null;
   latestOfferAt: Date | null;
@@ -72,6 +80,8 @@ export async function resolveUnansweredMemoryOfferTarget(
     memoryAgentId,
   );
   if (!question) return null;
+  if (question.senderAgentId)
+    return { conversationId: question.conversationId, targetAgentId: question.senderAgentId };
   const peer = await db.conversationMember.findFirst({
     where: {
       workspaceId,
@@ -111,22 +121,33 @@ async function oldestUnansweredExplicitMemoryQuestion(
   workspaceId: string,
   conversationIds: string[],
   memoryAgentId: string,
-): Promise<{ conversationId: string; createdAt: Date } | null> {
+): Promise<{ conversationId: string; createdAt: Date; senderAgentId: string | null } | null> {
   if (conversationIds.length === 0) return null;
   const rows = await db.message.findMany({
     where: {
       workspaceId,
       conversationId: { in: conversationIds },
       OR: [{ body: { contains: "@memory" } }, { body: { contains: `<@agent:${memoryAgentId}>` } }],
-      sender: { userId: { not: null } },
+      sender: {
+        OR: [{ userId: { not: null } }, { agentId: { not: null, notIn: [memoryAgentId] } }],
+      },
     },
     orderBy: { createdAt: "desc" },
     take: 40,
-    select: { body: true, createdAt: true, conversationId: true },
+    select: {
+      body: true,
+      createdAt: true,
+      conversationId: true,
+      sender: { select: { agentId: true } },
+    },
   });
   const questions = rows
     .filter((row) => isExplicitMemoryQuestion(row.body, memoryAgentId))
-    .map((row) => ({ conversationId: row.conversationId, createdAt: row.createdAt }))
+    .map((row) => ({
+      conversationId: row.conversationId,
+      createdAt: row.createdAt,
+      senderAgentId: row.sender?.agentId ?? null,
+    }))
     .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
   if (questions.length === 0) return null;
   const offers = (

@@ -9,6 +9,8 @@ import {
 import { startAgentProxy } from "../src/agent-proxy";
 import {
   admitOpenVikingRead,
+  admitOpenVikingControl,
+  forwardOpenVikingControl,
   forwardOpenVikingRead,
   OpenVikingReadProxyError,
 } from "../src/openviking-read-proxy";
@@ -460,3 +462,37 @@ function fakeCentrifugeClient() {
   };
   return { client };
 }
+
+test("diagnosis is a fenced control operation, never an ordinary read", async () => {
+  const command = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "diagnose" as const,
+    operationId: "diagnose-1",
+    messageId: "00000000-0000-4000-8000-000000000001",
+  };
+  expect(admitOpenVikingRead({ body: command, fence: OPENVIKING_TOOL_PROFILE }).ok).toBe(false);
+  expect(admitOpenVikingControl({ body: command, fence: undefined }).ok).toBe(false);
+  expect(admitOpenVikingControl({ body: command, fence: OPENVIKING_TOOL_PROFILE }).ok).toBe(true);
+  const response = {
+    ...command,
+    duplicate: false,
+    status: "completed",
+    published: true,
+    messageId: "answer",
+  };
+  const input = {
+    url: "http://web.internal",
+    command,
+    agentApiKey: "agent-key",
+    daemonApiKey: "daemon-key",
+  };
+  expect(
+    await forwardOpenVikingControl({ ...input, fetch: async () => Response.json(response) }),
+  ).toMatchObject({ status: "completed", published: true });
+  await expect(
+    forwardOpenVikingControl({
+      ...input,
+      fetch: async () => Response.json({ ...response, operationId: "another-request" }),
+    }),
+  ).rejects.toBeInstanceOf(OpenVikingReadProxyError);
+});

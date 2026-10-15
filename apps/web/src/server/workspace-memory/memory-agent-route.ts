@@ -1,6 +1,6 @@
 /**
  * Memory Agent command composition for the Agent HTTPS routes.
- * OpenViking-only: reads and one cited Memory Offer per triggering message.
+ * OpenViking reads, cited offers, and task-requested server-owned diagnosis.
  */
 
 import {
@@ -9,6 +9,7 @@ import {
   OPENVIKING_TOOL_PROFILE,
   type MemoryAgentToolProfile,
   type OpenVikingAgentCommand,
+  type OpenVikingDiagnoseResponse,
   type OpenVikingAgentResponse,
   type OpenVikingCitation,
 } from "@lrm/coforge-sdk/agent";
@@ -76,6 +77,12 @@ export function createMemoryAgentCommands(deps: {
   budgets: MemoryAgentBudgetLedger;
   citations: MemoryCitationBindings;
   offers: MemoryOffers;
+  diagnose?: (input: {
+    workspaceId: string;
+    agentId: string;
+    messageId: string;
+    operationId: string;
+  }) => Promise<OpenVikingDiagnoseResponse>;
   openviking: OpenVikingMemoryReads;
   offerTargets?: MemoryOfferTargetResolver;
 }): MemoryAgentCommands {
@@ -111,6 +118,10 @@ export function createMemoryAgentCommands(deps: {
               triggerMessageId: input.triggerMessageId,
             })
             .consume(command);
+        }
+        if (command.op === "diagnose") {
+          if (!deps.diagnose) throw new Error("diagnosis_unavailable");
+          return { ok: true, response: await deps.diagnose({ ...input, ...command }) };
         }
         return { ok: true, response: await handleOpenViking(deps, input, command) };
       } catch (error) {
@@ -206,6 +217,7 @@ async function handleOpenViking(
       content: read.content,
     };
   }
+  if (command.op === "diagnose") throw new Error("diagnosis_requires_coordinator");
   const delivery = await offerDelivery(deps, input, command);
   const offer = await deps.offers.publish({
     workspaceId: input.workspaceId,
@@ -238,6 +250,8 @@ function fenceAllows(
 }
 
 function translateError(command: OpenVikingAgentCommand, error: unknown): MemoryAgentCommandResult {
+  if (error instanceof Error && /^diagnosis_[a-z_]+$/.test(error.message))
+    return failure(400, command.operationId, "invalid", error.message);
   if (error instanceof MemoryAgentBudgetError)
     return failure(429, command.operationId, "budget", error.message);
   if (error instanceof RetiredFromMemoryDiscoveryError)
