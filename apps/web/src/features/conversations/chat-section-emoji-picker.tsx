@@ -55,13 +55,12 @@ export function ChatSectionEmojiPicker({
         <AriaPopover
           placement="bottom start"
           offset={6}
-          className="overflow-hidden rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
+          className="max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
         >
           <Dialog aria-label={label} className="outline-none">
             {({ close }) => (
-              <div className="w-88">
+              <div className="w-88 max-w-[calc(100vw-1rem)]">
                 <EmojiPicker
-                  pickerHostClassName="min-h-96 *:min-h-96 [&_.epr-picker]:border-0"
                   onPick={(emoji) => {
                     onChange(emoji);
                     close();

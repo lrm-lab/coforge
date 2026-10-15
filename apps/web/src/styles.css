@@ -244,12 +244,12 @@ input[type="search"]::-webkit-search-cancel-button {
 [data-epr-host] {
   --epr-bg-color: var(--color-bg-primary);
   --epr-text-color: var(--color-text-secondary);
-  --epr-emoji-hover-color: var(--color-bg-secondary-hover);
-  --epr-focus-bg-color: var(--color-bg-secondary-hover);
-  --epr-hover-bg-color: var(--color-bg-secondary-hover);
-  --epr-highlight-color: var(--color-bg-secondary-hover);
-  --epr-active-skin-hover-color: var(--color-bg-secondary-hover);
-  --epr-emoji-variation-indicator-color: var(--color-bg-secondary-hover);
+  --epr-emoji-hover-color: var(--color-bg-secondary_hover);
+  --epr-focus-bg-color: var(--color-bg-secondary_hover);
+  --epr-hover-bg-color: var(--color-bg-secondary_hover);
+  --epr-highlight-color: var(--color-bg-secondary_hover);
+  --epr-active-skin-hover-color: var(--color-bg-secondary_hover);
+  --epr-emoji-variation-indicator-color: var(--color-bg-secondary_hover);
   --epr-category-label-bg-color: var(--color-bg-primary);
   --epr-category-label-text-color: var(--color-text-tertiary);
   --epr-category-icon-inactive-color: var(--color-text-quaternary);
