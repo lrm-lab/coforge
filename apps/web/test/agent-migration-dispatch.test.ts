@@ -120,8 +120,10 @@ test("a Computer that reconnects is leased again for the part each active migrat
     manifest: {},
   });
   await dispatch.reissue(migrations, workspaceId, "computer-a");
+  // The source still holds the uploaded one's Agent stopped until the switch.
   expect(published.map((entry) => decodeAgentMigrationLease(entry.data))).toMatchObject([
     { migrationId: waiting.migration.id, role: "source", computerId: "computer-a" },
+    { migrationId: uploaded.migration.id, role: "source", computerId: "computer-a" },
   ]);
   published.length = 0;
   await dispatch.reissue(migrations, workspaceId, "computer-b");

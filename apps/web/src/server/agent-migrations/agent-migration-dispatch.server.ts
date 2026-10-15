@@ -23,9 +23,12 @@ import type {
 /** How long a role may spend on its part of the transfer: a 10 GiB bundle with room to retry. */
 export const AGENT_MIGRATION_LEASE_MS = 60 * 60 * 1000;
 
-/** The states in which each role still has transfer work, and so still needs its lease. */
+/**
+ * The states in which each role still has work, and so still needs its lease: the target places
+ * the workspace, and the source uploads it and then keeps the Agent stopped until the switch.
+ */
 const LEASED_STATES: Record<AgentMigrationRole, readonly AgentMigrationState[]> = {
-  source: ["requested", "source_stopped"],
+  source: ["requested", "source_stopped", "uploaded", "placing"],
   target: ["uploaded", "placing"],
 };
 

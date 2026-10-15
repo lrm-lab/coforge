@@ -28,7 +28,7 @@ const DOWNLOAD_CONCURRENCY = 3;
 
 type Ports = { server: AgentMigrationServer; bucket: AgentMigrationBucket };
 
-type Transfer = {
+export type AgentMigrationTransfer = {
   migrationId: string;
   generation: number;
   /** The lease's expiry, in this Computer's clock. */
@@ -36,9 +36,12 @@ type Transfer = {
   signal?: AbortSignal;
 };
 
-/** Runs `attempt` until it succeeds, fails for good, the deadline passes, or `signal` aborts. */
-async function untilDeadline<T>(
-  transfer: Transfer,
+/**
+ * Runs `attempt` until it succeeds, fails for good, the deadline passes, or `signal` aborts: the
+ * retry every call of a migration's run makes, chunk or step alike.
+ */
+export async function retryUntilDeadline<T>(
+  transfer: AgentMigrationTransfer,
   what: string,
   attempt: (signal: AbortSignal) => Promise<T>,
 ) {
@@ -74,10 +77,10 @@ async function untilDeadline<T>(
 /** Puts one sealed chunk into the bucket; a chunk the bucket already holds counts as uploaded. */
 export async function uploadAgentMigrationChunk(
   ports: Ports,
-  input: Transfer & { chunk: AgentMigrationBundleChunk },
+  input: AgentMigrationTransfer & { chunk: AgentMigrationBundleChunk },
 ) {
   const { bytes, ...chunk } = input.chunk;
-  await untilDeadline(input, `upload of chunk ${chunk.index}`, async (signal) => {
+  await retryUntilDeadline(input, `upload of chunk ${chunk.index}`, async (signal) => {
     const attempt = { migrationId: input.migrationId, generation: input.generation, chunk };
     await ports.bucket.put(await ports.server.uploadUrl(attempt, signal), bytes, signal);
   });
@@ -89,7 +92,10 @@ export async function uploadAgentMigrationChunk(
  */
 export async function downloadAgentMigrationChunks(
   ports: Ports,
-  input: Transfer & { chunks: readonly AgentMigrationChunkReference[]; migrationDirectory: string },
+  input: AgentMigrationTransfer & {
+    chunks: readonly AgentMigrationChunkReference[];
+    migrationDirectory: string;
+  },
 ) {
   const stop = new AbortController();
   const signal = input.signal ? AbortSignal.any([input.signal, stop.signal]) : stop.signal;
@@ -99,7 +105,7 @@ export async function downloadAgentMigrationChunks(
     while (!signal.aborted && next < input.chunks.length) {
       const chunk = input.chunks[next++]!;
       if (await hasAgentMigrationChunk(input.migrationDirectory, chunk)) continue;
-      const bytes = await untilDeadline(
+      const bytes = await retryUntilDeadline(
         transfer,
         `download of chunk ${chunk.index}`,
         async (attemptSignal) => {

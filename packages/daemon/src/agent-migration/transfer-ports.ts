@@ -52,6 +52,7 @@ export interface AgentMigrationServer {
   view(migrationId: string, signal?: AbortSignal): Promise<AgentMigrationView>;
   step(
     input: Attempt & { expectedRevision: number; step: AgentMigrationStep },
+    signal?: AbortSignal,
   ): Promise<AgentMigrationStepResult>;
   uploadUrl(
     input: Attempt & { chunk: AgentMigrationChunkEntry },
@@ -60,16 +61,22 @@ export interface AgentMigrationServer {
   downloadUrl(input: Attempt & { index: number }, signal?: AbortSignal): Promise<{ url: string }>;
   completeUpload(
     input: Attempt & { expectedRevision: number; manifest: AgentMigrationBundleManifest },
+    signal?: AbortSignal,
   ): Promise<AgentMigrationStepResult>;
   /** `errorCode` is a short snake_case code; a longer `errorDetail` is cut to fit the route. */
   fail(
     input: Attempt & { errorCode: string; errorDetail?: string },
+    signal?: AbortSignal,
   ): Promise<AgentMigrationStepResult>;
 }
 
 export interface AgentMigrationBucket {
   /** Stores one chunk; a bucket that already holds it (overwrite refused) has it, which is done. */
-  put(signed: AgentMigrationSignedUrl, bytes: Uint8Array, signal: AbortSignal): Promise<void>;
+  put(
+    signed: AgentMigrationSignedUrl,
+    bytes: Uint8Array<ArrayBuffer>,
+    signal: AbortSignal,
+  ): Promise<void>;
   /** Fetches one chunk, refusing an answer that is not `sizeBytes` long before reading it. */
   get(url: string, sizeBytes: number, signal: AbortSignal): Promise<Uint8Array>;
 }

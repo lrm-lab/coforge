@@ -1,5 +1,5 @@
 /** Why a chunk transfer stopped before it finished; the code names the cause. */
-export type AgentMigrationTransferErrorCode = "lease_expired" | "aborted" | "bucket_refused";
+export type AgentMigrationTransferErrorCode = "lease_expired" | "aborted" | "manifest_missing";
 
 export class AgentMigrationTransferError extends Error {
   constructor(

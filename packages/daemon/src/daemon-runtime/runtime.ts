@@ -91,6 +91,7 @@ import {
   type CodeAgentModelCatalog,
   type UsageScanResponse,
   REMINDER_CAPABILITY,
+  AGENT_MIGRATION_CAPABILITY,
   type AgentReminderOperationRequest,
   type LocalReminderRequest,
   type ReminderJob,
@@ -112,6 +113,8 @@ import {
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
+import { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
+import { AgentMigrationBucketClient } from "#src/connection/agent-migration-bucket-client";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
 import {
   agentContextReportOutcome,
@@ -452,6 +455,9 @@ export class DaemonRuntime {
     flush: (agentId, held) => this.#flushHeldDeliveries(agentId, held),
   });
   readonly #reminders: ReminderScheduler;
+  /** This Computer's Agent migration runs; absent when the transport cannot reach the route. */
+  readonly #migrations: AgentMigrationRunner | undefined;
+  #migrationsClosed: Promise<void> | undefined;
   readonly #agentInboxes = new Map<string, AgentInboxStateMachine>();
   readonly #appInboxes = new Map<string, Promise<AgentAppInbox>>();
   readonly #notifiedAppItems = new Map<string, Map<string, Promise<boolean>>>();
@@ -649,6 +655,21 @@ export class DaemonRuntime {
       },
       (job, occurrence) => this.#acceptReminderDue(job, occurrence.late),
     );
+    // The transport is replaced on each start, so the runner reaches the route through whichever
+    // one is current.
+    this.#migrations = this.#transport.agentMigrationServer
+      ? new AgentMigrationRunner({
+          server: () => this.#transport.agentMigrationServer!(),
+          bucket: new AgentMigrationBucketClient(),
+          agents: {
+            stop: (agentId) => this.stopAgent(agentId),
+            isRunning: (agentId) => this.#agentProcessManager.runningAgentIds().includes(agentId),
+          },
+          workspaceDirectory: (agentId) =>
+            agentWorkspaceDirectory(connection.workspaceRoot, connection.workspaceId, agentId),
+          stateDirectory,
+        })
+      : undefined;
     const state = new AgentRuntimeState(
       // Control state lives only in this process: the server
       // re-dispatches what should still be running after a restart, so a persisted record could
@@ -1120,6 +1141,19 @@ export class DaemonRuntime {
           void this.#reminders.apply(sync).catch(() => {});
         }),
       );
+      const migrations = this.#migrations;
+      if (migrations) {
+        this.#subscribe(
+          this.#transport.onAgentMigrationLease?.((lease) => {
+            void migrations.lease(lease);
+          }),
+        );
+        this.#subscribe(
+          this.#transport.onAgentMigrationCancel?.((cancel) => {
+            void migrations.cancel(cancel).catch(() => {});
+          }),
+        );
+      }
       await this.#transport.start(token, {
         workspaceId: connection.workspaceId,
         computerId: connection.computerId,
@@ -1148,7 +1182,10 @@ export class DaemonRuntime {
           ...readOperatingSystem(),
           recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds ?? [],
           recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds ?? [],
-          capabilities: [REMINDER_CAPABILITY],
+          capabilities: [
+            REMINDER_CAPABILITY,
+            ...(this.#migrations ? [AGENT_MIGRATION_CAPABILITY] : []),
+          ],
         }),
         signal,
       );
@@ -1655,6 +1692,11 @@ export class DaemonRuntime {
     try {
       this.#assertRunning();
       this.#assertAgentNotStopping(agentId);
+      if (this.#migrations?.holds(agentId))
+        throw new AgentPreflightError(
+          `Agent workspace is moving to another Computer: ${agentId}`,
+          "AGENT_MIGRATING",
+        );
     } catch (error) {
       return Promise.reject(error);
     }
@@ -4153,6 +4195,8 @@ export class DaemonRuntime {
     // as long as the cloud stays unreachable.
     this.#startAbort?.abort(new DaemonConnectionStoppedError());
     this.#reminders.stop();
+    // Each attempt is leased again on the next ready, and its run picks up from the server's state.
+    this.#migrationsClosed = this.#migrations?.close();
     for (const token of this.#agentProxyTokens.values()) this.#agentProxy?.revoke(token);
     this.#agentProxyTokens.clear();
     this.#agentContexts.clear();
@@ -4200,6 +4244,27 @@ export class DaemonRuntime {
     }
   }
 
+  /**
+   * Waits, on the same bound as `#settleReminders`, for the migration runs `stop()` aborted: a
+   * placement's rename or an attempt's removal under the state directory must not outlive it. A
+   * run that is still going when the bound passes is picked up from the server's state next time.
+   */
+  async #settleMigrations(): Promise<void> {
+    const closed = this.#migrationsClosed;
+    if (!closed) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        closed,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async #stop(shutdownReason: DaemonShutdownReason): Promise<void> {
     if (this.#startPromise) {
       try {
@@ -4239,6 +4304,7 @@ export class DaemonRuntime {
     // work already running settles alongside too, on the same bound, before the transport closes.
     await Promise.all([
       this.#settleReminders(),
+      this.#settleMigrations(),
       this.#connection.computerId
         ? this.#transport.sendShutdownNotice?.({
             ...this.#envelope(),

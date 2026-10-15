@@ -368,6 +368,7 @@ export interface DaemonConnectionClient {
   onReminderSync?(callback: (sync: ReminderSync) => void): () => void;
   onAgentMigrationLease?(callback: (lease: ReceivedAgentMigrationLease) => void): () => void;
   onAgentMigrationCancel?(callback: (cancel: AgentMigrationCancel) => void): () => void;
+  agentMigrationServer?(): AgentMigrationServer;
   requestSnapshot?(request: ReminderSnapshotRequest): Promise<ReminderSync>;
   fireReminder?(request: ReminderFireRequest): Promise<ReminderFireResponse>;
   agentReminder?(

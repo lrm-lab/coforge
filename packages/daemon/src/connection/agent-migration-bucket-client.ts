@@ -11,7 +11,7 @@ import {
  * a freshly signed URL. A caller's abort propagates as the abort.
  */
 export class AgentMigrationBucketClient implements AgentMigrationBucket {
-  async put(signed: AgentMigrationSignedUrl, bytes: Uint8Array, signal: AbortSignal) {
+  async put(signed: AgentMigrationSignedUrl, bytes: Uint8Array<ArrayBuffer>, signal: AbortSignal) {
     const response = await request(signal, () =>
       fetch(signed.url, { method: "PUT", headers: signed.headers, body: bytes, signal }),
     );

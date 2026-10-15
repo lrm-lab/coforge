@@ -101,8 +101,12 @@ export class AgentMigrationHttpClient implements AgentMigrationServer {
     return this.#call<AgentMigrationView>(ANSWERS.view, { operation: "view", migrationId }, signal);
   }
 
-  step(input: Parameters<AgentMigrationServer["step"]>[0]) {
-    return this.#call<AgentMigrationStepResult>(ANSWERS.step, { operation: "step", ...input });
+  step(input: Parameters<AgentMigrationServer["step"]>[0], signal?: AbortSignal) {
+    return this.#call<AgentMigrationStepResult>(
+      ANSWERS.step,
+      { operation: "step", ...input },
+      signal,
+    );
   }
 
   uploadUrl(input: Parameters<AgentMigrationServer["uploadUrl"]>[0], signal?: AbortSignal) {
@@ -121,21 +125,29 @@ export class AgentMigrationHttpClient implements AgentMigrationServer {
     );
   }
 
-  completeUpload(input: Parameters<AgentMigrationServer["completeUpload"]>[0]) {
-    return this.#call<AgentMigrationStepResult>(ANSWERS.step, {
-      operation: "upload_complete",
-      ...input,
-    });
+  completeUpload(
+    input: Parameters<AgentMigrationServer["completeUpload"]>[0],
+    signal?: AbortSignal,
+  ) {
+    return this.#call<AgentMigrationStepResult>(
+      ANSWERS.step,
+      { operation: "upload_complete", ...input },
+      signal,
+    );
   }
 
-  fail(input: Parameters<AgentMigrationServer["fail"]>[0]) {
-    return this.#call<AgentMigrationStepResult>(ANSWERS.step, {
-      operation: "fail",
-      ...input,
-      ...(input.errorDetail === undefined
-        ? {}
-        : { errorDetail: input.errorDetail.slice(0, MAX_ERROR_DETAIL) }),
-    });
+  fail(input: Parameters<AgentMigrationServer["fail"]>[0], signal?: AbortSignal) {
+    return this.#call<AgentMigrationStepResult>(
+      ANSWERS.step,
+      {
+        operation: "fail",
+        ...input,
+        ...(input.errorDetail === undefined
+          ? {}
+          : { errorDetail: input.errorDetail.slice(0, MAX_ERROR_DETAIL) }),
+      },
+      signal,
+    );
   }
 
   async #call<T>(

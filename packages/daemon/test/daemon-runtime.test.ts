@@ -1,3 +1,6 @@
+import { AGENT_MIGRATION_CAPABILITY } from "@lrm/coforge-sdk/internal";
+import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
+import type { ReceivedAgentMigrationLease } from "#src/connection/daemon-connection";
 import {
   afterAll,
   afterEach,
@@ -10991,4 +10994,62 @@ describe("a launch that cannot start says why", () => {
       runtimeError: { errorClass: "LauncherError", errorReason: "runtime_spawn_failed" },
     });
   });
+});
+
+test("a daemon that can migrate says so in its ready, and starts no Agent a source migration holds", async () => {
+  const credentials = new InMemoryDaemonCredentialStore();
+  await credentials.save(connection.workspaceId, connection.computerId, "token-migration");
+  let snapshot: (() => import("@lrm/coforge-sdk/internal").DaemonRuntimeReadyRequest) | undefined;
+  let lease: ((lease: ReceivedAgentMigrationLease) => void) | undefined;
+  const runtime = new DaemonRuntime(
+    connection,
+    () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
+    credentials,
+    {
+      create: () => ({
+        async start() {},
+        async stop() {},
+        async ready(get) {
+          snapshot = get;
+        },
+        onAgentMigrationLease(callback) {
+          lease = callback;
+          return () => {};
+        },
+        // The server never answers, so the run stays in flight while the hold is checked.
+        agentMigrationServer: () =>
+          ({
+            view: (_id: string, signal: AbortSignal) =>
+              new Promise((_resolve, reject) =>
+                signal.addEventListener("abort", () => reject(signal.reason)),
+              ),
+          }) as unknown as AgentMigrationServer,
+      }),
+    },
+    undefined,
+    emptyCodeAgentDiscovery,
+    workspaceRoot,
+  );
+  try {
+    await runtime.start(connection);
+    expect(snapshot!().capabilities).toContain(AGENT_MIGRATION_CAPABILITY);
+    lease!({
+      protocolMajor: 1,
+      requestId: "lease-1",
+      workspaceId: connection.workspaceId,
+      computerId: connection.computerId,
+      agentId: "moving-agent",
+      migrationId: "migration-1",
+      generation: 1,
+      role: "source",
+      expectedRevision: 0,
+      expiresInMs: 60_000,
+      deadline: Date.now() + 60_000,
+    });
+    await expect(runtime.startAgent("moving-agent", config)).rejects.toThrow(
+      "moving to another Computer",
+    );
+  } finally {
+    await runtime.stop();
+  }
 });

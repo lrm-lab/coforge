@@ -48,7 +48,7 @@ export type AgentMigrationBundleChunk = {
   offsetBytes: number;
   sizeBytes: number;
   sha256: string;
-  bytes: Uint8Array;
+  bytes: Uint8Array<ArrayBuffer>;
 };
 
 /** What the target needs to fetch, verify and extract the bundle. */

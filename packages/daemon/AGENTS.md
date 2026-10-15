@@ -34,6 +34,9 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 - An Agent migration uploads the Agent workspace. A code-agent provider that
   keeps Session or auth state inside it must add that directory to
   `RUNTIME_STORAGE` in `agent-migration/workspace-selection.ts`.
+- Every Agent launch goes through `DaemonRuntime.#startAgent`, which refuses an
+  Agent a source migration holds (`AgentMigrationRunner.holds`). A new launch
+  path must keep that gate.
 - `platform/daemon-logging.ts` configures the LogTape sinks once per
   Daemon-role process. Entrypoints own logging context and disposal; modules
   use LogTape category loggers directly, without a logger facade.
