@@ -129,10 +129,10 @@ function uploadAttachment(
 }
 
 /**
- * The chosen file next to the paperclip. A pasted screenshot or other image is a
- * horizontal ellipse, so the thumbnail is not a circle. Any other file stays a small
- * rounded square with its type icon. Clicking it opens the preview with the file's
- * details, upload progress, and the download and remove actions.
+ * The chosen file next to the paperclip. An image uses the message avatar's frame:
+ * 2.25rem by 2.5rem, rounded, with the violet edge. Any other file stays a small chip
+ * with its type icon. Clicking it opens the preview with the file's details, upload
+ * progress, and the download and remove actions.
  */
 function AttachmentChip({
   attachment,
@@ -171,24 +171,21 @@ function AttachmentChip({
         aria-label={file.name}
         className={
           isImage
-            ? "h-auto rounded-[50%] p-0 hover:bg-transparent"
+            ? "h-auto rounded-[0.625rem] p-0 hover:bg-transparent"
             : "h-auto rounded-md p-0 hover:bg-transparent"
         }
       >
         <Avatar
-          size="xs"
+          size={isImage ? "sm" : "xs"}
           rounded={false}
           src={isImage ? previewUrl : undefined}
           alt=""
           className={
             isImage
-              ? // `size-6` is a circle. Important height and width keep the box wider than it is
-                // tall, so that circle radius becomes an ellipse.
-                "h-6! w-10! overflow-hidden rounded-[50%] bg-secondary ring-1 ring-secondary ring-inset"
+              ? undefined
               : "overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset"
           }
-          contentClassName={isImage ? "rounded-[50%]" : undefined}
-          placeholder={icon("size-4")}
+          placeholder={icon(isImage ? "size-5" : "size-4")}
         />
       </Button>
       <AriaPopover
