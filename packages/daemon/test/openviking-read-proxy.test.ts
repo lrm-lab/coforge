@@ -496,3 +496,41 @@ test("diagnosis is a fenced control operation, never an ordinary read", async ()
     }),
   ).rejects.toBeInstanceOf(OpenVikingReadProxyError);
 });
+
+test("the outer read deadline allows a healthy backend response beyond ten seconds", async () => {
+  const controller = new AbortController();
+  let deadline = 0;
+  const timeout = spyOn(AbortSignal, "timeout").mockImplementation((milliseconds) => {
+    deadline = milliseconds;
+    return controller.signal;
+  });
+  fetchSpies.push(timeout);
+  let respond!: () => void;
+  const expected = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "find",
+    operationId: FIND_COMMAND.operationId,
+    duplicate: false,
+    items: [],
+  };
+  const pending = forwardOpenVikingRead({
+    url: "http://coforge.test/read",
+    command: FIND_COMMAND,
+    agentApiKey: AGENT_API_KEY,
+    daemonApiKey: "fixture-daemon",
+    fetch: async (_url, init) =>
+      new Promise<Response>((resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("deadline", "AbortError")),
+          { once: true },
+        );
+        respond = () => resolve(Response.json(expected));
+      }),
+  });
+  // The real six-way BM25 request took about 10.1s; allow the full 15s backend budget
+  // without making this regression depend on wall-clock timing.
+  if (deadline <= 15_000) controller.abort();
+  respond();
+  await expect(pending).resolves.toEqual(expected);
+});

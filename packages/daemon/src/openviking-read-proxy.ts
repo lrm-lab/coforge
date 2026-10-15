@@ -40,7 +40,9 @@ const FORBIDDEN_PAYLOAD_KEYS = [
   "apiKey",
   "plaintext",
 ] as const;
-const DEFAULT_FORWARD_TIMEOUT_MS = 10_000;
+// Web's OpenViking request budget is 15s. The enclosing hop must also
+// leave time for Web authorization, citation binding and the response.
+const DEFAULT_FORWARD_TIMEOUT_MS = 20_000;
 
 export class OpenVikingReadProxyError extends Error {
   readonly status: number;
