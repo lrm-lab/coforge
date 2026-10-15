@@ -130,7 +130,7 @@ function MentionBadge() {
 // collage with one or more members) in a two-line row (`lastMessage` given), and a 20px icon for
 // Saved and for a channel with no member. A two-line row has a second line with the
 // last message's preview under its name. Both share the text start and the current/hover
-// treatment. A channel's selected row is a card (`card`).
+// treatment. A channel's or direct message's selected row is a card (`card`).
 function ConversationRow({
   target,
   current,
@@ -146,7 +146,7 @@ function ConversationRow({
 }: {
   target: ConversationTarget;
   current?: boolean;
-  /** The selected row is a bordered card, as a channel's is. */
+  /** The selected row is a bordered card, as a channel's and a direct message's are. */
   card?: boolean;
   /** The member pinned this row: its name draws the sidebar foreground colour (design spec),
    * darker than an unpinned row's, until it is selected or muted. */
@@ -382,8 +382,8 @@ function DirectorySection({
           section that cannot collapse still folds while the sections are being reordered. */}
       {/* Design spec: 36px from the last row's avatar to the next section's title. A row pads its
           avatar by 0.5rem and its list item by 1px, so the list adds the 27px left (1.6875rem);
-          when the last row is a channel's bordered card, its 1px border takes one of those
-          (1.625rem). A folded section adds nothing: folded titles stay one 2.25rem row apart. */}
+          when the last row is a bordered card (a channel or direct message), its 1px border takes
+          one of those (1.625rem). A folded section adds nothing: folded titles stay one 2.25rem row apart. */}
       <div
         id={listId}
         hidden={expanded === false}
@@ -640,6 +640,7 @@ export function ConversationDirectory({
       <ConversationRow
         target={{ dmId: conversationId }}
         current={conversationId === selectedDmId}
+        card
         pinned={pinned}
         unreadCount={unreadCounts[conversationId]}
         label={self ? m.conversation_dm_self_name({ name }) : name}
