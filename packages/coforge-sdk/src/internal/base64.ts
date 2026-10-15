@@ -36,18 +36,17 @@ export function decodeBase64(value: string): Uint8Array {
     const padding = lastGroup ? trailingPadding : 0;
     if (!lastGroup && (value[index + 2] === "=" || value[index + 3] === "="))
       throw new Error("Invalid base64 padding");
-    const digits: number[] = [];
+    let group = 0;
     for (let position = 0; position < 4 - padding; position++) {
       const digit = DIGITS.get(value[index + position]!);
       if (digit === undefined) throw new Error("Invalid base64 character");
-      digits.push(digit);
+      group = (group << 6) | digit;
     }
     // Refuse a group whose unused trailing bits are set: `Zh==` decodes to `f` the way `Zg==` does,
     // so accepting it would admit a second spelling of the same bytes.
-    if (padding === 2 && (digits[1]! & 0x0f) !== 0) throw new Error("Invalid base64 padding");
-    if (padding === 1 && (digits[2]! & 0x03) !== 0) throw new Error("Invalid base64 padding");
-    const group =
-      (digits[0]! << 18) | ((digits[1] ?? 0) << 12) | ((digits[2] ?? 0) << 6) | (digits[3] ?? 0);
+    if (padding === 2 && (group & 0x0f) !== 0) throw new Error("Invalid base64 padding");
+    if (padding === 1 && (group & 0x03) !== 0) throw new Error("Invalid base64 padding");
+    group <<= padding * 6;
     bytes[offset++] = (group >> 16) & 0xff;
     if (padding < 2) bytes[offset++] = (group >> 8) & 0xff;
     if (padding < 1) bytes[offset++] = group & 0xff;

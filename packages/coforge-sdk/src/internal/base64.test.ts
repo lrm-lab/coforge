@@ -47,3 +47,21 @@ test("base64 decoding refuses anything that is not one canonical spelling", () =
   expect(() => decodeBase64("Zh==")).toThrow();
   expect(() => decodeBase64("Zm9=")).toThrow();
 });
+
+test("base64 decoding preserves every byte across complete groups and padded tails", () => {
+  for (const length of [1, 2, 3, 255, 256, 257]) {
+    const expected = Uint8Array.from({ length }, (_, index) => index & 255);
+    const encoded = Buffer.from(expected).toString("base64");
+    const decoded = decodeBase64(encoded);
+    expect(decoded).toEqual(expected);
+    decoded[0] = 255;
+    expect(decodeBase64(encoded)).toEqual(expected);
+  }
+});
+
+test("base64 decoding retains canonical tail and character errors after complete groups", () => {
+  for (const value of ["Zm9vZh==", "Zm9vZm9=", "Zg==!AAA"])
+    expect(() => decodeBase64(value)).toThrow("Invalid base64 padding");
+  for (const value of ["Zm9vZ===", "Zm9vZg=A", "Zm9v!AAA"])
+    expect(() => decodeBase64(value)).toThrow("Invalid base64 character");
+});
