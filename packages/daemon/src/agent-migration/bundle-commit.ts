@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, open, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, posix, sep } from "node:path";
 import { extract } from "tar-stream";
 import { AGENT_MIGRATION_BUNDLE_ROOT, type AgentMigrationBundleManifest } from "./bundle-writer";
@@ -38,9 +38,11 @@ export type AgentMigrationCommitOutcome =
 
 async function readMarker(workspaceDirectory: string): Promise<CommitMarker | null> {
   try {
-    return JSON.parse(
-      await readFile(join(workspaceDirectory, AGENT_MIGRATION_COMMIT_MARKER), "utf8"),
-    );
+    const bytes = await Bun.file(
+      join(workspaceDirectory, AGENT_MIGRATION_COMMIT_MARKER),
+    ).arrayBuffer();
+    // BunFile.text() strips a BOM; keep it so JSON.parse rejects the same damaged markers.
+    return JSON.parse(Buffer.from(bytes).toString("utf8"));
   } catch {
     return null;
   }

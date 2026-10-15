@@ -197,6 +197,31 @@ test("committing the same bundle again is a no-op that reports it was already co
   );
 });
 
+test.each(["missing", "malformed", "null", "BOM-prefixed", "directory"])(
+  "a %s commit marker does not make a repeated placement a no-op",
+  async (kind) => {
+    const paths = await target();
+    const manifest = await transfer(await sourceWorkspace({ "MEMORY.md": "transferred" }), paths);
+    await commit(paths, manifest);
+    await Bun.write(join(paths.workspaceDirectory, "MEMORY.md"), "local edits");
+    const markerPath = join(paths.workspaceDirectory, AGENT_MIGRATION_COMMIT_MARKER);
+    const marker = Bun.file(markerPath);
+    if (kind === "missing" || kind === "directory") {
+      await marker.delete();
+      if (kind === "directory") await mkdir(markerPath);
+    } else {
+      const content =
+        kind === "BOM-prefixed" ? "\ufeff" + (await marker.text()) : kind === "null" ? "null" : "{";
+      await Bun.write(marker, content);
+    }
+
+    const backup = join(paths.backupDirectory, `preexisting-${migration.migrationId}`);
+    expect(await commit(paths, manifest)).toEqual({ outcome: "committed", movedAsideTo: backup });
+    expect(await Bun.file(join(paths.workspaceDirectory, "MEMORY.md")).text()).toBe("transferred");
+    expect(await Bun.file(join(backup, "MEMORY.md")).text()).toBe("local edits");
+  },
+);
+
 test("moves a workspace already on the target aside, intact, before placing the migrated one", async () => {
   const paths = await target();
   await mkdir(paths.workspaceDirectory, { recursive: true });
