@@ -4,8 +4,7 @@ import {
   agentMigrationStatusLine,
   isAgentMigrationInProgress,
   isAgentMigrationShown,
-  agentMigrationSourceNote,
-  agentMigrationTargetNote,
+  agentMigrationRefusal,
   agentMigrationSteps,
 } from "#src/features/agents/agent-migration";
 import { AppError } from "#src/lib/app-error";
@@ -90,24 +89,43 @@ test("a move reads as four steps: those behind it done, the one under way curren
   expect(steps("completed")).toEqual(["done", "done", "done", "done"]);
 });
 
-test("a move that cannot start says which Computer holds it back, and how", () => {
-  const refusal = (errorId: string) =>
-    agentMigrationErrorMessage(new AppError("TEMPORARILY_UNAVAILABLE", { errorId }));
-  expect(refusal("agent-migration-source-outdated")).toBe(m.agent_migration_source_outdated());
-  expect(refusal("agent-migration-source-offline")).toBe(m.agent_migration_source_offline());
-  expect(refusal("agent-migration-target-outdated")).toBe(m.agent_migration_target_outdated());
-  expect(refusal("agent-migration-target-offline")).toBe(m.agent_migration_target_offline());
-  expect(agentMigrationSourceNote("ready")).toBeNull();
-  expect(agentMigrationSourceNote(null)).toBeNull();
-  expect(agentMigrationSourceNote("outdated")).toBe(m.agent_migration_source_outdated());
-  expect(agentMigrationTargetNote({ readiness: "ready", runsAgent: true })).toBeNull();
-  expect(agentMigrationTargetNote({ readiness: "offline", runsAgent: true })).toBe(
-    m.agent_migration_target_note_offline(),
-  );
-  expect(agentMigrationTargetNote({ readiness: "outdated", runsAgent: true })).toBe(
-    m.agent_migration_target_note_outdated(),
-  );
-  expect(agentMigrationTargetNote({ readiness: "ready", runsAgent: false })).toBe(
-    m.agent_migration_target_note_runtime(),
-  );
+test("a move that cannot start says which Computer holds it back, and where to fix it", () => {
+  const refusal = (
+    errorId: string,
+    code: "TEMPORARILY_UNAVAILABLE" | "INVALID_INPUT" = "TEMPORARILY_UNAVAILABLE",
+  ) => agentMigrationRefusal(new AppError(code, { errorId }));
+  expect(refusal("agent-migration-source-outdated")).toEqual({
+    message: m.agent_migration_source_outdated(),
+    fixAt: "source",
+  });
+  expect(refusal("agent-migration-source-offline")).toEqual({
+    message: m.agent_migration_source_offline(),
+    fixAt: "source",
+  });
+  expect(refusal("agent-migration-target-outdated")).toEqual({
+    message: m.agent_migration_target_outdated(),
+    fixAt: "target",
+  });
+  expect(refusal("agent-migration-target-offline")).toEqual({
+    message: m.agent_migration_target_offline(),
+    fixAt: "target",
+  });
+  expect(refusal("agent-migration-runtime-unavailable", "INVALID_INPUT")).toEqual({
+    message: m.agent_migration_error_runtime_unavailable(),
+    fixAt: "target",
+  });
+  // A Computer that is gone is fixed on the Computers page, not on its own.
+  expect(refusal("agent-migration-target-unavailable", "INVALID_INPUT")).toEqual({
+    message: m.agent_migration_error_target_unavailable(),
+    fixAt: "computers",
+  });
+  // A refusal no Computer page can fix offers no link.
+  expect(refusal("agent-migration-unavailable")).toEqual({
+    message: m.agent_migration_error_unavailable(),
+    fixAt: null,
+  });
+  expect(agentMigrationRefusal(new Error("network"))).toEqual({
+    message: m.agent_migration_error_generic(),
+    fixAt: null,
+  });
 });

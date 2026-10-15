@@ -10,14 +10,17 @@ import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
+import { localizeHref } from "#src/paraglide/runtime";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { workspacePath } from "#src/features/workspaces/workspace-url";
 import {
   agentMigrationErrorMessage,
+  agentMigrationRefusal,
   agentMigrationStatusLine,
   agentMigrationSteps,
   isAgentMigrationInProgress,
   isAgentMigrationShown,
-  agentMigrationSourceNote,
-  agentMigrationTargetNote,
+  type AgentMigrationFixAt,
 } from "#src/features/agents/agent-migration";
 import { useInvalidateAgentProfile } from "./agent-profile-queries";
 import {
@@ -27,12 +30,7 @@ import {
   requestAgentMigration,
 } from "#src/features/agents/agent-migrations.functions";
 
-type ComputerOption = {
-  id: string;
-  name: string;
-  readiness: "ready" | "outdated" | "offline";
-  runsAgent: boolean;
-};
+type ComputerOption = { id: string; name: string };
 
 /** How often a move in progress is read again; each stage takes seconds to minutes. */
 const PROGRESS_POLL_MS = 3_000;
@@ -129,13 +127,12 @@ export function AgentMigrationForm({
   onSelect,
   disabled,
 }: {
-  /** The Workspace's other Computers, each with whether it can take the Agent now. */
+  /** The Workspace's other Computers; whether one can take the Agent is checked on Move. */
   computers: readonly ComputerOption[];
   selected: string | null;
   onSelect: (computerId: string) => void;
   disabled?: boolean;
 }) {
-  // Every Computer is listed; one that cannot take the Agent says why and cannot be picked.
   return (
     <div className="grid gap-4 px-6 pt-4">
       {computers.length === 0 ? (
@@ -152,18 +149,13 @@ export function AgentMigrationForm({
             if (key !== null) onSelect(String(key));
           }}
         >
-          {computers.map((computer) => {
-            const note = agentMigrationTargetNote(computer);
-            return (
-              <Select.Item
-                key={computer.id}
-                id={computer.id}
-                label={computer.name || m.agent_computer_unnamed()}
-                isDisabled={note !== null}
-                {...(note ? { supportingText: note } : {})}
-              />
-            );
-          })}
+          {computers.map((computer) => (
+            <Select.Item
+              key={computer.id}
+              id={computer.id}
+              label={computer.name || m.agent_computer_unnamed()}
+            />
+          ))}
         </Select>
       )}
       <div className="flex items-start gap-3">
@@ -173,6 +165,35 @@ export function AgentMigrationForm({
           <li>{m.agent_migration_dialog_stops()}</li>
           <li>{m.agent_migration_dialog_left_behind()}</li>
         </ul>
+      </div>
+    </div>
+  );
+}
+
+/** Why the move was refused, with a link to the page where it can be fixed. */
+export function AgentMigrationRefusalNotice({
+  message,
+  link,
+}: {
+  message: string;
+  link: { href: string; label: string } | null;
+}) {
+  return (
+    <div
+      role="alert"
+      className="mx-6 mt-4 flex items-start gap-3 rounded-lg border border-secondary bg-warning-primary px-3 py-2.5"
+    >
+      <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
+      <div className="grid min-w-0 gap-1 text-sm">
+        <p className="text-secondary">{message}</p>
+        {link && (
+          <a
+            href={link.href}
+            className="justify-self-start font-semibold text-brand-secondary hover:underline"
+          >
+            {link.label}
+          </a>
+        )}
       </div>
     </div>
   );
@@ -196,6 +217,7 @@ export function AgentMigrationSection({
   isOwner: boolean;
 }) {
   const queryClient = useQueryClient();
+  const workspaceSlug = useWorkspaceSlug();
   const invalidateProfile = useInvalidateAgentProfile(agentId);
   const readMigration = useServerFn(getAgentMigration);
   const requestMove = useServerFn(requestAgentMigration);
@@ -204,7 +226,11 @@ export function AgentMigrationSection({
   const [open, setOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [dialogError, setDialogError] = useState("");
+  const [refusal, setRefusal] = useState<{
+    message: string;
+    fixAt: AgentMigrationFixAt;
+    targetComputerId: string;
+  } | null>(null);
   const [cancelError, setCancelError] = useState("");
   const [submitting, guardSubmit] = useSubmitGuard();
   const [canceling, guardCancel] = useSubmitGuard();
@@ -225,8 +251,6 @@ export function AgentMigrationSection({
   });
   const targets: ComputerOption[] = computers.data ?? [];
 
-  // An old daemon on the Agent's own Computer would never answer a move: say so up front.
-  const sourceNote = agentMigrationSourceNote(status.data?.source ?? null);
   const latest = status.data?.migration;
   const migration = latest && isAgentMigrationShown(latest) ? latest : undefined;
   const inProgress = migration ? isAgentMigrationInProgress(migration.state) : false;
@@ -245,19 +269,37 @@ export function AgentMigrationSection({
 
   function submit() {
     if (!selected || submitting) return;
-    setDialogError("");
+    const targetComputerId = selected;
+    setRefusal(null);
     void guardSubmit(async () => {
       try {
-        await requestMove({ data: { agentId, targetComputerId: selected } });
+        await requestMove({ data: { agentId, targetComputerId } });
         setOpen(false);
         await refresh();
       } catch (cause) {
-        setDialogError(agentMigrationErrorMessage(cause));
+        // The dialog stays open: it says why, links to where to fix it, and offers to try again.
+        setRefusal({ ...agentMigrationRefusal(cause), targetComputerId });
         // A Stop can succeed and the response still fail. Refresh so an active move
         // shows its progress and Cancel instead of the stale idle status.
         await refresh().catch(() => undefined);
       }
     });
+  }
+
+  /** The page that can fix a refusal: the Computer it names, or else the Computers page. */
+  function refusalLink(fixAt: AgentMigrationFixAt, targetComputerId: string) {
+    if (!fixAt) return null;
+    const computerId =
+      fixAt === "source" ? currentComputerId : fixAt === "target" ? targetComputerId : null;
+    return computerId
+      ? {
+          href: localizeHref(workspacePath(workspaceSlug, `/computer/${computerId}`)),
+          label: m.agent_migration_open_computer(),
+        }
+      : {
+          href: localizeHref(workspacePath(workspaceSlug, "/computers")),
+          label: m.agent_migration_open_computers(),
+        };
   }
 
   function cancel() {
@@ -293,18 +335,14 @@ export function AgentMigrationSection({
           canceling={canceling}
         />
       )}
-      {isOwner && status.data.available && !inProgress && sourceNote && (
-        <p className="text-sm text-tertiary">{sourceNote}</p>
-      )}
       {isOwner && status.data.available && !inProgress && (
         <Button
           color="secondary"
           className="w-full justify-center"
           iconLeading={SwitchHorizontal01}
-          isDisabled={sourceNote !== null}
           onPress={() => {
             setSelected(null);
-            setDialogError("");
+            setRefusal(null);
             setOpen(true);
           }}
         >
@@ -374,10 +412,11 @@ export function AgentMigrationSection({
                   onSelect={setSelected}
                   disabled={submitting}
                 />
-                {dialogError && (
-                  <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
-                    {dialogError}
-                  </p>
+                {refusal && (
+                  <AgentMigrationRefusalNotice
+                    message={refusal.message}
+                    link={refusalLink(refusal.fixAt, refusal.targetComputerId)}
+                  />
                 )}
                 <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
                   <Button color="secondary" isDisabled={submitting} onPress={close}>
@@ -390,7 +429,11 @@ export function AgentMigrationSection({
                     showTextWhileLoading
                     onPress={submit}
                   >
-                    {submitting ? m.agent_migration_submit_pending() : m.agent_migration_submit()}
+                    {submitting
+                      ? m.agent_migration_submit_pending()
+                      : refusal
+                        ? m.agent_migration_try_again()
+                        : m.agent_migration_submit()}
                   </Button>
                 </div>
               </>

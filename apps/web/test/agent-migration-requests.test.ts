@@ -55,7 +55,6 @@ test("the owner moves the Agent; the owner and Workspace admins see the move, no
   const { requests, requested } = setup();
   expect(await requests.status(owner, "agent-1")).toEqual({
     available: true,
-    source: "ready",
     migration: null,
   });
   const moved = await requests.request(owner, {
@@ -198,7 +197,6 @@ test("reading a move needs nothing it would take to start one", async () => {
   });
   expect(await requests.status(owner, "agent-1")).toEqual({
     available: true,
-    source: "ready",
     migration: null,
   });
 });
@@ -218,15 +216,14 @@ test("a Computer that is offline or too old to move Agents is refused before any
   }
 });
 
-test("the profile learns whether its own Computer can move the Agent, and which Computers can take it", async () => {
+test("the dialog lists every other Computer, ready or not; the request says which cannot take part", async () => {
   const { requests } = setup({
     readiness: { "computer-a": "outdated", "computer-c": "offline" },
-    runtimeMissing: false,
+    runtimeMissing: true,
   });
-  expect(await requests.status(owner, "agent-1")).toMatchObject({ source: "outdated" });
   expect(await requests.targets(owner, "agent-1")).toEqual([
-    { id: "computer-b", name: "Studio Mac", readiness: "ready", runsAgent: true },
-    { id: "computer-c", name: "Old Laptop", readiness: "offline", runsAgent: true },
+    { id: "computer-b", name: "Studio Mac" },
+    { id: "computer-c", name: "Old Laptop" },
   ]);
   await expect(requests.targets(stranger, "agent-1")).rejects.toMatchObject({
     code: "ACCESS_DENIED",

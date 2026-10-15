@@ -87,15 +87,12 @@ export class AgentMigrationRequests {
         !(await this.deps.isWorkspaceAdmin(principal.workspaceId, principal.userId)))
     )
       throw new AppError("NOT_FOUND");
-    const [available, latest, source] = await Promise.all([
+    const [available, latest] = await Promise.all([
       this.deps.available(),
       this.deps.migrations.latestForAgent(principal.workspaceId, agentId),
-      this.#agentComputerReadiness(principal.workspaceId, agentId),
     ]);
     return {
       available,
-      /** Whether the Agent's own Computer can move it now; null for an Agent on no Computer. */
-      source,
       migration: latest
         ? {
             id: latest.id,
@@ -116,7 +113,8 @@ export class AgentMigrationRequests {
     if (!(await this.deps.available()))
       throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "agent-migration-unavailable" });
     // Before anything stops: an old daemon on either side would ignore the move, leaving the
-    // Agent stopped until its lease ran out.
+    // Agent stopped until its lease ran out. This is the only check: the dialog lists every
+    // Computer, as Raft does, and says what this refusal names.
     const source = await this.#agentComputerReadiness(principal.workspaceId, input.agentId);
     if (source && source !== "ready")
       throw new AppError("TEMPORARILY_UNAVAILABLE", {
@@ -164,20 +162,13 @@ export class AgentMigrationRequests {
   }
 
   /**
-   * The Computers the owner could move the Agent to, each with whether it can take part now and
-   * whether it runs the Agent, so the dialog can say why one cannot be picked.
+   * The Computers the owner could move the Agent to: every other one, unmarked. Whether one can
+   * take part is decided when the move is asked for (`request`).
    */
   async targets(principal: Principal, agentId: string) {
     await this.#assertOwner(principal, agentId);
     const current = await this.deps.agentComputer(principal.workspaceId, agentId);
-    const computers = await this.deps.otherComputers(principal.workspaceId, current);
-    return Promise.all(
-      computers.map(async (computer) => ({
-        ...computer,
-        readiness: await this.deps.computerReadiness(principal.workspaceId, computer.id),
-        runsAgent: await this.deps.canRunAgent(principal.workspaceId, agentId, computer.id),
-      })),
-    );
+    return this.deps.otherComputers(principal.workspaceId, current);
   }
 
   async #agentComputerReadiness(workspaceId: string, agentId: string) {
