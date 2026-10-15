@@ -199,6 +199,9 @@ export function AgentMigrationSection({
         await refresh();
       } catch (cause) {
         setDialogError(agentMigrationErrorMessage(cause));
+        // A Stop can succeed and the response still fail. Refresh so an active move
+        // shows its progress and Cancel instead of the stale idle status.
+        await refresh().catch(() => undefined);
       }
     });
   }
@@ -212,6 +215,7 @@ export function AgentMigrationSection({
         await refresh();
       } catch (cause) {
         setCancelError(agentMigrationErrorMessage(cause));
+        await refresh().catch(() => undefined);
       }
     });
   }
