@@ -830,7 +830,9 @@ export function ConversationDirectory({
                         label={m.conversation_pinned_section()}
                       >
                         {pinnedEmpty ? (
-                          <DirectoryEmptyNote>{m.conversation_pinned_empty_hint()}</DirectoryEmptyNote>
+                          <DirectoryEmptyNote>
+                            {m.conversation_pinned_empty_hint()}
+                          </DirectoryEmptyNote>
                         ) : (
                           list("pinned")
                         )}
