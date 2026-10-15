@@ -26,6 +26,7 @@ import {
 } from "#src/agent-migration/workspace-selection";
 
 const MiB = 1024 * 1024;
+const BACKPRESSURE_FIXTURE_TIMEOUT_MS = 4000;
 const tempRoot = realpathSync(tmpdir());
 const roots: string[] = [];
 const locked: string[] = [];
@@ -188,20 +189,44 @@ test("cuts the stream into chunks whose offsets, digests and sizes add up to the
   expect(manifest.sha256).toBe(sha256(bundle));
 });
 
-test("keeps at most three chunks in the hands of the consumer at once", async () => {
-  const root = await workspace({ "a.bin": incompressible(5 * MiB) });
-  let inFlight = 0;
-  let peak = 0;
-  await pack(root, {
-    chunkBytes: MiB,
-    onChunk: async () => {
-      peak = Math.max(peak, ++inFlight);
-      await Bun.sleep(150);
-      inFlight -= 1;
-    },
-  });
-  expect(peak).toBe(3);
-});
+test(
+  "keeps at most three chunks in the hands of the consumer at once",
+  async () => {
+    const root = await workspace({ "a.bin": incompressible(10 * MiB) });
+    // The isolated process reaches beforeExit only after the producer runs out of work it can
+    // perform without a consumer completing. This observes backpressure independently of speed.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        Bun.fileURLToPath(new URL("./fixtures/agent-migration-backpressure.ts", import.meta.url)),
+        root,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        // Reap a stuck fixture before the test runner's existing five-second deadline.
+        timeout: BACKPRESSURE_FIXTURE_TIMEOUT_MS,
+      },
+    );
+    try {
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(stderr).toBe("");
+      expect(exitCode).toBe(0);
+      const report = JSON.parse(stdout);
+      expect(report).toMatchObject({ heldAtIdle: 3, peak: 3 });
+      expect(report.chunks).toBeGreaterThanOrEqual(4);
+      expect(report.completed).toBe(report.chunks);
+    } finally {
+      if (child.exitCode === null) child.kill();
+      await child.exited;
+    }
+  },
+  BACKPRESSURE_FIXTURE_TIMEOUT_MS + 1000,
+);
 
 test("packs an unchanged workspace to the same bytes every time", async () => {
   const root = await workspace({ "MEMORY.md": "m", "notes/a.md": "a", "src/main.ts": "export {}" });
