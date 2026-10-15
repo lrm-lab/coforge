@@ -4,10 +4,8 @@ import { getMessageRequestIdempotency } from "#src/server/conversations/redis-me
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import {
-  agentReadableBody,
-  MESSAGE_MENTIONS_SELECT,
-} from "#src/server/conversations/mentions.server";
+import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
+import { agentMessageView } from "#src/server/conversations/agent-message-view.server";
 import { createExplicitMemoryDiagnosis, type DiagnosisScope } from "./explicit-diagnosis";
 import { createOpenVikingExplicitDiagnosis } from "#src/server/openviking/explicit-diagnosis.server";
 import { createOpenVikingRuntimeClient } from "#src/server/openviking/runtime-client.server";
@@ -89,7 +87,7 @@ export function createPrismaExplicitMemoryDiagnosis(input: {
       let remaining = MAX_CHARACTERS;
       const messages = [];
       for (const row of rows) {
-        const content = agentReadableBody(row.body, row.mentions);
+        const content = agentMessageView(row).body;
         if (content.length > remaining) break;
         remaining -= content.length;
         messages.push({
@@ -107,7 +105,7 @@ export function createPrismaExplicitMemoryDiagnosis(input: {
         requestId: question.id,
         conversationId: question.conversationId,
         targetAgentId,
-        question: agentReadableBody(question.body, question.mentions),
+        question: agentMessageView(question).body,
         messages: messages.reverse(),
       };
     },

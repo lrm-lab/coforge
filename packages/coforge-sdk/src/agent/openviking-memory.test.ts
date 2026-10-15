@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { OPENVIKING_CITATION_KIND, type OpenVikingCitation } from "./memory-citations";
 import {
+  type OpenVikingExpandCommand,
+  type OpenVikingFindResponse,
+  type OpenVikingRetrieval,
   MEMORY_OFFER_BUDGET_PER_TRIGGER,
   MEMORY_READ_BUDGET_PER_TRIGGER,
   OPENVIKING_AGENT_ERROR_CODES,
@@ -378,7 +381,7 @@ test("diagnosis commands bind to a real message UUID and reject false successful
 });
 
 test("decodes a graph hop from the BM25 discovery chain", () => {
-  const command = {
+  const command: OpenVikingExpandCommand = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
     op: "expand",
     operationId: "hop-1",
@@ -394,7 +397,7 @@ test("decodes a graph hop from the BM25 discovery chain", () => {
 });
 
 test("BM25 discovery preserves the chain and typed graph navigation", () => {
-  const retrieval = {
+  const retrieval: OpenVikingRetrieval = {
     mode: "bm25",
     chainRef: "chain-1",
     step: 0,
@@ -409,7 +412,7 @@ test("BM25 discovery preserves the chain and typed graph navigation", () => {
       },
     ],
   };
-  const response = {
+  const response: OpenVikingFindResponse = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
     op: "find",
     operationId: "find-graph",
