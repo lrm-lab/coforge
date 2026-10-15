@@ -88,3 +88,37 @@ test("raw import refuses a backend without BM25 provenance or a matching content
     server.stop(true);
   }
 });
+
+test("large raw document batches respect the existing transport byte cap", async () => {
+  const posted: string[][] = [];
+  const server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const { resources } = (await request.json()) as {
+        resources: { uri: string; text: string }[];
+      };
+      posted.push(resources.map((row) => row.uri));
+      return Response.json({
+        status: "ok",
+        result: {
+          retrieval_mode: "bm25",
+          resources: resources.map((row) => ({
+            uri: row.uri,
+            content_hash: "sha256:" + new Bun.CryptoHasher("sha256").update(row.text).digest("hex"),
+          })),
+        },
+      });
+    },
+  });
+  try {
+    const { importKnowledgeResources } = await import("../src/knowledge-import");
+    const rows = ["a", "b"].map((id) => ({
+      uri: `viking://resources/docs/${id}.md`,
+      text: "x".repeat(4_300_000),
+    }));
+    await importKnowledgeResources(createEvalRuntime(server.url.toString()), identity, rows);
+    expect(posted).toEqual(rows.map((row) => [row.uri]));
+  } finally {
+    server.stop(true);
+  }
+});

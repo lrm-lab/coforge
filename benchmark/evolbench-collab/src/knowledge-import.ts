@@ -3,6 +3,12 @@ import type { OpenVikingRuntimeClient } from "../../../apps/web/src/server/openv
 import type { ServerOpenVikingIdentity } from "../../../apps/web/src/server/openviking/route-policy";
 import { knowledgeResource, validateKnowledgeReady, type KnowledgeReady } from "./knowledge";
 
+class KnowledgeTransportError extends Error {
+  constructor(readonly code: string) {
+    super(`knowledge import transport: ${code}`);
+  }
+}
+
 async function jsonRequest(
   runtime: OpenVikingRuntimeClient,
   identity: ServerOpenVikingIdentity,
@@ -18,7 +24,7 @@ async function jsonRequest(
     body: method === "GET" ? undefined : body,
     headers: { "content-type": contentType },
   });
-  if (!result.ok) throw new Error(`knowledge import transport: ${result.failure.code}`);
+  if (!result.ok) throw new KnowledgeTransportError(result.failure.code);
   const payload = (await new Response(result.response.body).json()) as {
     status?: string;
     result?: Record<string, unknown>;
@@ -41,18 +47,33 @@ export async function importKnowledgeResources(
   identity: ServerOpenVikingIdentity,
   resources: { uri: string; text: string }[],
 ) {
-  const result = await jsonRequest(
-    runtime,
-    identity,
-    "/api/v1/search/index_lexical",
-    JSON.stringify({
-      resources: resources.map((resource) => ({
-        ...resource,
-        kind: resource.uri.includes("/experiences/") ? "experience" : "document",
-      })),
-    }),
-    "application/json",
-  );
+  let result: Record<string, unknown>;
+  try {
+    result = await jsonRequest(
+      runtime,
+      identity,
+      "/api/v1/search/index_lexical",
+      JSON.stringify({
+        resources: resources.map((resource) => ({
+          ...resource,
+          kind: resource.uri.includes("/experiences/") ? "experience" : "document",
+        })),
+      }),
+      "application/json",
+    );
+  } catch (error) {
+    if (
+      error instanceof KnowledgeTransportError &&
+      error.code === "request_too_large" &&
+      resources.length > 1
+    ) {
+      const middle = Math.floor(resources.length / 2);
+      await importKnowledgeResources(runtime, identity, resources.slice(0, middle));
+      await importKnowledgeResources(runtime, identity, resources.slice(middle));
+      return;
+    }
+    throw error;
+  }
   if (
     result.retrieval_mode !== "bm25" ||
     !Array.isArray(result.resources) ||
