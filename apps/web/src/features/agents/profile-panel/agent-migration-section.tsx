@@ -146,6 +146,7 @@ export function AgentMigrationForm({
           isDisabled={disabled}
           size="md"
           label={m.agent_migration_dialog_target()}
+          placeholder={m.agent_migration_dialog_target_placeholder()}
           selectedKey={selected}
           onSelectionChange={(key) => {
             if (key !== null) onSelect(String(key));

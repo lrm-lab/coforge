@@ -189,6 +189,7 @@
   "agent_control_migrating": "This Agent is moving to another Computer. It starts again there when the move finishes.",
   "agent_migration_action": "Move to another Computer",
   "agent_migration_dialog_title": "Move {name} to another Computer",
+  "agent_migration_dialog_target_placeholder": "Choose a Computer",
   "agent_migration_dialog_target": "Computer",
   "agent_migration_dialog_no_targets": "This Workspace has no other Computer. Connect one first.",
   "agent_migration_dialog_session": "The Agent starts a fresh runtime session there. Its workspace, memory and identity move with it.",

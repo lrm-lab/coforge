@@ -189,6 +189,7 @@
   "agent_control_migrating": "这个智能体正在迁移到其他电脑，迁移完成后会在新电脑上重新启动。",
   "agent_migration_action": "迁移到其他电脑",
   "agent_migration_dialog_title": "将 {name} 迁移到其他电脑",
+  "agent_migration_dialog_target_placeholder": "选择电脑",
   "agent_migration_dialog_target": "目标电脑",
   "agent_migration_dialog_no_targets": "这个工作区没有其他电脑，请先连接一台。",
   "agent_migration_dialog_session": "智能体会在目标电脑上开启新的运行时会话，工作区、记忆和身份会随之迁移。",
