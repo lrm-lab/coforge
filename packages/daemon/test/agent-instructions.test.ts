@@ -151,6 +151,8 @@ test("the openviking-memory profile requires an @memory query and never mentions
   });
   expect(fenced).toContain("## Team memory (Memory Agent)");
   expect(fenced).toContain("explicit @memory question requires a memory query");
+  expect(fenced).toContain("Use message_read with the exact target");
+  expect(fenced).not.toContain("Use message_check or message_read");
   expect(fenced).not.toContain("Bearer");
   expect(fenced).not.toContain("CAUSAL_MEMORY_TOKENS");
   expect(

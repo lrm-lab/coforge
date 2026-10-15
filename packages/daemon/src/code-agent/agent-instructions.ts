@@ -113,7 +113,7 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
         context.toolProfile,
         context.memoryOfferOnly ?? evalMemoryOfferOnly(),
       ),
-      "## Inbox\nAn inbox notice lists targets, not bodies. Use message_check or message_read with the exact target, including any thread suffix. Either may return nothing. Do not announce the notice or poll for messages.",
+      "## Inbox\nAn inbox notice lists targets, not bodies. Use message_read with the exact target, including any thread suffix, and no range anchor. Continue while hasNewer is true. A read may return nothing if the messages were already consumed. Do not announce the notice or poll for messages.",
       guide.safety,
     );
   } else {
