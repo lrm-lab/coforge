@@ -267,7 +267,6 @@ input[type="search"]::-webkit-search-cancel-button {
   --epr-picker-border-radius: 0.75rem !important;
   --epr-emoji-variation-picker-bg-color: var(--color-bg-primary) !important;
   --epr-skin-tone-picker-menu-color: var(--color-bg-primary) !important;
-  --epr-emoji-font-family: inherit !important;
 }
 
 @media (max-width: 380px) {
@@ -279,5 +278,4 @@ input[type="search"]::-webkit-search-cancel-button {
     --epr-category-padding: 0.5rem 0.75rem !important;
     --epr-search-input-height: 2rem !important;
   }
-}
 }
