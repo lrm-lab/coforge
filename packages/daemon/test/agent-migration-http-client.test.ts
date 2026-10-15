@@ -89,16 +89,17 @@ test("each operation is one POST with the daemon key, its name and its fields", 
     new Set(seen.map(({ method, path, authorization }) => `${method} ${path} ${authorization}`)),
   ).toEqual(new Set(["POST /api/daemon/agent-migrations Bearer daemon-key"]));
   expect(seen.map((request) => request.body)).toEqual([
-    { operation: "view", migrationId: "migration-1" },
+    { version: 1, operation: "view", migrationId: "migration-1" },
     {
+      version: 1,
       operation: "upload_url",
       ...ids,
       chunk: { index: 0, offsetBytes: 0, sizeBytes: 1, sha256: "a".repeat(64) },
     },
-    { operation: "download_url", ...ids, index: 4 },
-    { operation: "step", ...ids, expectedRevision: 2, step: "placement_started" },
-    { operation: "fail", ...ids, errorCode: "download_failed", errorDetail: "chunk 4" },
-    { operation: "upload_complete", ...ids, expectedRevision: 1, manifest },
+    { version: 1, operation: "download_url", ...ids, index: 4 },
+    { version: 1, operation: "step", ...ids, expectedRevision: 2, step: "placement_started" },
+    { version: 1, operation: "fail", ...ids, errorCode: "download_failed", errorDetail: "chunk 4" },
+    { version: 1, operation: "upload_complete", ...ids, expectedRevision: 1, manifest },
   ]);
 });
 

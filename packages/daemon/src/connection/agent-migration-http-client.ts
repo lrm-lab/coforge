@@ -91,7 +91,7 @@ function retryable(status: number, code: string) {
 
 /**
  * The server's Agent migration route over HTTPS, authenticated with this Computer's daemon API
- * key: one POST per operation, its name in `operation`. A refusal becomes an
+ * key: one POST per operation, `version: 1` and its name in `operation`. A refusal becomes an
  * `AgentMigrationRemoteError` carrying the route's code; a caller's abort propagates as itself.
  */
 export class AgentMigrationHttpClient implements AgentMigrationServer {
@@ -154,7 +154,7 @@ export class AgentMigrationHttpClient implements AgentMigrationServer {
           authorization: `Bearer ${this.options.daemonApiKey()}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, version: 1 }),
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
     } catch (error) {
