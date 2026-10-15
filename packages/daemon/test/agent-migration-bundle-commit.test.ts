@@ -448,6 +448,53 @@ test("refuses the commit directory in another case and an entry under a file", a
   expect(await errorCode(commit(nested, underFile))).toBe("unsafe_path");
 });
 
+for (const kind of ["file", "symlink"] as const) {
+  test(`refuses a ${kind} replacing an implicit parent directory, placing nothing`, async () => {
+    const paths = await target();
+    const manifest = await craftedBundle(
+      [
+        { name: "workspace/Notes/child.txt", content: "child" },
+        { name: "workspace/notes", type: kind, content: "parent", linkname: "other" },
+      ],
+      paths,
+    );
+    expect(await errorCode(commit(paths, manifest))).toBe("unsafe_path");
+    expect(await readdir(paths.migrationDirectory)).toEqual(["chunks"]);
+    expect(await lstat(paths.workspaceDirectory).catch(() => null)).toBeNull();
+  });
+
+  test(`refuses an entry under a Unicode-equivalent ${kind}, placing nothing`, async () => {
+    const paths = await target();
+    const manifest = await craftedBundle(
+      [
+        { name: "workspace/Café", type: kind, content: "parent", linkname: "other" },
+        { name: "workspace/cafe\u0301/child.txt", content: "child" },
+      ],
+      paths,
+    );
+    expect(await errorCode(commit(paths, manifest))).toBe("unsafe_path");
+    expect(await readdir(paths.migrationDirectory)).toEqual(["chunks"]);
+    expect(await lstat(paths.workspaceDirectory).catch(() => null)).toBeNull();
+  });
+}
+
+test("places sibling entries that share an implicit directory", async () => {
+  const paths = await target();
+  const manifest = await craftedBundle(
+    [
+      { name: "workspace/notes/first.txt", content: "first" },
+      { name: "workspace/notes/second.txt", content: "second" },
+      { name: "workspace/notes/link", type: "symlink", linkname: "first.txt" },
+    ],
+    paths,
+  );
+  expect(await commit(paths, manifest)).toEqual({ outcome: "committed" });
+  expect(await Bun.file(join(paths.workspaceDirectory, "notes/first.txt")).text()).toBe("first");
+  expect(await Bun.file(join(paths.workspaceDirectory, "notes/second.txt")).text()).toBe("second");
+  expect(await readlink(join(paths.workspaceDirectory, "notes/link"))).toBe("first.txt");
+  expect((await readdir(paths.migrationDirectory)).sort()).toEqual(["chunks"]);
+});
+
 test("a refused entry ends a many-chunk unpack promptly instead of hanging", async () => {
   const source = await sourceWorkspace({ "a.txt": "a" });
   const paths = await target();

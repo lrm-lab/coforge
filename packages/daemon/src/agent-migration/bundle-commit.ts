@@ -79,8 +79,6 @@ export async function agentWorkspacePlacement(workspaceDirectory: string) {
  */
 class PlacedPaths {
   readonly #entries = new Set<string>();
-  readonly #symlinks = new Set<string>();
-  readonly #files = new Set<string>();
   readonly #directories = new Set<string>();
 
   static fold(path: string) {
@@ -88,7 +86,7 @@ class PlacedPaths {
   }
 
   /** The workspace-relative path of an archive entry, or a refusal naming why it may not land. */
-  admit(name: string, kind: "file" | "symlink") {
+  admit(name: string) {
     const prefix = `${AGENT_MIGRATION_BUNDLE_ROOT}/`;
     const path = name.startsWith(prefix) ? name.slice(prefix.length) : "";
     if (!isSafeRelativePath(path)) throw new AgentMigrationCommitError("unsafe_path", name);
@@ -100,12 +98,11 @@ class PlacedPaths {
       throw new AgentMigrationCommitError("unsafe_path", `${name} collides with another entry`);
     for (let depth = 1; depth < segments.length; depth += 1) {
       const ancestor = segments.slice(0, depth).join("/");
-      if (this.#symlinks.has(ancestor) || this.#files.has(ancestor))
+      if (this.#entries.has(ancestor))
         throw new AgentMigrationCommitError("unsafe_path", `${name} lies under a link or file`);
       this.#directories.add(ancestor);
     }
     this.#entries.add(folded);
-    (kind === "symlink" ? this.#symlinks : this.#files).add(folded);
     return path;
   }
 }
@@ -181,7 +178,7 @@ async function unpack(
             "unsupported_entry",
             `${header.name} is a ${header.type ?? "typeless entry"}`,
           );
-        const path = admitted.admit(header.name, header.type);
+        const path = admitted.admit(header.name);
         const target = join(destination, path);
         // Refuse as soon as the archive outgrows its manifest, before it can fill the disk.
         if (++totals.entryCount > manifest.entryCount)
