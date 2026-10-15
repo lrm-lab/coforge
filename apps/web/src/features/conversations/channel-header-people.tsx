@@ -5,18 +5,15 @@ import { Heading } from "react-aria-components";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Badge } from "#src/components/base/badges/badges";
-import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
-import { HoverPopover, useClosePreview } from "#src/components/ui/hover-popover";
+import { HoverPopover } from "#src/components/ui/hover-popover";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import {
   useOpenAgentProfile,
   type OpenAgentProfile,
-  type OpenPersonProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
-import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
@@ -55,8 +52,6 @@ function MemberProfileCard({
   description,
   serverRole,
   channelRole,
-  onOpenDirect,
-  onOpenProfile,
 }: {
   userId?: string;
   name: string;
@@ -64,11 +59,8 @@ function MemberProfileCard({
   description?: string | null;
   serverRole?: string | null;
   channelRole?: string;
-  onOpenDirect?: (peer: { userId: string }) => void;
-  onOpenProfile?: OpenPersonProfile;
 }) {
   const online = userId ? useMemberOnline(userId) : undefined;
-  const closePreview = useClosePreview();
 
   const roleText =
     serverRole || channelRole
@@ -115,34 +107,6 @@ function MemberProfileCard({
           {description}
         </p>
       )}
-      {userId && (onOpenDirect || onOpenProfile) && (
-        <div className="border-t border-secondary px-3 py-2 flex justify-end gap-2">
-          {onOpenProfile && (
-            <Button
-              size="sm"
-              color="secondary"
-              onPress={() => {
-                closePreview();
-                onOpenProfile(userId);
-              }}
-            >
-              {m.member_person_view_profile()}
-            </Button>
-          )}
-          {onOpenDirect && (
-            <Button
-              size="sm"
-              color="secondary"
-              onPress={() => {
-                closePreview();
-                void onOpenDirect({ userId });
-              }}
-            >
-              {m.member_private_chat()}
-            </Button>
-          )}
-        </div>
-      )}
     </>
   );
 }
@@ -177,16 +141,12 @@ export function ChannelHeaderFaces({
   onOpenMembers,
   onAddMembers,
   onOpenAgentProfile,
-  onOpenPersonProfile,
-  onOpenDirect,
 }: {
   entries: readonly ChannelHeaderFace[];
   canAdd: boolean;
   onOpenMembers: () => void;
   onAddMembers: () => void;
   onOpenAgentProfile?: OpenAgentProfile;
-  onOpenPersonProfile?: OpenPersonProfile;
-  onOpenDirect?: (peer: { userId: string }) => void;
 }) {
   const shown = entries.slice(0, CHANNEL_HEADER_FACE_LIMIT);
   const more = entries.length - shown.length;
@@ -249,8 +209,6 @@ export function ChannelHeaderFaces({
                   description={entry.description}
                   serverRole={entry.serverRole}
                   channelRole={entry.channelRole}
-                  onOpenDirect={onOpenDirect}
-                  onOpenProfile={onOpenPersonProfile}
                 />
               </HoverPopover>
             );
@@ -299,8 +257,7 @@ export function ChannelHeaderMemberCluster({
   onAddMembers: () => void;
 }) {
   const members = useChannelMembers(channelId);
-  const { openAgentProfile, openPersonProfile } = useOpenAgentProfile();
-  const openDirect = useOpenDirectConversation();
+  const { openAgentProfile } = useOpenAgentProfile();
 
   if (members.isPending) {
     return (
@@ -346,8 +303,6 @@ export function ChannelHeaderMemberCluster({
       onOpenMembers={onOpenMembers}
       onAddMembers={onAddMembers}
       onOpenAgentProfile={openAgentProfile}
-      onOpenPersonProfile={openPersonProfile}
-      onOpenDirect={openDirect}
     />
   );
 }
