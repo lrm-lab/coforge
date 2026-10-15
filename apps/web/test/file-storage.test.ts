@@ -302,6 +302,17 @@ describe("oss file storage", () => {
     expect(conflict.status).toBe(409);
   });
 
+  test("presigns a V4 GET that reads an object back without the server in the path", async () => {
+    if (!storage.presignGet) throw new Error("expected presignGet to be implemented");
+    const key = "workspaces/w/agents/a/migrations/m/1/chunks/0-abc";
+    await storage.put(key, new Blob(["chunk bytes"]), "application/octet-stream");
+    const url = await storage.presignGet(key, { expiresInSeconds: 60 });
+    expect(url).toContain("x-oss-signature-version=OSS4-HMAC-SHA256");
+    const response = await fetch(url);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("chunk bytes");
+  });
+
   test("a presigned URL always answers the public endpoint while server traffic stays internal", async () => {
     // `COFORGE_OSS_INTERNAL=1` must only ever move the server's own traffic onto the internal
     // endpoint: the presigned PUT is consumed by a browser or the CLI, and an internal endpoint

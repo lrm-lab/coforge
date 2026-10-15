@@ -210,3 +210,23 @@ test.skipIf(!connectionString)(
     }
   },
 );
+
+test.skipIf(!connectionString)("keeps the bundle manifest written with a transition", async () => {
+  const { store, input, cleanup } = await setup();
+  try {
+    const created = await store.create(input);
+    if (created === "active_exists") throw new Error("unreachable");
+    expect(await store.manifest(created.id)).toBeNull();
+    const manifest = { format: "tar+gzip", sha256: "abc", chunks: [{ index: 0, sha256: "def" }] };
+    await store.transition({
+      id: created.id,
+      expectedRevision: 0,
+      to: "uploaded",
+      at: new Date(),
+      manifest,
+    });
+    expect(await store.manifest(created.id)).toEqual(manifest);
+  } finally {
+    await cleanup();
+  }
+});

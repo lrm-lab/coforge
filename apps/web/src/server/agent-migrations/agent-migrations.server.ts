@@ -65,6 +65,8 @@ export type AgentMigrationTransition = {
   error?: { code: string; detail: string | null };
   /** Moves the Agent in the same transaction, only while it is still on `fromComputerId`. */
   move?: { agentId: string; fromComputerId: string; toComputerId: string };
+  /** The bundle manifest the source sends with `upload_complete`, kept with the transition. */
+  manifest?: unknown;
 };
 
 export interface AgentMigrationStore {
@@ -84,6 +86,8 @@ export interface AgentMigrationStore {
     requestedByUserId: string;
   }): Promise<AgentMigrationRecord | "active_exists">;
   find(id: string): Promise<AgentMigrationRecord | null>;
+  /** The bundle manifest stored with `upload_complete`, or null before it. */
+  manifest(id: string): Promise<unknown | null>;
   /**
    * Applies a transition only at `expectedRevision`. For a move, `agent_moved` means the Agent had
    * already left the source Computer and `target_unavailable` that the target is no longer a live
@@ -114,12 +118,13 @@ export type AgentMigrationStepRefusal =
   | "stale_generation"
   | "stale_revision"
   | MoveRefusal
-  | "invalid_transition";
+  | "invalid_transition"
+  | "manifest_required";
 
-type Role = "source" | "target";
+export type AgentMigrationRole = "source" | "target";
 
 /** Each step in happy-path order: who sends it and the state it reaches from the previous one. */
-const STEPS: Record<AgentMigrationStep, { role: Role; to: AgentMigrationState }> = {
+const STEPS: Record<AgentMigrationStep, { role: AgentMigrationRole; to: AgentMigrationState }> = {
   source_stopped: { role: "source", to: "source_stopped" },
   upload_complete: { role: "source", to: "uploaded" },
   placement_started: { role: "target", to: "placing" },
@@ -132,7 +137,11 @@ const HAPPY_PATH: readonly AgentMigrationState[] = [
   ...Object.values(STEPS).map((step) => step.to),
 ];
 
-function roleOf(migration: AgentMigrationRecord, participant: MigrationParticipant): Role | null {
+/** Which side of the migration this Computer is, or null when it is neither. */
+export function agentMigrationRoleOf(
+  migration: AgentMigrationRecord,
+  participant: MigrationParticipant,
+): AgentMigrationRole | null {
   if (participant.computerId === migration.sourceComputerId) return "source";
   if (participant.computerId === migration.targetComputerId) return "target";
   return null;
@@ -168,7 +177,7 @@ export class AgentMigrations {
   /** The migration as one of its two Computers may see it, or null for anyone else. */
   async view(participant: MigrationParticipant, migrationId: string) {
     const migration = await this.#find(participant.workspaceId, migrationId);
-    return migration && roleOf(migration, participant) ? migration : null;
+    return migration && agentMigrationRoleOf(migration, participant) ? migration : null;
   }
 
   async advance(
@@ -178,6 +187,8 @@ export class AgentMigrations {
       generation: number;
       expectedRevision: number;
       step: AgentMigrationStep;
+      /** Required with `upload_complete`: the bundle's manifest, opaque to this module. */
+      manifest?: unknown;
     },
   ): Promise<
     | { status: "advanced" | "already_applied"; migration: AgentMigrationRecord }
@@ -186,7 +197,7 @@ export class AgentMigrations {
     const migration = await this.#find(participant.workspaceId, input.migrationId);
     if (!migration) return { status: "refused", code: "not_found" };
     const step = STEPS[input.step];
-    if (roleOf(migration, participant) !== step.role)
+    if (agentMigrationRoleOf(migration, participant) !== step.role)
       return { status: "refused", code: "wrong_computer" };
     if (input.generation !== migration.generation)
       return { status: "refused", code: "stale_generation" };
@@ -199,8 +210,11 @@ export class AgentMigrations {
       return { status: "refused", code: "stale_revision" };
     if (migration.state !== HAPPY_PATH[reached - 1])
       return { status: "refused", code: "invalid_transition" };
+    if (input.step === "upload_complete" && input.manifest === undefined)
+      return { status: "refused", code: "manifest_required" };
     const applied = await this.#apply(migration, {
       to: step.to,
+      ...(input.step === "upload_complete" ? { manifest: input.manifest } : {}),
       ...(input.step === "switch"
         ? {
             move: {
@@ -262,6 +276,11 @@ export class AgentMigrations {
       : { status: "failed", migration: applied };
   }
 
+  /** The bundle manifest of a migration a participant has already viewed, or null before upload. */
+  async manifest(migration: AgentMigrationRecord) {
+    return this.store.manifest(migration.id);
+  }
+
   async #find(workspaceId: string, migrationId: string) {
     const migration = await this.store.find(migrationId);
     return migration && migration.workspaceId === workspaceId ? migration : null;
@@ -270,7 +289,7 @@ export class AgentMigrations {
   /** Compare-and-set at the revision the caller read. */
   #apply(
     migration: AgentMigrationRecord,
-    change: Pick<AgentMigrationTransition, "to" | "error" | "move">,
+    change: Pick<AgentMigrationTransition, "to" | "error" | "move" | "manifest">,
   ) {
     return this.store.transition({
       id: migration.id,

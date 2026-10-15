@@ -33,6 +33,7 @@ import { Route as WorkspacesNewRouteImport } from './routes/workspaces.new'
 import { Route as ApiAttachmentsAttachmentIdRouteImport } from './routes/api/attachments.$attachmentId'
 import { Route as ApiComputerAttachRouteImport } from './routes/api/computer/attach'
 import { Route as ApiComputerWorkspaceRouteImport } from './routes/api/computer/workspace'
+import { Route as ApiDaemonAgentMigrationsRouteImport } from './routes/api/daemon/agent-migrations'
 import { Route as ApiHostsHeartbeatRouteImport } from './routes/api/hosts/heartbeat'
 import { Route as ApiHostsRegisterRouteImport } from './routes/api/hosts/register'
 import { Route as ApiInternalCentrifugoRouteImport } from './routes/api/internal/centrifugo'
@@ -242,6 +243,12 @@ const ApiComputerWorkspaceRoute = ApiComputerWorkspaceRouteImport.update({
   path: '/api/computer/workspace',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDaemonAgentMigrationsRoute =
+  ApiDaemonAgentMigrationsRouteImport.update({
+    id: '/api/daemon/agent-migrations',
+    path: '/api/daemon/agent-migrations',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiHostsHeartbeatRoute = ApiHostsHeartbeatRouteImport.update({
   id: '/api/hosts/heartbeat',
   path: '/api/hosts/heartbeat',
@@ -754,6 +761,7 @@ export interface FileRoutesByFullPath {
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
+  '/api/daemon/agent-migrations': typeof ApiDaemonAgentMigrationsRoute
   '/api/hosts/heartbeat': typeof ApiHostsHeartbeatRoute
   '/api/hosts/register': typeof ApiHostsRegisterRoute
   '/api/internal/centrifugo': typeof ApiInternalCentrifugoRoute
@@ -864,6 +872,7 @@ export interface FileRoutesByTo {
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
+  '/api/daemon/agent-migrations': typeof ApiDaemonAgentMigrationsRoute
   '/api/hosts/heartbeat': typeof ApiHostsHeartbeatRoute
   '/api/hosts/register': typeof ApiHostsRegisterRoute
   '/api/internal/centrifugo': typeof ApiInternalCentrifugoRoute
@@ -973,6 +982,7 @@ export interface FileRoutesById {
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
+  '/api/daemon/agent-migrations': typeof ApiDaemonAgentMigrationsRoute
   '/api/hosts/heartbeat': typeof ApiHostsHeartbeatRoute
   '/api/hosts/register': typeof ApiHostsRegisterRoute
   '/api/internal/centrifugo': typeof ApiInternalCentrifugoRoute
@@ -1087,6 +1097,7 @@ export interface FileRouteTypes {
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
     | '/api/computer/workspace'
+    | '/api/daemon/agent-migrations'
     | '/api/hosts/heartbeat'
     | '/api/hosts/register'
     | '/api/internal/centrifugo'
@@ -1197,6 +1208,7 @@ export interface FileRouteTypes {
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
     | '/api/computer/workspace'
+    | '/api/daemon/agent-migrations'
     | '/api/hosts/heartbeat'
     | '/api/hosts/register'
     | '/api/internal/centrifugo'
@@ -1305,6 +1317,7 @@ export interface FileRouteTypes {
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
     | '/api/computer/workspace'
+    | '/api/daemon/agent-migrations'
     | '/api/hosts/heartbeat'
     | '/api/hosts/register'
     | '/api/internal/centrifugo'
@@ -1417,6 +1430,7 @@ export interface RootRouteChildren {
   WorkspacesNewRoute: typeof WorkspacesNewRoute
   ApiComputerAttachRoute: typeof ApiComputerAttachRoute
   ApiComputerWorkspaceRoute: typeof ApiComputerWorkspaceRoute
+  ApiDaemonAgentMigrationsRoute: typeof ApiDaemonAgentMigrationsRoute
   ApiHostsHeartbeatRoute: typeof ApiHostsHeartbeatRoute
   ApiHostsRegisterRoute: typeof ApiHostsRegisterRoute
   ApiInternalCentrifugoRoute: typeof ApiInternalCentrifugoRoute
@@ -1639,6 +1653,13 @@ declare module '@tanstack/react-router' {
       path: '/api/computer/workspace'
       fullPath: '/api/computer/workspace'
       preLoaderRoute: typeof ApiComputerWorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/daemon/agent-migrations': {
+      id: '/api/daemon/agent-migrations'
+      path: '/api/daemon/agent-migrations'
+      fullPath: '/api/daemon/agent-migrations'
+      preLoaderRoute: typeof ApiDaemonAgentMigrationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/hosts/heartbeat': {
@@ -2436,6 +2457,7 @@ const rootRouteChildren: RootRouteChildren = {
   WorkspacesNewRoute: WorkspacesNewRoute,
   ApiComputerAttachRoute: ApiComputerAttachRoute,
   ApiComputerWorkspaceRoute: ApiComputerWorkspaceRoute,
+  ApiDaemonAgentMigrationsRoute: ApiDaemonAgentMigrationsRoute,
   ApiHostsHeartbeatRoute: ApiHostsHeartbeatRoute,
   ApiHostsRegisterRoute: ApiHostsRegisterRoute,
   ApiInternalCentrifugoRoute: ApiInternalCentrifugoRoute,

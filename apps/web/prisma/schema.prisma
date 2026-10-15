@@ -1792,6 +1792,9 @@ model AgentMigration {
   switchedAt        DateTime?
   errorCode         String?
   errorDetail       String?
+  /// The bundle manifest the source sent with `upload_complete`: chunk digests and totals the
+  /// target verifies against. Opaque to the state machine.
+  manifest          Json?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   finishedAt        DateTime?

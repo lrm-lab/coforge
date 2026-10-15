@@ -31,6 +31,11 @@ export interface FileStorage {
     objectKey: string,
     input: { contentType: string; expiresInSeconds: number },
   ): Promise<{ url: string; headers: Record<string, string> }>;
+  /**
+   * Issues a short-lived presigned GET for one object, or is absent when this backend cannot
+   * hand out direct downloads (`LocalFileStorage` has none). Backs Agent migration downloads.
+   */
+  presignGet?(objectKey: string, input: { expiresInSeconds: number }): Promise<string>;
 }
 
 /**

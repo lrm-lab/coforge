@@ -4,12 +4,10 @@ import { join } from "node:path";
 import {
   AgentMigrations,
   FINISHED_AGENT_MIGRATION_STATES,
-  isFinishedAgentMigration,
-  type AgentMigrationRecord,
   type AgentMigrationStep,
-  type AgentMigrationStore,
   type MigrationParticipant,
 } from "#src/server/agent-migrations/agent-migrations.server";
+import { memoryStore } from "./helpers/agent-migration-memory-store";
 
 const workspaceId = "workspace-1";
 const source = { workspaceId, computerId: "computer-a" };
@@ -20,62 +18,6 @@ const REQUEST = {
   targetComputerId: "computer-b",
   requestedByUserId: "user-1",
 };
-
-/**
- * An in-memory store that keeps the store's contract: a transition applies only at the revision
- * it names, and a move only while the Agent is still on the source. Compare-and-set, the single
- * active migration and the atomic switch against PostgreSQL are covered by
- * `agent-migration-repository.integration.test.ts`.
- */
-function memoryStore(
-  placement: { computerId: string | null } | null = { computerId: "computer-a" },
-) {
-  const rows = new Map<string, AgentMigrationRecord>();
-  const agentComputer = { value: placement?.computerId ?? null };
-  const liveComputers = new Set(["computer-a", "computer-b"]);
-  const store: AgentMigrationStore = {
-    agentPlacement: async () => (placement ? { computerId: agentComputer.value } : null),
-    workspaceHasComputer: async (_workspace, computerId) => liveComputers.has(computerId),
-    create: async (input) => {
-      const active = [...rows.values()].some(
-        (row) => row.agentId === input.agentId && !isFinishedAgentMigration(row.state),
-      );
-      if (active) return "active_exists";
-      const row: AgentMigrationRecord = {
-        id: `migration-${rows.size + 1}`,
-        workspaceId: input.workspaceId,
-        agentId: input.agentId,
-        sourceComputerId: input.sourceComputerId,
-        targetComputerId: input.targetComputerId,
-        state: "requested",
-        revision: 0,
-        generation: 1,
-        switchedAt: null,
-        errorCode: null,
-      };
-      rows.set(row.id, row);
-      return row;
-    },
-    find: async (id) => rows.get(id) ?? null,
-    transition: async ({ id, expectedRevision, to, error, move }) => {
-      const row = rows.get(id);
-      if (!row || row.revision !== expectedRevision) return "stale_revision";
-      if (move && agentComputer.value !== move.fromComputerId) return "agent_moved";
-      if (move && !liveComputers.has(move.toComputerId)) return "target_unavailable";
-      const updated = {
-        ...row,
-        state: to,
-        revision: row.revision + 1,
-        ...(to === "switched" ? { switchedAt: new Date() } : {}),
-        ...(error ? { errorCode: error.code } : {}),
-      };
-      rows.set(id, updated);
-      if (move) agentComputer.value = move.toComputerId;
-      return updated;
-    },
-  };
-  return { store, rows, agentComputer, liveComputers };
-}
 
 async function requested(fixture = memoryStore()) {
   const migrations = new AgentMigrations(fixture.store);
@@ -97,8 +39,12 @@ async function step(
     generation: current.generation,
     expectedRevision: current.revision,
     step: name,
+    ...(name === "upload_complete" ? { manifest: MANIFEST } : {}),
   });
 }
+
+/** What a source sends with `upload_complete`; the domain keeps it without reading it. */
+const MANIFEST = { format: "tar+gzip", sha256: "abc", chunks: [] };
 
 test("the one-active index finishes on the same states as the domain", () => {
   const schema = readFileSync(join(import.meta.dir, "../prisma/schema.prisma"), "utf8");
@@ -327,4 +273,28 @@ test("a participant's failure report ends the migration with its error code", as
     status: "failed",
     migration: { state: "failed", errorCode: "chunk_digest_mismatch" },
   });
+});
+
+test("upload completion carries the bundle manifest, stored with the step", async () => {
+  const { migrations, migration, manifests } = await requested();
+  await step(migrations, migration.id, source, "source_stopped");
+  const current = (await migrations.view(source, migration.id))!;
+  const bare = {
+    migrationId: migration.id,
+    generation: 1,
+    expectedRevision: current.revision,
+    step: "upload_complete" as const,
+  };
+  expect(await migrations.advance(source, bare)).toEqual({
+    status: "refused",
+    code: "manifest_required",
+  });
+  expect(await migrations.advance(source, { ...bare, manifest: MANIFEST })).toMatchObject({
+    status: "advanced",
+    migration: { state: "uploaded" },
+  });
+  expect(manifests.get(migration.id)).toEqual(MANIFEST);
+  expect(await migrations.manifest((await migrations.view(target, migration.id))!)).toEqual(
+    MANIFEST,
+  );
 });

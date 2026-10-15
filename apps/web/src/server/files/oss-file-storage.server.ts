@@ -82,7 +82,7 @@ export async function createOssFileStorage(config: OssConfig): Promise<ManagedFi
 
 export class OssFileStorage implements FileStorage, BulkFileRemoval {
   /** Server-side traffic (put/open/remove/head) may ride the internal endpoint; `presignPut`
-   * signs on the public-endpoint client because its URL is consumed outside this server. */
+   * and `presignGet` sign on the public-endpoint client because its URL is consumed outside this server. */
   constructor(
     private readonly client: OSS,
     private readonly presignClient: OSS,
@@ -181,6 +181,11 @@ export class OssFileStorage implements FileStorage, BulkFileRemoval {
       objectKey,
     );
     return { url, headers };
+  }
+
+  async presignGet(objectKey: string, input: { expiresInSeconds: number }) {
+    // Public-endpoint client, as for `presignPut`: a Computer's daemon fetches this URL.
+    return this.presignClient.signatureUrlV4("GET", input.expiresInSeconds, {}, objectKey);
   }
 }
 

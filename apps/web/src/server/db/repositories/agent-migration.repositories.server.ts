@@ -36,8 +36,10 @@ function transitionColumns({
   to,
   at,
   error,
+  manifest,
 }: AgentMigrationTransition): Prisma.AgentMigrationUpdateInput {
   return {
+    ...(manifest !== undefined ? { manifest: manifest as Prisma.InputJsonValue } : {}),
     state: to,
     revision: { increment: 1 },
     ...(to === "switched" ? { switchedAt: at } : {}),
@@ -97,6 +99,14 @@ export class PrismaAgentMigrationStore implements AgentMigrationStore {
       select: MIGRATION_SELECT,
     });
     return row ? toMigrationRecord(row) : null;
+  }
+
+  async manifest(id: string) {
+    const row = await this.db.agentMigration.findUnique({
+      where: { id },
+      select: { manifest: true },
+    });
+    return row?.manifest ?? null;
   }
 
   async transition(input: AgentMigrationTransition) {
