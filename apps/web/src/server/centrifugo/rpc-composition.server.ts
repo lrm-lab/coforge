@@ -74,6 +74,7 @@ import {
   createMentionDeliveryTransitionMethod,
 } from "./rpc-handler.server";
 import { AgentDeliveryRejections } from "#src/server/agents/agent-delivery-rejection.server";
+import { getAgentMigrationCapabilityLease } from "#src/server/agent-migrations/agent-migration-capability.server";
 import { agentMigrationOrchestrator } from "#src/server/agent-migrations/agent-migration-composition.server";
 import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
@@ -251,6 +252,21 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
     );
     const reminderRepository = new PrismaReminderRepository(db);
     const reminderLease = getReminderCapabilityLease();
+    const migrationLease = getAgentMigrationCapabilityLease();
+    // Each ready records, and each heartbeat keeps alive, every capability the server asks about.
+    const capabilityLeases = {
+      record: (workspaceId: string, computerId: string, capabilities: readonly string[]) =>
+        Promise.all([
+          reminderLease.record(workspaceId, computerId, capabilities),
+          migrationLease.record(workspaceId, computerId, capabilities),
+        ]),
+      refresh: async (workspaceId: string, computerId: string) => {
+        await Promise.all([
+          reminderLease.refresh(workspaceId, computerId),
+          migrationLease.refresh(workspaceId, computerId),
+        ]);
+      },
+    };
     const reminders = new Reminders(reminderRepository, reminderLease, (sync) =>
       centrifugo.publish(
         daemonControlChannel(sync.workspaceId, sync.computerId),
@@ -296,7 +312,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
             controlStore,
           ),
           restarts: getComputerRestartStore(),
-          capabilities: reminderLease,
+          capabilities: capabilityLeases,
           reminderRecovery: {
             snapshotAssigned: async (workspaceId, computerId) => {
               const agents = await db.agent.findMany({
@@ -336,7 +352,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         ),
         [DAEMON_CONNECTION_STATUS_METHOD]: createDaemonConnectionStatusMethod(
           undefined,
-          reminderLease,
+          capabilityLeases,
           getComputerUpgradeStore(),
         ),
         [DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD]: createDaemonRuntimeCodeAgentsUpdateMethod(

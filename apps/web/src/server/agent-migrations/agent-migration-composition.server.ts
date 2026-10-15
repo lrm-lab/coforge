@@ -9,6 +9,8 @@ import {
   storedRuntimeSelection,
 } from "#src/server/agents/computer-runtime-availability.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
+import { getAgentMigrationCapabilityLease } from "./agent-migration-capability.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { agentStartIntent, agentStopIntent } from "#src/server/agents/manage-agents.server";
 import { userAgentRuntimeControl } from "#src/server/agents/user-agent-control.server";
@@ -136,6 +138,39 @@ export function agentMigrationRequests(db: PrismaClient) {
         storedRuntimeSelection(config),
       );
     },
+    agentComputer: async (workspaceId, agentId) =>
+      (
+        await db.agent.findFirst({
+          where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+          select: { computerId: true },
+        })
+      )?.computerId ?? null,
+    // Connected, from the Computer status cache; able to move Agents, from what its daemon's last
+    // ready said, which a heartbeat keeps alive.
+    computerReadiness: async (workspaceId, computerId) => {
+      const [online, supported] = await Promise.all([
+        getComputerStatusCache()
+          .get({ workspaceId, computerId })
+          .catch(() => false),
+        getAgentMigrationCapabilityLease()
+          .supports(workspaceId, computerId)
+          .catch(() => false),
+      ]);
+      if (supported) return "ready";
+      return online ? "outdated" : "offline";
+    },
+    otherComputers: async (workspaceId, exceptComputerId) =>
+      (
+        await db.workspaceComputer.findMany({
+          where: {
+            workspaceId,
+            computer: { deletedAt: null },
+            ...(exceptComputerId ? { computerId: { not: exceptComputerId } } : {}),
+          },
+          select: { computer: { select: { id: true, name: true, displayName: true } } },
+          orderBy: { computer: { name: "asc" } },
+        })
+      ).map(({ computer }) => ({ id: computer.id, name: computer.displayName || computer.name })),
     // A misconfigured bucket reads as "not set up" here; the daemons' route reports the error.
     available: async () =>
       (await readAgentMigrationStorageConfig(process.env).catch(() => null)) !== null,

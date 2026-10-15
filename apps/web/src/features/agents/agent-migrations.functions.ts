@@ -32,3 +32,12 @@ export const cancelAgentMigration = createServerFn({ method: "POST" })
     declareNoStore();
     return agentMigrationRequests(db).cancel({ userId: user.id, workspaceId }, data);
   });
+
+/** The Computers the owner could move the Agent to, with why any of them cannot take it now. */
+export const listAgentMigrationTargets = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(agentInputSchema)
+  .handler(({ data, context: { user, db, workspaceId } }) => {
+    declareNoStore();
+    return agentMigrationRequests(db).targets({ userId: user.id, workspaceId }, data.agentId);
+  });

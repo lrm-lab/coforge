@@ -92,11 +92,32 @@ const REFUSALS: Record<string, () => string> = {
   "agent-migrating": m.agent_migration_error_already_moving,
   "agent-migration-unplaced": m.agent_migration_error_unplaced,
   "agent-migration-runtime-unavailable": m.agent_migration_error_runtime_unavailable,
+  "agent-migration-source-outdated": m.agent_migration_source_outdated,
+  "agent-migration-source-offline": m.agent_migration_source_offline,
+  "agent-migration-target-outdated": m.agent_migration_target_outdated,
+  "agent-migration-target-offline": m.agent_migration_target_offline,
   "agent-migration-same-computer": m.agent_migration_error_same_computer,
   "agent-migration-target-unavailable": m.agent_migration_error_target_unavailable,
   "agent-migration-source-unreachable": m.agent_migration_error_source_unreachable,
   "agent-migration-unavailable": m.agent_migration_error_unavailable,
 };
+
+type Readiness = "ready" | "outdated" | "offline";
+
+/** Why the Agent's own Computer cannot start a move now, or null when it can. */
+export function agentMigrationSourceNote(source: Readiness | null) {
+  if (source === "outdated") return m.agent_migration_source_outdated();
+  if (source === "offline") return m.agent_migration_source_offline();
+  return null;
+}
+
+/** Why a Computer cannot take the Agent now, or null when it can be picked. */
+export function agentMigrationTargetNote(target: { readiness: Readiness; runsAgent: boolean }) {
+  if (target.readiness === "offline") return m.agent_migration_target_note_offline();
+  if (target.readiness === "outdated") return m.agent_migration_target_note_outdated();
+  if (!target.runsAgent) return m.agent_migration_target_note_runtime();
+  return null;
+}
 
 /** Why a move or its cancel was refused; a retry is offered only when it can help. */
 export function agentMigrationErrorMessage(cause: unknown) {

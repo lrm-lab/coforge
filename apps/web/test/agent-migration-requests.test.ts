@@ -9,8 +9,15 @@ const owner = { userId: "user-1", workspaceId: "workspace-1" };
 const stranger = { userId: "user-2", workspaceId: "workspace-1" };
 const admin = { userId: "user-3", workspaceId: "workspace-1" };
 
+type Readiness = "ready" | "offline" | "outdated";
+
 function setup(
-  options: { available?: boolean; fails?: "stop" | "lease"; runtimeMissing?: boolean } = {},
+  options: {
+    available?: boolean;
+    fails?: "stop" | "lease";
+    runtimeMissing?: boolean;
+    readiness?: Record<string, Readiness>;
+  } = {},
 ) {
   const fixture = memoryStore();
   const migrations = new AgentMigrations(fixture.store);
@@ -31,6 +38,13 @@ function setup(
     isWorkspaceAdmin: async (_workspaceId, userId) => userId === "user-3",
     computerName: async (computerId) => (computerId === "computer-b" ? "Studio Mac" : null),
     canRunAgent: async () => !options.runtimeMissing,
+    agentComputer: async () => "computer-a",
+    computerReadiness: async (_workspaceId, computerId) =>
+      options.readiness?.[computerId] ?? "ready",
+    otherComputers: async () => [
+      { id: "computer-b", name: "Studio Mac" },
+      { id: "computer-c", name: "Old Laptop" },
+    ],
     available: async () => options.available ?? true,
   });
   return { requests, requested, fixture };
@@ -38,7 +52,11 @@ function setup(
 
 test("the owner moves the Agent; the owner and Workspace admins see the move, nobody else", async () => {
   const { requests, requested } = setup();
-  expect(await requests.status(owner, "agent-1")).toEqual({ available: true, migration: null });
+  expect(await requests.status(owner, "agent-1")).toEqual({
+    available: true,
+    source: "ready",
+    migration: null,
+  });
   const moved = await requests.request(owner, {
     agentId: "agent-1",
     targetComputerId: "computer-b",
@@ -171,7 +189,44 @@ test("reading a move needs nothing it would take to start one", async () => {
     isWorkspaceAdmin: async () => false,
     computerName: async () => null,
     canRunAgent: async () => true,
+    agentComputer: async () => "computer-a",
+    computerReadiness: async () => "ready",
+    otherComputers: async () => [],
     available: async () => true,
   });
-  expect(await requests.status(owner, "agent-1")).toEqual({ available: true, migration: null });
+  expect(await requests.status(owner, "agent-1")).toEqual({
+    available: true,
+    source: "ready",
+    migration: null,
+  });
+});
+
+test("a Computer that is offline or too old to move Agents is refused before anything stops", async () => {
+  for (const [readiness, errorId] of [
+    [{ "computer-a": "outdated" }, "agent-migration-source-outdated"],
+    [{ "computer-a": "offline" }, "agent-migration-source-offline"],
+    [{ "computer-b": "outdated" }, "agent-migration-target-outdated"],
+    [{ "computer-b": "offline" }, "agent-migration-target-offline"],
+  ] as const) {
+    const { requests, requested } = setup({ readiness });
+    await expect(
+      requests.request(owner, { agentId: "agent-1", targetComputerId: "computer-b" }),
+    ).rejects.toMatchObject({ errorId });
+    expect(requested).toEqual([]);
+  }
+});
+
+test("the profile learns whether its own Computer can move the Agent, and which Computers can take it", async () => {
+  const { requests } = setup({
+    readiness: { "computer-a": "outdated", "computer-c": "offline" },
+    runtimeMissing: false,
+  });
+  expect(await requests.status(owner, "agent-1")).toMatchObject({ source: "outdated" });
+  expect(await requests.targets(owner, "agent-1")).toEqual([
+    { id: "computer-b", name: "Studio Mac", readiness: "ready", runsAgent: true },
+    { id: "computer-c", name: "Old Laptop", readiness: "offline", runsAgent: true },
+  ]);
+  await expect(requests.targets(stranger, "agent-1")).rejects.toMatchObject({
+    code: "ACCESS_DENIED",
+  });
 });

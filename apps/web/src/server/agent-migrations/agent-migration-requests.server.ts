@@ -15,6 +15,23 @@ import type { AgentMigrationRequestRefusal, AgentMigrations } from "./agent-migr
 
 type Principal = { userId: string; workspaceId: string };
 
+/**
+ * Whether a Computer can take part in a move now: connected and running a daemon that moves
+ * Agents (`agent-migration:v1`), connected but too old to, or not connected.
+ */
+export type AgentMigrationReadiness = "ready" | "outdated" | "offline";
+
+const READINESS_REFUSALS = {
+  source: {
+    outdated: "agent-migration-source-outdated",
+    offline: "agent-migration-source-offline",
+  },
+  target: {
+    outdated: "agent-migration-target-outdated",
+    offline: "agent-migration-target-offline",
+  },
+} as const;
+
 /** The `AppError` each refusal of a request reaches its asker as. */
 function refusalError(code: AgentMigrationRequestRefusal) {
   switch (code) {
@@ -48,6 +65,14 @@ export class AgentMigrationRequests {
       computerName(computerId: string): Promise<string | null>;
       /** Whether the Computer can run the Agent's runtime for its owner. */
       canRunAgent(workspaceId: string, agentId: string, computerId: string): Promise<boolean>;
+      /** The Computer the Agent is placed on now, or null when it has none. */
+      agentComputer(workspaceId: string, agentId: string): Promise<string | null>;
+      computerReadiness(workspaceId: string, computerId: string): Promise<AgentMigrationReadiness>;
+      /** The Workspace's Computers other than this one, by name. */
+      otherComputers(
+        workspaceId: string,
+        exceptComputerId: string | null,
+      ): Promise<{ id: string; name: string }[]>;
       /** Whether this deployment has the migration bucket a move needs. */
       available(): Promise<boolean>;
     },
@@ -62,12 +87,15 @@ export class AgentMigrationRequests {
         !(await this.deps.isWorkspaceAdmin(principal.workspaceId, principal.userId)))
     )
       throw new AppError("NOT_FOUND");
-    const [available, latest] = await Promise.all([
+    const [available, latest, source] = await Promise.all([
       this.deps.available(),
       this.deps.migrations.latestForAgent(principal.workspaceId, agentId),
+      this.#agentComputerReadiness(principal.workspaceId, agentId),
     ]);
     return {
       available,
+      /** Whether the Agent's own Computer can move it now; null for an Agent on no Computer. */
+      source,
       migration: latest
         ? {
             id: latest.id,
@@ -86,6 +114,18 @@ export class AgentMigrationRequests {
     await this.#assertOwner(principal, input.agentId);
     if (!(await this.deps.available()))
       throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "agent-migration-unavailable" });
+    // Before anything stops: an old daemon on either side would ignore the move, leaving the
+    // Agent stopped until its lease ran out.
+    const source = await this.#agentComputerReadiness(principal.workspaceId, input.agentId);
+    if (source && source !== "ready")
+      throw new AppError("TEMPORARILY_UNAVAILABLE", {
+        errorId: READINESS_REFUSALS.source[source],
+      });
+    const target = await this.deps.computerReadiness(principal.workspaceId, input.targetComputerId);
+    if (target !== "ready")
+      throw new AppError("TEMPORARILY_UNAVAILABLE", {
+        errorId: READINESS_REFUSALS.target[target],
+      });
     // Before anything stops: an Agent moved where its runtime is missing could not start there.
     if (
       !(await this.deps.canRunAgent(principal.workspaceId, input.agentId, input.targetComputerId))
@@ -120,6 +160,28 @@ export class AgentMigrationRequests {
       workspaceId: principal.workspaceId,
       migrationId: input.migrationId,
     });
+  }
+
+  /**
+   * The Computers the owner could move the Agent to, each with whether it can take part now and
+   * whether it runs the Agent, so the dialog can say why one cannot be picked.
+   */
+  async targets(principal: Principal, agentId: string) {
+    await this.#assertOwner(principal, agentId);
+    const current = await this.deps.agentComputer(principal.workspaceId, agentId);
+    const computers = await this.deps.otherComputers(principal.workspaceId, current);
+    return Promise.all(
+      computers.map(async (computer) => ({
+        ...computer,
+        readiness: await this.deps.computerReadiness(principal.workspaceId, computer.id),
+        runsAgent: await this.deps.canRunAgent(principal.workspaceId, agentId, computer.id),
+      })),
+    );
+  }
+
+  async #agentComputerReadiness(workspaceId: string, agentId: string) {
+    const computerId = await this.deps.agentComputer(workspaceId, agentId);
+    return computerId ? this.deps.computerReadiness(workspaceId, computerId) : null;
   }
 
   async #assertOwner(principal: Principal, agentId: string) {

@@ -10,22 +10,29 @@ import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
-import { listComputers } from "#src/features/computers/computers.functions";
 import {
   agentMigrationErrorMessage,
   agentMigrationStatusLine,
   agentMigrationSteps,
   isAgentMigrationInProgress,
   isAgentMigrationShown,
+  agentMigrationSourceNote,
+  agentMigrationTargetNote,
 } from "#src/features/agents/agent-migration";
 import { useInvalidateAgentProfile } from "./agent-profile-queries";
 import {
   cancelAgentMigration,
   getAgentMigration,
+  listAgentMigrationTargets,
   requestAgentMigration,
 } from "#src/features/agents/agent-migrations.functions";
 
-type ComputerOption = { id: string; displayName: string; online: boolean };
+type ComputerOption = {
+  id: string;
+  name: string;
+  readiness: "ready" | "outdated" | "offline";
+  runsAgent: boolean;
+};
 
 /** How often a move in progress is read again; each stage takes seconds to minutes. */
 const PROGRESS_POLL_MS = 3_000;
@@ -120,16 +127,16 @@ export function AgentMigrationForm({
   onSelect,
   disabled,
 }: {
-  /** The Workspace's other Computers. */
+  /** The Workspace's other Computers, each with whether it can take the Agent now. */
   computers: readonly ComputerOption[];
   selected: string | null;
   onSelect: (computerId: string) => void;
   disabled?: boolean;
 }) {
-  const online = computers.filter((computer) => computer.online);
+  // Every Computer is listed; one that cannot take the Agent says why and cannot be picked.
   return (
     <div className="grid gap-4 px-6 pt-4">
-      {online.length === 0 ? (
+      {computers.length === 0 ? (
         <p className="text-sm text-tertiary">{m.agent_migration_dialog_no_targets()}</p>
       ) : (
         <Select
@@ -142,9 +149,18 @@ export function AgentMigrationForm({
             if (key !== null) onSelect(String(key));
           }}
         >
-          {online.map((computer) => (
-            <Select.Item key={computer.id} id={computer.id} label={computer.displayName} />
-          ))}
+          {computers.map((computer) => {
+            const note = agentMigrationTargetNote(computer);
+            return (
+              <Select.Item
+                key={computer.id}
+                id={computer.id}
+                label={computer.name || m.agent_computer_unnamed()}
+                isDisabled={note !== null}
+                {...(note ? { supportingText: note } : {})}
+              />
+            );
+          })}
         </Select>
       )}
       <div className="flex items-start gap-3">
@@ -181,7 +197,7 @@ export function AgentMigrationSection({
   const readMigration = useServerFn(getAgentMigration);
   const requestMove = useServerFn(requestAgentMigration);
   const cancelMove = useServerFn(cancelAgentMigration);
-  const loadComputers = useServerFn(listComputers);
+  const loadTargets = useServerFn(listAgentMigrationTargets);
   const [open, setOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -200,18 +216,14 @@ export function AgentMigrationSection({
         : false,
   });
   const computers = useQuery({
-    queryKey: ["agent-migration-computers", agentId],
-    queryFn: () => loadComputers(),
+    queryKey: ["agent-migration-targets", agentId, currentComputerId],
+    queryFn: () => loadTargets({ data: { agentId } }),
     enabled: open,
   });
-  const targets: ComputerOption[] = (computers.data ?? [])
-    .filter((computer) => computer.id !== currentComputerId)
-    .map((computer) => ({
-      id: computer.id,
-      displayName: computer.displayName || computer.name || m.agent_computer_unnamed(),
-      online: Boolean(computer.online),
-    }));
+  const targets: ComputerOption[] = computers.data ?? [];
 
+  // An old daemon on the Agent's own Computer would never answer a move: say so up front.
+  const sourceNote = agentMigrationSourceNote(status.data?.source ?? null);
   const latest = status.data?.migration;
   const migration = latest && isAgentMigrationShown(latest) ? latest : undefined;
   const inProgress = migration ? isAgentMigrationInProgress(migration.state) : false;
@@ -277,11 +289,15 @@ export function AgentMigrationSection({
           canceling={canceling}
         />
       )}
+      {isOwner && status.data.available && !inProgress && sourceNote && (
+        <p className="text-sm text-tertiary">{sourceNote}</p>
+      )}
       {isOwner && status.data.available && !inProgress && (
         <Button
           color="secondary"
           className="w-full justify-center"
           iconLeading={SwitchHorizontal01}
+          isDisabled={sourceNote !== null}
           onPress={() => {
             setSelected(null);
             setDialogError("");

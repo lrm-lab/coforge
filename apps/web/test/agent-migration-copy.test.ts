@@ -4,6 +4,8 @@ import {
   agentMigrationStatusLine,
   isAgentMigrationInProgress,
   isAgentMigrationShown,
+  agentMigrationSourceNote,
+  agentMigrationTargetNote,
   agentMigrationSteps,
 } from "#src/features/agents/agent-migration";
 import { AppError } from "#src/lib/app-error";
@@ -83,4 +85,26 @@ test("a move reads as four steps: those behind it done, the one under way curren
   expect(steps("placing")).toEqual(["done", "done", "current", "pending"]);
   expect(steps("switched")).toEqual(["done", "done", "done", "current"]);
   expect(steps("completed")).toEqual(["done", "done", "done", "done"]);
+});
+
+test("a move that cannot start says which Computer holds it back, and how", () => {
+  const refusal = (errorId: string) =>
+    agentMigrationErrorMessage(new AppError("TEMPORARILY_UNAVAILABLE", { errorId }));
+  expect(refusal("agent-migration-source-outdated")).toBe(m.agent_migration_source_outdated());
+  expect(refusal("agent-migration-source-offline")).toBe(m.agent_migration_source_offline());
+  expect(refusal("agent-migration-target-outdated")).toBe(m.agent_migration_target_outdated());
+  expect(refusal("agent-migration-target-offline")).toBe(m.agent_migration_target_offline());
+  expect(agentMigrationSourceNote("ready")).toBeNull();
+  expect(agentMigrationSourceNote(null)).toBeNull();
+  expect(agentMigrationSourceNote("outdated")).toBe(m.agent_migration_source_outdated());
+  expect(agentMigrationTargetNote({ readiness: "ready", runsAgent: true })).toBeNull();
+  expect(agentMigrationTargetNote({ readiness: "offline", runsAgent: true })).toBe(
+    m.agent_migration_target_note_offline(),
+  );
+  expect(agentMigrationTargetNote({ readiness: "outdated", runsAgent: true })).toBe(
+    m.agent_migration_target_note_outdated(),
+  );
+  expect(agentMigrationTargetNote({ readiness: "ready", runsAgent: false })).toBe(
+    m.agent_migration_target_note_runtime(),
+  );
 });
