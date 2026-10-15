@@ -528,9 +528,9 @@ test("the outer read deadline allows a healthy backend response beyond ten secon
         respond = () => resolve(Response.json(expected));
       }),
   });
-  // The real six-way BM25 request took about 10.1s; allow the full 15s backend budget
+  // The real six-way BM25 request took about 10.1s; allow the full 60s backend budget
   // without making this regression depend on wall-clock timing.
-  if (deadline <= 15_000) controller.abort();
+  if (deadline <= 60_000) controller.abort();
   respond();
   await expect(pending).resolves.toEqual(expected);
 });
@@ -554,15 +554,18 @@ test("the production connection preserves the enclosing OpenViking deadline", as
   };
   fetchSpies.push(
     spyOn(globalThis, "fetch").mockImplementation(
-      async (_url, init) =>
-        new Promise<Response>((resolve, reject) => {
-          init?.signal?.addEventListener(
-            "abort",
-            () => reject(new DOMException("deadline", "AbortError")),
-            { once: true },
-          );
-          respond = () => resolve(Response.json(expected));
-        }),
+      Object.assign(
+        async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+          new Promise<Response>((resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("deadline", "AbortError")),
+              { once: true },
+            );
+            respond = () => resolve(Response.json(expected));
+          }),
+        { preconnect: globalThis.fetch.preconnect },
+      ),
     ),
   );
   const fake = fakeCentrifugeClient();
@@ -573,7 +576,7 @@ test("the production connection preserves the enclosing OpenViking deadline", as
     serverHttpUrl: "https://server.example/api/internal/centrifugo",
   });
   const pending = connection.agentOpenviking(FIND_COMMAND, AGENT_API_KEY);
-  if (deadline <= 15_000) controller.abort();
+  if (deadline <= 60_000) controller.abort();
   respond();
   try {
     await expect(pending).resolves.toEqual(expected);

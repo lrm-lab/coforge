@@ -280,7 +280,7 @@ test("body and stream size limits fail closed at the default envelope", () => {
   expect(DEFAULT_OPENVIKING_TRANSPORT_LIMITS).toEqual({
     maxRequestBytes: 1_048_576,
     maxResponseBytes: 8_388_608,
-    timeoutMs: 15_000,
+    timeoutMs: 60_000,
   });
   expect(decideTransportSize({ kind: "request", bytes: 1_048_576 })).toEqual({ ok: true });
   expect(decideTransportSize({ kind: "request", bytes: 1_048_577 })).toEqual({

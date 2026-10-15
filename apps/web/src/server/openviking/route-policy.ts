@@ -45,7 +45,8 @@ export function sanitizeOpenVikingTransportFailure(
 export const DEFAULT_OPENVIKING_TRANSPORT_LIMITS = {
   maxRequestBytes: 1_048_576,
   maxResponseBytes: 8_388_608,
-  timeoutMs: 15_000,
+  // Concurrent full-corpus BM25 reads can exceed 15s under normal server load.
+  timeoutMs: 60_000,
 } as const;
 
 export type OpenVikingTransportLimits = {
