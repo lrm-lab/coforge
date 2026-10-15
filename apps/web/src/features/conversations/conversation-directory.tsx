@@ -378,7 +378,11 @@ function DirectorySection({
       </div>
       {/* Kept mounted but hidden: collapsing must not throw away the rows' realtime state. A
           section that cannot collapse still folds while the sections are being reordered. */}
-      <div id={listId} hidden={expanded === false}>
+      {/* Design spec: 36px from the last row's avatar to the next section's title. A channel row
+          pads its avatar by 0.5rem inside a 1px card border, and its list item adds 1px, so the
+          list adds the 26px left (1.625rem; a borderless DM row lands 1px closer). A folded
+          section adds nothing: folded titles stay one 2.25rem row apart. */}
+      <div id={listId} hidden={expanded === false} className="pb-[1.625rem]">
         {children}
       </div>
     </>
