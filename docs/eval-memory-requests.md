@@ -25,7 +25,8 @@ Memory。是否遵守需结合原生 Agent 轨迹核查，不能仅凭提示词�
 
 使用独立 OpenViking account。账号初始设置文件可以指定 embedding 与 VLM；Gemma 实验
 必须显式配置 Gemma VLM 和 Task/Memory 模型，不能沿用 runner 的 DeepSeek 默认值。
-设置文件、密钥文件留在本地，禁止提交。
+设置文件、密钥文件留在本地，禁止提交。可用 `COFORGE_EVAL_MODELS_PATH` 指定隔离的 Pi 模型
+配置（默认读取 `~/.pi/agent/models.json`），例如让两个 Agent 使用已有的全局 Gemma 请求池。
 
 ```bash
 # 在仓库根目录；先设置 OPENVIKING_PROTOTYPE_CONF 和输入路径变量。
@@ -41,7 +42,7 @@ mise exec -- bun run --cwd benchmark/evolbench-collab prepare:knowledge
 默认要求 67,707 篇文档和 89 条经验。小型集成验证可显式设置
 `COFORGE_KNOWLEDGE_DOCUMENT_COUNT` / `COFORGE_KNOWLEDGE_EXPERIENCE_COUNT`，结果必须标为 smoke。
 语义/向量处理每资源等待预算为 900 秒；请求成功但后台失败不算准备成功。
-checkpoint 保存源文件 SHA256、账号、已提交 task id 和完成记录。恢复时去掉
+checkpoint 保存源文件 SHA256、账号创建时间、已提交 task id 和完成记录；同名重建账号不能复用。恢复时去掉
 `COFORGE_KNOWLEDGE_CREATE_ACCOUNT=1`，使用相同输入和账号；不重复提交已保存的后台任务。
 所有资源完成且数量吻合后才写 ready 文件。后台任务过期或失败需先处理，不能手工伪造 ready。
 
@@ -67,6 +68,7 @@ mise exec -- bun run --cwd benchmark/evolbench-collab eval
 还需配置 `DATABASE_URL`、`REDIS_URL`、Agent 凭据加密 key、Centrifugo API/WS、Web URL、
 OpenViking URL/配置和明确的 `COFORGE_MEMORY_HINT_TTL_SECONDS`；沿用产品环境，不另建检索服务。
 `attempts.jsonl` 记录知识源哈希和数量、请求消息 ID、所有 Offer 消息 ID、实际 disposition，
-以及原有最终答案与运行诊断。判分继续使用原有离线 grader；“有答案”不等于判分正确。
+以及原有最终答案与运行诊断。`trajectory_path` 指向清理 workspace 前导出的群聊与原生回执。
+收到 Hint 却未提交对应原生回执会标记 `missing_disposition`，答案仍可正常判分。判分继续使用原有离线 grader；“有答案”不等于判分正确。
 
 验证：`mise exec -- bun run --cwd benchmark/evolbench-collab test` 和 `check`。

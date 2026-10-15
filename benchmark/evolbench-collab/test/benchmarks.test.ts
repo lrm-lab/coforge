@@ -213,3 +213,21 @@ describe("summarizeArm", () => {
     expect(summary.mechanismFails).toBe(1);
   });
 });
+
+test("a cited Hint without the Task's native disposition is a mechanism failure", () => {
+  const result: EpisodeResult = {
+    finalOutput: "answer",
+    offerMessageId: "offer",
+    citationCount: 1,
+    taskMessageCount: 1,
+    memoryLeakMessageIds: [],
+    timedOut: false,
+    elapsedMs: 1,
+    terminationReason: "final_settled",
+    runtimeErrorCount: 0,
+    memoryHintIds: ["hint-1"],
+    dispositions: [],
+  };
+  expect(classifyMechanism(result)).toBe("missing_disposition");
+  expect(result.finalOutput).toBe("answer");
+});

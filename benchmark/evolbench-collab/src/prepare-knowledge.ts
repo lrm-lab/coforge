@@ -1,3 +1,4 @@
+import { readKnowledgeAccountCreatedAt } from "./knowledge";
 import {
   createEvalRuntime,
   provisionDisposableAccount,
@@ -28,6 +29,7 @@ Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE ??= "/tmp/pcm-eval-ov-keys.json";
 await rememberEvalAccountKey(accountId, users.adminKey);
 const ready = await prepareKnowledge({
   runtime,
+  accountCreatedAt: await readKnowledgeAccountCreatedAt(runtime, root, accountId),
   identity: userIdentity(accountId, users.adminUserId, users.adminKey, "admin"),
   corpusPath: required("COFORGE_KNOWLEDGE_CORPUS"),
   ledgerPath: required("COFORGE_KNOWLEDGE_LEDGER"),

@@ -49,7 +49,8 @@ export type EvalDaemon = {
 function memoryApiKey(provider: string): string {
   const inline = Bun.env.DEV_MEMORY_API_KEY?.trim();
   if (inline) return inline;
-  const modelsPath = `${process.env.HOME}/.pi/agent/models.json`;
+  const modelsPath =
+    Bun.env.COFORGE_EVAL_MODELS_PATH ?? `${process.env.HOME}/.pi/agent/models.json`;
   const models = JSON.parse(readFileSync(modelsPath, "utf8")) as {
     providers?: Record<string, { apiKey?: string }>;
   };
@@ -101,7 +102,7 @@ export async function startEvalDaemon(input: {
   let probeError = "not started";
   for (let attempt = 0; attempt < 8; attempt += 1) {
     try {
-      const probe = await fetch(webUrl);
+      const probe = await fetch(webUrl, { redirect: "manual" });
       probeStatus = probe.status;
       if (probe.ok || probe.status === 307 || probe.status === 302) break;
       probeError = `status ${probe.status}`;
@@ -148,7 +149,10 @@ export async function startEvalDaemon(input: {
 
   const isolatedPiHost = join(stateDirectory, "pi-host");
   mkdirSync(isolatedPiHost, { recursive: true });
-  copyFileSync(`${process.env.HOME}/.pi/agent/models.json`, join(isolatedPiHost, "models.json"));
+  copyFileSync(
+    Bun.env.COFORGE_EVAL_MODELS_PATH ?? `${process.env.HOME}/.pi/agent/models.json`,
+    join(isolatedPiHost, "models.json"),
+  );
   writeFileSync(join(isolatedPiHost, "settings.json"), `${JSON.stringify({ skills: [] })}\n`, {
     mode: 0o600,
   });
@@ -258,64 +262,76 @@ export async function startEvalDaemon(input: {
       console.error("[startEvalDaemon:real-error]", inspect(error, { depth: 6 }));
     }
     await runtime.stop().catch(() => undefined);
+    proxy.close();
     throw new Error(error instanceof Error ? error.message : String(error));
   }
-  const memoryApiKey_ = memoryApiKey(input.env.memoryAgentProvider);
-  const taskApiKey = memoryApiKey(input.env.taskAgentProvider);
-  await input.workspace.db.agent.update({
-    where: { id: input.workspace.memoryAgentId },
-    data: {
-      computerId: registration.computerId,
-      stoppedAt: null,
-      runtimeConfig: {
-        runtime: RUNTIME_PROVIDER.COFORGE,
-        provider: {
-          kind: "coforge" as const,
-          providerId: input.env.memoryAgentProvider,
-          apiKey: await encryptApiKey(
-            input.workspace.memoryAgentId,
-            input.env.memoryAgentProvider,
-            memoryApiKey_,
-          ),
+  try {
+    const memoryApiKey_ = memoryApiKey(input.env.memoryAgentProvider);
+    const taskApiKey = memoryApiKey(input.env.taskAgentProvider);
+    await input.workspace.db.agent.update({
+      where: { id: input.workspace.memoryAgentId },
+      data: {
+        computerId: registration.computerId,
+        stoppedAt: null,
+        runtimeConfig: {
+          runtime: RUNTIME_PROVIDER.COFORGE,
+          provider: {
+            kind: "coforge" as const,
+            providerId: input.env.memoryAgentProvider,
+            apiKey: await encryptApiKey(
+              input.workspace.memoryAgentId,
+              input.env.memoryAgentProvider,
+              memoryApiKey_,
+            ),
+          },
+          model: input.env.memoryAgentModel,
+          modelProvider: input.env.memoryAgentProvider,
+          reasoning: "",
         },
-        model: input.env.memoryAgentModel,
-        modelProvider: input.env.memoryAgentProvider,
-        reasoning: "",
       },
-    },
-  });
-  await input.workspace.db.agent.update({
-    where: { id: input.workspace.taskAgentId },
-    data: {
-      computerId: registration.computerId,
-      stoppedAt: null,
-      runtimeConfig: {
-        runtime: RUNTIME_PROVIDER.COFORGE,
-        provider: {
-          kind: "coforge" as const,
-          providerId: input.env.taskAgentProvider,
-          apiKey: await encryptApiKey(
-            input.workspace.taskAgentId,
-            input.env.taskAgentProvider,
-            taskApiKey,
-          ),
+    });
+    await input.workspace.db.agent.update({
+      where: { id: input.workspace.taskAgentId },
+      data: {
+        computerId: registration.computerId,
+        stoppedAt: null,
+        runtimeConfig: {
+          runtime: RUNTIME_PROVIDER.COFORGE,
+          provider: {
+            kind: "coforge" as const,
+            providerId: input.env.taskAgentProvider,
+            apiKey: await encryptApiKey(
+              input.workspace.taskAgentId,
+              input.env.taskAgentProvider,
+              taskApiKey,
+            ),
+          },
+          model: input.env.taskAgentModel,
+          modelProvider: input.env.taskAgentProvider,
+          reasoning: "",
         },
-        model: input.env.taskAgentModel,
-        modelProvider: input.env.taskAgentProvider,
-        reasoning: "",
       },
-    },
-  });
-  input.workspace.computerId = registration.computerId;
-  return {
-    computerId: registration.computerId,
-    workspaceRoot,
-    runtimeDiagnostics,
-    async stop() {
-      for (const unsubscribe of diagnosticSubscriptions.splice(0)) unsubscribe();
-      await runtime?.stop();
-    },
-  };
+    });
+    input.workspace.computerId = registration.computerId;
+    return {
+      computerId: registration.computerId,
+      workspaceRoot,
+      runtimeDiagnostics,
+      async stop() {
+        for (const unsubscribe of diagnosticSubscriptions.splice(0)) unsubscribe();
+        try {
+          await runtime?.stop();
+        } finally {
+          proxy.close();
+        }
+      },
+    };
+  } catch (error) {
+    for (const unsubscribe of diagnosticSubscriptions.splice(0)) unsubscribe();
+    await runtime.stop().catch(() => undefined);
+    proxy.close();
+    throw error;
+  }
 }
 
 /** Product Start: server publishes AgentStart over Centrifugo. Message delivery cannot wake an

@@ -20,6 +20,7 @@ test("a frozen IR test refuses incomplete or mismatched prepared knowledge", () 
   const ready = {
     version: 1,
     accountId: "prepared-ir",
+    accountCreatedAt: "2026-10-15T00:00:00Z",
     documents: 67707,
     experiences: 89,
     corpusSha256: "a".repeat(64),

@@ -130,17 +130,21 @@ async function digest(path: string) {
 export async function prepareKnowledge(input: {
   runtime: OpenVikingRuntimeClient;
   identity: ServerOpenVikingIdentity;
+  accountCreatedAt: string;
   corpusPath: string;
   ledgerPath: string;
   readyPath: string;
   expectedDocuments: number;
   expectedExperiences: number;
 }) {
+  // Revoke readiness before any input/checkpoint operation can fail.
+  if (await Bun.file(input.readyPath).exists()) await Bun.file(input.readyPath).delete();
   const corpusSha256 = await digest(input.corpusPath);
   const ledgerSha256 = await digest(input.ledgerPath);
   const checkpointPath = `${input.readyPath}.checkpoint.jsonl`;
   const signature = JSON.stringify({
     accountId: input.identity.accountId,
+    accountCreatedAt: input.accountCreatedAt,
     corpusSha256,
     ledgerSha256,
   });
@@ -157,8 +161,6 @@ export async function prepareKnowledge(input: {
   } else {
     await Bun.write(checkpointPath, `${signature}\n`);
   }
-  // A previous ready file must not survive an interrupted/failed preparation.
-  if (await Bun.file(input.readyPath).exists()) await Bun.file(input.readyPath).delete();
   const checkpoint = await open(checkpointPath, "a");
   const seen = new Set<string>();
   let documents = 0,
@@ -195,6 +197,7 @@ export async function prepareKnowledge(input: {
     const ready: KnowledgeReady = validateKnowledgeReady({
       version: 1,
       accountId: input.identity.accountId,
+      accountCreatedAt: input.accountCreatedAt,
       documents,
       experiences,
       corpusSha256,

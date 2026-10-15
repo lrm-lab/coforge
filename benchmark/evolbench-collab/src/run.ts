@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { validateKnowledgeReady } from "./knowledge";
+import { readKnowledgeAccountCreatedAt, validateKnowledgeReady } from "./knowledge";
 import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
 import { controlAgent, startAgent, startEvalDaemon, type EvalDaemon } from "./eval-daemon";
@@ -172,6 +172,13 @@ async function provisionFamily(
   let users: OvUsers;
   if (frozenKnowledge) {
     accountId = frozenKnowledge.accountId;
+    if (
+      (await readKnowledgeAccountCreatedAt(runtime, root, accountId)) !==
+      frozenKnowledge.accountCreatedAt
+    )
+      throw new Error(
+        "prepared knowledge account was recreated; rebuild knowledge before evaluation",
+      );
     const bindings = await db.openVikingBinding.findMany({
       where: { accountId },
       select: { workspaceId: true },
@@ -230,22 +237,31 @@ async function provisionFamily(
     benchmark: family.benchmark || benchmark,
     ovAccountId: accountId,
   });
-  const dispatcher = createEvalDispatcher({ workspace, runtime, accountId, users });
-  const daemon = await startEvalDaemon({ workspace, env });
-  await startAgent(workspace, workspace.memoryAgentId, workspaceProfileToToolFence("openviking"));
-  await startAgent(workspace, workspace.taskAgentId);
-  return {
-    accountId,
-    workspace,
-    daemon,
-    dispatcher,
-    agentWorkspaceDir: join(
-      daemon.workspaceRoot,
-      workspace.workspaceId,
-      "agents",
-      workspace.taskAgentId,
-    ),
-  };
+  let daemon: EvalDaemon | undefined;
+  try {
+    const dispatcher = createEvalDispatcher({ workspace, runtime, accountId, users });
+    daemon = await startEvalDaemon({ workspace, env });
+    await startAgent(workspace, workspace.memoryAgentId, workspaceProfileToToolFence("openviking"));
+    await startAgent(workspace, workspace.taskAgentId);
+    return {
+      accountId,
+      workspace,
+      daemon,
+      dispatcher,
+      agentWorkspaceDir: join(
+        daemon.workspaceRoot,
+        workspace.workspaceId,
+        "agents",
+        workspace.taskAgentId,
+      ),
+    };
+  } catch (error) {
+    await daemon?.stop().catch(() => undefined);
+    await destroyEvalWorkspace(workspace);
+    if (arm === "cold")
+      await deleteDisposableAccount(runtime, root, accountId).catch(() => undefined);
+    throw error;
+  }
 }
 
 async function releaseFamily(arm: "warm" | "cold", provisioned: FamilyWorkspace): Promise<void> {
@@ -361,8 +377,39 @@ async function executeEpisode(
   row.memory_request_message_ids = result.memoryRequestMessageIds;
   row.memory_offer_message_ids = result.offerMessageIds;
   row.memory_dispositions = result.dispositions;
+  row.memory_hint_ids = result.memoryHintIds;
+  row.memory_reply_message_ids = result.memoryReplyMessageIds;
   row.task_message_count = result.taskMessageCount;
   row.memory_leak_count = result.memoryLeakMessageIds.length;
+  row.trajectory_path = join(env.resultDir, `${encodeURIComponent(row.run_id)}-conversation.json`);
+  const messages = await provisioned.workspace.db.message.findMany({
+    where: { conversationId: provisioned.workspace.channelId },
+    orderBy: { sequence: "asc" },
+    select: {
+      id: true,
+      sequence: true,
+      createdAt: true,
+      body: true,
+      sender: { select: { agentId: true, userId: true } },
+      mentions: { select: { kind: true, actorId: true } },
+    },
+  });
+  await Bun.write(
+    row.trajectory_path,
+    JSON.stringify(
+      {
+        episodeId: episode.episodeId,
+        workspaceId: provisioned.workspace.workspaceId,
+        channelId: provisioned.workspace.channelId,
+        messages,
+        hintIds: result.memoryHintIds,
+        offerMessageIds: result.offerMessageIds,
+        dispositions: result.dispositions,
+      },
+      null,
+      2,
+    ),
+  );
   if (sidecarVerification) row.sidecar_verification = sidecarVerification;
   if (arm === "warm" && !frozenKnowledge) {
     const drained = await drainEpisodeToMemory({

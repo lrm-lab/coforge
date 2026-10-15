@@ -26,6 +26,8 @@ function fixture(
     createdAt: Date;
     mentions: { kind: string; actorId: string }[];
   }[],
+  memoryMessages: { id: string; createdAt: Date }[] = [],
+  offers: { messageId: string; citations: { citationId: string }[] }[] = [],
 ) {
   const start = new Date(Date.now() - 1000);
   const workspace = {
@@ -48,7 +50,7 @@ function fixture(
           return { id: "trigger", createdAt: start };
         },
         async findMany(input: { where: { sender: { agentId: string } } }) {
-          return input.where.sender.agentId === "task" ? messages : [];
+          return input.where.sender.agentId === "task" ? messages : memoryMessages;
         },
       },
       memoryOfferRecord: {
@@ -56,7 +58,7 @@ function fixture(
           return null;
         },
         async findMany() {
-          return [];
+          return offers;
         },
       },
       memoryHintRecord: {
@@ -111,4 +113,42 @@ test("IR retains the answer format and asks Memory for both evidence and experie
   expect(reminder).toContain("Exact Answer:");
   expect(reminder).toContain("@memory");
   expect(reminder).not.toContain("complete final code");
+});
+
+test("multiple offers and ordinary Memory clarification are recorded without false leaks", async () => {
+  const now = new Date();
+  const result = await runEpisode(
+    fixture(
+      [
+        {
+          id: "request-1",
+          body: "@memory experience",
+          createdAt: now,
+          mentions: [{ kind: "agent", actorId: "memory" }],
+        },
+        {
+          id: "request-2",
+          body: "@memory documents",
+          createdAt: now,
+          mentions: [{ kind: "agent", actorId: "memory" }],
+        },
+        { id: "answer", body: "Exact Answer: 2041", createdAt: now, mentions: [] },
+      ],
+      [
+        { id: "offer-1", createdAt: now },
+        { id: "clarification", createdAt: now },
+        { id: "offer-2", createdAt: now },
+      ],
+      [
+        { messageId: "offer-2", citations: [{ citationId: "source-2" }] },
+        { messageId: "offer-1", citations: [{ citationId: "source-1" }] },
+      ],
+    ),
+  );
+  expect(result.memoryRequestCount).toBe(2);
+  expect(result.offerMessageIds).toEqual(["offer-2", "offer-1"]);
+  expect(result.citationCount).toBe(2);
+  expect(result.memoryLeakMessageIds).toEqual([]);
+  expect(result.memoryReplyMessageIds).toEqual(["clarification"]);
+  expect(result.finalOutput).toBe("Exact Answer: 2041");
 });

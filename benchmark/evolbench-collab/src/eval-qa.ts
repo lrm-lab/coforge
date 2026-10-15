@@ -95,6 +95,8 @@ export type EpisodeResult = {
   memoryRequestMessageIds?: string[];
   offerMessageIds?: string[];
   dispositions?: MemoryDispositionRecord[];
+  memoryHintIds?: string[];
+  memoryReplyMessageIds?: string[];
   /** Local observation timestamps, in Unix milliseconds. */
   lastRuntimeErrorAt?: number;
   lastProgressAt?: number;
@@ -186,6 +188,8 @@ export async function runEpisode(input: {
     memoryRequestMessageIds: [] as string[],
     offerMessageIds: [] as string[],
     dispositions: [] as MemoryDispositionRecord[],
+    memoryHintIds: [] as string[],
+    memoryReplyMessageIds: [] as string[],
   };
   const finish = (exit: Exclude<EpisodeTerminationReason, "runtime_failed">): EpisodeResult => {
     const runtime = input.runtimeDiagnostics?.snapshot();
@@ -258,11 +262,13 @@ export async function runEpisode(input: {
         offers.flatMap((offer) => offer.citations.map((citation) => citation.citationId)),
       ).size,
       taskMessageCount: taskMessages.length,
-      memoryLeakMessageIds: memoryMessages.map((row) => row.id).filter((id) => !offerIds.has(id)),
+      memoryLeakMessageIds: [],
+      memoryReplyMessageIds: memoryMessages.map((row) => row.id).filter((id) => !offerIds.has(id)),
       timedOut: false,
       memoryRequestCount: requests.length,
       memoryRequestMessageIds: [...requestIds],
       offerMessageIds: [...offerIds],
+      memoryHintIds: hints.map((hint) => hint.id),
       dispositions: hints.flatMap((hint) =>
         hint.dispositions.map((record) => ({
           hint_id: hint.id,

@@ -16,5 +16,11 @@ export function classifyMechanism(result: EpisodeResult): string {
   if (result.citationCount < 1) return "uncited_offer";
   if (!result.finalOutput?.trim()) return "no_reply";
   if (result.timedOut) return "timeout";
+  if (
+    result.memoryHintIds?.some(
+      (id) => !result.dispositions?.some((record) => record.hint_id === id),
+    )
+  )
+    return "missing_disposition";
   return "ok";
 }
