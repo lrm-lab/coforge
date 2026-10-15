@@ -226,12 +226,6 @@ input[type="search"]::-webkit-search-cancel-button {
     mask-composite: exclude;
   }
 
-  /* A composer image chip uses the message avatar's size and radius. It is a file
-     thumbnail, so it does not wear the avatar's violet identity edge. */
-  [data-avatar].attachment-thumb > :first-child::after {
-    display: none;
-  }
-
   /* Both the official member presence indicator and CoForge's Agent activity dot
      use the reference's 8px dot / 32px avatar and 1.5px separator proportions. */
   [data-avatar] > span.ring-bg-primary,

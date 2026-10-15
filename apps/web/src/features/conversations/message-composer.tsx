@@ -129,10 +129,10 @@ function uploadAttachment(
 }
 
 /**
- * The chosen file in the row above the field. An image uses the message avatar's size and
- * corner (2.25rem by 2.5rem) without the violet identity edge. Any other file stays a
- * small chip with its type icon. Clicking it opens the preview with the file's details,
- * upload progress, and the download and remove actions.
+ * The chosen file beside the paperclip. An image is a square the same size as that icon
+ * (1.25rem) with a small corner, so it is not a circle and not an avatar. Any other file
+ * stays a small chip with its type icon. Clicking it opens the preview with the file's
+ * details, upload progress, and the download and remove actions.
  */
 function AttachmentChip({
   attachment,
@@ -171,22 +171,27 @@ function AttachmentChip({
         aria-label={file.name}
         className={
           isImage
-            ? "h-auto rounded-[0.625rem] p-0 hover:bg-transparent"
+            ? "size-5 shrink-0 overflow-hidden rounded-sm p-0 ring-1 ring-secondary ring-inset hover:bg-transparent"
             : "h-auto rounded-md p-0 hover:bg-transparent"
         }
       >
-        <Avatar
-          size={isImage ? "sm" : "xs"}
-          rounded={false}
-          src={isImage ? previewUrl : undefined}
-          alt=""
-          className={
-            isImage
-              ? "attachment-thumb"
-              : "overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset"
-          }
-          placeholder={icon(isImage ? "size-5" : "size-4")}
-        />
+        {isImage ? (
+          previewUrl ? (
+            <img src={previewUrl} alt="" className="size-5 object-cover" />
+          ) : (
+            <span className="flex size-full items-center justify-center bg-secondary">
+              {icon("size-3")}
+            </span>
+          )
+        ) : (
+          <Avatar
+            size="xs"
+            rounded={false}
+            alt=""
+            className="overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset"
+            placeholder={icon("size-4")}
+          />
+        )}
       </Button>
       <AriaPopover
         placement="top start"
@@ -732,23 +737,6 @@ export function MessageComposer({
       <label htmlFor={composerId} className="sr-only">
         {m.conversation_message_label()}
       </label>
-      {attachments.length > 0 && (
-        <div className="flex flex-wrap items-end gap-2 px-2">
-          {attachments.map((item) => (
-            <AttachmentChip
-              key={item.localId}
-              attachment={item}
-              uploading={!item.id && !item.failed}
-              onRemove={() =>
-                setAttachments((current) =>
-                  current.filter((other) => other.localId !== item.localId),
-                )
-              }
-              onRetry={() => void uploadOne(item)}
-            />
-          ))}
-        </div>
-      )}
       <textarea
         id={composerId}
         ref={completion.textareaRef}
@@ -806,6 +794,17 @@ export function MessageComposer({
           tooltip={m.conversation_attachment_label()}
           onClick={() => fileInputRef.current?.click()}
         />
+        {attachments.map((item) => (
+          <AttachmentChip
+            key={item.localId}
+            attachment={item}
+            uploading={!item.id && !item.failed}
+            onRemove={() =>
+              setAttachments((current) => current.filter((other) => other.localId !== item.localId))
+            }
+            onRetry={() => void uploadOne(item)}
+          />
+        ))}
         <input
           ref={fileInputRef}
           type="file"
