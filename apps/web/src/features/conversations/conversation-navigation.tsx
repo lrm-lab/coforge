@@ -241,7 +241,10 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
               )}
             >
               <PageHeader heading={m.navigation_chat()} />
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4">
+              {/* 0.75rem under the header rule. Saved's icon is centered in the 2.25rem
+                  row and the bookmark path is inset another 0.125rem, so the rule
+                  sits 1.5rem above the bookmark. Bottom padding stays 1rem. */}
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4">
                 <ConversationDirectory
                   channels={visibleChannels}
                   agents={agents}

@@ -715,7 +715,9 @@ export function ConversationDirectory({
 
   return (
     <DndContext {...drag.context}>
-      <div className={cx("mt-2", DIRECTORY_INSET)}>
+      {/* No top margin. The list pane's 0.75rem padding is the whole gap above
+          this row, so the header rule lands 24px above the bookmark. */}
+      <div className={DIRECTORY_INSET}>
         <ConversationRow
           target={{ view: "saved" }}
           current={selectedSaved}
