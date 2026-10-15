@@ -6,17 +6,12 @@ import { dirname, join } from "node:path";
 import { AGENT_MIGRATION_COMMIT_MARKER } from "#src/agent-migration/bundle-commit";
 import { AGENT_MIGRATION_IGNORE_FILE } from "#src/agent-migration/selection-rules";
 import { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
-import {
-  AgentMigrationRemoteError,
-  type AgentMigrationBucket,
-  type AgentMigrationServer,
-  type AgentMigrationState,
-  type AgentMigrationView,
-} from "#src/agent-migration/transfer-ports";
-import type { AgentMigrationBundleManifest } from "#src/agent-migration/bundle-writer";
+import { AgentMigrationRemoteError } from "#src/agent-migration/transfer-ports";
+import { cloud } from "./fixtures/agent-migration-cloud";
 
 const roots: string[] = [];
 const runners: AgentMigrationRunner[] = [];
+const WORKSPACE_RACE_TIMEOUT_MS = 4_000;
 afterEach(async () => {
   const closed = await Promise.allSettled(runners.splice(0).map((runner) => runner.close()));
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -32,118 +27,53 @@ async function temp(prefix: string) {
 const migrationId = "migration-1";
 const agentId = "agent-1";
 
-/**
- * The server's side of one migration, shared by both Computers: the fenced state machine the
- * route enforces (each step from its role, at the revision it read) and the steps and failures
- * each Computer reported, in order. `faults` makes the next calls of an operation fail.
- */
-function cloud() {
-  const record = {
-    state: "requested" as AgentMigrationState,
-    revision: 0,
-    generation: 1,
-    manifest: null as AgentMigrationBundleManifest | null,
-  };
-  const reports: string[] = [];
-  const details: (string | undefined)[] = [];
-  const objects = new Map<string, Uint8Array>();
-  const faults: Record<string, AgentMigrationRemoteError[]> = {};
-  const fault = (operation: string) => {
-    const error = faults[operation]?.shift();
-    if (error) throw error;
-  };
-  let failUploads = false;
-  const advance = (
-    expectedRevision: number,
-    from: AgentMigrationState,
-    to: AgentMigrationState,
-  ) => {
-    if (record.state === to) return { status: "already_applied" as const };
-    if (record.state !== from || record.revision !== expectedRevision)
-      throw new AgentMigrationRemoteError("invalid_transition", false);
-    record.state = to;
-    record.revision++;
-    return { status: "advanced" as const };
-  };
-  const described = () => ({
-    id: migrationId,
-    state: record.state,
-    generation: record.generation,
-    revision: record.revision,
-  });
-  const serverFor = (role: "source" | "target"): AgentMigrationServer => ({
-    view: async (): Promise<AgentMigrationView> => {
-      fault("view");
-      return {
-        migration: {
-          ...described(),
-          agentId,
-          role,
-          sourceComputerId: "computer-a",
-          targetComputerId: "computer-b",
-        },
-        manifest: record.manifest,
-      };
+test.each([
+  {
+    name: "a returned workspace stays placed while an earlier source archive finishes",
+    mode: "placement",
+    expected: {
+      returningState: "switched",
+      memory: "returned workspace",
+      lastReport: "target:switch",
     },
-    step: async (input) => {
-      reports.push(`${role}:${input.step}`);
-      fault(input.step);
-      const from: Record<string, AgentMigrationState> = {
-        source_stopped: "requested",
-        placement_started: "uploaded",
-        switch: "placing",
-        arrived: "switched",
-      };
-      const to: Record<string, AgentMigrationState> = {
-        source_stopped: "source_stopped",
-        placement_started: "placing",
-        switch: "switched",
-        arrived: "completed",
-      };
-      return {
-        ...advance(input.expectedRevision, from[input.step]!, to[input.step]!),
-        migration: described(),
-      };
-    },
-    uploadUrl: async (input) => ({ url: `chunk/${input.chunk.index}`, headers: {} }),
-    downloadUrl: async (input) => ({ url: `chunk/${input.index}` }),
-    completeUpload: async (input) => {
-      reports.push(`${role}:upload_complete`);
-      const result = advance(input.expectedRevision, "source_stopped", "uploaded");
-      record.manifest = input.manifest;
-      return { ...result, migration: described() };
-    },
-    fail: async (input) => {
-      reports.push(`${role}:fail:${input.errorCode}`);
-      details.push(input.errorDetail);
-      record.state = "failed";
-      record.revision++;
-      return { status: "failed", migration: described() };
-    },
-  });
-  const bucket: AgentMigrationBucket = {
-    put: async (signed, bytes) => {
-      if (failUploads) throw new AgentMigrationRemoteError("bucket_refused", false, "403");
-      objects.set(signed.url, bytes);
-    },
-    get: async (url) => {
-      const object = objects.get(url);
-      if (!object) throw new AgentMigrationRemoteError("bucket_unavailable", true, "404");
-      return object;
-    },
-  };
-  return {
-    record,
-    reports,
-    details,
-    faults,
-    serverFor,
-    bucket,
-    refuseUploads: () => {
-      failUploads = true;
-    },
-  };
-}
+  },
+  {
+    name: "a lease that expires waiting for an earlier archive places no workspace",
+    mode: "expired",
+    expected: { returningState: "failed", memory: null, lastReport: "target:fail:lease_expired" },
+  },
+])(
+  "$name",
+  async ({ mode, expected }) => {
+    const root = await temp("agent-migration-workspace-race-");
+    const fixture = Bun.fileURLToPath(
+      new URL("./fixtures/agent-migration-workspace-race.ts", import.meta.url),
+    );
+    const child = Bun.spawn([process.execPath, fixture, root, mode], {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: WORKSPACE_RACE_TIMEOUT_MS,
+    });
+    try {
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(stderr).toBe("");
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout)).toMatchObject({
+        outgoingState: "completed",
+        archived: "original workspace",
+        ...expected,
+      });
+    } finally {
+      if (child.exitCode === null) child.kill();
+      await child.exited;
+    }
+  },
+  WORKSPACE_RACE_TIMEOUT_MS + 1_000,
+);
 
 async function computer(name: string, shared: ReturnType<typeof cloud>, role: "source" | "target") {
   const root = await temp(`agent-migration-${name}-`);

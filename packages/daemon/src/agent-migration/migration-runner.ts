@@ -104,6 +104,8 @@ export class AgentMigrationRunner {
   readonly #runs = new Map<string, Run>();
   /** Individual source runs holding an Agent; one run's cleanup cannot release another's hold. */
   readonly #held = new Map<string, Set<symbol>>();
+  /** Placement and archiving share one workspace; unrelated Agents may still proceed together. */
+  readonly #workspaceOperations = new Map<string, Promise<void>>();
 
   constructor(private readonly options: AgentMigrationRunnerOptions) {}
 
@@ -188,6 +190,20 @@ export class AgentMigrationRunner {
     const held = this.#held.get(agentId);
     held?.delete(owner);
     if (held?.size === 0) this.#held.delete(agentId);
+  }
+
+  #withWorkspace(agentId: string, operation: () => Promise<void>): Promise<void> {
+    const next = (this.#workspaceOperations.get(agentId) ?? Promise.resolve()).then(
+      operation,
+      operation,
+    );
+    const settled = next.catch(() => {});
+    this.#workspaceOperations.set(agentId, settled);
+    void settled.finally(() => {
+      if (this.#workspaceOperations.get(agentId) === settled)
+        this.#workspaceOperations.delete(agentId);
+    });
+    return next;
   }
 
   async #run(owner: symbol, lease: AgentMigrationLeaseGrant, signal: AbortSignal) {
@@ -330,29 +346,31 @@ export class AgentMigrationRunner {
     uploaded: string,
   ) {
     if (state !== "switched" && state !== "completed") return;
-    const workspaceDirectory = this.options.workspaceDirectory(lease.agentId);
-    const backupDirectory = this.#backupDirectory(lease.agentId);
-    try {
-      const placing = [...this.#runs.values()].some(
-        (run) => run.agentId === lease.agentId && run.role === "target",
-      );
-      if (placing || !(await exists(workspaceDirectory))) return;
-      if ((await agentWorkspacePlacement(workspaceDirectory)) !== uploaded) return;
-      // Already archived by an earlier run of this same migration.
-      if (await exists(join(backupDirectory, sourceBackupName(lease.migrationId)))) return;
-      await moveWorkspaceToBackup(
-        workspaceDirectory,
-        backupDirectory,
-        sourceBackupName(lease.migrationId),
-      );
-      await pruneWorkspaceBackups(backupDirectory);
-      logger.info("agent_migration:source_archived", { migration_id: lease.migrationId });
-    } catch (error) {
-      logger.warn("agent_migration:source_archive_failed", {
-        migration_id: lease.migrationId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await this.#withWorkspace(lease.agentId, async () => {
+      const workspaceDirectory = this.options.workspaceDirectory(lease.agentId);
+      const backupDirectory = this.#backupDirectory(lease.agentId);
+      try {
+        const placing = [...this.#runs.values()].some(
+          (run) => run.agentId === lease.agentId && run.role === "target",
+        );
+        if (placing || !(await exists(workspaceDirectory))) return;
+        if ((await agentWorkspacePlacement(workspaceDirectory)) !== uploaded) return;
+        // Already archived by an earlier run of this same migration.
+        if (await exists(join(backupDirectory, sourceBackupName(lease.migrationId)))) return;
+        await moveWorkspaceToBackup(
+          workspaceDirectory,
+          backupDirectory,
+          sourceBackupName(lease.migrationId),
+        );
+        await pruneWorkspaceBackups(backupDirectory);
+        logger.info("agent_migration:source_archived", { migration_id: lease.migrationId });
+      } catch (error) {
+        logger.warn("agent_migration:source_archive_failed", {
+          migration_id: lease.migrationId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
   }
 
   #backupDirectory(agentId: string) {
@@ -409,27 +427,35 @@ export class AgentMigrationRunner {
       migrationId: lease.migrationId,
       generation: lease.generation,
     };
-    let placed = false;
     try {
       await downloadAgentMigrationChunks(
         { server: this.options.server(), bucket },
         { ...transfer, chunks: manifest.chunks, migrationDirectory },
       );
-      await commitAgentMigrationBundle({
-        ...placement,
-        migrationDirectory,
-        manifest,
-        agentRunning: agents.isRunning(lease.agentId),
+      await this.#withWorkspace(lease.agentId, async () => {
+        if (transfer.signal?.aborted)
+          throw new AgentMigrationTransferError("aborted", "placing the workspace");
+        if (Date.now() >= transfer.deadline)
+          throw new AgentMigrationTransferError("lease_expired", "placing the workspace");
+        let placed = false;
+        try {
+          await commitAgentMigrationBundle({
+            ...placement,
+            migrationDirectory,
+            manifest,
+            agentRunning: agents.isRunning(lease.agentId),
+          });
+          placed = true;
+          await this.#switch(transfer, revision);
+        } catch (error) {
+          // An unavailable outcome is not proof that the switch failed. Keep the placed copy and
+          // its backup until ownership can be confirmed, including a cancel after the switch.
+          const unknown =
+            error instanceof AgentMigrationTransferError && error.code === "switch_unknown";
+          if (placed && !unknown) await rollBackAgentMigrationPlacement(placement);
+          throw error;
+        }
       });
-      placed = true;
-      await this.#switch(transfer, revision);
-    } catch (error) {
-      // An unavailable outcome is not proof that the switch failed. Keep the placed copy and
-      // its backup until ownership can be confirmed, including a cancel after the switch.
-      const unknown =
-        error instanceof AgentMigrationTransferError && error.code === "switch_unknown";
-      if (placed && !unknown) await rollBackAgentMigrationPlacement(placement);
-      throw error;
     } finally {
       await this.#dropAttempt(lease.migrationId, lease.generation);
     }
