@@ -301,6 +301,17 @@ test("subagent_activity always shows one unified label, even with entries", () =
   ]);
 });
 
+test("a subagent progress row keeps the unified label and shows the daemon's phase as its detail", () => {
+  expect(
+    presentActivity({
+      activityKind: "working" as const,
+      detailKind: "subagent_activity",
+      level: "info",
+      detail: "Subagent started (Explore)",
+    }),
+  ).toMatchObject([{ label: "Subagent working", detail: "Subagent started (Explore)" }]);
+});
+
 test("structured tools separate the label from command and path details", () => {
   const observation = {
     activityKind: "working" as const,

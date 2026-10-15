@@ -1202,3 +1202,34 @@ test("stopAgent does not report runtime_interrupted when the Agent was idle", as
     await runtime.stop();
   }
 });
+
+test("subagent progress shows each new phase once while the turn is busy, and nothing after it", async () => {
+  const { runtime, activities, emitEvent } = await harness();
+  try {
+    emitEvent({ type: "progress" });
+    activities.length = 0;
+    const lineage = { subagentType: "general-purpose", parentToolUseId: "toolu_agent" };
+    emitEvent({ type: "subagent-progress", phase: "started", ...lineage });
+    emitEvent({ type: "subagent-progress", phase: "progress", ...lineage });
+    emitEvent({ type: "subagent-progress", phase: "progress", ...lineage });
+    emitEvent({ type: "subagent-progress", phase: "notification", ...lineage });
+    emitEvent({ type: "subagent-progress", phase: "started" });
+    expect(
+      activities.map(({ detailKind, level, detail }) => ({ detailKind, level, detail })),
+    ).toEqual(
+      [
+        "Subagent started (general-purpose)",
+        "Subagent working (general-purpose)",
+        "Subagent update (general-purpose)",
+        "Subagent started",
+      ].map((detail) => ({ detailKind: "subagent_activity", level: "info", detail })),
+    );
+    // A background subagent can report after the turn ends; it must not wake an idle Agent.
+    emitEvent({ type: "completed", status: "completed" });
+    activities.length = 0;
+    emitEvent({ type: "subagent-progress", phase: "notification", ...lineage });
+    expect(activities).toHaveLength(0);
+  } finally {
+    await runtime.stop();
+  }
+});

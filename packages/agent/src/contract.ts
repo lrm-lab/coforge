@@ -124,6 +124,17 @@ export type AgentRuntimeEvent =
   // Only providers that can observe an aborted compaction report this; a provider with no such
   // signal never emits it.
   | { type: "compaction-interrupted"; occurredAt?: string }
+  // A subagent's lifecycle as its provider reports it (Claude Code's `task_*` system messages):
+  // started, still working, or a terminal/update notification. `subagentType` and
+  // `parentToolUseId` are raw provider facts; the daemon core alone formats the row and decides
+  // whether it is shown. A background command's task lifecycle is never reported as this.
+  | {
+      type: "subagent-progress";
+      phase: "started" | "progress" | "notification";
+      subagentType?: string;
+      parentToolUseId?: string;
+      occurredAt?: string;
+    }
   // Content-free "the provider is alive" signal (e.g. a partial stream frame with no
   // renderable text, or a turn/message lifecycle notification that carries no content).
   | { type: "progress"; source?: string; occurredAt?: string }

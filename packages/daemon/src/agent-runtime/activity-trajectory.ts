@@ -108,6 +108,7 @@ export class ActivityTrajectory {
       event.type === "compaction-started" ||
       event.type === "compaction-finished" ||
       event.type === "compaction-interrupted" ||
+      event.type === "subagent-progress" ||
       event.type === "error" ||
       event.type === "reconnecting"
     )

@@ -940,6 +940,81 @@ test("Claude Code reports a compaction-started event per status=compacting line,
   }
 });
 
+test("Claude Code relays a subagent's task lifecycle as subagent-progress, never a background command's", async () => {
+  // Shaped like Claude Code 2.1.300 stream-json: a foreground subagent, then a background Bash
+  // task, whose `task_notification` names no type, so only `task_started` tells them apart.
+  const fixture = await controlledClaude();
+  const { session, emit } = fixture;
+  const events: AgentRuntimeEvent[] = [];
+  session.subscribe((event) => events.push(event));
+  try {
+    await session.sendMessage("wait");
+    await emit(
+      {
+        type: "system",
+        subtype: "task_started",
+        task_id: "task-agent",
+        tool_use_id: "toolu_agent",
+        description: "Read a.txt contents",
+        subagent_type: "general-purpose",
+        is_backgrounded: false,
+        task_type: "local_agent",
+      },
+      {
+        type: "system",
+        subtype: "task_progress",
+        task_id: "task-agent",
+        tool_use_id: "toolu_agent",
+        description: "Reading a.txt",
+        subagent_type: "general-purpose",
+        last_tool_name: "Read",
+      },
+      {
+        type: "system",
+        subtype: "task_started",
+        task_id: "task-bash",
+        tool_use_id: "toolu_bash",
+        description: "Run sleep then echo hi in background",
+        is_backgrounded: true,
+        task_type: "local_bash",
+      },
+      {
+        type: "system",
+        subtype: "task_notification",
+        task_id: "task-bash",
+        tool_use_id: "toolu_bash",
+        status: "completed",
+        summary: "Background command completed (exit code 0)",
+      },
+      {
+        type: "system",
+        subtype: "task_notification",
+        task_id: "task-agent",
+        tool_use_id: "toolu_agent",
+        status: "completed",
+        summary: "a.txt contains hello",
+      },
+    );
+    await waitForEvent(events, "subagent-progress");
+    await Bun.sleep(20);
+    expect(
+      events.flatMap((event) =>
+        event.type === "subagent-progress"
+          ? [{ phase: event.phase, type: event.subagentType, parent: event.parentToolUseId }]
+          : [],
+      ),
+    ).toEqual(
+      (["started", "progress", "notification"] as const).map((phase) => ({
+        phase,
+        type: "general-purpose",
+        parent: "toolu_agent",
+      })),
+    );
+  } finally {
+    await fixture.dispose();
+  }
+});
+
 test("Claude Code reports compaction-finished on compact_boundary even without an open compaction", async () => {
   // Whether an unmatched finish is visible is the daemon core's guard now (dedup lives there),
   // not the adapter's - the adapter always relays the raw boundary signal.

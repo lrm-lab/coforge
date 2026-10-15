@@ -10,6 +10,7 @@ import { mkdirSync } from "node:fs";
 import { readOperatingSystem } from "#src/platform/operating-system";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
 import { CompactionTracker } from "#src/agent-runtime/compaction-tracker";
+import { subagentProgressDetail } from "#src/agent-runtime/subagent-progress-activity";
 import {
   buildRuntimeErrorActivity,
   buildRuntimeErrorFingerprintFenceActivity,
@@ -2645,6 +2646,25 @@ export class DaemonRuntime {
             "Context compaction interrupted; completion was not confirmed",
           ),
         );
+      return;
+    }
+    if (event.type === "subagent-progress") {
+      // Shown only while this launch's turn is busy: a background subagent can report after the
+      // turn ended, and a busy kind would wake an idle Agent. A repeat of the row just shown
+      // (one per subagent tool call) adds nothing.
+      const last = this.#activityPublisher.lastBusy(agentId);
+      if (last?.launch !== launch) return;
+      const detail = subagentProgressDetail(event);
+      if (
+        last.activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY &&
+        last.activity.detail === detail
+      )
+        return;
+      this.#activityPublisher.publish(
+        agentId,
+        launch,
+        this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY, "info", detail),
+      );
       return;
     }
     if (event.type === "progress") {
