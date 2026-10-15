@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+// Server-authored receipt metadata, visible only to the named target.
+message MemoryHintDelivery {
+  string hint_id = 1;
+  string tool = 2;
+}

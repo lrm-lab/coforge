@@ -22,23 +22,11 @@ live in nested `AGENTS.md` files listed at the end.
 
 ## TanStack Start boundaries
 
-- This app uses TanStack Start, not Next.js. Do not add `app/`, `pages/`,
-  `getServerSideProps`, `getStaticProps`, or `"use server"` directives.
-- Follow the TanStack guidance listed in the repository-level `AGENTS.md`
-  before changing routing, data loading, Server Functions, middleware,
-  authentication, SSR, or code splitting.
-- `src/server.ts` is the runtime entry point. Keep it limited to request
-  middleware and the Start server handler; do not put feature behavior there.
-- Use a Server Function (`createServerFn`) for data and mutations called by
-  the Web UI. Put the public function at the owning feature seam, for example
-  `src/features/agents/agents.functions.ts`.
-- Follow TanStack Start's file naming: `.functions.ts` for `createServerFn`
-  wrappers (importable anywhere), `.server.ts` for server-only code, and no
-  suffix for client-safe code. Everything under `src/server/` is server-only:
-  every TypeScript module there ends in `.server.ts` (data files such as the Manual topics are read only by those modules), and `vite.config.ts` import
-  protection denies both `*.server.*` and `src/server/**` in the client build.
-  Code the browser also needs (schemas, slugs, pure formatting) lives in the
-  owning `features/` module or `src/lib/`, never in `src/server/`. Server
+- This app uses TanStack Start, not Next.js. Do not add `app/`, `pages/`, `getServerSideProps`, `getStaticProps`, or `"use server"` directives.
+- Follow the TanStack guidance listed in the repository-level `AGENTS.md` before changing routing, data loading, Server Functions, middleware, authentication, SSR, or code splitting.
+- `src/server.ts` is the runtime entry point. Keep it limited to request middleware and the Start server handler; do not put feature behavior there.
+- Use a Server Function (`createServerFn`) for data and mutations called by the Web UI. Put the public function at the owning feature seam, for example `src/features/agents/agents.functions.ts`.
+- Follow TanStack Start's file naming: `.functions.ts` for `createServerFn` wrappers (importable anywhere), `.server.ts` for server-only code, and no suffix for client-safe code. Everything under `src/server/` is server-only: every TypeScript module there ends in `.server.ts` (data files such as the Manual topics are read only by those modules), and `vite.config.ts` import protection denies both `*.server.*` and `src/server/**` in the client build. Code the browser also needs (schemas, slugs, pure formatting) lives in the owning `features/` module or `src/lib/`, never in `src/server/`. Server
   Functions and function middleware live in `features/`, not `src/server/`.
 - Import through `#src/` (see the root `AGENTS.md`). Untitled UI's CLI writes
   `@/` imports; rewrite them to `#src/` when adding a component.
@@ -162,6 +150,7 @@ responsibility.
 - `server/records/` — Workspace Records (see the last section).
 - `server/reminders/` — cloud Agent Reminders.
 - `server/tasks/` — the message-backed TaskBoard, the shape a Task command must have, the Tasks page's overview reads, its Task view, history records, and notice wording.
+- `server/workspace-memory/` — memory profiles, grounded offers, target-only Hint receipts and source ACL checks.
 - `server/workspaces/` — Workspace catalog (name, icon and URL, with the former slugs that keep naming a Workspace; their persistence is `db/repositories/workspace-slugs.repositories.server.ts`), selection, enrollment, member roles, member directory, join links, admitting a member (`admitWorkspaceMember`, the one step a join link takes), deleting a Workspace, removing its memory first and its stored files after, and going out of a Workspace (leaving or deleting it) to the next one.
 - `prisma/` (app root) — schema and migrations; `messages/` — UI translations.
 

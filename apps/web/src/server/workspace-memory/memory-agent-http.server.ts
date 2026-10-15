@@ -1,3 +1,4 @@
+import { PrismaMemoryDispositionStore } from "#src/server/db/repositories/memory-disposition.repositories.server";
 /**
  * Thin HTTP assembly for the Memory Agent route. Routes stay adapters.
  */
@@ -66,6 +67,15 @@ export function createScopedMemoryAgentHttpCommands(
       offers: citationsStore,
       publisher: createPrismaMemoryOfferPublisher(db),
       channels: createPrismaMemoryOfferChannels(db),
+      hints: {
+        prepare(input) {
+          const seconds = Number(Bun.env.COFORGE_MEMORY_HINT_TTL_SECONDS);
+          return new PrismaMemoryDispositionStore(db).prepare({
+            ...input,
+            ttlMilliseconds: seconds * 1000,
+          });
+        },
+      },
     }),
     openviking: createOpenVikingMemoryReads({
       client: extras.openvikingReads ?? createDefaultOpenVikingReadClient(db),
@@ -112,9 +122,9 @@ function accountKeyFor(credentialRef: string): string | undefined {
   return key;
 }
 
-function createDefaultOpenVikingReadClient(db: PrismaClient): OpenVikingMemoryReadClient {
+export function createDefaultOpenVikingGateway(db: PrismaClient) {
   const bindings = new PrismaOpenVikingBindingStore(db);
-  const gateway = createOpenVikingPolicyGateway({
+  return createOpenVikingPolicyGateway({
     profiles: new PrismaWorkspaceMemoryProfileStore(db),
     bindings,
     runtime: createOpenVikingRuntimeClient({
@@ -127,6 +137,11 @@ function createDefaultOpenVikingReadClient(db: PrismaClient): OpenVikingMemoryRe
       return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
     },
   });
+}
+
+function createDefaultOpenVikingReadClient(db: PrismaClient): OpenVikingMemoryReadClient {
+  const bindings = new PrismaOpenVikingBindingStore(db);
+  const gateway = createDefaultOpenVikingGateway(db);
   return createCatalogOpenVikingMemoryReadClient({
     async forward(request) {
       const result = await gateway.forward(

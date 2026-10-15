@@ -1,0 +1,56 @@
+# Memory Hint receipts
+
+An addressed task Agent decides `adopt`, `reject`, or `defer` with the native
+`memory_disposition` tool. A delivered Hint carries recipient-only structured
+`hint_id` and tool metadata. The channel body stays the cited Hint text.
+The Memory Agent cannot receive a Hint or submit its receipt.
+
+The authenticated server determines the deciding Agent and timestamp. The tool
+records intent only; it does not post a channel message, freeze other tools,
+prove followthrough, or award positive utility. Actions preceding a successful
+`adopt` must not be counted as followthrough by a consumer.
+
+## State and permissions
+
+- `adopt` and `reject` are terminal. Repeating the current decision returns its
+  original record, even after expiry, without another citation.
+- `defer` can be followed once by `adopt` or `reject` within the original Hint
+  delivery TTL. Repeating `defer` does not refresh that TTL.
+- New writes recheck the target's current access to each frozen source. Each
+  readable source receives `considered` for adopt/defer or `rejected` for reject.
+  Unreadable source identifiers are returned without their contents. If all
+  sources are unreadable, nothing is recorded.
+- Existing delivery provenance is not reranked or rechecked for current
+  discovery eligibility. Leaving the channel does not remove receipt rights.
+- Malformed requests fail before lookup. Unknown and another Agent's Hint have
+  the same unauthorized result. Empty reasons fail without checking source ACL.
+- PostgreSQL locks each Hint while checking and appending its receipt. History
+  and per-source citations commit together; failures append neither.
+
+## Runtime and configuration
+
+The first delivery integrates the native tool into bundled CoForge and Pi
+task sessions. Other provider adapters do not yet have a native-tool injection
+surface; their adapter integration remains outstanding. There is no CLI receipt
+subcommand, and a channel reply cannot stand in for the native tool.
+
+Set `COFORGE_MEMORY_HINT_TTL_SECONDS` explicitly on the Web/backend. No default
+is selected here: the design left the TTL duration open. Invalid/missing values
+prevent new Hint creation. Delivery sets the expiry once; replay never extends
+it. Apply the Prisma migration before starting the updated backend, and update
+the Computer/Daemon alongside it so receipt metadata survives message codecs.
+
+Historical Memory Offers have no retroactively fabricated Hint or receipt.
+The IR benchmark's separate Go harness is unchanged by this product branch.
+
+## Validation
+
+Public behavior tests cover the native tool, authenticated local proxy,
+state transitions, authority failures, source ACL changes, and delivery/recovery
+codec round trips. PostgreSQL integration exercises the actual migration,
+cross-process row locking, append-only history, and per-source citation roles.
+
+Design source: `skill-node-design-grill/cycles/002-memory-disposition-receipt.md`
+(Q190–Q216), supplied in the local design archive. This delivery was authorized
+on 2026-10-15 and uses branch `feat/memory-disposition-receipt-20261015`, based on
+`5146d1393bbe1956044d37d9a36cddd8f0dfa77e`.

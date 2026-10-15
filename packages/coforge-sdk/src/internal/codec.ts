@@ -1,3 +1,4 @@
+import { memoryHintMessage, readMemoryHint } from "./memory-hint";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { isMemoryAgentToolProfile } from "../agent/memory-tool-fences";
 import { parseActivityEntries, type ActivityTrajectoryEntry } from "./activity-entries";
@@ -763,11 +764,16 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
         : undefined,
       messageType: AGENT_START_MESSAGE_TYPE,
       wakeMessage: value.wakeMessage
-        ? { ...value.wakeMessage, sequence: BigInt(value.wakeMessage.sequence) }
+        ? {
+            ...value.wakeMessage,
+            sequence: BigInt(value.wakeMessage.sequence),
+            memoryHint: memoryHintMessage(value.wakeMessage.memoryHint),
+          }
         : undefined,
       resumeMessages: (value.resumeMessages ?? []).map((message) => ({
         ...message,
         sequence: BigInt(message.sequence),
+        memoryHint: memoryHintMessage(message.memoryHint),
       })),
       unreadSummary: Object.entries(value.unreadSummary ?? {}).map(([target, count]) => ({
         target,
@@ -846,6 +852,7 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     latestSenderHandle: message.latestSenderHandle,
     latestSenderDescription: message.latestSenderDescription,
     body: message.body,
+    ...(message.memoryHint ? { memoryHint: readMemoryHint(message.memoryHint) } : {}),
     ...(message.nonMemberMention ? { nonMemberMention: true } : {}),
   });
   return {
@@ -1030,6 +1037,7 @@ export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Ar
       nonMemberMention: value.nonMemberMention,
       taskExecutionSessionId: value.taskExecutionSessionId ?? "",
       mentionDelivery: mentionDeliveryEnvelopeMessage(value.mentionDelivery),
+      memoryHint: memoryHintMessage(value.memoryHint),
     }),
   );
 }
@@ -1073,6 +1081,7 @@ export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDeliv
       ? { taskExecutionSessionId: value.taskExecutionSessionId }
       : {}),
     ...(mentionDelivery ? { mentionDelivery } : {}),
+    ...(value.memoryHint ? { memoryHint: readMemoryHint(value.memoryHint) } : {}),
   };
 }
 export function encodeAgentMessageDeliveryAck(value: AgentMessageDeliveryAck): Uint8Array {

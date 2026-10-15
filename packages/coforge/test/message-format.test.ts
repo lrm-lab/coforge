@@ -26,6 +26,20 @@ function message(overrides: Partial<AgentMessageRecord> = {}): AgentMessageRecor
   };
 }
 
+test("target message check and read expose structured Hint receipt metadata without altering its body", () => {
+  const hint = message({
+    body: "use these constraints",
+    memoryHint: { hint_id: "server-hint", tool: "memory_disposition" },
+  });
+  expect(formatMessageLine(hint)).toContain(
+    "use these constraints\n[Memory Hint hint_id=server-hint tool=memory_disposition]",
+  );
+  expect(
+    formatReadWindow("#general", { messages: [hint], hasOlder: false, hasNewer: false }),
+  ).toContain("[Memory Hint hint_id=server-hint tool=memory_disposition]");
+  expect(hint.body).toBe("use these constraints");
+});
+
 test("formatUtcTimestamp renders ISO input as UTC YYYY-MM-DD HH:MM:SSZ", () => {
   expect(formatUtcTimestamp("2026-09-07T10:05:09Z")).toBe("2026-09-07 10:05:09Z");
   expect(formatUtcTimestamp("2026-01-02T00:00:00.500Z")).toBe("2026-01-02 00:00:00Z");

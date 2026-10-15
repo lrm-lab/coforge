@@ -28,41 +28,42 @@ The architecture invariants every change must respect are in
 
 ## Documentation
 
-| Document | Covers |
-| --- | --- |
-| [AGENTS.md](AGENTS.md) | Repository rules: decisions, module design, delivery, toolchain, architecture invariants |
-| [apps/web/AGENTS.md](apps/web/AGENTS.md) | Web/backend rules and module map |
-| [packages/computer/AGENTS.md](packages/computer/AGENTS.md) | Computer package rules and module map |
-| [packages/daemon/AGENTS.md](packages/daemon/AGENTS.md) | Daemon package rules and module map |
-| [crates/installer/AGENTS.md](crates/installer/AGENTS.md) | Rust installer crate (`coforge-installer`): toolchain, commands, contract, CI, supply-chain gate |
-| [crates/installer/src/AGENTS.md](crates/installer/src/AGENTS.md) | Installer module map |
-| [docs/database-schema/](docs/database-schema/README.md) | Database schema and conversation/delivery model |
-| [docs/reliable-message-delivery.md](docs/reliable-message-delivery.md) | Message delivery guarantees |
-| [docs/workspace-deletion.md](docs/workspace-deletion.md) | What deleting a Workspace removes, and when |
-| [docs/observability/](docs/observability/README.md) | Agent Activity, status, and observability baseline |
-| [docs/local-logging.md](docs/local-logging.md) | Computer/Daemon logging contract |
-| [docs/release/](docs/release/README.md) | Release contract: deployment, Computer distribution, installer feed, promotion, rollback |
-| [docs/design/](docs/design/README.md) | Product UI design guidance |
-| [docs/design-tokens.md](docs/design-tokens.md) | Design tokens |
-| [docs/operations/aliyun-oss-cdn/](docs/operations/aliyun-oss-cdn/README.md) | OSS/CDN provisioning runbook |
-| [docs/operations/cdn-certificates/](docs/operations/cdn-certificates/README.md) | CDN certificate renewal runbook |
-| [docs/agents/testing.md](docs/agents/testing.md) | Testing guidance for agents |
-| [docs/agents/e2e-testing/](docs/agents/e2e-testing/README.md) | Live OpenRouter integration test |
-| [docs/agents/mise-tasks.md](docs/agents/mise-tasks.md) | Mise task policy |
-| [docs/agents/reference-cli-research/](docs/agents/reference-cli-research/README.md) | Studying the Raft Computer 1.0.45 reference binary, source tree, and installer |
-| [docs/research/](docs/research/README.md) | Evidence-backed research reports |
-| [apps/web/README.md](apps/web/README.md) | Web app setup and scripts |
-| [apps/web/src/components/ui/README.md](apps/web/src/components/ui/README.md) | UI component inventory and exceptions |
-| [packages/computer/README.md](packages/computer/README.md) | `coforge-computer` package |
-| [packages/daemon/README.md](packages/daemon/README.md) | `coforge-daemon` package |
-| [packages/agent/README.md](packages/agent/README.md) | Built-in Pi-based Agent runtime |
-| [packages/coforge/README.md](packages/coforge/README.md) | Agent-facing `coforge` CLI |
-| [docs/agent-cli/](docs/agent-cli/README.md) | `coforge` Agent CLI command reference |
-| [packages/coforge-sdk/README.md](packages/coforge-sdk/README.md) | Shared contracts and transports |
-| [infra/README.md](infra/README.md) | Local Docker Compose services |
-| [docs/operations/staging/](docs/operations/staging/README.md) | Staging environment runbook |
-| [docs/operations/production/](docs/operations/production/README.md) | Production environment runbook |
-| [infra/production/README.md](infra/production/README.md) | Production Compose environment (points to its runbook) |
+| Document                                                                            | Covers                                                                                           |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [AGENTS.md](AGENTS.md)                                                              | Repository rules: decisions, module design, delivery, toolchain, architecture invariants         |
+| [apps/web/AGENTS.md](apps/web/AGENTS.md)                                            | Web/backend rules and module map                                                                 |
+| [packages/computer/AGENTS.md](packages/computer/AGENTS.md)                          | Computer package rules and module map                                                            |
+| [packages/daemon/AGENTS.md](packages/daemon/AGENTS.md)                              | Daemon package rules and module map                                                              |
+| [crates/installer/AGENTS.md](crates/installer/AGENTS.md)                            | Rust installer crate (`coforge-installer`): toolchain, commands, contract, CI, supply-chain gate |
+| [crates/installer/src/AGENTS.md](crates/installer/src/AGENTS.md)                    | Installer module map                                                                             |
+| [docs/database-schema/](docs/database-schema/README.md)                             | Database schema and conversation/delivery model                                                  |
+| [docs/memory-disposition.md](docs/memory-disposition.md)                            | Target-only Memory Hint receipts, configuration, and validation                                  |
+| [docs/reliable-message-delivery.md](docs/reliable-message-delivery.md)              | Message delivery guarantees                                                                      |
+| [docs/workspace-deletion.md](docs/workspace-deletion.md)                            | What deleting a Workspace removes, and when                                                      |
+| [docs/observability/](docs/observability/README.md)                                 | Agent Activity, status, and observability baseline                                               |
+| [docs/local-logging.md](docs/local-logging.md)                                      | Computer/Daemon logging contract                                                                 |
+| [docs/release/](docs/release/README.md)                                             | Release contract: deployment, Computer distribution, installer feed, promotion, rollback         |
+| [docs/design/](docs/design/README.md)                                               | Product UI design guidance                                                                       |
+| [docs/design-tokens.md](docs/design-tokens.md)                                      | Design tokens                                                                                    |
+| [docs/operations/aliyun-oss-cdn/](docs/operations/aliyun-oss-cdn/README.md)         | OSS/CDN provisioning runbook                                                                     |
+| [docs/operations/cdn-certificates/](docs/operations/cdn-certificates/README.md)     | CDN certificate renewal runbook                                                                  |
+| [docs/agents/testing.md](docs/agents/testing.md)                                    | Testing guidance for agents                                                                      |
+| [docs/agents/e2e-testing/](docs/agents/e2e-testing/README.md)                       | Live OpenRouter integration test                                                                 |
+| [docs/agents/mise-tasks.md](docs/agents/mise-tasks.md)                              | Mise task policy                                                                                 |
+| [docs/agents/reference-cli-research/](docs/agents/reference-cli-research/README.md) | Studying the Raft Computer 1.0.45 reference binary, source tree, and installer                   |
+| [docs/research/](docs/research/README.md)                                           | Evidence-backed research reports                                                                 |
+| [apps/web/README.md](apps/web/README.md)                                            | Web app setup and scripts                                                                        |
+| [apps/web/src/components/ui/README.md](apps/web/src/components/ui/README.md)        | UI component inventory and exceptions                                                            |
+| [packages/computer/README.md](packages/computer/README.md)                          | `coforge-computer` package                                                                       |
+| [packages/daemon/README.md](packages/daemon/README.md)                              | `coforge-daemon` package                                                                         |
+| [packages/agent/README.md](packages/agent/README.md)                                | Built-in Pi-based Agent runtime                                                                  |
+| [packages/coforge/README.md](packages/coforge/README.md)                            | Agent-facing `coforge` CLI                                                                       |
+| [docs/agent-cli/](docs/agent-cli/README.md)                                         | `coforge` Agent CLI command reference                                                            |
+| [packages/coforge-sdk/README.md](packages/coforge-sdk/README.md)                    | Shared contracts and transports                                                                  |
+| [infra/README.md](infra/README.md)                                                  | Local Docker Compose services                                                                    |
+| [docs/operations/staging/](docs/operations/staging/README.md)                       | Staging environment runbook                                                                      |
+| [docs/operations/production/](docs/operations/production/README.md)                 | Production environment runbook                                                                   |
+| [infra/production/README.md](infra/production/README.md)                            | Production Compose environment (points to its runbook)                                           |
 
 Project skills live in `.agents/skills`; `skills-lock.json` pins the upstream ones.
 

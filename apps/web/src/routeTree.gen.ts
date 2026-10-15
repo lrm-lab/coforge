@@ -52,6 +52,7 @@ import { Route as ApiAgentV1EventsRouteImport } from './routes/api/agent/v1/even
 import { Route as ApiAgentV1GithubCommitTrailersRouteImport } from './routes/api/agent/v1/github-commit-trailers'
 import { Route as ApiAgentV1GithubCredentialsRouteImport } from './routes/api/agent/v1/github-credentials'
 import { Route as ApiAgentV1ManualRouteImport } from './routes/api/agent/v1/manual'
+import { Route as ApiAgentV1MemoryDispositionsRouteImport } from './routes/api/agent/v1/memory-dispositions'
 import { Route as ApiAgentV1MessagesRouteImport } from './routes/api/agent/v1/messages'
 import { Route as ApiAgentV1OpenvikingRouteImport } from './routes/api/agent/v1/openviking'
 import { Route as ApiAgentV1ProfileRouteImport } from './routes/api/agent/v1/profile'
@@ -336,6 +337,12 @@ const ApiAgentV1ManualRoute = ApiAgentV1ManualRouteImport.update({
   path: '/api/agent/v1/manual',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentV1MemoryDispositionsRoute =
+  ApiAgentV1MemoryDispositionsRouteImport.update({
+    id: '/api/agent/v1/memory-dispositions',
+    path: '/api/agent/v1/memory-dispositions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1MessagesRoute = ApiAgentV1MessagesRouteImport.update({
   id: '/api/agent/v1/messages',
   path: '/api/agent/v1/messages',
@@ -747,6 +754,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/github-commit-trailers': typeof ApiAgentV1GithubCommitTrailersRoute
   '/api/agent/v1/github-credentials': typeof ApiAgentV1GithubCredentialsRoute
   '/api/agent/v1/manual': typeof ApiAgentV1ManualRoute
+  '/api/agent/v1/memory-dispositions': typeof ApiAgentV1MemoryDispositionsRoute
   '/api/agent/v1/messages': typeof ApiAgentV1MessagesRoute
   '/api/agent/v1/openviking': typeof ApiAgentV1OpenvikingRoute
   '/api/agent/v1/profile': typeof ApiAgentV1ProfileRoute
@@ -852,6 +860,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/github-commit-trailers': typeof ApiAgentV1GithubCommitTrailersRoute
   '/api/agent/v1/github-credentials': typeof ApiAgentV1GithubCredentialsRoute
   '/api/agent/v1/manual': typeof ApiAgentV1ManualRoute
+  '/api/agent/v1/memory-dispositions': typeof ApiAgentV1MemoryDispositionsRoute
   '/api/agent/v1/messages': typeof ApiAgentV1MessagesRoute
   '/api/agent/v1/openviking': typeof ApiAgentV1OpenvikingRoute
   '/api/agent/v1/profile': typeof ApiAgentV1ProfileRoute
@@ -960,6 +969,7 @@ export interface FileRoutesById {
   '/api/agent/v1/github-commit-trailers': typeof ApiAgentV1GithubCommitTrailersRoute
   '/api/agent/v1/github-credentials': typeof ApiAgentV1GithubCredentialsRoute
   '/api/agent/v1/manual': typeof ApiAgentV1ManualRoute
+  '/api/agent/v1/memory-dispositions': typeof ApiAgentV1MemoryDispositionsRoute
   '/api/agent/v1/messages': typeof ApiAgentV1MessagesRoute
   '/api/agent/v1/openviking': typeof ApiAgentV1OpenvikingRoute
   '/api/agent/v1/profile': typeof ApiAgentV1ProfileRoute
@@ -1068,6 +1078,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/github-commit-trailers'
     | '/api/agent/v1/github-credentials'
     | '/api/agent/v1/manual'
+    | '/api/agent/v1/memory-dispositions'
     | '/api/agent/v1/messages'
     | '/api/agent/v1/openviking'
     | '/api/agent/v1/profile'
@@ -1173,6 +1184,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/github-commit-trailers'
     | '/api/agent/v1/github-credentials'
     | '/api/agent/v1/manual'
+    | '/api/agent/v1/memory-dispositions'
     | '/api/agent/v1/messages'
     | '/api/agent/v1/openviking'
     | '/api/agent/v1/profile'
@@ -1280,6 +1292,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/github-commit-trailers'
     | '/api/agent/v1/github-credentials'
     | '/api/agent/v1/manual'
+    | '/api/agent/v1/memory-dispositions'
     | '/api/agent/v1/messages'
     | '/api/agent/v1/openviking'
     | '/api/agent/v1/profile'
@@ -1379,6 +1392,7 @@ export interface RootRouteChildren {
   ApiAgentV1GithubCommitTrailersRoute: typeof ApiAgentV1GithubCommitTrailersRoute
   ApiAgentV1GithubCredentialsRoute: typeof ApiAgentV1GithubCredentialsRoute
   ApiAgentV1ManualRoute: typeof ApiAgentV1ManualRoute
+  ApiAgentV1MemoryDispositionsRoute: typeof ApiAgentV1MemoryDispositionsRoute
   ApiAgentV1MessagesRoute: typeof ApiAgentV1MessagesRoute
   ApiAgentV1OpenvikingRoute: typeof ApiAgentV1OpenvikingRoute
   ApiAgentV1ProfileRoute: typeof ApiAgentV1ProfileRoute
@@ -1720,6 +1734,13 @@ declare module '@tanstack/react-router' {
       path: '/api/agent/v1/manual'
       fullPath: '/api/agent/v1/manual'
       preLoaderRoute: typeof ApiAgentV1ManualRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/memory-dispositions': {
+      id: '/api/agent/v1/memory-dispositions'
+      path: '/api/agent/v1/memory-dispositions'
+      fullPath: '/api/agent/v1/memory-dispositions'
+      preLoaderRoute: typeof ApiAgentV1MemoryDispositionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agent/v1/messages': {
@@ -2367,6 +2388,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1GithubCommitTrailersRoute: ApiAgentV1GithubCommitTrailersRoute,
   ApiAgentV1GithubCredentialsRoute: ApiAgentV1GithubCredentialsRoute,
   ApiAgentV1ManualRoute: ApiAgentV1ManualRoute,
+  ApiAgentV1MemoryDispositionsRoute: ApiAgentV1MemoryDispositionsRoute,
   ApiAgentV1MessagesRoute: ApiAgentV1MessagesRoute,
   ApiAgentV1OpenvikingRoute: ApiAgentV1OpenvikingRoute,
   ApiAgentV1ProfileRoute: ApiAgentV1ProfileRoute,
@@ -2421,13 +2443,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

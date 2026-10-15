@@ -33,6 +33,8 @@ import { getCoforgeAgentDir, getCoforgeSessionDir, prepareAgentSessionDirectory 
 import { API_KEY_ENV_BY_PROVIDER, configureRuntimeEnvironment } from "./runtime-provider";
 import { classifyPiLaunchFailure, PI_MODEL_UNAVAILABLE } from "./launch-error";
 
+import { createMemoryDispositionTool } from "./memory-disposition-tool";
+
 const MEMORY_READ_OPS = new Set(["find", "search_context", "read"]);
 
 export type MemoryAgentProxy = {
@@ -508,6 +510,7 @@ export async function createSession(options: {
         ]
       : []),
     ...memoryTools,
+    ...(!memoryFence ? [createMemoryDispositionTool(defaultMemoryProxy(environment))] : []),
   ];
   const created = await createAgentSessionFromServices({
     services,

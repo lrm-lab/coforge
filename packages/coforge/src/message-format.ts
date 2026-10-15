@@ -84,7 +84,7 @@ function channelSummaryBody(message: AgentMessageRecord): string {
 /** The message line shared by `message check`, `message resolve`, and held Task context. */
 export function formatMessageLine(message: AgentMessageRecord): string {
   const notice = message.nonMemberMention ? `\n${NON_MEMBER_MENTION_NOTICE}` : "";
-  return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${channelSummaryBody(message)}${attachmentSuffix(message)}${taskSuffix(message)}${notice}`;
+  return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${channelSummaryBody(message)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${notice}`;
 }
 
 /** What an Agent notified of a channel message from outside that channel may do about it. */
@@ -124,7 +124,7 @@ export function formatReadWindow(
   messages.forEach((message, index) => {
     const replyTarget = includeReplyTarget ? ` replyTarget=${target}:${shortId(message.id)}` : "";
     lines.push(
-      `[${index + 1}/${messages.length} msg=${message.id} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}] ${messageSender(message)}: ${message.body}${attachmentSuffix(message)}${taskSuffix(message)}`,
+      `[${index + 1}/${messages.length} msg=${message.id} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}] ${messageSender(message)}: ${message.body}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}`,
     );
   });
 
@@ -519,4 +519,10 @@ export function formatUndeliveredMentions(
     );
   }
   return lines.join("\n");
+}
+
+function memoryHintSuffix(message: AgentMessageRecord): string {
+  return message.memoryHint
+    ? `\n[Memory Hint hint_id=${message.memoryHint.hint_id} tool=${message.memoryHint.tool}]`
+    : "";
 }

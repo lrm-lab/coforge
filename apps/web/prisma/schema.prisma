@@ -54,6 +54,7 @@ model Workspace {
   admittedSegmentSourceMessages AdmittedSegmentSourceMessage[]
   admittedSegmentDispatches AdmittedSegmentDispatch[]
   openvikingCitations    OpenVikingCitationRecord[]
+  memoryHints            MemoryHintRecord[]
   memoryOffers           MemoryOfferRecord[]
   memoryOfferCitations   MemoryOfferCitation[]
   memoryCleanupWork      WorkspaceMemoryCleanupWork[]
@@ -845,6 +846,7 @@ model ConversationMember {
 }
 
 model Message {
+  memoryHint            MemoryHintRecord?
   id             String                 @id @default(uuid(7)) @db.Uuid
   conversationId String                 @db.Uuid
   workspaceId    String                 @db.Uuid
@@ -1688,4 +1690,61 @@ model WorkspaceMemoryCleanupWork {
   @@index([workspaceId, state])
   @@index([state, leaseExpiresAt])
   @@map("workspace_memory_cleanup_work")
+}
+
+/// Server-authored frozen Memory Hint; delivery creates one exposure.
+model MemoryHintRecord {
+  id              String                   @id @default(uuid(7)) @db.Uuid
+  workspaceId     String                   @map("workspace_id") @db.Uuid
+  operationId     String                   @map("operation_id")
+  targetAgentId   String                   @map("target_agent_id") @db.Uuid
+  memoryAgentId   String                   @map("memory_agent_id") @db.Uuid
+  conversationId  String                   @map("conversation_id") @db.Uuid
+  bodyHash        String                   @map("body_hash")
+  sources         Json
+  ttlMilliseconds Int                      @map("ttl_milliseconds")
+  deliveredAt     DateTime?                @map("delivered_at")
+  expiresAt       DateTime?                @map("expires_at")
+  messageId       String?                  @unique @map("message_id") @db.Uuid
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  workspace       Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  message         Message?                 @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  dispositions    MemoryDispositionEvent[]
+
+  @@unique([workspaceId, operationId])
+  @@unique([workspaceId, id])
+  @@index([workspaceId, targetAgentId])
+  @@map("memory_hint_records")
+}
+
+/// Append-only authenticated target decisions. At most defer then one terminal decision.
+model MemoryDispositionEvent {
+  id                 String                      @id @default(uuid(7)) @db.Uuid
+  workspaceId        String                      @map("workspace_id") @db.Uuid
+  hintId             String                      @map("hint_id") @db.Uuid
+  sequence           Int
+  targetAgentId      String                      @map("target_agent_id") @db.Uuid
+  decision           String
+  reason             String
+  intendedActionRefs String[]                    @map("intended_action_refs")
+  skippedSourceRefs  String[]                    @map("skipped_source_refs")
+  decidedAt          DateTime                    @map("decided_at")
+  hint               MemoryHintRecord            @relation(fields: [workspaceId, hintId], references: [workspaceId, id], onDelete: Cascade)
+  citations          MemoryDispositionCitation[]
+
+  @@unique([hintId, sequence])
+  @@map("memory_disposition_events")
+}
+
+/// Per-source consideration/rejection. Never an applied or utility event.
+model MemoryDispositionCitation {
+  id            String                 @id @default(uuid(7)) @db.Uuid
+  dispositionId String                 @map("disposition_id") @db.Uuid
+  citationId    String                 @map("citation_id")
+  role          String
+  source        Json
+  disposition   MemoryDispositionEvent @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+
+  @@unique([dispositionId, citationId])
+  @@map("memory_disposition_citations")
 }

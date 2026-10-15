@@ -3,7 +3,7 @@
  * recipient Agent; it never writes OpenViking.
  */
 
-import type { MemoryCitation } from "@lrm/coforge-sdk/agent";
+import type { MemoryCitation, MemoryHintDelivery } from "@lrm/coforge-sdk/agent";
 import type {
   MemoryOfferRecord,
   WorkspaceMemoryCitationStore,
@@ -20,6 +20,7 @@ export type MemoryOfferResult = {
 };
 
 export type MemoryOfferChannel = {
+  isMemoryAgent(workspaceId: string, agentId: string): Promise<boolean>;
   isActiveChannelAgent(
     workspaceId: string,
     conversationId: string,
@@ -45,6 +46,17 @@ export function createMemoryOffers(deps: {
   offers: Pick<WorkspaceMemoryCitationStore, "putOffer" | "getOffer">;
   publisher: MemoryOfferPublisher;
   channels: MemoryOfferChannel;
+  hints: {
+    prepare(input: {
+      workspaceId: string;
+      operationId: string;
+      targetAgentId: string;
+      memoryAgentId: string;
+      conversationId: string;
+      body: string;
+      citations: readonly MemoryCitation[];
+    }): Promise<MemoryHintDelivery>;
+  };
 }): MemoryOffers {
   return {
     async publish(input) {
@@ -59,7 +71,13 @@ export function createMemoryOffers(deps: {
         input.conversationId,
         input.targetAgentId,
       );
-      if (!active) throw new WorkspaceMemoryScopeError();
+      if (
+        !active ||
+        input.targetAgentId === input.memoryAgentId ||
+        (await deps.channels.isMemoryAgent(input.workspaceId, input.targetAgentId))
+      )
+        throw new WorkspaceMemoryScopeError();
+      const memoryHint = await deps.hints.prepare({ ...input, citations });
       const delivered = await deps.publisher.publish({
         workspaceId: input.workspaceId,
         conversationId: input.conversationId,
@@ -67,6 +85,7 @@ export function createMemoryOffers(deps: {
         recipientAgentId: input.targetAgentId,
         body: input.body,
         requestId: input.operationId,
+        memoryHint,
       });
       try {
         const saved = await deps.offers.putOffer({

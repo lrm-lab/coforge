@@ -155,6 +155,7 @@ export type AgentRecoveryContext = {
       sequence: number;
       target: string;
       body: string;
+      memoryHint?: import("@lrm/coforge-sdk/agent").MemoryHintDelivery;
       /** The Agent was notified of this channel message without being a member of the channel. */
       nonMemberMention?: boolean;
     } & LatestSenderFields
@@ -196,6 +197,7 @@ const ACTION_CARD_STATE_SELECT = {
 
 /** Message projection sent to an Agent. */
 const AGENT_MESSAGE_INCLUDE = {
+  memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
   sender: MESSAGE_SENDER_SELECT,
   attachments: { orderBy: { position: "asc" } },
   task: TASK_METADATA_SELECT,
@@ -279,6 +281,7 @@ function toAgentMessage(
     task: Parameters<typeof messageTask>[0];
     attachments: AttachmentMetadata[];
     actionCard?: { state: string } | null;
+    memoryHint?: { id: string; targetAgentId: string; deliveredAt: Date | null } | null;
     mentions?: MessageMentionRef[];
   },
   target: string,
@@ -300,6 +303,9 @@ function toAgentMessage(
     target,
     attachments: row.attachments,
     ...(task ? { task } : {}),
+    ...(row.memoryHint?.deliveredAt && row.memoryHint.targetAgentId === readerAgentId
+      ? { memoryHint: { hint_id: row.memoryHint.id, tool: "memory_disposition" as const } }
+      : {}),
   };
 }
 
@@ -852,7 +858,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       take: limit,
       include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
     });
-    return rows.map((message) => toAgentMessage(message, messageDeliveryTarget(message)));
+    return rows.map((message) => toAgentMessage(message, messageDeliveryTarget(message), agentId));
   }
 
   /** Looks a Message up by anchor across every conversation the Agent is a member of. */
@@ -875,7 +881,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
 
   async resolveAgentMessage(workspaceId: string, agentId: string, anchor: string) {
     const row = await this.resolveAgentScopedMessage(workspaceId, agentId, anchor);
-    return toAgentMessage(row, messageDeliveryTarget(row));
+    return toAgentMessage(row, messageDeliveryTarget(row), agentId);
   }
 
   async setAgentMessageReaction(
@@ -1512,6 +1518,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             sender: MESSAGE_SENDER_SELECT,
             mentions: MESSAGE_MENTIONS_SELECT,
             pendingMentionActions: { where: NOTIFIED_AGENT_WHERE(agentId), select: { id: true } },
+            memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
           },
         },
       },
@@ -1550,6 +1557,15 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         latestSenderHandle: sender.handle,
         latestSenderDescription: sender.description,
         ...agentMessageView(delivery.message, agentId),
+        ...(delivery.message.memoryHint?.deliveredAt &&
+        delivery.message.memoryHint.targetAgentId === agentId
+          ? {
+              memoryHint: {
+                hint_id: delivery.message.memoryHint.id,
+                tool: "memory_disposition" as const,
+              },
+            }
+          : {}),
         ...(delivery.message.pendingMentionActions.length && !memberOf.has(delivery.conversationId)
           ? { nonMemberMention: true }
           : {}),
@@ -1609,7 +1625,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       : agentMember.agentReadThroughSequence;
     const include = AGENT_MESSAGE_INCLUDE;
     const map = (rows: DirectConversationMessageRow[]) =>
-      rows.map((row) => toAgentMessage(row, canonicalTarget));
+      rows.map((row) => toAgentMessage(row, canonicalTarget, agentId));
     if (page.around && anchor) {
       const beforeCount = Math.floor((limit - 1) / 2);
       const afterCount = limit - 1 - beforeCount;
@@ -1756,6 +1772,18 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       list.push(mention);
       mentionsByMessage.set(mention.messageId, list);
     }
+    const hints = rows.length
+      ? await this.db.memoryHintRecord.findMany({
+          where: {
+            workspaceId,
+            targetAgentId: agentId,
+            deliveredAt: { not: null },
+            messageId: { in: rows.map((row) => row.id) },
+          },
+          select: { id: true, messageId: true },
+        })
+      : [];
+    const hintsByMessage = new Map(hints.map((hint) => [hint.messageId, hint.id]));
     for (const row of rows) {
       if (!row.channelName && !row.otherUsername)
         throw new Error("Agent conversation has no other member to target");
@@ -1796,6 +1824,14 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         latestSenderDescription: sender.description,
         ...agentMessageView({ body: row.body, mentions: mentionsByMessage.get(row.id) ?? [] }),
         ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
+        ...(hintsByMessage.has(row.id)
+          ? {
+              memoryHint: {
+                hint_id: hintsByMessage.get(row.id)!,
+                tool: "memory_disposition" as const,
+              },
+            }
+          : {}),
       });
     }
     return { resumeMessages, unreadSummary };
@@ -2169,6 +2205,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     attachmentIds?: string[],
     threadRootId?: string,
     mentions?: readonly AgentMentionBinding[],
+    memoryHintId?: string,
   ) {
     const conversation = await this.db.conversation.findUnique({
       where: { id: conversationId },
@@ -2244,7 +2281,40 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     const root = threadRootId
       ? await this.resolveMessage(conversationId, threadRootId, true)
       : undefined;
+    const messageSelect = {
+      id: true,
+      body: true,
+      createdAt: true,
+      sequence: true,
+      // Carried so the browser signal can exclude thread replies from channel unread.
+      threadRootId: true,
+      mentions: { select: { kind: true, actorId: true, handle: true } },
+      deliveries: {
+        select: {
+          deliveryId: true,
+          agentId: true,
+          agent: { select: { computerId: true } },
+        },
+      },
+    } satisfies Prisma.MessageSelect;
     const result = await this.db.$transaction(async (tx) => {
+      let hint;
+      if (memoryHintId) {
+        await tx.$queryRaw`SELECT id FROM memory_hint_records
+          WHERE workspace_id = ${conversation.workspaceId}::uuid AND id::text = ${memoryHintId} FOR UPDATE`;
+        hint = await tx.memoryHintRecord.findUniqueOrThrow({
+          where: { workspaceId_id: { workspaceId: conversation.workspaceId, id: memoryHintId } },
+        });
+        if (hint.memoryAgentId !== agentId || hint.conversationId !== conversationId)
+          throw new AgentSendRejectedError(403, "Memory Hint delivery scope mismatch");
+        if (hint.messageId) {
+          const existing = await tx.message.findUniqueOrThrow({
+            where: { id: hint.messageId },
+            select: messageSelect,
+          });
+          return { ...existing, attachments: [] };
+        }
+      }
       const sequence = await allocateSequence(tx, conversationId);
       // The sending Agent must be the same Agent that uploaded each attachment (the
       // earlier limitation of never checking uploader identity, closed by the Agent
@@ -2340,6 +2410,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             senderAgentId: agentId,
           })
         : [];
+      if (hint && !recipients.includes(hint.targetAgentId))
+        throw new AgentSendRejectedError(403, "Memory Hint target delivery is missing");
       const created = await tx.message.create({
         data: {
           conversationId,
@@ -2368,23 +2440,19 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             })),
           },
         },
-        select: {
-          id: true,
-          body: true,
-          createdAt: true,
-          sequence: true,
-          // Carried so the browser signal can exclude thread replies from channel unread.
-          threadRootId: true,
-          mentions: { select: { kind: true, actorId: true, handle: true } },
-          deliveries: {
-            select: {
-              deliveryId: true,
-              agentId: true,
-              agent: { select: { computerId: true } },
-            },
-          },
-        },
+        select: messageSelect,
       });
+      if (hint) {
+        const deliveredAt = new Date();
+        await tx.memoryHintRecord.update({
+          where: { id: hint.id },
+          data: {
+            messageId: created.id,
+            deliveredAt,
+            expiresAt: new Date(deliveredAt.getTime() + hint.ttlMilliseconds),
+          },
+        });
+      }
       // A channel mention of someone outside the channel reached nobody; the sending Agent may
       // still act on it. A DM stores every `@handle` as text, so it records nothing.
       if (conversation.channelName)
