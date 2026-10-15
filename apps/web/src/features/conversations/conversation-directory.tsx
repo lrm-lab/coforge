@@ -370,7 +370,8 @@ function DirectorySection({
               className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"
             >
               {Icon ? (
-                <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+                // Same ink as the Saved bookmark: text colour, #101319 in light mode.
+                <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" />
               ) : null}
               {title}
             </span>
@@ -727,7 +728,7 @@ export function ConversationDirectory({
           icon={
             <Bookmark
               aria-hidden="true"
-              className={cx("size-4", selectedSaved ? "text-brand-secondary" : "text-tertiary")}
+              className={cx("size-4", selectedSaved ? "text-brand-secondary" : "text-primary")}
             />
           }
         >

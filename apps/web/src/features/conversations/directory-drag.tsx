@@ -397,7 +397,13 @@ export function DirectoryDragOverlay({
             // `px-4` + the overlay's `p-1` is the 1.25rem a title row insets its mark by, so the
             // carried mark and title sit on the same x as the real ones.
             <span className="flex h-9 items-center gap-1.5 px-4">
-              <Mark aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+              <Mark
+                aria-hidden="true"
+                className={cx(
+                  "size-4 shrink-0",
+                  active.id === "group:pinned" ? "text-primary" : "text-fg-quaternary",
+                )}
+              />
               <span className="min-w-0 truncate text-sm font-medium text-primary uppercase">
                 {active.label}
               </span>
