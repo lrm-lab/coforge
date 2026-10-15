@@ -223,6 +223,7 @@
   "agent_migration_step_place": "在新电脑上放置工作区",
   "agent_migration_step_start": "在新电脑上启动",
   "agent_migration_step_done": "已完成",
+  "agent_migration_step_pending": "未开始",
   "agent_migration_step_current": "进行中",
   "agent_migration_retry": "重新迁移",
   "agent_migration_cancel_title": "取消迁移？",

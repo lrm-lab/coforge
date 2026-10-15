@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { setResponseHeader } from "@tanstack/react-start/server";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import {
   agentIdInputSchema,
   agentIdSchema,
@@ -58,7 +57,7 @@ import {
 } from "#src/server/agents/agent-runtime-credentials.server";
 import { ChangeAgentRuntimeCredential } from "#src/server/agents/change-agent-runtime-credential.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
-import { agentRuntimeSelectionIsAvailable } from "#src/server/agents/agent-runtime-availability.server";
+import { computerCanRunAgent } from "#src/server/agents/computer-runtime-availability.server";
 import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-assistant.server";
 import {
   parseAgentRuntimeConfig,
@@ -80,7 +79,6 @@ type Database = ReturnType<typeof requireDatabaseClient>;
 function manageAgents(db: Database) {
   const agents = new PrismaAgentRepository(db);
   const runtimeLock = getAgentRuntimeLock();
-  const runtimeVisibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
   const agentManagement = new ManageAgents(
     agents,
     {
@@ -88,47 +86,8 @@ function manageAgents(db: Database) {
       stop: (intent, ownerId) => userAgentRuntimeControl(db, agents).stop(intent, ownerId),
     },
     {
-      canRun: async (workspaceId, userId, computerId, config) => {
-        const connection = await db.workspaceComputer.findFirst({
-          where: { workspaceId, computerId },
-          select: {
-            computer: {
-              select: {
-                modelCatalogs: {
-                  where: {
-                    workspaceId,
-                    provider:
-                      config.provider === RUNTIME_PROVIDER.PI && config.hasApiKey
-                        ? { in: [RUNTIME_PROVIDER.PI, RUNTIME_PROVIDER.COFORGE] }
-                        : config.provider,
-                  },
-                  select: { models: true },
-                },
-              },
-            },
-          },
-        });
-        const providers = new Set<typeof config.provider>();
-        if (await runtimeVisibility.canSelect({ workspaceId, userId }, computerId, config.provider))
-          providers.add(config.provider);
-        if (
-          config.provider === RUNTIME_PROVIDER.COFORGE &&
-          (await runtimeVisibility.canSelect(
-            { workspaceId, userId },
-            computerId,
-            RUNTIME_PROVIDER.PI,
-          ))
-        )
-          providers.add(RUNTIME_PROVIDER.PI);
-        const models = connection?.computer.modelCatalogs.flatMap((catalog) =>
-          Array.isArray(catalog.models) ? catalog.models : [],
-        );
-        return agentRuntimeSelectionIsAvailable(config, {
-          connected: Boolean(connection),
-          providers,
-          models: models ?? [],
-        });
-      },
+      canRun: (workspaceId, userId, computerId, config) =>
+        computerCanRunAgent(db, { workspaceId, userId }, computerId, config),
     },
     runtimeLock,
     () => runtimeCredentials(db, true),

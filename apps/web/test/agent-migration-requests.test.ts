@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { AgentMigrations } from "#src/server/agent-migrations/agent-migrations.server";
 import { AgentMigrationRequests } from "#src/server/agent-migrations/agent-migration-requests.server";
 import { AgentMigrationSourceStopError } from "#src/server/agent-migrations/agent-migration-orchestrator.server";
+import { storedRuntimeSelection } from "#src/server/agents/computer-runtime-availability.server";
 import { memoryStore } from "./helpers/agent-migration-memory-store";
 
 const owner = { userId: "user-1", workspaceId: "workspace-1" };
@@ -131,4 +132,30 @@ test("a Computer that cannot run the Agent's runtime is refused before anything 
     errorId: "agent-migration-runtime-unavailable",
   });
   expect(requested).toEqual([]);
+});
+
+test("a move checks the target against the Agent's stored selection, key included", () => {
+  const base = {
+    runtime: "pi" as const,
+    model: "claude-sonnet",
+    modelProvider: "anthropic",
+    reasoning: "high",
+  };
+  expect(storedRuntimeSelection({ ...base, provider: { kind: "default" } })).toEqual({
+    provider: "pi",
+    model: "claude-sonnet",
+    modelProvider: "anthropic",
+    reasoning: "high",
+    hasApiKey: false,
+  });
+  expect(
+    storedRuntimeSelection({
+      ...base,
+      provider: {
+        kind: "coforge",
+        providerId: "anthropic",
+        apiKey: { keyId: "v1", ciphertext: "x", nonce: "n", hint: "••••1234" },
+      },
+    } as never).hasApiKey,
+  ).toBe(true);
 });

@@ -223,6 +223,7 @@
   "agent_migration_step_place": "Place the workspace on the new Computer",
   "agent_migration_step_start": "Start on the new Computer",
   "agent_migration_step_done": "done",
+  "agent_migration_step_pending": "not started",
   "agent_migration_step_current": "in progress",
   "agent_migration_retry": "Move again",
   "agent_migration_cancel_title": "Cancel the move?",

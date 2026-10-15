@@ -36,13 +36,11 @@ export function AgentMigrationStatus({
   targetName,
   onCancel,
   canceling,
-  error,
 }: {
   migration: { state: string; errorCode: string | null };
   targetName: string;
   onCancel?: () => void;
   canceling?: boolean;
-  error?: string;
 }) {
   const inProgress = isAgentMigrationInProgress(migration.state);
   return (
@@ -72,18 +70,18 @@ export function AgentMigrationStatus({
                   step.status === "done"
                     ? "size-2 rounded-full bg-success-solid"
                     : step.status === "current"
-                      ? "size-2 animate-pulse rounded-full bg-brand-solid"
+                      ? "size-2 rounded-full bg-fg-secondary motion-safe:animate-pulse"
                       : "size-2 rounded-full bg-quaternary"
                 }
               />
               <span>{step.label}</span>
-              {step.status !== "pending" && (
-                <span className="sr-only">
-                  {step.status === "done"
-                    ? m.agent_migration_step_done()
-                    : m.agent_migration_step_current()}
-                </span>
-              )}
+              <span className="sr-only">
+                {step.status === "done"
+                  ? m.agent_migration_step_done()
+                  : step.status === "current"
+                    ? m.agent_migration_step_current()
+                    : m.agent_migration_step_pending()}
+              </span>
             </li>
           ))}
         </ol>
@@ -99,11 +97,6 @@ export function AgentMigrationStatus({
         >
           {m.agent_migration_cancel()}
         </Button>
-      )}
-      {error && (
-        <p role="alert" className="text-sm text-error-primary">
-          {error}
-        </p>
       )}
     </div>
   );
@@ -273,7 +266,14 @@ export function AgentMigrationSection({
         <AgentMigrationStatus
           migration={migration}
           targetName={migration.targetComputerName || m.agent_computer_unnamed()}
-          onCancel={isOwner ? () => setConfirmCancel(true) : undefined}
+          onCancel={
+            isOwner
+              ? () => {
+                  setCancelError("");
+                  setConfirmCancel(true);
+                }
+              : undefined
+          }
           canceling={canceling}
         />
       )}
@@ -319,7 +319,7 @@ export function AgentMigrationSection({
                     {m.agent_migration_cancel_keep()}
                   </Button>
                   <Button
-                    color="primary-destructive"
+                    color="primary"
                     isDisabled={canceling}
                     isLoading={canceling}
                     showTextWhileLoading
