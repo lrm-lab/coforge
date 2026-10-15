@@ -30,17 +30,19 @@ for (let first = 0; first < ALPHABET.length; first++) {
 export function encodeBase64(bytes: Uint8Array): string {
   if (bytes.length === 0) return "";
   const encoded = new Uint8Array(Math.ceil(bytes.length / 3) * 4);
-  const words = new DataView(encoded.buffer);
   let offset = 0;
   let index = 0;
-  for (; index + 2 < bytes.length; index += 3) {
-    const first = bytes[index]!;
-    const second = bytes[index + 1]!;
-    const third = bytes[index + 2]!;
-    const high = ENCODING_PAIRS[(first << 4) | (second >> 4)]!;
-    const low = ENCODING_PAIRS[((second & 0x0f) << 8) | third]!;
-    words.setUint32(offset, (high << 16) | low, false);
-    offset += 4;
+  if (bytes.length >= 3) {
+    const words = new DataView(encoded.buffer);
+    for (; index + 2 < bytes.length; index += 3) {
+      const first = bytes[index]!;
+      const second = bytes[index + 1]!;
+      const third = bytes[index + 2]!;
+      const high = ENCODING_PAIRS[(first << 4) | (second >> 4)]!;
+      const low = ENCODING_PAIRS[((second & 0x0f) << 8) | third]!;
+      words.setUint32(offset, (high << 16) | low, false);
+      offset += 4;
+    }
   }
   if (index < bytes.length) {
     const first = bytes[index]!;
