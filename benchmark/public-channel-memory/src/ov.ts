@@ -1,4 +1,8 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, rename, rm } from "node:fs/promises";
+import {
+  acquireProcessLock,
+  isLockContention,
+} from "../../../packages/daemon/src/platform/process-lock";
 import { dirname } from "node:path";
 import { createOpenVikingTypedAccountDelete } from "../../../apps/web/src/server/openviking/typed-account-delete.server";
 import {
@@ -91,7 +95,8 @@ export async function provisionDisposableAccount(
       body: JSON.stringify({ account_id: accountId, admin_user_id: "eval-admin", settings }),
     }),
   );
-  if (created.status >= 300) throw new Error(`typed account create failed status=${created.status}`);
+  if (created.status >= 300)
+    throw new Error(`typed account create failed status=${created.status}`);
   const adminKey = resultField(created.json).user_key;
   if (typeof adminKey !== "string" || adminKey.length === 0) {
     throw new Error("typed account create did not return a user key");
@@ -105,7 +110,8 @@ export async function provisionDisposableAccount(
       body: JSON.stringify({ user_id: "eval-user", role: "user" }),
     }),
   );
-  if (registered.status >= 300) throw new Error(`typed user create failed status=${registered.status}`);
+  if (registered.status >= 300)
+    throw new Error(`typed user create failed status=${registered.status}`);
   const userKey = resultField(registered.json).user_key;
   if (typeof userKey !== "string" || userKey.length === 0) {
     throw new Error("typed user create did not return a user key");
@@ -127,7 +133,8 @@ export async function rotateEvalAdminKey(
       body: "{}",
     }),
   );
-  if (rotated.status >= 300) throw new Error(`typed admin key rotate failed status=${rotated.status}`);
+  if (rotated.status >= 300)
+    throw new Error(`typed admin key rotate failed status=${rotated.status}`);
   const adminKey = resultField(rotated.json).user_key;
   if (typeof adminKey !== "string" || adminKey.length === 0) {
     throw new Error("typed admin key rotate did not return a user key");
@@ -148,21 +155,49 @@ async function readAccountKeyFile(path: string): Promise<Record<string, string>>
   }
 }
 
+export const EVAL_ACCOUNT_KEY_LOCK_WAIT_MS = 5_000;
+
+async function updateAccountKeys(path: string, update: (keys: Record<string, string>) => void) {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const deadline = Date.now() + EVAL_ACCOUNT_KEY_LOCK_WAIT_MS;
+  let lock;
+  while (!lock) {
+    try {
+      lock = acquireProcessLock(`${path}.lock.sqlite3`);
+    } catch (error) {
+      if (!isLockContention(error) || Date.now() >= deadline) throw error;
+      await Bun.sleep(10);
+    }
+  }
+  const temporary = `${path}.${crypto.randomUUID()}.tmp`;
+  try {
+    const keys = await readAccountKeyFile(path);
+    update(keys);
+    await writeFile(temporary, `${JSON.stringify(keys)}\n`, { mode: 0o600 });
+    await rename(temporary, path);
+  } finally {
+    try {
+      await rm(temporary, { force: true });
+    } finally {
+      lock.release();
+    }
+  }
+}
+
 export async function rememberEvalAccountKey(accountId: string, adminKey: string): Promise<void> {
   const path = Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE;
   if (!path) throw new Error("openviking account key file is not configured");
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const keys = await readAccountKeyFile(path);
-  keys[`secret:ov-${accountId}`] = adminKey;
-  await writeFile(path, `${JSON.stringify(keys)}\n`, { mode: 0o600 });
+  await updateAccountKeys(path, (keys) => {
+    keys[`secret:ov-${accountId}`] = adminKey;
+  });
 }
 
 export async function forgetEvalAccountKey(accountId: string): Promise<void> {
   const path = Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE;
   if (!path) return;
-  const keys = await readAccountKeyFile(path);
-  delete keys[`secret:ov-${accountId}`];
-  await writeFile(path, `${JSON.stringify(keys)}\n`, { mode: 0o600 });
+  await updateAccountKeys(path, (keys) => {
+    delete keys[`secret:ov-${accountId}`];
+  });
 }
 
 export async function deleteDisposableAccount(
