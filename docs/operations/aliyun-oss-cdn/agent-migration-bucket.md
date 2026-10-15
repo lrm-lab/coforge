@@ -21,7 +21,7 @@ zone：生命周期短、没有加速域名、不承载任何用户文件。
 ## 生命周期
 
 规则 `expire-agent-migration-bundles`：对象在最后修改 7 天后删除，未完成的分片在 1 天后删除。
-目前这是唯一的清理方式；迁移结束后由应用删除该迁移的前缀是后续工作。规则名应统一为
+迁移完成、失败或取消后，Web/backend 会立即删除该迁移的整个前缀（`workspaces/<ws>/agents/<agent>/migrations/<id>/`）；删除失败只记日志，由这条规则兜底。规则名应统一为
 `coforge-expire-agent-migration-bundles`（OSS 不支持改名，需删除后重建），尚未执行。
 
 ## 访问日志

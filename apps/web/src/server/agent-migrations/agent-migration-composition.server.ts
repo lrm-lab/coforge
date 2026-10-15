@@ -56,6 +56,8 @@ export function agentMigrationOrchestrator(
     dispatch: new AgentMigrationDispatch(createCentrifugoServerApi()),
     runtime: agentMigrationRuntime(db),
     lock: getAgentRuntimeLock(),
+    // A bucket that cannot be set up reads as none here; the daemons' route reports the error.
+    bucket: () => getAgentMigrationStorage().catch(() => null),
   });
 }
 

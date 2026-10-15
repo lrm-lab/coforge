@@ -21,6 +21,8 @@ function setup(
   const runtime: string[] = [];
   /** Cancels published and Agents started, in the order they went out. */
   const order: string[] = [];
+  /** The bucket prefixes removed once a migration ended. */
+  const removed: string[] = [];
   const orchestrator = new AgentMigrationOrchestrator({
     migrations,
     dispatch: new AgentMigrationDispatch({
@@ -53,6 +55,11 @@ function setup(
       },
     },
     lock: { run: (_agentId, callback) => callback() },
+    bucket: async () => ({
+      removePrefix: async (prefix: string) => {
+        removed.push(prefix);
+      },
+    }),
   });
   const request = {
     workspaceId,
@@ -80,7 +87,17 @@ function setup(
         }
       })
       .filter((cancel) => cancel !== null);
-  return { ...fixture, migrations, orchestrator, runtime, order, request, leases, cancels };
+  return {
+    ...fixture,
+    migrations,
+    orchestrator,
+    runtime,
+    order,
+    removed,
+    request,
+    leases,
+    cancels,
+  };
 }
 
 async function upToPlacing(context: ReturnType<typeof setup>, id: string) {
@@ -309,4 +326,31 @@ test("one migration that cannot be moved on keeps none of the others from it", a
     "unreachable",
   );
   expect(context.rows.get(switching.migration.id)!.state).toBe("completed");
+});
+
+test("a migration's objects leave the bucket once it completes, fails or is canceled", async () => {
+  const context = setup();
+  const done = await context.orchestrator.request(context.request);
+  if (done.status !== "created") throw new Error(done.status);
+  await upToPlacing(context, done.migration.id);
+  const switched = await context.migrations.advance(target, {
+    migrationId: done.migration.id,
+    generation: 1,
+    expectedRevision: 3,
+    step: "switch",
+  });
+  if (switched.status !== "advanced") throw new Error(switched.status);
+  await context.orchestrator.switched(switched.migration);
+  // The fixture's placement moved with the first Agent, so the second goes back the other way.
+  const canceled = await context.orchestrator.request({
+    ...context.request,
+    agentId: "agent-2",
+    targetComputerId: "computer-a",
+  });
+  if (canceled.status !== "created") throw new Error(canceled.status);
+  await context.orchestrator.cancel({ workspaceId, migrationId: canceled.migration.id });
+  expect(context.removed).toEqual([
+    `workspaces/${workspaceId}/agents/agent-1/migrations/${done.migration.id}/`,
+    `workspaces/${workspaceId}/agents/agent-2/migrations/${canceled.migration.id}/`,
+  ]);
 });

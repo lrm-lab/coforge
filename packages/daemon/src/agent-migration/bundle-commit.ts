@@ -1,25 +1,20 @@
-import type { Dirent } from "node:fs";
 import {
-  cp,
   lstat,
   mkdir,
   open,
-  readdir,
   readFile,
-  readlink,
   realpath,
   rename,
   rm,
-  statfs,
   symlink,
-  utimes,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, posix, relative, sep } from "node:path";
+import { dirname, join, posix, sep } from "node:path";
 import { extract } from "tar-stream";
 import { AGENT_MIGRATION_BUNDLE_ROOT, type AgentMigrationBundleManifest } from "./bundle-writer";
 import { readVerifiedAgentMigrationChunk } from "./chunk-store";
 import { AgentMigrationCommitError } from "./commit-error";
+import { moveWorkspaceToBackup, preexistingBackupName } from "./workspace-backups";
 import {
   AGENT_MIGRATION_COMMIT_DIRECTORY,
   isSafeRelativePath,
@@ -38,8 +33,6 @@ import {
 
 export const AGENT_MIGRATION_COMMIT_MARKER = `${AGENT_MIGRATION_COMMIT_DIRECTORY}/commit-v1.json`;
 const COMMIT_MARKER_SCHEMA = "coforge.agent-migration-commit/v1";
-/** Headroom kept free beyond the tree's own size when a move aside has to copy across devices. */
-const COPY_HEADROOM_BYTES = 256 * 1024 * 1024;
 
 type MigrationIdentity = { agentId: string; migrationId: string; generation: number };
 
@@ -263,32 +256,6 @@ async function unpack(
   return { ...totals, ...chunks.digest() };
 }
 
-/** Every path in a tree with what it is, to tell a faithful copy from a partial one. */
-async function describeTree(root: string): Promise<string[]> {
-  const lines: string[] = [];
-  const walk = async (directory: string) => {
-    const dirents: Dirent[] = await readdir(directory, { withFileTypes: true });
-    for (const dirent of dirents.sort((left, right) => (left.name < right.name ? -1 : 1))) {
-      const path = join(directory, dirent.name);
-      const name = relative(root, path);
-      if (dirent.isDirectory()) {
-        lines.push(`d ${name}`);
-        await walk(path);
-      } else if (dirent.isSymbolicLink()) lines.push(`l ${name} ${await readlink(path)}`);
-      else lines.push(`f ${name} ${(await lstat(path)).size}`);
-    }
-  };
-  await walk(root);
-  return lines;
-}
-
-async function treeBytes(root: string): Promise<number> {
-  let total = 0;
-  for (const line of await describeTree(root))
-    if (line.startsWith("f ")) total += Number(line.split(" ").at(-1));
-  return total;
-}
-
 /**
  * Undoes this migration's placement on the target when the switch did not land: the placed
  * workspace goes, and the workspace it moved aside comes back. A workspace that does not carry this
@@ -305,11 +272,11 @@ export async function rollBackAgentMigrationPlacement(
     marker.generation !== input.generation
   )
     return;
-  const preexisting = join(input.backupDirectory, `preexisting-${input.migrationId}`);
+  const preexisting = join(input.backupDirectory, preexistingBackupName(input.migrationId));
   // Stage the original beside the workspace before discarding the placed copy. The same verified
   // cross-device move used for backups keeps both copies intact if preparing the restore fails.
   const restored = (await exists(preexisting))
-    ? await moveAside(
+    ? await moveWorkspaceToBackup(
         preexisting,
         dirname(input.workspaceDirectory),
         `rollback-${input.migrationId}-${crypto.randomUUID()}`,
@@ -317,67 +284,6 @@ export async function rollBackAgentMigrationPlacement(
     : undefined;
   await rm(input.workspaceDirectory, { recursive: true, force: true });
   if (restored) await rename(restored, input.workspaceDirectory);
-}
-
-/**
- * Moves a workspace out of the way, intact. Across devices it is copied beside the backup name,
- * checked against the original, renamed into place, and only then removed from where it was.
- */
-async function moveAside(workspaceDirectory: string, backupDirectory: string, migrationId: string) {
-  const stats = await lstat(workspaceDirectory);
-  if (!stats.isDirectory() || stats.isSymbolicLink())
-    throw new AgentMigrationCommitError(
-      "workspace_invalid",
-      "the workspace is not a real directory",
-    );
-  const fromBackups = relative(workspaceDirectory, backupDirectory);
-  if (fromBackups === "" || (!fromBackups.startsWith("..") && !fromBackups.startsWith(sep)))
-    throw new AgentMigrationCommitError(
-      "workspace_invalid",
-      "backups would land inside the workspace",
-    );
-  await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
-  const to = join(backupDirectory, `preexisting-${migrationId}`);
-  if (await exists(to))
-    throw new AgentMigrationCommitError("backup_conflict", `${to} already exists`);
-  try {
-    await rename(workspaceDirectory, to);
-  } catch (error) {
-    if ((error as { code?: string }).code !== "EXDEV") throw error;
-    const needed = (await treeBytes(workspaceDirectory)) + COPY_HEADROOM_BYTES;
-    const free = await statfs(backupDirectory);
-    if (free.bavail * free.bsize < needed)
-      throw new AgentMigrationCommitError(
-        "insufficient_disk",
-        `${needed} bytes needed for the backup copy`,
-      );
-    const partial = `${to}.partial-${crypto.randomUUID()}`;
-    try {
-      await cp(workspaceDirectory, partial, {
-        recursive: true,
-        verbatimSymlinks: true,
-        preserveTimestamps: true,
-        errorOnExist: true,
-      });
-      if (
-        (await describeTree(workspaceDirectory)).join("\n") !==
-        (await describeTree(partial)).join("\n")
-      )
-        throw new AgentMigrationCommitError(
-          "backup_copy_mismatch",
-          "the backup copy differs from the workspace",
-        );
-      await rename(partial, to);
-    } catch (copyError) {
-      await rm(partial, { recursive: true, force: true });
-      throw copyError;
-    }
-    await rm(workspaceDirectory, { recursive: true, force: true });
-  }
-  // Backups are kept and pruned by age; stamp when this one was made.
-  const now = new Date();
-  await utimes(to, now, now);
-  return to;
 }
 
 export async function commitAgentMigrationBundle(
@@ -435,7 +341,11 @@ export async function commitAgentMigrationBundle(
     });
 
     const movedAsideTo = (await exists(input.workspaceDirectory))
-      ? await moveAside(input.workspaceDirectory, input.backupDirectory, input.migrationId)
+      ? await moveWorkspaceToBackup(
+          input.workspaceDirectory,
+          input.backupDirectory,
+          preexistingBackupName(input.migrationId),
+        )
       : undefined;
     await mkdir(dirname(input.workspaceDirectory), { recursive: true });
     try {

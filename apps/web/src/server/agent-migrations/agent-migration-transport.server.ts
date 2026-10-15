@@ -91,6 +91,15 @@ export type AgentMigrationManifest = z.infer<typeof agentMigrationManifestSchema
 
 export type AgentMigrationChunk = z.infer<typeof chunkSchema>;
 
+/** Every object of one migration, under the Agent's Workspace prefix; removed once it ends. */
+export function agentMigrationPrefix(input: {
+  workspaceId: string;
+  agentId: string;
+  migrationId: string;
+}) {
+  return `workspaces/${input.workspaceId}/agents/${input.agentId}/migrations/${input.migrationId}/`;
+}
+
 /** A chunk's object key: under the Agent's Workspace prefix, per attempt, named by its digest. */
 export function agentMigrationChunkKey(input: {
   workspaceId: string;
@@ -100,7 +109,7 @@ export function agentMigrationChunkKey(input: {
   index: number;
   sha256: string;
 }) {
-  return `workspaces/${input.workspaceId}/agents/${input.agentId}/migrations/${input.migrationId}/${input.generation}/chunks/${input.index}-${input.sha256}`;
+  return `${agentMigrationPrefix(input)}${input.generation}/chunks/${input.index}-${input.sha256}`;
 }
 
 type Refused<Code extends string> = { status: "refused"; code: Code };

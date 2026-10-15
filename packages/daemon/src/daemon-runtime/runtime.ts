@@ -1143,6 +1143,7 @@ export class DaemonRuntime {
       );
       const migrations = this.#migrations;
       if (migrations) {
+        void migrations.pruneLeftovers().catch(() => {});
         this.#subscribe(
           this.#transport.onAgentMigrationLease?.((lease) => {
             void migrations.lease(lease);

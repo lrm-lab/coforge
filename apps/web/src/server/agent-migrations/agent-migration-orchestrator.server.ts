@@ -1,3 +1,4 @@
+import { agentMigrationPrefix } from "./agent-migration-transport.server";
 import type { AgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import {
   AGENT_MIGRATION_LEASE_MS,
@@ -52,6 +53,8 @@ export class AgentMigrationOrchestrator {
       dispatch: AgentMigrationDispatch;
       runtime: AgentMigrationRuntime;
       lock: AgentRuntimeLock;
+      /** The migration bucket, or null where there is none; read only when objects are removed. */
+      bucket?: () => Promise<{ removePrefix(prefix: string): Promise<void> } | null>;
     },
   ) {}
 
@@ -113,6 +116,27 @@ export class AgentMigrationOrchestrator {
         step: "arrived",
       },
     );
+    await this.#removeObjects(migration);
+  }
+
+  /**
+   * A migration that ended has no use for its objects: they leave the bucket now rather than at
+   * the bucket's 7-day lifecycle rule. A failure is only logged; that rule removes them anyway.
+   */
+  async #removeObjects(migration: AgentMigrationRecord) {
+    try {
+      await (
+        await this.deps.bucket?.()
+      )?.removePrefix(agentMigrationPrefix({ ...migration, migrationId: migration.id }));
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          event: "agent_migration:objects_remove_failed",
+          migration_id: migration.id,
+          reason: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
   }
 
   /**
@@ -144,6 +168,7 @@ export class AgentMigrationOrchestrator {
           ),
         );
     }
+    await this.#removeObjects(migration);
     if (told) throw told.error;
   }
 

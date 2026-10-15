@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { lstat, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { getLogger } from "@logtape/logtape";
 import type { AgentMigrationCancel, AgentMigrationLease } from "@lrm/coforge-sdk/internal";
@@ -21,6 +21,17 @@ import {
 } from "./transfer-ports";
 import { AgentMigrationTransferError } from "./transfer-error";
 import { selectAgentMigrationWorkspace } from "./workspace-selection";
+import {
+  moveWorkspaceToBackup,
+  pruneWorkspaceBackups,
+  sourceBackupName,
+} from "./workspace-backups";
+
+const exists = (path: string) =>
+  lstat(path).then(
+    () => true,
+    () => false,
+  );
 
 /**
  * This Computer's part in its Agents' migrations, one run per lease. As the source it stops the
@@ -59,6 +70,8 @@ type Run = { owner: symbol; stop: AbortController; done: Promise<void> };
 /** The route's grammar for a failure code. */
 const ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/;
 const OUTCOME_POLL_MS = 5_000;
+/** How long an attempt directory no run claims is kept before it is cleared. */
+const LEFTOVER_ATTEMPT_MS = 7 * 24 * 60 * 60 * 1000;
 /** The states in which the source must still keep the Agent stopped. */
 const UNDECIDED = new Set<AgentMigrationState>([
   "requested",
@@ -234,7 +247,7 @@ export class AgentMigrationRunner {
     const { bucket, agents } = this.options;
     const view = await this.#view(transfer);
     const { state } = view.migration;
-    if (!UNDECIDED.has(state)) return;
+    if (!UNDECIDED.has(state)) return this.#archiveSource(lease, state);
     // Whatever the state, an Agent this Computer is still the source for stays stopped.
     await agents.stop(lease.agentId);
     if (state === "requested" || state === "source_stopped") {
@@ -269,18 +282,67 @@ export class AgentMigrationRunner {
         ),
       );
     }
-    await this.#untilDecided(transfer);
+    const decided = await this.#untilDecided(transfer);
+    // Let go first: archiving can take a while, and nothing here may run the Agent again anyway.
+    this.#release(lease.agentId, runKey(lease.migrationId, lease.generation, "source"));
+    await this.#archiveSource(lease, decided);
   }
 
-  /** Waits for the target's switch, or the migration's end, before letting the Agent go. */
+  /**
+   * Waits for the target's switch, or the migration's end, before letting the Agent go; resolves
+   * with the state that decided it.
+   */
   async #untilDecided(transfer: AgentMigrationTransfer) {
     const interval = this.options.outcomePollMs ?? OUTCOME_POLL_MS;
-    while (UNDECIDED.has((await this.#view(transfer)).migration.state)) {
+    for (;;) {
+      const { state } = (await this.#view(transfer)).migration;
+      if (!UNDECIDED.has(state)) return state;
       if (Date.now() + interval >= transfer.deadline)
         throw new AgentMigrationTransferError("lease_expired", "waiting for the switch");
       await Bun.sleep(interval);
       if (transfer.signal?.aborted) throw new AgentMigrationTransferError("aborted", "waiting");
     }
+  }
+
+  /**
+   * The Agent has moved away: what it left in its workspace here becomes a backup, so the Agents'
+   * tree holds only Agents that run here and the move can still be undone by hand for a while.
+   */
+  async #archiveSource(lease: AgentMigrationLeaseGrant, state: AgentMigrationState) {
+    if (state !== "switched" && state !== "completed") return;
+    const workspaceDirectory = this.options.workspaceDirectory(lease.agentId);
+    const backupDirectory = this.#backupDirectory(lease.agentId);
+    if (!(await exists(workspaceDirectory))) return;
+    if (await exists(join(backupDirectory, sourceBackupName(lease.migrationId)))) return;
+    await moveWorkspaceToBackup(
+      workspaceDirectory,
+      backupDirectory,
+      sourceBackupName(lease.migrationId),
+    );
+    await pruneWorkspaceBackups(backupDirectory);
+    logger.info("agent_migration:source_archived", { migration_id: lease.migrationId });
+  }
+
+  #backupDirectory(agentId: string) {
+    return join(this.options.stateDirectory, "migration-workspace-backups", agentId);
+  }
+
+  /**
+   * Clears what runs that never finished left behind: attempt directories untouched for a week,
+   * and every Agent's backups past what is kept. Called once as the daemon starts.
+   */
+  async pruneLeftovers(now = Date.now()) {
+    const attempts = join(this.options.stateDirectory, "migrations");
+    for (const name of await readdir(attempts).catch(() => [] as string[])) {
+      if ([...this.#runs.keys()].some((key) => key.startsWith(`${name}:`))) continue;
+      const path = join(attempts, name);
+      const touched = (await stat(path).catch(() => null))?.mtimeMs;
+      if (touched !== undefined && now - touched > LEFTOVER_ATTEMPT_MS)
+        await rm(path, { recursive: true, force: true });
+    }
+    const backups = join(this.options.stateDirectory, "migration-workspace-backups");
+    for (const agentId of await readdir(backups).catch(() => [] as string[]))
+      await pruneWorkspaceBackups(join(backups, agentId), now);
   }
 
   async #target(lease: AgentMigrationLeaseGrant, transfer: AgentMigrationTransfer) {
@@ -301,11 +363,7 @@ export class AgentMigrationRunner {
     );
     const placement = {
       workspaceDirectory: this.options.workspaceDirectory(lease.agentId),
-      backupDirectory: join(
-        this.options.stateDirectory,
-        "migration-workspace-backups",
-        lease.agentId,
-      ),
+      backupDirectory: this.#backupDirectory(lease.agentId),
       agentId: lease.agentId,
       migrationId: lease.migrationId,
       generation: lease.generation,

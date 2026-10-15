@@ -4,7 +4,12 @@ import {
   readFileStorageConfig,
   type FileStorageConfig,
 } from "#src/server/files/file-storage.server";
+import type { BulkFileRemoval } from "#src/server/files/file-storage.server";
 import type { AgentMigrationObjectStore } from "./agent-migration-transport.server";
+
+/** The migration bucket: presigned transfers, and removing a migration's objects once it ends. */
+export type AgentMigrationBucket = AgentMigrationObjectStore &
+  Pick<BulkFileRemoval, "removePrefix">;
 
 /**
  * Where an Agent migration's workspace bundle travels between two Computers: a bucket of its own,
@@ -34,10 +39,10 @@ export async function readAgentMigrationStorageConfig(
   return { ...privateStore, bucket };
 }
 
-let current: Promise<AgentMigrationObjectStore | null> | undefined;
+let current: Promise<AgentMigrationBucket | null> | undefined;
 
 /** The process-wide migration bucket, or `null` when this deployment has none. */
-export function getAgentMigrationStorage(): Promise<AgentMigrationObjectStore | null> {
+export function getAgentMigrationStorage(): Promise<AgentMigrationBucket | null> {
   current ??= createAgentMigrationStorage().catch((error: unknown) => {
     // Not cached: a request after a failed read (say, a Docker secret not yet mounted) reads again.
     current = undefined;
@@ -46,11 +51,11 @@ export function getAgentMigrationStorage(): Promise<AgentMigrationObjectStore | 
   return current;
 }
 
-async function createAgentMigrationStorage(): Promise<AgentMigrationObjectStore | null> {
+async function createAgentMigrationStorage(): Promise<AgentMigrationBucket | null> {
   const config = await readAgentMigrationStorageConfig(Bun.env);
   if (!config) return null;
   const storage = await createFileStorage(config);
   if (!storage.presignPut || !storage.presignGet)
     throw new FileStorageConfigError("the migration bucket must support presigned URLs");
-  return storage as AgentMigrationObjectStore;
+  return storage as AgentMigrationBucket;
 }

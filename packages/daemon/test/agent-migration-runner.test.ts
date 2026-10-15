@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { AGENT_MIGRATION_IGNORE_FILE } from "#src/agent-migration/selection-rules";
@@ -249,7 +249,43 @@ test("a leased source and then a leased target move the Agent's workspace betwee
   expect(await exists(join(target.workspace, "work"))).toBe(false);
   expect(await exists(join(target.workspace, ".env"))).toBe(false);
   // The attempt's chunks are gone once the Agent has switched.
+<<<<<<< HEAD
   expect(await exists(join(target.state, "migrations", migrationId, "1"))).toBe(false);
+=======
+  expect(await exists(join(target.state, "migrations", migrationId))).toBe(false);
+  // The source keeps what the Agent left behind as a backup, out of the Agents' tree.
+  expect(await exists(source.workspace)).toBe(false);
+  const archived = join(
+    source.state,
+    "migration-workspace-backups",
+    agentId,
+    `source-${migrationId}`,
+  );
+  expect(await readFile(join(archived, "MEMORY.md"), "utf8")).toBe("what I remember");
+  expect(await readFile(join(archived, "work/repo/README.md"), "utf8")).toBe("code stays behind");
+});
+
+test("a source whose migration failed keeps its workspace where it is", async () => {
+  const shared = cloud();
+  const { source, run } = await uploaded(shared, { "MEMORY.md": "stays" });
+  shared.record.state = "failed";
+  await run;
+  expect(await readFile(join(source.workspace, "MEMORY.md"), "utf8")).toBe("stays");
+});
+
+test("leftover attempts older than a week are cleared when the runner starts", async () => {
+  const shared = cloud();
+  const target = await computer("target", shared, "target");
+  const old = join(target.state, "migrations", "old-migration", "1", "chunks");
+  const recent = join(target.state, "migrations", "recent-migration", "1", "chunks");
+  await mkdir(old, { recursive: true });
+  await mkdir(recent, { recursive: true });
+  const weekAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+  await utimes(join(target.state, "migrations", "old-migration"), weekAgo, weekAgo);
+  await target.runner.pruneLeftovers();
+  expect(await exists(join(target.state, "migrations", "old-migration"))).toBe(false);
+  expect(await exists(recent)).toBe(true);
+>>>>>>> 13fb8946 (feat(agents): clear what a migration leaves behind on Computers and in the bucket)
 });
 
 test("a lease delivered again joins the run already going", async () => {
