@@ -8,6 +8,11 @@
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+const PAIRS = Array.from(
+  { length: 4096 },
+  (_, value) => ALPHABET[value >> 6]! + ALPHABET[value & 0x3f]!,
+);
+
 const DIGITS = new Int16Array(128).fill(-1);
 for (let digit = 0; digit < ALPHABET.length; digit++) DIGITS[ALPHABET.charCodeAt(digit)] = digit;
 
@@ -17,10 +22,13 @@ export function encodeBase64(bytes: Uint8Array): string {
     const first = bytes[index]!;
     const second = bytes[index + 1];
     const third = bytes[index + 2];
-    encoded += ALPHABET[first >> 2];
-    encoded += ALPHABET[((first & 0x03) << 4) | ((second ?? 0) >> 4)];
-    encoded += second === undefined ? "=" : ALPHABET[((second & 0x0f) << 2) | ((third ?? 0) >> 6)];
-    encoded += third === undefined ? "=" : ALPHABET[third & 0x3f];
+    encoded += PAIRS[(first << 4) | ((second ?? 0) >> 4)];
+    encoded +=
+      second === undefined
+        ? "=="
+        : third === undefined
+          ? ALPHABET[(second & 0x0f) << 2] + "="
+          : PAIRS[((second & 0x0f) << 8) | third];
   }
   return encoded;
 }

@@ -81,3 +81,19 @@ test("base64 decoding rejects nonalphabet ASCII and out-of-range Unicode in ever
   }
   expect(() => decodeBase64("\ud83d\ude00AA")).toThrow("Invalid base64 character");
 });
+
+test("base64 encoding preserves complete groups and both tails within a bounded view", () => {
+  const backing = new Uint8Array(3 + 4096 * 3 + 4).fill(211);
+  for (let value = 0; value < 4096; value++) {
+    const offset = 3 + value * 3;
+    backing[offset] = value >> 4;
+    backing[offset + 1] = ((value & 0x0f) << 4) | (value >> 8);
+    backing[offset + 2] = value & 0xff;
+  }
+  const original = backing.slice();
+  for (const tail of [0, 1, 2]) {
+    const bytes = backing.subarray(3, backing.length - 4 - tail);
+    expect(encodeBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
+    expect(backing).toEqual(original);
+  }
+});
