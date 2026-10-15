@@ -94,7 +94,7 @@ export function agentMigrationRequests(db: PrismaClient) {
   const migrations = new AgentMigrations(new PrismaAgentMigrationStore(db));
   return new AgentMigrationRequests({
     migrations,
-    orchestrator: agentMigrationOrchestrator(db, migrations),
+    orchestrator: () => agentMigrationOrchestrator(db, migrations),
     agentOwner: async (workspaceId, agentId) =>
       (
         await db.agent.findFirst({

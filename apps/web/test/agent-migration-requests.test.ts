@@ -17,7 +17,7 @@ function setup(
   const requested: string[] = [];
   const requests = new AgentMigrationRequests({
     migrations,
-    orchestrator: {
+    orchestrator: () => ({
       request: async (input) => {
         if (options.fails === "stop")
           throw new AgentMigrationSourceStopError(new Error("no answer"));
@@ -26,7 +26,7 @@ function setup(
         return migrations.request(input);
       },
       cancel: (input) => migrations.cancel(input),
-    },
+    }),
     agentOwner: async (_workspaceId, agentId) => (agentId === "agent-1" ? "user-1" : undefined),
     isWorkspaceAdmin: async (_workspaceId, userId) => userId === "user-3",
     computerName: async (computerId) => (computerId === "computer-b" ? "Studio Mac" : null),
@@ -158,4 +158,20 @@ test("a move checks the target against the Agent's stored selection, key include
       },
     } as never).hasApiKey,
   ).toBe(true);
+});
+
+test("reading a move needs nothing it would take to start one", async () => {
+  const fixture = memoryStore();
+  const requests = new AgentMigrationRequests({
+    migrations: new AgentMigrations(fixture.store),
+    orchestrator: () => {
+      throw new Error("Centrifugo server API is not configured");
+    },
+    agentOwner: async () => "user-1",
+    isWorkspaceAdmin: async () => false,
+    computerName: async () => null,
+    canRunAgent: async () => true,
+    available: async () => true,
+  });
+  expect(await requests.status(owner, "agent-1")).toEqual({ available: true, migration: null });
 });

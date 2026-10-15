@@ -35,7 +35,11 @@ export class AgentMigrationRequests {
   constructor(
     private readonly deps: {
       migrations: AgentMigrations;
-      orchestrator: Pick<AgentMigrationOrchestrator, "request" | "cancel">;
+      /**
+       * Built only to start or cancel a move: it publishes to the Computers, which reading how a
+       * move is going never does, so a deployment that cannot publish still shows the move.
+       */
+      orchestrator: () => Pick<AgentMigrationOrchestrator, "request" | "cancel">;
       /** The owner of a live Agent in the Workspace, or undefined when there is none. */
       agentOwner(workspaceId: string, agentId: string): Promise<string | undefined>;
       /** Whether the person is one of the Workspace's owners or admins. */
@@ -89,7 +93,7 @@ export class AgentMigrationRequests {
       throw new AppError("INVALID_INPUT", { errorId: "agent-migration-runtime-unavailable" });
     let started: Awaited<ReturnType<AgentMigrationOrchestrator["request"]>>;
     try {
-      started = await this.deps.orchestrator.request({
+      started = await this.deps.orchestrator().request({
         workspaceId: principal.workspaceId,
         agentId: input.agentId,
         targetComputerId: input.targetComputerId,
@@ -112,7 +116,7 @@ export class AgentMigrationRequests {
     await this.#assertOwner(principal, input.agentId);
     const latest = await this.deps.migrations.latestForAgent(principal.workspaceId, input.agentId);
     if (latest?.id !== input.migrationId) throw new AppError("NOT_FOUND");
-    await this.deps.orchestrator.cancel({
+    await this.deps.orchestrator().cancel({
       workspaceId: principal.workspaceId,
       migrationId: input.migrationId,
     });
