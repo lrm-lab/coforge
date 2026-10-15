@@ -1516,6 +1516,7 @@ export class PublicChannels {
               id: true,
               username: true,
               displayName: true,
+              description: true,
               avatarObjectKey: true,
             },
           },
@@ -1609,6 +1610,7 @@ export class PublicChannels {
             // roster (`agent-channel-management.server.ts`), which names people by it.
             username: row.user!.username,
             displayName: humanLabel(row.user!),
+            description: row.user!.description,
             avatarUrl: workspaceUserAvatarUrl(workspaceId, row.user!.id, row.user!.avatarObjectKey),
             serverRole,
             channelRole: row.channelRole,

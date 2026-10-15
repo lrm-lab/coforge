@@ -1,10 +1,23 @@
 import { Link } from "@tanstack/react-router";
 import { Folder } from "@untitledui/icons";
+import { Heading } from "react-aria-components";
 
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
+import { Badge } from "#src/components/base/badges/badges";
+import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { HoverPopover, useClosePreview } from "#src/components/ui/hover-popover";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { StatusDot } from "#src/components/ui/status-dot";
+import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
+import {
+  useOpenAgentProfile,
+  type OpenAgentProfile,
+} from "#src/features/agents/profile-panel/open-agent-profile";
+import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
+import { MemberAvatar } from "#src/features/workspaces/member-avatar";
+import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
@@ -16,7 +29,106 @@ export type ChannelHeaderFace = {
   key: string;
   displayName: string;
   avatarUrl: string | null;
+  kind?: "human" | "agent";
+  userId?: string;
+  agentId?: string;
+  name?: string;
+  description?: string | null;
+  serverRole?: string | null;
+  channelRole?: string;
 };
+
+/** Owner and admin are Workspace roles; a channel admin is one by this channel's own role. */
+function roleLabel(member: { serverRole?: string | null; channelRole?: string }) {
+  if (member.serverRole === "owner") return m.channel_members_role_owner();
+  if (member.serverRole === "admin") return m.channel_members_role_admin();
+  if (member.channelRole === "admin") return m.channel_members_role_channel_admin();
+  return m.channel_members_role_member();
+}
+
+/** The profile card shown on hover for a human member. */
+function MemberProfileCard({
+  userId,
+  name,
+  src,
+  description,
+  serverRole,
+  channelRole,
+  onOpenDirect,
+}: {
+  userId?: string;
+  name: string;
+  src?: string | null;
+  description?: string | null;
+  serverRole?: string | null;
+  channelRole?: string;
+  onOpenDirect?: (peer: { userId: string }) => void;
+}) {
+  const online = userId ? useMemberOnline(userId) : undefined;
+  const closePreview = useClosePreview();
+
+  const roleText =
+    serverRole || channelRole
+      ? roleLabel({ serverRole, channelRole: channelRole ?? "member" })
+      : null;
+
+  return (
+    <>
+      <div className="flex items-start gap-3 p-3">
+        {userId ? (
+          <MemberAvatar size="md" userId={userId} name={name} src={src ?? null} />
+        ) : (
+          <Avatar
+            size="md"
+            alt=""
+            src={src ?? undefined}
+            initials={avatarInitial(name)}
+            contentClassName={avatarToneClassName(name)}
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Heading slot="title" className="truncate text-sm font-semibold text-primary">
+              {name}
+            </Heading>
+            {online !== undefined && (
+              <span className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
+                <StatusDot tone={online ? "online" : "offline"} className="size-1.5 shrink-0" />
+                <span className="truncate">{online ? m.member_online() : m.member_offline()}</span>
+              </span>
+            )}
+          </div>
+          {roleText && (
+            <div className="mt-1">
+              <Badge size="sm" color="gray">
+                {roleText}
+              </Badge>
+            </div>
+          )}
+        </div>
+      </div>
+      {description && (
+        <p className="border-t border-secondary px-3 py-2 text-xs text-secondary break-words line-clamp-3">
+          {description}
+        </p>
+      )}
+      {userId && onOpenDirect && (
+        <div className="border-t border-secondary px-3 py-2 flex justify-end">
+          <Button
+            size="sm"
+            color="secondary"
+            onPress={() => {
+              closePreview();
+              void onOpenDirect({ userId });
+            }}
+          >
+            {m.member_private_chat()}
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
 
 /** The project named on a channel, as a folder chip beside the title. Absent when the channel
  * has no project. */
@@ -47,11 +159,15 @@ export function ChannelHeaderFaces({
   canAdd,
   onOpenMembers,
   onAddMembers,
+  onOpenAgentProfile,
+  onOpenDirect,
 }: {
   entries: readonly ChannelHeaderFace[];
   canAdd: boolean;
   onOpenMembers: () => void;
   onAddMembers: () => void;
+  onOpenAgentProfile?: OpenAgentProfile;
+  onOpenDirect?: (peer: { userId: string }) => void;
 }) {
   const shown = entries.slice(0, CHANNEL_HEADER_FACE_LIMIT);
   const more = entries.length - shown.length;
@@ -63,12 +179,9 @@ export function ChannelHeaderFaces({
           className="hidden items-center -space-x-1 md:flex"
           aria-label={m.channel_settings_members()}
         >
-          {shown.map((entry) => (
-            <Tooltip key={entry.key} title={entry.displayName}>
-              <TooltipTrigger
-                className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
-                onPress={onOpenMembers}
-              >
+          {shown.map((entry) => {
+            const avatarNode = (
+              <>
                 <Avatar
                   size="xs"
                   alt=""
@@ -78,9 +191,50 @@ export function ChannelHeaderFaces({
                   className="ring-[1.5px] ring-bg-primary"
                 />
                 <span className="sr-only">{entry.displayName}</span>
-              </TooltipTrigger>
-            </Tooltip>
-          ))}
+              </>
+            );
+
+            if (entry.agentId || entry.kind === "agent") {
+              const agentId = entry.agentId ?? entry.key.replace(/^agent:/, "");
+              return (
+                <AgentHoverCard
+                  key={entry.key}
+                  agentId={agentId}
+                  name={entry.displayName}
+                  handle={entry.name}
+                  src={entry.avatarUrl}
+                  trigger={avatarNode}
+                  triggerClassName="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
+                  onOpenProfile={onOpenAgentProfile}
+                />
+              );
+            }
+
+            const userId =
+              entry.userId ??
+              (entry.key.startsWith("user:") ? entry.key.replace(/^user:/, "") : undefined);
+
+            return (
+              <HoverPopover
+                key={entry.key}
+                label={entry.displayName}
+                trigger={avatarNode}
+                triggerClassName="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
+                className="w-70"
+                onPress={onOpenMembers}
+              >
+                <MemberProfileCard
+                  userId={userId}
+                  name={entry.displayName}
+                  src={entry.avatarUrl}
+                  description={entry.description}
+                  serverRole={entry.serverRole}
+                  channelRole={entry.channelRole}
+                  onOpenDirect={onOpenDirect}
+                />
+              </HoverPopover>
+            );
+          })}
           {more > 0 && (
             <Tooltip title={m.channel_settings_members_more({ count: more })}>
               <TooltipTrigger
@@ -125,6 +279,9 @@ export function ChannelHeaderMemberCluster({
   onAddMembers: () => void;
 }) {
   const members = useChannelMembers(channelId);
+  const { openAgentProfile } = useOpenAgentProfile();
+  const openDirect = useOpenDirectConversation();
+
   if (members.isPending) {
     return (
       <div
@@ -141,14 +298,25 @@ export function ChannelHeaderMemberCluster({
   if (!members.data) return null;
   const entries: ChannelHeaderFace[] = [
     ...members.data.humans.map((human) => ({
+      kind: "human" as const,
       key: `user:${human.id}`,
+      userId: human.id,
       displayName: human.displayName,
+      description: human.description,
       avatarUrl: human.avatarUrl,
+      serverRole: human.serverRole,
+      channelRole: human.channelRole,
     })),
     ...members.data.agents.map((agent) => ({
+      kind: "agent" as const,
       key: `agent:${agent.id}`,
+      agentId: agent.id,
+      name: agent.name,
       displayName: agent.displayName,
+      description: agent.description,
       avatarUrl: agent.avatarUrl,
+      serverRole: agent.serverRole,
+      channelRole: agent.channelRole,
     })),
   ];
   return (
@@ -157,6 +325,8 @@ export function ChannelHeaderMemberCluster({
       canAdd={canAdd}
       onOpenMembers={onOpenMembers}
       onAddMembers={onAddMembers}
+      onOpenAgentProfile={openAgentProfile}
+      onOpenDirect={openDirect}
     />
   );
 }
