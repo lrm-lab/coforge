@@ -131,7 +131,7 @@ describe("benchmark registry", () => {
 });
 
 describe("episodePrompt", () => {
-  test("addresses the task agent so only it can request memory", () => {
+  test("addresses both agents so Memory can retrieve from the initial task", () => {
     const prompt = episodePrompt(
       {
         benchmark: "past_bench",
@@ -148,7 +148,7 @@ describe("episodePrompt", () => {
       },
       reminderForEpisode("past_bench", ""),
     );
-    expect(prompt.startsWith("@task Summarize the notes.")).toBe(true);
+    expect(prompt.startsWith("@task @memory Summarize the notes.")).toBe(true);
     expect(prompt).toContain("Channel note:");
   });
 });

@@ -4,7 +4,7 @@
  * message. */
 
 export type BenchmarkProfile = {
-  /** Appended to the episode prompt posted as the @task question. */
+  /** Appended to the episode prompt posted as the @task @memory question. */
   publishReminder: string;
   /** Default per-episode deadline before the reply is taken as-is. */
   episodeTimeoutMs: number;

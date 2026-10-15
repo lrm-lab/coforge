@@ -28,7 +28,8 @@ export function episodePrompt(
     episode.domain === "information_retrieval"
       ? episode.prompt.split("## How to call search in this environment")[0]!.trimEnd()
       : episode.prompt;
-  return `@task ${prompt}${note}\n\n${reminder}`.replace(/@memory\b/g, "Memory Agent");
+  const body = `${prompt}${note}\n\n${reminder}`.replace(/@memory\b/g, "Memory Agent");
+  return `@task @memory ${body}`;
 }
 
 export async function postEpisodePrompt(input: {
@@ -155,8 +156,8 @@ export function createEpisodeRuntimeDiagnostics() {
   };
 }
 
-/** The human addresses Task. Task decides whether to @memory; only Memory
- * performs document/experience retrieval and returns cited Offers. */
+/** The human addresses both agents. Memory starts task-based retrieval;
+ * Task may request follow-ups. Only Memory retrieves and returns cited Offers. */
 export async function runEpisode(input: {
   workspace: EvalWorkspace;
   env: EvalEnv;

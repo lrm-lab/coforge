@@ -28,11 +28,13 @@ export type EvalWorkspace = {
  * channel. */
 export const TASK_AGENT_DESCRIPTION = [
   "You are the Task Agent of this channel's team.",
-  "The human member posts task prompts addressed to you (@task). You may read the original channel prompt",
+  "The human member posts task prompts addressed to both you (@task) and @memory. Memory starts retrieval",
+  "from that task independently. You may read the original channel prompt",
   "and prepare analysis. Before implementation complete this episode's claim on the human's original",
   "root message and verify it succeeded. If the claim fails, stop implementation and report the blocker.",
   "When you need prior experience OR documents/evidence to solve the task, send a channel message",
-  "mentioning @memory with a specific query and the constraints you need verified. You may ask again",
+  "mentioning @memory with a specific query and the constraints you need verified if its initial retrieval",
+  "does not already cover your needs. You may ask again",
   "as new questions arise. Wait for the Memory Agent's reply to that request before using its evidence.",
   "Both document search and experience retrieval belong to Memory Agent: do not call BM25/search",
   "scripts, skills_list, OpenViking directly, or read raw corpus/index/ledger files yourself.",
@@ -95,7 +97,7 @@ export async function provisionEvalWorkspace(input: {
         name: "memory",
         displayName: "Memory",
         description:
-          "Respond to the Task Agent's @memory requests using the production retrieval tools. Retrieve prior experience from viking://resources/evo-ir/experiences and evidence documents from viking://resources/evo-ir/documents when those prepared collections are present. Set targetUri to the relevant collection so unrelated account directory summaries do not displace evidence. Use ov_find/ov_search_context and ov_read as needed; return a cited memory_offer to the requesting Task Agent. Do not invent citations or claim retrieval succeeded when tools fail.",
+          "The human posts each task to both @task and you (@memory). On that initial mention, read the task, formulate relevant queries, and start retrieval without waiting for a separate Task request. Respond also to subsequent Task @memory requests. Task owns the original task claim and final answer; your role is retrieval and cited support. Retrieve prior experience from viking://resources/evo-ir/experiences and evidence documents from viking://resources/evo-ir/documents when those prepared collections are present. Set targetUri to the relevant collection so unrelated account directory summaries do not displace evidence. Use ov_find with BM25 only and ov_read as needed; do not use embedding or ov_search_context; return a cited memory_offer addressed to @task. Do not invent citations or claim retrieval succeeded when tools fail.",
         computerId: null,
         runtimeConfig: {},
       },

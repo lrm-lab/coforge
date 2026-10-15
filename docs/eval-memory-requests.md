@@ -1,4 +1,4 @@
-# Task 主动请求 Memory 的评测
+# Task 与 Memory 协作评测
 
 评测入口是 `benchmark/evolbench-collab/src/run.ts`，通过真实 CoForge 频道、Daemon、
 Agent HTTPS 接口和 OpenViking 工具运行。经验与证据文档统一由 Memory Agent 检索。
@@ -6,8 +6,8 @@ Agent HTTPS 接口和 OpenViking 工具运行。经验与证据文档统一由 M
 
 ## 群聊协议
 
-1. 人类题目发送给 `@task`。Memory Agent 静音普通频道通知，个人 @mention 仍会唤醒它。
-2. Task 需要经验或文档时，在频道 `@memory` 提出查询，可以多次请求。
+1. 人类题目同时发送给 `@task @memory`，分别触发两个 Agent。Memory 根据原始任务自主构造查询并开始检索，无需等待 Task 再次请求。两者执行顺序不作保证。
+2. Memory Agent 静音普通频道通知；人类或 Task 的个人 @mention 都会唤醒它。Task 需要补充经验或文档时，在频道 `@memory` 提出查询，可以多次请求。
 3. Memory 调用 `ov_find` / `ov_search_context` / `ov_read`，用 `memory_offer` 返回带引用的 Hint。
 4. Task 调用原生 `memory_disposition` 记录 adopt / reject / defer 和原因，再决定如何执行。
 5. 最后一条不包含对 Memory 的结构化 @mention 的 Task 消息是最终答案。

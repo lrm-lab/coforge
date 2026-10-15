@@ -103,7 +103,7 @@ test("an @memory request is never treated as a final task answer", async () => {
 });
 test("the production prompt has no raw search command or grader answer", () => {
   const text = episodePrompt(episode, "Post final answer");
-  expect(text.startsWith("@task Question: find the bird.")).toBe(true);
+  expect(text.startsWith("@task @memory Question: find the bird.")).toBe(true);
   expect(text).not.toContain("ir_search.py");
   expect(text).not.toContain("hidden-answer");
 });
@@ -153,13 +153,14 @@ test("multiple offers and ordinary Memory clarification are recorded without fal
   expect(result.finalOutput).toBe("Exact Answer: 2041");
 });
 
-test("human prompt instructions never wake Memory before Task requests retrieval", () => {
+test("the human task explicitly wakes both agents, with one Memory mention", () => {
   const prompt = episodePrompt(
     { ...episode, prompt: "Find a bird. Ask @memory for evidence." },
     "Ask @memory for documents.",
   );
-  expect(prompt.startsWith("@task ")).toBe(true);
-  expect(prompt).not.toMatch(/@memory\b/);
+  expect(prompt.startsWith("@task @memory Find a bird.")).toBe(true);
+  expect(prompt.match(/@memory\b/g)).toHaveLength(1);
+  expect(prompt).toContain("Ask Memory Agent for evidence.");
 });
 
 test("an IR final answer can mention Memory in its explanation", async () => {
