@@ -24,6 +24,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { ChevronRight, Pin01 } from "@untitledui/icons";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import type { DirectorySectionId } from "./directory-sections";
@@ -376,9 +377,12 @@ export function DirectoryDragOverlay({
   active,
   children,
 }: {
-  active: { group: boolean; label: string; width: number } | null;
+  active: { id: string; group: boolean; label: string; width: number } | null;
   children: ReactNode;
 }) {
+  // A section keeps its title row's mark while it is carried: Pinned its pin, the others the
+  // chevron they show folded (every section folds while the sections are reordered).
+  const Mark = active?.id === "group:pinned" ? Pin01 : ChevronRight;
   if (typeof document === "undefined") return null;
   return createPortal(
     <DragOverlay dropAnimation={{ duration: 150, easing: "ease-out" }}>
@@ -390,8 +394,13 @@ export function DirectoryDragOverlay({
           className="pointer-events-none rounded-md bg-primary p-1 shadow-lg ring-1 ring-secondary"
         >
           {active.group ? (
-            <span className="block truncate px-2 py-2 text-sm font-medium text-primary uppercase">
-              {active.label}
+            // `px-4` + the overlay's `p-1` is the 1.25rem a title row insets its mark by, so the
+            // carried mark and title sit on the same x as the real ones.
+            <span className="flex h-9 items-center gap-1.5 px-4">
+              <Mark aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+              <span className="min-w-0 truncate text-sm font-medium text-primary uppercase">
+                {active.label}
+              </span>
             </span>
           ) : (
             children
