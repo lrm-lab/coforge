@@ -159,3 +159,20 @@ test("base64 encoding keeps results independent across empty and reused views", 
   expect(encodeBase64(bytes.subarray(0, 2))).toBe("//8=");
   expect(encodeBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
 });
+
+test("base64 encoding preserves independent leading and trailing alphabet pairs", () => {
+  for (const trailingPair of [false, true]) {
+    const bytes = new Uint8Array(4096 * 3 + 2);
+    for (let value = 0; value < 4096; value++) {
+      const offset = value * 3;
+      bytes[offset] = trailingPair ? 0 : value >> 4;
+      bytes[offset + 1] = trailingPair ? value >> 8 : (value & 0x0f) << 4;
+      bytes[offset + 2] = trailingPair ? value & 0xff : 0;
+    }
+    bytes.set([0xa5, 0x7b], 4096 * 3);
+    for (const tail of [0, 1, 2]) {
+      const view = bytes.subarray(0, 4096 * 3 + tail);
+      expect(encodeBase64(view)).toBe(Buffer.from(view).toString("base64"));
+    }
+  }
+});
