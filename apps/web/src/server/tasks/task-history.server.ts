@@ -1,8 +1,13 @@
 import type { TaskHistoryChange, TaskHistoryEvent } from "@lrm/coforge-sdk/internal";
 import type { Prisma } from "#src/generated/prisma/client";
-import { agentReadableBody } from "#src/server/conversations/mentions.server";
+import type { BrowserMessageMentionRow } from "#src/server/conversations/mentions.server";
 import { browserSenderHandle } from "#src/server/conversations/sender-display.server";
-import { storedTaskStatus, type SelectedTask } from "./task-view.server";
+import {
+  readTaskText,
+  storedTaskStatus,
+  type SelectedTask,
+  type TaskReader,
+} from "./task-view.server";
 
 /** Which history events a Task write records, and how a recorded event reads back. */
 
@@ -14,9 +19,18 @@ type HistoryActor = {
   agent?: { name: string } | null;
 };
 
-export function historyEventView(event: HistoryEvent): TaskHistoryEvent {
+/**
+ * One history row as `reader` sees it. A title change is recorded with the title's stored tokens
+ * and reads back here against the Task message's `mentions`, by name for people and by `@handle`
+ * for an Agent; a record written as plain text before that reads as it was written.
+ */
+export function historyEventView(
+  event: HistoryEvent,
+  reader: TaskReader = "people",
+  mentions: readonly BrowserMessageMentionRow[] = [],
+): TaskHistoryEvent {
   // Rows are written only through historyRows, which types each payload by its event type.
-  return {
+  const view = {
     id: event.id,
     seq: event.seq,
     actorType: event.actorType,
@@ -25,6 +39,21 @@ export function historyEventView(event: HistoryEvent): TaskHistoryEvent {
     eventType: event.eventType,
     payload: event.payload,
   } as TaskHistoryEvent;
+  if (view.eventType !== "amended" || !view.payload.changes.title) return view;
+  const { from, to } = view.payload.changes.title;
+  return {
+    ...view,
+    payload: {
+      ...view.payload,
+      changes: {
+        ...view.payload.changes,
+        title: {
+          from: readTaskText(from, reader, mentions),
+          to: readTaskText(to, reader, mentions),
+        },
+      },
+    },
+  };
 }
 
 function assigneeChange(task: SelectedTask): TaskHistoryChange {
@@ -59,13 +88,9 @@ export function taskChanges(before: SelectedTask, after: SelectedTask): TaskHist
       payload: { from: storedTaskStatus(before.status), to: storedTaskStatus(after.status) },
     });
   const amended: Extract<TaskHistoryChange, { eventType: "amended" }>["payload"]["changes"] = {};
-  // Titles are compared and recorded as `taskView` shows them, so a title's stored tokens are never
-  // written into the record, and a title that reads the same is no change.
-  const titles = {
-    from: agentReadableBody(before.title, before.message.mentions),
-    to: agentReadableBody(after.title, after.message.mentions),
-  };
-  if (titles.from !== titles.to) amended.title = titles;
+  // Titles are recorded with their stored tokens, so each reader reads a person's mention its own
+  // way (`historyEventView`) and no username is written into the record.
+  if (before.title !== after.title) amended.title = { from: before.title, to: after.title };
   if (before.description !== after.description)
     amended.description = { from: before.description, to: after.description };
   if (amended.title || amended.description)

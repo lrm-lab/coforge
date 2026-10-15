@@ -54,10 +54,11 @@ test("a delivery's body never carries a stored token", () => {
 
 /**
  * Agent-facing message records are built only by `agentMessageView`: no serializer reads a stored
- * body back itself. The daemon encoder and a Task's title (`taskView`, its history diff,
- * `quotedTask`) are the other readers of stored bodies, each at its single call site. The
- * sidebar's one-line preview and the push preview are for people and name them
- * (`peopleReadableBody`), so they do not read bodies this way.
+ * body back itself. The daemon encoder, a Task's text for an Agent (`readTaskText`, which
+ * `taskView` and a history title change read through) and `quotedTask` are the other readers of
+ * stored bodies, each at its single call site. The sidebar's one-line preview, the push preview and
+ * a Task's text for people name a person (`peopleReadableBody`), so they do not read bodies this
+ * way.
  */
 test("no Agent-facing serializer reads a stored body except through agentMessageView", async () => {
   const callers = (await filesContaining("agentReadableBody(")).filter(
@@ -66,8 +67,6 @@ test("no Agent-facing serializer reads a stored body except through agentMessage
   expect(callers).toEqual([
     "src/server/conversations/agent-delivery.server.ts",
     "src/server/conversations/agent-message-view.server.ts",
-    "src/server/tasks/task-board.server.ts",
-    "src/server/tasks/task-history.server.ts",
     "src/server/tasks/task-notices.server.ts",
     "src/server/tasks/task-view.server.ts",
   ]);

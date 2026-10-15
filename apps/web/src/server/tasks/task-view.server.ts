@@ -10,9 +10,12 @@ import type { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import {
-  MESSAGE_MENTIONS_SELECT,
+  BROWSER_MESSAGE_MENTIONS_SELECT,
   agentReadableBody,
+  browserMessageMention,
+  type BrowserMessageMentionRow,
 } from "#src/server/conversations/mentions.server";
+import { peopleReadableBody } from "#src/server/conversations/message-preview-line.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 
 /**
@@ -52,10 +55,11 @@ export const taskSelection = {
     orderBy: { createdAt: "desc" },
     take: 1,
   },
-  // The backing message's sequence, so realtime signals need no second read, and its mention rows,
-  // which a title converted from that message needs to read its mention tokens back.
+  // The backing message's sequence, so realtime signals need no second read, and its mention rows
+  // with the names they are shown by, which a title converted from that message needs to read its
+  // mention tokens back for people or for an Agent.
   message: {
-    select: { sequence: true, mentions: MESSAGE_MENTIONS_SELECT },
+    select: { sequence: true, mentions: BROWSER_MESSAGE_MENTIONS_SELECT },
   },
 } satisfies Prisma.TaskSelect;
 
@@ -121,16 +125,34 @@ export function taskMember(
   };
 }
 
-export function taskView(task: SelectedTask): TaskView {
+/**
+ * Who reads a Task: people (the task board, its realtime copies, the Tasks page, the Activity
+ * inbox) or an Agent (its `task` commands). A person's mention reads as their name for people,
+ * never their username, and as the `@handle` an Agent mentions them by for an Agent.
+ */
+export type TaskReader = "people" | "agent";
+
+/** Text holding a Task message's mention tokens (its title, a recorded title change), as `reader`
+ * reads it: mention, task and channel tokens become the text a person or an Agent writes. */
+export function readTaskText(
+  text: string,
+  reader: TaskReader,
+  mentions: readonly BrowserMessageMentionRow[],
+): string {
+  return reader === "agent"
+    ? agentReadableBody(text, mentions)
+    : peopleReadableBody(text, mentions.map(browserMessageMention));
+}
+
+export function taskView(task: SelectedTask, reader: TaskReader = "people"): TaskView {
   const resourceReceipt = task.resourceReceipt;
   return {
     messageId: task.messageId,
     conversationId: task.conversationId,
     number: task.number,
     // A title converted from a message keeps that message's stored tokens; they read back as text
-    // (`@handle`, `task #N`, `#name`) here, the view both the task board and an Agent's `task`
-    // commands read.
-    title: agentReadableBody(task.title, task.message.mentions),
+    // for whoever reads the Task.
+    title: readTaskText(task.title, reader, task.message.mentions),
     description: task.description,
     status: storedTaskStatus(task.status),
     revision: task.revision,
