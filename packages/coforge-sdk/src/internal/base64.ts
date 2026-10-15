@@ -8,10 +8,10 @@
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-const PAIRS = Array.from(
-  { length: 4096 },
-  (_, value) => ALPHABET[value >> 6]! + ALPHABET[value & 0x3f]!,
+const ENCODING_DIGITS = Uint8Array.from({ length: ALPHABET.length }, (_, index) =>
+  ALPHABET.charCodeAt(index),
 );
+const ASCII_DECODER = new TextDecoder();
 
 const DIGITS = new Int16Array(128).fill(-1);
 for (let digit = 0; digit < ALPHABET.length; digit++) DIGITS[ALPHABET.charCodeAt(digit)] = digit;
@@ -24,20 +24,21 @@ for (let first = 0; first < ALPHABET.length; first++) {
 }
 
 export function encodeBase64(bytes: Uint8Array): string {
-  let encoded = "";
+  if (bytes.length === 0) return "";
+  const encoded = new Uint8Array(Math.ceil(bytes.length / 3) * 4);
+  let offset = 0;
   for (let index = 0; index < bytes.length; index += 3) {
     const first = bytes[index]!;
     const second = bytes[index + 1];
     const third = bytes[index + 2];
-    encoded += PAIRS[(first << 4) | ((second ?? 0) >> 4)];
-    encoded +=
-      second === undefined
-        ? "=="
-        : third === undefined
-          ? ALPHABET[(second & 0x0f) << 2] + "="
-          : PAIRS[((second & 0x0f) << 8) | third];
+    encoded[offset++] = ENCODING_DIGITS[first >> 2]!;
+    encoded[offset++] = ENCODING_DIGITS[((first & 0x03) << 4) | ((second ?? 0) >> 4)]!;
+    encoded[offset++] =
+      second === undefined ? 61 : ENCODING_DIGITS[((second & 0x0f) << 2) | ((third ?? 0) >> 6)]!;
+    encoded[offset++] = third === undefined ? 61 : ENCODING_DIGITS[third & 0x3f]!;
   }
-  return encoded;
+  // Every output byte is ASCII, so non-streaming UTF-8 decoding preserves the base64 spelling.
+  return ASCII_DECODER.decode(encoded);
 }
 
 export function decodeBase64(value: string): Uint8Array {

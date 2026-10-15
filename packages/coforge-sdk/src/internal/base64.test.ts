@@ -134,3 +134,28 @@ test("base64 decoding preserves every alphabet pair in earlier complete groups",
     expect(decodeBase64(encoded)).toEqual(expected);
   }
 });
+
+test("base64 encoding preserves large bounded views through every tail length", () => {
+  const backing = Uint8Array.from({ length: 1048584 }, (_, index) => (index * 113) & 255);
+  const original = backing.slice();
+  for (const length of [16383, 16384, 16385, 1048575, 1048576, 1048577]) {
+    const bytes = backing.subarray(3, 3 + length);
+    expect(encodeBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
+  }
+  expect(backing).toEqual(original);
+});
+
+test("base64 encoding keeps results independent across empty and reused views", () => {
+  const backing = Uint8Array.from({ length: 1029 }, (_, index) => index & 255);
+  const bytes = backing.subarray(3, 1027);
+  const expected = Buffer.from(bytes).toString("base64");
+  const first = encodeBase64(bytes);
+  expect(first).toBe(expected);
+  expect(encodeBase64(new Uint8Array())).toBe("");
+  bytes.fill(255);
+  expect(encodeBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
+  expect(first).toBe(expected);
+  expect(encodeBase64(bytes.subarray(0, 1))).toBe("/w==");
+  expect(encodeBase64(bytes.subarray(0, 2))).toBe("//8=");
+  expect(encodeBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
+});
