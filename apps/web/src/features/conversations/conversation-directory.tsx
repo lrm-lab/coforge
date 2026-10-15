@@ -327,7 +327,7 @@ function DirectorySection({
         <div
           className={cx(
             "flex h-9 items-center gap-1 rounded-md pr-2 pl-2 transition-colors duration-100 ease-linear",
-            onToggle && "group-hover/section:bg-primary_hover",
+            onToggle ? "group-hover/section:bg-primary_hover" : "cursor-pointer",
           )}
         >
           {onToggle ? (
@@ -360,8 +360,8 @@ function DirectorySection({
               </Button>,
             )
           ) : (
-            // Nothing to press: the mark takes the chevron's gutter and the title keeps its x, so
-            // this title line reads the same as the others without pretending to be a control.
+            // Nothing to press: the mark takes the chevron's gutter and the title keeps its x.
+            // The row still uses the hand cursor, the same as the other section titles.
             // `gap-1.5`, not the Button's own `gap-1`: the Button's label span adds 2px of its
             // own, so 6px here is what puts this title on the same x as a collapsible section's
             // (measured in the browser, both at 262px in the 1440 layout).
