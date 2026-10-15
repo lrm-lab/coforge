@@ -9422,7 +9422,11 @@ describe("Agent delivery queue", () => {
           fake.emit({ type: "completed", status: "failed" });
           const initial = activities.find((activity) => activity.detailKind === "runtime_error");
           expect(initial).toMatchObject({
+            agentId: "agent-a",
+            detailKind: "runtime_error",
+            level: "error",
             detail: "connect ECONNRESET",
+            entries: [{ kind: "text", text: "Error: connect ECONNRESET" }],
             runtimeError: { errorClass, errorReason },
           });
           expect(initial!.runtimeError!.fingerprint).toMatch(/^[0-9a-f]{8}$/);

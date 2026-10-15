@@ -19,10 +19,7 @@ import {
   fingerprintRuntimeError,
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
-import {
-  classifyRuntimeErrorText,
-  type RuntimeErrorClassification,
-} from "#src/agent-runtime/runtime-error-classification";
+import { classifyRuntimeErrorText } from "#src/agent-runtime/runtime-error-classification";
 import {
   AgentProcessManager,
   type CodeAgentProviderFactory,
@@ -2654,18 +2651,20 @@ export class DaemonRuntime {
       // Classified once here: the Activity's fallback class/reason and this failure's retry
       // decision are the same reading of the same text.
       const classification = classifyRuntimeErrorText(event.message);
-      const built = this.#noteRuntimeErrorRecovery(
+      const built = buildRuntimeErrorActivity(event, classification);
+      // Retry policy uses the failure's text classification, never provider-native class/reason hints.
+      const fence = this.#runtimeErrorHold.noteFailure(
         agentId,
-        event,
-        buildRuntimeErrorActivity(event, classification),
         classification,
+        built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
       );
+      const reported = fence ? buildRuntimeErrorFingerprintFenceActivity(built, fence) : built;
       this.#activityPublisher.publish(
         agentId,
         launch,
-        this.#activity(agentId, built.detailKind, built.level, built.detail, {
-          entries: built.entries,
-          runtimeError: built.runtimeError,
+        this.#activity(agentId, reported.detailKind, reported.level, reported.detail, {
+          entries: reported.entries,
+          runtimeError: reported.runtimeError,
         }),
       );
       return;
@@ -3336,29 +3335,6 @@ export class DaemonRuntime {
       detail,
       runtimeError ? { runtimeError } : {},
     );
-  }
-
-  /**
-   * Decides what a mid-turn runtime error means for this Agent's queued deliveries —
-   * retry after a backoff, stop retrying, or stop retrying because the same fingerprint has now
-   * failed `RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD` times in a row — and returns the Activity
-   * that should actually be reported (unchanged, unless the fence just tripped). The retry
-   * decision is always taken from this failure's own text (`classifyRuntimeErrorText`), never
-   * from a provider's own class/reason hint: an arbitrary provider-native string is not something
-   * a fixed retry table can look up.
-   */
-  #noteRuntimeErrorRecovery(
-    agentId: string,
-    event: RuntimeErrorEvent,
-    built: ReturnType<typeof buildRuntimeErrorActivity>,
-    classification: RuntimeErrorClassification,
-  ): ReturnType<typeof buildRuntimeErrorActivity> {
-    const fence = this.#runtimeErrorHold.noteFailure(
-      agentId,
-      classification,
-      built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
-    );
-    return fence ? buildRuntimeErrorFingerprintFenceActivity(built, fence) : built;
   }
 
   /** Attempts delivery of everything just released from an explicit or busy-gated hold, as one
