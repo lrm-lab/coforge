@@ -22,12 +22,19 @@ export const OPENVIKING_AGENT_OPERATIONS = [
   "find",
   "search_context",
   "read",
+  "expand",
   "offer",
   "diagnose",
 ] as const;
+
 export type OpenVikingAgentOperation = (typeof OPENVIKING_AGENT_OPERATIONS)[number];
 
-export const OPENVIKING_AGENT_READ_OPERATIONS = ["find", "search_context", "read"] as const;
+export const OPENVIKING_AGENT_READ_OPERATIONS = [
+  "find",
+  "search_context",
+  "read",
+  "expand",
+] as const;
 export type OpenVikingAgentReadOperation = (typeof OPENVIKING_AGENT_READ_OPERATIONS)[number];
 
 /** Native tool names on the fenced OpenViking Memory Agent profile (plus channel message I/O). */
@@ -35,6 +42,7 @@ export const OPENVIKING_TOOL_NAMES = {
   find: "ov_find",
   searchContext: "ov_search_context",
   read: "ov_read",
+  expand: "ov_expand",
   offer: "memory_offer",
   diagnose: "memory_diagnose",
 } as const;
@@ -75,6 +83,29 @@ export type OpenVikingReadCommand = {
   uri: string;
 };
 
+export const OPENVIKING_GRAPH_RELATIONS = [
+  "incoming",
+  "outgoing",
+  "source",
+  "target",
+  "forks",
+  "anchor",
+  "branch_steps",
+  "next",
+  "previous",
+  "observed_block",
+] as const;
+export type OpenVikingGraphRelation = (typeof OPENVIKING_GRAPH_RELATIONS)[number];
+export type OpenVikingExpandCommand = {
+  protocol: typeof OPENVIKING_AGENT_PROTOCOL;
+  op: "expand";
+  operationId: string;
+  chainRef: string;
+  uri: string;
+  relation: OpenVikingGraphRelation;
+  limit?: number;
+};
+
 export type OpenVikingOfferCommand = {
   protocol: typeof OPENVIKING_AGENT_PROTOCOL;
   op: "offer";
@@ -108,8 +139,24 @@ export type OpenVikingAgentCommand =
   | OpenVikingFindCommand
   | OpenVikingSearchContextCommand
   | OpenVikingReadCommand
+  | OpenVikingExpandCommand
   | OpenVikingOfferCommand
   | OpenVikingDiagnoseCommand;
+
+export type OpenVikingRetrieval = {
+  mode: "bm25";
+  chainRef: string;
+  step: number;
+  remainingHops: number;
+  exhausted: boolean;
+  nodes: Array<{
+    uri: string;
+    kind: string;
+    status?: string;
+    sourceRef?: string;
+    relations: OpenVikingGraphRelation[];
+  }>;
+};
 
 export type OpenVikingFindResponse = {
   protocol: typeof OPENVIKING_AGENT_PROTOCOL;
@@ -117,6 +164,7 @@ export type OpenVikingFindResponse = {
   operationId: string;
   duplicate: boolean;
   items: OpenVikingCitation[];
+  retrieval?: OpenVikingRetrieval;
 };
 
 export type OpenVikingSearchContextResponse = {
@@ -134,6 +182,15 @@ export type OpenVikingReadResponse = {
   duplicate: boolean;
   citation: OpenVikingCitation;
   content: string;
+};
+
+export type OpenVikingExpandResponse = {
+  protocol: typeof OPENVIKING_AGENT_PROTOCOL;
+  op: "expand";
+  operationId: string;
+  duplicate: boolean;
+  items: OpenVikingCitation[];
+  retrieval?: OpenVikingRetrieval;
 };
 
 export type OpenVikingOfferResponse = {
@@ -160,6 +217,7 @@ export type OpenVikingAgentResponse =
   | OpenVikingFindResponse
   | OpenVikingSearchContextResponse
   | OpenVikingReadResponse
+  | OpenVikingExpandResponse
   | OpenVikingOfferResponse
   | OpenVikingDiagnoseResponse;
 
@@ -176,6 +234,8 @@ export const OPENVIKING_ARGUMENT_EXAMPLES: Record<OpenVikingAgentOperation, stri
   find: '{"operationId": "find-1", "query": "<检索词>", "limit": 10}',
   search_context: '{"operationId": "search-1", "query": "<检索词>", "limit": 10}',
   read: '{"operationId": "read-1", "uri": "<document uri>"}',
+  expand:
+    '{"operationId": "hop-1", "chainRef": "<ov_find chainRef>", "uri": "<served node uri>", "relation": "anchor", "limit": 5}',
   offer:
     '{"operationId": "offer-1", "citationRefs": ["<ov_find 返回的 citation id>"], "body": "<给 @task 的正文>"}',
 };
@@ -191,6 +251,7 @@ export const OPENVIKING_REQUIRED_FIELDS: Record<OpenVikingAgentOperation, readon
   find: ["operationId", "query"],
   search_context: ["operationId", "query"],
   read: ["operationId", "uri"],
+  expand: ["operationId", "chainRef", "uri", "relation"],
   offer: ["operationId", "citationRefs", "body"],
 };
 
@@ -285,6 +346,8 @@ export function listMissingOpenVikingFields(
     body?: unknown;
     citationRefs?: unknown;
     messageId?: unknown;
+    chainRef?: unknown;
+    relation?: unknown;
   };
   const missing: string[] = [];
   for (const field of OPENVIKING_REQUIRED_FIELDS[command.op]) {
@@ -292,6 +355,8 @@ export function listMissingOpenVikingFields(
       if (typeof raw.operationId !== "string" || raw.operationId.trim() === "") missing.push(field);
     } else if (field === "messageId") {
       if (isMissingText(raw.messageId)) missing.push(field);
+    } else if (field === "chainRef" || field === "relation") {
+      if (isMissingText(raw[field])) missing.push(field);
     } else if (field === "uri") {
       if (typeof raw.uri !== "string" || raw.uri.length === 0) missing.push(field);
     } else if (field === "citationRefs") {
@@ -367,6 +432,29 @@ export function decodeOpenVikingAgentCommand(value: unknown): OpenVikingAgentCom
     };
   }
 
+  if (command.op === "expand") {
+    const expand = command as Partial<OpenVikingExpandCommand>;
+    if (
+      typeof expand.chainRef !== "string" ||
+      !expand.chainRef.trim() ||
+      expand.chainRef.length > 256 ||
+      typeof expand.uri !== "string" ||
+      !expand.uri.trim() ||
+      !(OPENVIKING_GRAPH_RELATIONS as readonly unknown[]).includes(expand.relation)
+    )
+      throw new Error("invalid graph expansion");
+    const limit = optionalCandidateLimit(expand.limit, "openviking expand");
+    return {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "expand",
+      operationId,
+      chainRef: expand.chainRef,
+      uri: expand.uri,
+      relation: expand.relation!,
+      ...(limit === undefined ? {} : { limit }),
+    };
+  }
+
   if (command.op === "read") {
     if (typeof command.uri !== "string" || command.uri.length === 0)
       throw new Error("invalid openviking read uri");
@@ -437,6 +525,54 @@ function decodeOpenVikingCitationList(value: unknown, label: string): OpenViking
   return value.map(decodeOpenVikingCitation);
 }
 
+function decodeRetrieval(value: unknown): OpenVikingRetrieval | undefined {
+  if (value === undefined) return undefined;
+  const row = value as Partial<OpenVikingRetrieval> | null;
+  if (
+    !row ||
+    row.mode !== "bm25" ||
+    typeof row.chainRef !== "string" ||
+    !row.chainRef.trim() ||
+    row.chainRef.length > 256 ||
+    !Number.isInteger(row.step) ||
+    row.step! < 0 ||
+    !Number.isInteger(row.remainingHops) ||
+    row.remainingHops! < 0 ||
+    typeof row.exhausted !== "boolean" ||
+    !Array.isArray(row.nodes)
+  )
+    throw new Error("invalid BM25 retrieval navigation");
+  const nodes = row.nodes.map((node) => {
+    if (
+      !node ||
+      typeof node.uri !== "string" ||
+      typeof node.kind !== "string" ||
+      (node.status !== undefined && typeof node.status !== "string") ||
+      (node.sourceRef !== undefined && typeof node.sourceRef !== "string") ||
+      !Array.isArray(node.relations) ||
+      node.relations.some(
+        (relation) => !(OPENVIKING_GRAPH_RELATIONS as readonly unknown[]).includes(relation),
+      )
+    )
+      throw new Error("invalid graph navigation node");
+    return {
+      uri: node.uri,
+      kind: node.kind,
+      ...(node.status === undefined ? {} : { status: node.status }),
+      ...(node.sourceRef === undefined ? {} : { sourceRef: node.sourceRef }),
+      relations: [...node.relations],
+    };
+  });
+  return {
+    mode: "bm25",
+    chainRef: row.chainRef,
+    step: row.step!,
+    remainingHops: row.remainingHops!,
+    exhausted: row.exhausted,
+    nodes,
+  };
+}
+
 export function decodeOpenVikingAgentResponse(
   op: OpenVikingAgentOperation,
   value: unknown,
@@ -457,6 +593,9 @@ export function decodeOpenVikingAgentResponse(
       operationId: response.operationId,
       duplicate: response.duplicate,
       items: decodeOpenVikingCitationList(response.items, "openviking find"),
+      ...(response.retrieval === undefined
+        ? {}
+        : { retrieval: decodeRetrieval(response.retrieval) }),
     };
   }
 
@@ -469,6 +608,18 @@ export function decodeOpenVikingAgentResponse(
       items: decodeOpenVikingCitationList(response.items, "openviking search_context"),
     };
   }
+
+  if (response.op === "expand")
+    return {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "expand",
+      operationId: response.operationId,
+      duplicate: response.duplicate,
+      items: decodeOpenVikingCitationList(response.items, "openviking expand"),
+      ...(response.retrieval === undefined
+        ? {}
+        : { retrieval: decodeRetrieval(response.retrieval) }),
+    };
 
   if (response.op === "read") {
     const read = response as OpenVikingReadResponse;

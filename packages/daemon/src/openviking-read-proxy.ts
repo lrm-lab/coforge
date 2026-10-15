@@ -16,12 +16,14 @@ import {
   type OpenVikingAgentErrorCode,
   type OpenVikingAgentReadOperation,
   type OpenVikingFindCommand,
+  type OpenVikingExpandCommand,
   type OpenVikingOfferCommand,
   type OpenVikingReadCommand,
   type OpenVikingSearchContextCommand,
 } from "@lrm/coforge-sdk/agent";
 
 export type OpenVikingAgentReadCommand =
+  | OpenVikingExpandCommand
   | OpenVikingFindCommand
   | OpenVikingSearchContextCommand
   | OpenVikingReadCommand;

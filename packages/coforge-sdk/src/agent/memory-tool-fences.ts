@@ -14,7 +14,6 @@ export type WorkspaceMemoryProfileName = (typeof WORKSPACE_MEMORY_PROFILES)[numb
 
 const OPENVIKING_FENCE_TOOLS = [
   OPENVIKING_TOOL_NAMES.find,
-  OPENVIKING_TOOL_NAMES.searchContext,
   OPENVIKING_TOOL_NAMES.read,
   OPENVIKING_TOOL_NAMES.offer,
   OPENVIKING_TOOL_NAMES.diagnose,

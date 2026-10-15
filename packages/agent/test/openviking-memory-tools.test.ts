@@ -33,7 +33,6 @@ test("strict eval Memory exposes reads and server-owned controls but no ordinary
   );
   expect(tools.map((tool) => tool.name)).toEqual([
     "ov_find",
-    "ov_search_context",
     "ov_read",
     "memory_offer",
     "memory_diagnose",
@@ -101,7 +100,6 @@ test("the openviking-memory fence exposes reads, scoped diagnosis, offers, and c
   );
   expect(names).toEqual([
     OPENVIKING_TOOL_NAMES.find,
-    OPENVIKING_TOOL_NAMES.searchContext,
     OPENVIKING_TOOL_NAMES.read,
     OPENVIKING_TOOL_NAMES.offer,
     OPENVIKING_TOOL_NAMES.diagnose,
@@ -260,24 +258,13 @@ test("send_channel_message accepts message only as an alias of a missing content
   expect(proxy.calls[0]?.body).not.toHaveProperty("message");
 });
 
-test("openviking-memory ov_search_context forwards the native tokenBudget unchanged", async () => {
-  const proxy = fakeProxy();
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
-  await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
-    operationId: "ctx-1",
-    query: "deploy",
-    tokenBudget: 8000,
-  });
-  expect(proxy.calls[0]).toEqual({
-    path: agentApiRoutes.proxy.openviking.path,
-    body: {
-      protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "search_context",
-      operationId: "ctx-1",
-      query: "deploy",
-      tokenBudget: 8000,
-    },
-  });
+test("Memory does not expose ov_search_context", () => {
+  const tools = createMemoryFenceTools(
+    OPENVIKING_TOOL_PROFILE,
+    new MemoryAgentTurnBudget(),
+    fakeProxy(),
+  );
+  expect(tools.some((tool) => tool.name === "ov_search_context")).toBe(false);
 });
 
 test("group Memory tools default to their own channel and reject another channel", async () => {

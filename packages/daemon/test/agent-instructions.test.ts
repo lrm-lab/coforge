@@ -160,7 +160,7 @@ test("the openviking-memory profile requires an @memory query and never mentions
   ).not.toContain("## Team memory (Memory Agent)");
 });
 
-const OPENVIKING_FENCE_TOOLS = ["ov_find", "ov_search_context", "ov_read", "memory_offer"] as const;
+const OPENVIKING_FENCE_TOOLS = ["ov_find", "ov_read", "memory_offer", "memory_diagnose"] as const;
 const CAUSAL_ONLY_TOOLS = [
   "causal_search",
   "causal_trace",
@@ -226,6 +226,8 @@ test("the openviking-memory fence names reads and server-owned memory controls",
   const section = memoryAgentSection(instructionsForFence("openviking-memory"));
   const listing = allowedToolsetListing(section);
   for (const name of OPENVIKING_FENCE_TOOLS) expect(listing).toContain(name);
+  expect(listing).not.toContain("ov_search_context");
+  expect(section).toContain("memory_diagnose");
   for (const name of CAUSAL_ONLY_TOOLS) expect(listing).not.toContain(name);
   expect(section).toContain("Other explicit @memory questions require a memory query");
   expect(section).toContain("cannot write files");

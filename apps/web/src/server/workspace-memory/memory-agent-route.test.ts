@@ -93,7 +93,7 @@ function commands(
       client: {
         async invoke(request) {
           gatewayCalls.push({ operation: request.operation });
-          return { results: [ovHit] };
+          return { retrieval_mode: "bm25", results: [ovHit] };
         },
       },
       citations,

@@ -40,7 +40,7 @@ import { classifyPiLaunchFailure, PI_MODEL_UNAVAILABLE } from "./launch-error";
 
 import { createMemoryDispositionTool } from "./memory-disposition-tool";
 
-const MEMORY_READ_OPS = new Set(["find", "search_context", "read"]);
+const MEMORY_READ_OPS = new Set(["find", "search_context", "read", "expand"]);
 
 export type MemoryAgentProxy = {
   post(path: string, body: unknown): Promise<unknown>;
@@ -359,7 +359,7 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.find]: openvikingTool(
       OPENVIKING_TOOL_NAMES.find,
       "OpenViking find",
-      "Find cited OpenViking documents for the current public-channel question.",
+      "Use BM25 only to find cited documents, experiences, Fork nodes, and AIG nodes for the current question. No embedding or vector fallback is used.",
       "find",
       {
         operationId: Type.String({
@@ -379,39 +379,6 @@ export function createMemoryFenceTools(
           Type.String({
             description:
               "Optional. URI scope. Omit to search the whole workspace. Example: viking://workspace/docs.",
-          }),
-        ),
-      },
-    ),
-    [OPENVIKING_TOOL_NAMES.searchContext]: openvikingTool(
-      OPENVIKING_TOOL_NAMES.searchContext,
-      "OpenViking search context",
-      "Expand hierarchical OpenViking context within the remaining shared token budget.",
-      "search_context",
-      {
-        operationId: Type.String({
-          description:
-            "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: search-1. Use a new id on every call.",
-        }),
-        query: Type.String({
-          description: "Required. Search text. Example: deploy rollback.",
-        }),
-        limit: Type.Optional(
-          Type.Integer({
-            minimum: 1,
-            description: "Optional. Integer from 1 to 10. Example: 10.",
-          }),
-        ),
-        targetUri: Type.Optional(
-          Type.String({
-            description:
-              "Optional. URI scope. Omit to search the whole workspace. Example: viking://workspace/docs.",
-          }),
-        ),
-        tokenBudget: Type.Optional(
-          Type.Integer({
-            minimum: 1,
-            description: "Optional. Positive integer budget for this expansion. Example: 2400.",
           }),
         ),
       },

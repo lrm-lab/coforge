@@ -17,6 +17,8 @@ import type { OpenVikingMemoryReadClient } from "./memory-agent-reads";
 export { MemoryAgentMutationError } from "./memory-agent-reads";
 export type { OpenVikingMemoryReadClient } from "./memory-agent-reads";
 
+export class MemoryReadCapabilityError extends Error {}
+
 export type OpenVikingMemoryReads = {
   find(input: {
     workspaceId: string;
@@ -55,10 +57,19 @@ export function createOpenVikingMemoryReads(deps: {
         operation: "find",
         body: {
           query: input.query,
+          retrieval_mode: "bm25",
           limit: input.limit ?? OPENVIKING_CANDIDATE_LIMIT_MAX,
           ...(input.targetUri === undefined ? {} : { target_uri: input.targetUri }),
         },
       });
+      const envelope =
+        payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const lexical =
+        envelope.result && typeof envelope.result === "object"
+          ? (envelope.result as Record<string, unknown>)
+          : envelope;
+      if (lexical.retrieval_mode !== "bm25")
+        throw new MemoryReadCapabilityError("bm25_backend_required");
       return deps.citations.bindOpenVikingHits(
         input.workspaceId,
         input.operationId,

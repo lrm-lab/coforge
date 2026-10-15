@@ -35,6 +35,7 @@ test("freezes the OpenViking agent protocol, fence, tools, and turn budget", () 
     find: "ov_find",
     searchContext: "ov_search_context",
     read: "ov_read",
+    expand: "ov_expand",
     offer: "memory_offer",
     diagnose: "memory_diagnose",
   });
@@ -42,9 +43,11 @@ test("freezes the OpenViking agent protocol, fence, tools, and turn budget", () 
     "find",
     "search_context",
     "read",
+    "expand",
     "offer",
     "diagnose",
   ]);
+
   expect(MEMORY_READ_BUDGET_PER_TRIGGER).toBe(3);
   expect(MEMORY_OFFER_BUDGET_PER_TRIGGER).toBe(1);
   expect(OPENVIKING_CANDIDATE_LIMIT_MAX).toBe(10);
@@ -372,4 +375,47 @@ test("diagnosis commands bind to a real message UUID and reject false successful
       published: true,
     }),
   ).toThrow();
+});
+
+test("decodes a graph hop from the BM25 discovery chain", () => {
+  const command = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "expand",
+    operationId: "hop-1",
+    chainRef: "chain-1",
+    uri: "viking://resources/causal/fork.md",
+    relation: "anchor",
+    limit: 5,
+  };
+  expect(decodeOpenVikingAgentCommand(command)).toEqual(command);
+  expect(() =>
+    decodeOpenVikingAgentCommand({ ...command, relation: "arbitrary_private_read" }),
+  ).toThrow();
+});
+
+test("BM25 discovery preserves the chain and typed graph navigation", () => {
+  const retrieval = {
+    mode: "bm25",
+    chainRef: "chain-1",
+    step: 0,
+    remainingHops: 4,
+    exhausted: false,
+    nodes: [
+      {
+        uri: citation.uri,
+        kind: "fork_overlay",
+        status: "counterfactual",
+        relations: ["anchor", "branch_steps"],
+      },
+    ],
+  };
+  const response = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "find",
+    operationId: "find-graph",
+    duplicate: false,
+    items: [citation],
+    retrieval,
+  };
+  expect(decodeOpenVikingAgentResponse("find", response)).toEqual(response);
 });

@@ -9,7 +9,7 @@ Agent HTTPS 接口和 OpenViking 工具运行。经验与证据文档统一由 M
 1. 人类题目同时发送给 `@task @memory`，分别触发两个 Agent。Memory 根据原始任务自主构造查询并开始检索，无需等待 Task 再次请求。两者执行顺序不作保证。
 2. Memory Agent 注册为 Workspace 的 Memory Agent。普通频道和线程更新按目标累计，5 条或首条等待 30 秒触发合并通知，即使未 @Memory 或只 @其他 Agent；自己的消息不计入。个人 @mention 仍立即通知。停止、离群或关闭 memory profile 后不再新增观察投递。Task 可继续 `@memory` 提出查询。
    收到通知后使用不带范围锚点的 `message_read`，从服务端已读位置分页读取正文，`hasNewer=true` 时继续。通知与 custody ACK 不推进已读位置；成功读取才推进。`message_check` 只消费投递集合，不能代替频道增量阅读。读完判断是否需要检索或发言。
-3. Memory 使用 `ov_find` 检索、按需 `ov_read`，用 `memory_offer` 返回带引用的 Hint。要求 `ov_find` 只走 BM25，Memory 不暴露 `ov_search_context`；对应后端和词法索引准备改造尚未完成，不能使用旧 ready 文件宣称已验证此检索路径。
+3. Memory 使用 `ov_find` 检索、按需 `ov_read`，用 `memory_offer` 返回带引用的 Hint。要求 `ov_find` 只走 BM25，Memory 不暴露 `ov_search_context`；对应后端和词法索引准备改造尚未完成。后端未明确返回 `retrieval_mode=bm25` 时，CoForge 返回 `bm25_backend_required`，不接受旧语义检索结果；不能使用旧 ready 文件宣称已验证此检索路径。图扩展目前仅合入 SDK 契约，未对 Memory 暴露工具，调用返回 `graph_expansion_backend_required`。
 4. Task 调用原生 `memory_disposition` 记录 adopt / reject / defer 和原因，再决定如何执行。
 5. 最后一条不包含对 Memory 的结构化 @mention 的 Task 消息是最终答案；IR 的 `Exact Answer:` / `Confidence:` 完整答案允许在解释中提及 Memory。两者结束运行、Memory 没有待消费的观察消息，且最新回复、Hint 和运行进展经过 settle 窗口后才结束该题，避免在 30 秒批通知发出前清理 workspace。仍受 quiet 和总 deadline 预算限制。
 

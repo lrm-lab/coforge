@@ -34,6 +34,7 @@ function harness(results: unknown) {
 
 test("find and read bind OpenViking citations through the injected client", async () => {
   const { reads, calls, ovRows } = harness({
+    retrieval_mode: "bm25",
     results: [
       {
         uri: "viking://resources/docs/deploy.md",
@@ -60,7 +61,7 @@ test("find and read bind OpenViking citations through the injected client", asyn
     workspaceId: "ws-a",
     agentId: "mem-1",
     operation: "find",
-    body: { query: "deploy", limit: 10 },
+    body: { query: "deploy", limit: 10, retrieval_mode: "bm25" },
   });
   expect(ovRows.get("ws-a:ov:viking://resources/docs/deploy.md")?.boundOperationId).toBe("find-1");
 
@@ -91,6 +92,7 @@ test("binds catalog find hits that use abstract, numeric level, and no content h
     status: "ok",
     accountId: "acct-a",
     result: {
+      retrieval_mode: "bm25",
       memories: [],
       resources: [
         {
@@ -118,7 +120,7 @@ test("binds catalog find hits that use abstract, numeric level, and no content h
 });
 
 test("search_context disables query expansion and never issues an OpenViking write", async () => {
-  const { reads, calls } = harness({ results: [] });
+  const { reads, calls } = harness({ retrieval_mode: "bm25", results: [] });
   await reads.searchContext({
     workspaceId: "ws-a",
     agentId: "mem-1",
@@ -146,6 +148,7 @@ test("search_context disables query expansion and never issues an OpenViking wri
 test("find keeps a skill revision and drops episode, insight, and episodeInsight", async () => {
   const { reads, ovRows } = harness({
     accountId: "acct-a",
+    retrieval_mode: "bm25",
     results: [
       {
         uri: "viking://skills/deploy/revisions/3",
@@ -211,4 +214,17 @@ test("read binds the real OpenViking content response envelope", async () => {
   expect(result.content).toBe("The observatory opened in 2041.");
   expect(result.citation.accountId).toBe("acct-a");
   expect(result.citation.contentHash).toMatch(/^sha256:/);
+});
+
+test("BM25-only find refuses an older backend response without lexical provenance", async () => {
+  const { reads, ovRows } = harness({ results: [] });
+  await expect(
+    reads.find({
+      workspaceId: "ws",
+      agentId: "memory",
+      operationId: "bm25-check",
+      query: "deploy",
+    }),
+  ).rejects.toThrow("bm25_backend_required");
+  expect(ovRows.size).toBe(0);
 });
