@@ -8,9 +8,9 @@ Agent HTTPS 接口和 OpenViking 工具运行。经验与证据文档统一由 M
 
 1. 人类题目同时发送给 `@task @memory`，分别触发两个 Agent。Memory 根据原始任务自主构造查询并开始检索，无需等待 Task 再次请求。两者执行顺序不作保证。
 2. Memory Agent 静音普通频道通知；人类或 Task 的个人 @mention 都会唤醒它。Task 需要补充经验或文档时，在频道 `@memory` 提出查询，可以多次请求。
-3. Memory 调用 `ov_find` / `ov_search_context` / `ov_read`，用 `memory_offer` 返回带引用的 Hint。
+3. Memory 使用 `ov_find` 检索、按需 `ov_read`，用 `memory_offer` 返回带引用的 Hint。要求 `ov_find` 只走 BM25，Memory 不暴露 `ov_search_context`；对应后端和词法索引准备改造尚未完成，不能使用旧 ready 文件宣称已验证此检索路径。
 4. Task 调用原生 `memory_disposition` 记录 adopt / reject / defer 和原因，再决定如何执行。
-5. 最后一条不包含对 Memory 的结构化 @mention 的 Task 消息是最终答案。
+5. 最后一条不包含对 Memory 的结构化 @mention 的 Task 消息是最终答案；IR 的 `Exact Answer:` / `Confidence:` 完整答案允许在解释中提及 Memory。两者结束运行且最新回复、Hint 和运行进展经过 settle 窗口后才结束该题，仍受 quiet 和总 deadline 预算限制。
 
 harness 不做 pre-turn recall，不自动检索、选技能或注入经验，也不向 Task 工作目录复制
 原始语料、技能 ledger 或 `ir_search.py`。Task 保留产品正常执行工具；角色指令要求检索走
@@ -18,7 +18,7 @@ Memory。是否遵守需结合原生 Agent 轨迹核查，不能仅凭提示词�
 
 ## 准备 IR 文档和训练经验
 
-宿主机准备程序使用 OpenViking 资源上传 API 和默认 `semantic_and_vectors` 处理。
+现有宿主机准备程序使用 OpenViking 资源上传 API 和默认 `semantic_and_vectors` 处理；以下是该旧准备程序的行为，不能代替尚在实现的 BM25 词法索引准备。
 文档输入为 JSONL，每行仅投影 `docid`、`text`、可选 `url`；经验输入为冻结训练 ledger
 数组，投影 `sha256` 和 `text`。题目标签和 grader 字段不加入文档资源。
 经验文本自身应在训练阶段完成来源审核。

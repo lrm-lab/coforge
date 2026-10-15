@@ -61,6 +61,8 @@ test("runtime diagnostics wait for terminal settlement and reset per episode", (
     lastRuntimeErrorAt: 100,
     taskFailed: false,
     memoryFailed: false,
+    taskRunning: false,
+    memoryRunning: false,
   });
   diagnostics.observe("task", { type: "completed", status: "failed" }, 110);
   expect(diagnostics.snapshot().taskFailed).toBe(true);
@@ -76,6 +78,8 @@ test("runtime diagnostics wait for terminal settlement and reset per episode", (
     runtimeErrorCount: 0,
     taskFailed: false,
     memoryFailed: false,
+    taskRunning: false,
+    memoryRunning: false,
   });
 });
 

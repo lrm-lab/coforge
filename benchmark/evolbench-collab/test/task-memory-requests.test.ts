@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { reminderForEpisode } from "../src/benchmarks";
-import { runEpisode, episodePrompt } from "../src/eval-qa";
+import { runEpisode, episodePrompt, createEpisodeRuntimeDiagnostics } from "../src/eval-qa";
 import type { EvalWorkspace } from "../src/workspace";
 import type { EvalEnv } from "../src/env";
 import type { ManifestEpisode } from "../src/types";
@@ -176,4 +176,24 @@ test("an IR final answer can mention Memory in its explanation", async () => {
   );
   expect(result.terminationReason).toBe("final_settled");
   expect(result.memoryRequestCount).toBe(0);
+});
+
+test("a Task answer cannot settle while the initially mentioned Memory is running", async () => {
+  const input = fixture([
+    { id: "answer", body: "Exact Answer: bird", createdAt: new Date(), mentions: [] },
+  ]);
+  const diagnostics = createEpisodeRuntimeDiagnostics();
+  const result = await runEpisode({ ...input, runtimeDiagnostics: diagnostics });
+  expect(result.terminationReason).not.toBe("final_settled");
+  expect(result.finalOutput).toBe("Exact Answer: bird");
+});
+
+test("a late Memory reply gives Task another settlement window", async () => {
+  const now = Date.now();
+  const input = fixture(
+    [{ id: "answer", body: "Exact Answer: bird", createdAt: new Date(now - 1000), mentions: [] }],
+    [{ id: "late-offer", createdAt: new Date(now) }],
+  );
+  const result = await runEpisode({ ...input, settleMs: 1000 });
+  expect(result.terminationReason).not.toBe("final_settled");
 });

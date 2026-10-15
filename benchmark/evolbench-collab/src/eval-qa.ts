@@ -121,19 +121,31 @@ export function createEpisodeRuntimeDiagnostics() {
   let lastRuntimeErrorAt: number | undefined;
   let lastProgressAt: number | undefined;
   const failed = { task: false, memory: false };
+  const running = { task: false, memory: false };
   return {
-    reset() {
+    reset(options: { awaitInitialTurns?: boolean } = {}) {
       runtimeErrorCount = 0;
       lastRuntimeErrorAt = undefined;
       lastProgressAt = undefined;
       failed.task = failed.memory = false;
+      running.task = running.memory = options.awaitInitialTurns ?? false;
     },
     observe(role: "task" | "memory", event: AgentRuntimeEvent, observedAt = Date.now()) {
       if (event.type === "error") {
         runtimeErrorCount += 1;
         lastRuntimeErrorAt = observedAt;
       }
-      if (event.type === "completed") failed[role] = event.status === "failed";
+      if (event.type === "completed") {
+        failed[role] = event.status === "failed";
+        running[role] = false;
+      }
+      if (
+        event.type === "progress" ||
+        event.type === "text-delta" ||
+        event.type === "thinking-delta" ||
+        event.type === "tool-start"
+      )
+        running[role] = true;
       if (
         event.type === "progress" ||
         event.type === "text-delta" ||
@@ -151,6 +163,8 @@ export function createEpisodeRuntimeDiagnostics() {
         ...(lastProgressAt === undefined ? {} : { lastProgressAt }),
         taskFailed: failed.task,
         memoryFailed: failed.memory,
+        taskRunning: running.task,
+        memoryRunning: running.memory,
       };
     },
   };
@@ -168,7 +182,7 @@ export async function runEpisode(input: {
   runtimeDiagnostics?: ReturnType<typeof createEpisodeRuntimeDiagnostics>;
 }): Promise<EpisodeResult> {
   const startedAt = Date.now();
-  input.runtimeDiagnostics?.reset();
+  input.runtimeDiagnostics?.reset({ awaitInitialTurns: true });
   const posted = await postEpisodePrompt({
     workspace: input.workspace,
     redisUrl: input.env.redisUrl,
@@ -293,15 +307,25 @@ export async function runEpisode(input: {
     const lastTaskAt = taskMessages.at(-1)?.createdAt?.getTime() ?? 0;
     const lastAnswer = answers.at(-1);
     const answerIsLastTaskMessage = lastAnswer?.id === taskMessages.at(-1)?.id;
+    const runtime = input.runtimeDiagnostics?.snapshot();
+    const lastMemoryAt = memoryMessages.at(-1)?.createdAt.getTime() ?? 0;
+    const lastHintAt = Math.max(0, ...hints.map((hint) => hint.deliveredAt?.getTime() ?? 0));
+    const lastInteractionAt = Math.max(
+      lastTaskAt,
+      lastMemoryAt,
+      lastHintAt,
+      runtime?.lastProgressAt ?? 0,
+    );
     if (
       lastAnswer &&
       answerIsLastTaskMessage &&
-      Date.now() - lastAnswer.createdAt.getTime() >= input.settleMs
+      !runtime?.taskRunning &&
+      !runtime?.memoryRunning &&
+      Date.now() - lastInteractionAt >= input.settleMs
     ) {
       return finish("final_settled");
     }
     // An @memory request is work in progress, not a candidate final answer.
-    const lastMemoryAt = memoryMessages.at(-1)?.createdAt.getTime() ?? 0;
     const progressAt = input.runtimeDiagnostics?.snapshot().lastProgressAt ?? 0;
     if (
       Date.now() - Math.max(posted.createdAt.getTime(), lastTaskAt, lastMemoryAt, progressAt) >=
