@@ -393,7 +393,6 @@ describe("WorkspaceMembers", () => {
             id: "agent-1",
             displayName: "COBOL",
             avatarUrl: null,
-            description: "Writes reports",
           },
         ],
       });

@@ -645,6 +645,12 @@ export const MessageRow = memo(function MessageRow({
     message.senderKind === "user" && message.senderUserId && onOpenPersonProfile
       ? message.senderUserId
       : undefined;
+  // The sender's profile, an Agent's or a person's, when the conversation offers it.
+  const openSenderProfile = openableAgentId
+    ? () => onOpenAgentProfile?.(openableAgentId)
+    : openablePersonId
+      ? () => onOpenPersonProfile?.(openablePersonId)
+      : undefined;
   // A deleted sender is inert and visually muted: no profile affordance, a grey avatar tone, and
   // a `DELETED` badge beside the name.
   // An Agent's avatar in the stream carries the same online/working/thinking/error/offline dot the
@@ -933,7 +939,7 @@ export const MessageRow = memo(function MessageRow({
               noTextPadding
               aria-label={m.member_person_open_profile({ name: message.senderName })}
               className="shrink-0 rounded-full!"
-              onPress={() => onOpenPersonProfile?.(openablePersonId)}
+              onPress={openSenderProfile}
             >
               {avatar}
             </Button>
@@ -944,15 +950,11 @@ export const MessageRow = memo(function MessageRow({
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {!grouped && (
             <p className="flex min-h-5 items-baseline gap-2 pr-8">
-              {openableAgentId || openablePersonId ? (
+              {openSenderProfile ? (
                 <Button
                   color="tertiary"
                   noTextPadding
-                  onPress={() =>
-                    openableAgentId
-                      ? onOpenAgentProfile?.(openableAgentId)
-                      : openablePersonId && onOpenPersonProfile?.(openablePersonId)
-                  }
+                  onPress={openSenderProfile}
                   className="h-auto min-w-0 truncate rounded p-0 text-sm font-semibold text-primary hover:bg-transparent hover:text-primary hover:underline"
                 >
                   {displayName}

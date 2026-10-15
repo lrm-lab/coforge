@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useHydrated, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertCircle,
-  Edit01,
   MessageSquare01 as MessageSquare,
   UserMinus01,
   UserX01,
@@ -13,8 +12,6 @@ import {
 import { Heading, Text } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
-import { Badge } from "#src/components/base/badges/badges";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Button } from "#src/components/base/buttons/button";
@@ -26,7 +23,6 @@ import {
   EmptyTitle,
 } from "#src/components/ui/empty";
 import { Skeleton } from "#src/components/ui/skeleton";
-import { useAppToast } from "#src/components/ui/toast";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { formatCalendarDate } from "#src/lib/dates";
@@ -38,21 +34,21 @@ import {
   removeWorkspaceMember,
   updateWorkspaceMemberRole,
 } from "#src/features/workspaces/members.functions";
-import { workspaceRoleLabel } from "#src/features/workspaces/workspace-members-panel";
+import { workspaceRoleLabel } from "#src/features/workspaces/workspace-role-label";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { MemberPersonProfile } from "#src/features/workspaces/workspaces.functions";
 import { AgentDisplayAvatar } from "./agent-display-avatar";
 import { MEMBER_DIRECTORY_KEY, memberPersonQuery } from "./member-directory-queries";
 import { useCurrentWorkspaceId, useLiveAgentDisplay } from "./workspace-agents-realtime";
-import { SECTION_CAPTION_CLASS, SUBFIELD_LABEL_CLASS } from "./profile-panel/inline-edit-field";
+import { SECTION_CAPTION_CLASS } from "./profile-panel/inline-edit-field";
 import { PanelMessage } from "./profile-panel/panel-message";
 import { formatAgentProfileParam } from "./profile-panel/profile-panel-search";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
 /**
- * The Members page's right-hand panel for a person (`profile=user:<id>`), the human counterpart of
- * `AgentProfilePanel`: who they are (name, description, email), their Workspace role and join
+ * A person's right-hand panel (`profile=user:<id>`) on the Members page and in a conversation, the
+ * human counterpart of `AgentProfilePanel`: who they are (name, description, email), their Workspace role and join
  * date, and the Agents they created that the viewer may see. Owners and admins change the
  * person's role and remove them here as in Settings → Members; a person edits their own profile
  * in Settings → Account.
@@ -163,10 +159,16 @@ function PersonProfileBody({
   onRemoved: () => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const { changeRole, remove, removeOpen, setRemoveOpen, removing } = useMemberActions(
-    profile,
-    onRemoved,
-  );
+  const {
+    changeRole,
+    changingRole,
+    roleError,
+    remove,
+    removeOpen,
+    setRemoveOpen,
+    removing,
+    removeError,
+  } = useMemberActions(profile, onRemoved);
   const navigate = useNavigate();
   const timeZone = appRoute.useLoaderData().timeZone;
   const locale = getLocale();
@@ -215,71 +217,50 @@ function PersonProfileBody({
 
       <section className="border-b border-secondary px-6 py-5">
         <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_description()}</p>
-        {profile.description.trim() ? (
-          <p className="mt-2 text-sm whitespace-pre-wrap break-words text-secondary">
-            {profile.description}
-          </p>
-        ) : (
-          <p className="mt-2 text-sm text-quaternary italic">{m.member_person_no_description()}</p>
-        )}
+        <p className="mt-2 text-sm whitespace-pre-wrap break-words text-secondary">
+          {profile.description.trim() || "—"}
+        </p>
       </section>
 
       <section className="border-b border-secondary px-6 py-5">
         <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_info()}</p>
-        <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4">
-          <div>
-            <dt className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_role()}</dt>
-            <dd className="mt-1 flex items-center gap-1">
-              <Badge size="sm" color="gray">
-                {workspaceRoleLabel(profile.role)}
-              </Badge>
-              {profile.canChangeRole && (
-                <Dropdown.Root>
-                  <ButtonUtility
-                    icon={Edit01}
-                    size="xs"
-                    color="tertiary"
-                    tooltip={m.agent_profile_edit_role()}
-                  />
-                  <Dropdown.Popover placement="bottom start" className="w-48">
-                    <Dropdown.Menu
-                      aria-label={m.agent_profile_edit_role()}
-                      onAction={() => changeRole(profile.role === "admin" ? "member" : "admin")}
-                    >
-                      <Dropdown.Item
-                        id="change-role"
-                        label={
-                          profile.role === "admin"
-                            ? m.workspace_member_make_member()
-                            : m.workspace_member_make_admin()
-                        }
-                      />
-                    </Dropdown.Menu>
-                  </Dropdown.Popover>
-                </Dropdown.Root>
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className={SUBFIELD_LABEL_CLASS}>{m.member_person_joined()}</dt>
-            <dd className="mt-1 text-sm font-medium text-primary">
-              <time className="tabular-nums" dateTime={new Date(profile.joinedAt).toISOString()}>
-                {joinedOn}
-              </time>
-            </dd>
-          </div>
-          {profile.email && (
-            <div className="col-span-2 min-w-0">
-              <dt className={SUBFIELD_LABEL_CLASS}>{m.member_person_email()}</dt>
-              <dd className="mt-1 truncate text-sm font-medium text-primary">
-                <a
-                  href={`mailto:${profile.email}`}
-                  className="rounded-sm outline-focus-ring hover:underline focus-visible:outline-2"
+        {/* Short read-only facts: docs/design/field-display.md's fact list, label left and value
+            right, with the one action on a fact at its row's end and its error under the row. */}
+        <dl className="mt-2">
+          <FactRow
+            label={m.agent_profile_role()}
+            action={
+              profile.canChangeRole && (
+                <Button
+                  size="sm"
+                  color="secondary"
+                  isLoading={changingRole}
+                  onPress={() => changeRole(profile.role === "admin" ? "member" : "admin")}
                 >
-                  {profile.email}
-                </a>
-              </dd>
-            </div>
+                  {profile.role === "admin"
+                    ? m.workspace_member_make_member()
+                    : m.workspace_member_make_admin()}
+                </Button>
+              )
+            }
+            error={roleError}
+          >
+            {workspaceRoleLabel(profile.role)}
+          </FactRow>
+          <FactRow label={m.member_person_joined()}>
+            <time className="tabular-nums" dateTime={new Date(profile.joinedAt).toISOString()}>
+              {joinedOn}
+            </time>
+          </FactRow>
+          {profile.email && (
+            <FactRow label={m.member_person_email()}>
+              <a
+                href={`mailto:${profile.email}`}
+                className="rounded-sm outline-focus-ring hover:underline focus-visible:outline-2"
+              >
+                {profile.email}
+              </a>
+            </FactRow>
           )}
         </dl>
       </section>
@@ -307,15 +288,8 @@ function PersonProfileBody({
                   className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left ring-1 ring-secondary outline-focus-ring ring-inset hover:bg-primary_hover focus-visible:outline-2"
                 >
                   <CreatedAgentAvatar agent={agent} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-primary">
-                      {agent.displayName}
-                    </span>
-                    {agent.description && (
-                      <span className="block truncate text-xs text-tertiary">
-                        {agent.description}
-                      </span>
-                    )}
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
+                    {agent.displayName}
                   </span>
                 </Link>
               </li>
@@ -342,6 +316,7 @@ function PersonProfileBody({
             name={profile.displayName}
             open={removeOpen}
             busy={removing}
+            error={removeError}
             onOpenChange={setRemoveOpen}
             onConfirm={remove}
           />
@@ -353,39 +328,92 @@ function PersonProfileBody({
 
 /**
  * The owner/admin actions on a person, through the same writes Settings → Members uses (the
- * server re-checks who may do what). Each refreshes the Members directory and the page; a
- * failure says so in a toast, as Settings → Members does.
+ * server re-checks who may do what). Each refreshes the Members directory and the page. A failure
+ * stays inline where it happened (docs/design/toast-vs-inline.md): under the role row, or in the
+ * remove dialog, which stays open so it can be tried again.
  */
 function useMemberActions(profile: MemberPersonProfile, onRemoved: () => void) {
   const updateRole = useServerFn(updateWorkspaceMemberRole);
   const removeMember = useServerFn(removeWorkspaceMember);
   const queryClient = useQueryClient();
   const router = useRouter();
-  const toast = useAppToast();
+  const [changingRole, guardRole] = useSubmitGuard();
+  const [roleError, setRoleError] = useState<string>();
   const [removeOpen, setRemoveOpen] = useState(false);
-  const [removing, guard] = useSubmitGuard();
+  const [removing, guardRemove] = useSubmitGuard();
+  const [removeError, setRemoveError] = useState<string>();
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY }),
       router.invalidate({ sync: true }),
     ]);
   const changeRole = (role: "admin" | "member") =>
-    void updateRole({ data: { userId: profile.id, role } })
-      .then(refresh)
-      .catch(() => toast.error(m.workspace_members_action_failed()));
+    void guardRole(async () => {
+      setRoleError(undefined);
+      try {
+        await updateRole({ data: { userId: profile.id, role } });
+      } catch {
+        setRoleError(m.workspace_members_action_failed());
+        return;
+      }
+      await refresh();
+    });
   const remove = () =>
-    void guard(async () => {
+    void guardRemove(async () => {
+      setRemoveError(undefined);
       try {
         await removeMember({ data: { userId: profile.id } });
       } catch {
-        toast.error(m.workspace_members_action_failed());
+        setRemoveError(m.workspace_members_action_failed());
         return;
       }
       setRemoveOpen(false);
       onRemoved();
       await refresh();
     });
-  return { changeRole, remove, removeOpen, setRemoveOpen, removing };
+  const openRemove = (open: boolean) => {
+    setRemoveError(undefined);
+    setRemoveOpen(open);
+  };
+  return {
+    changeRole,
+    changingRole,
+    roleError,
+    remove,
+    removeOpen,
+    setRemoveOpen: openRemove,
+    removing,
+    removeError,
+  };
+}
+
+/** One fact of the Info list: label left, value right, an optional action at the row's end, and
+ * the action's error under the row (docs/design/field-display.md). */
+function FactRow({
+  label,
+  children,
+  action,
+  error,
+}: {
+  label: string;
+  children: ReactNode;
+  action?: ReactNode;
+  error?: string;
+}) {
+  return (
+    <div className="border-b border-secondary py-1.5 last:border-b-0">
+      <div className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1">
+        <dt className="text-sm font-medium whitespace-nowrap text-primary">{label}</dt>
+        <dd className="ml-auto min-w-0 truncate text-right text-sm text-tertiary">{children}</dd>
+        {action}
+      </div>
+      {error && (
+        <p role="alert" className="pb-1.5 text-sm text-error-primary">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** Confirms removing a person from the Workspace; the confirm is the dialog's one red button. */
@@ -393,12 +421,15 @@ function RemoveMemberDialog({
   name,
   open,
   busy,
+  error,
   onOpenChange,
   onConfirm,
 }: {
   name: string;
   open: boolean;
   busy: boolean;
+  /** Why the last attempt failed; shown under the description. */
+  error?: string;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
@@ -420,6 +451,11 @@ function RemoveMemberDialog({
                   <Text slot="description" className="text-sm text-secondary">
                     {m.member_person_remove_confirm_description()}
                   </Text>
+                  {error && (
+                    <p role="alert" className="text-sm text-error-primary">
+                      {error}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="mt-6 flex justify-end gap-3">

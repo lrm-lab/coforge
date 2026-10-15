@@ -14,6 +14,7 @@ import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { InviteMemberDialog } from "./invite-member-dialog";
 import { canManageMembers } from "./workspace-roles";
+import { workspaceRoleLabel } from "./workspace-role-label";
 import { removeWorkspaceMember, updateWorkspaceMemberRole } from "./members.functions";
 
 type MemberRow = {
@@ -23,13 +24,6 @@ type MemberRow = {
   displayName: string | null;
   avatarUrl: string | null;
 };
-
-/** A Workspace role as people read it. */
-export function workspaceRoleLabel(role: string) {
-  if (role === "owner") return m.workspace_role_owner();
-  if (role === "admin") return m.workspace_role_admin();
-  return m.workspace_role_member();
-}
 
 export function WorkspaceMembersPanel(props: {
   actorUserId: string;

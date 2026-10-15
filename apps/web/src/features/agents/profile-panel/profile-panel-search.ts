@@ -32,7 +32,7 @@ export function formatAgentProfileParam(agentId: string): string {
   return `${AGENT_PROFILE_PREFIX}${agentId}`;
 }
 
-/** The `profile` search param value that opens the Members page's panel on one person. */
+/** The `profile` search param value that opens the panel on one person. */
 export function formatPersonProfileParam(userId: string): string {
   return `${PERSON_PROFILE_PREFIX}${userId}`;
 }

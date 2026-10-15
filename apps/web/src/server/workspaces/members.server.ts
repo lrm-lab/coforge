@@ -54,7 +54,6 @@ function createdAgentsSelect(visibleAgents: Prisma.AgentWhereInput) {
       id: true,
       name: true,
       displayName: true,
-      description: true,
       avatarObjectKey: true,
       weeklyReportAssistant: { select: { id: true } },
     },
@@ -361,10 +360,7 @@ export class WorkspaceMembers {
       isViewer,
       canChangeRole: manageable,
       canRemove: manageable && !isViewer,
-      createdAgents: person.agents.map((agent) => ({
-        ...createdAgentView(workspaceId, agent, person),
-        description: agent.description,
-      })),
+      createdAgents: person.agents.map((agent) => createdAgentView(workspaceId, agent, person)),
     };
   }
 
