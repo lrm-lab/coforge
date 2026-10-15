@@ -237,3 +237,31 @@ input[type="search"]::-webkit-search-cancel-button {
     box-shadow: 0 0 0 calc(var(--avatar-size) * 0.046875) var(--color-bg-primary);
   }
 }
+
+/* The shared emoji grid (`components/ui/emoji-picker.tsx`) themed to the app's tokens: the
+   library draws its surfaces through these epr variables, so hover/focus/search/label/colors
+   read the same as the rest of the UI (the picker's own dark ramp is switched by `Theme`). */
+[data-epr-host] {
+  --epr-bg-color: var(--color-bg-primary);
+  --epr-text-color: var(--color-text-secondary);
+  --epr-emoji-hover-color: var(--color-bg-secondary-hover);
+  --epr-focus-bg-color: var(--color-bg-secondary-hover);
+  --epr-hover-bg-color: var(--color-bg-secondary-hover);
+  --epr-highlight-color: var(--color-bg-secondary-hover);
+  --epr-active-skin-hover-color: var(--color-bg-secondary-hover);
+  --epr-emoji-variation-indicator-color: var(--color-bg-secondary-hover);
+  --epr-category-label-bg-color: var(--color-bg-primary);
+  --epr-category-label-text-color: var(--color-text-tertiary);
+  --epr-category-icon-inactive-color: var(--color-text-quaternary);
+  --epr-category-icon-active-color: var(--color-text-primary);
+  --epr-search-input-bg-color: var(--color-bg-secondary);
+  --epr-search-input-bg-color-active: var(--color-bg-secondary_hover);
+  --epr-search-input-text-color: var(--color-text-primary);
+  --epr-search-input-placeholder-color: var(--color-text-quaternary);
+  --epr-search-border-color: transparent;
+  --epr-search-border-color-active: transparent;
+  --epr-picker-border-color: transparent;
+  --epr-picker-border-radius: 0.75rem;
+  --epr-emoji-variation-picker-bg-color: var(--color-bg-primary);
+  --epr-skin-tone-picker-menu-color: var(--color-bg-primary);
+}

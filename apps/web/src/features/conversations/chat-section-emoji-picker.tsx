@@ -59,8 +59,9 @@ export function ChatSectionEmojiPicker({
         >
           <Dialog aria-label={label} className="outline-none">
             {({ close }) => (
-              <div>
+              <div className="w-88">
                 <EmojiPicker
+                  pickerHostClassName="min-h-96 *:min-h-96 [&_.epr-picker]:border-0"
                   onPick={(emoji) => {
                     onChange(emoji);
                     close();
