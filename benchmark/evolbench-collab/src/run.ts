@@ -50,9 +50,10 @@ if (manifest.some((episode) => episode.domain === "information_retrieval") && !f
 }
 if (
   frozenKnowledge &&
-  (env.arms.some((arm) => arm !== "warm") || manifest.some((episode) => episode.split !== "test"))
+  (env.arms.some((arm) => arm !== frozenKnowledge.arm) ||
+    manifest.some((episode) => episode.split !== "test"))
 ) {
-  throw new Error("prepared knowledge evaluation requires warm arm and a test-only manifest");
+  throw new Error("prepared knowledge arm must match the ready file and use a test-only manifest");
 }
 const profile = profileFor(benchmark);
 const episodeTimeoutMs = env.episodeTimeoutMs ?? profile.episodeTimeoutMs;
@@ -258,7 +259,7 @@ async function provisionFamily(
   } catch (error) {
     await daemon?.stop().catch(() => undefined);
     await destroyEvalWorkspace(workspace);
-    if (arm === "cold")
+    if (arm === "cold" && !frozenKnowledge)
       await deleteDisposableAccount(runtime, root, accountId).catch(() => undefined);
     throw error;
   }
@@ -267,7 +268,8 @@ async function provisionFamily(
 async function releaseFamily(arm: "warm" | "cold", provisioned: FamilyWorkspace): Promise<void> {
   await provisioned.daemon.stop().catch(() => undefined);
   await destroyEvalWorkspace(provisioned.workspace);
-  if (arm === "warm") {
+  if (arm === "warm" || frozenKnowledge) {
+    // A prepared account is shared read-only across fresh test workspaces.
     // The warm account carries drained memory; it must outlive this process so
     // a crash-resume can rebind to it. Clean it up manually once the
     // evaluation finishes.

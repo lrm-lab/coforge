@@ -25,6 +25,7 @@ import {
   OPENVIKING_AGENT_PROTOCOL,
   OPENVIKING_CANDIDATE_LIMIT_MAX,
   OPENVIKING_TOOL_NAMES,
+  OPENVIKING_GRAPH_RELATIONS,
   toolsForMemoryFence,
   type MemoryAgentToolProfile,
   type OpenVikingAgentCommand,
@@ -354,6 +355,19 @@ export function createMemoryFenceTools(
           description:
             "Full UUID of the task agent’s saved @memory diagnose message, obtained with message_read.",
         }),
+      },
+    ),
+    [OPENVIKING_TOOL_NAMES.expand]: openvikingTool(
+      OPENVIKING_TOOL_NAMES.expand,
+      "Expand memory graph",
+      "Follow an explicit relation from a Fork or AIG node already returned by ov_find or ov_expand. Reuse retrieval.chainRef and choose a node URI and one of its listed relations. Expansion is bounded and uses no embedding.",
+      "expand",
+      {
+        operationId: Type.String(),
+        chainRef: Type.String(),
+        uri: Type.String(),
+        relation: Type.Union(OPENVIKING_GRAPH_RELATIONS.map((value) => Type.Literal(value))),
+        limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
       },
     ),
     [OPENVIKING_TOOL_NAMES.find]: openvikingTool(

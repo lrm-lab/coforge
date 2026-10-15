@@ -18,18 +18,39 @@ test("document ingestion excludes labels and hidden answers", () => {
 
 test("a frozen IR test refuses incomplete or mismatched prepared knowledge", () => {
   const ready = {
-    version: 1,
+    version: 2,
+    arm: "warm",
     accountId: "prepared-ir",
     accountCreatedAt: "2026-10-15T00:00:00Z",
     documents: 67707,
     experiences: 89,
     corpusSha256: "a".repeat(64),
     ledgerSha256: "b".repeat(64),
-    processingMode: "semantic_and_vectors",
+    processingMode: "bm25",
     completed: true,
   };
   expect(validateKnowledgeReady(ready).accountId).toBe("prepared-ir");
   expect(() => validateKnowledgeReady({ ...ready, completed: false })).toThrow();
   expect(() => validateKnowledgeReady({ ...ready, documents: 0 })).toThrow();
   expect(() => validateKnowledgeReady({ ...ready, ledgerSha256: "" })).toThrow();
+});
+
+test("cold preparation contains evidence documents and no train experience", () => {
+  const ready = {
+    version: 2,
+    arm: "cold",
+    accountId: "cold",
+    accountCreatedAt: "2026-10-15T00:00:00Z",
+    documents: 67707,
+    experiences: 0,
+    corpusSha256: "a".repeat(64),
+    ledgerSha256: "b".repeat(64),
+    processingMode: "bm25",
+    completed: true,
+  };
+  expect(validateKnowledgeReady(ready).experiences).toBe(0);
+  expect(() => validateKnowledgeReady({ ...ready, experiences: 1 })).toThrow();
+  expect(() =>
+    validateKnowledgeReady({ ...ready, processingMode: "semantic_and_vectors" }),
+  ).toThrow();
 });

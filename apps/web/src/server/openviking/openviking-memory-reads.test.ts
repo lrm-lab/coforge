@@ -52,7 +52,7 @@ test("find and read bind OpenViking citations through the injected client", asyn
     operationId: "find-1",
     query: "deploy",
   });
-  expect(found[0]).toMatchObject({
+  expect(found.items[0]).toMatchObject({
     kind: OPENVIKING_CITATION_KIND,
     uri: "viking://resources/docs/deploy.md",
     matchedLevel: "L2",
@@ -110,13 +110,13 @@ test("binds catalog find hits that use abstract, numeric level, and no content h
     operationId: "find-env",
     query: "Caroline",
   });
-  expect(found[0]).toMatchObject({
+  expect(found.items[0]).toMatchObject({
     uri: "viking://resources/docs/caroline.md",
     matchedLevel: "L1",
     excerpt: "Caroline went to the group in May",
     accountId: "acct-a",
   });
-  expect(found[0]?.contentHash).toMatch(/^sha256:/);
+  expect(found.items[0]?.contentHash).toMatch(/^sha256:/);
 });
 
 test("search_context disables query expansion and never issues an OpenViking write", async () => {
@@ -142,7 +142,7 @@ test("search_context disables query expansion and never issues an OpenViking wri
       operationId: "write-1",
       query: "x",
     }),
-  ).resolves.toEqual([]);
+  ).resolves.toEqual({ items: [] });
 });
 
 test("find keeps a skill revision and drops episode, insight, and episodeInsight", async () => {
@@ -182,7 +182,7 @@ test("find keeps a skill revision and drops episode, insight, and episodeInsight
     operationId: "find-q160",
     query: "deploy",
   });
-  expect(found.map((item) => item.uri)).toEqual(["viking://skills/deploy/revisions/3"]);
+  expect(found.items.map((item) => item.uri)).toEqual(["viking://skills/deploy/revisions/3"]);
   expect([...ovRows.keys()]).toEqual(["ws-a:ov:viking://skills/deploy/revisions/3"]);
 });
 
@@ -227,4 +227,66 @@ test("BM25-only find refuses an older backend response without lexical provenanc
     }),
   ).rejects.toThrow("bm25_backend_required");
   expect(ovRows.size).toBe(0);
+});
+
+test("find exposes served graph navigation and expand forwards the explicit hop", async () => {
+  const uri = "viking://resources/causal/block.md";
+  const { reads, calls } = harness({
+    retrieval_mode: "bm25",
+    accountId: "acct-a",
+    chain_ref: "chain-a",
+    step: 0,
+    remaining_hops: 4,
+    exhausted: false,
+    resources: [
+      {
+        uri,
+        excerpt: "deployment checkpoint",
+        level: 2,
+        metadata: {
+          kind: "native_block",
+          status: "recorded",
+          source_ref: "native-block:rev:b1",
+          relations: ["incoming", "outgoing", "forks"],
+        },
+      },
+    ],
+  });
+  const found = await reads.find({
+    workspaceId: "ws-a",
+    agentId: "memory",
+    operationId: "find-graph",
+    query: "deployment",
+  });
+  expect(found.retrieval).toMatchObject({
+    mode: "bm25",
+    chainRef: "chain-a",
+    nodes: [{ uri, kind: "native_block", relations: ["incoming", "outgoing", "forks"] }],
+  });
+  await reads.expand({
+    workspaceId: "ws-a",
+    agentId: "memory",
+    operationId: "hop-1",
+    chainRef: "chain-a",
+    uri,
+    relation: "outgoing",
+    limit: 3,
+  });
+  expect(calls[1]).toEqual({
+    workspaceId: "ws-a",
+    agentId: "memory",
+    operation: "expand",
+    body: { operation_id: "hop-1", chain_ref: "chain-a", uri, relation: "outgoing", limit: 3 },
+  });
+  await expect(
+    reads.expand({
+      workspaceId: "ws-b",
+      agentId: "memory",
+      operationId: "unserved",
+      chainRef: "chain-a",
+      uri,
+      relation: "outgoing",
+    }),
+  ).rejects.toThrow();
+  expect(calls).toHaveLength(2);
 });

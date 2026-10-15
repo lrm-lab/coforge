@@ -16,14 +16,15 @@ export function knowledgeResource(kind: "document" | "experience", row: Record<s
 }
 
 export type KnowledgeReady = {
-  version: 1;
+  version: 2;
+  arm: "warm" | "cold";
   accountId: string;
   accountCreatedAt: string;
   documents: number;
   experiences: number;
   corpusSha256: string;
   ledgerSha256: string;
-  processingMode: "semantic_and_vectors";
+  processingMode: "bm25";
   completed: true;
 };
 
@@ -31,9 +32,9 @@ export function validateKnowledgeReady(value: unknown): KnowledgeReady {
   const row = value as Partial<KnowledgeReady> | null;
   if (
     !row ||
-    row.version !== 1 ||
+    row.version !== 2 ||
     row.completed !== true ||
-    row.processingMode !== "semantic_and_vectors" ||
+    row.processingMode !== "bm25" ||
     typeof row.accountCreatedAt !== "string" ||
     !Number.isFinite(Date.parse(row.accountCreatedAt)) ||
     typeof row.accountId !== "string" ||
@@ -41,7 +42,9 @@ export function validateKnowledgeReady(value: unknown): KnowledgeReady {
     !Number.isInteger(row.documents) ||
     row.documents! < 1 ||
     !Number.isInteger(row.experiences) ||
-    row.experiences! < 1 ||
+    row.experiences! < 0 ||
+    (row.arm !== "warm" && row.arm !== "cold") ||
+    (row.arm === "warm" ? row.experiences! < 1 : row.experiences !== 0) ||
     !/^[a-f0-9]{64}$/.test(row.corpusSha256 ?? "") ||
     !/^[a-f0-9]{64}$/.test(row.ledgerSha256 ?? "")
   ) {

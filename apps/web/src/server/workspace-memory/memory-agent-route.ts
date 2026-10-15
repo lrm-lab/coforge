@@ -168,7 +168,7 @@ async function handleOpenViking(
   command: OpenVikingAgentCommand,
 ): Promise<OpenVikingAgentResponse> {
   if (command.op === "find") {
-    const items = await deps.openviking.find({
+    const result = await deps.openviking.find({
       workspaceId: input.workspaceId,
       agentId: input.agentId,
       operationId: command.operationId,
@@ -181,7 +181,7 @@ async function handleOpenViking(
       op: "find",
       operationId: command.operationId,
       duplicate: false,
-      items,
+      ...result,
     };
   }
   if (command.op === "search_context") {
@@ -219,8 +219,23 @@ async function handleOpenViking(
     };
   }
   if (command.op === "diagnose") throw new Error("diagnosis_requires_coordinator");
-  if (command.op === "expand")
-    throw new MemoryReadCapabilityError("graph_expansion_backend_required");
+  if (command.op === "expand") {
+    const result = await deps.openviking.expand({
+      ...input,
+      operationId: command.operationId,
+      chainRef: command.chainRef,
+      uri: command.uri,
+      relation: command.relation,
+      ...(command.limit === undefined ? {} : { limit: command.limit }),
+    });
+    return {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "expand",
+      operationId: command.operationId,
+      duplicate: false,
+      ...result,
+    };
+  }
   const delivery = await offerDelivery(deps, input, command);
   const offer = await deps.offers.publish({
     workspaceId: input.workspaceId,

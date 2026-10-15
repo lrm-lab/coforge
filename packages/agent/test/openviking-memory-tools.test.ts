@@ -33,6 +33,7 @@ test("strict eval Memory exposes reads and server-owned controls but no ordinary
   );
   expect(tools.map((tool) => tool.name)).toEqual([
     "ov_find",
+    "ov_expand",
     "ov_read",
     "memory_offer",
     "memory_diagnose",
@@ -100,6 +101,7 @@ test("the openviking-memory fence exposes reads, scoped diagnosis, offers, and c
   );
   expect(names).toEqual([
     OPENVIKING_TOOL_NAMES.find,
+    OPENVIKING_TOOL_NAMES.expand,
     OPENVIKING_TOOL_NAMES.read,
     OPENVIKING_TOOL_NAMES.offer,
     OPENVIKING_TOOL_NAMES.diagnose,

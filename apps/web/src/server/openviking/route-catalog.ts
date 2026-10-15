@@ -58,6 +58,7 @@ export const PINNED_OPENVIKING_ROUTES: readonly PinnedOpenVikingRoute[] = [
   route("POST", "/api/v1/content/batch-write", "content"),
   route("POST", "/api/v1/content/set_tags", "content"),
   route("POST", "/api/v1/content/reindex", "content"),
+  route("POST", "/api/v1/search/expand", "search"),
   route("POST", "/api/v1/search/find", "search"),
   route("POST", "/api/v1/search/search", "search"),
   route("POST", "/api/v1/search/recall", "search"),

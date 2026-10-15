@@ -160,7 +160,13 @@ test("the openviking-memory profile requires an @memory query and never mentions
   ).not.toContain("## Team memory (Memory Agent)");
 });
 
-const OPENVIKING_FENCE_TOOLS = ["ov_find", "ov_read", "memory_offer", "memory_diagnose"] as const;
+const OPENVIKING_FENCE_TOOLS = [
+  "ov_find",
+  "ov_expand",
+  "ov_read",
+  "memory_offer",
+  "memory_diagnose",
+] as const;
 const CAUSAL_ONLY_TOOLS = [
   "causal_search",
   "causal_trace",

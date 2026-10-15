@@ -61,6 +61,7 @@ const CORE_REACHABLE_KEYS = new Set([
   "POST /api/v1/content/batch-write",
   "POST /api/v1/content/set_tags",
   "POST /api/v1/content/reindex",
+  "POST /api/v1/search/expand",
   "POST /api/v1/search/find",
   "POST /api/v1/search/search",
   "POST /api/v1/search/grep",
@@ -294,10 +295,10 @@ test("family sum minus the resolved reindex duplicate plus residuals equals the 
     ROUTE_FAMILY_OPS.length +
     ADMIN_FAMILY_ROUTES.length;
   const summary = summarizeAggregatedCatalog();
-  expect(familySum).toBe(125);
+  expect(familySum).toBe(126);
   expect(summary.total).toBe(PINNED_OPENVIKING_ROUTES.length);
-  expect(summary.total).toBe(192);
-  expect(summary.dataPlane).toBe(63);
+  expect(summary.total).toBe(193);
+  expect(summary.dataPlane).toBe(64);
   expect(summary.typedControlOnly).toBe(49);
   expect(summary.denied).toBe(80);
   expect(summary.total - familySum).toBe(67);

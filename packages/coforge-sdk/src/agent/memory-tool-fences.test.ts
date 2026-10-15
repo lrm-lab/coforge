@@ -20,6 +20,7 @@ test("keeps the Agent tool fence distinct from Workspace Memory Profile persiste
 test("exposes only ov_* tools on the openviking fence", () => {
   expect(toolsForMemoryFence(OPENVIKING_TOOL_PROFILE)).toEqual([
     OPENVIKING_TOOL_NAMES.find,
+    OPENVIKING_TOOL_NAMES.expand,
     OPENVIKING_TOOL_NAMES.read,
     OPENVIKING_TOOL_NAMES.offer,
     OPENVIKING_TOOL_NAMES.diagnose,

@@ -35,87 +35,48 @@ async function jsonRequest(
   return payload.result;
 }
 
-/** Upload through the server API, waiting for production semantic/vector processing. */
+/** Index raw resources with BM25; this path schedules no embedding or semantic jobs. */
+export async function importKnowledgeResources(
+  runtime: OpenVikingRuntimeClient,
+  identity: ServerOpenVikingIdentity,
+  resources: { uri: string; text: string }[],
+) {
+  const result = await jsonRequest(
+    runtime,
+    identity,
+    "/api/v1/search/index_lexical",
+    JSON.stringify({
+      resources: resources.map((resource) => ({
+        ...resource,
+        kind: resource.uri.includes("/experiences/") ? "experience" : "document",
+      })),
+    }),
+    "application/json",
+  );
+  if (
+    result.retrieval_mode !== "bm25" ||
+    !Array.isArray(result.resources) ||
+    result.resources.length !== resources.length
+  )
+    throw new Error("knowledge import requires verified BM25 resources");
+  const hashes = new Map(
+    result.resources.map((row: { uri: string; content_hash: string }) => [
+      row.uri,
+      row.content_hash,
+    ]),
+  );
+  for (const resource of resources) {
+    const hash = "sha256:" + new Bun.CryptoHasher("sha256").update(resource.text).digest("hex");
+    if (hashes.get(resource.uri) !== hash) throw new Error("knowledge content hash mismatch");
+  }
+}
+
 export async function importKnowledgeResource(
   runtime: OpenVikingRuntimeClient,
   identity: ServerOpenVikingIdentity,
   resource: { uri: string; text: string },
-  progress?: { taskId?: string; submitted(taskId: string): Promise<void> },
 ) {
-  let taskId = progress?.taskId;
-  let result: Record<string, unknown>;
-  if (!taskId) {
-    const form = new FormData();
-    form.append("file", new File([resource.text], "source.md", { type: "text/markdown" }));
-    const upload = new Response(form);
-    const contentType = upload.headers.get("content-type")!;
-    const temp = await jsonRequest(
-      runtime,
-      identity,
-      "/api/v1/resources/temp_upload",
-      new Uint8Array(await upload.arrayBuffer()),
-      contentType,
-    );
-    if (typeof temp.temp_file_id !== "string")
-      throw new Error("knowledge upload missing temp_file_id");
-    result = await jsonRequest(
-      runtime,
-      identity,
-      "/api/v1/resources",
-      JSON.stringify({
-        temp_file_id: temp.temp_file_id,
-        to: resource.uri,
-        create_parent: true,
-        wait: false,
-        processing_mode: "semantic_and_vectors",
-      }),
-      "application/json",
-    );
-    if (typeof result.task_id !== "string") throw new Error("knowledge import missing task_id");
-    taskId = result.task_id;
-    await progress?.submitted(taskId);
-  }
-  const deadline = Date.now() + 900_000;
-  while (true) {
-    const task = await jsonRequest(
-      runtime,
-      identity,
-      `/api/v1/tasks/${encodeURIComponent(taskId)}`,
-      "",
-      "application/json",
-      "GET",
-    );
-    if (task.status === "completed") {
-      const completed = task.result as Record<string, unknown> | undefined;
-      if (completed?.root_uri !== resource.uri)
-        throw new Error("knowledge import returned an unexpected root_uri");
-      const summaryResponse = await runtime.request({
-        method: "GET",
-        path: "/api/v1/content/read",
-        query: { uri: `${resource.uri}/.overview.md` },
-        identity,
-      });
-      if (!summaryResponse.ok || summaryResponse.response.status !== 200)
-        throw new Error("semantic summary unavailable");
-      const summary = (await new Response(summaryResponse.response.body).json()) as {
-        status?: string;
-        result?: unknown;
-      };
-      if (
-        summary.status !== "ok" ||
-        typeof summary.result !== "string" ||
-        !summary.result.trim() ||
-        summary.result.includes("[Directory overview is not generated]")
-      )
-        throw new Error("semantic summary unavailable; repair processing before resuming");
-      return;
-    }
-    if (task.status === "failed" || task.status === "cancelled")
-      throw new Error(`knowledge processing ${task.status}`);
-    if (Date.now() >= deadline)
-      throw new Error("knowledge processing deadline; resume using saved task id");
-    await Bun.sleep(5000);
-  }
+  await importKnowledgeResources(runtime, identity, [resource]);
 }
 
 async function* lines(path: string) {
@@ -166,16 +127,15 @@ export async function prepareKnowledge(input: {
     accountCreatedAt: input.accountCreatedAt,
     corpusSha256,
     ledgerSha256,
+    processingMode: "bm25",
   });
   const done = new Set<string>();
-  const tasks = new Map<string, string>();
   if (await Bun.file(checkpointPath).exists()) {
     const saved = (await Bun.file(checkpointPath).text()).trim().split("\n");
     if (saved.shift() !== signature) throw new Error("knowledge checkpoint input/account mismatch");
     for (const line of saved) {
       const row = JSON.parse(line) as { uri: string; taskId?: string; completed?: boolean };
       if (row.completed) done.add(row.uri);
-      if (row.taskId) tasks.set(row.uri, row.taskId);
     }
   } else {
     await Bun.write(checkpointPath, `${signature}\n`);
@@ -184,21 +144,23 @@ export async function prepareKnowledge(input: {
   const seen = new Set<string>();
   let documents = 0,
     experiences = 0;
+  let pending: { uri: string; text: string }[] = [];
+  const flush = async () => {
+    if (!pending.length) return;
+    await importKnowledgeResources(input.runtime, input.identity, pending);
+    for (const resource of pending) {
+      await checkpoint.write(`${JSON.stringify({ uri: resource.uri, completed: true })}\n`);
+      done.add(resource.uri);
+    }
+    await checkpoint.sync();
+    pending = [];
+  };
   const add = async (kind: "document" | "experience", row: Record<string, unknown>) => {
     const resource = knowledgeResource(kind, row);
     if (seen.has(resource.uri)) throw new Error("duplicate knowledge resource");
     seen.add(resource.uri);
-    if (!done.has(resource.uri)) {
-      await importKnowledgeResource(input.runtime, input.identity, resource, {
-        taskId: tasks.get(resource.uri),
-        async submitted(taskId) {
-          await checkpoint.write(`${JSON.stringify({ uri: resource.uri, taskId })}\n`);
-          await checkpoint.sync();
-        },
-      });
-      await checkpoint.write(`${JSON.stringify({ uri: resource.uri, completed: true })}\n`);
-      await checkpoint.sync();
-    }
+    if (!done.has(resource.uri)) pending.push(resource);
+    if (pending.length === 50) await flush();
   };
   try {
     for await (const line of lines(input.corpusPath)) {
@@ -211,17 +173,33 @@ export async function prepareKnowledge(input: {
       await add("experience", row);
       experiences++;
     }
+    await flush();
+    const indexed = await jsonRequest(
+      input.runtime,
+      input.identity,
+      "/api/v1/search/index_lexical",
+      "",
+      "application/json",
+      "GET",
+    );
+    if (
+      indexed.retrieval_mode !== "bm25" ||
+      indexed.document !== documents ||
+      (indexed.experience ?? 0) !== experiences
+    )
+      throw new Error("knowledge index count mismatch");
     if (documents !== input.expectedDocuments || experiences !== input.expectedExperiences)
       throw new Error("knowledge count mismatch");
     const ready: KnowledgeReady = validateKnowledgeReady({
-      version: 1,
+      version: 2,
+      arm: experiences === 0 ? "cold" : "warm",
       accountId: input.identity.accountId,
       accountCreatedAt: input.accountCreatedAt,
       documents,
       experiences,
       corpusSha256,
       ledgerSha256,
-      processingMode: "semantic_and_vectors",
+      processingMode: "bm25",
       completed: true,
     });
     await Bun.write(input.readyPath, JSON.stringify(ready, null, 2));

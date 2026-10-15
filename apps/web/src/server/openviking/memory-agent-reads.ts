@@ -5,7 +5,7 @@
 
 import { lookupAggregatedRoute } from "./catalog/aggregated-catalog";
 
-export const MEMORY_AGENT_READ_OPERATIONS = ["find", "search_context", "read"] as const;
+export const MEMORY_AGENT_READ_OPERATIONS = ["find", "search_context", "read", "expand"] as const;
 export type MemoryAgentReadOperation = (typeof MEMORY_AGENT_READ_OPERATIONS)[number];
 
 export class MemoryAgentMutationError extends Error {
@@ -39,6 +39,7 @@ export type OpenVikingCatalogReadTransport = {
 };
 
 const MEMORY_AGENT_READ_ROUTES = {
+  expand: requireMemoryReadRoute("POST", "/api/v1/search/expand"),
   find: requireMemoryReadRoute("POST", "/api/v1/search/find"),
   search_context: requireMemoryReadRoute("POST", "/api/v1/search/search"),
   read: requireMemoryReadRoute("GET", "/api/v1/content/read"),
