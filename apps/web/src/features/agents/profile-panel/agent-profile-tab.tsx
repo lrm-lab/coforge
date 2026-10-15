@@ -175,6 +175,7 @@ export function AgentProfileTab({
   onLoadSkills,
   envVars,
   onStartDelete,
+  migration,
   contextUsage,
 }: {
   profile: NonNullable<AgentProfile>;
@@ -182,6 +183,8 @@ export function AgentProfileTab({
   /** The Agent's current context-window usage, or `null` when there is no reading —
    * hidden entirely in that case. Display only; nothing triggers on it. */
   contextUsage?: { usedTokens: number; windowTokens: number; observedAtMs: number } | null;
+  /** The Agent's moves between Computers (`AgentMigrationSection`), shown under ACTIONS. */
+  migration?: ReactNode;
   /** `canManageAgentRole || ownedByCurrentUser` — gates every pencil, the ACTIONS section. */
   canManage: boolean;
   controls: AgentRuntimeControls;
@@ -473,6 +476,7 @@ export function AgentProfileTab({
             >
               {m.agent_control_restart_reset_tooltip()}
             </Button>
+            {migration}
             {onStartDelete && (
               /* A danger entry button is still a button (`docs/design/color-status-typography.md` §11 危险操作), so it
                * gets the bordered red rather than bare red text. The one solid red belongs to the

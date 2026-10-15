@@ -290,3 +290,29 @@ test.skipIf(!connectionString)(
     }
   },
 );
+
+test.skipIf(!connectionString)(
+  "an Agent's latest migration is the one requested last, ended or not",
+  async () => {
+    const { store, input, cleanup } = await setup();
+    try {
+      expect(await store.latestForAgent(input.workspaceId, input.agentId)).toBeNull();
+      const first = await store.create(input);
+      if (first === "active_exists") throw new Error("unreachable");
+      await store.transition({ id: first.id, expectedRevision: 0, to: "canceled", at: new Date() });
+      expect(await store.latestForAgent(input.workspaceId, input.agentId)).toMatchObject({
+        id: first.id,
+        state: "canceled",
+      });
+      const second = await store.create(input);
+      if (second === "active_exists") throw new Error("unreachable");
+      expect(await store.latestForAgent(input.workspaceId, input.agentId)).toMatchObject({
+        id: second.id,
+        state: "requested",
+      });
+      expect(await store.latestForAgent(input.workspaceId, crypto.randomUUID())).toBeNull();
+    } finally {
+      await cleanup();
+    }
+  },
+);

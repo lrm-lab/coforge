@@ -1,0 +1,292 @@
+import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, SwitchHorizontal01 } from "@untitledui/icons";
+import { Text } from "react-aria-components";
+
+import { Button } from "#src/components/base/buttons/button";
+import { Select } from "#src/components/base/select/select";
+import { StatusDot } from "#src/components/ui/status-dot";
+import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { DialogHeader } from "#src/components/application/modals/dialog-header";
+import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
+import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { m } from "#src/paraglide/messages";
+import { listComputers } from "#src/features/computers/computers.functions";
+import {
+  agentMigrationErrorMessage,
+  agentMigrationStatusLine,
+  isAgentMigrationInProgress,
+} from "#src/features/agents/agent-migration";
+import {
+  cancelAgentMigration,
+  getAgentMigration,
+  requestAgentMigration,
+} from "#src/features/agents/agent-migrations.functions";
+
+type ComputerOption = { id: string; displayName: string; online: boolean };
+
+/** How often a move in progress is read again; each stage takes seconds to minutes. */
+const PROGRESS_POLL_MS = 3_000;
+
+/** One line on where the Agent's latest move stands, with a cancel while it is going. */
+export function AgentMigrationStatus({
+  migration,
+  targetName,
+  onCancel,
+  canceling,
+  error,
+}: {
+  migration: { state: string; errorCode: string | null };
+  targetName: string;
+  onCancel?: () => void;
+  canceling?: boolean;
+  error?: string;
+}) {
+  const inProgress = isAgentMigrationInProgress(migration.state);
+  return (
+    <div className="grid gap-2 rounded-lg border border-secondary px-3 py-2.5">
+      <p role="status" className="text-sm text-secondary">
+        {agentMigrationStatusLine(migration, targetName)}
+      </p>
+      {inProgress && onCancel && (
+        <Button
+          color="secondary"
+          size="sm"
+          className="justify-self-start"
+          isDisabled={canceling}
+          isLoading={canceling}
+          onPress={onCancel}
+        >
+          {m.agent_migration_cancel()}
+        </Button>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-error-primary">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The move dialog's body: the target Computer, then what moves and what stays. */
+export function AgentMigrationForm({
+  computers,
+  selected,
+  onSelect,
+  disabled,
+}: {
+  /** The Workspace's other Computers. */
+  computers: readonly ComputerOption[];
+  selected: string | null;
+  onSelect: (computerId: string) => void;
+  disabled?: boolean;
+}) {
+  const online = computers.filter((computer) => computer.online);
+  return (
+    <div className="grid gap-4 px-6 pt-4">
+      {online.length === 0 ? (
+        <p className="text-sm text-tertiary">{m.agent_migration_dialog_no_targets()}</p>
+      ) : (
+        <Select
+          isRequired
+          isDisabled={disabled}
+          size="md"
+          label={m.agent_migration_dialog_target()}
+          selectedKey={selected}
+          onSelectionChange={(key) => {
+            if (key !== null) onSelect(String(key));
+          }}
+        >
+          {online.map((computer) => (
+            <Select.Item
+              key={computer.id}
+              id={computer.id}
+              label={computer.displayName}
+              icon={
+                <StatusDot tone="online" label={m.computer_status_online()} className="size-2" />
+              }
+            />
+          ))}
+        </Select>
+      )}
+      <div className="flex items-start gap-3">
+        <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
+        <ul className="min-w-0 list-disc space-y-1 pl-5 text-sm text-secondary">
+          <li>
+            <Text slot="description">{m.agent_migration_dialog_session()}</Text>
+          </li>
+          <li>{m.agent_migration_dialog_stops()}</li>
+          <li>{m.agent_migration_dialog_left_behind()}</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The Profile's "Move to another Computer": the Agent's latest move, read again while it is
+ * going, and for its owner the action that starts one and the cancel that ends it. The whole
+ * section is absent while this server cannot move Agents and there is no move to show.
+ */
+export function AgentMigrationSection({
+  agentId,
+  agentName,
+  currentComputerId,
+  isOwner,
+}: {
+  agentId: string;
+  agentName: string;
+  currentComputerId: string | null;
+  /** Only the Agent's owner moves it (`AgentMigrationRequests`). */
+  isOwner: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const readMigration = useServerFn(getAgentMigration);
+  const requestMove = useServerFn(requestAgentMigration);
+  const cancelMove = useServerFn(cancelAgentMigration);
+  const loadComputers = useServerFn(listComputers);
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [dialogError, setDialogError] = useState("");
+  const [cancelError, setCancelError] = useState("");
+  const [submitting, guardSubmit] = useSubmitGuard();
+  const [canceling, guardCancel] = useSubmitGuard();
+
+  const statusKey = ["agent-migration", agentId] as const;
+  const status = useQuery({
+    queryKey: statusKey,
+    queryFn: () => readMigration({ data: { agentId } }),
+    refetchInterval: (query) =>
+      query.state.data?.migration && isAgentMigrationInProgress(query.state.data.migration.state)
+        ? PROGRESS_POLL_MS
+        : false,
+  });
+  const computers = useQuery({
+    queryKey: ["agent-migration-computers", agentId],
+    queryFn: () => loadComputers(),
+    enabled: open || Boolean(status.data?.migration),
+  });
+  const computerName = (id: string) => {
+    const computer = computers.data?.find((candidate) => candidate.id === id);
+    return computer?.displayName || computer?.name || m.agent_computer_unnamed();
+  };
+  const targets: ComputerOption[] = (computers.data ?? [])
+    .filter((computer) => computer.id !== currentComputerId)
+    .map((computer) => ({
+      id: computer.id,
+      displayName: computer.displayName || computer.name || m.agent_computer_unnamed(),
+      online: Boolean(computer.online),
+    }));
+
+  const migration = status.data?.migration;
+  const inProgress = migration ? isAgentMigrationInProgress(migration.state) : false;
+  if (!status.data || (!status.data.available && !migration)) return null;
+
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: statusKey }),
+      queryClient.invalidateQueries({ queryKey: ["agent-profile", agentId] }),
+    ]);
+
+  function submit() {
+    if (!selected || submitting) return;
+    setDialogError("");
+    void guardSubmit(async () => {
+      try {
+        await requestMove({ data: { agentId, targetComputerId: selected } });
+        setOpen(false);
+        await refresh();
+      } catch (cause) {
+        setDialogError(agentMigrationErrorMessage(cause));
+      }
+    });
+  }
+
+  function cancel() {
+    if (!migration || canceling) return;
+    setCancelError("");
+    void guardCancel(async () => {
+      try {
+        await cancelMove({ data: { agentId, migrationId: migration.id } });
+        await refresh();
+      } catch (cause) {
+        setCancelError(agentMigrationErrorMessage(cause));
+      }
+    });
+  }
+
+  return (
+    <>
+      {migration && (
+        <AgentMigrationStatus
+          migration={migration}
+          targetName={computerName(migration.targetComputerId)}
+          onCancel={isOwner ? cancel : undefined}
+          canceling={canceling}
+          error={cancelError}
+        />
+      )}
+      {isOwner && status.data.available && !inProgress && (
+        <Button
+          color="secondary"
+          className="w-full justify-center"
+          iconLeading={SwitchHorizontal01}
+          onPress={() => {
+            setSelected(null);
+            setDialogError("");
+            setOpen(true);
+          }}
+        >
+          {m.agent_migration_action()}
+        </Button>
+      )}
+      <ModalOverlay
+        isOpen={open}
+        onOpenChange={(next: boolean) => {
+          if (submitting) return;
+          setOpen(next);
+        }}
+      >
+        <Modal className="w-[calc(100vw-2rem)] max-w-lg">
+          <Dialog className="overflow-hidden text-left">
+            {({ close }) => (
+              <>
+                <DialogHeader
+                  title={m.agent_migration_dialog_title({ name: agentName })}
+                  onClose={submitting ? undefined : close}
+                />
+                <AgentMigrationForm
+                  computers={targets}
+                  selected={selected}
+                  onSelect={setSelected}
+                  disabled={submitting}
+                />
+                {dialogError && (
+                  <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
+                    {dialogError}
+                  </p>
+                )}
+                <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
+                  <Button color="secondary" isDisabled={submitting} onPress={close}>
+                    {m.controls_cancel()}
+                  </Button>
+                  <Button
+                    color="primary"
+                    isDisabled={!selected || submitting}
+                    isLoading={submitting}
+                    showTextWhileLoading
+                    onPress={submit}
+                  >
+                    {submitting ? m.agent_migration_submit_pending() : m.agent_migration_submit()}
+                  </Button>
+                </div>
+              </>
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+    </>
+  );
+}

@@ -88,6 +88,8 @@ export interface AgentMigrationStore {
     requestedByUserId: string;
   }): Promise<AgentMigrationRecord | "active_exists">;
   find(id: string): Promise<AgentMigrationRecord | null>;
+  /** The Agent's most recently requested migration in the Workspace, finished or not. */
+  latestForAgent(workspaceId: string, agentId: string): Promise<AgentMigrationRecord | null>;
   /** The Workspace's unfinished migrations this Computer is the source or the target of. */
   activeFor(workspaceId: string, computerId: string): Promise<AgentMigrationRecord[]>;
   /** The bundle manifest stored with `upload_complete`, or null before it. */
@@ -296,6 +298,11 @@ export class AgentMigrations {
   /** The unfinished migrations one Computer takes part in, for leasing it again on reconnect. */
   async activeFor(participant: MigrationParticipant) {
     return this.store.activeFor(participant.workspaceId, participant.computerId);
+  }
+
+  /** The Agent's most recently requested migration, for showing how a move is going. */
+  async latestForAgent(workspaceId: string, agentId: string) {
+    return this.store.latestForAgent(workspaceId, agentId);
   }
 
   /** The bundle manifest of a migration a participant has already viewed, or null before upload. */

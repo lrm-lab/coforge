@@ -42,6 +42,10 @@ export function memoryStore(
       return row;
     },
     find: async (id) => rows.get(id) ?? null,
+    latestForAgent: async (workspaceId, agentId) =>
+      [...rows.values()]
+        .filter((row) => row.workspaceId === workspaceId && row.agentId === agentId)
+        .at(-1) ?? null,
     activeFor: async (workspaceId, computerId) =>
       [...rows.values()].filter(
         (row) =>

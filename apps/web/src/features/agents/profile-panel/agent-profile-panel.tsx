@@ -58,6 +58,7 @@ import {
   previewAgentVisibilityChange,
 } from "#src/features/agents/agents.functions";
 import { AgentDeleteDialog } from "#src/features/agents/agent-delete-dialog";
+import { AgentMigrationSection } from "./agent-migration-section";
 import { AgentVisibilityConfirmDialog } from "#src/features/agents/agent-visibility-confirm-dialog";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { useAppToast } from "#src/components/ui/toast";
@@ -480,6 +481,16 @@ export function AgentProfilePanel({
             onLoadSkills={profile.ownedByCurrentUser ? onLoadSkills : undefined}
             envVars={profile.ownedByCurrentUser ? (envQuery.data ?? {}) : undefined}
             onStartDelete={profile.canDeleteAgent ? () => setDeleteDialogOpen(true) : undefined}
+            migration={
+              profile.computer ? (
+                <AgentMigrationSection
+                  agentId={profile.id}
+                  agentName={profile.displayName || profile.name}
+                  currentComputerId={profile.computer.id}
+                  isOwner={profile.ownedByCurrentUser}
+                />
+              ) : undefined
+            }
             onRequestVisibilityChange={
               profile.canChangeVisibility ? (target) => setVisibilityTarget(target) : undefined
             }

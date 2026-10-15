@@ -1,0 +1,104 @@
+import { AppError } from "#src/lib/app-error";
+import type { AgentMigrationOrchestrator } from "./agent-migration-orchestrator.server";
+import type { AgentMigrationRequestRefusal, AgentMigrations } from "./agent-migrations.server";
+
+/**
+ * A person's side of moving an Agent to another Computer: asking for the move, canceling it, and
+ * seeing how it is going. Only the Agent's owner moves it, the same rule as changing its Computer
+ * (`ManageAgents.update`); anyone in the Workspace may see the move. Each refusal is an `AppError`
+ * whose `errorId` names the reason, so the dialog can say it.
+ */
+
+type Principal = { userId: string; workspaceId: string };
+
+/** The `AppError` each refusal of a request reaches its asker as. */
+function refusalError(code: AgentMigrationRequestRefusal) {
+  switch (code) {
+    case "agent_not_found":
+      return new AppError("NOT_FOUND");
+    case "agent_unplaced":
+      return new AppError("INVALID_INPUT", { errorId: "agent-migration-unplaced" });
+    case "same_computer":
+      return new AppError("INVALID_INPUT", { errorId: "agent-migration-same-computer" });
+    case "target_unavailable":
+      return new AppError("INVALID_INPUT", { errorId: "agent-migration-target-unavailable" });
+    case "already_migrating":
+      return new AppError("CONFLICT", { errorId: "agent-migrating" });
+  }
+}
+
+export class AgentMigrationRequests {
+  constructor(
+    private readonly deps: {
+      migrations: AgentMigrations;
+      orchestrator: Pick<AgentMigrationOrchestrator, "request" | "cancel">;
+      /** The owner of a live Agent in the Workspace, or undefined when there is none. */
+      agentOwner(workspaceId: string, agentId: string): Promise<string | undefined>;
+      /** Whether this deployment has the migration bucket a move needs. */
+      available(): Promise<boolean>;
+    },
+  ) {}
+
+  /** The Agent's latest migration, and whether a new one can be asked for at all. */
+  async status(principal: Principal, agentId: string) {
+    if (!(await this.deps.agentOwner(principal.workspaceId, agentId)))
+      throw new AppError("NOT_FOUND");
+    const [available, latest] = await Promise.all([
+      this.deps.available(),
+      this.deps.migrations.latestForAgent(principal.workspaceId, agentId),
+    ]);
+    return {
+      available,
+      migration: latest
+        ? {
+            id: latest.id,
+            state: latest.state,
+            sourceComputerId: latest.sourceComputerId,
+            targetComputerId: latest.targetComputerId,
+            errorCode: latest.errorCode,
+            updatedAt: latest.updatedAt.toISOString(),
+          }
+        : null,
+    };
+  }
+
+  async request(principal: Principal, input: { agentId: string; targetComputerId: string }) {
+    await this.#assertOwner(principal, input.agentId);
+    if (!(await this.deps.available()))
+      throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "agent-migration-unavailable" });
+    let started: Awaited<ReturnType<AgentMigrationOrchestrator["request"]>>;
+    try {
+      started = await this.deps.orchestrator.request({
+        workspaceId: principal.workspaceId,
+        agentId: input.agentId,
+        targetComputerId: input.targetComputerId,
+        requestedByUserId: principal.userId,
+      });
+    } catch {
+      // The source never confirmed it stopped the Agent; the attempt has already been ended.
+      throw new AppError("TEMPORARILY_UNAVAILABLE", {
+        errorId: "agent-migration-source-unreachable",
+      });
+    }
+    if (started.status === "refused") throw refusalError(started.code);
+    return { id: started.migration.id };
+  }
+
+  /** Cancels the move; one that has already ended is left as it is. */
+  async cancel(principal: Principal, input: { agentId: string; migrationId: string }) {
+    await this.#assertOwner(principal, input.agentId);
+    const latest = await this.deps.migrations.latestForAgent(principal.workspaceId, input.agentId);
+    if (latest?.id !== input.migrationId) throw new AppError("NOT_FOUND");
+    await this.deps.orchestrator.cancel({
+      workspaceId: principal.workspaceId,
+      migrationId: input.migrationId,
+    });
+  }
+
+  async #assertOwner(principal: Principal, agentId: string) {
+    const owner = await this.deps.agentOwner(principal.workspaceId, agentId);
+    if (!owner) throw new AppError("NOT_FOUND");
+    if (owner !== principal.userId)
+      throw new AppError("ACCESS_DENIED", { errorId: "agent-not-authorized" });
+  }
+}

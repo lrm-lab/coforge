@@ -115,6 +115,15 @@ export class PrismaAgentMigrationStore implements AgentMigrationStore {
     return rows.map(toMigrationRecord);
   }
 
+  async latestForAgent(workspaceId: string, agentId: string) {
+    const row = await this.db.agentMigration.findFirst({
+      where: { workspaceId, agentId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: MIGRATION_SELECT,
+    });
+    return row ? toMigrationRecord(row) : null;
+  }
+
   async manifest(id: string) {
     const row = await this.db.agentMigration.findUnique({
       where: { id },
