@@ -19,11 +19,16 @@ function setup(
   const migrations = new AgentMigrations(fixture.store);
   const published: { channel: string; data: Uint8Array }[] = [];
   const runtime: string[] = [];
+  /** Cancels published and Agents started, in the order they went out. */
+  const order: string[] = [];
   const orchestrator = new AgentMigrationOrchestrator({
     migrations,
     dispatch: new AgentMigrationDispatch({
       publish: async (channel, data) => {
         published.push({ channel, data });
+        try {
+          order.push(`cancel:${decodeAgentMigrationCancel(data).role}`);
+        } catch {}
         if (options.publishFails) throw new Error("centrifugo is unreachable");
       },
     }),
@@ -44,6 +49,7 @@ function setup(
         )
           throw new Error("agent-migrating");
         runtime.push(`start:${agent.agentId}@${fixture.agentComputer.value}`);
+        order.push("start");
       },
     },
     lock: { run: (_agentId, callback) => callback() },
@@ -74,7 +80,7 @@ function setup(
         }
       })
       .filter((cancel) => cancel !== null);
-  return { ...fixture, migrations, orchestrator, runtime, request, leases, cancels };
+  return { ...fixture, migrations, orchestrator, runtime, order, request, leases, cancels };
 }
 
 async function upToPlacing(context: ReturnType<typeof setup>, id: string) {
@@ -203,14 +209,28 @@ test("a reconnecting Computer fails a migration idle past its lease and runs the
   const started = await context.orchestrator.request(context.request);
   if (started.status !== "created") throw new Error(started.status);
   context.runtime.length = 0;
-  const later = started.migration.updatedAt.getTime() + AGENT_MIGRATION_LEASE_MS + 1;
-  await context.orchestrator.recover(workspaceId, "computer-a", later);
+  const since = started.migration.updatedAt.getTime();
+  // Within the grace past the lease, the Computer's own run may still be finishing.
+  await context.orchestrator.recover(
+    workspaceId,
+    "computer-a",
+    since + AGENT_MIGRATION_LEASE_MS + 1,
+  );
+  expect(context.rows.get(started.migration.id)!.state).toBe("requested");
+  const leasesBefore = context.leases().length;
+  await context.orchestrator.recover(
+    workspaceId,
+    "computer-a",
+    since + AGENT_MIGRATION_LEASE_MS + 61_000,
+  );
   expect(context.rows.get(started.migration.id)).toMatchObject({
     state: "failed",
     errorCode: "lease_expired",
   });
   expect(context.runtime).toEqual(["start:agent-1@computer-a"]);
-  expect(context.cancels()).toHaveLength(2);
+  // The source is told to let go before the Start reaches it, and the expired one is not leased.
+  expect(context.order).toEqual(["cancel:source", "cancel:target", "start"]);
+  expect(context.leases()).toHaveLength(leasesBefore);
 });
 
 test("a reconnecting Computer within the lease is only leased again", async () => {
@@ -241,4 +261,52 @@ test("a target that reconnects after a switch nobody followed up starts the Agen
   await context.orchestrator.recover(workspaceId, "computer-b", Date.now());
   expect(context.runtime.at(-1)).toBe("start:agent-1@computer-b");
   expect(context.rows.get(started.migration.id)!.state).toBe("completed");
+});
+
+test("a source that reconnects also finishes a switch nobody followed up", async () => {
+  const context = setup();
+  const started = await context.orchestrator.request(context.request);
+  if (started.status !== "created") throw new Error(started.status);
+  await upToPlacing(context, started.migration.id);
+  await context.migrations.advance(target, {
+    migrationId: started.migration.id,
+    generation: 1,
+    expectedRevision: 3,
+    step: "switch",
+  });
+  await context.orchestrator.recover(workspaceId, "computer-a", Date.now());
+  expect(context.rows.get(started.migration.id)!.state).toBe("completed");
+});
+
+test("one migration that cannot be moved on keeps none of the others from it", async () => {
+  const context = setup({ publishFails: true });
+  const stuck = await context.migrations.request(context.request);
+  const switching = await context.migrations.request({ ...context.request, agentId: "agent-2" });
+  if (stuck.status !== "created" || switching.status !== "created") throw new Error("setup");
+  for (const [revision, step] of [
+    [0, "source_stopped"],
+    [1, "upload_complete"],
+  ] as const)
+    await context.migrations.advance(source, {
+      migrationId: switching.migration.id,
+      generation: 1,
+      expectedRevision: revision,
+      step,
+      ...(step === "upload_complete" ? { manifest: {} } : {}),
+    });
+  for (const [revision, step] of [
+    [2, "placement_started"],
+    [3, "switch"],
+  ] as const)
+    await context.migrations.advance(target, {
+      migrationId: switching.migration.id,
+      generation: 1,
+      expectedRevision: revision,
+      step,
+    });
+  // The lease for the first cannot be published; the second still completes.
+  await expect(context.orchestrator.recover(workspaceId, "computer-a", Date.now())).rejects.toThrow(
+    "unreachable",
+  );
+  expect(context.rows.get(switching.migration.id)!.state).toBe("completed");
 });

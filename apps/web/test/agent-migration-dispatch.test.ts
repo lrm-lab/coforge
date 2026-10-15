@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
 import { decodeAgentMigrationCancel, decodeAgentMigrationLease } from "@lrm/coforge-sdk/internal";
 import { AgentMigrations } from "#src/server/agent-migrations/agent-migrations.server";
-import { AgentMigrationDispatch } from "#src/server/agent-migrations/agent-migration-dispatch.server";
+import {
+  AGENT_MIGRATION_LEASE_MS,
+  AgentMigrationDispatch,
+} from "#src/server/agent-migrations/agent-migration-dispatch.server";
 import { memoryStore } from "./helpers/agent-migration-memory-store";
 
 const workspaceId = "workspace-1";
@@ -81,14 +84,17 @@ test("a Computer that reconnects is leased again for the part each active migrat
     step: "upload_complete",
     manifest: {},
   });
-  await dispatch.reissue(migrations, workspaceId, "computer-a");
+  await dispatch.reissue(await migrations.activeFor(source), "computer-a");
   // The source still holds the uploaded one's Agent stopped until the switch.
   expect(published.map((entry) => decodeAgentMigrationLease(entry.data))).toMatchObject([
     { migrationId: waiting.migration.id, role: "source", computerId: "computer-a" },
     { migrationId: uploaded.migration.id, role: "source", computerId: "computer-a" },
   ]);
   published.length = 0;
-  await dispatch.reissue(migrations, workspaceId, "computer-b");
+  await dispatch.reissue(
+    await migrations.activeFor({ workspaceId, computerId: "computer-b" }),
+    "computer-b",
+  );
   expect(published.map((entry) => decodeAgentMigrationLease(entry.data))).toMatchObject([
     { migrationId: uploaded.migration.id, role: "target", expectedRevision: 2 },
   ]);
@@ -107,8 +113,24 @@ test("reissuing a failed lease still attempts the Computer's other active migrat
       if (lease.migrationId === first.migration.id) throw new Error("first lease failed");
     },
   });
-  await expect(dispatch.reissue(migrations, workspaceId, "computer-a")).rejects.toThrow(
-    "first lease failed",
-  );
+  await expect(
+    dispatch.reissue(
+      await migrations.activeFor({ workspaceId, computerId: "computer-a" }),
+      "computer-a",
+    ),
+  ).rejects.toThrow("first lease failed");
   expect(attempted).toEqual([first.migration.id, second.migration.id]);
+});
+
+test("a lease carries only what is left of the migration's lease, and none once it has run out", async () => {
+  const { api, published } = publisher();
+  const migrations = new AgentMigrations(memoryStore().store);
+  const created = await migrations.request(request);
+  if (created.status !== "created") throw new Error(created.status);
+  const dispatch = new AgentMigrationDispatch(api);
+  const since = created.migration.updatedAt.getTime();
+  await dispatch.lease(created.migration, "source", since + 45 * 60 * 1000);
+  expect(decodeAgentMigrationLease(published[0]!.data).expiresInMs).toBe(15 * 60 * 1000);
+  await dispatch.lease(created.migration, "source", since + AGENT_MIGRATION_LEASE_MS);
+  expect(published).toHaveLength(1);
 });

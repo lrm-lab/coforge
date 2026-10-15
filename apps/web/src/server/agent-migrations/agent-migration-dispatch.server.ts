@@ -7,11 +7,7 @@ import {
   daemonControlChannel,
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
-import type {
-  AgentMigrationRecord,
-  AgentMigrations,
-  AgentMigrationState,
-} from "./agent-migrations.server";
+import type { AgentMigrationRecord, AgentMigrationState } from "./agent-migrations.server";
 
 /**
  * Telling a migration's two Computers what to do, over their daemon control channels: a transfer
@@ -20,7 +16,11 @@ import type {
  * The Computers answer over HTTPS (`agent-migration-daemon-api.server.ts`), never here.
  */
 
-/** How long a role may spend on its part of the transfer: a 10 GiB bundle with room to retry. */
+/**
+ * How long a migration may go without a step: a 10 GiB bundle with room to retry. A lease runs out
+ * this long after the migration's last transition, whenever it is issued, so a Computer's deadline
+ * never outlasts the server's (`AgentMigrationOrchestrator.recover`).
+ */
 export const AGENT_MIGRATION_LEASE_MS = 60 * 60 * 1000;
 
 /**
@@ -49,14 +49,19 @@ const scope = (migration: AgentMigrationRecord, role: AgentMigrationRole) => ({
 export class AgentMigrationDispatch {
   constructor(private readonly api: Pick<CentrifugoServerApi, "publish">) {}
 
-  /** Leases one role of the migration's current attempt, at the revision it now has. */
-  async lease(migration: AgentMigrationRecord, role: AgentMigrationRole) {
+  /**
+   * Leases one role of the migration's current attempt, at the revision it now has, for what is
+   * left of its lease; one already run out is not leased at all.
+   */
+  async lease(migration: AgentMigrationRecord, role: AgentMigrationRole, now = Date.now()) {
+    const expiresInMs = migration.updatedAt.getTime() + AGENT_MIGRATION_LEASE_MS - now;
+    if (expiresInMs < 1) return;
     await this.api.publish(
       daemonControlChannel(migration.workspaceId, computerOf(migration, role)),
       encodeAgentMigrationLease({
         ...scope(migration, role),
         expectedRevision: migration.revision,
-        expiresInMs: AGENT_MIGRATION_LEASE_MS,
+        expiresInMs: Math.min(expiresInMs, AGENT_MIGRATION_LEASE_MS),
       }),
     );
   }
@@ -82,19 +87,20 @@ export class AgentMigrationDispatch {
   }
 
   /**
-   * Leases a Computer that has just reconnected again for every active migration that still needs
-   * transfer work from it: a lease published while it was offline is not kept for it.
+   * Leases a Computer that has just reconnected again, for each of these migrations that still
+   * needs work from it: a lease published while it was offline is not kept for it. One that cannot
+   * be published does not keep the others from being tried; the first failure is then reported.
    */
-  async reissue(migrations: AgentMigrations, workspaceId: string, computerId: string) {
+  async reissue(migrations: readonly AgentMigrationRecord[], computerId: string, now = Date.now()) {
     const failures: unknown[] = [];
-    for (const migration of await migrations.activeFor({ workspaceId, computerId }))
+    for (const migration of migrations)
       for (const role of ["source", "target"] as const)
         if (
           computerOf(migration, role) === computerId &&
           LEASED_STATES[role].includes(migration.state)
         ) {
           try {
-            await this.lease(migration, role);
+            await this.lease(migration, role, now);
           } catch (error) {
             failures.push(error);
           }

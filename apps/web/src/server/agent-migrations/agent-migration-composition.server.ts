@@ -40,17 +40,25 @@ function agentMigrationRuntime(db: PrismaClient): AgentMigrationRuntime {
   };
 }
 
-/** The migration use cases wired to one database, the migration bucket and Centrifugo. */
+/** The orchestration wired to one database and Centrifugo; it never needs the bucket. */
+export function agentMigrationOrchestrator(
+  db: PrismaClient,
+  migrations = new AgentMigrations(new PrismaAgentMigrationStore(db)),
+) {
+  return new AgentMigrationOrchestrator({
+    migrations,
+    dispatch: new AgentMigrationDispatch(createCentrifugoServerApi()),
+    runtime: agentMigrationRuntime(db),
+    lock: getAgentRuntimeLock(),
+  });
+}
+
+/** The daemons' migration operations, wired to one database, the migration bucket and Centrifugo. */
 export async function agentMigrationServices(db: PrismaClient) {
   const migrations = new AgentMigrations(new PrismaAgentMigrationStore(db));
   return {
     migrations,
     transport: new AgentMigrationTransport(migrations, await getAgentMigrationStorage()),
-    orchestrator: new AgentMigrationOrchestrator({
-      migrations,
-      dispatch: new AgentMigrationDispatch(createCentrifugoServerApi()),
-      runtime: agentMigrationRuntime(db),
-      lock: getAgentRuntimeLock(),
-    }),
+    orchestrator: agentMigrationOrchestrator(db, migrations),
   };
 }

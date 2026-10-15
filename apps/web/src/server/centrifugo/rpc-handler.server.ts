@@ -417,10 +417,11 @@ export const createDaemonRuntimeReadyMethod =
       stage = "reminder_recovery";
       if (request.capabilities?.includes("reminder:v1"))
         await reminderRecovery?.snapshotAssigned(request.workspaceId, request.computerId);
-      // Not a stage: a migration that cannot be leased again must not keep the whole Computer
-      // from coming back. Its next reconnect tries again.
+      // Not a stage, and not awaited: moving the Computer's migrations on takes Agent locks and
+      // publishes, and none of that may keep the whole Computer from coming back. A recovery
+      // that fails is tried again on the next reconnect.
       if (request.capabilities?.includes(AGENT_MIGRATION_CAPABILITY))
-        await migrationRecovery?.recover(request.workspaceId, request.computerId).catch((error) =>
+        void migrationRecovery?.recover(request.workspaceId, request.computerId).catch((error) =>
           console.warn(
             JSON.stringify({
               event: "agent_migration:recovery_failed",

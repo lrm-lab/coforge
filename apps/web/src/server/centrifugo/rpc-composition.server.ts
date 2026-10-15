@@ -74,7 +74,7 @@ import {
   createMentionDeliveryTransitionMethod,
 } from "./rpc-handler.server";
 import { AgentDeliveryRejections } from "#src/server/agents/agent-delivery-rejection.server";
-import { agentMigrationServices } from "#src/server/agent-migrations/agent-migration-composition.server";
+import { agentMigrationOrchestrator } from "#src/server/agent-migrations/agent-migration-composition.server";
 import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import {
@@ -319,8 +319,8 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
             },
           },
           migrationRecovery: {
-            recover: async (workspaceId, computerId) =>
-              (await agentMigrationServices(db)).orchestrator.recover(workspaceId, computerId),
+            recover: (workspaceId, computerId) =>
+              agentMigrationOrchestrator(db).recover(workspaceId, computerId),
           },
           observe: (scope, observation) => recordComputerObservation(db, scope, observation),
           upgrades: getComputerUpgradeStore(),

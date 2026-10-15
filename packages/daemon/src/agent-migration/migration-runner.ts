@@ -120,10 +120,12 @@ export class AgentMigrationRunner {
   /** Ends the attempt's run here; the target drops its chunks, the source lets the Agent go. */
   async cancel(cancel: AgentMigrationCancel): Promise<void> {
     const key = runKey(cancel.migrationId, cancel.generation, cancel.role);
+    // At once, before the run winds down: the server's Start follows the cancel on the same
+    // channel, and the Agent must be startable here when it arrives.
+    this.#release(cancel.agentId, key);
     const run = this.#runs.get(key);
     run?.stop.abort();
     await run?.done;
-    this.#release(cancel.agentId, key);
     if (cancel.role === "target") await this.#dropAttempt(cancel.migrationId);
     logger.info("agent_migration:canceled", {
       migration_id: cancel.migrationId,
@@ -157,6 +159,8 @@ export class AgentMigrationRunner {
       logger.info("agent_migration:run_finished", fields);
     } catch (error) {
       if (signal.aborted) return;
+      // Before the report: the server answers it by starting the Agent here again.
+      if (lease.role === "source") this.#release(lease.agentId, key);
       const errorCode = failureCode(error);
       logger.warn("agent_migration:run_failed", {
         ...fields,

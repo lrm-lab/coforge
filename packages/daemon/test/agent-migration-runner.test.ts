@@ -360,3 +360,45 @@ test("a cancel stops the target's run without reporting a failure, and drops its
   shared.record.state = "canceled";
   await run;
 });
+
+test("the source lets the Agent go before the server can answer with a Start", async () => {
+  const shared = cloud();
+  shared.refuseUploads();
+  const source = await computer("source", shared, "source");
+  await write(source.workspace, { "MEMORY.md": "m" });
+  const serverFor = shared.serverFor;
+  let heldWhenReported: boolean | undefined;
+  shared.serverFor = (role) => {
+    const server = serverFor(role);
+    return {
+      ...server,
+      fail: async (input) => {
+        heldWhenReported = source.runner.holds(agentId);
+        return server.fail(input);
+      },
+    };
+  };
+  await source.runner.lease(lease("source", 0));
+  expect(heldWhenReported).toBe(false);
+
+  // A cancel releases the Agent at once, while the run it ends is still winding down.
+  const again = cloud();
+  const other = await computer("other", again, "source");
+  await write(other.workspace, { "MEMORY.md": "m" });
+  const run = other.runner.lease(lease("source", 0));
+  await until(() => again.record.state === "uploaded");
+  const canceled = other.runner.cancel({
+    protocolMajor: 1,
+    requestId: "cancel-1",
+    workspaceId: "workspace-1",
+    computerId: "computer-a",
+    agentId,
+    migrationId,
+    generation: 1,
+    role: "source",
+    switched: false,
+  });
+  expect(other.runner.holds(agentId)).toBe(false);
+  await canceled;
+  await run;
+});
