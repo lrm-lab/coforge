@@ -3,9 +3,11 @@ import {
   AgentProcessCleanupError,
   type AgentRuntimeConfig,
   type AgentRuntimeEvent,
+  type AgentSession,
   type CodeAgentProvider,
   type UsageSnapshot,
 } from "#src/code-agent/contract";
+import { withDeadline } from "#src/code-agent/deadline";
 import { mkdirSync } from "node:fs";
 import { readOperatingSystem } from "#src/platform/operating-system";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
@@ -134,6 +136,11 @@ import {
   readAgentWorkspaceFile,
 } from "#src/agent-runtime/agent-workspace-files";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
+import {
+  ProviderProgress,
+  STALLED_RECOVERY_EXIT_TIMEOUT_MS,
+  shouldRecoverStalledRuntime,
+} from "./stalled-recovery";
 import { AgentMessageOperations } from "./agent-message-operations";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
@@ -289,12 +296,22 @@ type AgentInputQueue = {
 type ActivityLaunch = PublishedActivityLaunch & {
   startup?: AgentStartup;
   trajectory?: ActivityTrajectory;
+  /** When the provider last reported anything, and its open tool calls (`stalled-recovery.ts`). */
+  progress?: ProviderProgress;
   // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
   // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
   // — `AgentSession.onExit` itself carries no exit code/signal, so this is the only fact the
   // core has for that decision (see agent-runtime/runtime-error-activity.ts).
   crashDetail?: RuntimeErrorEvent;
 };
+
+/** A launch found stalled, and what its restart needs (`#stalledRuntime`). */
+type StalledRuntime = Readonly<{
+  launch: ActivityLaunch;
+  session: AgentSession;
+  restart: AgentRestartConfig;
+  silentForMs: number;
+}>;
 
 const TURN_ACTIVITY_EVENT_TYPES = new Set<AgentRuntimeEvent["type"]>([
   "text-delta",
@@ -427,6 +444,8 @@ export class DaemonRuntime {
   readonly #startBuffers = new Map<string, AgentMessageDelivery[]>();
   /** Agents whose in-flight launch is a message wake, which presents what waits as one notice. */
   readonly #wakeLaunches = new Set<string>();
+  /** Agents whose stalled provider is being restarted; messages meanwhile wait for the relaunch. */
+  readonly #stalledRecoveries = new Set<string>();
   /** Per-Agent delivery hold after retryable runtime errors: backoff, fingerprint fence, and the
    * backoff's release timer. */
   readonly #runtimeErrorHold = new RuntimeErrorDeliveryHold({
@@ -576,7 +595,11 @@ export class DaemonRuntime {
         shouldHold: (agentId) => this.#deliveryQueue.shouldHold(agentId),
         queued: (agentId) => this.#deliveryQueue.pending(agentId),
         enqueue: (agentId, message) => this.#deliveryQueue.enqueue(agentId, message),
-        busy: (agentId) => this.#deliveryQueue.busy(agentId),
+        busy: (agentId) => {
+          if (!this.#deliveryQueue.isBusy(agentId))
+            this.#currentActivityLaunches.get(agentId)?.progress?.noteTurnStarted();
+          this.#deliveryQueue.busy(agentId);
+        },
         noticeSettled: (agentId) => {
           const launch = this.#currentActivityLaunches.get(agentId);
           if (launch) this.#reconcileIdleTurn(agentId, launch);
@@ -2265,7 +2288,10 @@ export class DaemonRuntime {
         this.#observeRuntimeEvent(agentId, launch, config, runtime, Boolean(control), event),
       );
       launch.trajectory = trajectory;
+      const progress = new ProviderProgress();
+      launch.progress = progress;
       const unsubscribe = runtime.session.subscribe((event) => {
+        progress.observe(event);
         const startupFailed = current() && launch.startup?.observe(event);
         const turnActivity =
           event.type === "activity"
@@ -2960,6 +2986,18 @@ export class DaemonRuntime {
     if (isTrackedMention(message)) return this.#handleTrackedMention(message);
     if (this.#stoppingAgents.has(message.agentId))
       throw new Error(`Agent runtime is stopping: ${message.agentId}`);
+    // A stalled provider is restarted for this message, which waits for the relaunch rather than
+    // the stalled session; so does one arriving meanwhile (nor does it wake the Agent a second
+    // time once the old process is gone).
+    if (this.#runnerHold === undefined) {
+      const recovering = this.#stalledRecoveries.has(message.agentId);
+      const stalled = recovering ? undefined : this.#stalledRuntime(message.agentId);
+      if (recovering || stalled) {
+        this.#keepForNextLaunch(message.agentId, message);
+        if (stalled) return this.#recoverStalledRuntime(message.agentId, stalled);
+        return;
+      }
+    }
     const exited =
       this.#runnerHold === undefined &&
       !this.#agentProcessManager.session(message.agentId) &&
@@ -3009,9 +3047,13 @@ export class DaemonRuntime {
     const { agentId } = message;
     const refusal = this.#mentionDeliveries.admissionRefusal(message);
     if (refusal) return this.#mentionDeliveries.refuse(message, refusal);
+    // A stalled provider being restarted is no session to tell: refused as unknown, the server
+    // keeps the mention pending and issues it again for the relaunch's session report.
     if (
       this.#runnerHold === undefined &&
-      (this.#stoppingAgents.has(agentId) || !this.#agentProcessManager.session(agentId))
+      (this.#stoppingAgents.has(agentId) ||
+        this.#stalledRecoveries.has(agentId) ||
+        !this.#agentProcessManager.session(agentId))
     ) {
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
       return Promise.resolve();
@@ -3042,6 +3084,110 @@ export class DaemonRuntime {
       launchId: report.launchId,
       sessionId: report.sessionId,
     });
+  }
+
+  /** What a stalled-provider restart works on, when a message arriving now should restart this
+   * Agent's provider (`stalled-recovery.ts`): its busy turn has been silent too long with nothing
+   * still running. */
+  #stalledRuntime(agentId: string): StalledRuntime | undefined {
+    const launch = this.#currentActivityLaunches.get(agentId);
+    const session = this.#agentProcessManager.session(agentId);
+    const restart = this.#agentProcessManager.restartConfig(agentId);
+    const progress = launch?.progress;
+    if (!launch || !progress || !session || !restart) return undefined;
+    const stalled = shouldRecoverStalledRuntime({
+      turnBusy:
+        this.#activityPublisher.lastBusy(agentId)?.launch === launch &&
+        session.hasLiveTurn !== false,
+      silentForMs: progress.silentForMs(),
+      hasOpenToolCall: progress.hasOpenToolCall,
+      resumable: this.#runningMentionIdentity(agentId) !== undefined,
+      hasUnsettledMention: () => this.#mentionDeliveries.hasUnsettled(agentId),
+    });
+    return stalled ? { launch, session, restart, silentForMs: progress.silentForMs() } : undefined;
+  }
+
+  /**
+   * Restarts a stalled provider for the message(s) now waiting for it, as the reference client
+   * does: announce it, end the stalled process without a stopped/crashed Activity, then wake the
+   * Agent on the same launch, resuming the session it last reported. Messages meanwhile wait for
+   * the relaunch.
+   */
+  async #recoverStalledRuntime(agentId: string, stalled: StalledRuntime): Promise<void> {
+    this.#stalledRecoveries.add(agentId);
+    try {
+      if (!(await this.#endStalledRuntime(agentId, stalled))) return;
+      const sessionId =
+        this.#sessionReferences.get(agentId)?.sessionId ?? stalled.restart.sessionId;
+      // A relaunch that fails reports its own launch error; the waiting messages stay queued,
+      // acknowledged, for the Agent's next launch.
+      await this.#wakeAgent(agentId, { ...stalled.restart, sessionId }).catch((error: unknown) =>
+        logger.error("Agent stalled-runtime relaunch failed", {
+          event: "agent.runtime.stalled_recovery_failed",
+          agent_id: agentId,
+          error: thrownMessage(error),
+        }),
+      );
+    } finally {
+      this.#stalledRecoveries.delete(agentId);
+    }
+  }
+
+  /** Announces the restart and ends the stalled process; false, with an error Activity, when it
+   * will not exit. Once is enough: that launch is never judged stalled again. */
+  async #endStalledRuntime(
+    agentId: string,
+    { launch, session, restart, silentForMs }: StalledRuntime,
+  ): Promise<boolean> {
+    const runtimeName = runtimeDisplayName(restart.config.provider);
+    // Before `stopping`, which mutes everything but stopped/interrupted/error Activity.
+    this.#activityPublisher.publish(
+      agentId,
+      launch,
+      this.#activity(
+        agentId,
+        AGENT_ACTIVITY_DETAIL_KIND.STALLED_RECOVERY,
+        "info",
+        `Restarting stalled ${runtimeName} runtime for queued message`,
+      ),
+    );
+    logger.warn("Agent runtime stalled; restarting it for a queued message", {
+      event: "agent.runtime.stalled_recovery",
+      agent_id: agentId,
+      silent_for_ms: silentForMs,
+    });
+    launch.stopping = true;
+    try {
+      await withDeadline(
+        session.dispose(),
+        STALLED_RECOVERY_EXIT_TIMEOUT_MS,
+        () => new Error("the stalled Agent runtime did not exit in time"),
+      );
+      if (this.#agentProcessManager.session(agentId) !== session) return true;
+      throw new Error("the stalled Agent runtime did not exit");
+    } catch (error) {
+      launch.progress = undefined;
+      // A process that is still running gets its Activity back.
+      const stillRunning = this.#agentProcessManager.session(agentId) === session;
+      if (stillRunning) launch.stopping = false;
+      this.#activityPublisher.publish(
+        agentId,
+        launch,
+        this.#activity(
+          agentId,
+          AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
+          "error",
+          `Restarting the stalled ${runtimeName} runtime failed`,
+        ),
+      );
+      logger.error("Agent stalled-runtime restart failed", {
+        event: "agent.runtime.stalled_recovery_failed",
+        agent_id: agentId,
+        still_running: stillRunning,
+        error: thrownMessage(error),
+      });
+      return false;
+    }
   }
 
   /** A delivery for an Agent with no hold, session, or launch in flight. */

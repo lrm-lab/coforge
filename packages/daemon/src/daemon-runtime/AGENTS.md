@@ -133,6 +133,12 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   `receive`'s treatment (consumed, malformed). An explicit Stop, or a
   launch abandoned because its recovery notice was rejected, discards them;
   the next Start recovers them from the cloud read boundary.
+- `stalled-recovery.ts` owns when a message restarts a stalled provider instead
+  of being steered into its turn; `runtime.ts` only performs it. Count only raw
+  provider events and turn-starting input as progress, never published
+  Activity, and never let it touch `hasLiveTurn`. Do not restart over an open
+  tool call, an unresumable session, or an unsettled tracked mention (nothing
+  settles it on exit); refuse a tracked mention during a restart.
 - Thread follow state is cloud-persisted. The Daemon only forwards the Agent's
   explicit unfollow operation.
 

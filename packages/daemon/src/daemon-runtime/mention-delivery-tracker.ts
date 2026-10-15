@@ -239,6 +239,15 @@ export class MentionDeliveryTracker {
     );
   }
 
+  /** Whether a tracked mention for `agentId` is received or pending, not yet drained or refused:
+   * ending its session now would leave it settled wrongly, since nothing is reported on exit. */
+  hasUnsettled(agentId: string): boolean {
+    if (this.#pending.has(agentId)) return true;
+    for (const tracked of this.#tracked.values())
+      if (tracked.message.agentId === agentId && tracked.state === "received") return true;
+    return false;
+  }
+
   /** Already told in the current session: pending while that turn runs, drained once idle. */
   #told(message: TrackedMentionDelivery): Promise<void> {
     return this.ports.busy(message.agentId) ? this.#markPending(message) : this.#drain(message);
