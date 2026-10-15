@@ -65,3 +65,19 @@ test("base64 decoding retains canonical tail and character errors after complete
   for (const value of ["Zm9vZ===", "Zm9vZg=A", "Zm9v!AAA"])
     expect(() => decodeBase64(value)).toThrow("Invalid base64 character");
 });
+
+test("base64 decoding rejects nonalphabet ASCII and out-of-range Unicode in every group position", () => {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+  const invalid = Array.from({ length: 128 }, (_, code) => String.fromCharCode(code)).filter(
+    (character) => !alphabet.includes(character),
+  );
+  for (const code of [128, 255, 256, 768, 0x4e2d, 0xff21, 0xd800, 0xdfff, 0xffff])
+    invalid.push(String.fromCharCode(code));
+  for (const character of invalid) {
+    for (let position = 0; position < 4; position++) {
+      const value = "A".repeat(position) + character + "A".repeat(3 - position);
+      expect(() => decodeBase64(value)).toThrow("Invalid base64 character");
+    }
+  }
+  expect(() => decodeBase64("\ud83d\ude00AA")).toThrow("Invalid base64 character");
+});

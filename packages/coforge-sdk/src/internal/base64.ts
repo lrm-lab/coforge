@@ -8,7 +8,8 @@
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-const DIGITS = new Map<string, number>([...ALPHABET].map((character, digit) => [character, digit]));
+const DIGITS = new Int16Array(128).fill(-1);
+for (let digit = 0; digit < ALPHABET.length; digit++) DIGITS[ALPHABET.charCodeAt(digit)] = digit;
 
 export function encodeBase64(bytes: Uint8Array): string {
   let encoded = "";
@@ -38,8 +39,8 @@ export function decodeBase64(value: string): Uint8Array {
       throw new Error("Invalid base64 padding");
     let group = 0;
     for (let position = 0; position < 4 - padding; position++) {
-      const digit = DIGITS.get(value[index + position]!);
-      if (digit === undefined) throw new Error("Invalid base64 character");
+      const digit = DIGITS[value.charCodeAt(index + position)];
+      if (digit === undefined || digit < 0) throw new Error("Invalid base64 character");
       group = (group << 6) | digit;
     }
     // Refuse a group whose unused trailing bits are set: `Zh==` decodes to `f` the way `Zg==` does,
