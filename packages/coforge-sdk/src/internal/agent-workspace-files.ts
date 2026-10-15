@@ -430,9 +430,10 @@ export function decodeAgentWorkspaceFileReadResult(
   )
     throw new Error("Invalid Workspace File read result");
   const text_ = text(value.text, MAX_TEXT_BYTES);
+  const contentBase64 = value.content.length > 0 ? encodeBase64(value.content) : "";
   const { contentType, content } = readResultContent({
     contentType: value.contentType,
-    contentBase64: value.content.length > 0 ? encodeBase64(value.content) : "",
+    contentBase64,
   });
   if (text_ !== "" && content.length > 0) throw new Error("Invalid Workspace File read result");
   return {
@@ -442,6 +443,6 @@ export function decodeAgentWorkspaceFileReadResult(
     modifiedAtMs: Number(value.modifiedAtMs),
     text: text_,
     contentType,
-    contentBase64: content.length > 0 ? encodeBase64(content) : "",
+    contentBase64,
   };
 }
