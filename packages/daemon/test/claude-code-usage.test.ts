@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readClaudeCodeUsage } from "#src/code-agent/claude-code/usage";
+import { UsageUnavailableError } from "#src/code-agent/contract";
 
 const fixture = new URL("./fixtures/claude-usage.ts", import.meta.url).pathname;
 const scratchDirectories: string[] = [];
@@ -92,13 +93,13 @@ test("keeps session, all-model week, and model-specific limits separate", async 
   expect(result?.secondary?.usedPercent).toBe(20);
 });
 
-test("returns null when Claude Code is not logged in or usage cannot be parsed", async () => {
+test("distinguishes missing Claude authentication from unreadable signed-in usage", async () => {
   expect(
     await readClaudeCodeUsage(await directory(), { command: command("logged-out") }),
   ).toBeNull();
-  expect(
-    await readClaudeCodeUsage(await directory(), { command: command("parse-failure") }),
-  ).toBeNull();
+  await expect(
+    readClaudeCodeUsage(await directory(), { command: command("parse-failure") }),
+  ).rejects.toBeInstanceOf(UsageUnavailableError);
 });
 
 test("times out and terminates Claude Code usage commands", async () => {

@@ -8,11 +8,12 @@ import {
   setSystemTime,
   test,
 } from "bun:test";
-import { mkdir, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
-import { DaemonRuntime } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, USAGE_SCAN_READ_TIMEOUT_MS } from "#src/daemon-runtime/runtime";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS } from "#src/agent-runtime/runtime-error-recovery";
 import { RuntimeExecutableNotFoundError } from "#src/platform/runtime-executable-not-found";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
@@ -5010,69 +5011,78 @@ describe("DaemonRuntime", () => {
     await runtime.stop();
   });
 
-  test("falls back to a current Claude rate-limit observation when direct usage is unavailable", async () => {
-    const credentials = new InMemoryDaemonCredentialStore();
-    await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-    const listeners = new Set<(event: AgentRuntimeEvent) => void>();
-    const adapter: CodeAgentProvider = {
-      provider: "claude-code",
-      async readUsage() {
-        return null;
-      },
-      async createAgentSession() {
-        return {
-          ...sessionSpy(),
-          subscribe(listener) {
-            listeners.add(listener);
-            return () => listeners.delete(listener);
-          },
-        };
-      },
-    };
-    const runtime = new DaemonRuntime(connection, () => adapter, credentials, {
-      create: () => ({
-        async start() {},
-        async ready() {},
-        async requestAgentLaunchConfig() {
-          return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+  test.each(["empty", "unavailable"])(
+    "falls back to a current Claude rate-limit observation when direct usage is %s",
+    async (reading) => {
+      const credentials = new InMemoryDaemonCredentialStore();
+      await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+      const listeners = new Set<(event: AgentRuntimeEvent) => void>();
+      const adapter: CodeAgentProvider = {
+        provider: "claude-code",
+        async readUsage() {
+          if (reading === "unavailable") throw new UsageUnavailableError();
+          return null;
         },
-        async stop() {},
-      }),
-    });
-    await runtime.start(connection);
-    await runtime.startAgent("agent-a", {
-      provider: "claude-code",
-      model: "claude-sonnet-5",
-      reasoning: "high",
-    });
-    for (const listener of listeners)
-      listener({
-        type: AGENT_RUNTIME_EVENT_TYPE.USAGE,
-        snapshot: {
+        async createAgentSession() {
+          return {
+            ...sessionSpy(),
+            subscribe(listener) {
+              listeners.add(listener);
+              return () => listeners.delete(listener);
+            },
+          };
+        },
+      };
+      const runtime = new DaemonRuntime(connection, () => adapter, credentials, {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async requestAgentLaunchConfig() {
+            return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+          },
+          async stop() {},
+        }),
+      });
+      try {
+        await runtime.start(connection);
+        await runtime.startAgent("agent-a", {
+          provider: "claude-code",
+          model: "claude-sonnet-5",
+          reasoning: "high",
+        });
+        for (const listener of listeners)
+          listener({
+            type: AGENT_RUNTIME_EVENT_TYPE.USAGE,
+            snapshot: {
+              provider: "claude-code",
+              primary: {
+                status: "ok",
+                windowDurationMinutes: 300,
+                resetsAt: "2099-09-04T03:00:00.000Z",
+              },
+            },
+          });
+
+        const result = await runtime.scanUsage("claude-code");
+        expect(result.status).toBe("available");
+        const { collectedAt, ...snapshot } = JSON.parse(
+          new TextDecoder().decode(result.snapshotJson),
+        );
+        // Stamped when the usage event was observed, not "now" when this later scan reused it.
+        expect(typeof collectedAt).toBe("string");
+        expect(snapshot).toEqual({
           provider: "claude-code",
           primary: {
             status: "ok",
             windowDurationMinutes: 300,
             resetsAt: "2099-09-04T03:00:00.000Z",
           },
-        },
-      });
-
-    const result = await runtime.scanUsage("claude-code");
-    expect(result.status).toBe("available");
-    const { collectedAt, ...snapshot } = JSON.parse(new TextDecoder().decode(result.snapshotJson));
-    // Stamped when the usage event was observed, not "now" when this later scan reused it.
-    expect(typeof collectedAt).toBe("string");
-    expect(snapshot).toEqual({
-      provider: "claude-code",
-      primary: {
-        status: "ok",
-        windowDurationMinutes: 300,
-        resetsAt: "2099-09-04T03:00:00.000Z",
-      },
-    });
-    await runtime.stop();
-  });
+        });
+      } finally {
+        await runtime.stop();
+      }
+    },
+  );
 
   test("an observed usage snapshot keeps the time it was observed, not the later scan time", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
@@ -5134,6 +5144,61 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
+
+  test.each(["parse-failure", "command-failure"])(
+    "a signed-in Claude with %s usage is unavailable instead of requiring sign-in",
+    async (mode) => {
+      const directory = await mkdtemp(join(tempRoot, "coforge-claude-usage-status-"));
+      const modeFile = join(directory, "mode");
+      const executable = join(directory, "claude.ts");
+      const fixture = new URL("./fixtures/claude-usage.ts", import.meta.url).pathname;
+      const credentials = new InMemoryDaemonCredentialStore();
+      const provider = new ClaudeCodeProvider({ command: [executable] });
+      const runtime = new DaemonRuntime(
+        { ...connection, workspaceRoot: directory },
+        () => provider,
+        credentials,
+        { create: () => ({ async start() {}, async ready() {}, async stop() {} }) },
+        undefined,
+        emptyCodeAgentDiscovery,
+      );
+      try {
+        // Forward to the existing CLI fixture, optionally making just /usage exit unsuccessfully.
+        // Authentication succeeds in both modes; neither outcome establishes expired credentials.
+        await Bun.write(
+          executable,
+          `#!${process.execPath}\nconst mode = await Bun.file(${JSON.stringify(modeFile)}).text();\nconst child = Bun.spawn([process.execPath, ${JSON.stringify(fixture)}, mode, ...Bun.argv.slice(2)], { stdin: "ignore", stdout: "inherit", stderr: "ignore" });\nconst code = await child.exited;\nprocess.exit(mode === "command-failure" && Bun.argv.includes("/usage") ? 1 : code);\n`,
+        );
+        await chmod(executable, 0o755);
+        await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+        await Bun.write(modeFile, mode);
+        await runtime.start({ ...connection, workspaceRoot: directory });
+        expect(await runtime.scanUsage("claude-code")).toMatchObject({
+          accepted: false,
+          status: "unavailable",
+          message: "Provider usage is unavailable",
+        });
+
+        // A later successful refresh recovers; a genuinely signed-out CLI still requests login.
+        await Bun.write(modeFile, "current");
+        const available = await runtime.scanUsage("claude-code");
+        expect(available.status).toBe("available");
+        expect(JSON.parse(new TextDecoder().decode(available.snapshotJson))).toMatchObject({
+          provider: "claude-code",
+          primary: { usedPercent: 6 },
+        });
+        await Bun.write(modeFile, "logged-out");
+        expect((await runtime.scanUsage("claude-code")).status).toBe("reauth");
+      } finally {
+        try {
+          await runtime.stop();
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      }
+    },
+    6 * USAGE_SCAN_READ_TIMEOUT_MS + DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS,
+  );
 
   test("scans Kiro quota and distinguishes an unrepresentable window from expired authentication", async () => {
     const credentials = new InMemoryDaemonCredentialStore();

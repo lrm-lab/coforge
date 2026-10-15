@@ -176,6 +176,9 @@ import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
+/** Per-provider reading deadline supplied by a runtime usage scan. */
+export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
+
 /**
  * The injectable half of Code Agent discovery. `runtimes` is the fast, always-awaited probe;
  * `cachedCatalogs` is a disk-only read (no spawning) used for the same report; `catalogs` is the
@@ -739,7 +742,7 @@ export class DaemonRuntime {
       const snapshot =
         (await codeAgentProvider.readUsage({
           workingDirectory: this.#connection.workspaceRoot,
-          timeoutMs: 10_000,
+          timeoutMs: USAGE_SCAN_READ_TIMEOUT_MS,
         })) ?? this.#currentObservedUsage(provider);
       return usageScanReading(snapshot, now);
     } catch (error) {
