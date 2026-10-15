@@ -576,7 +576,12 @@ class ClaudeCodeAgentSession implements AgentSession {
       this.#state = "idle";
       this.#emit({
         type: "completed",
-        status: interrupted ? "interrupted" : record.subtype === "success" ? "completed" : "failed",
+        // A completed agent loop can still carry an API failure in is_error.
+        status: interrupted
+          ? "interrupted"
+          : record.subtype === "success" && record.is_error !== true
+            ? "completed"
+            : "failed",
       });
       this.#flushNotices();
     }

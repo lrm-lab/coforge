@@ -573,6 +573,42 @@ test("Claude Code emits no context-usage event when no modelUsage entry carries 
 });
 
 test(
+  "Claude Code reports an API-error result as failed and accepts the next successful turn",
+  async () => {
+    const fixture = await controlledClaude();
+    const { session, emit } = fixture;
+    const events: AgentRuntimeEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    try {
+      await session.sendMessage("wait");
+      await emit({
+        type: "result",
+        subtype: "success",
+        is_error: true,
+        result: "API Error: Test authentication expired",
+        errors: [],
+      });
+      expect(events.filter((event) => event.type === "completed")).toEqual([
+        { type: "completed", status: "failed" },
+      ]);
+      expect(session.hasLiveTurn).toBe(false);
+
+      events.length = 0;
+      await session.sendMessage("wait");
+      await emit({ type: "result", subtype: "success", is_error: false });
+      expect(events.filter((event) => event.type === "completed")).toEqual([
+        { type: "completed", status: "completed" },
+      ]);
+      expect(session.hasLiveTurn).toBe(false);
+    } finally {
+      await fixture.dispose();
+    }
+  },
+  5_000 + 2 * PROCESS_TREE_EXIT_GRACE_MS,
+);
+
+test(
   "Claude Code rejects overlapping turns and interrupts an initialized CLI without replacing it",
   async () => {
     const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-lifecycle-"));
