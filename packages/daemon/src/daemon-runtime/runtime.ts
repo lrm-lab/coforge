@@ -2632,8 +2632,19 @@ export class DaemonRuntime {
       return;
     }
     if (event.type === "compaction-interrupted") {
-      // Silent: only the internal state clears.
-      this.#compactionTracker.interrupt(agentId);
+      // The provider's signal does not say whether the compaction was aborted or failed (a
+      // failure also arrives as its own error), so the row says only that it did not complete.
+      if (this.#compactionTracker.interrupt(agentId) === "interrupted")
+        this.#activityPublisher.publish(
+          agentId,
+          launch,
+          this.#activity(
+            agentId,
+            AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
+            "info",
+            "Context compaction interrupted; completion was not confirmed",
+          ),
+        );
       return;
     }
     if (event.type === "progress") {

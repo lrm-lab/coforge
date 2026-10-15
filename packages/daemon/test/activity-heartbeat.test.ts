@@ -768,16 +768,26 @@ test("a turn ending after an open compaction infers it finished, reported before
   }
 });
 
-test("compaction-interrupted silently clears an open compaction with no visible Activity", async () => {
+test("compaction-interrupted reports an open compaction as interrupted, once", async () => {
   const { runtime, activities, emitEvent } = await harness();
   try {
-    emitEvent({ type: "compaction-started" });
     activities.length = 0;
     emitEvent({ type: "compaction-interrupted" });
     expect(activities).toHaveLength(0);
-    // Cleared: a later explicit finish is now a no-op too.
+    emitEvent({ type: "compaction-started" });
+    activities.length = 0;
+    emitEvent({ type: "compaction-interrupted" });
+    expect(activities).toHaveLength(1);
+    expect(activities[0]).toMatchObject({
+      agentId: "agent-a",
+      detailKind: "system_message",
+      level: "info",
+      detail: "Context compaction interrupted; completion was not confirmed",
+    });
+    // Cleared: a repeated interrupt and a later explicit finish are no-ops.
+    emitEvent({ type: "compaction-interrupted" });
     emitEvent({ type: "compaction-finished" });
-    expect(activities).toHaveLength(0);
+    expect(activities).toHaveLength(1);
   } finally {
     await runtime.stop();
   }

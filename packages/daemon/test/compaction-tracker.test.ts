@@ -19,17 +19,17 @@ test("finish reports finished only when a compaction is active, and is idempoten
   expect(tracker.finish("agent-a")).toBe("not-active");
 });
 
-test("interrupt silently clears an active compaction, and finish afterward is a no-op", () => {
+test("interrupt reports interrupted and clears an active compaction; finish afterward is a no-op", () => {
   const tracker = new CompactionTracker(() => {});
   tracker.start("agent-a");
-  tracker.interrupt("agent-a");
+  expect(tracker.interrupt("agent-a")).toBe("interrupted");
   expect(tracker.isActive("agent-a")).toBe(false);
   expect(tracker.finish("agent-a")).toBe("not-active");
 });
 
-test("interrupt on an Agent with no active compaction is a no-op", () => {
+test("interrupt on an Agent with no active compaction reports not-active", () => {
   const tracker = new CompactionTracker(() => {});
-  expect(() => tracker.interrupt("agent-a")).not.toThrow();
+  expect(tracker.interrupt("agent-a")).toBe("not-active");
   expect(tracker.isActive("agent-a")).toBe(false);
 });
 

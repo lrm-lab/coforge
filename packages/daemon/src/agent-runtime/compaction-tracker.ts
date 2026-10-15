@@ -19,6 +19,7 @@ type CompactionState =
 
 export type CompactionStartResult = "started" | "already-active";
 export type CompactionFinishResult = "finished" | "not-active";
+export type CompactionInterruptResult = "interrupted" | "not-active";
 
 export class CompactionTracker {
   readonly #states = new Map<string, CompactionState>();
@@ -56,13 +57,14 @@ export class CompactionTracker {
     return "finished";
   }
 
-  /** Clears an active compaction without a visible Activity (interrupted compaction is silent by
-   * itself; the caller decides separately whether the interruption is otherwise reported). */
-  interrupt(agentId: string): void {
+  /** Ends an active compaction episode as interrupted. Like `finish`, a no-op unless one is
+   * active, so the caller only reports the interruption when this returns `"interrupted"`. */
+  interrupt(agentId: string): CompactionInterruptResult {
     const state = this.#states.get(agentId);
-    if (!state || state.kind !== "active") return;
+    if (!state || state.kind !== "active") return "not-active";
     clearTimeout(state.watchdog);
     this.#states.set(agentId, { kind: "inactive" });
+    return "interrupted";
   }
 
   isActive(agentId: string): boolean {
