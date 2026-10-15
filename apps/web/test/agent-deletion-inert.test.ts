@@ -139,6 +139,7 @@ function manageAgents(record: AgentRecord) {
     listInWorkspace: async () => [record],
     listForComputer: async () => [record],
     listDeletedForComputer: async () => [record],
+    hasActiveMigration: async () => false,
     listOwnedInWorkspace: async () => [record],
     create: async () => record,
     update: async (_id, input) => Object.assign(record, input),

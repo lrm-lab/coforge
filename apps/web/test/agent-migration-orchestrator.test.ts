@@ -31,6 +31,15 @@ function setup(
         if (options.stopFails) throw new Error("the source did not confirm the stop");
       },
       start: async (agent) => {
+        // As Agent control does: nothing starts an Agent a migration still holds.
+        if (
+          [...fixture.rows.values()].some(
+            (row) =>
+              row.agentId === agent.agentId &&
+              ["requested", "source_stopped", "uploaded", "placing"].includes(row.state),
+          )
+        )
+          throw new Error("agent-migrating");
         runtime.push(`start:${agent.agentId}@${fixture.agentComputer.value}`);
       },
     },

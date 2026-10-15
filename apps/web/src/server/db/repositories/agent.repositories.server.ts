@@ -100,7 +100,7 @@ export interface AgentRepository {
    * starting them, so a delete whose Stop never reached an offline Daemon is reconciled. */
   listDeletedForComputer(workspaceId: string, computerId: string): Promise<AgentRecord[]>;
   /** Whether a migration that has not finished is moving the Agent between Computers. */
-  hasActiveMigration?(agentId: string): Promise<boolean>;
+  hasActiveMigration(agentId: string): Promise<boolean>;
   listOwnedInWorkspace(workspaceId: string, ownerId: string): Promise<AgentRecord[]>;
   create(input: Omit<AgentRecord, "id" | "createdAt"> & { id?: string }): Promise<AgentRecord>;
   /** `name` (the @mention username) is fixed at creation and is never part of an update. */

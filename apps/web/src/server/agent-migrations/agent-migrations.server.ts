@@ -30,17 +30,6 @@ export type AgentMigrationState =
  */
 export const FINISHED_AGENT_MIGRATION_STATES = ["completed", "canceled", "failed"] as const;
 
-/**
- * A migration in one of these states has not switched yet: the source still owns the Agent but is
- * moving its workspace away, so the Agent must not run anywhere.
- */
-export const HOLDING_AGENT_MIGRATION_STATES = [
-  "requested",
-  "source_stopped",
-  "uploaded",
-  "placing",
-] as const;
-
 export function isFinishedAgentMigration(state: AgentMigrationState) {
   return (FINISHED_AGENT_MIGRATION_STATES as readonly string[]).includes(state);
 }

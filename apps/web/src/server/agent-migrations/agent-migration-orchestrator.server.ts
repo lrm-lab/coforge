@@ -49,22 +49,17 @@ export class AgentMigrationOrchestrator {
     const agent = scopeOf(started.migration);
     try {
       await lock.run(agent.agentId, async () => {
-        if (await runtime.stoppedByUser(agent)) return;
-        try {
-          await runtime.stop(agent);
-        } catch (error) {
-          // A Stop the source never confirmed would otherwise be replayed when it reconnects and
-          // leave the Agent stopped for no migration: supersede it with a Start.
-          await runtime.start(agent).catch(() => {});
-          throw error;
-        }
+        if (!(await runtime.stoppedByUser(agent))) await runtime.stop(agent);
       });
     } catch (error) {
-      // Nothing has moved yet: end the attempt rather than lease a source still running it.
-      await migrations.cancel({
+      // Nothing has moved yet: end the attempt rather than lease a source still running it. Ending
+      // it also starts the Agent again, which supersedes a Stop the source never confirmed and
+      // would otherwise replay on reconnect; it can only start once the attempt is over.
+      const canceled = await migrations.cancel({
         workspaceId: input.workspaceId,
         migrationId: started.migration.id,
       });
+      if (canceled.status === "canceled") await this.ended(canceled.migration);
       throw error;
     }
     await dispatch.lease(started.migration, "source");

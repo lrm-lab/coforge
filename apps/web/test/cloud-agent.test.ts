@@ -68,6 +68,7 @@ describe("PublishAgentRuntimeControl", () => {
         },
         listForComputer: async () => agents.map((agent) => structuredClone(agent)),
         listDeletedForComputer: async () => [],
+        hasActiveMigration: async () => false,
       },
       {
         readAgentRecoveryContext: async (_workspaceId, agentId) => {
@@ -182,6 +183,7 @@ describe("PublishAgentRuntimeControl", () => {
         listInWorkspace: async () => [],
         listForComputer: async () => [structuredClone(current)],
         listDeletedForComputer: async () => [],
+        hasActiveMigration: async () => false,
         create: async () => current,
         update: async () => current,
       },
@@ -245,6 +247,7 @@ describe("PublishAgentRuntimeControl", () => {
         },
         listForComputer: async () => agents.map((agent) => structuredClone(agent)),
         listDeletedForComputer: async () => [],
+        hasActiveMigration: async () => false,
       },
       {
         readAgentRecoveryContext: async (_workspaceId, agentId) => {
@@ -343,6 +346,7 @@ describe("PublishAgentRuntimeControl", () => {
         },
         listForComputer: async () => agents.map((agent) => structuredClone(agent)),
         listDeletedForComputer: async () => [],
+        hasActiveMigration: async () => false,
       },
       {
         readAgentRecoveryContext: async () => ({ resumeMessages: [], unreadSummary: {} }),

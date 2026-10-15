@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/internal";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
-import { HOLDING_AGENT_MIGRATION_STATES } from "#src/server/agent-migrations/agent-migrations.server";
+import { FINISHED_AGENT_MIGRATION_STATES } from "#src/server/agent-migrations/agent-migrations.server";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import type {
   AgentControlAgent,
@@ -81,7 +81,8 @@ export class PrismaAgentControlStore implements AgentControlStore {
         currentSessionId: true,
         currentSession: true,
         migrations: {
-          where: { state: { in: [...HOLDING_AGENT_MIGRATION_STATES] } },
+          // Spelled as the partial index `agent_migrations_one_active` is, plus the switch.
+          where: { state: { notIn: [...FINISHED_AGENT_MIGRATION_STATES, "switched"] } },
           select: { id: true },
           take: 1,
         },

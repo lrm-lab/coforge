@@ -232,7 +232,7 @@ export class ManageAgents {
         JSON.stringify(current.runtimeConfig) !== JSON.stringify(runtimeConfig);
       const computerChanged = computerId !== current.computerId;
       // A migration is already moving it; a second move would race the switch.
-      if (computerChanged && (await this.agents.hasActiveMigration?.(current.id)))
+      if (computerChanged && (await this.agents.hasActiveMigration(current.id)))
         throw new AppError("CONFLICT", { errorId: "agent-migrating" });
       if (
         (runtimeChanged || computerChanged) &&

@@ -965,6 +965,8 @@ export class AgentControl {
     const agent = await this.store.get(input.agentId);
     if (!agent || agent.workspaceId !== input.workspaceId || agent.computerId !== input.computerId)
       throw new Error("Agent launch is not authorized");
+    // Whatever the control state says, a Computer never launches an Agent being moved off it.
+    if (agent.migrating) throw new Error("Agent is moving to another Computer");
     const state = agent.state;
     if (!state) {
       if (input.controlEpoch || input.requestId || input.launchId)
