@@ -77,7 +77,7 @@ export function EmojiPicker({
             : import("emoji-picker-react/dist/data/emojis-en"),
         ]);
         if (alive) setLibrary({ picker: epr.default, data: data.default });
-      } catch (cause) {
+      } catch {
         if (alive) setFailed(true);
       }
     })();
