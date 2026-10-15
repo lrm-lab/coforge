@@ -1,3 +1,4 @@
+import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -18,7 +19,10 @@ describe("lifelongagentbench adapter", () => {
   };
 
   test("converts HF-shaped rows: order, family, env note, grader isolation", () => {
-    const rows = convertLlabEntries({ taskType: "db_bench", entries: [entry, { ...entry, sample_index: 1 }] });
+    const rows = convertLlabEntries({
+      taskType: "db_bench",
+      entries: [entry, { ...entry, sample_index: 1 }],
+    });
     expect(rows).toHaveLength(2);
     const first = rows[0]!;
     expect(first.benchmark).toBe("lifelongagentbench");
@@ -30,7 +34,9 @@ describe("lifelongagentbench adapter", () => {
     // The answer never rides the prompt; it rides the grader block.
     expect(first.turns[0]!.prompt).not.toContain("03ae28a1");
     expect(first.grader.kind).toBe(llabGraderKind("db_bench"));
-    expect((first.grader.answer_ref as { answer_info: { md5: string } }).answer_info.md5).toBe("03ae28a1...");
+    expect((first.grader.answer_ref as { answer_info: { md5: string } }).answer_info.md5).toBe(
+      "03ae28a1...",
+    );
   });
 
   test("knowledge_graph grader carries the answer set", () => {
@@ -39,7 +45,10 @@ describe("lifelongagentbench adapter", () => {
       entries: [{ question: "who is...", entity_dict: {}, answer_list: ["m.01", "m.02"] }],
     });
     expect(rows[0]!.grader.kind).toBe("llmab_kg_official");
-    expect((rows[0]!.grader.answer_ref as { answer_list: string[] }).answer_list).toEqual(["m.01", "m.02"]);
+    expect((rows[0]!.grader.answer_ref as { answer_list: string[] }).answer_list).toEqual([
+      "m.01",
+      "m.02",
+    ]);
   });
 
   test("rejects empty conversions", () => {
@@ -54,7 +63,10 @@ describe("skillflow adapter", () => {
   test("converts a downloaded family: lexical difficulty order, Harbor grader ref", async () => {
     const root = await mkdtemp(join(tmpdir(), "sf-adapt-"));
     const family = join(root, "Compensation-Scenario-Modeling");
-    await write(join(family, "01_foundation", "instruction.md"), "Build the model at `/root/x.xlsx`.\n");
+    await write(
+      join(family, "01_foundation", "instruction.md"),
+      "Build the model at `/root/x.xlsx`.\n",
+    );
     await write(join(family, "02_refresh", "instruction.md"), "Refresh the model.\n");
     const rows = await convertSkillFlowTasks({ tasksRoot: root });
     expect(rows.map((row) => row.task_id)).toEqual([
@@ -72,7 +84,10 @@ describe("skillflow adapter", () => {
     const family = join(root, "Fam");
     await write(join(family, "a_task", "instruction.md"), "A\n");
     await write(join(family, "z_task", "instruction.md"), "Z\n");
-    await write(join(family, "ALL_TASK_DIFFICULTY_RANKING.json"), JSON.stringify(["z_task", "a_task"]));
+    await write(
+      join(family, "ALL_TASK_DIFFICULTY_RANKING.json"),
+      JSON.stringify(["z_task", "a_task"]),
+    );
     const rows = await convertSkillFlowTasks({ tasksRoot: root });
     expect(rows.map((row) => row.task_id)).toEqual(["Fam/z_task", "Fam/a_task"]);
   });

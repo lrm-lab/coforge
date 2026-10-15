@@ -109,10 +109,7 @@ export function groupFamilies(episodes: readonly ManifestEpisode[]): EpisodeFami
  * of the family in order — train sedimentation included; cold executes only
  * the test split, each in a zero-state workspace.
  */
-export function episodesForArm(
-  family: EpisodeFamily,
-  arm: EvalArm,
-): ManifestEpisode[] {
+export function episodesForArm(family: EpisodeFamily, arm: EvalArm): ManifestEpisode[] {
   if (arm === "warm") return family.episodes;
   return family.episodes.filter((episode) => episode.split === "test");
 }

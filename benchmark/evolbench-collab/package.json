@@ -4,11 +4,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "eval": "bun src/run.ts"
+    "eval": "bun src/run.ts",
+    "test": "bun test",
+    "format": "oxfmt src test",
+    "check": "oxfmt --check src test && oxlint src test && bun run typecheck",
+    "prepare:knowledge": "bun src/prepare-knowledge.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@coforge/agent": "workspace:*",
     "@lrm/coforge-sdk": "workspace:*",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "@types/node": "26.4.0",
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
   }
 }

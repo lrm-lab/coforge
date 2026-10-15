@@ -1,3 +1,4 @@
+import type { MemoryDispositionRecord } from "@lrm/coforge-sdk/agent";
 import { RedisClient } from "bun";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { PublicChannels } from "../../../apps/web/src/server/conversations/public-channels.server";
@@ -23,7 +24,11 @@ export function episodePrompt(
         .replaceAll("%TASK_ID%", episode.taskId)
         .replaceAll("%EPISODE_ID%", episode.episodeId)}`
     : "";
-  return `@memory ${episode.prompt}${note}\n\n${reminder}`;
+  const prompt =
+    episode.domain === "information_retrieval"
+      ? episode.prompt.split("## How to call search in this environment")[0]!.trimEnd()
+      : episode.prompt;
+  return `@task ${prompt}${note}\n\n${reminder}`;
 }
 
 export async function postEpisodePrompt(input: {
@@ -50,7 +55,7 @@ export async function postEpisodePrompt(input: {
       });
       const triggerId = (sent as { id?: string }).id;
       if (!triggerId) throw new Error("channel send did not return a message id");
-      return { triggerId, createdAt: new Date() };
+      return { triggerId, createdAt: sent.createdAt };
     } finally {
       redis.close();
     }
@@ -86,6 +91,10 @@ export type EpisodeResult = {
   elapsedMs: number;
   terminationReason: EpisodeTerminationReason;
   runtimeErrorCount: number;
+  memoryRequestCount?: number;
+  memoryRequestMessageIds?: string[];
+  offerMessageIds?: string[];
+  dispositions?: MemoryDispositionRecord[];
   /** Local observation timestamps, in Unix milliseconds. */
   lastRuntimeErrorAt?: number;
   lastProgressAt?: number;
@@ -144,9 +153,8 @@ export function createEpisodeRuntimeDiagnostics() {
   };
 }
 
-/** One episode: the prompt goes to @memory; the Memory Agent publishes its
- * recall offer addressed to the Task Agent; the Task Agent executes and posts
- * the final answer. The reply is final after the settle window of quiet. */
+/** The human addresses Task. Task decides whether to @memory; only Memory
+ * performs document/experience retrieval and returns cited Offers. */
 export async function runEpisode(input: {
   workspace: EvalWorkspace;
   env: EvalEnv;
@@ -174,6 +182,10 @@ export async function runEpisode(input: {
     taskMessageCount: 0,
     memoryLeakMessageIds: [] as string[],
     timedOut: false,
+    memoryRequestCount: 0,
+    memoryRequestMessageIds: [] as string[],
+    offerMessageIds: [] as string[],
+    dispositions: [] as MemoryDispositionRecord[],
   };
   const finish = (exit: Exclude<EpisodeTerminationReason, "runtime_failed">): EpisodeResult => {
     const runtime = input.runtimeDiagnostics?.snapshot();
@@ -190,7 +202,7 @@ export async function runEpisode(input: {
     };
   };
   while (Date.now() < deadline) {
-    const offer = await input.workspace.db.memoryOfferRecord.findFirst({
+    const offers = await input.workspace.db.memoryOfferRecord.findMany({
       where: {
         workspaceId: input.workspace.workspaceId,
         conversationId: input.workspace.channelId,
@@ -206,7 +218,12 @@ export async function runEpisode(input: {
         sender: { agentId: input.workspace.taskAgentId },
       },
       orderBy: { createdAt: "asc" },
-      select: { id: true, body: true, createdAt: true },
+      select: {
+        id: true,
+        body: true,
+        createdAt: true,
+        mentions: { select: { kind: true, actorId: true } },
+      },
     });
     const memoryMessages = await input.workspace.db.message.findMany({
       where: {
@@ -215,36 +232,67 @@ export async function runEpisode(input: {
         sender: { agentId: input.workspace.memoryAgentId },
       },
       orderBy: { createdAt: "asc" },
-      select: { id: true },
+      select: { id: true, createdAt: true },
     });
+    const hints = await input.workspace.db.memoryHintRecord.findMany({
+      where: {
+        workspaceId: input.workspace.workspaceId,
+        conversationId: input.workspace.channelId,
+        targetAgentId: input.workspace.taskAgentId,
+        deliveredAt: { gt: posted.createdAt },
+      },
+      include: { dispositions: { orderBy: { sequence: "asc" } } },
+    });
+    const requests = taskMessages.filter((message) =>
+      message.mentions.some(
+        (mention) => mention.kind === "agent" && mention.actorId === input.workspace.memoryAgentId,
+      ),
+    );
+    const requestIds = new Set(requests.map((message) => message.id));
+    const answers = taskMessages.filter((message) => !requestIds.has(message.id));
+    const offerIds = new Set(offers.map((offer) => offer.messageId));
     snapshot = {
-      finalOutput: taskMessages.at(-1)?.body ?? null,
-      offerMessageId: offer?.messageId ?? null,
-      citationCount: offer?.citations.length ?? 0,
+      finalOutput: answers.at(-1)?.body ?? null,
+      offerMessageId: offers[0]?.messageId ?? null,
+      citationCount: new Set(
+        offers.flatMap((offer) => offer.citations.map((citation) => citation.citationId)),
+      ).size,
       taskMessageCount: taskMessages.length,
-      memoryLeakMessageIds: memoryMessages
-        .map((row) => row.id)
-        .filter((id) => id !== offer?.messageId),
+      memoryLeakMessageIds: memoryMessages.map((row) => row.id).filter((id) => !offerIds.has(id)),
       timedOut: false,
+      memoryRequestCount: requests.length,
+      memoryRequestMessageIds: [...requestIds],
+      offerMessageIds: [...offerIds],
+      dispositions: hints.flatMap((hint) =>
+        hint.dispositions.map((record) => ({
+          hint_id: hint.id,
+          target_agent_id: record.targetAgentId,
+          decision: record.decision as MemoryDispositionRecord["decision"],
+          reason: record.reason,
+          intended_action_refs: record.intendedActionRefs,
+          decided_at: record.decidedAt.toISOString(),
+          skipped_source_refs: record.skippedSourceRefs,
+        })),
+      ),
     };
     const lastTaskAt = taskMessages.at(-1)?.createdAt?.getTime() ?? 0;
-    // This is a channel-output budget, not a claim that the agents are inactive.
-    // Shell work or model generation does not extend the no-Offer budget.
-    const deadQuiet =
-      snapshot.offerMessageId === null &&
-      Date.now() - Math.max(posted.createdAt.getTime(), lastTaskAt) >= abortQuietMs;
-    if (deadQuiet) {
-      return finish("quiet_no_offer");
-    }
-    const offeredAndQuiet =
-      snapshot.offerMessageId !== null &&
-      snapshot.taskMessageCount > 0 &&
-      Date.now() - lastTaskAt >= input.settleMs;
-    // Without an offer we ride to the deadline: the memory agent may be slow,
-    // and an answer that arrived without recall is still recorded (the grader
-    // judges it) while the mechanism columns expose the missing recall.
-    if (offeredAndQuiet) {
+    const lastAnswer = answers.at(-1);
+    const answerIsLastTaskMessage = lastAnswer?.id === taskMessages.at(-1)?.id;
+    if (
+      lastAnswer &&
+      answerIsLastTaskMessage &&
+      Date.now() - lastAnswer.createdAt.getTime() >= input.settleMs
+    ) {
       return finish("final_settled");
+    }
+    // An @memory request is work in progress, not a candidate final answer.
+    const lastMemoryAt = memoryMessages.at(-1)?.createdAt.getTime() ?? 0;
+    const progressAt = input.runtimeDiagnostics?.snapshot().lastProgressAt ?? 0;
+    if (
+      Date.now() - Math.max(posted.createdAt.getTime(), lastTaskAt, lastMemoryAt, progressAt) >=
+      abortQuietMs
+    ) {
+      return finish("quiet_no_offer");
     }
     await delay(input.env.pollMs);
   }

@@ -1,3 +1,4 @@
+import { describe, expect, test } from "bun:test";
 import { profileFor, reminderForEpisode } from "../src/benchmarks";
 import { classifyMechanism } from "../src/leak";
 import { summarizeArm } from "../src/report";
@@ -19,7 +20,7 @@ test("Task role gates implementation on the current claim and verifies final sub
     "stop implementation",
     "report the blocker",
     "no intermediate progress",
-    "last Task channel message",
+    "last non-request Task channel message",
     "accepted=true",
     "--json",
     "state=sent",
@@ -130,7 +131,7 @@ describe("benchmark registry", () => {
 });
 
 describe("episodePrompt", () => {
-  test("addresses the memory agent and appends the reminder", () => {
+  test("addresses the task agent so only it can request memory", () => {
     const prompt = episodePrompt(
       {
         benchmark: "past_bench",
@@ -147,7 +148,7 @@ describe("episodePrompt", () => {
       },
       reminderForEpisode("past_bench", ""),
     );
-    expect(prompt.startsWith("@memory Summarize the notes.")).toBe(true);
+    expect(prompt.startsWith("@task Summarize the notes.")).toBe(true);
     expect(prompt).toContain("Channel note:");
   });
 });

@@ -1,3 +1,5 @@
+import { MentionDeliveryReports } from "../../../apps/web/src/server/conversations/mention-deliveries.server";
+import { PrismaMentionDeliveryRepository } from "../../../apps/web/src/server/db/repositories/mention-delivery.repositories.server";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -84,7 +86,8 @@ export async function startEvalDaemon(input: {
   workspace: EvalWorkspace;
   env: EvalEnv;
 }): Promise<EvalDaemon> {
-  Bun.env[EVAL_MEMORY_OFFER_ONLY] = "1";
+  // Use the production Memory toolset, including its normal channel reply tool.
+  delete Bun.env[EVAL_MEMORY_OFFER_ONLY];
   process.env[EVAL_DISABLE_HOST_PI_INJECTION] = "1";
   Bun.env[EVAL_DISABLE_HOST_PI_INJECTION] = "1";
   const webUrl = input.env.webUrl ?? "http://127.0.0.1:8788";
@@ -179,13 +182,15 @@ export async function startEvalDaemon(input: {
       agentMessage: (context, request, agentApiKey) =>
         runtimeApi().agentMessage(context, request, agentApiKey),
       agentAttachment: (context, attachmentId, agentApiKey) =>
-        runtimeApi().agentAttachment(context, attachmentId, agentApiKey),
+        runtimeApi().agentRequests.agentAttachment(context, attachmentId, agentApiKey),
       inbox: (context, request) => runtimeApi().inbox(context, request),
       issueAgentContext: (agentId, context) => runtimeApi().issueAgentContext(agentId, context),
       agentTask: (context, request, agentApiKey) =>
         runtimeApi().agentTask(context, request, agentApiKey),
       agentOpenviking: (context, request, agentApiKey) =>
         runtimeApi().agentRequests.agentOpenviking(context, request, agentApiKey),
+      agentMemoryDisposition: (context, request, agentApiKey) =>
+        runtimeApi().agentRequests.agentMemoryDisposition(context, request, agentApiKey),
       memoryFence: (agentId) => runtimeApi().memoryFence(agentId),
     },
   });
@@ -342,14 +347,22 @@ export async function controlAgent(
   action: "start" | "stop" | "restart" | "reset-session" | "full-reset",
   fence?: MemoryAgentToolProfile,
 ): Promise<void> {
+  const centrifugo = centrifugoApiWithFence(fence);
+  const conversations = new PrismaDirectConversationRepository(workspace.db);
+  const mentions = new MentionDeliveryReports(
+    new PrismaMentionDeliveryRepository(workspace.db),
+    centrifugo,
+    conversations,
+  );
   const control = new AgentControl(
     new PrismaAgentControlStore(workspace.db),
-    centrifugoApiWithFence(fence),
+    centrifugo,
     getAgentRuntimeLock(),
     { timeoutMs: 120_000, fallbackMs: 1_000 },
-    createAgentSessions(workspace.db),
+    createAgentSessions(workspace.db, mentions),
     getAgentControlSignal(),
-    new PrismaDirectConversationRepository(workspace.db),
+    conversations,
+    mentions,
   );
   const result = await control.execute({
     userId: workspace.evalUserId,
@@ -370,14 +383,22 @@ export async function startAgent(
   agentId: string,
   fence?: MemoryAgentToolProfile,
 ): Promise<void> {
+  const centrifugo = centrifugoApiWithFence(fence);
+  const conversations = new PrismaDirectConversationRepository(workspace.db);
+  const mentions = new MentionDeliveryReports(
+    new PrismaMentionDeliveryRepository(workspace.db),
+    centrifugo,
+    conversations,
+  );
   const control = new AgentControl(
     new PrismaAgentControlStore(workspace.db),
-    centrifugoApiWithFence(fence),
+    centrifugo,
     getAgentRuntimeLock(),
     { timeoutMs: 90_000, fallbackMs: 1_000 },
-    createAgentSessions(workspace.db),
+    createAgentSessions(workspace.db, mentions),
     getAgentControlSignal(),
-    new PrismaDirectConversationRepository(workspace.db),
+    conversations,
+    mentions,
   );
   const result = await control.execute({
     userId: workspace.evalUserId,

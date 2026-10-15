@@ -28,16 +28,21 @@ export type EvalWorkspace = {
  * channel. */
 export const TASK_AGENT_DESCRIPTION = [
   "You are the Task Agent of this channel's team.",
-  "The human member posts task prompts for the Memory Agent (@memory); its Memory Offer addressed",
-  "to you carries recalled experience from earlier tasks in this room (or says none exists).",
-  "You may read the original channel prompt and prepare analysis before the Offer arrives.",
-  "Before executing the solution, read this round's Offer and complete this episode's claim",
-  "on the human's original root message, then verify the claim succeeded. If the claim fails,",
-  "stop implementation and report the blocker; never bypass the claim.",
+  "The human member posts task prompts addressed to you (@task). You may read the original channel prompt",
+  "and prepare analysis. Before implementation complete this episode's claim on the human's original",
+  "root message and verify it succeeded. If the claim fails, stop implementation and report the blocker.",
+  "When you need prior experience OR documents/evidence to solve the task, send a channel message",
+  "mentioning @memory with a specific query and the constraints you need verified. You may ask again",
+  "as new questions arise. Wait for the Memory Agent's reply to that request before using its evidence.",
+  "Both document search and experience retrieval belong to Memory Agent: do not call BM25/search",
+  "scripts, skills_list, OpenViking directly, or read raw corpus/index/ledger files yourself.",
+  "The harness does not retrieve or inject memory before your turn. For a cited Memory Hint addressed",
+  "to you, call native memory_disposition with hint_id, decision=adopt|reject|defer, and a reason before",
+  "applying it. A channel reply is not a receipt; adopt records intent, not execution. Other tools stay available.",
   "Execute in your own workspace using the shell, starting from the original task prompt.",
   "Post your final answer as your last channel message in the exact format the task requests;",
-  "send no intermediate progress notifications: this evaluation treats the last Task channel message",
-  "as the final answer. Intermediate work stays in your workspace.",
+  "Send no intermediate progress notifications; @memory retrieval requests are allowed and are not",
+  "final answers. This evaluation treats your last non-request Task channel message as the final answer.",
   "Verify the final send returns accepted=true and a messageId; the CLI's --json receipt",
   "renders acceptance as state=sent plus messageId. Without a receipt, never claim",
   "the answer was submitted; follow the send's retry/draft instructions and report any blocker honestly.",
@@ -84,6 +89,8 @@ export async function provisionEvalWorkspace(input: {
       ownerId: owner.id,
       name: "memory",
       displayName: "Memory",
+      description:
+        "Respond to the Task Agent's @memory requests using the production retrieval tools. Retrieve prior experience from viking://resources/evo-ir/experiences and evidence documents from viking://resources/evo-ir/documents when those prepared collections are present. Set targetUri to the relevant collection so unrelated account directory summaries do not displace evidence. Use ov_find/ov_search_context and ov_read as needed; return a cited memory_offer to the requesting Task Agent. Do not invent citations or claim retrieval succeeded when tools fail.",
       computerId: null,
       runtimeConfig: {},
     },
@@ -115,7 +122,12 @@ export async function provisionEvalWorkspace(input: {
   });
   for (const agent of [memoryAgent, taskAgent]) {
     await input.db.conversationMember.create({
-      data: { conversationId: channel.id, workspaceId: workspace.id, agentId: agent.id },
+      data: {
+        conversationId: channel.id,
+        workspaceId: workspace.id,
+        agentId: agent.id,
+        channelMuted: agent.id === memoryAgent.id,
+      },
     });
   }
 

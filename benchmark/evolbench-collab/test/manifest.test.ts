@@ -1,3 +1,4 @@
+import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,7 +62,9 @@ describe("parseManifestLine", () => {
 
   test("empty lines are skipped; promptless lines are rejected", () => {
     expect(parseManifestLine("", 0)).toBeNull();
-    expect(() => parseManifestLine(JSON.stringify({ benchmark: "x" }), 2)).toThrow("no turns[0].prompt");
+    expect(() => parseManifestLine(JSON.stringify({ benchmark: "x" }), 2)).toThrow(
+      "no turns[0].prompt",
+    );
   });
 });
 
@@ -80,7 +83,11 @@ describe("groupFamilies + episodesForArm", () => {
       "stream",
     ]);
     const past = families.find((family) => family.familyId === "SM01_preference_adoption")!;
-    expect(past.episodes.map((episode) => episode.episodeId)).toEqual(["learn_a", "learn_b", "eval_near"]);
+    expect(past.episodes.map((episode) => episode.episodeId)).toEqual([
+      "learn_a",
+      "learn_b",
+      "eval_near",
+    ]);
     expect(episodesForArm(past, "warm")).toHaveLength(3);
     expect(episodesForArm(past, "cold").map((episode) => episode.episodeId)).toEqual(["eval_near"]);
   });

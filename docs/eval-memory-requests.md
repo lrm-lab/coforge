@@ -1,0 +1,72 @@
+# Task 主动请求 Memory 的评测
+
+评测入口是 `benchmark/evolbench-collab/src/run.ts`，通过真实 CoForge 频道、Daemon、
+Agent HTTPS 接口和 OpenViking 工具运行。经验与证据文档统一由 Memory Agent 检索。
+旧 Go/GMS/BM25 runner 的历史分数不能作为这条链路的结果。
+
+## 群聊协议
+
+1. 人类题目发送给 `@task`。Memory Agent 静音普通频道通知，个人 @mention 仍会唤醒它。
+2. Task 需要经验或文档时，在频道 `@memory` 提出查询，可以多次请求。
+3. Memory 调用 `ov_find` / `ov_search_context` / `ov_read`，用 `memory_offer` 返回带引用的 Hint。
+4. Task 调用原生 `memory_disposition` 记录 adopt / reject / defer 和原因，再决定如何执行。
+5. 最后一条不包含对 Memory 的结构化 @mention 的 Task 消息是最终答案。
+
+harness 不做 pre-turn recall，不自动检索、选技能或注入经验，也不向 Task 工作目录复制
+原始语料、技能 ledger 或 `ir_search.py`。Task 保留产品正常执行工具；角色指令要求检索走
+Memory。是否遵守需结合原生 Agent 轨迹核查，不能仅凭提示词宣称工具隔离。
+
+## 准备 IR 文档和训练经验
+
+宿主机准备程序使用 OpenViking 资源上传 API 和默认 `semantic_and_vectors` 处理。
+文档输入为 JSONL，每行仅投影 `docid`、`text`、可选 `url`；经验输入为冻结训练 ledger
+数组，投影 `sha256` 和 `text`。题目标签和 grader 字段不加入文档资源。
+经验文本自身应在训练阶段完成来源审核。
+
+使用独立 OpenViking account。账号初始设置文件可以指定 embedding 与 VLM；Gemma 实验
+必须显式配置 Gemma VLM 和 Task/Memory 模型，不能沿用 runner 的 DeepSeek 默认值。
+设置文件、密钥文件留在本地，禁止提交。
+
+```bash
+# 在仓库根目录；先设置 OPENVIKING_PROTOTYPE_CONF 和输入路径变量。
+COFORGE_KNOWLEDGE_ACCOUNT_ID=ir-frozen-20261015 \
+COFORGE_KNOWLEDGE_CREATE_ACCOUNT=1 \
+COFORGE_KNOWLEDGE_ACCOUNT_SETTINGS="$ACCOUNT_SETTINGS" \
+COFORGE_KNOWLEDGE_CORPUS="$CORPUS_JSONL" \
+COFORGE_KNOWLEDGE_LEDGER="$TRAIN_LEDGER_JSON" \
+COFORGE_EVAL_KNOWLEDGE_READY="$READY_JSON" \
+mise exec -- bun run --cwd benchmark/evolbench-collab prepare:knowledge
+```
+
+默认要求 67,707 篇文档和 89 条经验。小型集成验证可显式设置
+`COFORGE_KNOWLEDGE_DOCUMENT_COUNT` / `COFORGE_KNOWLEDGE_EXPERIENCE_COUNT`，结果必须标为 smoke。
+语义/向量处理每资源等待预算为 900 秒；请求成功但后台失败不算准备成功。
+checkpoint 保存源文件 SHA256、账号、已提交 task id 和完成记录。恢复时去掉
+`COFORGE_KNOWLEDGE_CREATE_ACCOUNT=1`，使用相同输入和账号；不重复提交已保存的后台任务。
+所有资源完成且数量吻合后才写 ready 文件。后台任务过期或失败需先处理，不能手工伪造 ready。
+
+## 冻结 test
+
+IR runner 要求 `COFORGE_EVAL_KNOWLEDGE_READY`，缺少时直接失败，不回退 BM25/GMS。
+使用只含 test 的 manifest 和 `COFORGE_EVAL_ARMS=warm`；这里的 `memory_policy` 为
+`frozen_readonly`。每题新建 workspace、频道和 Agent 会话，顺序绑定同一个准备账号，
+不把 test 对话 drain 回 OpenViking。账号已被其他 workspace 绑定时直接报错。
+
+```bash
+COFORGE_EVOLBENCH_COLLAB_EVAL=1 \
+COFORGE_EVAL_ARMS=warm \
+COFORGE_EVAL_MANIFEST="$TEST_MANIFEST" \
+COFORGE_EVAL_KNOWLEDGE_READY="$READY_JSON" \
+COFORGE_EVAL_MEMORY_AGENT_PROVIDER=gemma-4-31b-it-2gpu-1 \
+COFORGE_EVAL_MEMORY_AGENT_MODEL=gemma-4-31B-it \
+COFORGE_EVAL_TASK_AGENT_PROVIDER=gemma-4-31b-it-2gpu-1 \
+COFORGE_EVAL_TASK_AGENT_MODEL=gemma-4-31B-it \
+mise exec -- bun run --cwd benchmark/evolbench-collab eval
+```
+
+还需配置 `DATABASE_URL`、`REDIS_URL`、Agent 凭据加密 key、Centrifugo API/WS、Web URL、
+OpenViking URL/配置和明确的 `COFORGE_MEMORY_HINT_TTL_SECONDS`；沿用产品环境，不另建检索服务。
+`attempts.jsonl` 记录知识源哈希和数量、请求消息 ID、所有 Offer 消息 ID、实际 disposition，
+以及原有最终答案与运行诊断。判分继续使用原有离线 grader；“有答案”不等于判分正确。
+
+验证：`mise exec -- bun run --cwd benchmark/evolbench-collab test` 和 `check`。

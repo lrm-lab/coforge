@@ -5,8 +5,10 @@ export const PI_DEEPSEEK_V4_FLASH_PROVIDER = "lenovo-deepseek-v4-flash";
 export const PI_DEEPSEEK_V4_FLASH_MODEL = "DeepSeek";
 
 export const DEFAULT_MANIFESTS: Record<string, string> = {
-  evoagentbench: "/home/zhoujie22/river2_0/evol_bench/EvoAgentBench/data/evo-code-implementation.jsonl",
-  agentstream: "/home/zhoujie22/river2_0/evol_bench/AgentStream/data/agentstream-interleaved-seed1.jsonl",
+  evoagentbench:
+    "/home/zhoujie22/river2_0/evol_bench/EvoAgentBench/data/evo-code-implementation.jsonl",
+  agentstream:
+    "/home/zhoujie22/river2_0/evol_bench/AgentStream/data/agentstream-interleaved-seed1.jsonl",
   skilllearnbench: "/home/zhoujie22/river2_0/evol_bench/SkillLearnBench/data/slb-full.jsonl",
   past_bench: "/home/zhoujie22/river2_0/evol_bench/PAST-Bench/data/past-notes-memory.jsonl",
   earthbench: "/home/zhoujie22/river2_0/evol_bench/EarthBench/data/eb-smoke.jsonl",
@@ -66,7 +68,8 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     .filter((arm): arm is EvalArm => (EVAL_ARMS as readonly string[]).includes(arm));
   if (arms.length === 0) throw new Error("COFORGE_EVAL_ARMS has no recognized arm (warm|cold)");
   const manifestPath = required(env, "COFORGE_EVAL_MANIFEST");
-  const memoryAgentProvider = env.COFORGE_EVAL_MEMORY_AGENT_PROVIDER ?? PI_DEEPSEEK_V4_FLASH_PROVIDER;
+  const memoryAgentProvider =
+    env.COFORGE_EVAL_MEMORY_AGENT_PROVIDER ?? PI_DEEPSEEK_V4_FLASH_PROVIDER;
   const memoryAgentModel = env.COFORGE_EVAL_MEMORY_AGENT_MODEL ?? PI_DEEPSEEK_V4_FLASH_MODEL;
   const taskAgentProvider = env.COFORGE_EVAL_TASK_AGENT_PROVIDER ?? memoryAgentProvider;
   const taskAgentModel = env.COFORGE_EVAL_TASK_AGENT_MODEL ?? memoryAgentModel;
@@ -79,7 +82,8 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
       .filter((part) => part.length > 0),
     arms,
     seed: Number(env.COFORGE_EVAL_SEED ?? "1"),
-    evaluationId: env.COFORGE_EVALUATION_ID ?? `evol-collab-${new Date().toISOString().slice(0, 10)}`,
+    evaluationId:
+      env.COFORGE_EVALUATION_ID ?? `evol-collab-${new Date().toISOString().slice(0, 10)}`,
     databaseUrl: required(env, "DATABASE_URL"),
     redisUrl: required(env, "REDIS_URL"),
     ovUrl: env.COFORGE_OPENVIKING_URL ?? "http://127.0.0.1:1933",

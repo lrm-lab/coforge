@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { validateKnowledgeReady } from "./knowledge";
 import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
 import { controlAgent, startAgent, startEvalDaemon, type EvalDaemon } from "./eval-daemon";
@@ -38,6 +39,21 @@ Bun.env.COFORGE_EVAL_DISABLE_HOST_PI_INJECTION = "1";
 process.env.COFORGE_EVAL_DISABLE_HOST_PI_INJECTION = "1";
 const manifest = await loadManifest(env.manifestPath, env.episodeMod);
 const benchmark = env.manifestBenchmark ?? manifest[0]!.benchmark;
+const knowledgePath = Bun.env.COFORGE_EVAL_KNOWLEDGE_READY;
+const frozenKnowledge = knowledgePath
+  ? validateKnowledgeReady(await Bun.file(knowledgePath).json())
+  : null;
+if (manifest.some((episode) => episode.domain === "information_retrieval") && !frozenKnowledge) {
+  throw new Error(
+    "IR requires COFORGE_EVAL_KNOWLEDGE_READY; direct BM25/GMS evaluation is disabled",
+  );
+}
+if (
+  frozenKnowledge &&
+  (env.arms.some((arm) => arm !== "warm") || manifest.some((episode) => episode.split !== "test"))
+) {
+  throw new Error("prepared knowledge evaluation requires warm arm and a test-only manifest");
+}
 const profile = profileFor(benchmark);
 const episodeTimeoutMs = env.episodeTimeoutMs ?? profile.episodeTimeoutMs;
 const settleMs = env.settleMs ?? profile.settleMs;
@@ -100,7 +116,11 @@ function attemptRow(input: {
     family_id: episode.familyId,
     domain: episode.domain,
     arm: input.arm,
-    memory_policy: input.arm === "warm" ? "read_write" : "no_shared_memory",
+    memory_policy: frozenKnowledge
+      ? "frozen_readonly"
+      : input.arm === "warm"
+        ? "read_write"
+        : "no_shared_memory",
     seed: env.seed,
     attempt: 1,
     status: input.finalOutput?.trim() ? "success" : "failure",
@@ -150,7 +170,18 @@ async function provisionFamily(
   const reuseId = arm === "warm" ? await warmReuseAccountId() : "";
   let accountId: string;
   let users: OvUsers;
-  if (reuseId.length > 0) {
+  if (frozenKnowledge) {
+    accountId = frozenKnowledge.accountId;
+    const bindings = await db.openVikingBinding.findMany({
+      where: { accountId },
+      select: { workspaceId: true },
+    });
+    if (bindings.length > 0)
+      throw new Error(
+        "prepared knowledge account is already bound; refusing to delete another workspace",
+      );
+    users = await rotateEvalAdminKey(runtime, root, accountId);
+  } else if (reuseId.length > 0) {
     try {
       users = await rotateEvalAdminKey(runtime, root, reuseId);
       accountId = reuseId;
@@ -191,7 +222,7 @@ async function provisionFamily(
     users = await provisionDisposableAccount(runtime, root, accountId);
   }
   await rememberEvalAccountKey(accountId, users.adminKey);
-  if (arm === "warm") await Bun.write(warmReuseStatePath, accountId);
+  if (arm === "warm" && !frozenKnowledge) await Bun.write(warmReuseStatePath, accountId);
   const workspace = await provisionEvalWorkspace({
     db,
     arm,
@@ -325,10 +356,15 @@ async function executeEpisode(
       lastProgressAt: result.lastProgressAt,
     },
   });
+  row.knowledge = frozenKnowledge ?? undefined;
+  row.memory_request_count = result.memoryRequestCount;
+  row.memory_request_message_ids = result.memoryRequestMessageIds;
+  row.memory_offer_message_ids = result.offerMessageIds;
+  row.memory_dispositions = result.dispositions;
   row.task_message_count = result.taskMessageCount;
   row.memory_leak_count = result.memoryLeakMessageIds.length;
   if (sidecarVerification) row.sidecar_verification = sidecarVerification;
-  if (arm === "warm") {
+  if (arm === "warm" && !frozenKnowledge) {
     const drained = await drainEpisodeToMemory({
       workspace: provisioned.workspace,
       dispatcher: provisioned.dispatcher,
@@ -360,7 +396,7 @@ try {
     for (const family of families) {
       const episodes = episodesForArm(family, arm);
       if (episodes.length === 0) continue;
-      if (arm === "warm") {
+      if (arm === "warm" && !frozenKnowledge) {
         const provisioned = await provisionFamily(arm, family);
         try {
           for (const episode of episodes) {
