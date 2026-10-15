@@ -189,6 +189,23 @@ test("cuts the stream into chunks whose offsets, digests and sizes add up to the
   expect(manifest.sha256).toBe(sha256(bundle));
 });
 
+test("a refused chunk keeps its original error while streaming and leaves the source packable", async () => {
+  const content = incompressible(6 * MiB);
+  const root = await workspace({ "large.txt": content });
+  const refusal = new Error("consumer refused the chunk");
+  await expect(
+    pack(root, {
+      chunkBytes: MiB,
+      onChunk: async () => {
+        throw refusal;
+      },
+    }),
+  ).rejects.toBe(refusal);
+
+  const { bundle } = await pack(root, { chunkBytes: MiB });
+  expect((await unpack(bundle)).get("workspace/large.txt")!.text).toBe(content);
+});
+
 test(
   "keeps at most three chunks in the hands of the consumer at once",
   async () => {

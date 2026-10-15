@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import { lstat, open, readlink, type FileHandle } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
+import { Writable } from "streamx";
 import { pack, type Pack } from "tar-stream";
 import { isSecretName, isWorkspaceSymlinkTarget } from "./selection-rules";
 import type {
@@ -194,23 +195,12 @@ type PreparedEntry =
   | { kind: "streamed"; header: Header; handle: FileHandle; sizeBytes: number };
 
 /**
- * streamx's `write` takes no callback: it returns false under backpressure, then emits `drain`.
- * A sink destroyed meanwhile emits `close` instead, which ends the wait.
+ * streamx's `write` takes no callback and returns false under backpressure. Its drain wait
+ * resolves false if the sink is destroyed before the queued writes finish.
  */
 async function writeTo(sink: EntrySink, data: Uint8Array) {
-  if (sink.write(data)) return;
-  await new Promise<void>((resolve, reject) => {
-    const settle = (error?: Error) => {
-      sink.off("drain", onDrain);
-      sink.off("close", onClose);
-      if (error) reject(error);
-      else resolve();
-    };
-    const onDrain = () => settle();
-    const onClose = () => settle(new Error("tar entry closed before it was written"));
-    sink.on("drain", onDrain);
-    sink.on("close", onClose);
-  });
+  if (!sink.write(data) && !(await Writable.drained(sink)))
+    throw new Error("tar entry closed before it was written");
 }
 
 /** Reads exactly `sizeBytes` from the start of the file, zero-padded if it shrank meanwhile. */

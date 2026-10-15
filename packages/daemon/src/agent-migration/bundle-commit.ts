@@ -1,5 +1,6 @@
 import { mkdir, open, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, posix, sep } from "node:path";
+import { Writable } from "streamx";
 import { extract } from "tar-stream";
 import { AGENT_MIGRATION_BUNDLE_ROOT, type AgentMigrationBundleManifest } from "./bundle-writer";
 import { readVerifiedAgentMigrationChunk } from "./chunk-store";
@@ -130,25 +131,6 @@ function verifiedChunks(migrationDirectory: string, manifest: AgentMigrationBund
   return { stream, digest: () => ({ sha256: bundleHash.digest("hex"), sizeBytes }) };
 }
 
-/**
- * Waits for a backpressured streamx writable to drain. A writable destroyed meanwhile emits
- * `close` instead and never drains, so that ends the wait too, as a failure.
- */
-function drained(writable: ReturnType<typeof extract>) {
-  return new Promise<void>((resolve, reject) => {
-    const settle = (error?: Error) => {
-      writable.off("drain", onDrain);
-      writable.off("close", onClose);
-      if (error) reject(error);
-      else resolve();
-    };
-    const onDrain = () => settle();
-    const onClose = () => settle(new Error("the archive reader closed before it drained"));
-    writable.on("drain", onDrain);
-    writable.on("close", onClose);
-  });
-}
-
 /** Unpacks the verified bundle into `destination`, checking every entry; returns its totals. */
 async function unpack(
   migrationDirectory: string,
@@ -176,8 +158,11 @@ async function unpack(
     try {
       const decompressed = chunks.stream.pipeThrough(new DecompressionStream("gzip"));
       for await (const data of decompressed as unknown as AsyncIterable<Uint8Array>) {
-        if (!reader.write(Buffer.from(data.buffer, data.byteOffset, data.byteLength)))
-          await drained(reader);
+        if (
+          !reader.write(Buffer.from(data.buffer, data.byteOffset, data.byteLength)) &&
+          !(await Writable.drained(reader))
+        )
+          throw new Error("the archive reader closed before it drained");
       }
       // streamx's `end` writes nothing for `undefined`; its typings just require the argument.
       reader.end(undefined);

@@ -25,6 +25,7 @@
     "@logtape/redaction": "2.3.2",
     "@lrm/coforge-sdk": "workspace:*",
     "centrifuge": "5.2.1",
+    "streamx": "2.28.1",
     "tar-stream": "3.2.1"
   },
   "devDependencies": {
