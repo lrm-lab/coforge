@@ -79,7 +79,7 @@ export function EmojiPicker({
         if (alive) setLibrary({ picker: epr.default, data: data.default });
       } catch (cause) {
         if (alive) setFailed(true);
-        console.warn("emoji picker could not be loaded", cause);
+        console.error("emoji picker could not be loaded", cause);
       }
     })();
     return () => {
@@ -111,7 +111,7 @@ export function EmojiPicker({
     // A module URL whose fetch failed is remembered by the document, so a second import() of the
     // same URL cannot recover — the first retry is an honest second attempt, and after it the
     // only real recovery is a fresh document load.
-    const exhausted = attempt > 1;
+    const exhausted = attempt > 0;
     grid = (
       <div className="flex min-h-90 flex-col items-center justify-center gap-2 text-sm text-tertiary">
         <span>{zh ? "加载失败" : "Failed to load"}</span>
