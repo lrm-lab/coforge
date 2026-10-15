@@ -67,12 +67,8 @@ export function EmojiPicker({
           // TEMP DEBUG
           const Orig = eprModule.default;
           const Wrapped = function (props: never) {
-            try {
-              return (Orig as (p: never) => unknown)(props);
-            } catch (e) {
-              console.error("[epr-debug] props", JSON.stringify(props ?? null)?.slice(0, 200), "stack", (e as Error).stack?.slice(0, 500));
-              throw e;
-            }
+            if (props === null) console.error("[epr-null-props] caller:", new Error().stack?.slice(0, 700));
+            return (Orig as (p: never) => unknown)(props);
           };
           setEpr(Wrapped);
           setData(dataModule.default);
