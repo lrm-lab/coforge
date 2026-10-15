@@ -1010,6 +1010,7 @@ export const MessageRow = memo(function MessageRow({
                 onOpenTask={onOpenTask}
                 channelNames={channelNames}
                 onOpenAgentProfile={onOpenAgentProfile}
+                onOpenPersonProfile={onOpenPersonProfile}
                 expanded={expanded}
                 collapsible={collapsible}
                 onToggleExpanded={() => onToggleExpanded(message.id)}

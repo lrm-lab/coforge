@@ -38,6 +38,7 @@ export function MessageBody({
   plainMentions,
   viewerId,
   onOpenAgentProfile,
+  onOpenPersonProfile,
   onOpenTask,
   channelNames,
 }: {
@@ -52,6 +53,8 @@ export function MessageBody({
    * the conversation owns that slot; absent, Agent chips render as inert highlights (the
    * previous behavior), never dead controls. */
   onOpenAgentProfile?: (agentId: string) => void;
+  /** Opens a person's profile from their mention chip; absent, a person's chip is inert. */
+  onOpenPersonProfile?: (userId: string) => void;
   /** Opens a task reference's detail popup. Absent, a known Task's badge is not a control. */
   onOpenTask?: (number: number) => void;
   /** Every channel of the Workspace, id → current name (closed ones included), for a host that can
@@ -85,14 +88,17 @@ export function MessageBody({
         : [rehypeSanitize],
     [hasReference, handles, viewerId, plainMentions, channelNames],
   );
-  // The `span` override recognises the chips `rehypeReferenceChips` injects: an Agent mention chip
-  // (`data-mention-agent-id`) becomes an accessible button, a task reference
+  // The `span` override recognises the chips `rehypeReferenceChips` injects: a mention chip
+  // (`data-mention-agent-id` or `data-mention-user-id`) becomes an accessible button, a task reference
   // (`data-task-reference-number`) its Task's badge (`TaskReference`), a channel-reference chip
   // (`data-channel-id`) a link to the channel, and a thread-reference chip (`data-thread-root-id`) a
   // link that opens the thread in its channel. Every other span passes through.
   const components = useMemo<Components>(
-    () => ({ ...MARKDOWN_COMPONENTS, span: chipSpan(onOpenAgentProfile, onOpenTask) }),
-    [onOpenAgentProfile, onOpenTask],
+    () => ({
+      ...MARKDOWN_COMPONENTS,
+      span: chipSpan(onOpenAgentProfile, onOpenPersonProfile, onOpenTask),
+    }),
+    [onOpenAgentProfile, onOpenPersonProfile, onOpenTask],
   );
 
   return (
@@ -171,17 +177,19 @@ function ChannelChipLink({
 }
 
 /**
- * The `span` renderer. An Agent mention chip carries `data-mention-agent-id` and becomes a
- * keyboard- and pointer-accessible control when `onOpenAgentProfile` is provided. A task reference
+ * The `span` renderer. A mention chip carries `data-mention-agent-id` (an Agent) or
+ * `data-mention-user-id` (a person) and becomes a keyboard- and pointer-accessible control that
+ * opens that profile when the matching handler is provided. A task reference
  * carries `data-task-reference-number` and renders as `TaskReference`. A channel-reference chip
  * carries `data-channel-id` and becomes a router link to that channel: it navigates, so it is a
  * real link (open in a new tab, copy the address) rather than a button. A thread-reference chip
  * carries `data-thread-channel-id` and `data-thread-root-id` and becomes a router link to that
  * channel with the thread pane open (`?threadRootId=`), the same URL state the thread opener
- * writes. All other spans, human mention chips included, render unchanged.
+ * writes. All other spans render unchanged.
  */
 function chipSpan(
   onOpenAgentProfile?: (agentId: string) => void,
+  onOpenPersonProfile?: (userId: string) => void,
   onOpenTask?: (number: number) => void,
 ) {
   return function ChipSpan({
@@ -222,10 +230,13 @@ function chipSpan(
       );
     }
     const agentId = (props as Record<string, unknown>)["data-mention-agent-id"];
+    const userId = (props as Record<string, unknown>)["data-mention-user-id"];
     const control = chipControl(
       typeof agentId === "string" && onOpenAgentProfile
         ? () => onOpenAgentProfile(agentId)
-        : undefined,
+        : typeof userId === "string" && onOpenPersonProfile
+          ? () => onOpenPersonProfile(userId)
+          : undefined,
     );
     return (
       <span {...props} {...control} className={className}>

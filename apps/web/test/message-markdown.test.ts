@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
   CHANNEL_CHIP_CLASS,
-  MENTION_CHIP_AGENT_CLASS,
+  MENTION_CHIP_OPENABLE_CLASS,
   MENTION_CHIP_CLASS,
   MENTION_CHIP_SELF_CLASS,
   type ChipMention,
@@ -146,7 +146,7 @@ test("an Agent chip carries its Agent id and the clickable class", () => {
   });
   const chip = (tree.children[0]!.children as Array<Record<string, unknown>>)[0]!;
   const properties = chip.properties as { className: string[]; "data-mention-agent-id"?: string };
-  expect(properties.className).toContain(MENTION_CHIP_AGENT_CLASS);
+  expect(properties.className).toContain(MENTION_CHIP_OPENABLE_CLASS);
   expect(properties["data-mention-agent-id"]).toBe(UUID);
 });
 
@@ -164,7 +164,7 @@ test("a chip uses the ordinary brand fill by default", () => {
   );
 });
 
-test("a mention of the viewing user gets the stronger treatment and stays a plain highlight", () => {
+test("a mention of the viewing user gets the stronger treatment and opens their own profile", () => {
   const tree = chipify([paragraph([text(HUMAN_TOKEN)])], {
     handles: new Map([
       [`user:${OTHER_UUID}`, { actorId: OTHER_UUID, handle: "ada", label: "ada" }],
@@ -172,10 +172,15 @@ test("a mention of the viewing user gets the stronger treatment and stays a plai
     viewerId: OTHER_UUID,
   });
   const chip = (tree.children[0]!.children as Array<Record<string, unknown>>)[0]!;
-  const properties = chip.properties as { className: string[]; "data-mention-agent-id"?: string };
-  expect(properties.className).toEqual(MENTION_CHIP_SELF_CLASS.split(" "));
-  // A human mention is never clickable.
-  expect(properties.className).not.toContain(MENTION_CHIP_AGENT_CLASS);
+  const properties = chip.properties as {
+    className: string[];
+    "data-mention-agent-id"?: string;
+    "data-mention-user-id"?: string;
+  };
+  expect(properties.className.slice(0, -1)).toEqual(MENTION_CHIP_SELF_CLASS.split(" "));
+  // A person's mention opens their profile, as an Agent's opens the Agent's.
+  expect(properties.className).toContain(MENTION_CHIP_OPENABLE_CLASS);
+  expect(properties["data-mention-user-id"]).toBe(OTHER_UUID);
   expect(properties["data-mention-agent-id"]).toBeUndefined();
 });
 
@@ -187,9 +192,10 @@ test("a mention of someone else does not get the viewer treatment", () => {
     viewerId: UUID,
   });
   const chip = (tree.children[0]!.children as Array<Record<string, unknown>>)[0]!;
-  expect((chip.properties as { className: string[] }).className).toEqual(
-    MENTION_CHIP_CLASS.split(" "),
-  );
+  expect((chip.properties as { className: string[] }).className).toEqual([
+    ...MENTION_CHIP_CLASS.split(" "),
+    MENTION_CHIP_OPENABLE_CLASS,
+  ]);
 });
 
 test("the viewer is recognized by their id, so a namesake of their handle is not them", () => {
@@ -201,9 +207,10 @@ test("the viewer is recognized by their id, so a namesake of their handle is not
     viewerId: UUID,
   });
   const chip = (namesake.children[0]!.children as Array<Record<string, unknown>>)[0]!;
-  expect((chip.properties as { className: string[] }).className).toEqual(
-    MENTION_CHIP_CLASS.split(" "),
-  );
+  expect((chip.properties as { className: string[] }).className).toEqual([
+    ...MENTION_CHIP_CLASS.split(" "),
+    MENTION_CHIP_OPENABLE_CLASS,
+  ]);
   // An Agent is never the viewer, even when its id is compared to theirs.
   const agent = chipify([paragraph([text(AGENT_TOKEN)])], {
     handles: new Map([

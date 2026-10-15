@@ -127,14 +127,17 @@ export function ChannelMembersPage({
   );
 }
 
-/** The roster's state that outlives it while an Agent's profile is open in its place, so Back
+/** A roster member whose profile opens in the roster's place: an Agent or a person. */
+export type RosterProfile = { kind: "agent" | "user"; id: string };
+
+/** The roster's state that outlives it while a member's profile is open in its place, so Back
  * returns to the same search, with focus on the row that opened the profile. */
 export type RosterState = {
   search: string;
   onSearchChange: (search: string) => void;
-  onOpenAgentProfile: (agentId: string) => void;
-  /** The Agent whose profile was just left: its row takes focus. */
-  returnFocusAgentId?: string;
+  onOpenProfile: (profile: RosterProfile) => void;
+  /** The member whose profile was just left: their row takes focus. */
+  returnFocus?: RosterProfile;
 };
 
 function MembersRoster({
@@ -143,7 +146,7 @@ function MembersRoster({
   viewerId,
   data,
   onAdd,
-  roster: { search, onSearchChange, onOpenAgentProfile, returnFocusAgentId },
+  roster: { search, onSearchChange, onOpenProfile, returnFocus },
 }: {
   channelId: string;
   channelName: string;
@@ -224,8 +227,8 @@ function MembersRoster({
         canRemove={data.canRemoveMembers}
         onToggleRole={toggleRole}
         onRemove={setRemoving}
-        onOpenAgentProfile={onOpenAgentProfile}
-        autoFocus={member.kind === "agent" && member.id === returnFocusAgentId}
+        onOpenProfile={onOpenProfile}
+        autoFocus={member.kind === returnFocus?.kind && member.id === returnFocus.id}
       />
     );
   }
@@ -307,7 +310,7 @@ const MemberRow = memo(function MemberRow({
   canRemove,
   onToggleRole,
   onRemove,
-  onOpenAgentProfile,
+  onOpenProfile,
   autoFocus,
 }: {
   member: Member;
@@ -317,7 +320,7 @@ const MemberRow = memo(function MemberRow({
   canRemove: boolean;
   onToggleRole: (member: Member) => void;
   onRemove: (member: Member) => void;
-  onOpenAgentProfile: (agentId: string) => void;
+  onOpenProfile: (profile: RosterProfile) => void;
   autoFocus: boolean;
 }) {
   const hasActions = canChangeRole || canRemove;
@@ -353,18 +356,18 @@ const MemberRow = memo(function MemberRow({
   );
   return (
     <li className="group flex items-center gap-3 px-4 py-2 md:px-6">
-      {member.kind === "agent" ? (
-        <AriaButton
-          aria-label={m.agent_open_profile({ name: member.displayName })}
-          autoFocus={autoFocus}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md outline-focus-ring focus-visible:outline-2"
-          onPress={() => onOpenAgentProfile(member.id)}
-        >
-          {identity}
-        </AriaButton>
-      ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-3">{identity}</span>
-      )}
+      <AriaButton
+        aria-label={
+          member.kind === "agent"
+            ? m.agent_open_profile({ name: member.displayName })
+            : m.member_person_open_profile({ name: member.displayName })
+        }
+        autoFocus={autoFocus}
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md outline-focus-ring focus-visible:outline-2"
+        onPress={() => onOpenProfile({ kind: member.kind, id: member.id })}
+      >
+        {identity}
+      </AriaButton>
       {/* Hidden by opacity, not visibility, so the actions stay in the tab order and a keyboard
           focus reveals them. */}
       <span className="flex shrink-0 items-center gap-2 md:grid">

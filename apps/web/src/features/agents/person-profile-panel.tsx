@@ -4,12 +4,13 @@ import { getRouteApi, Link, useHydrated, useNavigate, useRouter } from "@tanstac
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertCircle,
+  ArrowLeft,
   MessageSquare01 as MessageSquare,
   UserMinus01,
   UserX01,
   XClose as X,
 } from "@untitledui/icons";
-import { Heading, Text } from "react-aria-components";
+import { Button as AriaButton, Heading, Text } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
@@ -54,7 +55,21 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
  * person's role and remove them here as in Settings → Members; a person edits their own profile
  * in Settings → Account.
  */
-export function PersonProfilePanel({ userId, onClose }: { userId: string; onClose: () => void }) {
+export function PersonProfilePanel({
+  userId,
+  onClose,
+  back,
+  onOpenAgent,
+}: {
+  userId: string;
+  onClose: () => void;
+  /** Where the profile was opened from, when it is shown inside another page (a channel's
+   * members): a Back button before the avatar returns there. */
+  back?: PanelBack;
+  /** Opens one of the person's Agents in the host's own place for it. Absent, the Agent opens in
+   * the page's profile slot through the address. */
+  onOpenAgent?: (agentId: string) => void;
+}) {
   // The app shell's Workspace, which every page hosting this panel sits under.
   const workspaceId = useCurrentWorkspaceId();
   const person = useQuery({
@@ -84,7 +99,9 @@ export function PersonProfilePanel({ userId, onClose }: { userId: string; onClos
       isAppErrorCode(person.error, "NOT_FOUND") || isAppErrorCode(person.error, "ACCESS_DENIED");
     return (
       <aside className="flex min-h-0 flex-1 flex-col">
-        <div className="flex h-12 shrink-0 items-center justify-end px-5">
+        <div className="flex h-12 shrink-0 items-center gap-2 px-5">
+          {back && <BackButton back={back} />}
+          <span className="flex-1" />
           <CloseButton onClose={onClose} />
         </div>
         {missing ? (
@@ -115,6 +132,7 @@ export function PersonProfilePanel({ userId, onClose }: { userId: string; onClos
     <aside aria-label={profile.displayName} className="flex min-h-0 flex-1 flex-col">
       {/* Same 48px band and 20px gutter as the Agent panel's header. */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-5">
+        {back && <BackButton back={back} />}
         <MemberAvatar
           size="sm"
           userId={profile.id}
@@ -133,8 +151,24 @@ export function PersonProfilePanel({ userId, onClose }: { userId: string; onClos
         />
         <CloseButton onClose={onClose} />
       </header>
-      <PersonProfileBody profile={profile} onRemoved={onClose} />
+      <PersonProfileBody profile={profile} onRemoved={onClose} onOpenAgent={onOpenAgent} />
     </aside>
+  );
+}
+
+type PanelBack = { label: string; onPress: () => void };
+
+function BackButton({ back }: { back: PanelBack }) {
+  return (
+    <ButtonUtility
+      icon={ArrowLeft}
+      size="sm"
+      color="tertiary"
+      className="-ml-1.5"
+      tooltip={back.label}
+      aria-label={back.label}
+      onClick={back.onPress}
+    />
   );
 }
 
@@ -154,8 +188,10 @@ function CloseButton({ onClose }: { onClose: () => void }) {
 function PersonProfileBody({
   profile,
   onRemoved,
+  onOpenAgent,
 }: {
   profile: MemberPersonProfile;
+  onOpenAgent?: (agentId: string) => void;
   /** The person was removed from the Workspace: the panel has nothing left to show. */
   onRemoved: () => void;
 }) {
@@ -276,24 +312,31 @@ function PersonProfileBody({
           <ul aria-label={m.member_created_agents()} className="mt-3 flex flex-col gap-2">
             {profile.createdAgents.map((agent) => (
               <li key={agent.id}>
-                <Link
-                  // The page the panel is on (Members or a conversation) shows the Agent's panel
-                  // in the same slot.
-                  to="."
-                  resetScroll={false}
-                  search={(previous: { profile?: string; agentTab?: string }) => ({
-                    ...previous,
-                    profile: formatAgentProfileParam(agent.id),
-                    agentTab: undefined,
-                  })}
-                  aria-label={m.agent_open_profile({ name: agent.displayName })}
-                  className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left ring-1 ring-secondary outline-focus-ring ring-inset hover:bg-primary_hover focus-visible:outline-2"
-                >
-                  <CreatedAgentAvatar agent={agent} />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
-                    {agent.displayName}
-                  </span>
-                </Link>
+                {onOpenAgent ? (
+                  <AriaButton
+                    aria-label={m.agent_open_profile({ name: agent.displayName })}
+                    className={CREATED_AGENT_ROW_CLASS}
+                    onPress={() => onOpenAgent(agent.id)}
+                  >
+                    <CreatedAgentRow agent={agent} />
+                  </AriaButton>
+                ) : (
+                  <Link
+                    // The page the panel is on (Members or a conversation) shows the Agent's panel
+                    // in the same slot.
+                    to="."
+                    resetScroll={false}
+                    search={(previous: { profile?: string; agentTab?: string }) => ({
+                      ...previous,
+                      profile: formatAgentProfileParam(agent.id),
+                      agentTab: undefined,
+                    })}
+                    aria-label={m.agent_open_profile({ name: agent.displayName })}
+                    className={CREATED_AGENT_ROW_CLASS}
+                  >
+                    <CreatedAgentRow agent={agent} />
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
@@ -479,6 +522,20 @@ function RemoveMemberDialog({
         </Dialog>
       </Modal>
     </ModalOverlay>
+  );
+}
+
+const CREATED_AGENT_ROW_CLASS =
+  "flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left ring-1 ring-secondary outline-focus-ring ring-inset hover:bg-primary_hover focus-visible:outline-2";
+
+function CreatedAgentRow({ agent }: { agent: MemberPersonProfile["createdAgents"][number] }) {
+  return (
+    <>
+      <CreatedAgentAvatar agent={agent} />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
+        {agent.displayName}
+      </span>
+    </>
   );
 }
 

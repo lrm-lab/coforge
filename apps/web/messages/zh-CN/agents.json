@@ -48,6 +48,7 @@
   "member_no_humans": "暂无人员",
   "member_no_computer": "未分配电脑",
   "member_person_open_profile": "打开 {name} 的资料",
+  "member_person_view_profile": "查看资料",
   "member_person_email": "邮箱",
   "member_person_joined": "加入时间",
   "member_person_no_agents": "尚未创建 Agent",

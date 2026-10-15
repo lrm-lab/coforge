@@ -14,6 +14,7 @@ import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import {
   useOpenAgentProfile,
   type OpenAgentProfile,
+  type OpenPersonProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
@@ -55,6 +56,7 @@ function MemberProfileCard({
   serverRole,
   channelRole,
   onOpenDirect,
+  onOpenProfile,
 }: {
   userId?: string;
   name: string;
@@ -63,6 +65,7 @@ function MemberProfileCard({
   serverRole?: string | null;
   channelRole?: string;
   onOpenDirect?: (peer: { userId: string }) => void;
+  onOpenProfile?: OpenPersonProfile;
 }) {
   const online = userId ? useMemberOnline(userId) : undefined;
   const closePreview = useClosePreview();
@@ -112,18 +115,32 @@ function MemberProfileCard({
           {description}
         </p>
       )}
-      {userId && onOpenDirect && (
-        <div className="border-t border-secondary px-3 py-2 flex justify-end">
-          <Button
-            size="sm"
-            color="secondary"
-            onPress={() => {
-              closePreview();
-              void onOpenDirect({ userId });
-            }}
-          >
-            {m.member_private_chat()}
-          </Button>
+      {userId && (onOpenDirect || onOpenProfile) && (
+        <div className="border-t border-secondary px-3 py-2 flex justify-end gap-2">
+          {onOpenProfile && (
+            <Button
+              size="sm"
+              color="secondary"
+              onPress={() => {
+                closePreview();
+                onOpenProfile(userId);
+              }}
+            >
+              {m.member_person_view_profile()}
+            </Button>
+          )}
+          {onOpenDirect && (
+            <Button
+              size="sm"
+              color="secondary"
+              onPress={() => {
+                closePreview();
+                void onOpenDirect({ userId });
+              }}
+            >
+              {m.member_private_chat()}
+            </Button>
+          )}
         </div>
       )}
     </>
@@ -160,6 +177,7 @@ export function ChannelHeaderFaces({
   onOpenMembers,
   onAddMembers,
   onOpenAgentProfile,
+  onOpenPersonProfile,
   onOpenDirect,
 }: {
   entries: readonly ChannelHeaderFace[];
@@ -167,6 +185,7 @@ export function ChannelHeaderFaces({
   onOpenMembers: () => void;
   onAddMembers: () => void;
   onOpenAgentProfile?: OpenAgentProfile;
+  onOpenPersonProfile?: OpenPersonProfile;
   onOpenDirect?: (peer: { userId: string }) => void;
 }) {
   const shown = entries.slice(0, CHANNEL_HEADER_FACE_LIMIT);
@@ -231,6 +250,7 @@ export function ChannelHeaderFaces({
                   serverRole={entry.serverRole}
                   channelRole={entry.channelRole}
                   onOpenDirect={onOpenDirect}
+                  onOpenProfile={onOpenPersonProfile}
                 />
               </HoverPopover>
             );
@@ -279,7 +299,7 @@ export function ChannelHeaderMemberCluster({
   onAddMembers: () => void;
 }) {
   const members = useChannelMembers(channelId);
-  const { openAgentProfile } = useOpenAgentProfile();
+  const { openAgentProfile, openPersonProfile } = useOpenAgentProfile();
   const openDirect = useOpenDirectConversation();
 
   if (members.isPending) {
@@ -326,6 +346,7 @@ export function ChannelHeaderMemberCluster({
       onOpenMembers={onOpenMembers}
       onAddMembers={onAddMembers}
       onOpenAgentProfile={openAgentProfile}
+      onOpenPersonProfile={openPersonProfile}
       onOpenDirect={openDirect}
     />
   );

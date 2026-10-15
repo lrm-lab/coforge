@@ -48,6 +48,7 @@
   "member_no_humans": "No humans to display",
   "member_no_computer": "No computer assigned",
   "member_person_open_profile": "Open {name}'s profile",
+  "member_person_view_profile": "View profile",
   "member_person_email": "Email",
   "member_person_joined": "Joined",
   "member_person_no_agents": "No Agents created",
