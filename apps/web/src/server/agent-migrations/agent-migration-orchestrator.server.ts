@@ -32,6 +32,14 @@ export type AgentMigrationRuntime = {
 /** How far past its lease the server waits before expiring a migration a Computer may still be running. */
 const EXPIRY_GRACE_MS = 60 * 1000;
 
+/** The source never confirmed it stopped the Agent, so the request ended before anything moved. */
+export class AgentMigrationSourceStopError extends Error {
+  constructor(cause: unknown) {
+    super("the source Computer did not confirm the Agent stopped", { cause });
+    this.name = "AgentMigrationSourceStopError";
+  }
+}
+
 const scopeOf = (migration: AgentMigrationRecord): AgentScope => ({
   workspaceId: migration.workspaceId,
   agentId: migration.agentId,
@@ -66,7 +74,7 @@ export class AgentMigrationOrchestrator {
         migrationId: started.migration.id,
       });
       if (canceled.status === "canceled") await this.ended(canceled.migration);
-      throw error;
+      throw new AgentMigrationSourceStopError(error);
     }
     await dispatch.lease(started.migration, "source");
     return started;

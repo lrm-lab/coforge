@@ -53,7 +53,8 @@ test("a move in progress shows its stage and, for its owner, a cancel; a finishe
       onCancel={() => {}}
     />,
   );
-  expect(failed).toContain("bucket_refused");
+  expect(failed).toContain(m.agent_migration_reason_transfer());
+  expect(failed).toContain("text-error-primary");
   expect(failed).not.toContain(m.agent_migration_cancel());
 
   const watching = renderToStaticMarkup(

@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { agentStartIntent, agentStopIntent } from "#src/server/agents/manage-agents.server";
@@ -81,6 +82,20 @@ export function agentMigrationRequests(db: PrismaClient) {
           select: { ownerId: true },
         })
       )?.ownerId,
+    isWorkspaceAdmin: async (workspaceId, userId) => {
+      const membership = await db.workspaceMembership.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId } },
+        select: { role: true },
+      });
+      return membership ? isAdminLike(membership.role as WorkspaceMemberRole) : false;
+    },
+    computerName: async (computerId) => {
+      const computer = await db.computer.findUnique({
+        where: { id: computerId },
+        select: { displayName: true, name: true },
+      });
+      return computer?.displayName || computer?.name || null;
+    },
     // A misconfigured bucket reads as "not set up" here; the daemons' route reports the error.
     available: async () =>
       (await readAgentMigrationStorageConfig(process.env).catch(() => null)) !== null,

@@ -11,6 +11,34 @@ export function isAgentMigrationInProgress(state: string) {
   return IN_PROGRESS.has(state);
 }
 
+/** How long a move that ended stays shown; after that the profile shows no move at all. */
+const SHOWN_AFTER_END_MS = 24 * 60 * 60 * 1000;
+
+/** Whether a move is worth showing: one still going, or one that ended within the last day. */
+export function isAgentMigrationShown(
+  migration: { state: string; updatedAt: string },
+  now = Date.now(),
+) {
+  return (
+    isAgentMigrationInProgress(migration.state) ||
+    now - Date.parse(migration.updatedAt) < SHOWN_AFTER_END_MS
+  );
+}
+
+const REASONS: Record<string, () => string> = {
+  lease_expired: m.agent_migration_reason_lease_expired,
+  agent_moved: m.agent_migration_reason_agent_moved,
+  target_unavailable: m.agent_migration_reason_target_unavailable,
+  bundle_too_large: m.agent_migration_reason_too_large,
+  insufficient_disk: m.agent_migration_reason_disk,
+  workspace_in_use: m.agent_migration_reason_in_use,
+};
+
+/** Why a move failed, in words; every code not named here reads as a failed transfer. */
+function failureReason(errorCode: string | null) {
+  return (errorCode ? REASONS[errorCode] : undefined)?.() ?? m.agent_migration_reason_transfer();
+}
+
 /** One line for where a move stands, naming the Computer it goes to. */
 export function agentMigrationStatusLine(migration: AgentMigrationSummary, computer: string) {
   switch (migration.state) {
@@ -28,12 +56,13 @@ export function agentMigrationStatusLine(migration: AgentMigrationSummary, compu
     case "canceled":
       return m.agent_migration_status_canceled();
     default:
-      return m.agent_migration_status_failed({ reason: migration.errorCode ?? "unexpected" });
+      return m.agent_migration_status_failed({ reason: failureReason(migration.errorCode) });
   }
 }
 
 const REFUSALS: Record<string, () => string> = {
   "agent-migrating": m.agent_migration_error_already_moving,
+  "agent-migration-unplaced": m.agent_migration_error_unplaced,
   "agent-migration-same-computer": m.agent_migration_error_same_computer,
   "agent-migration-target-unavailable": m.agent_migration_error_target_unavailable,
   "agent-migration-source-unreachable": m.agent_migration_error_source_unreachable,

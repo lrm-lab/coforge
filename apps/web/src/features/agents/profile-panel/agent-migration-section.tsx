@@ -1,12 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, SwitchHorizontal01 } from "@untitledui/icons";
-import { Text } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Select } from "#src/components/base/select/select";
-import { StatusDot } from "#src/components/ui/status-dot";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
@@ -17,7 +15,9 @@ import {
   agentMigrationErrorMessage,
   agentMigrationStatusLine,
   isAgentMigrationInProgress,
+  isAgentMigrationShown,
 } from "#src/features/agents/agent-migration";
+import { useInvalidateAgentProfile } from "./agent-profile-queries";
 import {
   cancelAgentMigration,
   getAgentMigration,
@@ -46,7 +46,12 @@ export function AgentMigrationStatus({
   const inProgress = isAgentMigrationInProgress(migration.state);
   return (
     <div className="grid gap-2 rounded-lg border border-secondary px-3 py-2.5">
-      <p role="status" className="text-sm text-secondary">
+      <p
+        role="status"
+        className={
+          migration.state === "failed" ? "text-sm text-error-primary" : "text-sm text-secondary"
+        }
+      >
         {agentMigrationStatusLine(migration, targetName)}
       </p>
       {inProgress && onCancel && (
@@ -100,23 +105,14 @@ export function AgentMigrationForm({
           }}
         >
           {online.map((computer) => (
-            <Select.Item
-              key={computer.id}
-              id={computer.id}
-              label={computer.displayName}
-              icon={
-                <StatusDot tone="online" label={m.computer_status_online()} className="size-2" />
-              }
-            />
+            <Select.Item key={computer.id} id={computer.id} label={computer.displayName} />
           ))}
         </Select>
       )}
       <div className="flex items-start gap-3">
         <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
         <ul className="min-w-0 list-disc space-y-1 pl-5 text-sm text-secondary">
-          <li>
-            <Text slot="description">{m.agent_migration_dialog_session()}</Text>
-          </li>
+          <li>{m.agent_migration_dialog_session()}</li>
           <li>{m.agent_migration_dialog_stops()}</li>
           <li>{m.agent_migration_dialog_left_behind()}</li>
         </ul>
@@ -143,6 +139,7 @@ export function AgentMigrationSection({
   isOwner: boolean;
 }) {
   const queryClient = useQueryClient();
+  const invalidateProfile = useInvalidateAgentProfile(agentId);
   const readMigration = useServerFn(getAgentMigration);
   const requestMove = useServerFn(requestAgentMigration);
   const cancelMove = useServerFn(cancelAgentMigration);
@@ -166,12 +163,8 @@ export function AgentMigrationSection({
   const computers = useQuery({
     queryKey: ["agent-migration-computers", agentId],
     queryFn: () => loadComputers(),
-    enabled: open || Boolean(status.data?.migration),
+    enabled: open,
   });
-  const computerName = (id: string) => {
-    const computer = computers.data?.find((candidate) => candidate.id === id);
-    return computer?.displayName || computer?.name || m.agent_computer_unnamed();
-  };
   const targets: ComputerOption[] = (computers.data ?? [])
     .filter((computer) => computer.id !== currentComputerId)
     .map((computer) => ({
@@ -180,15 +173,21 @@ export function AgentMigrationSection({
       online: Boolean(computer.online),
     }));
 
-  const migration = status.data?.migration;
+  const latest = status.data?.migration;
+  const migration = latest && isAgentMigrationShown(latest) ? latest : undefined;
   const inProgress = migration ? isAgentMigrationInProgress(migration.state) : false;
+
+  // A move that just finished changed the Agent's Computer: the profile shows the new one.
+  const wasInProgress = useRef(inProgress);
+  useEffect(() => {
+    if (wasInProgress.current && !inProgress) void invalidateProfile();
+    wasInProgress.current = inProgress;
+  }, [inProgress, invalidateProfile]);
+
   if (!status.data || (!status.data.available && !migration)) return null;
 
   const refresh = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: statusKey }),
-      queryClient.invalidateQueries({ queryKey: ["agent-profile", agentId] }),
-    ]);
+    Promise.all([queryClient.invalidateQueries({ queryKey: statusKey }), invalidateProfile()]);
 
   function submit() {
     if (!selected || submitting) return;
@@ -222,7 +221,7 @@ export function AgentMigrationSection({
       {migration && (
         <AgentMigrationStatus
           migration={migration}
-          targetName={computerName(migration.targetComputerId)}
+          targetName={migration.targetComputerName || m.agent_computer_unnamed()}
           onCancel={isOwner ? cancel : undefined}
           canceling={canceling}
           error={cancelError}

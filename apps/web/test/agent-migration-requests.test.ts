@@ -1,12 +1,14 @@
 import { expect, test } from "bun:test";
 import { AgentMigrations } from "#src/server/agent-migrations/agent-migrations.server";
 import { AgentMigrationRequests } from "#src/server/agent-migrations/agent-migration-requests.server";
+import { AgentMigrationSourceStopError } from "#src/server/agent-migrations/agent-migration-orchestrator.server";
 import { memoryStore } from "./helpers/agent-migration-memory-store";
 
 const owner = { userId: "user-1", workspaceId: "workspace-1" };
 const stranger = { userId: "user-2", workspaceId: "workspace-1" };
+const admin = { userId: "user-3", workspaceId: "workspace-1" };
 
-function setup(options: { available?: boolean; stopFails?: boolean } = {}) {
+function setup(options: { available?: boolean; fails?: "stop" | "lease" } = {}) {
   const fixture = memoryStore();
   const migrations = new AgentMigrations(fixture.store);
   const requested: string[] = [];
@@ -14,35 +16,43 @@ function setup(options: { available?: boolean; stopFails?: boolean } = {}) {
     migrations,
     orchestrator: {
       request: async (input) => {
-        if (options.stopFails) throw new Error("the source did not confirm the stop");
+        if (options.fails === "stop")
+          throw new AgentMigrationSourceStopError(new Error("no answer"));
+        if (options.fails === "lease") throw new Error("centrifugo is unreachable");
         requested.push(input.targetComputerId);
         return migrations.request(input);
       },
       cancel: (input) => migrations.cancel(input),
     },
     agentOwner: async (_workspaceId, agentId) => (agentId === "agent-1" ? "user-1" : undefined),
+    isWorkspaceAdmin: async (_workspaceId, userId) => userId === "user-3",
+    computerName: async (computerId) => (computerId === "computer-b" ? "Studio Mac" : null),
     available: async () => options.available ?? true,
   });
   return { requests, requested, fixture };
 }
 
-test("the owner moves the Agent, and anyone in the Workspace sees how the move is going", async () => {
+test("the owner moves the Agent; the owner and Workspace admins see the move, nobody else", async () => {
   const { requests, requested } = setup();
-  expect(await requests.status(stranger, "agent-1")).toEqual({ available: true, migration: null });
+  expect(await requests.status(owner, "agent-1")).toEqual({ available: true, migration: null });
   const moved = await requests.request(owner, {
     agentId: "agent-1",
     targetComputerId: "computer-b",
   });
   expect(requested).toEqual(["computer-b"]);
-  expect(await requests.status(stranger, "agent-1")).toMatchObject({
-    available: true,
-    migration: {
-      id: moved.id,
-      state: "requested",
-      targetComputerId: "computer-b",
-      errorCode: null,
-    },
-  });
+  for (const viewer of [owner, admin])
+    expect(await requests.status(viewer, "agent-1")).toMatchObject({
+      available: true,
+      migration: {
+        id: moved.id,
+        state: "requested",
+        targetComputerId: "computer-b",
+        targetComputerName: "Studio Mac",
+        errorCode: null,
+      },
+    });
+  // A private Agent's very existence stays hidden from other members.
+  await expect(requests.status(stranger, "agent-1")).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
 
 test("only the owner may move or cancel, and each refusal names its reason", async () => {
@@ -90,7 +100,7 @@ test("a deployment without the migration bucket, or a source that cannot stop, r
     available: false,
   });
   await expect(
-    setup({ stopFails: true }).requests.request(owner, {
+    setup({ fails: "stop" }).requests.request(owner, {
       agentId: "agent-1",
       targetComputerId: "computer-b",
     }),
@@ -98,4 +108,13 @@ test("a deployment without the migration bucket, or a source that cannot stop, r
     code: "TEMPORARILY_UNAVAILABLE",
     errorId: "agent-migration-source-unreachable",
   });
+});
+
+test("a failure after the source stopped is not reported as a source that never answered", async () => {
+  await expect(
+    setup({ fails: "lease" }).requests.request(owner, {
+      agentId: "agent-1",
+      targetComputerId: "computer-b",
+    }),
+  ).rejects.toThrow("centrifugo is unreachable");
 });
