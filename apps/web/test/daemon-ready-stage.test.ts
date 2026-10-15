@@ -99,7 +99,7 @@ test("a daemon that runs migrations is leased again on ready; a failure there do
   const method = (fail: boolean) =>
     createDaemonRuntimeReadyMethod({
       migrationRecovery: {
-        reissue: async (workspaceId, computerId) => {
+        recover: async (workspaceId, computerId) => {
           reissued.push(`${workspaceId}:${computerId}`);
           if (fail) throw new Error("centrifugo is down");
         },
@@ -128,7 +128,7 @@ test("migration recovery logs a stable error type without external diagnostic te
   try {
     const method = createDaemonRuntimeReadyMethod({
       migrationRecovery: {
-        reissue: async () => {
+        recover: async () => {
           throw new Error("private external diagnostic");
         },
       },
@@ -140,7 +140,7 @@ test("migration recovery logs a stable error type without external diagnostic te
     expect(await method(payload, { principal: principal() })).toBeInstanceOf(Uint8Array);
     expect(warnings.map((line) => JSON.parse(line))).toEqual([
       {
-        event: "agent_migration:reissue_failed",
+        event: "agent_migration:recovery_failed",
         request_id: "ready-1",
         workspace_id: "workspace-1",
         computer_id: "computer-1",

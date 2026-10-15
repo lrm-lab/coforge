@@ -54,6 +54,8 @@ export type AgentMigrationRecord = {
   generation: number;
   /** Set when the target took over the Agent; null while the source still owns it. */
   switchedAt: Date | null;
+  /** The last transition; a lease runs out this long after it unless a step renews it. */
+  updatedAt: Date;
   errorCode: string | null;
 };
 
@@ -276,6 +278,19 @@ export class AgentMigrations {
     return typeof applied === "string"
       ? { status: "refused", code: "stale_revision" }
       : { status: "failed", migration: applied };
+  }
+
+  /**
+   * The server's own failure of an attempt that has not switched: its lease ran out with no step.
+   * Refused, with nothing written, once the attempt moved on or ended.
+   */
+  async expire(migration: AgentMigrationRecord) {
+    if (migration.switchedAt || isFinishedAgentMigration(migration.state)) return null;
+    const applied = await this.#apply(migration, {
+      to: "failed",
+      error: { code: "lease_expired", detail: null },
+    });
+    return typeof applied === "string" ? null : applied;
   }
 
   /** The unfinished migrations one Computer takes part in, for leasing it again on reconnect. */

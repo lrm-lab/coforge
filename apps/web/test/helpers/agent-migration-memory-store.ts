@@ -35,6 +35,7 @@ export function memoryStore(
         revision: 0,
         generation: 1,
         switchedAt: null,
+        updatedAt: new Date(),
         errorCode: null,
       };
       rows.set(row.id, row);
@@ -58,6 +59,7 @@ export function memoryStore(
         ...row,
         state: to,
         revision: row.revision + 1,
+        updatedAt: new Date(),
         ...(to === "switched" ? { switchedAt: new Date() } : {}),
         ...(error ? { errorCode: error.code } : {}),
       };

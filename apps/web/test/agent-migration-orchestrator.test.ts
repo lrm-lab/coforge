@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
 import { decodeAgentMigrationCancel, decodeAgentMigrationLease } from "@lrm/coforge-sdk/internal";
 import { AgentMigrations } from "#src/server/agent-migrations/agent-migrations.server";
-import { AgentMigrationDispatch } from "#src/server/agent-migrations/agent-migration-dispatch.server";
+import {
+  AGENT_MIGRATION_LEASE_MS,
+  AgentMigrationDispatch,
+} from "#src/server/agent-migrations/agent-migration-dispatch.server";
 import { AgentMigrationOrchestrator } from "#src/server/agent-migrations/agent-migration-orchestrator.server";
 import { memoryStore } from "./helpers/agent-migration-memory-store";
 
@@ -193,4 +196,49 @@ test("the source restart does not wait on telling the Computers, and happens aga
   // A daemon retrying its report finds the migration already failed and ends it again.
   await context.orchestrator.endedById(target, created.migration.id).catch(() => {});
   expect(context.runtime).toEqual(["start:agent-1@computer-a", "start:agent-1@computer-a"]);
+});
+
+test("a reconnecting Computer fails a migration idle past its lease and runs the Agent on the source again", async () => {
+  const context = setup();
+  const started = await context.orchestrator.request(context.request);
+  if (started.status !== "created") throw new Error(started.status);
+  context.runtime.length = 0;
+  const later = started.migration.updatedAt.getTime() + AGENT_MIGRATION_LEASE_MS + 1;
+  await context.orchestrator.recover(workspaceId, "computer-a", later);
+  expect(context.rows.get(started.migration.id)).toMatchObject({
+    state: "failed",
+    errorCode: "lease_expired",
+  });
+  expect(context.runtime).toEqual(["start:agent-1@computer-a"]);
+  expect(context.cancels()).toHaveLength(2);
+});
+
+test("a reconnecting Computer within the lease is only leased again", async () => {
+  const context = setup();
+  const started = await context.orchestrator.request(context.request);
+  if (started.status !== "created") throw new Error(started.status);
+  await context.orchestrator.recover(
+    workspaceId,
+    "computer-a",
+    started.migration.updatedAt.getTime(),
+  );
+  expect(context.rows.get(started.migration.id)!.state).toBe("requested");
+  expect(context.leases()).toHaveLength(2);
+});
+
+test("a target that reconnects after a switch nobody followed up starts the Agent and completes it", async () => {
+  const context = setup();
+  const started = await context.orchestrator.request(context.request);
+  if (started.status !== "created") throw new Error(started.status);
+  await upToPlacing(context, started.migration.id);
+  // The switch landed, but the server stopped before it started the Agent or sent `arrived`.
+  await context.migrations.advance(target, {
+    migrationId: started.migration.id,
+    generation: 1,
+    expectedRevision: 3,
+    step: "switch",
+  });
+  await context.orchestrator.recover(workspaceId, "computer-b", Date.now());
+  expect(context.runtime.at(-1)).toBe("start:agent-1@computer-b");
+  expect(context.rows.get(started.migration.id)!.state).toBe("completed");
 });

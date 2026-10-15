@@ -1,5 +1,8 @@
 import type { AgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
-import type { AgentMigrationDispatch } from "./agent-migration-dispatch.server";
+import {
+  AGENT_MIGRATION_LEASE_MS,
+  type AgentMigrationDispatch,
+} from "./agent-migration-dispatch.server";
 import type {
   AgentMigrationRecord,
   AgentMigrations,
@@ -137,6 +140,35 @@ export class AgentMigrationOrchestrator {
       (migration.state === "failed" || migration.state === "canceled")
     )
       await this.ended(migration);
+  }
+
+  /**
+   * A Computer of the Workspace has just reconnected. Each of its migrations moves on the way no
+   * one else would move it while it was away:
+   * - one that has not switched and has had no step for a whole lease fails, and ends;
+   * - one whose switch landed with no start or `arrived` after it is finished, where it is the
+   *   target;
+   * - every other one leases this Computer again, for the work it still has.
+   * One that cannot be moved on does not keep the others from it; the first failure is reported.
+   */
+  async recover(workspaceId: string, computerId: string, now = Date.now()) {
+    const { migrations, dispatch } = this.deps;
+    const failures: unknown[] = [];
+    const attempt = (work: () => Promise<unknown>) =>
+      work().catch((error: unknown) => {
+        failures.push(error);
+      });
+    for (const migration of await migrations.activeFor({ workspaceId, computerId })) {
+      if (!migration.switchedAt && now - migration.updatedAt.getTime() > AGENT_MIGRATION_LEASE_MS)
+        await attempt(async () => {
+          const expired = await migrations.expire(migration);
+          if (expired) await this.ended(expired);
+        });
+      else if (migration.state === "switched" && migration.targetComputerId === computerId)
+        await attempt(() => this.switched(migration));
+    }
+    await attempt(() => dispatch.reissue(migrations, workspaceId, computerId));
+    if (failures.length) throw failures[0];
   }
 
   /** A user's cancel; after the switch the target keeps the Agent. */

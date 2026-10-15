@@ -23,6 +23,7 @@ const MIGRATION_SELECT = {
   revision: true,
   generation: true,
   switchedAt: true,
+  updatedAt: true,
   errorCode: true,
 } as const;
 
