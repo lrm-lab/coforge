@@ -129,7 +129,7 @@ function uploadAttachment(
 }
 
 /**
- * The chosen file next to the paperclip. An image uses the message avatar's size and
+ * The chosen file in the row above the field. An image uses the message avatar's size and
  * corner (2.25rem by 2.5rem) without the violet identity edge. Any other file stays a
  * small chip with its type icon. Clicking it opens the preview with the file's details,
  * upload progress, and the download and remove actions.
@@ -732,6 +732,23 @@ export function MessageComposer({
       <label htmlFor={composerId} className="sr-only">
         {m.conversation_message_label()}
       </label>
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap items-end gap-2 px-2">
+          {attachments.map((item) => (
+            <AttachmentChip
+              key={item.localId}
+              attachment={item}
+              uploading={!item.id && !item.failed}
+              onRemove={() =>
+                setAttachments((current) =>
+                  current.filter((other) => other.localId !== item.localId),
+                )
+              }
+              onRetry={() => void uploadOne(item)}
+            />
+          ))}
+        </div>
+      )}
       <textarea
         id={composerId}
         ref={completion.textareaRef}
@@ -789,17 +806,6 @@ export function MessageComposer({
           tooltip={m.conversation_attachment_label()}
           onClick={() => fileInputRef.current?.click()}
         />
-        {attachments.map((item) => (
-          <AttachmentChip
-            key={item.localId}
-            attachment={item}
-            uploading={!item.id && !item.failed}
-            onRemove={() =>
-              setAttachments((current) => current.filter((other) => other.localId !== item.localId))
-            }
-            onRetry={() => void uploadOne(item)}
-          />
-        ))}
         <input
           ref={fileInputRef}
           type="file"
