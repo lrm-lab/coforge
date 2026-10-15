@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test";
 import {
+  decodeDaemonCommandRequest,
   decodeDaemonHandshakeRequest,
+  decodeDaemonHoldRequest,
   decodeLocalRpcRequest,
+  encodeDaemonCommandResponse,
   encodeDaemonHandshakeResponse,
+  encodeDaemonHoldResponse,
   encodeLocalRpcResponse,
   LOCAL_RPC_METHODS,
   readLocalRpcFrame,
@@ -80,5 +84,107 @@ test.each(operations)(
     expect(methods).toEqual(name === "hold" ? [method] : [LOCAL_RPC_METHODS.HANDSHAKE, method]);
     expect(connections).toBe(1);
     expect(closed).toBe(1);
+  },
+);
+
+const connectionOperations = [
+  {
+    name: "control",
+    method: "daemon:snapshot",
+    invoke: (launcher: LocalDaemonLauncher) => launcher.control("snapshot"),
+    respond: (payload: Uint8Array) =>
+      encodeDaemonCommandResponse({
+        protocolMajor: 1,
+        requestId: decodeDaemonCommandRequest(payload).requestId,
+        accepted: true,
+        runtimes: [],
+      }),
+    expected: [],
+  },
+  {
+    name: "hold",
+    method: LOCAL_RPC_METHODS.HOLD,
+    invoke: (launcher: LocalDaemonLauncher) => launcher.hold(),
+    respond: (payload: Uint8Array) =>
+      encodeDaemonHoldResponse({
+        protocolMajor: 1,
+        requestId: decodeDaemonHoldRequest(payload).requestId,
+        accepted: true,
+        held: true,
+        busyAgents: [],
+        unreachableWorkspaceIds: [],
+      }),
+    expected: { held: true, busyAgents: [] },
+  },
+  {
+    name: "identity",
+    method: LOCAL_RPC_METHODS.HANDSHAKE,
+    invoke: (launcher: LocalDaemonLauncher) => launcher.identity(1234),
+    respond: (payload: Uint8Array) =>
+      encodeDaemonHandshakeResponse({
+        protocolMajor: 1,
+        requestId: decodeDaemonHandshakeRequest(payload).requestId,
+        accepted: true,
+        daemonId: "fixture-daemon",
+        serverUrl: "https://coforge.test",
+      }),
+    expected: { daemonId: "fixture-daemon" },
+  },
+];
+
+test.each(connectionOperations)(
+  "$name keeps its connection open until the response settles, then closes on success or failure",
+  async ({ method, invoke, respond, expected }) => {
+    for (const fails of [false, true]) {
+      const started = Promise.withResolvers<void>();
+      const response = Promise.withResolvers<void>();
+      const failure = new Error("transport disconnected");
+      let closed = 0;
+      const launcher = new LocalDaemonLauncher({
+        executablePath: "/unused",
+        socketPath: "/unused.sock",
+        serverUrl: "https://coforge.test",
+        connect: async () => ({
+          async request(frame) {
+            const request = decodeLocalRpcRequest(readLocalRpcFrame(frame)!);
+            if (request.method === method) {
+              started.resolve();
+              await response.promise;
+              return encodeLocalRpcResponse({ method, payload: respond(request.payload) });
+            }
+            const handshake = decodeDaemonHandshakeRequest(request.payload);
+            return encodeLocalRpcResponse({
+              method: LOCAL_RPC_METHODS.HANDSHAKE,
+              payload: encodeDaemonHandshakeResponse({
+                protocolMajor: 1,
+                requestId: handshake.requestId,
+                accepted: true,
+                daemonId: "fixture-daemon",
+                serverUrl: "https://coforge.test",
+              }),
+            });
+          },
+          close() {
+            closed++;
+          },
+        }),
+      });
+      const result = invoke(launcher);
+      try {
+        await started.promise;
+        expect(closed).toBe(0);
+        if (fails) {
+          response.reject(failure);
+          await expect(result).rejects.toBe(failure);
+        } else {
+          response.resolve();
+          expect(await result).toMatchObject(expected);
+        }
+        expect(closed).toBe(1);
+      } finally {
+        response.resolve();
+        await result.catch(() => {});
+      }
+    }
   },
 );
