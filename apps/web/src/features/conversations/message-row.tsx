@@ -880,7 +880,7 @@ export const MessageRow = memo(function MessageRow({
         data-message={own ? "own" : "other"}
         onClick={openActions}
         className={cn(
-          "group/message relative mx-1 flex scroll-m-6 px-3 transition-[background-color,box-shadow] duration-500 hover:bg-border-secondary/50 focus-within:bg-border-secondary/50 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:mx-3",
+          "group/message relative mx-1 flex scroll-m-6 rounded-lg px-3 transition-[background-color,box-shadow] duration-500 hover:bg-border-secondary/50 focus-within:bg-border-secondary/50 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:mx-3",
           highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
           "gap-3",
           grouped ? "pt-0 pb-1" : "py-3",
