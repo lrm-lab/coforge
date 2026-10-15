@@ -71,17 +71,18 @@ describe("sortSectionRows", () => {
     { key: "k3", name: "beta", lastMessageAt: "2026-10-13T10:00:00Z" },
     { key: "k4", name: "item 10", lastMessageAt: "2026-10-12T10:00:00Z" },
     { key: "k5", name: "item 9", lastMessageAt: null },
+    { key: "k6", name: "item 8", lastMessageAt: "not a time" },
   ];
 
   test("Manual keeps the drag order", () => {
-    expect(sortSectionRows(rows, "manual")).toEqual(["k1", "k2", "k3", "k4", "k5"]);
+    expect(sortSectionRows(rows, "manual")).toEqual(["k1", "k2", "k3", "k4", "k5", "k6"]);
   });
 
-  test("Recent: latest first, ties and rows without a message keep the drag order", () => {
-    expect(sortSectionRows(rows, "recent")).toEqual(["k3", "k1", "k4", "k2", "k5"]);
+  test("Recent: latest first; ties, and rows without a (valid) time last, keep the drag order", () => {
+    expect(sortSectionRows(rows, "recent")).toEqual(["k3", "k1", "k4", "k2", "k5", "k6"]);
   });
 
   test("A-Z ignores case and reads numbers as numbers", () => {
-    expect(sortSectionRows(rows, "alpha", "en")).toEqual(["k2", "k3", "k5", "k4", "k1"]);
+    expect(sortSectionRows(rows, "alpha", "en")).toEqual(["k2", "k3", "k6", "k5", "k4", "k1"]);
   });
 });

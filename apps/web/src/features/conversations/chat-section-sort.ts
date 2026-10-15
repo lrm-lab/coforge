@@ -16,19 +16,29 @@ export function sortSectionRows(
 ): string[] {
   if (mode === "manual") return rows.map((row) => row.key);
   const collator = new Intl.Collator(locale, { sensitivity: "base", numeric: true });
-  const indexed = rows.map((row, index) => ({ row, index }));
+  const indexed = rows.map((row, index) => ({ row, index, at: instantOf(row.lastMessageAt) }));
   indexed.sort((left, right) => {
     const order =
       mode === "alpha"
         ? collator.compare(left.row.name, right.row.name)
-        : recency(right.row) - recency(left.row);
+        : newerFirst(left.at, right.at);
     return order || left.index - right.index;
   });
   return indexed.map(({ row }) => row.key);
 }
 
-function recency(row: SortableRow): number {
-  if (!row.lastMessageAt) return Number.NEGATIVE_INFINITY;
-  const time = Date.parse(row.lastMessageAt);
-  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+/** The last message's time; `null` when the row has none or the value is not an ISO instant. */
+function instantOf(value: string | null): Temporal.Instant | null {
+  if (!value) return null;
+  try {
+    return Temporal.Instant.from(value);
+  } catch {
+    return null;
+  }
+}
+
+/** Latest first; a row without a time goes after every row with one. */
+function newerFirst(left: Temporal.Instant | null, right: Temporal.Instant | null): number {
+  if (!left || !right) return left ? -1 : right ? 1 : 0;
+  return Temporal.Instant.compare(right, left);
 }

@@ -538,15 +538,24 @@ export function createSidebar(
      * the synced list, the built-in ones in the order query, which a failed save puts back. */
     reorderSections: async (order: readonly string[]) => {
       const orderKey = chatSectionOrderQuery(workspaceId).queryKey;
-      const before = queryClient.getQueryData<string[]>(orderKey);
+      // A read already in flight would land after this and put the old order back. Cancelled
+      // without `revert`, which would restore the pre-read state over the order set below.
+      void queryClient.cancelQueries({ queryKey: orderKey, exact: true }, { revert: false });
+      // Never read (or the read failed): the sidebar showed the default order, which `[]` is.
+      const before = queryClient.getQueryData<string[]>(orderKey) ?? [];
       queryClient.setQueryData(orderKey, [...order]);
       try {
         await saved(reorderSections(order), () => api.sections.reorder(order), [
           chatSectionsQuery(workspaceId).queryKey,
         ]);
+        // A read that started during the save may have brought the old order back meanwhile.
+        queryClient.setQueryData(orderKey, [...order]);
       } catch (cause) {
         queryClient.setQueryData(orderKey, before);
         throw cause;
+      } finally {
+        // Either way the server now holds the truth; read it rather than trust this tab's copy.
+        void queryClient.invalidateQueries({ queryKey: orderKey, exact: true });
       }
     },
     createSection: async (input: Parameters<ChatSectionsApi["create"]>[0]) => {

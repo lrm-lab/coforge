@@ -182,8 +182,12 @@ export function useChatSections() {
   return {
     sections: live.isReady ? live.data : (query.data ?? []),
     order: order.data ?? EMPTY_ORDER,
+    /** Sections may be dragged only once their saved order is known: a drag from the default
+     * order would overwrite it. */
+    orderReady: order.isSuccess,
     isPending: query.isPending,
     isError: query.isError,
-    retry: () => query.refetch(),
+    orderError: order.isError,
+    retry: () => Promise.all([query.refetch(), order.refetch()]),
   };
 }

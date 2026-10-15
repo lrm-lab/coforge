@@ -723,7 +723,7 @@ export function ConversationDirectory({
           {m.conversation_saved_nav()}
         </ConversationRow>
       </div>
-      {groups.isError && (
+      {(groups.isError || groups.orderError) && (
         <div role="alert" className={cx(DIRECTORY_INSET, "py-2 text-sm text-error-primary")}>
           <p>{m.chat_section_load_error()}</p>
           <Button color="link-gray" size="sm" onPress={() => void groups.retry()}>
@@ -750,7 +750,8 @@ export function ConversationDirectory({
         strategy={verticalListSortingStrategy}
       >
         {sectionOrder.map((key) => {
-          const reordering = savingSections.has("section-order");
+          // Not while the order is being saved, nor before it is known.
+          const reordering = savingSections.has("section-order") || !groups.orderReady;
           if (key === "pinned")
             return (
               // Pinned channels and DMs, together and in the order they were pinned. Empty, it
