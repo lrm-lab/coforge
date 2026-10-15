@@ -90,8 +90,13 @@ export class ActivityTrajectory {
       };
       // Retain a bounded prefix; do not repeatedly emit tails of truncated secrets.
       const text = pending.text + event.text;
-      pending.truncated ||= codePointLength(text) > 8000;
-      pending.text = truncateCodePoints(text, 8000);
+      // UTF-16 code units bound the code-point count, avoiding two arrays while in budget.
+      if (text.length <= 8000) {
+        pending.text = text;
+      } else {
+        pending.truncated ||= codePointLength(text) > 8000;
+        pending.text = truncateCodePoints(text, 8000);
+      }
       this.#pending = pending;
       clearTimeout(this.#timer);
       this.#timer = setTimeout(() => this.flush(), 350);

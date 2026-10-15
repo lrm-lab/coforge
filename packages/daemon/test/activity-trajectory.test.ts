@@ -4,6 +4,32 @@ import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
 
 afterEach(() => jest.useRealTimers());
 
+test("retains the code-point budget across deltas before redacting the assembled prefix", () => {
+  const cases = [
+    { chunks: ["token=", "x".repeat(7994)], text: "token=[REDACTED]" },
+    { chunks: ["token=", "x".repeat(7995)], text: "token=[REDACTED]…" },
+    { chunks: ["token=", "😀".repeat(7994)], text: "token=[REDACTED]" },
+    { chunks: ["token=", "😀".repeat(7995)], text: "token=[REDACTED]…" },
+    {
+      chunks: ["token=" + "x".repeat(7993) + "\ud83d", "\ude00"],
+      text: "token=[REDACTED]",
+    },
+    { chunks: ["a".repeat(1998) + "\ud83d", "\ude00"], text: "a".repeat(1998) + "😀" },
+  ];
+  for (const { chunks, text } of cases) {
+    const output: AgentRuntimeEvent[] = [];
+    const trajectory = new ActivityTrajectory((event) => output.push(event));
+    try {
+      for (const chunk of chunks) trajectory.accept({ type: "text-delta", text: chunk });
+      trajectory.flush();
+      expect(output).toHaveLength(2);
+      expect(output[1]).toMatchObject({ activity: { entries: [{ kind: "text", text }] } });
+    } finally {
+      trajectory.dispose();
+    }
+  }
+});
+
 /** The detail kind of an activity event, or the event's own type for anything else. */
 function kinds(events: AgentRuntimeEvent[]) {
   return events.map((event) =>
