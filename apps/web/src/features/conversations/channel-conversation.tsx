@@ -59,6 +59,9 @@ export type ChannelConversationView = Omit<DirectConversationView, "agent" | "me
   messages: DirectConversationView["messages"];
 };
 
+/** The channel header's search and settings glyphs: text colour (#101319 in light mode), 1.5 stroke. */
+const HEADER_ICON_CLASS = "text-primary hover:text-primary *:data-icon:stroke-[1.5]";
+
 export function ChannelConversationHeader({
   conversation,
   onChanged,
@@ -109,11 +112,14 @@ export function ChannelConversationHeader({
         actions={
           // Borderless utility strip: the -mr-1.5 cancels the last button's p-1.5 so its glyph
           // lands on the pane gutter (docs/design/page-skeleton-and-density.md §8 optical alignment).
+          // Search and settings draw in the text colour with a 1.5 stroke (design spec), not the
+          // utility button's default muted 2px glyph.
           <div className="-mr-1.5 flex shrink-0 items-center gap-3">
             <ButtonUtility
               icon={SearchLg}
               size="sm"
               color="tertiary"
+              className={HEADER_ICON_CLASS}
               tooltip={m.search_this_channel()}
               onClick={() =>
                 void navigate({
@@ -133,6 +139,7 @@ export function ChannelConversationHeader({
               icon={Settings}
               size="sm"
               color="tertiary"
+              className={HEADER_ICON_CLASS}
               tooltip={m.channel_settings_open()}
               onClick={() => openPanel(null)}
             />
