@@ -21,6 +21,43 @@ async function found(store: AgentMessageDraftStore, target: string) {
   return lookup.status === "found" ? lookup.draft : undefined;
 }
 
+test("draft roots capture the environment at construction while explicit and empty roots keep their meaning", async () => {
+  const firstRoot = temporaryStateDirectory();
+  const secondRoot = temporaryStateDirectory();
+  const explicitRoot = temporaryStateDirectory();
+  const previous = Bun.env.COFORGE_CLI_DRAFT_STATE_DIR;
+  const agentId = "environment-draft-agent";
+  try {
+    Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = firstRoot;
+    const first = new AgentMessageDraftStore(agentId, undefined, () => 1_000);
+    Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = secondRoot;
+    const second = new AgentMessageDraftStore(agentId, undefined, () => 1_000);
+    const explicit = new AgentMessageDraftStore(agentId, explicitRoot, () => 1_000);
+
+    await first.save("@ada", { content: "first root", idempotencyKey: "key-first" });
+    await second.save("@ada", { content: "second root", idempotencyKey: "key-second" });
+    await explicit.save("@ada", { content: "explicit root", idempotencyKey: "key-explicit" });
+    expect(
+      (await found(new AgentMessageDraftStore(agentId, firstRoot, () => 1_000), "@ada"))?.content,
+    ).toBe("first root");
+    expect(
+      (await found(new AgentMessageDraftStore(agentId, secondRoot, () => 1_000), "@ada"))?.content,
+    ).toBe("second root");
+
+    Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = "";
+    expect(() => new AgentMessageDraftStore(agentId)).toThrow(
+      "Agent message draft state directory is required",
+    );
+    expect(
+      (await found(new AgentMessageDraftStore(agentId, explicitRoot, () => 1_000), "@ada"))
+        ?.content,
+    ).toBe("explicit root");
+  } finally {
+    if (previous === undefined) delete Bun.env.COFORGE_CLI_DRAFT_STATE_DIR;
+    else Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = previous;
+  }
+});
+
 test("saves and looks up one Agent message draft in the continue-state shape", async () => {
   const stateDirectory = temporaryStateDirectory();
   const store = new AgentMessageDraftStore("agent/a", stateDirectory, () => 1_000);

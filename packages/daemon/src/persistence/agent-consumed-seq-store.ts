@@ -89,7 +89,7 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
   /** `COFORGE_CLI_CONSUMED_SEQ_STATE_DIR ?? os.tmpdir()`, next to the draft store: this file
    * belongs to the CLI's temporary state, not to the daemon's persistent state directory
    * (task #58, Frank: "放 /tmp"). */
-  constructor(rootDirectory = process.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR ?? tmpdir()) {
+  constructor(rootDirectory = Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR ?? tmpdir()) {
     if (!rootDirectory) throw new Error("consumed-sequence state directory is required");
     this.#root = rootDirectory;
   }
