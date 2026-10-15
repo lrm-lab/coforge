@@ -28,7 +28,7 @@ export function episodePrompt(
     episode.domain === "information_retrieval"
       ? episode.prompt.split("## How to call search in this environment")[0]!.trimEnd()
       : episode.prompt;
-  return `@task ${prompt}${note}\n\n${reminder}`;
+  return `@task ${prompt}${note}\n\n${reminder}`.replace(/@memory\b/g, "Memory Agent");
 }
 
 export async function postEpisodePrompt(input: {
@@ -247,11 +247,19 @@ export async function runEpisode(input: {
       },
       include: { dispositions: { orderBy: { sequence: "asc" } } },
     });
-    const requests = taskMessages.filter((message) =>
-      message.mentions.some(
-        (mention) => mention.kind === "agent" && mention.actorId === input.workspace.memoryAgentId,
-      ),
-    );
+    const requests = taskMessages.filter((message) => {
+      const finalIrAnswer =
+        input.episode.domain === "information_retrieval" &&
+        /(?:^|\n)Exact Answer:/i.test(message.body) &&
+        /(?:^|\n)Confidence:/i.test(message.body);
+      return (
+        !finalIrAnswer &&
+        message.mentions.some(
+          (mention) =>
+            mention.kind === "agent" && mention.actorId === input.workspace.memoryAgentId,
+        )
+      );
+    });
     const requestIds = new Set(requests.map((message) => message.id));
     const answers = taskMessages.filter((message) => !requestIds.has(message.id));
     const offerIds = new Set(offers.map((offer) => offer.messageId));

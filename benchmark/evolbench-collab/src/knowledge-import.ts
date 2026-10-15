@@ -89,6 +89,25 @@ export async function importKnowledgeResource(
       const completed = task.result as Record<string, unknown> | undefined;
       if (completed?.root_uri !== resource.uri)
         throw new Error("knowledge import returned an unexpected root_uri");
+      const summaryResponse = await runtime.request({
+        method: "GET",
+        path: "/api/v1/content/read",
+        query: { uri: `${resource.uri}/.overview.md` },
+        identity,
+      });
+      if (!summaryResponse.ok || summaryResponse.response.status !== 200)
+        throw new Error("semantic summary unavailable");
+      const summary = (await new Response(summaryResponse.response.body).json()) as {
+        status?: string;
+        result?: unknown;
+      };
+      if (
+        summary.status !== "ok" ||
+        typeof summary.result !== "string" ||
+        !summary.result.trim() ||
+        summary.result.includes("[Directory overview is not generated]")
+      )
+        throw new Error("semantic summary unavailable; repair processing before resuming");
       return;
     }
     if (task.status === "failed" || task.status === "cancelled")

@@ -152,3 +152,27 @@ test("multiple offers and ordinary Memory clarification are recorded without fal
   expect(result.memoryReplyMessageIds).toEqual(["clarification"]);
   expect(result.finalOutput).toBe("Exact Answer: 2041");
 });
+
+test("human prompt instructions never wake Memory before Task requests retrieval", () => {
+  const prompt = episodePrompt(
+    { ...episode, prompt: "Find a bird. Ask @memory for evidence." },
+    "Ask @memory for documents.",
+  );
+  expect(prompt.startsWith("@task ")).toBe(true);
+  expect(prompt).not.toMatch(/@memory\b/);
+});
+
+test("an IR final answer can mention Memory in its explanation", async () => {
+  const result = await runEpisode(
+    fixture([
+      {
+        id: "answer",
+        body: "Evidence came from @memory.\nExact Answer: 2041\nConfidence: High",
+        createdAt: new Date(),
+        mentions: [{ kind: "agent", actorId: "memory" }],
+      },
+    ]),
+  );
+  expect(result.terminationReason).toBe("final_settled");
+  expect(result.memoryRequestCount).toBe(0);
+});

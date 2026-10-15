@@ -15,6 +15,10 @@ function required(key: string) {
   if (!value) throw new Error(`missing ${key}`);
   return value;
 }
+const readyPath = required("COFORGE_EVAL_KNOWLEDGE_READY");
+if (await Bun.file(readyPath).exists()) await Bun.file(readyPath).delete();
+const corpusPath = required("COFORGE_KNOWLEDGE_CORPUS");
+const ledgerPath = required("COFORGE_KNOWLEDGE_LEDGER");
 const runtime = createEvalRuntime(Bun.env.COFORGE_OPENVIKING_URL ?? "http://127.0.0.1:1933");
 const root = rootIdentity(await readSecretRootKey(required("OPENVIKING_PROTOTYPE_CONF")));
 const accountId = required("COFORGE_KNOWLEDGE_ACCOUNT_ID");
@@ -31,9 +35,9 @@ const ready = await prepareKnowledge({
   runtime,
   accountCreatedAt: await readKnowledgeAccountCreatedAt(runtime, root, accountId),
   identity: userIdentity(accountId, users.adminUserId, users.adminKey, "admin"),
-  corpusPath: required("COFORGE_KNOWLEDGE_CORPUS"),
-  ledgerPath: required("COFORGE_KNOWLEDGE_LEDGER"),
-  readyPath: required("COFORGE_EVAL_KNOWLEDGE_READY"),
+  corpusPath,
+  ledgerPath,
+  readyPath,
   expectedDocuments: Number(Bun.env.COFORGE_KNOWLEDGE_DOCUMENT_COUNT ?? "67707"),
   expectedExperiences: Number(Bun.env.COFORGE_KNOWLEDGE_EXPERIENCE_COUNT ?? "89"),
 });

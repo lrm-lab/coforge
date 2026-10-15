@@ -68,133 +68,144 @@ export async function provisionEvalWorkspace(input: {
   const owner = await input.db.user.create({
     data: { username: `sb-eval-${suffix}`, displayName: "user" },
   });
-  const workspace = await input.db.workspace.create({
-    data: {
-      slug: slugFor(input.arm, input.familyId),
-      name: `evol collab ${input.arm} ${input.familyId}`,
-      members: {
-        create: [{ userId: owner.id, role: "owner" }],
-      },
-    },
-  });
-  const machineId = crypto.randomUUID();
-  const computer = await input.db.computer.create({
-    data: { ownerId: owner.id, machineId, name: "sb-eval" },
-  });
-  // Both agents' runtimeConfig is replaced by the eval daemon with the
-  // encrypted provider credential at start time.
-  const memoryAgent = await input.db.agent.create({
-    data: {
-      workspaceId: workspace.id,
-      ownerId: owner.id,
-      name: "memory",
-      displayName: "Memory",
-      description:
-        "Respond to the Task Agent's @memory requests using the production retrieval tools. Retrieve prior experience from viking://resources/evo-ir/experiences and evidence documents from viking://resources/evo-ir/documents when those prepared collections are present. Set targetUri to the relevant collection so unrelated account directory summaries do not displace evidence. Use ov_find/ov_search_context and ov_read as needed; return a cited memory_offer to the requesting Task Agent. Do not invent citations or claim retrieval succeeded when tools fail.",
-      computerId: null,
-      runtimeConfig: {},
-    },
-  });
-  const taskAgent = await input.db.agent.create({
-    data: {
-      workspaceId: workspace.id,
-      ownerId: owner.id,
-      name: "task",
-      displayName: "Task",
-      description: TASK_AGENT_DESCRIPTION,
-      computerId: null,
-      runtimeConfig: {},
-    },
-  });
-  const channel = await input.db.conversation.create({
-    data: {
-      workspaceId: workspace.id,
-      channelName:
-        input.familyId
-          .toLowerCase()
-          .replace(/[^a-z0-9-]+/g, "-")
-          .slice(0, 50) || "evol",
-      description: `${input.benchmark} group-chat collaboration eval`,
-    },
-  });
-  await input.db.conversationMember.create({
-    data: { conversationId: channel.id, workspaceId: workspace.id, userId: owner.id },
-  });
-  for (const agent of [memoryAgent, taskAgent]) {
-    await input.db.conversationMember.create({
+  let createdWorkspaceId: string | undefined;
+  let createdComputerId: string | undefined;
+  try {
+    const workspace = await input.db.workspace.create({
       data: {
-        conversationId: channel.id,
-        workspaceId: workspace.id,
-        agentId: agent.id,
-        channelMuted: agent.id === memoryAgent.id,
+        slug: slugFor(input.arm, input.familyId),
+        name: `evol collab ${input.arm} ${input.familyId}`,
+        members: {
+          create: [{ userId: owner.id, role: "owner" }],
+        },
       },
     });
-  }
-
-  const activationAt = new Date("2026-01-01T00:00:00.000Z");
-  const profiles = new PrismaWorkspaceMemoryProfileStore(input.db);
-  const seed = createDefaultWorkspaceMemoryProfile(workspace.id);
-  // The memory arm is always openviking: warm/cold differ in how much
-  // history has been admitted, not in the memory backend.
-  const selected = applyWorkspaceMemoryCommand(
-    seed,
-    { type: "select_desired", desired: "openviking", at: activationAt },
-    { prototypeEnabled: true },
-  );
-  if (!selected.ok) throw new Error(selected.failure.code);
-  const ready = applyWorkspaceMemoryCommand(selected.profile, {
-    type: "observe_ready",
-    generation: selected.profile.generation,
-  });
-  if (!ready.ok) throw new Error(ready.failure.code);
-  if ((await saveProfileTransition(profiles, seed, ready.profile)) !== "saved") {
-    throw new Error("profile transition was not saved");
-  }
-
-  const bindings = new PrismaOpenVikingBindingStore(input.db);
-  if (
-    (await bindings.compareAndSet({
-      workspaceId: workspace.id,
-      expectedGeneration: 0,
-      binding: {
+    createdWorkspaceId = workspace.id;
+    const machineId = crypto.randomUUID();
+    const computer = await input.db.computer.create({
+      data: { ownerId: owner.id, machineId, name: "sb-eval" },
+    });
+    createdComputerId = computer.id;
+    // Both agents' runtimeConfig is replaced by the eval daemon with the
+    // encrypted provider credential at start time.
+    const memoryAgent = await input.db.agent.create({
+      data: {
         workspaceId: workspace.id,
-        accountId: input.ovAccountId,
-        serviceIdentityId: `svc-${input.ovAccountId}`,
-        credentialRef: `secret:ov-${input.ovAccountId}`,
+        ownerId: owner.id,
+        name: "memory",
+        displayName: "Memory",
+        description:
+          "Respond to the Task Agent's @memory requests using the production retrieval tools. Retrieve prior experience from viking://resources/evo-ir/experiences and evidence documents from viking://resources/evo-ir/documents when those prepared collections are present. Set targetUri to the relevant collection so unrelated account directory summaries do not displace evidence. Use ov_find/ov_search_context and ov_read as needed; return a cited memory_offer to the requesting Task Agent. Do not invent citations or claim retrieval succeeded when tools fail.",
+        computerId: null,
+        runtimeConfig: {},
+      },
+    });
+    const taskAgent = await input.db.agent.create({
+      data: {
+        workspaceId: workspace.id,
+        ownerId: owner.id,
+        name: "task",
+        displayName: "Task",
+        description: TASK_AGENT_DESCRIPTION,
+        computerId: null,
+        runtimeConfig: {},
+      },
+    });
+    const channel = await input.db.conversation.create({
+      data: {
+        workspaceId: workspace.id,
+        channelName:
+          input.familyId
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, "-")
+            .slice(0, 50) || "evol",
+        description: `${input.benchmark} group-chat collaboration eval`,
+      },
+    });
+    await input.db.conversationMember.create({
+      data: { conversationId: channel.id, workspaceId: workspace.id, userId: owner.id },
+    });
+    for (const agent of [memoryAgent, taskAgent]) {
+      await input.db.conversationMember.create({
+        data: {
+          conversationId: channel.id,
+          workspaceId: workspace.id,
+          agentId: agent.id,
+          channelMuted: agent.id === memoryAgent.id,
+        },
+      });
+    }
+
+    const activationAt = new Date("2026-01-01T00:00:00.000Z");
+    const profiles = new PrismaWorkspaceMemoryProfileStore(input.db);
+    const seed = createDefaultWorkspaceMemoryProfile(workspace.id);
+    // The memory arm is always openviking: warm/cold differ in how much
+    // history has been admitted, not in the memory backend.
+    const selected = applyWorkspaceMemoryCommand(
+      seed,
+      { type: "select_desired", desired: "openviking", at: activationAt },
+      { prototypeEnabled: true },
+    );
+    if (!selected.ok) throw new Error(selected.failure.code);
+    const ready = applyWorkspaceMemoryCommand(selected.profile, {
+      type: "observe_ready",
+      generation: selected.profile.generation,
+    });
+    if (!ready.ok) throw new Error(ready.failure.code);
+    if ((await saveProfileTransition(profiles, seed, ready.profile)) !== "saved") {
+      throw new Error("profile transition was not saved");
+    }
+
+    const bindings = new PrismaOpenVikingBindingStore(input.db);
+    if (
+      (await bindings.compareAndSet({
+        workspaceId: workspace.id,
+        expectedGeneration: 0,
+        binding: {
+          workspaceId: workspace.id,
+          accountId: input.ovAccountId,
+          serviceIdentityId: `svc-${input.ovAccountId}`,
+          credentialRef: `secret:ov-${input.ovAccountId}`,
+          generation: ready.profile.generation,
+        },
+      })) !== "saved"
+    ) {
+      throw new Error("openviking binding was not saved");
+    }
+
+    // OpenViking-only designation (ADR 0062): the Memory Agent route authorizes
+    // through a memory_agent mapped identity, mirroring mapMemoryActor().
+    await input.db.openVikingMappedIdentity.create({
+      data: {
+        id: crypto.randomUUID(),
+        workspaceId: workspace.id,
+        actorKind: "memory_agent",
+        actorSubject: memoryAgent.id,
+        openvikingUserId: `memory-agent:${memoryAgent.id}`,
+        role: "user",
+        access: "readonly_shared",
         generation: ready.profile.generation,
       },
-    })) !== "saved"
-  ) {
-    throw new Error("openviking binding was not saved");
-  }
+    });
 
-  // OpenViking-only designation (ADR 0062): the Memory Agent route authorizes
-  // through a memory_agent mapped identity, mirroring mapMemoryActor().
-  await input.db.openVikingMappedIdentity.create({
-    data: {
-      id: crypto.randomUUID(),
+    return {
+      db: input.db,
       workspaceId: workspace.id,
-      actorKind: "memory_agent",
-      actorSubject: memoryAgent.id,
-      openvikingUserId: `memory-agent:${memoryAgent.id}`,
-      role: "user",
-      access: "readonly_shared",
-      generation: ready.profile.generation,
-    },
-  });
-
-  return {
-    db: input.db,
-    workspaceId: workspace.id,
-    slug: workspace.slug,
-    channelId: channel.id,
-    evalUserId: owner.id,
-    memoryAgentId: memoryAgent.id,
-    taskAgentId: taskAgent.id,
-    userIds: [owner.id],
-    computerId: computer.id,
-    machineId,
-  };
+      slug: workspace.slug,
+      channelId: channel.id,
+      evalUserId: owner.id,
+      memoryAgentId: memoryAgent.id,
+      taskAgentId: taskAgent.id,
+      userIds: [owner.id],
+      computerId: computer.id,
+      machineId,
+    };
+  } catch (error) {
+    if (createdWorkspaceId) await input.db.workspace.delete({ where: { id: createdWorkspaceId } });
+    if (createdComputerId) await input.db.computer.delete({ where: { id: createdComputerId } });
+    await input.db.user.delete({ where: { id: owner.id } });
+    throw error;
+  }
 }
 
 export async function resetAgentSessions(workspace: EvalWorkspace): Promise<void> {

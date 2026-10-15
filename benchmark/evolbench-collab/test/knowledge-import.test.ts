@@ -39,6 +39,8 @@ test("resource upload carries the file and waits for semantic/vector processing"
         received = file instanceof File ? await file.text() : "";
         return Response.json({ status: "ok", result: { temp_file_id: "upload-1" } });
       }
+      if (request.url.includes("/content/read"))
+        return Response.json({ status: "ok", result: "Prepared summary" });
       if (request.method === "GET")
         return Response.json({
           status: "ok",
@@ -74,6 +76,8 @@ test("an accepted ingestion task is not ready before vector processing completes
     fetch(request) {
       if (request.url.endsWith("temp_upload"))
         return Response.json({ status: "ok", result: { temp_file_id: "upload-1" } });
+      if (request.url.includes("/content/read"))
+        return Response.json({ status: "ok", result: "Prepared summary" });
       if (request.method === "GET") {
         checked = true;
         return Response.json({
@@ -129,6 +133,8 @@ test("recreating the same account cannot reuse completed knowledge checkpoints",
         uploads++;
         return Response.json({ status: "ok", result: { temp_file_id: `upload-${uploads}` } });
       }
+      if (request.url.includes("/content/read"))
+        return Response.json({ status: "ok", result: "Prepared summary" });
       if (request.method === "GET") {
         const id = new URL(request.url).pathname.split("/").at(-1)!;
         return Response.json({
@@ -174,5 +180,35 @@ test("recreating the same account cannot reuse completed knowledge checkpoints",
       `${input.readyPath}.checkpoint.jsonl`,
     ])
       if (await Bun.file(path).exists()) await Bun.file(path).delete();
+  }
+});
+
+test("completed processing with a failed semantic summary is not ready", async () => {
+  const uri = "viking://resources/evo-ir/documents/d1.md";
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      if (request.url.endsWith("temp_upload"))
+        return Response.json({ status: "ok", result: { temp_file_id: "upload" } });
+      if (request.url.includes("/content/read"))
+        return Response.json({ status: "ok", result: "[Directory overview is not generated]" });
+      if (request.method === "GET")
+        return Response.json({
+          status: "ok",
+          result: { status: "completed", result: { root_uri: uri } },
+        });
+      return Response.json({ status: "ok", result: { task_id: "task-1" } });
+    },
+  });
+  try {
+    await expect(
+      importKnowledgeResource(
+        createEvalRuntime(server.url.toString()),
+        userIdentity("account", "owner", "key"),
+        { uri, text: "Evidence" },
+      ),
+    ).rejects.toThrow("semantic summary unavailable");
+  } finally {
+    server.stop(true);
   }
 });
