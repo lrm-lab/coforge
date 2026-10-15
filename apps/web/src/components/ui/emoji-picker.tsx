@@ -33,6 +33,13 @@ const zhLabels: Partial<PickerLabels> = {
   searchResultsNone: "没有结果",
   searchResultsOne: "找到 1 个结果",
   searchResultsMany: "找到 %n 个结果",
+  categoryNavigation: "表情分类导航",
+  skinToneNeutral: "无肤色",
+  skinToneLight: "浅肤色",
+  skinToneMediumLight: "中等偏浅肤色",
+  skinToneMedium: "中等肤色",
+  skinToneMediumDark: "中等偏深肤色",
+  skinToneDark: "深肤色",
   loading: "加载中…",
   loadingError: "加载失败",
   retryLoading: "重试",
@@ -101,12 +108,22 @@ export function EmojiPicker({
       />
     );
   } else if (failed) {
+    // A module URL whose fetch failed is remembered by the document, so a second import() of the
+    // same URL cannot recover — the first retry is an honest second attempt, and after it the
+    // only real recovery is a fresh document load.
+    const exhausted = attempt > 1;
     grid = (
       <div className="flex min-h-90 flex-col items-center justify-center gap-2 text-sm text-tertiary">
         <span>{zh ? "加载失败" : "Failed to load"}</span>
-        <Button color="link-gray" size="sm" onPress={() => setAttempt((n) => n + 1)}>
-          {zh ? "重试" : "Retry"}
-        </Button>
+        {exhausted ? (
+          <Button color="link-gray" size="sm" onPress={() => window.location.reload()}>
+            {zh ? "刷新页面" : "Reload page"}
+          </Button>
+        ) : (
+          <Button color="link-gray" size="sm" onPress={() => setAttempt((n) => n + 1)}>
+            {zh ? "重试" : "Retry"}
+          </Button>
+        )}
       </div>
     );
   } else {
