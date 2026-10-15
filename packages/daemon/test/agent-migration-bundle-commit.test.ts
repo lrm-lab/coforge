@@ -552,3 +552,59 @@ test("rollback restores a workspace when its backup is on another filesystem", a
     renameAcrossDevices.mockRestore();
   }
 });
+
+for (const availableBytes of [268_435_469, 268_435_468]) {
+  test(`cross-device placement preserves the old tree with ${availableBytes} backup bytes free`, async () => {
+    const paths = await target();
+    await mkdir(join(paths.workspaceDirectory, "nested"), { recursive: true });
+    await Bun.write(join(paths.workspaceDirectory, "count 999.txt"), "first old");
+    await Bun.write(join(paths.workspaceDirectory, "nested", "notes 42.txt"), "old!");
+    await symlink("nested", join(paths.workspaceDirectory, "shortcut"), "dir");
+    const source = await sourceWorkspace({ "MEMORY.md": "moved" });
+    const manifest = await transfer(source, paths);
+    const rename = fileSystem.rename;
+    const disk = await fileSystem.statfs(paths.workspaceDirectory);
+    const diskSpace = spyOn(fileSystem, "statfs").mockResolvedValue({
+      ...disk,
+      bsize: 1,
+      bavail: availableBytes,
+    });
+    const acrossDevices = spyOn(fileSystem, "rename").mockImplementation(async (from, to) => {
+      if (String(from) === paths.workspaceDirectory)
+        throw Object.assign(new Error("cross-device rename"), { code: "EXDEV" });
+      await rename(from, to);
+    });
+    try {
+      // The two files total 13 bytes; directories and links add nothing to the 256 MiB reserve.
+      if (availableBytes === 268_435_469) {
+        expect(await commit(paths, manifest)).toEqual({
+          outcome: "committed",
+          movedAsideTo: join(paths.backupDirectory, "preexisting-migration-1"),
+        });
+        const backup = join(paths.backupDirectory, "preexisting-migration-1");
+        expect(await Bun.file(join(backup, "count 999.txt")).text()).toBe("first old");
+        expect(await Bun.file(join(backup, "nested", "notes 42.txt")).text()).toBe("old!");
+        expect(await readlink(join(backup, "shortcut"))).toBe("nested");
+        expect(await Bun.file(join(paths.workspaceDirectory, "MEMORY.md")).text()).toBe("moved");
+        expect(await Bun.file(join(paths.workspaceDirectory, "count 999.txt")).exists()).toBe(
+          false,
+        );
+        expect(await readdir(paths.backupDirectory)).toEqual(["preexisting-migration-1"]);
+      } else {
+        expect(await errorCode(commit(paths, manifest))).toBe("insufficient_disk");
+        expect(await Bun.file(join(paths.workspaceDirectory, "count 999.txt")).text()).toBe(
+          "first old",
+        );
+        expect(
+          await Bun.file(join(paths.workspaceDirectory, "nested", "notes 42.txt")).text(),
+        ).toBe("old!");
+        expect(await readlink(join(paths.workspaceDirectory, "shortcut"))).toBe("nested");
+        expect(await Bun.file(join(paths.workspaceDirectory, "MEMORY.md")).exists()).toBe(false);
+        expect(await readdir(paths.backupDirectory)).toEqual([]);
+      }
+    } finally {
+      acrossDevices.mockRestore();
+      diskSpace.mockRestore();
+    }
+  });
+}

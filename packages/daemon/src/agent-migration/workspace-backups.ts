@@ -38,9 +38,10 @@ export const exists = (path: string) =>
     () => false,
   );
 
-/** Every path in a tree with what it is, to tell a faithful copy from a partial one. */
-async function describeTree(root: string): Promise<string[]> {
+/** Every path's description and the tree's file bytes, for copy verification and disk headroom. */
+async function describeTree(root: string) {
   const lines: string[] = [];
+  let sizeBytes = 0;
   const walk = async (directory: string) => {
     const dirents: Dirent[] = await readdir(directory, { withFileTypes: true });
     for (const dirent of dirents.sort((left, right) => (left.name < right.name ? -1 : 1))) {
@@ -50,18 +51,15 @@ async function describeTree(root: string): Promise<string[]> {
         lines.push(`d ${name}`);
         await walk(path);
       } else if (dirent.isSymbolicLink()) lines.push(`l ${name} ${await readlink(path)}`);
-      else lines.push(`f ${name} ${(await lstat(path)).size}`);
+      else {
+        const { size } = await lstat(path);
+        lines.push(`f ${name} ${size}`);
+        sizeBytes += size;
+      }
     }
   };
   await walk(root);
-  return lines;
-}
-
-async function treeBytes(root: string): Promise<number> {
-  let total = 0;
-  for (const line of await describeTree(root))
-    if (line.startsWith("f ")) total += Number(line.split(" ").at(-1));
-  return total;
+  return { lines, sizeBytes };
 }
 
 /**
@@ -94,7 +92,7 @@ export async function moveWorkspaceToBackup(
     await rename(workspaceDirectory, to);
   } catch (error) {
     if ((error as { code?: string }).code !== "EXDEV") throw error;
-    const needed = (await treeBytes(workspaceDirectory)) + COPY_HEADROOM_BYTES;
+    const needed = (await describeTree(workspaceDirectory)).sizeBytes + COPY_HEADROOM_BYTES;
     const free = await statfs(backupDirectory);
     if (free.bavail * free.bsize < needed)
       throw new AgentMigrationCommitError(
@@ -110,8 +108,8 @@ export async function moveWorkspaceToBackup(
         errorOnExist: true,
       });
       if (
-        (await describeTree(workspaceDirectory)).join("\n") !==
-        (await describeTree(partial)).join("\n")
+        (await describeTree(workspaceDirectory)).lines.join("\n") !==
+        (await describeTree(partial)).lines.join("\n")
       )
         throw new AgentMigrationCommitError(
           "backup_copy_mismatch",
