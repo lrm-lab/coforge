@@ -1,3 +1,4 @@
+import { fstatSync } from "node:fs";
 import { weeklyReportWorkflowSchema } from "@lrm/coforge-sdk/internal";
 import {
   DEFAULT_REMINDER_TIMEZONE,
@@ -1467,6 +1468,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
         outputMode,
       );
     }
+    if (!invocation.sendDraft) refuseForeignStdinFile(invocation.target, outputMode);
     const body = invocation.sendDraft ? undefined : await readPipedSendContent();
     // With `--send-draft`, the body (and thus content presence) is only known to the daemon, which
     // already re-sends the draft's own saved mentions when no explicit override is given.
@@ -1962,6 +1964,39 @@ async function readPipedSendContent(): Promise<string> {
   } catch {
     return "";
   }
+}
+
+/** Refuses a body the shell redirected from a regular file another user owns. Such a file is not
+ * this Agent's reply: when writing the reply to a shared path fails, the file still holds its
+ * owner's earlier content, and sending it would post that under this Agent's name. Pipes,
+ * here-documents (which the shell creates as the caller) and platforms without uids pass. */
+function refuseForeignStdinFile(target: string, outputMode: "text" | "json"): void {
+  const callerUid = process.getuid?.();
+  if (callerUid === undefined) return;
+  let stdin;
+  try {
+    stdin = fstatSync(0);
+  } catch {
+    return;
+  }
+  if (!stdin.isFile() || stdin.uid === callerUid) return;
+  throw withOutputMode(
+    new CliError({
+      code: "STDIN_FILE_NOT_OWNED",
+      message: [
+        `stdin is redirected from a file owned by uid ${stdin.uid}, not by you (uid ${callerUid}). Nothing was sent.`,
+        "That file is not your reply: if writing your reply to it failed, it still holds its owner's earlier content.",
+        "Send the reply body as a quoted heredoc instead of through a file:",
+        `  coforge message send --target "${target}" <<'COFORGE_MESSAGE'`,
+        "  reply body",
+        "  COFORGE_MESSAGE",
+      ].join("\n"),
+      retryable: false,
+      draftSaved: false,
+      suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
+    }),
+    outputMode,
+  );
 }
 
 async function sendDraftStdinHasContent(): Promise<boolean> {
