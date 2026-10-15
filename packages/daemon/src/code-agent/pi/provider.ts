@@ -20,6 +20,7 @@ import {
   SessionEnvironmentError,
   getCoforgeAgentDir,
   getCoforgeSessionDir,
+  PI_SESSION_DIR,
   PI_SDK_VERSION,
 } from "@coforge/agent";
 import { join } from "node:path";
@@ -56,7 +57,7 @@ export class PiProvider implements CodeAgentProvider {
     const created = await createSession({
       cwd: options.agentWorkspaceDirectory,
       agentDir: hostAgentDir,
-      sessionDir: join(options.agentWorkspaceDirectory, ".pi-sessions"),
+      sessionDir: join(options.agentWorkspaceDirectory, PI_SESSION_DIR),
       sessionId: options.sessionId,
       sessionMode: options.sessionMode,
       modelProvider: runtime?.modelProvider,

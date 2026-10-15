@@ -1,4 +1,9 @@
 import { getLogger } from "@logtape/logtape";
+import {
+  AGENT_MIGRATION_IGNORE_FILE,
+  AGENT_MIGRATION_IGNORE_SEED,
+} from "#src/agent-migration/selection-rules";
+import { AGENT_MEMORY_FILE, AGENT_WORK_DIRECTORY } from "#src/agent-runtime/agent-workspace-path";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { collapseWhitespace, stripHeadingMarkers } from "#src/code-agent/agent-instructions";
@@ -79,7 +84,7 @@ export async function memoryIndexReminder(
   agentWorkspaceDirectory: string,
 ): Promise<string | undefined> {
   try {
-    const stats = await stat(join(agentWorkspaceDirectory, "MEMORY.md"));
+    const stats = await stat(join(agentWorkspaceDirectory, AGENT_MEMORY_FILE));
     if (stats.size <= MEMORY_SOFT_LIMIT_BYTES) return undefined;
     const kb = Math.max(1, Math.round(stats.size / 1024));
     return `Your MEMORY.md is ${kb}KB (limit ${MEMORY_TARGET_KB}KB). Move details into notes/ and keep MEMORY.md as an index.`;
@@ -90,8 +95,8 @@ export async function memoryIndexReminder(
 
 /**
  * Writes the seeded MEMORY.md and notes/active-context.md into an Agent's workspace on its first
- * launch, and creates the `notes/` / `work/` layout plus notes/work-log.md and a root
- * `.gitignore`. Never overwrites an existing file — once written, an Agent owns each of them and
+ * launch, and creates the `notes/` / `work/` layout plus notes/work-log.md, a root
+ * `.gitignore`, and the migration ignore file that leaves `work/` behind by default. Never overwrites an existing file — once written, an Agent owns each of them and
  * this seed step never touches it again (`flag: "wx"` fails with `EEXIST`, which is swallowed
  * here). After a Full Reset clears the Agent workspace (the record store's `clearWorkspace`), the
  * files are gone along with every other workspace file, so the next launch's call to this
@@ -107,9 +112,9 @@ export async function seedAgentMemory(
   agentWorkspaceDirectory: string,
   identity: AgentMemorySeedIdentity,
 ): Promise<void> {
-  const memoryPath = join(agentWorkspaceDirectory, "MEMORY.md");
+  const memoryPath = join(agentWorkspaceDirectory, AGENT_MEMORY_FILE);
   const notesDirectory = join(agentWorkspaceDirectory, "notes");
-  const workDirectory = join(agentWorkspaceDirectory, "work");
+  const workDirectory = join(agentWorkspaceDirectory, AGENT_WORK_DIRECTORY);
   try {
     // MEMORY.md first: a missing workspace directory fails here with ENOENT and is swallowed,
     // matching the previous seed (it must not mkdir the Agent workspace into existence).
@@ -119,6 +124,10 @@ export async function seedAgentMemory(
     await writeNewFile(join(notesDirectory, "active-context.md"), ACTIVE_CONTEXT_SEED);
     await writeNewFile(join(notesDirectory, "work-log.md"), WORK_LOG_SEED);
     await writeNewFile(join(agentWorkspaceDirectory, ".gitignore"), GITIGNORE_SEED);
+    await writeNewFile(
+      join(agentWorkspaceDirectory, AGENT_MIGRATION_IGNORE_FILE),
+      AGENT_MIGRATION_IGNORE_SEED,
+    );
   } catch (error) {
     if ((error as { code?: string }).code === "EEXIST") return;
     logger.error("Agent memory seed did not complete", {

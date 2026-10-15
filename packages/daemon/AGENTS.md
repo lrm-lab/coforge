@@ -31,6 +31,9 @@ Directories with their own `AGENTS.md` add rules for that directory only.
   authorization the cloud grants.
 - Protocol codecs and wire contracts live in `@lrm/coforge-sdk`; do not add a
   second codec in this package.
+- An Agent migration uploads the Agent workspace. A code-agent provider that
+  keeps Session or auth state inside it must add that directory to
+  `RUNTIME_STORAGE` in `agent-migration/workspace-selection.ts`.
 - `platform/daemon-logging.ts` configures the LogTape sinks once per
   Daemon-role process. Entrypoints own logging context and disposal; modules
   use LogTape category loggers directly, without a logger facade.
@@ -85,6 +88,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/agent-runtime/`       | Agent lifecycle state machine, control, native Session state, and Activity                      |
 | `src/code-agent/`          | `CodeAgentProvider` seam, provider adapters, runtime inventory, standing instructions           |
 | `src/code-agent/per-turn/` | The one Session and process wrapper under the Cursor, Grok, OpenCode, and Antigravity providers |
+| `src/agent-migration/`     | Agent migration on this Computer: which workspace files an Agent migration carries              |
 | `src/agent-app-inbox/`     | Typed Agent App items, kept separate from chat Message attention                                |
 | `src/agent-reminder/`      | Cloud reminder schedule mirror, version-fenced timers, and fire receipts                        |
 | `src/credentials/`         | Daemon credential store and Agent API keys                                                      |

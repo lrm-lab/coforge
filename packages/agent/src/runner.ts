@@ -29,7 +29,12 @@ import {
 import { Type } from "typebox";
 import { join, resolve } from "node:path";
 import { readdir, readFile } from "node:fs/promises";
-import { getCoforgeAgentDir, getCoforgeSessionDir, prepareAgentSessionDirectory } from "./paths";
+import {
+  getCoforgeAgentDir,
+  getCoforgeSessionDir,
+  PI_SESSION_DIR,
+  prepareAgentSessionDirectory,
+} from "./paths";
 import { API_KEY_ENV_BY_PROVIDER, configureRuntimeEnvironment } from "./runtime-provider";
 import { classifyPiLaunchFailure, PI_MODEL_UNAVAILABLE } from "./launch-error";
 
@@ -384,11 +389,11 @@ export async function createSession(options: {
   const sessionKind = options.sessionKind ?? "coforge";
   const expectedSessionDir = join(
     cwd,
-    sessionKind === "coforge" ? ".builtin-sessions" : ".pi-sessions",
+    sessionKind === "coforge" ? ".builtin-sessions" : PI_SESSION_DIR,
   );
   if (resolve(sessionDir) !== resolve(expectedSessionDir))
     throw new Error(
-      `${sessionKind === "coforge" ? "CoForge" : "Pi"} sessions must use ${sessionKind === "coforge" ? ".builtin-sessions" : ".pi-sessions"}`,
+      `${sessionKind === "coforge" ? "CoForge" : "Pi"} sessions must use ${sessionKind === "coforge" ? ".builtin-sessions" : PI_SESSION_DIR}`,
     );
   if (sessionKind === "coforge" && !options.apiKey)
     throw new Error("CoForge runtime provider API key is required");
