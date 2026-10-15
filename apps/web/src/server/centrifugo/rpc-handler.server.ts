@@ -5,7 +5,7 @@ import {
   utf8Encoder,
   utf8Decoder,
 } from "@lrm/coforge-sdk/internal";
-import { isRecord } from "@lrm/coforge-sdk/internal";
+import { AGENT_MIGRATION_CAPABILITY, isRecord, thrownMessage } from "@lrm/coforge-sdk/internal";
 import { ComputerRegistrationError } from "#src/server/computers/registration.server";
 import {
   handleRequestError,
@@ -333,6 +333,8 @@ export type DaemonRuntimeReadyPorts = {
     record(workspaceId: string, computerId: string, values: readonly string[]): Promise<unknown>;
   };
   reminderRecovery?: { snapshotAssigned(workspaceId: string, computerId: string): Promise<void> };
+  /** Leases the Computer again for its active Agent migrations (`AgentMigrationDispatch.reissue`). */
+  migrationRecovery?: { reissue(workspaceId: string, computerId: string): Promise<void> };
   observe?: (
     scope: { workspaceId: string; computerId: string },
     metadata: ComputerObservation,
@@ -348,6 +350,7 @@ export const createDaemonRuntimeReadyMethod =
     restarts,
     capabilities,
     reminderRecovery,
+    migrationRecovery,
     observe,
     upgrades,
     lifecycle,
@@ -414,6 +417,19 @@ export const createDaemonRuntimeReadyMethod =
       stage = "reminder_recovery";
       if (request.capabilities?.includes("reminder:v1"))
         await reminderRecovery?.snapshotAssigned(request.workspaceId, request.computerId);
+      // Not a stage: a migration that cannot be leased again must not keep the whole Computer
+      // from coming back. Its next reconnect tries again.
+      if (request.capabilities?.includes(AGENT_MIGRATION_CAPABILITY))
+        await migrationRecovery?.reissue(request.workspaceId, request.computerId).catch((error) =>
+          console.warn(
+            JSON.stringify({
+              event: "agent_migration:reissue_failed",
+              workspace_id: request.workspaceId,
+              computer_id: request.computerId,
+              reason: thrownMessage(error),
+            }),
+          ),
+        );
       stage = "upgrade_recovery";
       if (upgrades && request.computerVersion?.trim())
         await upgrades.ready(

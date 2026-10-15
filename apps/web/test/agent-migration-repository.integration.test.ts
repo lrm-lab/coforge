@@ -230,3 +230,24 @@ test.skipIf(!connectionString)("keeps the bundle manifest written with a transit
     await cleanup();
   }
 });
+
+test.skipIf(!connectionString)(
+  "lists a Computer's unfinished migrations, as source or target, never a finished one",
+  async () => {
+    const { store, input, source, target, cleanup } = await setup();
+    try {
+      const created = await store.create(input);
+      if (created === "active_exists") throw new Error("unreachable");
+      expect((await store.activeFor(input.workspaceId, source.id)).map((row) => row.id)).toEqual([
+        created.id,
+      ]);
+      expect((await store.activeFor(input.workspaceId, target.id)).map((row) => row.id)).toEqual([
+        created.id,
+      ]);
+      await store.transition({ id: created.id, expectedRevision: 0, to: "failed", at: new Date() });
+      expect(await store.activeFor(input.workspaceId, source.id)).toEqual([]);
+    } finally {
+      await cleanup();
+    }
+  },
+);

@@ -135,6 +135,8 @@ import {
   REMINDER_SYNC_MESSAGE_TYPE,
   decodeReminderFireResponse,
   decodeReminderSync,
+  decodeAgentMigrationCancel,
+  decodeAgentMigrationLease,
   encodeReminderFireRequest,
   encodeReminderSnapshotRequest,
   type AgentReminderOperationRequest,
@@ -143,6 +145,8 @@ import {
   type ReminderFireResponse,
   type ReminderSnapshotRequest,
   type ReminderSync,
+  type AgentMigrationCancel,
+  type AgentMigrationLease,
   type TaskRequest,
   type TaskResponse,
   type WeeklyReportRequest,
@@ -362,6 +366,8 @@ export interface DaemonConnectionClient {
   onAgentInboxPurge?(callback: (purge: AgentInboxPurge) => void): () => void;
   onAgentMessage?(callback: (message: AgentMessageDelivery) => void): () => void;
   onReminderSync?(callback: (sync: ReminderSync) => void): () => void;
+  onAgentMigrationLease?(callback: (lease: ReceivedAgentMigrationLease) => void): () => void;
+  onAgentMigrationCancel?(callback: (cancel: AgentMigrationCancel) => void): () => void;
   requestSnapshot?(request: ReminderSnapshotRequest): Promise<ReminderSync>;
   fireReminder?(request: ReminderFireRequest): Promise<ReminderFireResponse>;
   agentReminder?(
@@ -475,6 +481,9 @@ export const defaultCentrifugeWorkspaceClientFactory: CentrifugeWorkspaceClientF
     websocket: globalThis.WebSocket,
   }) as unknown as CentrifugeWorkspaceClient;
 
+/** A migration lease as it arrived: `deadline` is its expiry in this Computer's clock. */
+export type ReceivedAgentMigrationLease = AgentMigrationLease & { deadline: number };
+
 /** One replaceable listener; unsubscribing only clears the listener it registered. */
 class ListenerSlot<Listener extends (value: never) => unknown> {
   #listener: Listener | undefined;
@@ -509,6 +518,8 @@ export class DaemonConnection implements DaemonConnectionClient {
   readonly #agentWorkspaceReset = new ListenerSlot<(request: AgentWorkspaceResetRequest) => void>();
   readonly #agentMessage = new ListenerSlot<(message: AgentMessageDelivery) => void>();
   readonly #reminderSync = new ListenerSlot<(sync: ReminderSync) => void>();
+  readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
+  readonly #agentMigrationCancel = new ListenerSlot<(cancel: AgentMigrationCancel) => void>();
   readonly #skillsList = new ListenerSlot<(request: AgentSkillsListRequest) => Promise<void>>();
   readonly #workspaceFilesList = new ListenerSlot<
     (request: AgentWorkspaceFilesListRequest) => Promise<void>
@@ -819,6 +830,14 @@ export class DaemonConnection implements DaemonConnectionClient {
 
   onReminderSync(callback: (sync: ReminderSync) => void): () => void {
     return this.#reminderSync.set(callback);
+  }
+
+  onAgentMigrationLease(callback: (lease: ReceivedAgentMigrationLease) => void): () => void {
+    return this.#agentMigrationLease.set(callback);
+  }
+
+  onAgentMigrationCancel(callback: (cancel: AgentMigrationCancel) => void): () => void {
+    return this.#agentMigrationCancel.set(callback);
   }
 
   onSkillsList(callback: (request: AgentSkillsListRequest) => Promise<void>): () => void {
@@ -1840,6 +1859,20 @@ export class DaemonConnection implements DaemonConnectionClient {
         this.#deliver(this.#reminderSync, sync);
         return true;
       }) ||
+      this.#route(data, decodeAgentMigrationLease, (lease) => {
+        if (!ownsDaemon(lease)) return false;
+        // The lease runs from its arrival here, so no clock is compared with the server's.
+        this.#deliver(this.#agentMigrationLease, {
+          ...lease,
+          deadline: Date.now() + lease.expiresInMs,
+        });
+        return true;
+      }) ||
+      this.#route(data, decodeAgentMigrationCancel, (cancel) => {
+        if (!ownsDaemon(cancel)) return false;
+        this.#deliver(this.#agentMigrationCancel, cancel);
+        return true;
+      }) ||
       this.#route(data, decodeComputerUpgradeIntent, (upgrade) => {
         const requestUpgrade = config.requestUpgrade;
         if (
@@ -2337,6 +2370,8 @@ export class DaemonConnection implements DaemonConnectionClient {
       this.#agentWorkspaceReset,
       this.#agentMessage,
       this.#reminderSync,
+      this.#agentMigrationLease,
+      this.#agentMigrationCancel,
       this.#reconnect,
       this.#connectionRefused,
     ])

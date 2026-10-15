@@ -41,6 +41,13 @@ export function memoryStore(
       return row;
     },
     find: async (id) => rows.get(id) ?? null,
+    activeFor: async (workspaceId, computerId) =>
+      [...rows.values()].filter(
+        (row) =>
+          row.workspaceId === workspaceId &&
+          !isFinishedAgentMigration(row.state) &&
+          (row.sourceComputerId === computerId || row.targetComputerId === computerId),
+      ),
     manifest: async (id) => manifests.get(id) ?? null,
     transition: async ({ id, expectedRevision, to, error, move, manifest }) => {
       const row = rows.get(id);

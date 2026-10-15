@@ -19,6 +19,11 @@ await mockModuleForFile("#src/server/auth/daemon-api-key.server", () => ({
     return { computerId: "computer-1", workspaceId: "workspace-1", userId: "owner-1" };
   },
 }));
+await mockModuleForFile("#src/server/centrifugo/server-api.server", () => ({
+  createCentrifugoServerApi: () => ({ publish: async () => {} }),
+  daemonControlChannel: (workspaceId: string, computerId: string) =>
+    `daemon:${workspaceId}:${computerId}`,
+}));
 await mockModuleForFile("#src/server/agent-migrations/agent-migration-storage.server", () => ({
   getAgentMigrationStorage: async () => null,
 }));

@@ -35,6 +35,9 @@ import {
   encodeAgentStopIntent,
   encodeAgentActivityProbe,
   encodeAgentInboxPurge,
+  encodeAgentMigrationCancel,
+  encodeAgentMigrationLease,
+  type AgentMigrationCancel,
   encodeComputerRestartIntent,
   decodeComputerUpgradeResult,
   COMPUTER_UPGRADE_RESULT_METHOD,
@@ -4308,4 +4311,58 @@ test("a publication proves the connection carries traffic even when no decoder a
 
   expect(harness.lifecycle).toEqual([]);
   await harness.transport.stop();
+});
+
+const migrationScope = {
+  protocolMajor: 1,
+  requestId: "lease-request-1",
+  workspaceId: config.workspaceId,
+  computerId: config.computerId,
+  agentId: "agent-1",
+  migrationId: "migration-1",
+  generation: 1,
+  role: "source" as const,
+};
+
+test("a migration lease for this Computer reaches its slot with a deadline in this clock", async () => {
+  const fake = fakeClient();
+  const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
+  const leases: { migrationId: string; deadline: number }[] = [];
+  const cancels: AgentMigrationCancel[] = [];
+  transport.onAgentMigrationLease((lease) =>
+    leases.push({ migrationId: lease.migrationId, deadline: lease.deadline }),
+  );
+  transport.onAgentMigrationCancel((cancel) => cancels.push(cancel));
+  await transport.start("secret", config);
+  const channel = `daemon:${config.workspaceId}:${config.computerId}`;
+  const before = Date.now();
+  fake.publish(
+    channel,
+    encodeAgentMigrationLease({ ...migrationScope, expectedRevision: 0, expiresInMs: 60_000 }),
+  );
+  fake.publish(
+    channel,
+    encodeAgentMigrationCancel({ ...migrationScope, requestId: "cancel-1", switched: false }),
+  );
+  expect(leases).toHaveLength(1);
+  expect(leases[0]!.deadline).toBeGreaterThanOrEqual(before + 60_000);
+  expect(leases[0]!.deadline).toBeLessThanOrEqual(Date.now() + 60_000);
+  expect(cancels).toMatchObject([{ migrationId: "migration-1", switched: false }]);
+});
+
+test("a migration lease or cancel for another Computer is refused", async () => {
+  const fake = fakeClient();
+  const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
+  let delivered = 0;
+  transport.onAgentMigrationLease(() => delivered++);
+  transport.onAgentMigrationCancel(() => delivered++);
+  await transport.start("secret", config);
+  const other = { ...migrationScope, computerId: "other-computer" };
+  const channel = `daemon:${config.workspaceId}:${config.computerId}`;
+  fake.publish(
+    channel,
+    encodeAgentMigrationLease({ ...other, expectedRevision: 0, expiresInMs: 60_000 }),
+  );
+  fake.publish(channel, encodeAgentMigrationCancel({ ...other, switched: true }));
+  expect(delivered).toBe(0);
 });

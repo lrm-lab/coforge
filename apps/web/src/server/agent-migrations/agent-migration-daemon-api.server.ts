@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AgentMigrationRecord, MigrationParticipant } from "./agent-migrations.server";
+import type { AgentMigrationDispatch } from "./agent-migration-dispatch.server";
 import type { AgentMigrationTransport } from "./agent-migration-transport.server";
 
 /**
@@ -78,6 +79,7 @@ function answer(
 
 export async function answerAgentMigrationDaemonRequest(
   transport: AgentMigrationTransport,
+  dispatch: AgentMigrationDispatch,
   participant: MigrationParticipant,
   input: AgentMigrationDaemonRequest,
 ): Promise<Answer> {
@@ -100,8 +102,15 @@ export async function answerAgentMigrationDaemonRequest(
         ? { status: 200, body: { url: issued.url } }
         : refused(issued.code);
     }
-    case "upload_complete":
-      return answer(await transport.completeUpload(participant, input));
+    case "upload_complete": {
+      const completed = await transport.completeUpload(participant, input);
+      // Also on a retry whose reply was lost, while the target has not started placing: the
+      // target's lease may be what went missing. A failed publish fails the request, and the
+      // source's retry publishes again.
+      if (completed.status !== "refused" && completed.migration.state === "uploaded")
+        await dispatch.lease(completed.migration, "target");
+      return answer(completed);
+    }
     case "fail":
       return answer(await transport.fail(participant, input));
   }

@@ -86,6 +86,8 @@ export interface AgentMigrationStore {
     requestedByUserId: string;
   }): Promise<AgentMigrationRecord | "active_exists">;
   find(id: string): Promise<AgentMigrationRecord | null>;
+  /** The Workspace's unfinished migrations this Computer is the source or the target of. */
+  activeFor(workspaceId: string, computerId: string): Promise<AgentMigrationRecord[]>;
   /** The bundle manifest stored with `upload_complete`, or null before it. */
   manifest(id: string): Promise<unknown | null>;
   /**
@@ -274,6 +276,11 @@ export class AgentMigrations {
     return typeof applied === "string"
       ? { status: "refused", code: "stale_revision" }
       : { status: "failed", migration: applied };
+  }
+
+  /** The unfinished migrations one Computer takes part in, for leasing it again on reconnect. */
+  async activeFor(participant: MigrationParticipant) {
+    return this.store.activeFor(participant.workspaceId, participant.computerId);
   }
 
   /** The bundle manifest of a migration a participant has already viewed, or null before upload. */

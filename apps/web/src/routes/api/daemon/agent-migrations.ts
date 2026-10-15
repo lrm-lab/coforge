@@ -7,6 +7,8 @@ import {
   answerAgentMigrationDaemonRequest,
 } from "#src/server/agent-migrations/agent-migration-daemon-api.server";
 import { getAgentMigrationStorage } from "#src/server/agent-migrations/agent-migration-storage.server";
+import { AgentMigrationDispatch } from "#src/server/agent-migrations/agent-migration-dispatch.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { PrismaAgentMigrationStore } from "#src/server/db/repositories/agent-migration.repositories.server";
 
 export const Route = createFileRoute("/api/daemon/agent-migrations")({
@@ -22,7 +24,12 @@ export const Route = createFileRoute("/api/daemon/agent-migrations")({
           new AgentMigrations(new PrismaAgentMigrationStore(db)),
           await getAgentMigrationStorage(),
         );
-        const answer = await answerAgentMigrationDaemonRequest(transport, principal, input);
+        const answer = await answerAgentMigrationDaemonRequest(
+          transport,
+          new AgentMigrationDispatch(createCentrifugoServerApi()),
+          principal,
+          input,
+        );
         return Response.json(answer.body, {
           status: answer.status,
           headers: { "cache-control": "no-store" },

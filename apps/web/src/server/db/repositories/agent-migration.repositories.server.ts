@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import {
+  FINISHED_AGENT_MIGRATION_STATES,
   isFinishedAgentMigration,
   type AgentMigrationRecord,
   type AgentMigrationState,
@@ -99,6 +100,18 @@ export class PrismaAgentMigrationStore implements AgentMigrationStore {
       select: MIGRATION_SELECT,
     });
     return row ? toMigrationRecord(row) : null;
+  }
+
+  async activeFor(workspaceId: string, computerId: string) {
+    const rows = await this.db.agentMigration.findMany({
+      where: {
+        workspaceId,
+        state: { notIn: [...FINISHED_AGENT_MIGRATION_STATES] },
+        OR: [{ sourceComputerId: computerId }, { targetComputerId: computerId }],
+      },
+      select: MIGRATION_SELECT,
+    });
+    return rows.map(toMigrationRecord);
   }
 
   async manifest(id: string) {

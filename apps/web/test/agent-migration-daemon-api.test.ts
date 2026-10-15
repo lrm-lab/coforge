@@ -5,6 +5,8 @@ import {
   agentMigrationDaemonRequestSchema,
   answerAgentMigrationDaemonRequest,
 } from "#src/server/agent-migrations/agent-migration-daemon-api.server";
+import { decodeAgentMigrationLease } from "@lrm/coforge-sdk/internal";
+import { AgentMigrationDispatch } from "#src/server/agent-migrations/agent-migration-dispatch.server";
 import { memoryStore } from "./helpers/agent-migration-memory-store";
 
 const workspaceId = "workspace-1";
@@ -20,17 +22,27 @@ async function setup() {
     requestedByUserId: "user-1",
   });
   if (created.status !== "created") throw new Error(created.status);
+  const sizes = new Map<string, number>();
   const transport = new AgentMigrationTransport(migrations, {
-    head: async () => null,
-    presignPut: async (key) => ({ url: `https://oss.test/${key}`, headers: {} }),
+    head: async (key) => (sizes.has(key) ? { sizeBytes: sizes.get(key)! } : null),
+    presignPut: async (key) => {
+      sizes.set(key, 1024 * 1024);
+      return { url: `https://oss.test/${key}`, headers: {} };
+    },
     presignGet: async (key) => `https://oss.test/${key}`,
   });
   const answer = (participant: typeof source, body: unknown) => {
     const input = agentMigrationDaemonRequestSchema.safeParse(body);
     if (!input.success) throw new Error("request did not parse");
-    return answerAgentMigrationDaemonRequest(transport, participant, input.data);
+    return answerAgentMigrationDaemonRequest(transport, dispatch, participant, input.data);
   };
-  return { id: created.migration.id, answer };
+  const published: { channel: string; data: Uint8Array }[] = [];
+  const dispatch = new AgentMigrationDispatch({
+    publish: async (channel, data) => {
+      published.push({ channel, data });
+    },
+  });
+  return { id: created.migration.id, answer, published };
 }
 
 test("a daemon views, steps and fails a migration through one HTTPS operation", async () => {
@@ -108,4 +120,60 @@ test("the request schema refuses upload_complete as a plain step and unknown ope
   expect(
     agentMigrationDaemonRequestSchema.safeParse({ ...base, operation: "cancel" }).success,
   ).toBe(false);
+});
+
+test("a completed upload leases the target, again on a retry whose reply was lost", async () => {
+  const { id, answer, published } = await setup();
+  await answer(source, {
+    operation: "step",
+    migrationId: id,
+    generation: 1,
+    expectedRevision: 0,
+    step: "source_stopped",
+  });
+  const chunk = { index: 0, offsetBytes: 0, sizeBytes: 1024 * 1024, sha256: "0".repeat(64) };
+  await answer(source, { operation: "upload_url", migrationId: id, generation: 1, chunk });
+  const complete = {
+    operation: "upload_complete",
+    migrationId: id,
+    generation: 1,
+    expectedRevision: 1,
+    manifest: {
+      format: "tar+gzip",
+      contentType: "application/vnd.coforge.agent-migration-bundle+tar+gzip",
+      entryCount: 1,
+      expandedBytes: 10,
+      maxEntryBytes: 10,
+      memoryMdPresent: true,
+      notesPresent: false,
+      sizeBytes: chunk.sizeBytes,
+      sha256: "f".repeat(64),
+      chunkSizeBytes: chunk.sizeBytes,
+      chunks: [chunk],
+    },
+  };
+  expect(await answer(source, complete)).toMatchObject({ status: 200 });
+  expect(await answer(source, complete)).toMatchObject({
+    status: 200,
+    body: { status: "already_applied" },
+  });
+  expect(published.map((entry) => entry.channel)).toEqual([
+    `daemon:${workspaceId}:computer-b`,
+    `daemon:${workspaceId}:computer-b`,
+  ]);
+  expect(decodeAgentMigrationLease(published[0]!.data)).toMatchObject({
+    role: "target",
+    migrationId: id,
+    expectedRevision: 2,
+  });
+  // Once the target has started placing, a late retry from the source leases nobody again.
+  await answer(target, {
+    operation: "step",
+    migrationId: id,
+    generation: 1,
+    expectedRevision: 2,
+    step: "placement_started",
+  });
+  expect(await answer(source, complete)).toMatchObject({ body: { status: "already_applied" } });
+  expect(published).toHaveLength(2);
 });

@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+// Server to daemon: this Computer may move one Agent's workspace for one migration attempt, in the
+// named role, until the lease expires. The source stops the Agent and uploads; the target downloads
+// and places. Each publish has its own request_id; a daemon keys its run on (migration_id,
+// generation, role), so a lease delivered again joins the run already going and keeps its deadline.
+message AgentMigrationLease {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string agent_id = 5;
+  string migration_id = 6;
+  uint32 generation = 7;
+  // "source" or "target".
+  string role = 8;
+  // The migration's revision when the lease was issued; the first step the daemon sends names it.
+  uint32 expected_revision = 9;
+  // How long the lease lasts from when the daemon receives it, so no clock is compared across machines.
+  uint32 expires_in_ms = 10;
+  // Explicit envelope discriminator; never infer message type from payload fields.
+  string message_type = 11;
+}
+
+// Server to daemon: the migration attempt ended before finishing; stop its run and clean up what it
+// placed. `switched` says whether the Agent had already moved to the target, which then keeps it.
+message AgentMigrationCancel {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string agent_id = 5;
+  string migration_id = 6;
+  uint32 generation = 7;
+  // "source" or "target".
+  string role = 8;
+  bool switched = 9;
+  // Explicit envelope discriminator; never infer message type from payload fields.
+  string message_type = 10;
+}

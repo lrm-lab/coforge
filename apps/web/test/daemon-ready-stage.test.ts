@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 
-import { encodeDaemonRuntimeReadyRequest } from "@lrm/coforge-sdk/internal";
+import {
+  decodeDaemonRuntimeReadyRequest,
+  encodeDaemonRuntimeReadyRequest,
+} from "@lrm/coforge-sdk/internal";
 
 import { createDaemonRuntimeReadyMethod } from "#src/server/centrifugo/rpc-handler.server";
 
@@ -89,4 +92,30 @@ test("a failing ready names the stage that failed", async () => {
 test("a ready that completes still answers with bytes, not a stage", async () => {
   const method = createDaemonRuntimeReadyMethod({ recovery: { recoverWorkspace: async () => {} } });
   expect(await method(readyPayload(), { principal: principal() })).toBeInstanceOf(Uint8Array);
+});
+
+test("a daemon that runs migrations is leased again on ready; a failure there does not fail the ready", async () => {
+  const reissued: string[] = [];
+  const method = (fail: boolean) =>
+    createDaemonRuntimeReadyMethod({
+      migrationRecovery: {
+        reissue: async (workspaceId, computerId) => {
+          reissued.push(`${workspaceId}:${computerId}`);
+          if (fail) throw new Error("centrifugo is down");
+        },
+      },
+    });
+  const payload = (capabilities: string[]) =>
+    encodeDaemonRuntimeReadyRequest({
+      ...decodeDaemonRuntimeReadyRequest(readyPayload()),
+      capabilities,
+    });
+  expect(await method(false)(payload(["reminder:v1"]), { principal: principal() })).toBeInstanceOf(
+    Uint8Array,
+  );
+  expect(reissued).toEqual([]);
+  expect(
+    await method(true)(payload(["agent-migration:v1"]), { principal: principal() }),
+  ).toBeInstanceOf(Uint8Array);
+  expect(reissued).toEqual(["workspace-1:computer-1"]);
 });
