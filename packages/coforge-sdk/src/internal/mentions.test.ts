@@ -8,6 +8,7 @@ import {
   replaceMentionTokens,
   resolveMentionTargets,
   splitCodeSpans,
+  stripCodeSpans,
 } from "./mentions";
 
 test("parses a human mention selector as type user", () => {
@@ -60,6 +61,25 @@ test("rejects a value with the wrong number of segments", () => {
 
 test("finds a plain @handle in content", () => {
   expect(mentionsInContent("hi @ada, please review").has("ada")).toBe(true);
+});
+
+test("code stripping keeps long prose and its mention boundaries exactly as written", () => {
+  const body = "\u0000 中文😀 <tag> &lt; &#64; \\\r\n\u2028".repeat(3000) + "mail@ada @helper @ada";
+  expect(stripCodeSpans(body)).toBe(body);
+  expect([...mentionsInContent(body)]).toEqual(["helper", "ada"]);
+  expect(stripCodeSpans("")).toBe("");
+});
+
+test("code stripping preserves fence precedence and LF-only inline boundaries", () => {
+  expect(stripCodeSpans("@`before ```@ignored``` after`ada")).toBe("@ada");
+  expect(stripCodeSpans("before `a\nb` after")).toBe("before `a\nb` after");
+  expect(stripCodeSpans("before `a\rb\u2028c` end")).toBe("before  end");
+  expect(stripCodeSpans("before `a\nb` after `a\rb\u2028c` end")).toBe(
+    "before `a\nba\rb\u2028c` end",
+  );
+  expect(stripCodeSpans("before \\`@hidden` after @helper ```unfinished")).toBe(
+    "before \\ after @helper `unfinished",
+  );
 });
 
 test("ignores an @handle inside a fenced code block", () => {

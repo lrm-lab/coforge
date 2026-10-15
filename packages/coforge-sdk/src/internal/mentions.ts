@@ -61,6 +61,8 @@ const INLINE_CODE = /`[^`\n]*`/g;
 
 /** Removes fenced and inline code spans so a mention inside a code sample is never counted. */
 export function stripCodeSpans(body: string): string {
+  // Neither code pattern can match a body without a backtick.
+  if (!body.includes("`")) return body;
   return body.replace(FENCED_CODE, "").replace(INLINE_CODE, "");
 }
 
