@@ -39,11 +39,12 @@ import {
 
 type DragData =
   | { type: "row" | "section"; section: DirectorySectionId; label: string }
-  | { type: "group"; section: `custom:${string}`; label: string };
+  | { type: "group"; section: DirectorySectionId; label: string };
 
 /** dnd-kit's multiple-container pattern: preview row placement on drag-over, keep an overlay
- * outside the scroll area, and persist only the placement the member actually drops. Custom
- * group headers use their own SortableContext in the same DndContext, so rows can reach them too. */
+ * outside the scroll area, and persist only the placement the member actually drops. Section
+ * headers (built-in and custom) use their own SortableContext in the same DndContext, so rows can
+ * reach them too. `sectionIds` is the sections' order, top to bottom. */
 export function useDirectoryDrag({
   layout: base,
   natural,
@@ -54,10 +55,10 @@ export function useDirectoryDrag({
 }: {
   layout: DirectoryLayout;
   natural: Record<HomeSection, readonly string[]>;
-  sectionIds: readonly string[];
+  sectionIds: readonly DirectorySectionId[];
   commitPins: (change: NonNullable<ReturnType<typeof pinsAfterDrag>>) => void;
   commitSection: (change: NonNullable<ReturnType<typeof sectionChangeAfterDrag>>) => void;
-  commitOrder: (ids: string[]) => void;
+  commitOrder: (order: DirectorySectionId[]) => void;
 }) {
   const [dragging, setDragging] = useState<DirectoryLayout | null>(null);
   const [active, setActive] = useState<{
@@ -111,8 +112,10 @@ export function useDirectoryDrag({
   const onDragEnd = (event: DragEndEvent) => {
     const before = start.current ?? base;
     if (event.active.data.current?.type === "group") {
-      const from = sectionIds.indexOf(String(event.active.id).slice("group:".length));
-      const to = event.over ? sectionIds.indexOf(String(event.over.id).slice("group:".length)) : -1;
+      const keyOf = (id: string | number) =>
+        String(id).slice("group:".length) as DirectorySectionId;
+      const from = sectionIds.indexOf(keyOf(event.active.id));
+      const to = event.over ? sectionIds.indexOf(keyOf(event.over.id)) : -1;
       reset();
       if (from >= 0 && to >= 0 && from !== to) commitOrder(arrayMove([...sectionIds], from, to));
       return;
@@ -148,6 +151,7 @@ export function useDirectoryDrag({
         data: { current?: Record<string, unknown> };
         rect: { current: { initial: { width: number } | null } };
       };
+      activatorEvent: Event | null;
     }) => {
       start.current = base;
       setDragging(base);
@@ -155,7 +159,11 @@ export function useDirectoryDrag({
         id: String(event.active.id),
         group: event.active.data.current?.type === "group",
         label: String(event.active.data.current?.label ?? ""),
-        width: event.active.rect.current.initial?.width ?? 0,
+        // dnd-kit measures `rect.initial` after this callback, so it is still empty here: the
+        // overlay takes the width of the row or section that was pressed instead.
+        width:
+          event.active.rect.current.initial?.width ||
+          draggedWidth(event.activatorEvent?.target ?? null),
       });
     },
     onDragOver: relayout,
@@ -171,6 +179,13 @@ export function useDirectoryDrag({
     hoveredSection,
     sortingSections: active?.group === true,
   };
+}
+
+/** The width of the row (`li`) or section that a drag started on, from the pressed element. */
+function draggedWidth(target: EventTarget | null): number {
+  if (!(target instanceof Element)) return 0;
+  const item = target.closest("[data-chat-section-sortable], li");
+  return item?.getBoundingClientRect().width ?? 0;
 }
 
 /** Pointer drops must be inside a valid target. Keyboard drags use closestCenter, as the
@@ -307,14 +322,18 @@ export function DirectoryDragRow({
   );
 }
 
-/** The existing collapse button is also the section's drag activator. */
+/** A section's title row is its drag activator: the collapse button of one that collapses, the
+ * title itself of one that does not (Pinned). */
 export function DirectorySortableSection({
   id,
   label,
   disabled,
+  className,
   children,
 }: {
-  id: string;
+  id: DirectorySectionId;
+  /** The wrapper's own classes, e.g. hiding an empty section. */
+  className?: string;
   label: string;
   disabled: boolean;
   children: (headingProps: DirectoryDragActivation) => ReactNode;
@@ -322,7 +341,7 @@ export function DirectorySortableSection({
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `group:${id}`,
     disabled,
-    data: { type: "group", section: `custom:${id}`, label } satisfies DragData,
+    data: { type: "group", section: id, label } satisfies DragData,
   });
   const { onKeyDownCapture, ...activation } = useItemDragActivation(listeners, isDragging);
   return (
@@ -339,6 +358,7 @@ export function DirectorySortableSection({
       className={cx(
         "relative touch-manipulation outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2",
         isDragging && "opacity-30",
+        className,
       )}
       style={{
         transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,

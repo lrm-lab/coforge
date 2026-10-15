@@ -3,11 +3,18 @@ import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { ChatSections } from "#src/server/conversations/chat-sections.server";
 import { chatSectionFields, chatSectionPatch } from "./chat-section.schemas";
+import { BUILT_IN_SECTIONS } from "./directory-section-order";
 
 export const listChatSections = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(({ context: { db, workspaceId, user } }) =>
     new ChatSections(db, workspaceId, user.id).list(),
+  );
+
+export const getChatSectionOrder = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(({ context: { db, workspaceId, user } }) =>
+    new ChatSections(db, workspaceId, user.id).order(),
   );
 
 export const createChatSection = createServerFn({ method: "POST" })
@@ -33,7 +40,7 @@ export const deleteChatSection = createServerFn({ method: "POST" })
 
 export const reorderChatSections = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(z.object({ ids: z.array(z.uuid()).max(500) }))
+  .validator(z.object({ ids: z.array(z.union([z.enum(BUILT_IN_SECTIONS), z.uuid()])).max(500) }))
   .handler(({ context: { db, workspaceId, user }, data }) =>
     new ChatSections(db, workspaceId, user.id).reorder(data.ids),
   );

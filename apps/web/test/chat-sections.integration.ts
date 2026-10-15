@@ -87,6 +87,32 @@ test("dragged section and conversation orders survive a new read without droppin
     await expect(sections.reorder([crypto.randomUUID()])).rejects.toThrow("NOT_FOUND");
   }));
 
+test("a section's sort and the sidebar's section order, built-in sections included, survive a new read", () =>
+  withMember(async (sections, db, scope) => {
+    const first = await sections.create({ name: "First", emoji: null });
+    const second = await sections.create({ name: "Second", emoji: null });
+    expect(await sections.order()).toEqual([]);
+
+    await sections.update(first.id, { sortMode: "alpha" });
+    await expect(
+      sections.update(first.id, { sortMode: "newest" as unknown as "alpha" }),
+    ).rejects.toThrow("INVALID_INPUT");
+
+    // Only custom ids: the custom sections reorder and no preference is written.
+    await sections.reorder([second.id, first.id]);
+    expect(await sections.order()).toEqual([]);
+
+    const order = ["channels", first.id, "pinned", second.id, "agents"];
+    await sections.reorder(order);
+    const fresh = new ChatSections(db, scope.workspaceId, scope.userId);
+    expect(await fresh.order()).toEqual(order);
+    expect((await fresh.list()).map((section) => [section.id, section.sortMode])).toEqual([
+      [first.id, "alpha"],
+      [second.id, "manual"],
+    ]);
+    await expect(sections.reorder(["channels", "channels"])).rejects.toThrow("INVALID_INPUT");
+  }));
+
 test("personal Chat sections survive a new read with their name, emoji and collapse state", async () => {
   const db = database();
   const suffix = crypto.randomUUID();
@@ -105,6 +131,7 @@ test("personal Chat sections survive a new read with their name, emoji and colla
         emoji: "🚀",
         collapsed: false,
         sortOrder: 0,
+        sortMode: "manual",
         conversationIds: [],
       },
     ]);
@@ -116,6 +143,7 @@ test("personal Chat sections survive a new read with their name, emoji and colla
         emoji: null,
         collapsed: true,
         sortOrder: 0,
+        sortMode: "manual",
         conversationIds: [],
       },
     ]);

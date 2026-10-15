@@ -145,7 +145,7 @@
   "preferences_show_agent_model": "显示 Agent 模型",
   "preferences_show_agent_model_description": "在聊天里 Agent 名字旁显示它使用的模型。",
   "preferences_hide_empty_sidebar_sections": "隐藏空的侧栏分区",
-  "preferences_hide_empty_sidebar_sections_description": "“已置顶”为空时隐藏，拖动会话时重新出现。“频道”和“私聊”保留，方便发起会话。",
+  "preferences_hide_empty_sidebar_sections_description": "“已置顶”和自建分组为空时隐藏，拖动会话时重新出现。“频道”和“私聊”保留，方便发起会话。",
   "preferences_conversations": "会话",
   "preferences_conversation_open_mode": "打开会话时",
   "preferences_open_newest_read": "定位到最新消息并标记为已读",

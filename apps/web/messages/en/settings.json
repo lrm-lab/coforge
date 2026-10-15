@@ -145,7 +145,7 @@
   "preferences_show_agent_model": "Show agent model",
   "preferences_show_agent_model_description": "Show each agent's model next to its name in chat.",
   "preferences_hide_empty_sidebar_sections": "Hide empty sidebar sections",
-  "preferences_hide_empty_sidebar_sections_description": "Hide Pinned when empty; it comes back while you drag a conversation. Channels and Direct messages stay visible so you can start a conversation.",
+  "preferences_hide_empty_sidebar_sections_description": "Hide Pinned and your own sections when empty; they come back while you drag a conversation. Channels and Direct messages stay visible so you can start a conversation.",
   "preferences_conversations": "Conversations",
   "preferences_conversation_open_mode": "When I view a conversation",
   "preferences_open_newest_read": "Start at the newest message and mark it read",

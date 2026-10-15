@@ -612,6 +612,9 @@ model WorkspaceMemberPreference {
   conversationTabOrder String[]            @default([])
   /// Agent profile panel tab ids (profile, reminders, activity, workspace) in the member's order.
   agentProfileTabOrder   String[]            @default([])
+  /// Chat sidebar sections top to bottom: "pinned", "channels", "agents" and custom section ids.
+  /// Empty = the default order. Written with the custom sections' own `sortOrder`.
+  chatSectionOrder     String[]            @default([])
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
@@ -628,6 +631,9 @@ model ChatSection {
   emoji         String?
   collapsed     Boolean              @default(false)
   sortOrder     Int                  @default(0)
+  /// How the sidebar orders the section's rows: "manual" (drag order), "recent" (latest message
+  /// first) or "alpha" (by name). Validated by `chatSectionSortModes`.
+  sortMode      String               @default("manual")
   createdAt     DateTime             @default(now())
   membership    WorkspaceMembership  @relation(fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
   conversations ConversationMember[]

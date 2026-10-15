@@ -17,7 +17,7 @@ import {
 import { directListsOf, type DirectRow } from "./sidebar-rows";
 import { sidebarRefreshQueue, type ChatList } from "./conversation-unread";
 import { compareChannelNames, type ChannelSignal } from "./channel-signals";
-import { chatSectionsQuery } from "./chat-sections";
+import { chatSectionOrderQuery, chatSectionsQuery } from "./chat-sections";
 
 // React access to the Chat sidebar's lists (`sidebar-collections.ts`).
 
@@ -162,10 +162,14 @@ export function useSidebarActions() {
   return useSidebar().actions;
 }
 
+const EMPTY_ORDER: readonly string[] = [];
+
 /** Personal groups share the sidebar's optimistic transactions, including a move's unpin. */
 export function useChatSections() {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const query = useQuery(chatSectionsQuery(workspaceId));
+  // The built-in sections' places; until it loads (or if it fails) they keep the default order.
+  const order = useQuery(chatSectionOrderQuery(workspaceId));
   const sidebar = useSidebar();
   const live = useLiveQuery({
     queryKey: ["chat-sections", workspaceId],
@@ -177,6 +181,7 @@ export function useChatSections() {
   });
   return {
     sections: live.isReady ? live.data : (query.data ?? []),
+    order: order.data ?? EMPTY_ORDER,
     isPending: query.isPending,
     isError: query.isError,
     retry: () => query.refetch(),

@@ -8,8 +8,18 @@ import { announceViewerEvent, type ConversationRealtime } from "./conversation-r
 import {
   chatSectionFields,
   chatSectionPatch,
+  chatSectionSortModes,
   type ChatSection,
+  type ChatSectionSortMode,
 } from "#src/features/conversations/chat-section.schemas";
+import { isBuiltInSection } from "#src/features/conversations/directory-section-order";
+
+/** The column is plain text; a value this build does not know reads as the drag order. */
+function sortModeOf(value: string): ChatSectionSortMode {
+  return (chatSectionSortModes as readonly string[]).includes(value)
+    ? (value as ChatSectionSortMode)
+    : "manual";
+}
 
 /** One member's personal Chat groups. Every read/write keeps the trusted user + Workspace scope. */
 export class ChatSections {
@@ -43,6 +53,7 @@ export class ChatSections {
         emoji: true,
         collapsed: true,
         sortOrder: true,
+        sortMode: true,
         conversations: {
           where: { ...this.scope, leftAt: null },
           select: { conversationId: true },
@@ -50,8 +61,9 @@ export class ChatSections {
         },
       },
     });
-    return sections.map(({ conversations, ...section }) => ({
+    return sections.map(({ conversations, sortMode, ...section }) => ({
       ...section,
+      sortMode: sortModeOf(sortMode),
       conversationIds: conversations.map((member) => member.conversationId),
     }));
   }
@@ -71,10 +83,18 @@ export class ChatSections {
         select: { id: true, name: true, emoji: true, collapsed: true, sortOrder: true },
       });
     });
-    return { ...section, conversationIds: [] as string[] };
+    return { ...section, sortMode: "manual" as const, conversationIds: [] as string[] };
   }
 
-  async update(id: string, input: { name?: string; emoji?: string | null; collapsed?: boolean }) {
+  async update(
+    id: string,
+    input: {
+      name?: string;
+      emoji?: string | null;
+      collapsed?: boolean;
+      sortMode?: ChatSectionSortMode;
+    },
+  ) {
     await this.authorize();
     const parsed = chatSectionPatch.safeParse(input);
     if (!parsed.success) throw new AppError("INVALID_INPUT");
@@ -95,9 +115,26 @@ export class ChatSections {
     });
   }
 
-  async reorder(ids: readonly string[]) {
+  /** The sidebar's saved section order (built-in keys and custom ids); empty when never dragged. */
+  async order(): Promise<string[]> {
     await this.authorize();
-    if (new Set(ids).size !== ids.length) throw new AppError("INVALID_INPUT");
+    const saved = await this.db.workspaceMemberPreference.findUnique({
+      where: { workspaceId_userId: this.scope },
+      select: { chatSectionOrder: true },
+    });
+    return saved?.chatSectionOrder ?? [];
+  }
+
+  /**
+   * Saves the sidebar's section order. `order` names custom sections by id and may also name the
+   * built-in ones ("pinned", "channels", "agents"); with a built-in key, the whole order is kept as
+   * the member's preference, and the custom sections take their `sortOrder` from it either way.
+   */
+  async reorder(order: readonly string[]) {
+    await this.authorize();
+    if (new Set(order).size !== order.length) throw new AppError("INVALID_INPUT");
+    const ids = order.filter((key) => !isBuiltInSection(key));
+    const keepsBuiltIns = ids.length !== order.length;
     await this.db.$transaction(async (tx) => {
       await lockMemberPins(tx, this.workspaceId, this.userId);
       const sections = await tx.chatSection.findMany({
@@ -108,12 +145,18 @@ export class ChatSections {
       if (ids.some((id) => !sections.some((section) => section.id === id)))
         throw new AppError("NOT_FOUND");
       // A group unseen by this tab retains its place after the requested groups.
-      const order = [
+      const sorted = [
         ...ids,
         ...sections.map((section) => section.id).filter((id) => !ids.includes(id)),
       ];
-      for (const [sortOrder, id] of order.entries())
+      for (const [sortOrder, id] of sorted.entries())
         await tx.chatSection.update({ where: { id }, data: { sortOrder } });
+      if (keepsBuiltIns)
+        await tx.workspaceMemberPreference.upsert({
+          where: { workspaceId_userId: this.scope },
+          create: { ...this.scope, chatSectionOrder: [...order] },
+          update: { chatSectionOrder: [...order] },
+        });
     });
   }
 

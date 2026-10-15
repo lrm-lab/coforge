@@ -40,7 +40,13 @@ import { directRowsOf, type DirectRow } from "./sidebar-rows";
 import { channelNamesAfter, type ChannelSignal } from "./channel-signals";
 import type { ChatList } from "./conversation-unread";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
-import { chatSectionsQuery, serverChatSectionsApi, type ChatSectionsApi } from "./chat-sections";
+import {
+  chatSectionOrderQuery,
+  chatSectionsQuery,
+  serverChatSectionsApi,
+  type ChatSectionsApi,
+} from "./chat-sections";
+import { isBuiltInSection } from "./directory-section-order";
 import type { ChatSection } from "./chat-section.schemas";
 import {
   olderStreamPositions,
@@ -406,21 +412,22 @@ export function createSidebar(
     },
   });
   const reorderSections = createOptimisticAction<readonly string[]>({
-    onMutate: (ids) => {
+    onMutate: (order) => {
+      const ids = order.filter((key) => !isBuiltInSection(key));
       const current = [...sections.toArray].sort((a, b) => a.sortOrder - b.sortOrder);
-      const order = [
+      const sorted = [
         ...ids,
         ...current.map((section) => section.id).filter((id) => !ids.includes(id)),
       ];
-      order.forEach((id, sortOrder) => {
+      sorted.forEach((id, sortOrder) => {
         if (sections.has(id))
           sections.update(id, (section) => {
             section.sortOrder = sortOrder;
           });
       });
     },
-    mutationFn: async (ids, { transaction }) => {
-      await api.sections.reorder(ids);
+    mutationFn: async (order, { transaction }) => {
+      await api.sections.reorder(order);
       confirm(transaction);
     },
   });
@@ -527,10 +534,21 @@ export function createSidebar(
   const directsKey = sidebarDirectsQueryKey(workspaceId);
   const listOf = (target: PinRef) => [target.kind === "channel" ? channelsKey : directsKey];
   const actions = {
-    reorderSections: (ids: readonly string[]) =>
-      saved(reorderSections(ids), () => api.sections.reorder(ids), [
-        chatSectionsQuery(workspaceId).queryKey,
-      ]),
+    /** `order` is the whole sidebar (built-in keys and custom ids): the custom sections move in
+     * the synced list, the built-in ones in the order query, which a failed save puts back. */
+    reorderSections: async (order: readonly string[]) => {
+      const orderKey = chatSectionOrderQuery(workspaceId).queryKey;
+      const before = queryClient.getQueryData<string[]>(orderKey);
+      queryClient.setQueryData(orderKey, [...order]);
+      try {
+        await saved(reorderSections(order), () => api.sections.reorder(order), [
+          chatSectionsQuery(workspaceId).queryKey,
+        ]);
+      } catch (cause) {
+        queryClient.setQueryData(orderKey, before);
+        throw cause;
+      }
+    },
     createSection: async (input: Parameters<ChatSectionsApi["create"]>[0]) => {
       const section = await api.sections.create(input);
       sections.utils.writeInsert(section);
