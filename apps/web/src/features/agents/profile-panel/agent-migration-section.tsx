@@ -41,11 +41,13 @@ const PROGRESS_POLL_MS = 3_000;
 export function AgentMigrationStatus({
   migration,
   targetName,
+  sourceName,
   onCancel,
   canceling,
 }: {
   migration: { state: string; errorCode: string | null };
   targetName: string;
+  sourceName: string;
   onCancel?: () => void;
   canceling?: boolean;
 }) {
@@ -58,7 +60,7 @@ export function AgentMigrationStatus({
           migration.state === "failed" ? "text-sm text-error-primary" : "text-sm text-secondary"
         }
       >
-        {agentMigrationStatusLine(migration, targetName)}
+        {agentMigrationStatusLine(migration, targetName, sourceName)}
       </p>
       {(inProgress || migration.state === "completed") && (
         <ol className="grid gap-1 text-sm">
@@ -278,6 +280,7 @@ export function AgentMigrationSection({
         <AgentMigrationStatus
           migration={migration}
           targetName={migration.targetComputerName || m.agent_computer_unnamed()}
+          sourceName={migration.sourceComputerName || m.agent_computer_unnamed()}
           onCancel={
             isOwner
               ? () => {

@@ -36,7 +36,8 @@ function setup(
     }),
     agentOwner: async (_workspaceId, agentId) => (agentId === "agent-1" ? "user-1" : undefined),
     isWorkspaceAdmin: async (_workspaceId, userId) => userId === "user-3",
-    computerName: async (computerId) => (computerId === "computer-b" ? "Studio Mac" : null),
+    computerName: async (computerId) =>
+      ({ "computer-a": "Computer A", "computer-b": "Studio Mac" })[computerId] ?? null,
     canRunAgent: async () => !options.runtimeMissing,
     agentComputer: async () => "computer-a",
     computerReadiness: async (_workspaceId, computerId) =>
@@ -70,6 +71,7 @@ test("the owner moves the Agent; the owner and Workspace admins see the move, no
         state: "requested",
         targetComputerId: "computer-b",
         targetComputerName: "Studio Mac",
+        sourceComputerName: "Computer A",
         errorCode: null,
       },
     });

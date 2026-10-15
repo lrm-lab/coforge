@@ -201,7 +201,7 @@
   "agent_migration_status_uploading": "正在迁移到 {computer}：正在打包并上传工作区",
   "agent_migration_status_placing": "正在迁移到 {computer}：正在目标电脑上放置工作区",
   "agent_migration_status_starting": "正在迁移到 {computer}：正在目标电脑上启动智能体",
-  "agent_migration_status_completed": "已迁移到 {computer}",
+  "agent_migration_status_completed": "已从 {source} 迁移到 {computer}，在新电脑上开启了新的运行时会话，工作区和记忆都已带过去。",
   "agent_migration_status_canceled": "迁移已取消，智能体留在当前电脑上",
   "agent_migration_status_failed": "迁移失败（{reason}），智能体留在当前电脑上",
   "agent_migration_error_already_moving": "这个智能体已经在迁移中。",

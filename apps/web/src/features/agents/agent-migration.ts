@@ -68,7 +68,11 @@ function failureReason(errorCode: string | null) {
 }
 
 /** One line for where a move stands, naming the Computer it goes to. */
-export function agentMigrationStatusLine(migration: AgentMigrationSummary, computer: string) {
+export function agentMigrationStatusLine(
+  migration: AgentMigrationSummary,
+  computer: string,
+  source: string,
+) {
   switch (migration.state) {
     case "requested":
       return m.agent_migration_status_stopping({ computer });
@@ -80,7 +84,7 @@ export function agentMigrationStatusLine(migration: AgentMigrationSummary, compu
     case "switched":
       return m.agent_migration_status_starting({ computer });
     case "completed":
-      return m.agent_migration_status_completed({ computer });
+      return m.agent_migration_status_completed({ source, computer });
     case "canceled":
       return m.agent_migration_status_canceled();
     default:

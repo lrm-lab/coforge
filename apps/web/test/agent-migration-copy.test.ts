@@ -13,7 +13,7 @@ import { m } from "#src/paraglide/messages";
 
 test("each stage of a move reads as what is happening, naming the Computer it goes to", () => {
   const status = (state: string, errorCode: string | null = null) =>
-    agentMigrationStatusLine({ state, errorCode }, "Studio Mac");
+    agentMigrationStatusLine({ state, errorCode }, "Studio Mac", "Old Laptop");
   expect(status("requested")).toBe(m.agent_migration_status_stopping({ computer: "Studio Mac" }));
   expect(status("source_stopped")).toBe(
     m.agent_migration_status_uploading({ computer: "Studio Mac" }),
@@ -21,7 +21,10 @@ test("each stage of a move reads as what is happening, naming the Computer it go
   expect(status("uploaded")).toBe(m.agent_migration_status_placing({ computer: "Studio Mac" }));
   expect(status("placing")).toBe(m.agent_migration_status_placing({ computer: "Studio Mac" }));
   expect(status("switched")).toBe(m.agent_migration_status_starting({ computer: "Studio Mac" }));
-  expect(status("completed")).toBe(m.agent_migration_status_completed({ computer: "Studio Mac" }));
+  // Done: where it came from, where it is, and that it runs a fresh session there.
+  expect(status("completed")).toBe(
+    m.agent_migration_status_completed({ source: "Old Laptop", computer: "Studio Mac" }),
+  );
   expect(status("canceled")).toBe(m.agent_migration_status_canceled());
   expect(status("failed", "lease_expired")).toBe(
     m.agent_migration_status_failed({ reason: m.agent_migration_reason_lease_expired() }),

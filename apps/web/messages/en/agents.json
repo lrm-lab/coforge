@@ -201,7 +201,7 @@
   "agent_migration_status_uploading": "Moving to {computer}: packing and uploading its workspace",
   "agent_migration_status_placing": "Moving to {computer}: placing its workspace there",
   "agent_migration_status_starting": "Moving to {computer}: starting the Agent there",
-  "agent_migration_status_completed": "Moved to {computer}",
+  "agent_migration_status_completed": "Moved from {source} to {computer}. It runs a fresh runtime session there, with its workspace and memory.",
   "agent_migration_status_canceled": "The move was canceled; the Agent stays on this Computer",
   "agent_migration_status_failed": "The move failed ({reason}); the Agent stays on this Computer",
   "agent_migration_error_already_moving": "This Agent is already moving to another Computer.",

@@ -103,6 +103,7 @@ export class AgentMigrationRequests {
             sourceComputerId: latest.sourceComputerId,
             targetComputerId: latest.targetComputerId,
             targetComputerName: await this.deps.computerName(latest.targetComputerId),
+            sourceComputerName: await this.deps.computerName(latest.sourceComputerId),
             errorCode: latest.errorCode,
             updatedAt: latest.updatedAt.toISOString(),
           }
