@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { getLocale } from "#src/paraglide/runtime";
 
 import type { EmojiClickData, PickerLabels, Theme } from "emoji-picker-react";
@@ -12,9 +12,9 @@ import type { EmojiClickData, PickerLabels, Theme } from "emoji-picker-react";
  * a broken popover.
  *
  * The visuals come from the app: the host element carries `data-epr-host`, whose `styles.css`
- * block pins the epr variables to the closest app tokens (hover/focus = `bg-secondary_hover`,
- * search field, category labels, skin-tone menu), and the theme follows the root `dark-mode`
- * class (see `routes/__root.tsx`'s boot script), not the OS preference.
+ * block pins the epr variables to the app's tokens (hover/focus/search/category surfaces), and
+ * the theme follows the root `dark-mode` class (see `routes/__root.tsx`'s boot script), not the
+ * OS preference.
  *
  * It renders nothing around itself: the call site composes it with the official `Button` +
  * React Aria `DialogTrigger`/`Popover`/`Dialog`, and owns nullable-value semantics (an optional
@@ -36,7 +36,12 @@ const zhLabels: Partial<PickerLabels> = {
   retryLoading: "重试",
 };
 
-type Epr = typeof import("emoji-picker-react").default;
+/** One state, not two: a function-sized state would be read by React as a lazy initializer /
+ * updater and called with the previous state, which never are the picker's props. */
+type Library = {
+  picker: typeof import("emoji-picker-react").default;
+  data: object;
+};
 
 export function EmojiPicker({
   pickerHostClassName,
@@ -49,35 +54,23 @@ export function EmojiPicker({
   const zh = getLocale().startsWith("zh");
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
-  const [epr, setEpr] = useState<Epr | null>(null);
-  const [data, setData] = useState<object | null>(null);
+  const [library, setLibrary] = useState<Library | null>(null);
 
   useEffect(() => {
     let alive = true;
     setFailed(false);
     void (async () => {
       try {
-        const [eprModule, dataModule] = await Promise.all([
+        const [epr, data] = await Promise.all([
           import("emoji-picker-react"),
           zh
             ? import("emoji-picker-react/dist/data/emojis-zh")
             : import("emoji-picker-react/dist/data/emojis-en"),
         ]);
-        if (alive) {
-          // TEMP DEBUG
-          const Orig = eprModule.default;
-          const Wrapped = function (props: never) {
-            if (props === null) console.error("[epr-null-props] caller:", new Error().stack?.slice(0, 700));
-            return (Orig as (p: never) => unknown)(props);
-          };
-          setEpr(Wrapped);
-          setData(dataModule.default);
-        }
+        if (alive) setLibrary({ picker: epr.default, data: data.default });
       } catch (cause) {
         if (alive) setFailed(true);
-        // The chunk request itself is the evidence: a failed import must not stay an unhandled
-        // rejection behind the placeholder.
-        console.warn("emoji picker failed to load", cause);
+        console.warn("emoji picker could not be loaded", cause);
       }
     })();
     return () => {
@@ -88,45 +81,44 @@ export function EmojiPicker({
   const dark =
     typeof document !== "undefined" && document.documentElement.classList.contains("dark-mode");
 
+  let grid: ReactNode;
+  if (library) {
+    const { picker: Picker, data } = library;
+    grid = (
+      <Picker
+        theme={(dark ? "dark" : "light") as Theme}
+        lazyLoadEmojis
+        previewConfig={{ showPreview: false }}
+        labels={zh ? zhLabels : { searchPlaceholder: "Search emoji" }}
+        emojiData={data as never}
+        onEmojiClick={(emoji: EmojiClickData) => onPick(emoji.emoji)}
+      />
+    );
+  } else if (failed) {
+    grid = (
+      <div className="flex min-h-90 flex-col items-center justify-center gap-2 text-sm text-tertiary">
+        <span>{zh ? "加载失败" : "Failed to load"}</span>
+        <button
+          type="button"
+          onClick={() => setAttempt((n) => n + 1)}
+          className="font-medium text-brand-secondary hover:underline"
+        >
+          {zh ? "重试" : "Retry"}
+        </button>
+      </div>
+    );
+  } else {
+    // The placeholder's height is the picker's settled one, so the popover does not jump when
+    // the library arrives.
+    grid = <div className="min-h-90 animate-pulse bg-secondary" aria-hidden="true" />;
+  }
+
   return (
     <div
       data-epr-host=""
-      className={
-        pickerHostClassName ??
-        // The pulse placeholder's height is the picker's settled one, so the popover does not
-        // jump when the library arrives.
-        "min-h-90 *:min-h-90 [&_.epr-picker]:border-0"
-      }
+      className={pickerHostClassName ?? "min-h-90 *:min-h-90 [&_.epr-picker]:border-0"}
     >
-      {epr && data ? (
-        (() => {
-          // Capitalized so JSX renders the component, not a `<epr>` DOM tag.
-          const Picker = epr;
-          return (
-            <Picker
-              theme={(dark ? "dark" : "light") as Theme}
-              lazyLoadEmojis
-              previewConfig={{ showPreview: false }}
-              labels={zh ? zhLabels : { searchPlaceholder: "Search emoji" }}
-              emojiData={data as never}
-              onEmojiClick={(emoji: EmojiClickData) => onPick(emoji.emoji)}
-            />
-          );
-        })()
-      ) : failed ? (
-        <div className="flex min-h-90 flex-col items-center justify-center gap-2 text-sm text-tertiary">
-          <span>{zh ? "加载失败" : "Failed to load"}</span>
-          <button
-            type="button"
-            onClick={() => setAttempt((n) => n + 1)}
-            className="font-medium text-brand-secondary hover:underline"
-          >
-            {zh ? "重试" : "Retry"}
-          </button>
-        </div>
-      ) : (
-        <div className="min-h-90 animate-pulse bg-secondary" aria-hidden="true" />
-      )}
+      {grid}
     </div>
   );
 }
