@@ -1530,7 +1530,6 @@ export class DaemonConnection implements DaemonConnectionClient {
         command: request,
         agentApiKey,
         daemonApiKey: this.#token,
-        timeoutMs: AGENT_RPC_TIMEOUT_MS,
       });
     }
     return forwardOpenVikingRead({
@@ -1538,7 +1537,6 @@ export class DaemonConnection implements DaemonConnectionClient {
       command: request,
       agentApiKey,
       daemonApiKey: this.#token,
-      timeoutMs: AGENT_RPC_TIMEOUT_MS,
     });
   }
 

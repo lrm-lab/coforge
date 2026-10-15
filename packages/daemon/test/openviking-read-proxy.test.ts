@@ -534,3 +534,50 @@ test("the outer read deadline allows a healthy backend response beyond ten secon
   respond();
   await expect(pending).resolves.toEqual(expected);
 });
+
+test("the production connection preserves the enclosing OpenViking deadline", async () => {
+  const controller = new AbortController();
+  let deadline = 0;
+  fetchSpies.push(
+    spyOn(AbortSignal, "timeout").mockImplementation((milliseconds) => {
+      deadline = milliseconds;
+      return controller.signal;
+    }),
+  );
+  let respond!: () => void;
+  const expected = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "find",
+    operationId: FIND_COMMAND.operationId,
+    duplicate: false,
+    items: [],
+  };
+  fetchSpies.push(
+    spyOn(globalThis, "fetch").mockImplementation(
+      async (_url, init) =>
+        new Promise<Response>((resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("deadline", "AbortError")),
+            { once: true },
+          );
+          respond = () => resolve(Response.json(expected));
+        }),
+    ),
+  );
+  const fake = fakeCentrifugeClient();
+  const connection = new DaemonConnection("wss://cloud.example", () => fake.client);
+  await connection.start("daemon-token", {
+    computerId: "computer-a",
+    workspaceId: "workspace-a",
+    serverHttpUrl: "https://server.example/api/internal/centrifugo",
+  });
+  const pending = connection.agentOpenviking(FIND_COMMAND, AGENT_API_KEY);
+  if (deadline <= 15_000) controller.abort();
+  respond();
+  try {
+    await expect(pending).resolves.toEqual(expected);
+  } finally {
+    connection.stop();
+  }
+});
