@@ -99,7 +99,7 @@ function RoleMatrix() {
               </th>
             </tr>
             {group.rows.map((row) => (
-              <tr key={row.id} className="border-b border-secondary last:border-b-0">
+              <tr key={row.capability} className="border-b border-secondary last:border-b-0">
                 <th scope="row" className="py-2 pr-3 text-left font-normal text-secondary">
                   {row.label()}
                 </th>

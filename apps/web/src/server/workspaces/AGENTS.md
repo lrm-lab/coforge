@@ -39,3 +39,17 @@ These rules apply to `src/server/workspaces/`.
   The command installs `coforge-computer` and starts `host` against this
   deployment. It does not join a Workspace. The light is on only while that
   host's heartbeat is under 90 seconds old.
+
+## Role capabilities
+
+- What a Workspace role may do lives in one table, `WORKSPACE_CAPABILITY_ROLES`
+  (`src/features/workspaces/workspace-roles.ts`). Server checks answer from it
+  through `roleCan` (directly or via the named helpers built on it), and the
+  person panel's role help reads the same table. To change who may do
+  something, change the table; to add a role-gated action, add a capability,
+  never a new role comparison. `test/workspace-capabilities.test.ts` checks
+  that every listed helper and the help agree with it.
+- Rules that need more than the role stay with their owners and do not go in
+  the table: leaving (never the owner), a channel admin's own channel, and an
+  Agent's creator (private-Agent visibility, visibility changes, cancelling
+  its action cards).

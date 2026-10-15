@@ -5,6 +5,7 @@ import {
   canManageMembers,
   canManageWorkspaceSettings,
   isWorkspaceAdminRole,
+  roleCan,
   WORKSPACE_MEMBER_ROLES,
   type WorkspaceMemberRole,
 } from "#src/features/workspaces/workspace-roles";
@@ -37,9 +38,9 @@ export function assertCanManageMembers(actorRole: WorkspaceMemberRole): void {
   if (!canManageMembers(actorRole)) throw new AppError("ACCESS_DENIED");
 }
 
-/** Creating an Agent requires Workspace owner/admin authority, kept as its own named seam. */
+/** Creating an Agent requires the `createAgents` capability, kept as its own named seam. */
 export function canCreateAgents(actorRole: string | undefined): boolean {
-  return isElevatedServerRole(actorRole);
+  return roleCan(actorRole, "createAgents");
 }
 
 export function assertCanCreateAgents(actorRole: WorkspaceMemberRole): void {
@@ -47,18 +48,16 @@ export function assertCanCreateAgents(actorRole: WorkspaceMemberRole): void {
 }
 
 /**
- * The `deleteAgents` capability sits with `createAgents`/`editAgents` among the owner/admin-only
- * capabilities and is not a plain member's, so deleting an Agent is Workspace owner/admin only —
- * not even the Agent's own owner may delete it as a plain member.
+ * Deleting an Agent needs the `deleteAgents` capability (`WORKSPACE_CAPABILITY_ROLES`), which a
+ * plain member does not hold — not even for an Agent they created.
  */
 export function assertCanDeleteAgents(actorRole: WorkspaceMemberRole): void {
-  if (!isAdminLike(actorRole)) throw new AppError("ACCESS_DENIED");
+  if (!roleCan(actorRole, "deleteAgents")) throw new AppError("ACCESS_DENIED");
 }
 
 /**
- * `controlAgentRuntime` is held by the server owner, admin, and every plain member;
- * `resetAgentWorkspace` is owner/admin only. Named seam for `AgentControl.execute()`'s user-initiated Restart/Reset session/Full reset
- * authorization — not a general capability framework.
+ * The two capabilities `AgentControl.execute()` checks for a user-initiated Restart, Reset session
+ * or Full reset; who holds each is in `WORKSPACE_CAPABILITY_ROLES`.
  */
 export const AGENT_CONTROL_CAPABILITIES = ["controlAgentRuntime", "resetAgentWorkspace"] as const;
 export type AgentControlCapability = (typeof AGENT_CONTROL_CAPABILITIES)[number];
@@ -67,7 +66,7 @@ function hasAgentControlCapability(
   actorRole: WorkspaceMemberRole,
   capability: AgentControlCapability,
 ): boolean {
-  return capability === "controlAgentRuntime" ? true : isAdminLike(actorRole);
+  return roleCan(actorRole, capability);
 }
 
 export function assertHasAgentControlCapability(

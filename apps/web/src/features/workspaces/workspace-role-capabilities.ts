@@ -1,81 +1,50 @@
 import { m } from "#src/paraglide/messages";
-import {
-  canChangeWorkspaceSlug,
-  canDeleteWorkspace,
-  canManageMembers,
-  canManageWorkspaceSettings,
-  isWorkspaceAdminRole,
-  type WorkspaceMemberRole,
-} from "./workspace-roles";
+import { roleCan, type WorkspaceCapability, type WorkspaceMemberRole } from "./workspace-roles";
 
-type Capability = {
-  id: string;
+type CapabilityRow = {
+  capability: WorkspaceCapability;
   label: () => string;
   allows: (role: WorkspaceMemberRole) => boolean;
 };
 
-const everyone = () => true;
+const row = (capability: WorkspaceCapability, label: () => string): CapabilityRow => ({
+  capability,
+  label,
+  allows: (role) => roleCan(role, capability),
+});
 
 /**
  * What each Workspace role may do, as the role help shows it: capabilities by role, grouped like
- * Slack's "Permissions by role". Each row answers from the same role rule the server enforces
- * (`workspace-roles.ts`, which `member-role.server.ts` builds on), so the help cannot drift from
- * the checks. Agent-config edits are left out: only an Agent's creator edits it, whatever the role.
+ * Slack's "Permissions by role". Every cell reads `WORKSPACE_CAPABILITY_ROLES`, the table the
+ * server's role checks answer from, so the help cannot drift from them. Agent-config edits are left
+ * out: only an Agent's creator edits it, whatever the role.
  */
 export const WORKSPACE_ROLE_CAPABILITIES: {
   id: "using" | "administration";
   label: () => string;
-  rows: Capability[];
+  rows: CapabilityRow[];
 }[] = [
   {
     id: "using",
     label: () => m.workspace_roles_group_using(),
     rows: [
-      { id: "channels", label: () => m.workspace_roles_can_channels(), allows: everyone },
-      { id: "dms-and-tasks", label: () => m.workspace_roles_can_dms_tasks(), allows: everyone },
-      { id: "computers", label: () => m.workspace_roles_can_computers(), allows: everyone },
-      { id: "run-agents", label: () => m.workspace_roles_can_run_agents(), allows: everyone },
+      row("useChannels", () => m.workspace_roles_can_channels()),
+      row("useDirectMessagesAndTasks", () => m.workspace_roles_can_dms_tasks()),
+      row("addComputers", () => m.workspace_roles_can_computers()),
+      row("controlAgentRuntime", () => m.workspace_roles_can_run_agents()),
     ],
   },
   {
     id: "administration",
     label: () => m.workspace_roles_group_administration(),
     rows: [
-      {
-        id: "create-agents",
-        label: () => m.workspace_roles_can_create_agents(),
-        allows: isWorkspaceAdminRole,
-      },
-      {
-        id: "delete-agents",
-        label: () => m.workspace_roles_can_delete_agents(),
-        allows: isWorkspaceAdminRole,
-      },
-      {
-        id: "manage-members",
-        label: () => m.workspace_roles_can_manage_members(),
-        allows: canManageMembers,
-      },
-      {
-        id: "manage-channels",
-        label: () => m.workspace_roles_can_manage_channels(),
-        allows: isWorkspaceAdminRole,
-      },
-      {
-        id: "workspace-profile",
-        label: () => m.workspace_roles_can_workspace_profile(),
-        allows: canManageWorkspaceSettings,
-      },
-      {
-        id: "change-url",
-        label: () => m.workspace_roles_can_change_url(),
-        allows: canChangeWorkspaceSlug,
-      },
-      {
-        id: "delete-workspace",
-        label: () => m.workspace_roles_can_delete_workspace(),
-        allows: canDeleteWorkspace,
-      },
+      row("createAgents", () => m.workspace_roles_can_create_agents()),
+      row("deleteAgents", () => m.workspace_roles_can_delete_agents()),
+      row("manageMembers", () => m.workspace_roles_can_manage_members()),
+      row("manageChannels", () => m.workspace_roles_can_manage_channels()),
+      row("manageWorkspaceSettings", () => m.workspace_roles_can_workspace_profile()),
+      row("changeWorkspaceSlug", () => m.workspace_roles_can_change_url()),
+      row("deleteWorkspace", () => m.workspace_roles_can_delete_workspace()),
     ],
   },
 ];
