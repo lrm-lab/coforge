@@ -24,7 +24,8 @@ type MemberRow = {
   avatarUrl: string | null;
 };
 
-function roleLabel(role: string) {
+/** A Workspace role as people read it. */
+export function workspaceRoleLabel(role: string) {
   if (role === "owner") return m.workspace_role_owner();
   if (role === "admin") return m.workspace_role_admin();
   return m.workspace_role_member();
@@ -107,7 +108,7 @@ export function WorkspaceMembersPanel(props: {
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <Badge size="sm" color="gray">
-                      {roleLabel(member.role)}
+                      {workspaceRoleLabel(member.role)}
                     </Badge>
                     {hasActions && (
                       <Dropdown.Root>

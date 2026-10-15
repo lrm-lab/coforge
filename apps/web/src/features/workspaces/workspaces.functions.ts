@@ -105,6 +105,17 @@ export const loadMemberPeoplePage = createServerFn({ method: "GET" })
 
 export type MemberPerson = Awaited<ReturnType<typeof loadMemberPeoplePage>>["items"][number];
 
+/** One member's profile for the Members page's person panel. */
+export const loadMemberPersonProfile = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ userId: z.uuid() }))
+  .handler(async ({ data, context }) => {
+    const { user, db, workspaceId } = context;
+    return new WorkspaceMembers(db).person(workspaceId, user.id, data.userId);
+  });
+
+export type MemberPersonProfile = Awaited<ReturnType<typeof loadMemberPersonProfile>>;
+
 /** Every human member and every visible Agent, for pickers; `viewerId` marks the viewer's own
  * entry among the people. */
 export const loadWorkspaceDirectory = createServerFn({ method: "GET" })

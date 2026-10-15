@@ -44,6 +44,42 @@ function shownAgentName(agent: {
 const personLabelSql = (alias: Prisma.Sql) =>
   Prisma.sql`COALESCE(NULLIF(btrim(${alias}."displayName"), ''), ${alias}."username")`;
 
+/** The Agents a person created that the viewer may see, as a nested `agents` select. The Members
+ * directory and a person's profile share it, so both apply one visibility and naming rule. */
+function createdAgentsSelect(visibleAgents: Prisma.AgentWhereInput) {
+  return {
+    where: visibleAgents,
+    select: {
+      id: true,
+      name: true,
+      displayName: true,
+      description: true,
+      avatarObjectKey: true,
+      weeklyReportAssistant: { select: { id: true } },
+    },
+    orderBy: [{ name: "asc" as const }, { id: "asc" as const }],
+  };
+}
+
+/** One of a person's created Agents as the directory and the profile show it. */
+function createdAgentView(
+  workspaceId: string,
+  agent: {
+    id: string;
+    name: string;
+    displayName: string;
+    avatarObjectKey: string | null;
+    weeklyReportAssistant: { id: string } | null;
+  },
+  owner: { username: string; displayName: string | null },
+) {
+  return {
+    id: agent.id,
+    displayName: shownAgentName({ ...agent, owner }),
+    avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+  };
+}
+
 /** Take one extra row to learn whether another page exists; the cursor is the last row's id. */
 function pageOf<T extends { id: string }>(rows: T[], limit: number) {
   const items = rows.slice(0, limit);
@@ -277,6 +313,53 @@ export class WorkspaceMembers {
     };
   }
 
+  /**
+   * One member's profile as a teammate sees it: the name they are shown by (never their
+   * username), description, email, avatar, Workspace role, when they joined, and the Agents they
+   * created that the viewer may see. NOT_FOUND when the person is not a member of this Workspace.
+   */
+  async person(workspaceId: string, viewerId: string, personId: string) {
+    const { visibleAgents } = await this.viewer(workspaceId, viewerId);
+    const membership = await this.db.workspaceMembership.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: personId } },
+      select: {
+        role: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            description: true,
+            email: true,
+            avatarObjectKey: true,
+            agents: createdAgentsSelect(visibleAgents),
+          },
+        },
+      },
+    });
+    if (!membership) throw new AppError("NOT_FOUND");
+    const person = membership.user;
+    await this.storeAssistantNames(
+      workspaceId,
+      person.agents.map((agent) => ({ ...agent, owner: person })),
+    );
+    return {
+      id: person.id,
+      displayName: humanLabel(person),
+      description: person.description,
+      email: person.email,
+      avatarUrl: workspaceUserAvatarUrl(workspaceId, person.id, person.avatarObjectKey),
+      role: membership.role,
+      joinedAt: membership.createdAt,
+      isViewer: person.id === viewerId,
+      createdAgents: person.agents.map((agent) => ({
+        ...createdAgentView(workspaceId, agent, person),
+        description: agent.description,
+      })),
+    };
+  }
+
   async peoplePage(workspaceId: string, userId: string, input: PeoplePageInput) {
     const { visibleAgents } = await this.viewer(workspaceId, userId);
     const limit = clampPageLimit(input.limit, MEMBER_PAGE_MAX);
@@ -291,17 +374,7 @@ export class WorkspaceMembers {
         avatarObjectKey: true,
         // Visible Agents this person created. One list feeds the count and the faces: Prisma
         // pushes neither a nested `take` nor a page-scoped filtered `_count` into SQL.
-        agents: {
-          where: visibleAgents,
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            avatarObjectKey: true,
-            weeklyReportAssistant: { select: { id: true } },
-          },
-          orderBy: [{ name: "asc" }, { id: "asc" }],
-        },
+        agents: createdAgentsSelect(visibleAgents),
       },
     });
     const byId = new Map(rows.map((person) => [person.id, person]));
@@ -318,11 +391,9 @@ export class WorkspaceMembers {
         avatarUrl: workspaceUserAvatarUrl(workspaceId, person.id, person.avatarObjectKey),
         createdAgents: {
           total: person.agents.length,
-          items: person.agents.slice(0, CREATED_AGENT_FACES).map((agent) => ({
-            id: agent.id,
-            displayName: shownAgentName({ ...agent, owner: person }),
-            avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
-          })),
+          items: person.agents
+            .slice(0, CREATED_AGENT_FACES)
+            .map((agent) => createdAgentView(workspaceId, agent, person)),
         },
       })),
       limit,

@@ -6,6 +6,9 @@ import {
   agentProfileParamSchema,
   agentProfileTabParamSchema,
   formatAgentProfileParam,
+  formatPersonProfileParam,
+  memberProfileParamSchema,
+  personIdFromProfileParam,
   resolveAgentProfileTab,
   visibleAgentProfileTabs,
   AGENT_PROFILE_TABS,
@@ -28,6 +31,31 @@ describe("agentProfileParamSchema", () => {
     expect(agentProfileParamSchema.parse("agent:not-a-uuid")).toBeUndefined();
     expect(agentProfileParamSchema.parse("user:" + AGENT_ID)).toBeUndefined();
     expect(agentProfileParamSchema.parse("")).toBeUndefined();
+  });
+});
+
+describe("memberProfileParamSchema", () => {
+  test("opens either an Agent or a person on the Members page", () => {
+    expect(memberProfileParamSchema.parse(formatAgentProfileParam(AGENT_ID))).toBe(
+      `agent:${AGENT_ID}`,
+    );
+    expect(memberProfileParamSchema.parse(formatPersonProfileParam(AGENT_ID))).toBe(
+      `user:${AGENT_ID}`,
+    );
+  });
+
+  test("falls back to undefined for a malformed token", () => {
+    expect(memberProfileParamSchema.parse("user:not-a-uuid")).toBeUndefined();
+    expect(memberProfileParamSchema.parse(`channel:${AGENT_ID}`)).toBeUndefined();
+  });
+});
+
+describe("personIdFromProfileParam", () => {
+  test("extracts a person's id and ignores an Agent's", () => {
+    expect(personIdFromProfileParam(formatPersonProfileParam(AGENT_ID))).toBe(AGENT_ID);
+    expect(personIdFromProfileParam(formatAgentProfileParam(AGENT_ID))).toBeUndefined();
+    expect(personIdFromProfileParam("user:nope")).toBeUndefined();
+    expect(personIdFromProfileParam(undefined)).toBeUndefined();
   });
 });
 

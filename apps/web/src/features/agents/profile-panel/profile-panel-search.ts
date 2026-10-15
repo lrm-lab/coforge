@@ -13,6 +13,12 @@ const AGENT_PROFILE_PREFIX = "agent:";
 const UUID_SOURCE = UUID_LIKE_SOURCE;
 const UUID_PATTERN = new RegExp(`^${UUID_SOURCE}$`, "i");
 const AGENT_PROFILE_PATTERN = new RegExp(`^${AGENT_PROFILE_PREFIX}${UUID_SOURCE}$`, "i");
+/** The Members page also opens a person: `profile=user:<uuid>`. */
+const PERSON_PROFILE_PREFIX = "user:";
+const MEMBER_PROFILE_PATTERN = new RegExp(
+  `^(?:${AGENT_PROFILE_PREFIX}|${PERSON_PROFILE_PREFIX})${UUID_SOURCE}$`,
+  "i",
+);
 
 export const AGENT_PROFILE_TABS = ["profile", "activity", "reminders", "workspace"] as const;
 export type AgentProfileTab = (typeof AGENT_PROFILE_TABS)[number];
@@ -26,11 +32,29 @@ export const agentProfileParamSchema = z
   .optional()
   .catch(undefined);
 
+/** The Members page's `profile` search param: an Agent (`agent:<uuid>`) or a person
+ * (`user:<uuid>`); malformed values fall back to closed. */
+export const memberProfileParamSchema = z
+  .string()
+  .regex(MEMBER_PROFILE_PATTERN)
+  .optional()
+  .catch(undefined);
+
 export const agentProfileTabParamSchema = z.enum(AGENT_PROFILE_TABS).optional().catch(undefined);
 
 /** The `profile` search param value that opens the panel on one Agent. */
 export function formatAgentProfileParam(agentId: string): string {
   return `${AGENT_PROFILE_PREFIX}${agentId}`;
+}
+
+/** The `profile` search param value that opens the Members page's panel on one person. */
+export function formatPersonProfileParam(userId: string): string {
+  return `${PERSON_PROFILE_PREFIX}${userId}`;
+}
+
+/** The person's id encoded in a `profile` search param, or `undefined` when it names no person. */
+export function personIdFromProfileParam(profile: string | undefined): string | undefined {
+  return idFromProfileParam(profile, PERSON_PROFILE_PREFIX);
 }
 
 export function agentProfileSearchWithoutThread<T extends { threadRootId?: string }>(
@@ -44,8 +68,12 @@ export function agentProfileSearchWithoutThread<T extends { threadRootId?: strin
  * the param does not name an Agent (already validated by `agentProfileParamSchema`, but callers
  * that read raw search state — e.g. before validation — can use this defensively too). */
 export function agentIdFromProfileParam(profile: string | undefined): string | undefined {
-  if (!profile || !profile.startsWith(AGENT_PROFILE_PREFIX)) return undefined;
-  const id = profile.slice(AGENT_PROFILE_PREFIX.length);
+  return idFromProfileParam(profile, AGENT_PROFILE_PREFIX);
+}
+
+function idFromProfileParam(profile: string | undefined, prefix: string): string | undefined {
+  if (!profile || !profile.startsWith(prefix)) return undefined;
+  const id = profile.slice(prefix.length);
   return UUID_PATTERN.test(id) ? id : undefined;
 }
 
