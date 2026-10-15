@@ -35,6 +35,7 @@ import {
   updateWorkspaceMemberRole,
 } from "#src/features/workspaces/members.functions";
 import { workspaceRoleLabel } from "#src/features/workspaces/workspace-role-label";
+import { WorkspaceRoleHelp } from "#src/features/workspaces/workspace-role-help";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { MemberPersonProfile } from "#src/features/workspaces/workspaces.functions";
 import { AgentDisplayAvatar } from "./agent-display-avatar";
@@ -229,6 +230,7 @@ function PersonProfileBody({
         <dl className="mt-2">
           <FactRow
             label={m.agent_profile_role()}
+            help={<WorkspaceRoleHelp />}
             action={
               profile.canChangeRole && (
                 <Button
@@ -391,11 +393,14 @@ function useMemberActions(profile: MemberPersonProfile, onRemoved: () => void) {
  * the action's error under the row (docs/design/field-display.md). */
 function FactRow({
   label,
+  help,
   children,
   action,
   error,
 }: {
   label: string;
+  /** On-demand help about the fact, beside its label. */
+  help?: ReactNode;
   children: ReactNode;
   action?: ReactNode;
   error?: string;
@@ -403,7 +408,10 @@ function FactRow({
   return (
     <div className="border-b border-secondary py-1.5 last:border-b-0">
       <div className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1">
-        <dt className="text-sm font-medium whitespace-nowrap text-primary">{label}</dt>
+        <dt className="flex items-center gap-1 text-sm font-medium whitespace-nowrap text-primary">
+          {label}
+          {help}
+        </dt>
         <dd className="ml-auto min-w-0 truncate text-right text-sm text-tertiary">{children}</dd>
         {action}
       </div>
