@@ -20,3 +20,14 @@ export function truncateCodePoints(value: string, max: number): string {
   const chars = [...value];
   return chars.length > max ? chars.slice(0, max).join("") : value;
 }
+
+/**
+ * `value` cut to its first `max` Unicode code points with `…` appended, or `value` itself
+ * when already within budget. A string whose UTF-16 length is within budget is returned
+ * without expanding it into code points.
+ */
+export function truncateCodePointsWithEllipsis(value: string, max: number): string {
+  if (value.length <= max) return value;
+  const chars = [...value];
+  return chars.length > max ? `${chars.slice(0, max).join("")}…` : value;
+}

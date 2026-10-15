@@ -3,6 +3,7 @@ import {
   TOOL_ALIASES,
   toolActivityLabel,
   truncateCodePoints,
+  truncateCodePointsWithEllipsis,
   type AgentActivityDetailKind,
 } from "@lrm/coforge-sdk/internal";
 import { redactTrajectoryText } from "#src/agent-runtime/activity-trajectory";
@@ -28,33 +29,6 @@ const SUMMARY_KIND: Readonly<Record<string, "file_path" | "pattern" | "url" | "q
   web_search: "query",
 };
 
-// CoForge CLI subcommand -> canonical tool + allowlisted summary. Applies
-// only when the tokenised `bash` command's first token is `coforge` or a
-// path ending in `/coforge`.
-const TASK_TOOLS: Readonly<Record<string, string>> = {
-  list: "list_tasks",
-  create: "create_task",
-  convert: "convert_task",
-  claim: "claim_tasks",
-  unclaim: "unclaim_task",
-  assign: "assign_task",
-  update: "update_task_status",
-  amend: "amend_task",
-  history: "task_history",
-  delete: "delete_task",
-  receipt: "task_receipt",
-};
-const REMINDER_TOOLS: Readonly<Record<string, string>> = {
-  schedule: "schedule_reminder",
-  list: "list_reminders",
-  update: "update_reminder",
-  snooze: "snooze_reminder",
-  cancel: "cancel_reminder",
-  log: "reminder_log",
-  ack: "ack_reminder",
-  dismiss: "dismiss_reminder",
-};
-
 /** A normalized tool-start becomes an allowlisted Activity with its reported child lineage. */
 export function toolStartActivity(event: Extract<AgentRuntimeEvent, { type: "tool-start" }>) {
   const activity = toolActivity(event.name, event.input, event.occurredAt);
@@ -71,7 +45,7 @@ export function toolActivity(name: string, args: unknown, occurredAt?: string) {
 
   if (canonical === "bash") {
     const bash = summarizeBash(input.command);
-    return buildActivity(bash.detailKind, bash.summary, bash.toolName, occurredAt);
+    return buildActivity(bash.summary, bash.toolName, occurredAt);
   }
 
   const kind = SUMMARY_KIND[canonical];
@@ -85,7 +59,15 @@ export function toolActivity(name: string, args: unknown, occurredAt?: string) {
           : kind === "query"
             ? allowlistedString(input.query, 120)
             : undefined;
-  return buildActivity(AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED, summary, canonical, occurredAt);
+  return buildActivity(summary, canonical, occurredAt);
+}
+
+/** The Activity kind a tool start reports, one rule for provider tools and the CoForge CLI. */
+function detailKindFor(toolName: string): AgentActivityDetailKind {
+  if (toolName === "bash") return AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND;
+  if (toolName === "check_messages" || toolName === "receive_message")
+    return AGENT_ACTIVITY_DETAIL_KIND.CHECKING_MESSAGES;
+  return AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED;
 }
 
 /**
@@ -95,13 +77,13 @@ export function toolActivity(name: string, args: unknown, occurredAt?: string) {
  * in the entry's `toolInput`, sanitized to satisfy the SDK's `validToolInput` (at most
  * 200 code points, no control characters).
  */
-function buildActivity(
-  detailKind: AgentActivityDetailKind,
-  summary: string | undefined,
-  toolName: string,
-  occurredAt?: string,
-) {
-  const result = createAgentActivity(detailKind, "info", toolActivityLabel(toolName), occurredAt);
+function buildActivity(summary: string | undefined, toolName: string, occurredAt?: string) {
+  const result = createAgentActivity(
+    detailKindFor(toolName),
+    "info",
+    toolActivityLabel(toolName),
+    occurredAt,
+  );
   const toolInput = summary ? sanitizeToolInput(summary) : undefined;
   return {
     ...result,
@@ -122,136 +104,175 @@ function sanitizeToolInput(value: string): string {
   return truncateCodePoints(collapseWhitespace(value.replace(/[\x00-\x1f\x7f]/g, " ")), 200);
 }
 
-function summarizeBash(command: unknown): {
-  detailKind: AgentActivityDetailKind;
-  summary: string | undefined;
-  toolName: string;
-} {
-  if (typeof command !== "string")
-    return {
-      detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND,
-      summary: undefined,
-      toolName: "bash",
-    };
-  const tokens = tokenizeShellCommand(command);
-  const first = tokens[0];
-  if (tokens.length > 1 && first !== undefined && isCoforgeInvocation(first)) {
-    // An unrecognized subcommand has no semantic identity to report, so it falls through to
-    // the ordinary command summary below rather than reporting a name that stands for
-    // "some CoForge command": an invocation outside the closed set of known ones leaves an
-    // ordinary `bash`/`running_command` Activity.
-    const invocation = resolveCoforgeInvocation(tokens);
-    if (invocation)
-      return {
-        detailKind: invocation.checkingMessages
-          ? AGENT_ACTIVITY_DETAIL_KIND.CHECKING_MESSAGES
-          : AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED,
-        summary: invocation.summary,
-        toolName: invocation.tool,
-      };
-  }
-  // The row carries the command as the Agent wrote it, with only a length cap, so an inline
-  // script stays visible instead of the command appearing to stop at its heredoc (`cd x && python3
-  // -` with nothing after it). There is no heredoc cut; redaction and the 200-code-point cap
-  // still apply, and redaction is best-effort — a heredoc body is now in scope, so text the
-  // rules cannot recognise will show.
-  const redacted = redactTrajectoryText(command);
+function summarizeBash(command: unknown): { summary: string | undefined; toolName: string } {
+  if (typeof command !== "string") return { summary: undefined, toolName: "bash" };
+  // A command outside the closed set of recognized CoForge invocations has no semantic identity
+  // to report, so it falls through to the ordinary command summary below rather than reporting a
+  // name that stands for "some CoForge command".
+  const invocation = resolveCoforgeInvocation(command);
+  if (invocation) return { summary: invocation.summary, toolName: invocation.tool };
+  // The row carries the command as the Agent wrote it, cut at 100 code points with an ellipsis
+  // like the reference client, so an inline script stays visible instead of the command
+  // appearing to stop at its heredoc. Redaction is best-effort — a heredoc body is in scope, so
+  // text the rules cannot recognise will show.
   return {
-    detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND,
-    summary: truncateCodePoints(redacted, 200).trimEnd(),
+    summary: truncateCodePointsWithEllipsis(redactTrajectoryText(command), 100),
     toolName: "bash",
   };
 }
 
-function isCoforgeInvocation(token: string): boolean {
-  return token === "coforge" || token.endsWith("/coforge");
-}
+type Args = readonly string[];
+type CoforgeCliTool = { tool: string; summary?: (args: Args) => string | undefined };
 
-type CoforgeInvocation = { tool: string; summary?: string; checkingMessages?: boolean };
+const target = (args: Args) => flagValue(args, "--target");
+const taskRef = (args: Args) => {
+  const channel = target(args);
+  const number = taskNumbers(args)[0];
+  return channel && number !== undefined ? `${channel} #t${number}` : undefined;
+};
 
-/** The semantic identity of a recognized CoForge subcommand, or `null` when this command has
- * none and belongs in the ordinary command Activity. */
-function resolveCoforgeInvocation(tokens: readonly string[]): CoforgeInvocation | null {
-  const category = tokens[1];
-  const sub = tokens[2];
-  if (category === "message" && sub !== undefined) {
-    if (sub === "send") return { tool: "send_message", summary: flagValue(tokens, "--target") };
-    if (sub === "check") return { tool: "check_messages", checkingMessages: true };
-    if (sub === "read") return { tool: "read_history", summary: flagValue(tokens, "--target") };
-    if (sub === "search")
-      return {
-        tool: "search_messages",
-        summary: allowlistedString(flagValue(tokens, "--query"), 120),
-      };
-    if (sub === "resolve") return { tool: "resolve_message" };
-    if (sub === "react") return { tool: "react_message" };
-    // `inbox check` is deliberately absent: the semantic map contains `message check` and not
-    // it, so it stays an ordinary command Activity. The two commands answer different
-    // questions — the Computer's own held view versus a server drain — and only the drain has a
-    // semantic identity in that vocabulary.
-  } else if (category === "channel" && (sub === "mute" || sub === "unmute")) {
-    return {
-      tool: sub === "mute" ? "mute_channel" : "unmute_channel",
-      summary: flagValue(tokens, "--target"),
-    };
-  } else if (category === "thread" && sub === "unfollow") {
-    return { tool: "unfollow_thread", summary: flagValue(tokens, "--target") };
-  } else if (category === "task" && sub !== undefined && Object.hasOwn(TASK_TOOLS, sub)) {
-    const target = flagValue(tokens, "--target");
-    const number = flagValue(tokens, "--number");
-    return {
-      tool: TASK_TOOLS[sub]!,
-      summary: target ? (number ? `${target} #${number}` : target) : undefined,
-    };
-  } else if (category === "attachment" && sub === "view") {
-    return { tool: "view_file" };
-  } else if (category === "reminder" && sub !== undefined && Object.hasOwn(REMINDER_TOOLS, sub)) {
-    if (sub === "schedule")
-      return {
-        tool: "schedule_reminder",
-        summary: allowlistedString(flagValue(tokens, "--title"), 40),
-      };
-    if (sub === "list") return { tool: "list_reminders" };
-    const id = flagValue(tokens, "--id");
-    return { tool: REMINDER_TOOLS[sub]!, summary: id ? truncateCodePoints(id, 8) : undefined };
-  } else if (category === "weekly-report") {
-    return { tool: "weekly_report" };
-  } else if (category === "manual" && (sub === "get" || sub === "search")) {
-    return {
-      tool: sub === "get" ? "get_manual" : "search_manual",
-      summary: allowlistedString(tokens[3], 120),
-    };
-  } else if (category === "whoami") {
-    // Deliberately local: no wire call, so it is always read-only, unconditionally.
-    return { tool: "whoami" };
-  } else if (category === "version") {
-    return { tool: "get_version" };
-  } else if (category === "user" && sub === "info") {
-    return { tool: "get_user_info", summary: allowlistedString(tokens[3], 60) };
-  } else if (category === "profile" && sub === "show") {
-    const target = tokens[3] && !tokens[3].startsWith("--") ? tokens[3] : undefined;
-    return { tool: "get_profile", summary: allowlistedString(target, 60) };
-  } else if (category === "profile" && sub === "update") {
-    return { tool: "update_profile" };
+// The closed set of CoForge CLI subcommands with a semantic identity, keyed by their leading
+// words, and each one's summary format — both as the reference client 1.0.47 has them
+// (`resolveRaftCliInvocation`, `summarizeToolInput`). Its labels are `TOOL_LABELS`. One
+// deliberate difference: the reference client has no label for `list_channel_members`,
+// `update_channel`, `archive_channel`, `unarchive_channel` or `remove_channel_member`, so it
+// shows `Using <name>…` and no summary; here they have a label and report their channel.
+const COFORGE_CLI_TOOLS: Readonly<Record<string, CoforgeCliTool>> = {
+  "message send": { tool: "send_message", summary: target },
+  "message check": { tool: "check_messages" },
+  "message read": { tool: "read_history", summary: target },
+  "message search": { tool: "search_messages", summary: (args) => flagValue(args, "--query") },
+  "channel members": { tool: "list_channel_members", summary: (args) => args[0] },
+  "channel update": { tool: "update_channel", summary: target },
+  "channel lifecycle archive": { tool: "archive_channel", summary: target },
+  "channel lifecycle unarchive": { tool: "unarchive_channel", summary: target },
+  "channel remove-member": { tool: "remove_channel_member", summary: target },
+  "channel add-member": { tool: "add_channel_member", summary: target },
+  "channel join": { tool: "join_channel", summary: target },
+  "channel leave": { tool: "leave_channel", summary: target },
+  "task list": { tool: "list_tasks", summary: target },
+  "task create": { tool: "create_tasks", summary: target },
+  "task claim": {
+    tool: "claim_tasks",
+    summary: (args) => {
+      const channel = target(args);
+      const tasks = taskNumbers(args)
+        .map((n) => `#t${n}`)
+        .join(",");
+      return channel && tasks ? `${channel} ${tasks}` : channel;
+    },
+  },
+  "task unclaim": { tool: "unclaim_task", summary: taskRef },
+  "task update": { tool: "update_task_status", summary: taskRef },
+  "attachment upload": { tool: "upload_file", summary: (args) => flagValue(args, "--path") },
+  "attachment view": { tool: "view_file" },
+  "reminder schedule": {
+    tool: "schedule_reminder",
+    summary: (args) => {
+      const title = flagValue(args, "--title");
+      return title && truncateCodePointsWithEllipsis(title, 40);
+    },
+  },
+  "reminder list": { tool: "list_reminders" },
+  "reminder cancel": {
+    tool: "cancel_reminder",
+    summary: (args) => {
+      const id = flagValue(args, "--id");
+      return id && `#${truncateCodePoints(id, 8)}`;
+    },
+  },
+};
+
+/**
+ * The semantic identity of a CoForge CLI invocation, or `null` when the command has none and
+ * belongs in the ordinary command Activity. As in the reference client, a leading
+ * `sh`/`bash`/`zsh -c` payload is looked into first; otherwise it is the first `coforge`
+ * executable, after leading `NAME=value` assignments, in any `|`/`;`/`&&`/`||` segment.
+ */
+function resolveCoforgeInvocation(command: string): { tool: string; summary?: string } | null {
+  let first = true;
+  for (const tokens of shellSegments(command)) {
+    const index = skipEnvAssignments(tokens);
+    if (first) {
+      first = false;
+      const payload = shellPayload(tokens, index);
+      const inner = payload === undefined ? null : resolveCoforgeInvocation(payload);
+      if (inner) return inner;
+    }
+    if (isCoforgeExecutable(tokens[index])) return mapCoforgeSubcommand(tokens.slice(index + 1));
   }
   return null;
 }
 
-function flagValue(tokens: readonly string[], flag: string): string | undefined {
-  const index = tokens.indexOf(flag);
-  return index >= 0 ? tokens[index + 1] : undefined;
+function mapCoforgeSubcommand(args: Args): { tool: string; summary?: string } | null {
+  for (const words of [3, 2]) {
+    const key = args.slice(0, words).join(" ");
+    if (!Object.hasOwn(COFORGE_CLI_TOOLS, key)) continue;
+    const { tool, summary } = COFORGE_CLI_TOOLS[key]!;
+    return { tool, summary: summary?.(args.slice(words)) };
+  }
+  return null;
 }
 
-// Splits a shell command line into argv-like tokens, honouring single/double
-// quoting and backslash escapes. Stops at the first unquoted `<<`, `|`, `;`,
-// `&&`, `||`, or newline so a heredoc body, pipeline or command chain never
-// reaches the returned tokens.
-function tokenizeShellCommand(command: string): string[] {
-  const tokens: string[] = [];
+/** Every value of `flag`, given as `flag value` or `flag=value`. */
+function flagValues(args: Args, flag: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === flag && i + 1 < args.length) values.push(args[++i]!);
+    else if (arg.startsWith(`${flag}=`)) values.push(arg.slice(flag.length + 1));
+  }
+  return values;
+}
+
+/** The last value of `flag`, as the CLI parser would keep it. */
+function flagValue(args: Args, flag: string): string | undefined {
+  return flagValues(args, flag).at(-1);
+}
+
+function taskNumbers(args: Args): number[] {
+  return flagValues(args, "--number")
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0);
+}
+
+function skipEnvAssignments(tokens: Args): number {
+  let index = 0;
+  while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index]!)) index++;
+  return index;
+}
+
+function executableBase(token: string): string {
+  return token.slice(Math.max(token.lastIndexOf("/"), token.lastIndexOf("\\")) + 1).toLowerCase();
+}
+
+function isCoforgeExecutable(token: string | undefined): boolean {
+  return token !== undefined && executableBase(token) === "coforge";
+}
+
+/** The `-c` script (`-c`, `-lc`, …) when `tokens[index]` is `sh`, `bash` or `zsh`. */
+function shellPayload(tokens: Args, index: number): string | undefined {
+  const shell = tokens[index];
+  if (shell === undefined || !["sh", "bash", "zsh"].includes(executableBase(shell)))
+    return undefined;
+  for (let i = index + 1; i < tokens.length; i++) {
+    const arg = tokens[i]!;
+    if (!arg.startsWith("-")) break;
+    if (arg.endsWith("c")) return tokens[i + 1];
+  }
+  return undefined;
+}
+
+// Yields a shell command line's non-empty argv-like segments one at a time, honouring
+// single/double quoting and backslash escapes, so a caller stops tokenising once it has its
+// answer. A new segment starts at each unquoted `|`, `;`, `&&` or `||`; tokenising stops at the
+// first unquoted `<<` or newline, so a heredoc body never reaches a token.
+function* shellSegments(command: string): Generator<string[]> {
+  let segment: string[] = [];
   let current = "";
   let inToken = false;
   const push = () => {
-    if (inToken) tokens.push(current);
+    if (inToken) segment.push(current);
     current = "";
     inToken = false;
   };
@@ -268,17 +289,19 @@ function tokenizeShellCommand(command: string): string[] {
       push();
       break;
     }
-    if (ch === "|" && command[i + 1] === "|") {
+    if ((ch === "|" || ch === "&") && command[i + 1] === ch) {
       push();
-      break;
-    }
-    if (ch === "&" && command[i + 1] === "&") {
-      push();
-      break;
+      if (segment.length > 0) yield segment;
+      segment = [];
+      i += 2;
+      continue;
     }
     if (ch === "|" || ch === ";") {
       push();
-      break;
+      if (segment.length > 0) yield segment;
+      segment = [];
+      i++;
+      continue;
     }
     if (ch === "'") {
       inToken = true;
@@ -316,7 +339,7 @@ function tokenizeShellCommand(command: string): string[] {
     i++;
   }
   push();
-  return tokens;
+  if (segment.length > 0) yield segment;
 }
 
 function allowlistedString(value: unknown, max: number): string | undefined {

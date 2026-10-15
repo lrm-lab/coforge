@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { codePointLength, truncateCodePoints } from "./truncate";
+import { codePointLength, truncateCodePoints, truncateCodePointsWithEllipsis } from "./truncate";
 
 test("codePointLength counts an astral character as one, not two UTF-16 units", () => {
   expect(codePointLength("abc")).toBe(3);
@@ -20,4 +20,12 @@ test("truncateCodePoints budgets emoji as one code point and never splits a pair
   expect(codePointLength(truncated)).toBe(200);
   // No lone surrogates: spreading and rejoining round-trips exactly.
   expect([...truncated].join("")).toBe(truncated);
+});
+
+test("truncateCodePointsWithEllipsis marks a cut with … and leaves an in-budget value untouched", () => {
+  expect(truncateCodePointsWithEllipsis("abcdef", 3)).toBe("abc…");
+  expect(truncateCodePointsWithEllipsis("abc", 3)).toBe("abc");
+  // Five UTF-16 units but three code points: within budget, so no cut.
+  expect(truncateCodePointsWithEllipsis("😀😀a", 3)).toBe("😀😀a");
+  expect(truncateCodePointsWithEllipsis("😀😀😀😀", 3)).toBe("😀😀😀…");
 });

@@ -759,7 +759,7 @@ export {
   stableNormalizeFreshnessFact,
 } from "./freshness-decision";
 export type { FreshnessDecisionAction, FreshnessDecisionFactInput } from "./freshness-decision";
-export { codePointLength, truncateCodePoints } from "./truncate";
+export { codePointLength, truncateCodePoints, truncateCodePointsWithEllipsis } from "./truncate";
 export {
   compareReleaseVersions,
   isValidReleaseVersion,
