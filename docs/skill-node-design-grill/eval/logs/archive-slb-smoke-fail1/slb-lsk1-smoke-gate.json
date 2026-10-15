@@ -1,0 +1,17 @@
+{
+  "warm_n": 6,
+  "cold_n": 4,
+  "warm_offer_rate": 100.0,
+  "warm_code_extract_rate": 0.0,
+  "cold_code_extract_rate": 0.0,
+  "code_extract_gap_pp": 0.0,
+  "warm_leak_timeout_rate": 100.0,
+  "cold_leak_timeout_rate": 100.0,
+  "leak_timeout_gap_pp": 0.0,
+  "sidecar_graded": false,
+  "pass_offer": true,
+  "pass_code_gap": true,
+  "pass_leak_gap": true,
+  "pass_sidecar": false,
+  "pass": false
+}

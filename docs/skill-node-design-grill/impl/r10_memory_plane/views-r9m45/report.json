@@ -1,0 +1,429 @@
+{
+  "episodes": [
+    {
+      "calls": 1,
+      "compliant": true,
+      "construction_mode": "adaptive",
+      "episode_id": "0001-sb-fix-druid-loophole-cve",
+      "failure_marked": true,
+      "finish_reasons": [
+        "stop"
+      ],
+      "ledger_cut": true,
+      "marker_matches_ledger_cut": true,
+      "repairs": 0,
+      "revision_id": "post-run:0001-sb-fix-druid-loophole-cve:fix-druid-loophole-cve:adaptive",
+      "structure_counts": {
+        "blocks": 6,
+        "canvas_blocks": 82,
+        "canvas_claims": 81,
+        "canvas_subgraphs": 1,
+        "claims": 4,
+        "influence_claims": 4,
+        "skip_claims": 0,
+        "subgraphs": 1
+      },
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 5886,
+        "prompt_tokens": 35762,
+        "total_tokens": 41648
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": true,
+      "construction_mode": "adaptive",
+      "episode_id": "0002-sb-setup-fuzzing-py",
+      "failure_marked": true,
+      "finish_reasons": [
+        "stop"
+      ],
+      "ledger_cut": false,
+      "marker_matches_ledger_cut": false,
+      "repairs": 0,
+      "revision_id": "post-run:0002-sb-setup-fuzzing-py:setup-fuzzing-py:adaptive",
+      "structure_counts": {
+        "blocks": 10,
+        "canvas_blocks": 158,
+        "canvas_claims": 157,
+        "canvas_subgraphs": 0,
+        "claims": 10,
+        "influence_claims": 10,
+        "skip_claims": 0,
+        "subgraphs": 1
+      },
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 13061,
+        "prompt_tokens": 44336,
+        "total_tokens": 57397
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": true,
+      "construction_mode": "adaptive",
+      "episode_id": "0003-sb-software-dependency-audit",
+      "failure_marked": true,
+      "finish_reasons": [
+        "stop"
+      ],
+      "ledger_cut": true,
+      "marker_matches_ledger_cut": true,
+      "repairs": 0,
+      "revision_id": "post-run:0003-sb-software-dependency-audit:software-dependency-audit:adaptive",
+      "structure_counts": {
+        "blocks": 7,
+        "canvas_blocks": 53,
+        "canvas_claims": 52,
+        "canvas_subgraphs": 1,
+        "claims": 7,
+        "influence_claims": 7,
+        "skip_claims": 0,
+        "subgraphs": 1
+      },
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 8994,
+        "prompt_tokens": 25828,
+        "total_tokens": 34822
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": true,
+      "construction_mode": "adaptive",
+      "episode_id": "0004-sb-reserves-at-risk-calc",
+      "failure_marked": false,
+      "finish_reasons": [
+        "stop"
+      ],
+      "ledger_cut": false,
+      "marker_matches_ledger_cut": true,
+      "repairs": 0,
+      "revision_id": "post-run:0004-sb-reserves-at-risk-calc:reserves-at-risk-calc:adaptive",
+      "structure_counts": {
+        "blocks": 8,
+        "canvas_blocks": 129,
+        "canvas_claims": 128,
+        "canvas_subgraphs": 0,
+        "claims": 7,
+        "influence_claims": 7,
+        "skip_claims": 0,
+        "subgraphs": 1
+      },
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 11429,
+        "prompt_tokens": 55113,
+        "total_tokens": 66542
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": true,
+      "construction_mode": "adaptive",
+      "episode_id": "0005-sb-weighted-gdp-calc",
+      "failure_marked": false,
+      "finish_reasons": [
+        "stop"
+      ],
+      "ledger_cut": false,
+      "marker_matches_ledger_cut": true,
+      "repairs": 0,
+      "revision_id": "post-run:0005-sb-weighted-gdp-calc:weighted-gdp-calc:adaptive",
+      "structure_counts": {
+        "blocks": 7,
+        "canvas_blocks": 54,
+        "canvas_claims": 53,
+        "canvas_subgraphs": 0,
+        "claims": 6,
+        "influence_claims": 5,
+        "skip_claims": 1,
+        "subgraphs": 1
+      },
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 6877,
+        "prompt_tokens": 21686,
+        "total_tokens": 28563
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": true,
+      "construction_mode": "adaptive",
+      "episode_id": "0006-sb-xlsx-recover-data",
+      "failure_marked": true,
+      "finish_reasons": [
+        "stop"
+      ],
+      "ledger_cut": false,
+      "marker_matches_ledger_cut": false,
+      "repairs": 0,
+      "revision_id": "post-run:0006-sb-xlsx-recover-data:xlsx-recover-data:adaptive",
+      "structure_counts": {
+        "blocks": 6,
+        "canvas_blocks": 28,
+        "canvas_claims": 27,
+        "canvas_subgraphs": 0,
+        "claims": 4,
+        "influence_claims": 4,
+        "skip_claims": 0,
+        "subgraphs": 1
+      },
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 7926,
+        "prompt_tokens": 18800,
+        "total_tokens": 26726
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": false,
+      "episode_id": "0007-sb-econ-detrending-correlation",
+      "error": {
+        "message": "freeze refused: 4 high-severity violation(s): omitted_range_skip_required, omitted_range_skip_required, omitted_range_skip_required, omitted_range_skip_required",
+        "type": "HighSeverityViolation"
+      },
+      "finish_reasons": [
+        "stop"
+      ],
+      "repairs": 0,
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 5517,
+        "prompt_tokens": 23323,
+        "total_tokens": 28840
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": true,
+      "construction_mode": "adaptive",
+      "episode_id": "0008-sb-adaptive-cruise-control",
+      "failure_marked": false,
+      "finish_reasons": [
+        "stop"
+      ],
+      "ledger_cut": true,
+      "marker_matches_ledger_cut": false,
+      "repairs": 0,
+      "revision_id": "post-run:0008-sb-adaptive-cruise-control:adaptive-cruise-control:adaptive",
+      "structure_counts": {
+        "blocks": 7,
+        "canvas_blocks": 20,
+        "canvas_claims": 19,
+        "canvas_subgraphs": 1,
+        "claims": 6,
+        "influence_claims": 5,
+        "skip_claims": 1,
+        "subgraphs": 1
+      },
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 7071,
+        "prompt_tokens": 16973,
+        "total_tokens": 24044
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": true,
+      "construction_mode": "adaptive",
+      "episode_id": "0009-sb-energy-ac-optimal-power-flow",
+      "failure_marked": false,
+      "finish_reasons": [
+        "stop"
+      ],
+      "ledger_cut": false,
+      "marker_matches_ledger_cut": true,
+      "repairs": 0,
+      "revision_id": "post-run:0009-sb-energy-ac-optimal-power-flow:energy-ac-optimal-power-flow:adaptive",
+      "structure_counts": {
+        "blocks": 4,
+        "canvas_blocks": 80,
+        "canvas_claims": 79,
+        "canvas_subgraphs": 0,
+        "claims": 3,
+        "influence_claims": 2,
+        "skip_claims": 1,
+        "subgraphs": 1
+      },
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 7939,
+        "prompt_tokens": 29508,
+        "total_tokens": 37447
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": true,
+      "construction_mode": "adaptive",
+      "episode_id": "0010-sb-energy-unit-commitment",
+      "failure_marked": true,
+      "finish_reasons": [
+        "stop"
+      ],
+      "ledger_cut": true,
+      "marker_matches_ledger_cut": true,
+      "repairs": 0,
+      "revision_id": "post-run:0010-sb-energy-unit-commitment:energy-unit-commitment:adaptive",
+      "structure_counts": {
+        "blocks": 7,
+        "canvas_blocks": 67,
+        "canvas_claims": 66,
+        "canvas_subgraphs": 1,
+        "claims": 6,
+        "influence_claims": 6,
+        "skip_claims": 0,
+        "subgraphs": 1
+      },
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 6987,
+        "prompt_tokens": 28816,
+        "total_tokens": 35803
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": false,
+      "episode_id": "0011-sb-hvac-control",
+      "error": {
+        "message": "freeze refused: 5 high-severity violation(s): omitted_range_skip_required, omitted_range_skip_required, omitted_range_skip_required, omitted_range_skip_required, omitted_range_skip_required",
+        "type": "HighSeverityViolation"
+      },
+      "finish_reasons": [
+        "stop"
+      ],
+      "repairs": 0,
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 7320,
+        "prompt_tokens": 21253,
+        "total_tokens": 28573
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": false,
+      "episode_id": "0012-sb-energy-market-pricing",
+      "error": {
+        "message": "freeze refused: 2 high-severity violation(s): omitted_range_skip_required, omitted_range_skip_required",
+        "type": "HighSeverityViolation"
+      },
+      "finish_reasons": [
+        "stop"
+      ],
+      "repairs": 0,
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 9725,
+        "prompt_tokens": 13507,
+        "total_tokens": 23232
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": false,
+      "episode_id": "0013-sb-manufacturing-equipment-maintenance",
+      "error": {
+        "message": "freeze refused: 3 high-severity violation(s): omitted_range_skip_required, omitted_range_skip_required, omitted_range_skip_required",
+        "type": "HighSeverityViolation"
+      },
+      "finish_reasons": [
+        "stop"
+      ],
+      "repairs": 0,
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 6399,
+        "prompt_tokens": 30881,
+        "total_tokens": 37280
+      },
+      "usage_source": "handle_tracker"
+    },
+    {
+      "calls": 1,
+      "compliant": true,
+      "construction_mode": "adaptive",
+      "episode_id": "0014-sb-dynamic-object-aware-egomotion",
+      "failure_marked": true,
+      "finish_reasons": [
+        "stop"
+      ],
+      "ledger_cut": true,
+      "marker_matches_ledger_cut": true,
+      "repairs": 0,
+      "revision_id": "post-run:0014-sb-dynamic-object-aware-egomotion:dynamic-object-aware-egomotion:adaptive",
+      "structure_counts": {
+        "blocks": 5,
+        "canvas_blocks": 23,
+        "canvas_claims": 22,
+        "canvas_subgraphs": 1,
+        "claims": 5,
+        "influence_claims": 5,
+        "skip_claims": 0,
+        "subgraphs": 1
+      },
+      "truncated": 0,
+      "usage": {
+        "completion_tokens": 5159,
+        "prompt_tokens": 18070,
+        "total_tokens": 23229
+      },
+      "usage_source": "handle_tracker"
+    }
+  ],
+  "frozen_at": "2026-10-01T00:00:00.000Z",
+  "frozen_limits": {
+    "EVIDENCE_ROLE": "contemporaneous_basis",
+    "EXTRACTION_CONTRACT_VERSION": "extraction-contract-v1",
+    "MAX_INPUT_CHARS": 1048576,
+    "MAX_ITEMS": 64,
+    "MAX_REPAIRS": 1,
+    "MAX_TOKENS_PER_CALL": 32768,
+    "MAX_TOTAL_TOKENS": 2000000,
+    "OMITTED_RANGE_REASON": "record_type_not_a_block",
+    "VALUE_CLIP": 4000
+  },
+  "label": "契约与管道测试，不回答检索价值／不回答模型是否更好",
+  "mode": "model",
+  "schema": "r9-extraction-contract-roundtrip-v1",
+  "snapshot_source": "ledger",
+  "summary": {
+    "completion_tokens": 110290,
+    "compliant": 10,
+    "episodes": 14,
+    "failed_episodes": [
+      "0007-sb-econ-detrending-correlation",
+      "0011-sb-hvac-control",
+      "0012-sb-energy-market-pricing",
+      "0013-sb-manufacturing-equipment-maintenance"
+    ],
+    "failures": 4,
+    "marker_compared": 10,
+    "marker_matches_ledger_cut": 7,
+    "prompt_tokens": 383856,
+    "repairs": 0,
+    "total_tokens": 494146,
+    "truncated": 0,
+    "usage_source": "handle_tracker"
+  }
+}

@@ -1,0 +1,70 @@
+{
+    "results": {
+        "tool": {
+            "name": "pytest",
+            "version": "8.4.1"
+        },
+        "summary": {
+            "tests": 5,
+            "passed": 0,
+            "failed": 5,
+            "skipped": 0,
+            "pending": 0,
+            "other": 0,
+            "start": 1790565407.1148257,
+            "stop": 1790565407.6388772
+        },
+        "tests": [
+            {
+                "name": "test_outputs.py::TestPDFValid::test_output_file_valid",
+                "status": "failed",
+                "duration": 0.0005676270229741931,
+                "start": 1790565407.14064,
+                "stop": 1790565407.1615016,
+                "retries": 0,
+                "file_path": "test_outputs.py",
+                "trace": "@pytest.fixture(scope=\"module\")\n    def pdf_text():\n        \"\"\"Extract text content from the filled PDF using pdftotext.\"\"\"\n        if not OUTPUT_FILE.exists():\n>           pytest.fail(f\"Output file not found at {OUTPUT_FILE}\")\nE           Failed: Output file not found at /root/sc100-filled.pdf\n\n/tests/test_outputs.py:301: Failed"
+            },
+            {
+                "name": "test_outputs.py::TestRequiredContent::test_content_present",
+                "status": "failed",
+                "duration": 0.00035484996624290943,
+                "start": 1790565407.1619039,
+                "stop": 1790565407.1699288,
+                "retries": 13,
+                "file_path": "test_outputs.py",
+                "trace": "@pytest.fixture(scope=\"module\")\n    def pdf_text():\n        \"\"\"Extract text content from the filled PDF using pdftotext.\"\"\"\n        if not OUTPUT_FILE.exists():\n>           pytest.fail(f\"Output file not found at {OUTPUT_FILE}\")\nE           Failed: Output file not found at /root/sc100-filled.pdf\n\n/tests/test_outputs.py:301: Failed"
+            },
+            {
+                "name": "test_outputs.py::TestCheckboxes::test_checkbox_value",
+                "status": "failed",
+                "duration": 0.00044979900121688843,
+                "start": 1790565407.2887487,
+                "stop": 1790565407.297313,
+                "retries": 5,
+                "file_path": "test_outputs.py",
+                "trace": "@pytest.fixture(scope=\"module\")\n    def checkbox_data():\n        \"\"\"Extract checkbox values from the filled PDF.\"\"\"\n        if not OUTPUT_FILE.exists():\n>           pytest.fail(f\"Output file not found at {OUTPUT_FILE}\")\nE           Failed: Output file not found at /root/sc100-filled.pdf\n\n/tests/test_outputs.py:323: Failed"
+            },
+            {
+                "name": "test_outputs.py::TestUncheckedCheckboxes::test_checkbox_unchecked",
+                "status": "failed",
+                "duration": 0.0003394389059394598,
+                "start": 1790565407.3450224,
+                "stop": 1790565407.3533306,
+                "retries": 5,
+                "file_path": "test_outputs.py",
+                "trace": "@pytest.fixture(scope=\"module\")\n    def checkbox_data():\n        \"\"\"Extract checkbox values from the filled PDF.\"\"\"\n        if not OUTPUT_FILE.exists():\n>           pytest.fail(f\"Output file not found at {OUTPUT_FILE}\")\nE           Failed: Output file not found at /root/sc100-filled.pdf\n\n/tests/test_outputs.py:323: Failed"
+            },
+            {
+                "name": "test_outputs.py::TestEmptyFields::test_field_empty",
+                "status": "failed",
+                "duration": 0.0689759129891172,
+                "start": 1790565407.3969893,
+                "stop": 1790565407.474681,
+                "retries": 19,
+                "file_path": "test_outputs.py",
+                "trace": "@pytest.fixture(scope=\"module\")\n    def pdf_field_values():\n        \"\"\"Extract all field values from the filled PDF using pypdf.\"\"\"\n        from pypdf import PdfReader\n    \n        if not OUTPUT_FILE.exists():\n>           pytest.fail(f\"Output file not found at {OUTPUT_FILE}\")\nE           Failed: Output file not found at /root/sc100-filled.pdf\n\n/tests/test_outputs.py:340: Failed"
+            }
+        ]
+    }
+}

@@ -1,0 +1,63 @@
+# Round 9 答复（进行中）
+
+- **Q50：A。**共享 typed retrieval facade；fork/branch、segment/atom、generic memory 使用不同 adapter；Memory 与 Diagnosis 使用不同 retrieval profile。
+- **Q51：确认。**引入 `MemoryTaskState`，与 OpenViking 七段 Working Memory、长期记忆事实和诊断权威证据分离。
+- **Q52：B。**交接服务端冻结的不可变 `DiagnosisBrief`，不移交活 agent session。
+- **Q53：由 Q92 重新定案。**Diagnosis 主要服务评测期归因/replay/continuation；EvaluationOrchestrator 独占状态迁移，Memory/Diagnosis 只能提交 trigger/schedule proposal，不能自行创建 run 或扩预算。
+- **Q54：A。**Step-reward scorer 是独立前置评测器，其输出只是 causal diagnosis 的候选定位信号；只有 causal diagnosis 可生成 fork node。
+- **Q55：C。**Memory Agent 是群聊成员；Diagnosis Agent 是后台 per-run agent。
+- **Q56：由 Q62/Q77 完整定案。**评测多次运行形成 `Memory Agent → Diagnosis Agent → Memory Agent` 循环；服务端校验 ForkDraft 后提交全局可检索 `ForkRevision(status=provisional)`（消费角色称 ForkCandidate），后续证据通过 superseding revision 进入 validated/invalidated。
+- **Q57：B。**每个 task_id 一条 lineage、每个 run_id 一份可变 MemoryTaskState；跨 run 通过带 provenance 的 refs、Memory Hint 和摘要交接，不延续活状态。
+- **Q58：B。**Memory 与 Diagnosis 各持独立 capability、pinned SearchPlan 与子预算，并受 task/evaluation 父级总上限约束；逐 ref/边重验来源 ACL。
+- **Q59：由 Q63–Q76 完整定案。**Memory 使用 Interaction lane 与 Causal-memory lane，独立候选/跳数/停止条件；跨 lane 可建立全局长期 HypothesisBridge，但与 EvidenceBridge 分型；每 path ≤2 hypothesis hops/≤12 entities、禁环、端点直接重验，并采用双通道、容量和晋升治理。
+- **Q60：B，并将产物定名为 `Memory Hint`。**它携带匹配理由、锚点状态、分支/结果、guidance、证据与置信状态；不是 executable skill。
+- **Q61：A。**同 task 只是强排序特征；跨 task 按四维语义重排；在线 Memory Agent 不创建 verified similarity edge。
+- **Q62：B，并由 Q66–Q91 完成评价治理。**ForkCandidate 立即进入普通全局 Memory provisional 通道；其 exposure/citation/adoption/outcome 分层、in-task/cross-task 双维引用强度、时间衰减和 exploration 去偏均已定案。
+- **Q63：A。**Memory 的多路探索拆成 Interaction lane 与 Causal-memory lane；两者独立计候选、跳数和停止条件，经显式 typed bridge 连接并在 MemoryTaskState 中归并。
+- **Q64：B，并由 Q67/Q71/Q72/Q74–Q76 完成治理。**模型可在任意两种节点间建立全局长期 HypothesisBridge 继续探索，但它与 EvidenceBridge 分型，受路径、双通道、容量、失活和 propose→validate 晋升规则约束。
+- **Q65：A，worker 上限改为 5。**每个一次性 InteractionPathWorker 负责一条有界 interaction path/subgraph，只返回结构化评估，由主 agent 归并；最多 5 个 worker，共享固定总预算。
+- **Q66：A。**分开记录 exposure、citation/reference_value、adoption、outcome/outcome_utility；跨任务 citation 可表现为边强度，但不直接等于 outcome utility。
+- **Q67：A。**动态跨-lane 关联分为 `HypothesisBridge` 与 `EvidenceBridge`；前者供探索并进入审计/checkpoint，后者才可支撑 fork 归因。HypothesisBridge 晋升必须走 causal diagnosis 的 propose→validate。
+- **Q68：确认拆成两维。**同一任务在真实 run、replay/continuation 中的每次引用都记录并贡献 `in_task_reference_strength`；不同 task lineage 的引用独立贡献 `cross_task_reference_strength`。两维分开存储，不压成一个引用分数，也不与 outcome utility 混合。
+- **Q69：A。**每次 Memory→Diagnosis→Memory 评测迭代统一最多并发 5 个一次性子 agent；InteractionPathWorker、sub-diagnosis worker 和其他 explorer 共用槽位，总预算不随 worker 数增加。
+- **Q70：B，并由 Q73/Q78 完成衰减参数。**in-task 与 cross-task 按全部 citation events 等权累加；原始事件永久保留，物化强度采用版本化指数衰减，默认 half-life 分别为 7 天和 90 天。
+- **Q71：B。**HypothesisBridge 创建后成为全局长期可遍历的 hypothesis edge，所有任务均可在探索时沿它多跳；它仍不能作为 EvidenceBridge 或因果证明。
+- **Q72：A。**每条 path 最多跨 2 条 HypothesisBridge、最多 12 个实体、禁止重复节点/边；端点必须对原始 query/MemoryTaskState 做直接适用性检查，5 workers 共享总路径预算。
+- **Q73：A。**Citation 原始事件永久保留；in-task/cross-task 物化强度使用 policy-versioned 指数衰减，各自配置 half-life，策略变化时重算投影。
+- **Q74：A。**Verified 与 provisional 使用独立召回配额和排序通道，再带状态标签混合输出；hypothesis citation 只影响 provisional 通道内部排名。
+- **Q75：A。**HypothesisBridge 按 canonical endpoint pair + relation type 聚合去重，保留每次 model judgment；设置 per-run 写入配额和 per-node active-edge cap，低分边转 inactive 而不删除审计记录。
+- **Q76：A。**Citation/traversal 只能提高验证优先级，不能自动晋升 EvidenceBridge；晋升必须由 causal diagnosis 提交直接 evidence refs、关系语义和反例检查并走 propose→validate。只有 citation provenance 明确包含 bridge_id 才给该桥计引用。
+- **Q77：A。**采用三阶段：run-local ForkDraft → 服务端校验后形成全局可检索 `ForkRevision(status=provisional)`（对外称 ForkCandidate）→ 获得因果验证后追加 `ForkRevision(status=validated|invalidated)`。权威存储接纳与因果结论验证分离。
+- **Q78：A。**Citation 默认 half-life：`in-task = 7 days`，`cross-task = 90 days`；通过版本化 policy 调整并重算投影。
+- **Q79：A。**每次最多 12 个轻量候选，默认 verified 8、provisional 4；通道不足可回填，保留来源通道和通道内 rank。
+- **Q80：A。**每个 evaluation iteration 最多新增/更新 12 个 endpoint-pair hypothesis judgments；每节点最多 32 条 active outgoing HypothesisBridge；超限按治理分转 inactive，workspace 只能收紧全局上限。
+- **Q81：A。**Provisional ForkRevision 仅在 anchor/ref/ACL/provenance 仍有效、有原始 observed branch、至少一个独立对照、完成四维适用性与反例检查且无高严重度矛盾时成为 validated；高质量可比证据反驳核心机制则 invalidated，证据不足保持 provisional，citation 不改变状态。
+- **Q82：A。**状态终结、replay/continuation 不合资格、父级预算/时间/分支额度耗尽，或连续 2 个 iteration 无新增 evidence refs 且关键判断不变时停止主动实验；未终态者保持 provisional，在 dossier 保存 waiting conditions，未来证据事件可重启一次性 run。
+- **Q83：A。**新 model judgment、明确 bridge_id 的 citation、adoption/outcome 或 direct-relevance 重验可触发 inactive HypothesisBridge 重算；重新进入节点 top-32 且 ACL 有效时记录 reactivated 并恢复 active。Exposure/traversal 不触发。
+- **Q84：A。**先应用 ACL、状态、freshness 与直接适用性硬门槛，再用 policy-versioned、role-specific reranker；verified 侧主要考虑语义、证据质量、outcome utility、新鲜度，provisional 侧主要考虑语义、直接适用性、judgment 一致性和衰减后的双维引用强度；保存 feature breakdown、版本和确定性 tie-break。
+- **Q85：A。**采用冻结 ControlContract 的配对实验；treatment 与 baseline 的唯一计划差异是目标 Memory Hint/guidance，关键冻结项无法满足时只算 supporting evidence。
+- **Q86：由 Q89 完整定案。**Memory Agent 通过 `memory@target_agent` 投递；被 @ agent 用结构化 MemoryDisposition(adopt|reject|defer) 独占采纳决定，followthrough/outcome 由独立机制记录。
+- **Q87：A。**Provisional 默认 4 槽采用 3 exploitation + 1 seeded exploration；记录 eligible set、selection propensity、seed 与 policy version，无合格探索项时回填 exploitation。
+- **Q88：B，并由 Q90 完成治理。**task_id 不同即计为跨任务，不引入 task_family/derivation 门槛；仅 task/evaluation orchestrator 可铸造不可变 task_id，replay/continuation/control/recovery run 继承原 ID。
+- **Q89：A。**被 `memory@` 的目标 agent 对每个已处理 Hint 输出结构化 `MemoryDisposition(decision=adopt|reject|defer)`；adopt 是其权威采纳决定，reject/defer 仍形成 citation，超时无回执只算 exposure。Followthrough 与 outcome 独立记录，只有 adoption + followthrough + 正向 outcome 才形成正向 outcome utility。
+- **Q90：A。**只有权威 task/evaluation orchestrator 可铸造不可变 task_id；replay、continuation、baseline/treatment 和恢复 run 继承原 ID。新顶层任务实例获得新 ID，即使文本相同也不按 hash 合并；agent 只能引用，不能自选或修改。
+- **Q91：A。**保留原始等权 citation 与时间衰减，同时根据 eligible set/selection propensity 生成 policy-versioned `debiased_reference_signal`，仅用于离线评价和下一版 reranker；不即时修改当前 policy。Exploration Hint 标记 `selection_mode=exploration`，其 disposition/adoption/outcome 正常记录。
+- **Q92：A。**EvaluationOrchestrator 独占 Memory→任务运行/评分→Diagnosis→Memory→下一 replay/continuation 的状态迁移；Memory/Diagnosis 只能提交 proposal，不能自行创建 run、扩预算或越过状态。
+- **Q93：经示例后确认 Q93a=A。**Memory/Diagnosis 通过活 session 保持语义连续性；服务端同时持久化不可变、内容寻址的 DiagnosisBrief/DiagnosisOutcome envelope，以 `evaluation_iteration_id + handoff_kind + input_manifest_hash` 幂等，采用 at-least-once 投递与 ack/checkpoint。重复投递返回原结果，不重复写 fork/citation/预算；输入变化创建新 iteration。Envelope 不携带 bearer credential，接收方用自己的 capability 重验 refs。
+- **Q94：A。**在线检索、引用强度和治理分只使用当前 principal 有权观察的 citation/disposition/followthrough/outcome/judgment 事件；不返回隐藏来源计数或可反推差值。全量聚合仅用于受控离线评价，并通过阈值化/去标识产物进入新 policy。
+- **Q95：A。**新增 diagnosis-local `Diagnosis Influence View`。Interaction DAG/AO 保持不可变事实层；每个 ForkRevision 必须带 `influence_grounding`，定位到冻结 InfluenceViewRevision 的 `block | edge | cut`。ForkNode 稳定身份仍由 `{workspace_id, anchor_kind, canonical_anchor_key}` 派生，不由 view/block ID 派生；同一 fork 的不同 revision 可引用不同 view 位置。
+- **Q97a：A。**每个 InfluenceBlock 必须属于单一 participant，并引用同一 Segment 内连续 AO 区间；一个 Segment 可拆成多个 Block，多 agent/非相邻影响只通过 InfluenceClaim 与 subgraph 表达。
+- **Q106：A。**Memory Hint 是 task/run-scoped 的终端消费事件，不进入普通检索索引、不作为 explore 中转节点；可综合多个 Fork/Branch/Guidance/Skill 来源，只允许沿 provenance 反向追溯来源。
+- **Q107：A。**Guidance 采用双重 grounding：DIV block/claim/cut 构成 semantic basis，AO/Segment/raw evidence 构成 factual basis；DIV 引用不替换权威事实引用，两者缺一不可。
+- **Q96：A。**DIV 采用 mutable InfluenceViewDraft → 最多 3 轮 critic/refiner → immutable InfluenceViewRevision；Reader 只读冻结 revision。自适应构建失败时服务端生成 deterministic minimal fallback view，可支撑 provisional grounding，但不能单独满足 validated 门槛。
+- **Q101：A。**L0 AO/raw 与 L1 Segment/Interaction DAG 由 runtime/channel service 实时确定性生成；L2 语义影响视图使用 LLM 构建并由服务端检查/fallback；L3 由 LLM propose、服务端提交；L4 由 Memory/目标 agent 生成消费解释、服务端确定性记账。
+- **Q97：A。**Influence View 允许基于 task/outcome/query 的稀疏覆盖，但必须保存 coverage_manifest（总范围、inspected/included/omitted refs、遗漏理由、snapshot watermark），纳入 Block 形成无环、弱连通解释子图。
+- **Q100：A。**采用阶段屏障复用统一 5-worker 并发槽：Build → Critic/Refiner → Freeze → Reader workers；阶段不重叠，总 token/tool/path/entity 预算不因槽位复用扩张。
+- **Q102（重定案）：A。**每条 causal/evaluation 轨迹 commit 后异步生成 `purpose=post_run_index` frozen InfluenceViewRevision；失败诊断时派生 `purpose=failure_diagnosis` revision。仅 frozen Block/Claim 轻量 projection 进入混合检索，与 Fork/Branch、当前 Segment/Atom 互补，不取消 Fork。
+- **Q108：A。**服务端做多 corpus 预召回、ACL 过滤和初排；主 Memory Agent（LLM）决定 typed explore、可派最多 5 个只读 path workers；workers 只返回 assessed refs/evidence/contradictions，主 Memory Agent 最终跨 corpus rerank、归并并生成 Hint。
+- **Q98/Q104（重定案）：A。**Reader 与 Causal Diagnosis 合并为同一活 CausalDiagnosisAgent，但使用服务端 phase gate：READ_VERIFY 阶段只能读取 frozen Influence View/selected evidence、调度只读 workers 并输出 ReaderReport；服务端冻结内容寻址 ReaderReport 后切换到 SYNTHESIZE_PROPOSE，Agent 才能基于报告 propose ForkDraft/bridge，不能修改 view/report。Builder/Critic 保持独立。
+- **Q99：A。**InfluenceClaim 从 hypothesis 开始；Reader 核验 source 产生 artifact、target 实际消费、downstream effect 出现及 alternative source/反例，输出 supported/contradicted/insufficient。Supported 也不自动生成 EvidenceBridge。
+- **Q103（重定案）：A。**Memory 全局 search 只返回 frozen InfluenceBlock/Claim projection；同 task 可按已知 ref 阅读完整 frozen selected blocks/claims，跨任务通过 summary-first evidence escalation 与逐 ref ACL 下钻；draft、critic 私有状态和未冻结内容不可见。
+- **Q105（重定案）：A。**采用 projection → Block/Claim summary → evidence synopsis → selected raw evidence 的渐进下钻；每级可停止并单独计预算/ACL/审计，命中上层对象不自动注入全部底层内容。
+
+**Round 9 frontier 已清空。**所有 Q50–Q108（含 Q93a、Q97a 及重定案）均已回答；等待设计者确认共享理解后再进入 ADR/实施。

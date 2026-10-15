@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIG 与 Fork 的群聊交互</title>
+<style>
+  :root {
+    --paper: #f3efe6;
+    --ink: #1c1916;
+    --muted: #6f675e;
+    --line: #e2d9cc;
+    --panel: #fffcf7;
+    --teal: #0e5c56;
+    --teal-bg: #e7f3f1;
+    --rust: #c2410c;
+    --rust-bg: #fff1e8;
+    --amber: #8a5a12;
+    --amber-bg: #fbf3e4;
+    --rose: #8d2f39;
+    --slate: #334155;
+    --shadow: 0 1px 0 rgba(28, 25, 22, 0.04);
+    --sans: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "Sarasa Mono SC", "Noto Sans Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--paper);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
+  .banner {
+    background: var(--ink);
+    color: #f6f1e8;
+    text-align: center;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    padding: 8px 16px;
+  }
+  header.top {
+    padding: 10px 22px 4px;
+    max-width: 1440px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  header.top h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+  }
+  header.top p {
+    margin: 4px 0 0;
+    color: var(--muted);
+    max-width: 90ch;
+  }
+  .shell {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 22px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+  .tabs, .subtabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .subtabs[hidden] { display: none !important; }
+  .tabs button, .subtabs button {
+    border: 1px solid var(--line);
+    background: transparent;
+    border-radius: 999px;
+    padding: 6px 12px;
+  }
+  .tabs button[aria-selected="true"], .subtabs button[aria-selected="true"] {
+    background: var(--ink);
+    color: #f6f1e8;
+    border-color: var(--ink);
+  }
+  .blurb { margin: 0; color: var(--muted); }
+  .roster {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .roster .label { color: var(--muted); margin-right: 4px; }
+  .chip {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: 999px;
+    padding: 4px 10px;
+    display: inline-flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+  .chip b { font-weight: 650; }
+  .chip span { color: var(--muted); font-size: 12px; }
+  .chip.is-hot { border-color: var(--rust); background: var(--rust-bg); }
+  .chip.is-hot span { color: var(--rust); }
+  .controls {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: var(--shadow);
+  }
+  .stepper { display: flex; gap: 6px; align-items: center; }
+  .stepper button, .jump {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 8px;
+    padding: 6px 10px;
+  }
+  .stepper button:disabled { opacity: 0.4; cursor: default; }
+  .count { min-width: 4.5rem; text-align: center; font-variant-numeric: tabular-nums; }
+  .write { min-width: 0; }
+  .write .kicker { color: var(--muted); font-size: 12px; }
+  .write strong { font-weight: 650; }
+  .board {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(280px, 340px) minmax(460px, 1fr) minmax(270px, 330px);
+    gap: 12px;
+  }
+  .col {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .pane {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .left .pane { flex: 1; }
+  .mid, .right { min-height: 0; }
+  .mid .pane, .right .pane { flex: 1; }
+  .pane h2 {
+    margin: 0;
+    padding: 10px 12px 0;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+  }
+  .pane .sub {
+    margin: 0;
+    padding: 2px 12px 8px;
+    color: var(--muted);
+    font-size: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .log, .seq, .diagram {
+    overflow: auto;
+    min-height: 0;
+    flex: 1;
+  }
+  .log, .seq {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .empty { color: var(--muted); margin: 8px 4px; }
+  .bubble, .card, .srow {
+    text-align: left;
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 10px;
+    padding: 8px 10px;
+  }
+  .bubble.is-current, .card.is-current, .srow.is-current {
+    border-color: var(--rust);
+    box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.16);
+  }
+  .who { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+  .who b { color: var(--ink); font-size: 13px; }
+  .actor-user b { color: #3f3a34; }
+  .actor-Memory b { color: #5b3d8a; }
+  .actor-Coder b { color: var(--teal); }
+  .actor-Builder b { color: #1d4e89; }
+  .actor-Critic b { color: var(--rose); }
+  .actor-Refiner b { color: var(--amber); }
+  .actor-Reader b { color: #3730a3; }
+  .actor-server b { color: var(--slate); }
+  .bubble p, .card p, .srow p { margin: 6px 0 0; }
+  .cards { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .fcard {
+    border: 1px dashed #c4b8d8;
+    background: #f8f5fb;
+    border-radius: 8px;
+    padding: 6px 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: baseline;
+  }
+  .fcard strong { flex: 1 0 100%; }
+  .fid, .tier, .mono { font-family: var(--mono); font-size: 12px; }
+  .tier { color: #5b3d8a; }
+  .draftbox {
+    margin-top: 8px;
+    border: 1px dashed var(--amber);
+    background: var(--amber-bg);
+    border-radius: 8px;
+    padding: 8px;
+  }
+  .draftbox ol { margin: 6px 0 0; padding-left: 1.1rem; }
+  .quote {
+    margin-top: 6px;
+    padding-left: 8px;
+    border-left: 3px solid var(--amber);
+  }
+  .status {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 8px 12px 0;
+    overflow-x: auto;
+  }
+  .status button, .status span.st {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 8px;
+    padding: 3px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .st b { font-weight: 650; margin-right: 4px; }
+  .st.is-hot { border-color: var(--rust); background: var(--rust-bg); }
+  .st.is-quiet { color: #9a9188; background: #f7f4ef; }
+  .diagram { padding: 8px 10px 12px; display: block; }
+  .sheet { display: flex; flex-direction: column; gap: 12px; }
+  .br {
+    display: grid;
+    grid-template-columns: minmax(132px, 0.9fr) minmax(220px, 1.4fr) minmax(132px, 0.9fr);
+    gap: 8px;
+    align-items: stretch;
+  }
+  .role {
+    border-radius: 12px;
+    padding: 8px;
+    min-width: 0;
+  }
+  .role h3 { margin: 0; font-size: 13px; font-weight: 700; }
+  .role p { margin: 2px 0 0; font-size: 11px; font-family: var(--mono); line-height: 1.35; }
+  .role.graph .on { color: #c2410c; font-weight: 700; }
+  .role .k { margin: 8px 0 2px; font-size: 10px; letter-spacing: 0.06em; color: var(--muted); }
+  .role ul { margin: 0; padding: 0; list-style: none; font-size: 12px; font-family: var(--mono); }
+  .role li { padding: 1px 0; }
+  .role.builder { background: #eef0fe; border: 1px solid #c7cbf7; }
+  .role.builder h3, .role.builder .on { color: #6366f1; }
+  .role.reader { background: #e9f7f4; border: 1px solid #a7ddd4; }
+  .role.reader h3, .role.reader .on { color: #0d9488; }
+  .role.graph { background: #f8f9fb; border: 1px solid #dbe2ea; }
+  .role.graph h3 { color: #0f172a; }
+  .role.is-now { box-shadow: 0 0 0 2px #c2410c; }
+  .agsvg { width: 100%; height: auto; display: block; }
+  .agsvg text { font-family: var(--sans); }
+  .ag-card { background: #fff; border: 1px solid #dbe2ea; border-radius: 12px; overflow: hidden; }
+  .ag-bar {
+    background: rgba(79, 70, 229, 0.14);
+    color: #0f172a;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 5px 10px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .ag-dot { width: 8px; height: 8px; border-radius: 50%; background: #4f46e5; flex: none; }
+  .ag-bar em { margin-left: auto; font-style: normal; font-family: var(--mono); font-weight: 650; color: #4f46e5; }
+  .capline { margin: 0; padding: 2px 8px 4px; font-size: 11px; color: #64748b; text-align: center; }
+  .capline .on { color: #c2410c; font-weight: 700; }
+  .emptygraph { margin: 28px 8px; color: var(--muted); text-align: center; font-size: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .chips article { padding: 4px 8px; }
+  .chips article { margin-top: 0; flex: 1; min-width: 180px; }
+  .toolgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+  .toolgrid ul { font-size: 11px; }
+  .rev, .overlay, .placeholder {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px;
+    background: #fff;
+  }
+  .placeholder { color: var(--muted); min-height: 180px; display: flex; align-items: center; justify-content: center; text-align: center; }
+  .rev header, .overlay header {
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    margin-bottom: 6px;
+    padding: 3px 6px;
+    border-radius: 6px;
+  }
+  .rev.compact .line {
+    font-size: 12px;
+    line-height: 1.35;
+    padding: 2px 4px;
+    border-radius: 6px;
+  }
+  .rev.compact header { margin-bottom: 4px; }
+  .rev.tight { padding-bottom: 6px; }
+  .rev.tight .node { padding: 4px 8px; }
+  .rev.tight .edge { padding: 2px 2px; }
+  .rev.tight .edge i { height: 10px; }
+  .rev header { background: var(--teal-bg); color: var(--teal); }
+  .overlay header { background: var(--amber-bg); color: var(--amber); }
+  .node {
+    border: 1.5px solid var(--teal);
+    background: var(--teal-bg);
+    border-radius: 10px;
+    padding: 6px 8px;
+  }
+  .node .mono { color: var(--teal); }
+  .imagined {
+    border: 1.5px dashed var(--amber);
+    background: repeating-linear-gradient(-45deg, #fff, #fff 6px, #fbf6ec 6px, #fbf6ec 12px);
+  }
+  .imagined .mono { color: var(--amber); }
+  .edge {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 4px 2px;
+  }
+  .edge i {
+    width: 1px;
+    height: 16px;
+    background: var(--teal);
+    display: block;
+    margin-left: 16px;
+    position: relative;
+  }
+  .edge.is-quiet i { background: #d9d0c4; }
+  .gdoc, .ev {
+    margin-top: 8px;
+    border-radius: 10px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    background: #fff;
+  }
+  .gdoc { border-color: #d6c7a6; }
+  .anchor {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--amber);
+    margin: 0 0 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
+  }
+  .note { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+  .legend { margin: 0; padding: 0 12px 8px; color: var(--muted); font-size: 12px; }
+  .lenses { display: flex; gap: 6px; padding: 10px 12px 0; flex-wrap: wrap; }
+  .lenses button {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .lenses button[aria-selected="true"] { background: var(--ink); color: #f6f1e8; border-color: var(--ink); }
+  .diagram[hidden], .uml[hidden], .status[hidden] { display: none !important; }
+  .uml {
+    overflow: auto;
+    min-height: 0;
+    flex: 1;
+    padding: 8px 12px 4px;
+  }
+  .uml-heads {
+    display: grid;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--panel);
+    padding-bottom: 6px;
+  }
+  .actor {
+    margin: 0 3px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 650;
+    padding: 6px 4px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+  }
+  .actor.role-server { color: var(--slate); }
+  .actor.role-Builder { color: #4f46e5; background: #eef0fe; border-color: #c7cbf7; }
+  .actor.role-Critic { color: #9a3412; background: #fff7ed; border-color: #fdba74; }
+  .actor.role-Refiner { color: #b45309; background: #fff7ed; border-color: #fdba74; }
+  .actor.role-Reader { color: #0d9488; background: #e9f7f4; border-color: #a7ddd4; }
+  .actor.role-aig { color: #0f172a; background: #ecfeff; border-color: #0891b2; }
+  .actor.role-fork { color: #b45309; background: #fff7ed; border-color: #fdba74; }
+  .uml-row {
+    position: relative;
+    display: grid;
+    width: 100%;
+    min-height: 46px;
+    border: 0;
+    background: transparent;
+    border-radius: 8px;
+    padding: 0;
+  }
+  .uml-row.hot { background: var(--rust-bg); }
+  .uml-row.future .uml-label { color: #9a9188; }
+  .life {
+    justify-self: center;
+    width: 0;
+    border-left: 1px dashed #d3c9bc;
+  }
+  .uml-row.hot .life.on { border-left: 2px solid var(--rust); }
+  .uml-row.hot .arrow { border-top-color: var(--rust); }
+  .uml-row.hot .arrow.to-right::after { border-left-color: var(--rust); }
+  .uml-row.hot .arrow.to-left::after { border-right-color: var(--rust); }
+  .arrow {
+    position: absolute;
+    top: 28px;
+    height: 0;
+    border-top: 1.5px solid var(--ink);
+  }
+  .arrow.future { border-top-style: dashed; border-top-color: #c3b8ac; }
+  .arrow.to-right::after, .arrow.to-left::after {
+    content: "";
+    position: absolute;
+    top: -4px;
+    border: 4px solid transparent;
+  }
+  .arrow.to-right::after { right: -1px; border-left: 7px solid var(--ink); border-right: 0; }
+  .arrow.to-left::after { left: -1px; border-right: 7px solid var(--ink); border-left: 0; }
+  .arrow.future.to-right::after { border-left-color: #c3b8ac; }
+  .arrow.future.to-left::after { border-right-color: #c3b8ac; }
+  .uml-label {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    top: 4px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .uml-foot { margin: 8px 4px 4px; color: var(--muted); font-size: 12px; }
+  .anchor-fig {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 8px;
+    align-items: center;
+    margin: 8px 4px 0;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+  }
+  .anchor-fig.hot { border-color: var(--rust); box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.16); }
+  .anchor-fig.future { opacity: 0.55; }
+  .mini { border: 1.5px solid var(--teal); background: var(--teal-bg); border-radius: 8px; padding: 6px 8px; font-size: 12px; }
+  .mini b { display: block; font-family: var(--mono); }
+  .mini.imagined { border-style: dashed; border-color: var(--amber); background: #fffaf2; }
+  .anchor-bridge { font-family: var(--mono); font-size: 11px; color: var(--amber); text-align: center; }
+  .is-hot {
+    box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.22);
+    border-color: var(--rust) !important;
+    background: var(--rust-bg) !important;
+  }
+  header.is-hot { background: var(--rust-bg) !important; color: var(--rust) !important; }
+  .is-quiet {
+    filter: saturate(0.2);
+    border-color: #e6dfd6 !important;
+    background: #f7f4ef !important;
+    color: #8d847b;
+  }
+  header.is-quiet { color: #8d847b !important; background: #f3efe8 !important; }
+  .agsvg .is-hot, .agsvg .is-quiet {
+    box-shadow: none;
+    background: none !important;
+    border-color: transparent !important;
+    filter: none;
+  }
+  .agsvg .is-quiet { opacity: 0.38; }
+  .srow { display: block; width: 100%; }
+  .srow .idx { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12px; }
+  .srow.future { color: #9a9188; }
+  .lane-system { border-left: 3px solid var(--slate); }
+  .lane-chat { border-left: 3px solid #5b3d8a; }
+  .lane-handoff { border-left: 3px solid #1d4e89; }
+  .keys { color: var(--muted); font-size: 12px; }
+  .legacy {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 2px 22px 8px;
+    color: var(--muted);
+    font-size: 12px;
+    width: 100%;
+  }
+  @media (max-width: 1100px) {
+    body { overflow: auto; height: auto; display: block; }
+    .shell { overflow: visible; min-height: auto; }
+    .board { display: block; }
+    .pane { overflow: visible; margin-bottom: 12px; }
+    .log, .seq, .diagram, .uml { max-height: 480px; flex: none; }
+    .controls { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="banner">已接受设计，产品代码尚未接入</div>
+  <header class="top">
+    <h1>AIG 与 Fork 的群聊交互</h1>
+    <p>群聊里是用户、Memory、Coder、Runner。中栏可以改看结构图、AIG 构建时序，或 Fork 与 AIG 的锚点。Coder 与 Runner 是这页的例子名字。</p>
+  </header>
+  <div class="shell">
+    <div class="tabs" role="tablist" aria-label="场景">
+      <button type="button" data-story="form" aria-selected="true">事实图成形</button>
+      <button type="button" data-story="remedy" aria-selected="false">确认失败并引导补救</button>
+      <button type="button" data-story="bounds" aria-selected="false">四条禁行</button>
+    </div>
+    <div class="subtabs" id="subtabs" role="tablist" aria-label="禁行" hidden>
+      <button type="button" data-sub="retrieve" aria-selected="true">retrieve</button>
+      <button type="button" data-sub="uncertain" aria-selected="false">uncertain</button>
+      <button type="button" data-sub="reject" aria-selected="false">拒绝补写</button>
+      <button type="button" data-sub="promote" aria-selected="false">拒绝升格</button>
+    </div>
+    <p class="blurb" id="blurb"></p>
+    <div class="roster" id="roster"></div>
+    <div class="controls">
+      <div class="stepper">
+        <button type="button" id="prev">上一步</button>
+        <div class="count" id="count"></div>
+        <button type="button" id="next">下一步</button>
+      </div>
+      <div class="keys">← → 也可以切换。点时序、气泡或交接卡会跳到那一步。</div>
+      <div class="write" id="write" aria-live="polite"></div>
+    </div>
+    <div class="board">
+      <div class="col left">
+        <section class="pane">
+          <h2>群聊</h2>
+          <p class="sub">成员：用户、Memory、Coder、Runner</p>
+          <div class="log" id="chat"></div>
+        </section>
+        <section class="pane">
+          <h2>AIG run 交接</h2>
+          <p class="sub">没有 message_id。草稿留在这里，中栏要等落盘。</p>
+          <div class="log" id="handoff"></div>
+        </section>
+      </div>
+      <section class="pane mid">
+        <h2>事实 AIG 与 ForkNode</h2>
+        <p class="sub" id="midsub">青色圆点和靛蓝箭头对齐论文里的 Adaptive Influence Graph。</p>
+        <div class="lenses" role="tablist" aria-label="中栏">
+          <button type="button" data-lens="graph" aria-selected="true">结构图</button>
+          <button type="button" data-lens="build" aria-selected="false">AIG 构建时序</button>
+          <button type="button" data-lens="fork" aria-selected="false">Fork 与 AIG</button>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="diagram" id="diagram"></div>
+        <div class="uml" id="uml" hidden></div>
+        <p class="legend" id="legend">青色圆点是事实节点，靛蓝箭头是影响边。虚线圆是 imagined node。橙色是这一步碰到的对象。</p>
+      </section>
+      <section class="pane right">
+        <h2>时序</h2>
+        <p class="sub">服务端记录只出现在这一栏。</p>
+        <div class="seq" id="seq"></div>
+      </section>
+    </div>
+  </div>
+  <p class="legacy">旧 Claim/Cut 与旧 Fork 只读留存，不出现在本图，也不进入这次 GuidedBranch。</p>
+  <script>
+    const CARDS = [
+      { id: "fc-184", title: "下单前按 Idempotency-Key 读取", tier: "analogical" },
+      { id: "fc-077", title: "重复扣款前先查请求号", tier: "analogical" }
+    ];
+
+    const baseRoster = { user: "在群里", memory: "在群里", coder: "在群里", runner: "在群里" };
+    const frozenGraph = { contract: "已冻结", aig: "R1", fork: "无", guidance: "无", outcome: "未评估", dispatch: "无" };
+    const openDiagram = { rev1: false, r2: false, overlay: false, guidance: false, evidence: false };
+    const r1Diagram = { rev1: true, r2: false, overlay: false, guidance: false, evidence: false };
+    const guidedDiagram = { rev1: true, r2: false, overlay: true, guidance: true, evidence: false };
+    const doneDiagram = { rev1: true, r2: true, overlay: true, guidance: true, evidence: true };
+
+    const STORIES = {
+      form: {
+        blurb: "从任务下达到 ReaderReport 冻结。中栏要到服务端落盘那一步才出现事实图。",
+        initial: {
+          diagram: openDiagram,
+          status: { contract: "未提出", aig: "未冻结", fork: "无", guidance: "无", outcome: "未评估", dispatch: "无" },
+          roster: baseRoster
+        },
+        events: [
+          {
+            lane: "chat", actor: "用户", title: "下达 checkout 幂等任务",
+            body: "给 checkout 补上幂等。创建订单必须幂等。OutcomeContract：集成测试 test_checkout_idempotent 通过，且重复 POST 不产生第二张订单。",
+            write: "用户可以写群聊消息。OutcomeContract 只是被提出，还没有冻结。",
+            status: { contract: "已提出" }, touchStatus: ["contract"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "OutcomeContract 已冻结",
+            body: "验收绑定 test_checkout_idempotent，以及「重复 POST 不产生第二张订单」。成功标准停在这一版。",
+            write: "服务端可以冻结 OutcomeContract。",
+            status: { contract: "已冻结" }, touchStatus: ["contract"]
+          },
+          {
+            lane: "chat", actor: "Coder", title: "实现已 commit",
+            body: "checkout 实现已 commit。",
+            write: "Coder 可以写群聊消息。"
+          },
+          {
+            lane: "system", actor: "服务端", title: "AO 台账已冻结",
+            body: "session commit 完成。复用 session-commit AIG pipeline。事实图还没有落盘。",
+            write: "服务端可以冻结 AO 台账，并启动 session-commit AIG pipeline。事实图还没有落盘。"
+          },
+          {
+            lane: "handoff", actor: "Builder", artifact: "InfluenceViewDraft", title: "交出构图草稿",
+            body: "草稿含 B1、B2、B3，原生边 B1→B2→B3。",
+            write: "Builder 可以写 InfluenceViewDraft。这份草稿不是事实图。",
+            preview: "draft-wrong"
+          },
+          {
+            lane: "handoff", actor: "Critic", artifact: "ViolationSet", title: "机制注记与 AO 不符",
+            body: "B1→B2 的机制注记与 AO 不符。AO 里 B2 是未查幂等键直接插入。这一份检查不判断任务成败。",
+            write: "Critic 可以写 ViolationSet。这里只涉及机制注记，不判断任务成败。",
+            preview: "violation"
+          },
+          {
+            lane: "handoff", actor: "Refiner", artifact: "InfluenceViewDraft", title: "改正机制注记",
+            body: "只改正 B1→B2 的机制注记。B1、B2、B3 的事实内容不变。",
+            write: "Refiner 可以改正草稿里的机制注记，不能改 Block 的事实内容。",
+            preview: "draft-fixed"
+          },
+          {
+            lane: "system", actor: "服务端", title: "AIG revision 已冻结",
+            body: "左列是事实 Block 与原生边，机制注记为改正后的版本。右列尚无 ForkNode。",
+            write: "服务端可以冻结事实 AIG revision。",
+            diagram: { rev1: true }, status: { aig: "R1" },
+            touch: ["frame-r1", "B1", "B2", "B3", "e12", "e23"], touchStatus: ["aig"]
+          },
+          {
+            lane: "handoff", actor: "Reader", artifact: "ReaderReport", title: "提交 ReaderReport",
+            body: "报告覆盖已检查的图、证据引用和未探索区域。这里还没有 TaskOutcomeAssessment。",
+            write: "Reader 可以提交 ReaderReport。报告还没有冻结，也还没有 TaskOutcomeAssessment。"
+          },
+          {
+            lane: "system", actor: "服务端", title: "ReaderReport 已冻结",
+            body: "没有 TaskOutcomeAssessment，也不宣布任务成功。",
+            write: "服务端可以冻结 ReaderReport。这一步不产生任务成败结论。"
+          }
+        ]
+      },
+      remedy: {
+        blurb: "事实图已经冻结，注记已经改正。这条从测试失败走到子 run 的新 revision，不重播 Critic 和 Refiner。",
+        initial: { diagram: r1Diagram, status: frozenGraph, roster: baseRoster },
+        events: [
+          {
+            lane: "system", actor: "服务端", title: "测试失败",
+            body: "test_checkout_idempotent 失败。重复 POST 仍插入第二张订单。这是 evaluator 信号。",
+            write: "服务端可以记录 evaluator 信号。这一步不改图，也不确认成败。",
+            status: { outcome: "测试失败" }, touchStatus: ["outcome"]
+          },
+          {
+            lane: "handoff", actor: "Reader", artifact: "TaskOutcomeAssessment", title: "提交 failure",
+            body: "TaskOutcomeAssessment = failure。依据是测试失败，以及重复 POST 仍插入订单。",
+            write: "Reader 可以提交 TaskOutcomeAssessment。这一步不落盘。",
+            status: { outcome: "已提交 failure" }, touchStatus: ["outcome"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "failure 已确认",
+            body: "对照已冻结的 OutcomeContract，evaluator 信号与契约一致。结果为 confirmed failure。",
+            write: "服务端可以对照 OutcomeContract 确认 failure。",
+            status: { outcome: "confirmed failure" }, touchStatus: ["outcome"]
+          },
+          {
+            lane: "chat", actor: "用户", title: "@memory diagnose",
+            body: "@memory diagnose 请诊断这次幂等失败。",
+            write: "用户可以在群里发出 @memory diagnose。"
+          },
+          {
+            lane: "chat", actor: "Memory", title: "返回历史 Fork 卡片",
+            body: "诊断进入后台。我这里只交检索结果，不写 Fork。",
+            write: "Memory 可以在群里返回历史 Fork 卡片。这一步不写 Fork，也不做诊断结论。",
+            cards: CARDS
+          },
+          {
+            lane: "system", actor: "服务端", title: "复用已冻结的 revision",
+            body: "已有冻结 revision R1，不重复建图。诊断读取的是这份事实图。",
+            write: "服务端可以决定复用已冻结的 revision。这一步不新建图。",
+            touch: ["frame-r1"], touchStatus: ["aig"]
+          },
+          {
+            lane: "handoff", actor: "Reader", artifact: "ForkProposal", title: "提出 GuidedCounterfactualBranch",
+            body: "anchor 为 B2。imagined node N1：写入前按 Idempotency-Key 读取，已存在则返回原订单。N1 还没有进入图。",
+            write: "Reader 可以提交 ForkProposal。N1 还不是图上的节点。",
+            preview: "proposal"
+          },
+          {
+            lane: "system", actor: "服务端", title: "ForkNode overlay 已持久化",
+            body: "fn-checkout-1 锚在 B2。N1 在 overlay 内，用虚线框，不是事实 Block。",
+            write: "服务端可以持久化 ForkNode overlay。",
+            diagram: { overlay: true }, status: { fork: "overlay" },
+            touch: ["frame-overlay", "anchor", "N1", "B2"], touchStatus: ["fork"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "GuidanceDocument 已冻结",
+            body: "gd-checkout-1 的目标写成实现角色，还没有指定具体 agent。步骤是 N1。来源是 fn-checkout-1。",
+            write: "服务端可以冻结 GuidanceDocument。目标角色还不是具体 agent。",
+            diagram: { guidance: true }, status: { guidance: "已冻结" },
+            touch: ["guidance"], touchStatus: ["guidance"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "已选中 Coder",
+            body: "Runner 在频道中，具备成员资格，但这次没有被选中。选择依据是 role、capability、ACL 与可用性。",
+            write: "服务端可以选定 target agent。",
+            status: { dispatch: "已选中 Coder" },
+            roster: { coder: "已选中", runner: "在场，未选中" },
+            touchStatus: ["dispatch"], touchRoster: ["coder", "runner"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "gate 已通过",
+            body: "ACL、permission、budget、安全、capability、幂等。这些门都过了，才允许自动派发。",
+            write: "服务端可以记录 gate 结果。通过之后才允许自动派发。",
+            status: { dispatch: "gate 通过" }, touchStatus: ["dispatch"]
+          },
+          {
+            lane: "chat", actor: "Memory", title: "发布指导并 @Coder",
+            body: "发布已冻结的 GuidanceDocument gd-checkout-1，并 @Coder。步骤只有 N1。我没有改写步骤，也没有改派给 Runner。父群停在这里。",
+            write: "Memory 可以发布已经冻结的 GuidanceDocument，并 @Coder。",
+            touch: ["guidance"], touchStatus: ["guidance"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "linked child run 已开始",
+            body: "来源 Fork fn-checkout-1，来源 Guidance gd-checkout-1。这是子 run，不是父群里的完成回报。",
+            write: "服务端可以创建 linked child run。",
+            status: { dispatch: "子 run" }, touchStatus: ["dispatch"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "GuidanceExecutionReport 已写入",
+            body: "N1 标为 functionally_equivalent，对应新 revision 里的 R2-B2。父群没有「改完了」这条消息。",
+            write: "服务端可以写入 GuidanceExecutionReport。",
+            touch: ["N1"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "追加 production-direct 证据",
+            body: "首行动对齐为 functionally_equivalent，并且该步已经映射到实际 Block。证据是追加，不改写 N1。",
+            write: "服务端可以追加 production-direct 证据。证据不改写 N1。",
+            diagram: { evidence: true }, touch: ["evidence"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "新事实 revision R2 已冻结",
+            body: "R2-B1 接收 POST /checkout。R2-B2 按 Idempotency-Key 命中已有订单。R2-B3 返回原订单。边为 R2-B1→R2-B2→R2-B3。R1 不改。N1 仍留在 overlay。",
+            write: "服务端可以冻结新的事实 AIG revision R2。N1 留在 overlay。",
+            diagram: { r2: true }, status: { aig: "R1 + R2" },
+            touch: ["frame-r2", "R2-B1", "R2-B2", "R2-B3", "r2e1", "r2e2"], touchStatus: ["aig"]
+          }
+        ]
+      },
+      retrieve: {
+        blurb: "用户只要求检索。历史卡片可以返回，诊断不会开始。",
+        initial: { diagram: r1Diagram, status: frozenGraph, roster: baseRoster },
+        events: [
+          {
+            lane: "chat", actor: "用户", title: "@memory retrieve",
+            body: "@memory retrieve 相似的 checkout 失败。",
+            write: "用户可以发出 @memory retrieve。"
+          },
+          {
+            lane: "chat", actor: "Memory", title: "只返回历史 Fork 卡片",
+            body: "这两张是历史先例。这次没有启动诊断。",
+            write: "Memory 可以返回历史 Fork 卡片。",
+            cards: CARDS
+          },
+          {
+            lane: "system", actor: "服务端", title: "未进入诊断",
+            body: "retrieve 不写 Fork，也不派发。图保持 R1。",
+            write: "服务端可以记录「未进入诊断」。这一步不写 Fork，也不派发。"
+          }
+        ]
+      },
+      uncertain: {
+        blurb: "这份世界里的 OutcomeContract 没有 evaluator，只有 provisional criteria。图可以已经有效。",
+        initial: {
+          diagram: r1Diagram,
+          status: { contract: "未冻结", aig: "R1", fork: "无", guidance: "无", outcome: "未评估", dispatch: "无" },
+          roster: baseRoster
+        },
+        events: [
+          {
+            lane: "chat", actor: "用户", title: "没有绑定测试",
+            body: "checkout 尽量不要重复下单。先看一下怎么算成功。没有绑定测试。",
+            write: "用户可以提出没有测试绑定的目标。",
+            status: { contract: "已提出" }, touchStatus: ["contract"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "以 provisional criteria 冻结",
+            body: "OutcomeContract 已冻结，但没有 evaluator、测试或验收命令。标准保持 provisional。",
+            write: "服务端可以把它冻成带 provisional criteria 的 OutcomeContract。",
+            status: { contract: "provisional" }, touchStatus: ["contract"]
+          },
+          {
+            lane: "handoff", actor: "Reader", artifact: "TaskOutcomeAssessment", title: "提交 uncertain",
+            body: "TaskOutcomeAssessment = uncertain。图结构可以有效，但不能据此确认失败。",
+            write: "Reader 可以提交 uncertain。",
+            status: { outcome: "uncertain" }, touchStatus: ["outcome"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "不自动派发",
+            body: "结果保持 uncertain。不自动派发，不创建 ForkNode，不打开子 run。",
+            write: "服务端可以拒绝自动派发。",
+            status: { dispatch: "不自动派发" }, touchStatus: ["dispatch"]
+          }
+        ]
+      },
+      reject: {
+        blurb: "GuidanceDocument 已经冻结。群聊里的改写要求不会变成新文档。",
+        initial: {
+          diagram: guidedDiagram,
+          status: { contract: "已冻结", aig: "R1", fork: "overlay", guidance: "已冻结", outcome: "confirmed failure", dispatch: "无" },
+          roster: baseRoster
+        },
+        events: [
+          {
+            lane: "chat", actor: "用户", title: "要求加上无限重试",
+            body: "@memory 在指导里加上无限重试。",
+            write: "用户可以向 Memory 提出改写指导。"
+          },
+          {
+            lane: "system", actor: "服务端", title: "拒绝发布",
+            body: "文稿与已冻结的 GuidanceDocument gd-checkout-1 不一致。被拒绝的增补是「无限重试」。群聊里没有这条改写。",
+            write: "服务端可以拒绝发布与已冻结 GuidanceDocument 不一致的文稿。",
+            touch: ["guidance"], touchStatus: ["guidance"]
+          }
+        ]
+      },
+      promote: {
+        blurb: "R1、R2 和 overlay 都已经在。N1 不会变成事实 Block。",
+        initial: {
+          diagram: doneDiagram,
+          status: { contract: "已冻结", aig: "R1 + R2", fork: "overlay", guidance: "已冻结", outcome: "confirmed failure", dispatch: "子 run" },
+          roster: { user: "在群里", memory: "在群里", coder: "已选中", runner: "在场，未选中" }
+        },
+        events: [
+          {
+            lane: "system", actor: "服务端", title: "R2 已是事实 revision",
+            body: "子 run 的事实 Block 在 R2。N1 仍是 overlay 上的 imagined node。",
+            write: "这一步不写入新对象。R2 在进入这条子故事之前已经冻结。",
+            touch: ["frame-r2", "R2-B1", "R2-B2", "R2-B3", "r2e1", "r2e2"], touchStatus: ["aig"]
+          },
+          {
+            lane: "system", actor: "服务端", title: "拒绝把 N1 升格",
+            body: "拒绝把 N1 写成事实 Block。R2-B2 来自子 run 的新 AO，不是 N1 升格。",
+            write: "服务端可以拒绝把 imagined node 升格为事实 Block。",
+            touch: ["N1"]
+          }
+        ]
+      }
+    };
+
+    const GROUPS = {
+      form: ["form"],
+      remedy: ["remedy"],
+      bounds: ["retrieve", "uncertain", "reject", "promote"]
+    };
+
+    const NAMES = { user: "用户", memory: "Memory", coder: "Coder", runner: "Runner" };
+    const STATUS_LABELS = {
+      contract: "契约",
+      aig: "事实图",
+      fork: "Fork",
+      guidance: "Guidance",
+      outcome: "结果",
+      dispatch: "派发"
+    };
+
+    const state = { group: "form", sub: "retrieve", step: 0, lens: "graph" };
+
+    function story() {
+      const id = state.group === "bounds" ? state.sub : state.group;
+      return STORIES[id];
+    }
+
+    function clone(v) { return JSON.parse(JSON.stringify(v)); }
+
+    function view() {
+      const s = story();
+      const step = Math.max(0, Math.min(state.step, s.events.length - 1));
+      state.step = step;
+      const diagram = clone(s.initial.diagram);
+      const status = clone(s.initial.status);
+      const roster = clone(s.initial.roster);
+      const chats = [];
+      const handoffs = [];
+      for (let i = 0; i <= step; i++) {
+        const e = s.events[i];
+        Object.assign(diagram, e.diagram || {});
+        Object.assign(status, e.status || {});
+        Object.assign(roster, e.roster || {});
+        if (e.lane === "chat") chats.push(i);
+        if (e.lane === "handoff") handoffs.push(i);
+      }
+      return { s, step, diagram, status, roster, chats, handoffs, current: s.events[step] };
+    }
+
+    function el(tag, cls, text) {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    }
+
+    function mark(node, id, touch, focus) {
+      if (!id) return;
+      node.dataset.id = id;
+      node.classList.toggle("is-hot", focus && touch.includes(id));
+      node.classList.toggle("is-quiet", focus && !touch.includes(id));
+    }
+
+    function jump(i) {
+      state.step = i;
+      render();
+    }
+
+    function addTextButton(parent, className, index, current, build) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = className + (index === current ? " is-current" : "");
+      b.addEventListener("click", () => jump(index));
+      build(b);
+      parent.append(b);
+      return b;
+    }
+
+    function fillCards(parent, cards) {
+      const wrap = el("div", "cards");
+      for (const c of cards) {
+        const row = el("div", "fcard");
+        row.append(el("span", "fid", c.id), el("strong", null, c.title), el("span", "tier", c.tier));
+        wrap.append(row);
+      }
+      parent.append(wrap);
+    }
+
+    function fillPreview(parent, kind) {
+      const box = el("div", "draftbox");
+      if (kind === "draft-wrong") {
+        box.append(el("div", null, "草稿，尚未冻结"));
+        const ol = document.createElement("ol");
+        ["B1 接收 POST /checkout", "B2 未查幂等键直接插入订单", "B3 返回 201"].forEach((t) => ol.append(el("li", null, t)));
+        box.append(ol);
+        const q = el("div", "quote");
+        q.append(el("div", null, "B1→B2 机制注记"));
+        q.append(el("div", null, "已按 Idempotency-Key 做存在性检查"));
+        box.append(q);
+      } else if (kind === "violation") {
+        box.append(el("div", null, "注记写成「已按 Idempotency-Key 做存在性检查」。"));
+        box.append(el("div", null, "AO 实际是未查幂等键，直接插入。"));
+      } else if (kind === "draft-fixed") {
+        box.append(el("div", null, "修订后的草稿"));
+        const q = el("div", "quote");
+        q.append(el("div", null, "B1→B2 机制注记"));
+        q.append(el("div", null, "未读取 Idempotency-Key，直接插入"));
+        box.append(q);
+      } else if (kind === "proposal") {
+        box.append(el("div", null, "anchor_block_id = B2"));
+        const n = el("div", "node imagined");
+        n.style.marginTop = "6px";
+        n.append(el("div", "mono", "N1"), el("div", null, "写入前按 Idempotency-Key 读取，已存在则返回原订单"));
+        box.append(n);
+        box.append(el("div", "note", "提案还在交接里，中栏要等服务端持久化。"));
+      }
+      parent.append(box);
+    }
+
+    function renderChat(v) {
+      const root = document.getElementById("chat");
+      root.replaceChildren();
+      if (!v.chats.length) {
+        root.append(el("p", "empty", "到这一步，群聊还没有新消息。"));
+        return;
+      }
+      for (const i of v.chats) {
+        const e = v.s.events[i];
+        addTextButton(root, "bubble actor-" + e.actor, i, v.step, (b) => {
+          const who = el("div", "who");
+          who.append(el("b", null, e.actor));
+          b.append(who, el("p", null, e.body));
+          if (e.cards) fillCards(b, e.cards);
+        });
+      }
+      if (state.group === "remedy" && v.step >= 11) {
+        root.append(el("p", "empty", "父群停在 Memory 的发布。后面的完成情况只出现在服务端记录里。"));
+      }
+    }
+
+    function renderHandoff(v) {
+      const root = document.getElementById("handoff");
+      root.replaceChildren();
+      if (!v.handoffs.length) {
+        root.append(el("p", "empty", "到这一步，还没有 AIG 交接。"));
+        return;
+      }
+      for (const i of v.handoffs) {
+        const e = v.s.events[i];
+        addTextButton(root, "card actor-" + e.actor, i, v.step, (b) => {
+          const who = el("div", "who");
+          who.append(el("b", null, e.actor));
+          who.append(el("span", null, e.artifact));
+          b.append(who, el("p", null, e.body));
+          if (e.preview) fillPreview(b, e.preview);
+        });
+      }
+    }
+
+    function renderSequence(v) {
+      const root = document.getElementById("seq");
+      root.replaceChildren();
+      v.s.events.forEach((e, i) => {
+        const cls = "srow lane-" + e.lane + (i === v.step ? " is-current" : "") + (i > v.step ? " future" : "");
+        addTextButton(root, cls, i, v.step, (b) => {
+          const who = el("div", "who");
+          who.append(el("b", null, e.actor + (e.artifact ? " · " + e.artifact : "")));
+          who.append(el("span", "idx", String(i + 1).padStart(2, "0")));
+          b.append(who, el("p", null, e.title));
+          if (e.lane === "system" || i === v.step) b.append(el("p", null, e.body));
+        });
+      });
+    }
+
+    function storyId() {
+      return state.group === "bounds" ? state.sub : state.group;
+    }
+
+    function beat(storyName, step) {
+      const id = storyId();
+      if (id === storyName) {
+        if (state.step === step) return "now";
+        if (state.step > step) return "past";
+        return "future";
+      }
+      if (storyName === "form" && ["remedy", "retrieve", "uncertain", "reject", "promote"].includes(id)) return "past";
+      if (storyName === "remedy" && ["reject", "promote"].includes(id)) return "past";
+      return "future";
+    }
+
+    const NS = "http://www.w3.org/2000/svg";
+    let svgSerial = 0;
+
+    function svgEl(name, attrs) {
+      const n = document.createElementNS(NS, name);
+      for (const [k, val] of Object.entries(attrs || {})) n.setAttribute(k, val);
+      return n;
+    }
+
+    function svgLines(x, y, lines, size, fill) {
+      const t = svgEl("text", { x, y, "text-anchor": "middle", "font-size": size, fill });
+      lines.forEach((line, i) => {
+        const s = svgEl("tspan", { x, dy: i === 0 ? 0 : size + 2 });
+        s.textContent = line;
+        t.append(s);
+      });
+      return t;
+    }
+
+    function toneOf(id, touch, focus, base) {
+      if (focus && touch.includes(id)) return "hot";
+      if (focus && !touch.includes(id)) return "quiet";
+      return base;
+    }
+
+    function influenceSvg(opts) {
+      const touch = opts.touch || [];
+      const focus = opts.focus;
+      const compact = !!opts.compact;
+      const showN1 = !!opts.showN1 && !compact;
+      const showR2 = !!opts.showR2 && !compact;
+      const dashed = !!opts.dashed;
+      const prefix = "m" + (++svgSerial);
+      const W = compact ? 320 : 680;
+      const y1 = compact ? 36 : 64;
+      const r = compact ? 14 : 16;
+      const y2 = 128;
+      const H = compact ? 78 : showR2 ? 196 : 128;
+      const xs3 = compact ? [54, 160, 266] : [120, 340, 560];
+      const xs4 = [86, 210, 354, 560];
+      const xs = showN1 ? xs4 : xs3;
+      const named = !compact && !showN1;
+      const edgeInk = dashed ? "#6366f1" : "#4f46e5";
+      const nodeFill = dashed ? "#eef0fe" : "#ecfeff";
+      const nodeStroke = dashed ? "#6366f1" : "#0891b2";
+      const colors = { ink: edgeInk, hot: "#c2410c", quiet: "#94a3b8", amber: "#b45309" };
+      const svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, class: "agsvg", role: "img" });
+      const defs = svgEl("defs");
+      for (const [name, fill] of Object.entries(colors)) {
+        const marker = svgEl("marker", {
+          id: prefix + name,
+          viewBox: "0 0 10 10",
+          refX: "8",
+          refY: "5",
+          markerWidth: "6",
+          markerHeight: "6",
+          orient: "auto"
+        });
+        marker.append(svgEl("path", { d: "M0 0 L10 5 L0 10 Z", fill }));
+        defs.append(marker);
+      }
+      svg.append(defs);
+      const title = svgEl("title");
+      title.textContent = "Adaptive Influence Graph";
+      svg.append(title);
+
+      function paint(id, base) {
+        return colors[toneOf(id, touch, focus, base)] || colors[base];
+      }
+
+      function arrow(id, x1, y1, x2, y2, base, dash) {
+        const g = svgEl("g");
+        mark(g, id, touch, focus);
+        const tone = toneOf(id, touch, focus, base);
+        g.append(svgEl("line", {
+          x1, y1, x2, y2,
+          stroke: colors[tone],
+          "stroke-width": tone === "hot" ? 2.2 : 1.6,
+          "stroke-dasharray": dash ? "5 3" : "",
+          "marker-end": "url(#" + prefix + tone + ")"
+        }));
+        svg.append(g);
+      }
+
+      function curve(id) {
+        const g = svgEl("g");
+        mark(g, id, touch, focus);
+        const tone = toneOf(id, touch, focus, "amber");
+        const d = "M " + xs[1] + " " + (y1 - r - 2) + " Q " + ((xs[1] + xs[3]) / 2) + " 6 " + xs[3] + " " + (y1 - r - 2);
+        g.append(svgEl("path", {
+          d,
+          fill: "none",
+          stroke: colors[tone],
+          "stroke-width": tone === "hot" ? 2.2 : 1.6,
+          "stroke-dasharray": "5 3",
+          "marker-end": "url(#" + prefix + tone + ")"
+        }));
+        const label = svgLines((xs[1] + xs[3]) / 2, 16, ["anchor_block_id"], 10, colors[tone]);
+        g.append(label);
+        svg.append(g);
+      }
+
+      function circle(id, x, y, num, lines, imagined) {
+        const g = svgEl("g");
+        mark(g, id, touch, focus);
+        const hot = focus && touch.includes(id);
+        const quiet = focus && !touch.includes(id);
+        const stroke = imagined ? (hot ? "#c2410c" : "#b45309") : (hot ? "#c2410c" : quiet ? "#94a3b8" : nodeStroke);
+        const fill = imagined ? "#fff7ed" : (quiet ? "#f8fafc" : nodeFill);
+        g.append(svgEl("circle", {
+          cx: x, cy: y, r,
+          fill,
+          stroke,
+          "stroke-width": hot ? 2.4 : 1.6,
+          "stroke-dasharray": imagined || dashed ? "4 3" : ""
+        }));
+        const numText = svgEl("text", {
+          x, y: y + 4, "text-anchor": "middle", "font-size": 13, fill: "#0f172a",
+          "font-family": "ui-monospace, monospace"
+        });
+        numText.textContent = num;
+        g.append(numText);
+        if (lines.length) g.append(svgLines(x, y + r + 14, lines, 11, quiet ? "#94a3b8" : "#334155"));
+        svg.append(g);
+      }
+
+      const note = opts.note === "wrong"
+        ? ["已按 Idempotency-Key", "做存在性检查"]
+        : ["未读取 Idempotency-Key", "直接插入"];
+      const tag = named ? null : (compact ? null : "id");
+      circle("B1", xs[0], y1, "1", named ? ["B1", "接收 POST /checkout"] : tag ? ["B1"] : [], false);
+      circle("B2", xs[1], y1, "2", named ? ["B2", "未查幂等键直接插入"] : tag ? ["B2"] : [], false);
+      circle("B3", xs[2], y1, "3", named ? ["B3", "返回 201"] : tag ? ["B3"] : [], false);
+      arrow("e12", xs[0] + r + 4, y1, xs[1] - r - 8, y1, "ink", dashed);
+      arrow("e23", xs[1] + r + 4, y1, xs[2] - r - 8, y1, "ink", dashed);
+      if (named) {
+        svg.append(svgLines((xs[0] + xs[1]) / 2, y1 - 24, note, 10, paint("e12", "ink")));
+      }
+      if (showN1) {
+        curve("anchor");
+        circle("N1", xs[3], y1, "N", ["N1"], true);
+      }
+      if (showR2) {
+        const rx = [xs[0], xs[1], xs[2]];
+        circle("R2-B1", rx[0], y2, "1", ["R2-B1", "接收 POST"], false);
+        circle("R2-B2", rx[1], y2, "2", ["R2-B2", "命中已有订单"], false);
+        circle("R2-B3", rx[2], y2, "3", ["R2-B3", "返回原订单"], false);
+        arrow("r2e1", rx[0] + r + 4, y2, rx[1] - r - 8, y2, "ink", false);
+        arrow("r2e2", rx[1] + r + 4, y2, rx[2] - r - 8, y2, "ink", false);
+        const tag = svgLines(24, y2 + 4, ["R2"], 11, "#4f46e5");
+        tag.setAttribute("text-anchor", "start");
+        mark(tag, "frame-r2", touch, focus);
+        svg.append(tag);
+      }
+      return svg;
+    }
+
+    function docChips(parent, d, touch, focus) {
+      if (!d.guidance && !d.evidence) return;
+      const row = el("div", "chips");
+      if (d.guidance) {
+        const g = el("article", "gdoc");
+        g.append(el("div", "mono", "GuidanceDocument gd-checkout-1"), el("div", null, "目标角色：实现 · 步骤：N1 · 已冻结"));
+        mark(g, "guidance", touch, focus);
+        row.append(g);
+      }
+      if (d.evidence) {
+        const ev = el("article", "ev");
+        ev.append(el("div", "mono", "production-direct"), el("div", null, "追加在 N1 上，不改写 imagined node"));
+        mark(ev, "evidence", touch, focus);
+        row.append(ev);
+      }
+      parent.append(row);
+    }
+
+    function renderDiagram(v) {
+      const root = document.getElementById("diagram");
+      root.replaceChildren();
+      const d = v.diagram;
+      const touch = v.current.touch || [];
+      const focus = touch.length > 0;
+      const card = el("section", "ag-card");
+      const bar = el("div", "ag-bar");
+      bar.append(el("span", "ag-dot"), document.createTextNode("Adaptive Influence Graph"));
+      bar.append(el("em", null, d.r2 ? "R1 + R2" : d.rev1 ? "R1" : "尚未冻结"));
+      card.append(bar);
+      if (!d.rev1) {
+        card.append(el("p", "emptygraph", "事实 revision 尚未冻结。Builder 的草稿留在左侧交接，不进这张图。"));
+      } else {
+        card.append(influenceSvg({
+          showN1: d.overlay,
+          showR2: d.r2,
+          touch,
+          focus,
+          note: "fixed"
+        }));
+        const note = "B1→B2：未读取 Idempotency-Key，直接插入。critic–refiner · structural + semantic";
+        card.append(el("p", "capline", d.r2 ? note + "。R2-B2 按 Idempotency-Key 命中已有订单，不是 N1 升格。" : note));
+        if (d.overlay) {
+          const ov = el("p", "capline", "N1：写入前按 Idempotency-Key 读取，已存在则返回原订单。fn-checkout-1 锚在 B2。");
+          mark(ov, "frame-overlay", touch, focus);
+          card.append(ov);
+        }
+        mark(bar, "frame-r1", touch, focus);
+      }
+      root.append(card);
+      docChips(root, d, touch, focus);
+    }
+
+    function renderBuild(v) {
+      const root = document.getElementById("uml");
+      root.replaceChildren();
+      const id = storyId();
+      const onForm = id === "form";
+      const draft = onForm && state.step >= 4 && state.step < 7;
+      const frozen = !onForm || state.step >= 7;
+      const strip = el("div", "br");
+      const builder = el("aside", "role builder" + (onForm && (state.step === 3 || state.step === 4) ? " is-now" : ""));
+      builder.append(el("h3", null, "Builder Agent"), el("p", null, "add_block · add_inheritance_note · modify_block · delete_block"));
+      const midRole = el("div", "role graph");
+      const critic = el("span", onForm && state.step === 5 ? "on" : "", "Critic");
+      const refiner = el("span", onForm && state.step === 6 ? "on" : "", "Refiner");
+      const pair = el("p", null);
+      pair.append(critic, document.createTextNode(" – "), refiner, document.createTextNode(" · structural + semantic"));
+      midRole.append(el("h3", null, draft ? "InfluenceViewDraft" : "Adaptive Influence Graph"), pair);
+      const reader = el("aside", "role reader");
+      reader.append(el("h3", null, "Reader Agent"), el("p", null, "get_graph · get_story · 冻结后才读"));
+      strip.append(builder, midRole, reader);
+      root.append(strip);
+      if (!draft && !frozen) {
+        root.append(el("p", "capline", "AO 台账之后才会构图。这一步图还是空的。"));
+      } else {
+        const card = el("section", "ag-card");
+        const bar = el("div", "ag-bar");
+        bar.append(el("span", "ag-dot"), document.createTextNode(draft ? "InfluenceViewDraft" : "Adaptive Influence Graph"));
+        bar.append(el("em", null, draft ? "尚未冻结" : "R1"));
+        card.append(bar);
+        const wrong = draft && state.step < 6;
+        card.append(influenceSvg({
+          dashed: draft,
+          note: wrong ? "wrong" : "fixed",
+          touch: draft ? (state.step === 4 ? ["B1", "B2", "B3", "e12", "e23"] : ["e12"]) : (onForm && state.step === 7 ? (v.current.touch || []) : []),
+          focus: draft || (onForm && state.step === 7)
+        }));
+        card.append(el("p", "capline", wrong
+          ? "B1→B2 的注记写成：已按 Idempotency-Key 做存在性检查。这和 AO 不符。"
+          : "B1→B2：未读取 Idempotency-Key，直接插入。事实 Block 没有改。"));
+        root.append(card);
+      }
+      root.append(sequenceFigure(
+        ["服务端", "Builder", "Critic", "Refiner", "事实 AIG"],
+        ["server", "Builder", "Critic", "Refiner", "aig"],
+        [
+          { group: "form", step: 3, from: 0, to: 1, label: "冻结的 AO 台账，启动 pipeline" },
+          { group: "form", step: 4, from: 1, to: 2, label: "InfluenceViewDraft。注记仍写成已检查" },
+          { group: "form", step: 5, from: 2, to: 3, label: "ViolationSet。注记与 AO 不符，不判断成败" },
+          { group: "form", step: 6, from: 3, to: 0, label: "改正注记。事实 Block 不变" },
+          { group: "form", step: 7, from: 0, to: 4, label: "冻结 revision R1" }
+        ],
+        "Reader 不在这条构建链上。ReaderReport 出现在 R1 冻结之后。只有最后一箭落到事实 AIG。"
+      ));
+    }
+
+    function renderFork(v) {
+      const root = document.getElementById("uml");
+      root.replaceChildren();
+      const d = v.diagram;
+      const touch = v.current.touch || [];
+      const focus = touch.length > 0;
+      const card = el("section", "ag-card");
+      const bar = el("div", "ag-bar");
+      bar.append(el("span", "ag-dot"), document.createTextNode("ForkNode 锚在事实 Block 上"));
+      bar.append(el("em", null, d.overlay ? "fn-checkout-1" : "尚未持久化"));
+      card.append(bar);
+      if (!d.rev1) {
+        card.append(el("p", "emptygraph", "事实 AIG 还没有冻结，Fork 还没有锚点。"));
+      } else {
+        mark(bar, "frame-r1", touch, focus);
+        card.append(influenceSvg({
+          showN1: d.overlay,
+          showR2: d.r2,
+          note: "fixed",
+          touch,
+          focus
+        }));
+        if (d.overlay) {
+          const ov = el("p", "capline", "N1：写入前按 Idempotency-Key 读取，已存在则返回原订单。虚线圆，不是事实 Block。");
+          mark(ov, "frame-overlay", touch, focus);
+          card.append(ov);
+        } else {
+          card.append(el("p", "capline", "N1 还不是图上的节点。服务端持久化之后，虚线圆才锚到 B2。"));
+        }
+      }
+      root.append(card);
+      docChips(root, d, touch, focus);
+      root.append(sequenceFigure(
+        ["事实 AIG", "Reader", "服务端", "ForkNode"],
+        ["aig", "Reader", "server", "fork"],
+        [
+          { group: "remedy", step: 5, from: 1, to: 0, label: "只读已冻结的 R1" },
+          { group: "remedy", step: 6, from: 1, to: 2, label: "ForkProposal，anchor_block_id = B2" },
+          { group: "remedy", step: 7, from: 2, to: 3, label: "持久化 overlay。N1 仍是虚线" }
+        ],
+        "B2 仍是事实 Block。N1 只住在 overlay 上，不会升格进 R1。子 run 的新事实写进 R2。"
+      ));
+    }
+
+    function sequenceFigure(names, roles, messages, foot) {
+      const wrap = el("div");
+      const heads = el("div", "uml-heads");
+      heads.style.gridTemplateColumns = "repeat(" + names.length + ", minmax(0, 1fr))";
+      names.forEach((name, i) => heads.append(el("div", "actor role-" + roles[i], name)));
+      wrap.append(heads);
+      messages.forEach((msg) => {
+        const phase = beat(msg.group, msg.step);
+        const row = el("button", "uml-row" + (phase === "now" ? " hot" : phase === "future" ? " future" : ""));
+        row.type = "button";
+        row.style.gridTemplateColumns = "repeat(" + names.length + ", minmax(0, 1fr))";
+        for (let i = 0; i < names.length; i++) {
+          const life = el("span", "life" + (i === msg.from || i === msg.to ? " on" : ""));
+          row.append(life);
+        }
+        const arrow = el("span", "arrow " + (msg.to >= msg.from ? "to-right" : "to-left") + (phase === "future" ? " future" : ""));
+        const n = names.length;
+        const a = (msg.from + 0.5) / n;
+        const b = (msg.to + 0.5) / n;
+        arrow.style.left = (Math.min(a, b) * 100) + "%";
+        arrow.style.width = (Math.abs(a - b) * 100) + "%";
+        row.append(arrow);
+        row.append(el("span", "uml-label", msg.label));
+        row.addEventListener("click", () => {
+          state.group = msg.group;
+          state.step = msg.step;
+          render();
+        });
+        wrap.append(row);
+      });
+      wrap.append(el("p", "uml-foot", foot));
+      return wrap;
+    }
+
+    function renderStatus(v) {
+      const root = document.getElementById("status");
+      root.replaceChildren();
+      const touch = v.current.touchStatus || [];
+      const focus = touch.length > 0;
+      for (const key of Object.keys(STATUS_LABELS)) {
+        const chip = el("span", "st");
+        chip.append(el("b", null, STATUS_LABELS[key]), document.createTextNode(v.status[key]));
+        mark(chip, key, touch, focus);
+        root.append(chip);
+      }
+    }
+
+    function renderRoster(v) {
+      const root = document.getElementById("roster");
+      root.replaceChildren();
+      root.append(el("span", "label", "群成员"));
+      const touch = v.current.touchRoster || [];
+      const focus = touch.length > 0;
+      for (const id of ["user", "memory", "coder", "runner"]) {
+        const chip = el("span", "chip");
+        chip.append(el("b", null, NAMES[id]), el("span", null, v.roster[id]));
+        mark(chip, id, touch, focus);
+        root.append(chip);
+      }
+    }
+
+    function renderChrome(v) {
+      document.getElementById("blurb").textContent = v.s.blurb;
+      document.getElementById("count").textContent = (v.step + 1) + " / " + v.s.events.length;
+      document.getElementById("prev").disabled = v.step === 0;
+      document.getElementById("next").disabled = v.step === v.s.events.length - 1;
+      const write = document.getElementById("write");
+      write.replaceChildren();
+      const e = v.current;
+      write.append(el("div", "kicker", "第 " + (v.step + 1) + " 步 · " + e.actor + (e.artifact ? " · " + e.artifact : "")));
+      write.append(el("strong", null, e.write));
+      for (const btn of document.querySelectorAll(".tabs button")) {
+        btn.setAttribute("aria-selected", String(btn.dataset.story === state.group));
+      }
+      const subs = document.getElementById("subtabs");
+      subs.hidden = state.group !== "bounds";
+      for (const btn of subs.querySelectorAll("button")) {
+        btn.setAttribute("aria-selected", String(btn.dataset.sub === state.sub));
+      }
+    }
+
+    function scrollPaneTo(pane, cur) {
+      if (!pane || !cur) return;
+      const paneRect = pane.getBoundingClientRect();
+      const curRect = cur.getBoundingClientRect();
+      if (curRect.top >= paneRect.top && curRect.bottom <= paneRect.bottom) return;
+      const alignTop = curRect.height > pane.clientHeight;
+      pane.scrollTop += (alignTop ? curRect.bottom - paneRect.bottom : curRect.top - paneRect.top) + (alignTop ? 8 : -8);
+    }
+
+    function scrollCurrent() {
+      for (const sel of ["#chat", "#handoff", "#seq"]) {
+        const pane = document.querySelector(sel);
+        if (!pane) continue;
+        scrollPaneTo(pane, pane.querySelector(".is-current") || pane.lastElementChild);
+      }
+      if (state.lens !== "graph") {
+        const uml = document.getElementById("uml");
+        scrollPaneTo(uml, uml.querySelector(".uml-row.hot"));
+        return;
+      }
+      const diagram = document.getElementById("diagram");
+      const hot = [...diagram.querySelectorAll(".is-hot")];
+      if (!hot.length) return;
+      const paneRect = diagram.getBoundingClientRect();
+      const top = Math.min(...hot.map((n) => n.getBoundingClientRect().top));
+      const bottom = Math.max(...hot.map((n) => n.getBoundingClientRect().bottom));
+      if (top >= paneRect.top && bottom <= paneRect.bottom) return;
+      const anchor = diagram.querySelector('[data-id="frame-r1"]');
+      const anchorTop = anchor ? anchor.getBoundingClientRect().top : paneRect.top;
+      const roomAbove = anchorTop - paneRect.top;
+      if (bottom > paneRect.bottom) {
+        const need = bottom - paneRect.bottom + 8;
+        diagram.scrollTop += Math.min(need, Math.max(0, roomAbove));
+      } else if (top < paneRect.top) {
+        diagram.scrollTop += top - paneRect.top - 8;
+      }
+    }
+
+    function renderStage(v) {
+      const graph = state.lens === "graph";
+      document.getElementById("diagram").hidden = !graph;
+      document.getElementById("uml").hidden = graph;
+      for (const btn of document.querySelectorAll(".lenses button")) {
+        btn.setAttribute("aria-selected", String(btn.dataset.lens === state.lens));
+      }
+      const sub = document.getElementById("midsub");
+      const legend = document.getElementById("legend");
+      if (graph) {
+        sub.textContent = "青色圆点和靛蓝箭头对齐论文里的 Adaptive Influence Graph。";
+        legend.textContent = "青色圆点是事实节点，靛蓝箭头是影响边。虚线圆是 imagined node。橙色是这一步碰到的对象。";
+        renderDiagram(v);
+      } else if (state.lens === "build") {
+        sub.textContent = "版式对齐论文里的 Builder、Adaptive Influence Graph、Reader。Critic 与 Refiner 只改注记。";
+        legend.textContent = "点一条箭头，会跳到事实图成形里的那一步。虚线箭头是还没走到的交接。";
+        renderBuild(v);
+      } else {
+        sub.textContent = "Reader 只读已冻结的 R1。ForkNode 用 anchor_block_id 锚在 B2。";
+        legend.textContent = "点一条箭头，会跳到引导补救里的那一步。N1 保持虚线。";
+        renderFork(v);
+      }
+    }
+
+    function render() {
+      const v = view();
+      renderChrome(v);
+      renderRoster(v);
+      renderStatus(v);
+      renderStage(v);
+      renderChat(v);
+      renderHandoff(v);
+      renderSequence(v);
+      scrollCurrent();
+    }
+
+    document.querySelectorAll(".lenses button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.lens = btn.dataset.lens;
+        render();
+      });
+    });
+    document.querySelectorAll(".tabs button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.group = btn.dataset.story;
+        state.step = 0;
+        render();
+      });
+    });
+    document.querySelectorAll(".subtabs button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.sub = btn.dataset.sub;
+        state.step = 0;
+        render();
+      });
+    });
+    document.getElementById("prev").addEventListener("click", () => { state.step -= 1; render(); });
+    document.getElementById("next").addEventListener("click", () => { state.step += 1; render(); });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+      ev.preventDefault();
+      state.step += ev.key === "ArrowRight" ? 1 : -1;
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# 群聊交互以共享 interaction event 为权威，DAG 实时物化于通道存储，causal-experiences 只存引用
+
+多 agent 经群聊交换信息时，"谁在何时知道了什么"必须可追溯，但把通信事实与诊断产物混存会破坏单一权威。决定：群聊服务为每条消息发不可变的 interaction event（message_id + channel sequence + 内容 hash）；各 agent 的 AO 台账分别记 channel.send（action）与 channel.receive（observation），segment 是 agent 视角被 event 截断的本地区间，去重键 {channel, event, participant, direction}。interaction DAG（segment/event 节点 + local_continuation/emit/deliver 边）由通道服务实时 append-only 物化并持有权威；causal-experiences 只保存 fork node 对 DAG 节点/边的引用。诊断 agent 经 traverse_interaction_dag 遍历，权限 = 群聊 capability ∩ 来源 session ACL，成员身份不得隐式越过任何 agent 的 session ACL；跨 agent 协同决策点以 interaction_edge 为锚点。
