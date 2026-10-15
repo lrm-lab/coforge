@@ -1076,19 +1076,60 @@ test("pending text is flushed before a tool-start's Activity", async () => {
   }
 });
 
-test("a subagent-scoped tool-start is reclassified as subagent_activity", async () => {
+test.each([
+  {
+    name: "Bash",
+    input: { command: "ls" },
+    detail: "Running command…",
+    detailKind: "running_command",
+    toolName: "bash",
+    toolInput: "ls",
+  },
+  {
+    name: "Read",
+    input: { file_path: "src/a.ts", content: "private contents" },
+    detail: "Reading file…",
+    detailKind: "tool_started",
+    toolName: "read_file",
+    toolInput: "src/a.ts",
+  },
+])("a subagent-scoped $name tool-start retains its entry and classification", async (tool) => {
   const { runtime, activities, emitEvent } = await harness();
   try {
     activities.length = 0;
     emitEvent({
       type: "tool-start",
       id: "1",
-      name: "Bash",
-      input: { command: "ls" },
+      name: tool.name,
+      input: tool.input,
       subagent: { parentToolUseId: "t1" },
     });
     expect(activities).toHaveLength(1);
-    expect(activities[0]).toMatchObject({ detailKind: "subagent_activity" });
+    expect(activities[0]).toMatchObject({
+      detailKind: "subagent_activity",
+      level: "info",
+      detail: tool.detail,
+    });
+    expect(activities[0]?.entries).toEqual([
+      {
+        kind: "tool_start",
+        toolName: tool.toolName,
+        toolInput: tool.toolInput,
+        subagent: { parentToolUseId: "t1" },
+      },
+    ]);
+
+    // A subsequent parent tool keeps its ordinary kind and carries no child scope.
+    emitEvent({ type: "tool-start", id: "2", name: tool.name, input: tool.input });
+    expect(activities).toHaveLength(2);
+    expect(activities[1]).toMatchObject({
+      detailKind: tool.detailKind,
+      level: "info",
+      detail: tool.detail,
+    });
+    expect(activities[1]?.entries).toEqual([
+      { kind: "tool_start", toolName: tool.toolName, toolInput: tool.toolInput },
+    ]);
   } finally {
     await runtime.stop();
   }

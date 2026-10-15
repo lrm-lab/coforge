@@ -40,7 +40,7 @@ import {
   agentStartupInput,
 } from "#src/agent-runtime/agent-startup";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
-import { toolActivity } from "#src/code-agent/tool-activity";
+import { toolStartActivity } from "#src/code-agent/tool-activity";
 export type DaemonConfig = {
   workspaceId: string;
   computerId: string;
@@ -2564,7 +2564,7 @@ export class DaemonRuntime {
       // Providers report only WHAT happened (tool-start: name + raw input); the
       // daemon core alone decides what Activity that is, via the same
       // `toolActivity` allowlist every provider used to call for itself.
-      const activity = event.type === "activity" ? event.activity : this.#toolStartActivity(event);
+      const activity = event.type === "activity" ? event.activity : toolStartActivity(event);
       // Resumed output or a new tool call means a still-open compaction is done; report
       // that first.
       if (
@@ -3269,18 +3269,6 @@ export class DaemonRuntime {
     if (proxyToken && this.#agentProxyTokens.get(agentId) === proxyToken)
       this.#agentProxyTokens.delete(agentId);
     if (proxyToken) this.#agentProxy?.revoke(proxyToken);
-  }
-
-  /** The single place a `tool-start` event becomes an Activity: resolves the
-   * provider's raw name/input through the shared `toolActivity` allowlist, then reattaches
-   * subagent lineage the provider reported alongside the tool call. */
-  #toolStartActivity(event: Extract<AgentRuntimeEvent, { type: "tool-start" }>) {
-    const activity = toolActivity(event.name, event.input, event.occurredAt);
-    const { subagent } = event;
-    return {
-      ...activity,
-      entries: activity.entries.map((entry) => ({ ...entry, ...(subagent ? { subagent } : {}) })),
-    };
   }
 
   #activity(

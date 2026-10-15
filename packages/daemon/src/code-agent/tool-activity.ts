@@ -8,6 +8,7 @@ import {
 import { redactTrajectoryText } from "#src/agent-runtime/activity-trajectory";
 import { createAgentActivity } from "#src/agent-runtime/agent-activity";
 import { collapseWhitespace } from "./agent-instructions";
+import type { AgentRuntimeEvent } from "./contract";
 
 // `TOOL_ALIASES` (shared with the web tool row labels — see
 // `packages/coforge-sdk/src/internal/tool-display.ts`) resolves a provider's tool name
@@ -53,6 +54,16 @@ const REMINDER_TOOLS: Readonly<Record<string, string>> = {
   ack: "ack_reminder",
   dismiss: "dismiss_reminder",
 };
+
+/** A normalized tool-start becomes an allowlisted Activity with its reported child lineage. */
+export function toolStartActivity(event: Extract<AgentRuntimeEvent, { type: "tool-start" }>) {
+  const activity = toolActivity(event.name, event.input, event.occurredAt);
+  const { subagent } = event;
+  return {
+    ...activity,
+    entries: activity.entries.map((entry) => ({ ...entry, ...(subagent ? { subagent } : {}) })),
+  };
+}
 
 export function toolActivity(name: string, args: unknown, occurredAt?: string) {
   const input = args !== null && typeof args === "object" ? (args as Record<string, unknown>) : {};
