@@ -93,14 +93,20 @@ export function EmojiPicker({
       }
     >
       {epr && data ? (
-        <epr
-          theme={(dark ? "dark" : "light") as Theme}
-          lazyLoadEmojis
-          previewConfig={{ showPreview: false }}
-          labels={zh ? zhLabels : { searchPlaceholder: "Search emoji" }}
-          emojiData={data as never}
-          onEmojiClick={(emoji: EmojiClickData) => onPick(emoji.emoji)}
-        />
+        (() => {
+          // Capitalized so JSX renders the component, not a `<epr>` DOM tag.
+          const Picker = epr;
+          return (
+            <Picker
+              theme={(dark ? "dark" : "light") as Theme}
+              lazyLoadEmojis
+              previewConfig={{ showPreview: false }}
+              labels={zh ? zhLabels : { searchPlaceholder: "Search emoji" }}
+              emojiData={data as never}
+              onEmojiClick={(emoji: EmojiClickData) => onPick(emoji.emoji)}
+            />
+          );
+        })()
       ) : failed ? (
         <div className="flex min-h-90 flex-col items-center justify-center gap-2 text-sm text-tertiary">
           <span>{zh ? "加载失败" : "Failed to load"}</span>
