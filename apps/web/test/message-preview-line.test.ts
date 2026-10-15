@@ -3,7 +3,9 @@ import { expect, test } from "bun:test";
 import { messagePreviewLine } from "#src/server/conversations/message-preview-line.server";
 
 const helperId = "0f8fad5b-d9cb-469f-a165-70867728950e";
-const helper = { kind: "agent", actorId: helperId, handle: "helper" };
+const helper = { kind: "agent", actorId: helperId, handle: "helper", label: "Helper Bot" };
+const graceId = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
+const grace = { kind: "user", actorId: graceId, handle: "grace-hopper-4k2", label: "Grace Hopper" };
 
 test("newlines and runs of whitespace collapse into one line", () => {
   expect(messagePreviewLine("line one\n\nline two\r\n\tthree   four\n", [])).toBe(
@@ -16,8 +18,14 @@ test("markdown stays as plain text", () => {
   expect(messagePreviewLine(body, [])).toBe("**bold** and `code` - [link](https://example.com)");
 });
 
-test("a mention token reads as its @handle", () => {
+test("an Agent's mention reads as its @handle, how an Agent is mentioned", () => {
   expect(messagePreviewLine(`hi <@agent:${helperId}> look`, [helper])).toBe("hi @helper look");
+});
+
+test("a person's mention reads as their name, never their username", () => {
+  expect(messagePreviewLine(`hi <@human:${graceId}> please review`, [grace])).toBe(
+    "hi @Grace Hopper please review",
+  );
 });
 
 test("a body of only whitespace or nothing is an empty preview", () => {

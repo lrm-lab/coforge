@@ -7,8 +7,14 @@ import {
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
-import { messagePreviewLine } from "#src/server/conversations/message-preview-line.server";
-import type { MessageMentionRef } from "#src/server/conversations/mentions.server";
+import {
+  messagePreviewLine,
+  type PreviewMentionRef,
+} from "#src/server/conversations/message-preview-line.server";
+import {
+  BROWSER_MESSAGE_MENTIONS_SELECT,
+  browserMessageMention,
+} from "#src/server/conversations/mentions.server";
 
 /** How many members a channel row shows, in join order. */
 export const CHANNEL_LIST_MEMBER_LIMIT = 6;
@@ -86,14 +92,14 @@ export async function channelListPreviews(
   const mentionRows = latest.length
     ? await db.messageMention.findMany({
         where: { messageId: { in: latest.map((row) => row.messageId) } },
-        select: { messageId: true, kind: true, actorId: true, handle: true },
+        select: { messageId: true, ...BROWSER_MESSAGE_MENTIONS_SELECT.select },
       })
     : [];
-  const mentionsByMessage = new Map<string, MessageMentionRef[]>();
-  for (const { messageId, kind, actorId, handle } of mentionRows) {
-    const mentions = mentionsByMessage.get(messageId) ?? [];
-    mentions.push({ kind, actorId, handle });
-    mentionsByMessage.set(messageId, mentions);
+  const mentionsByMessage = new Map<string, PreviewMentionRef[]>();
+  for (const row of mentionRows) {
+    const mentions = mentionsByMessage.get(row.messageId) ?? [];
+    mentions.push(browserMessageMention(row));
+    mentionsByMessage.set(row.messageId, mentions);
   }
 
   const userIds = new Set<string>();
