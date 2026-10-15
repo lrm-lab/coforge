@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
+import * as fileSystem from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import {
   chmod,
@@ -15,11 +16,12 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { pack } from "tar-stream";
 import {
   AGENT_MIGRATION_COMMIT_MARKER,
   commitAgentMigrationBundle,
+  rollBackAgentMigrationPlacement,
 } from "#src/agent-migration/bundle-commit";
 import { AgentMigrationCommitError } from "#src/agent-migration/commit-error";
 import {
@@ -500,4 +502,28 @@ test("strips setuid and setgid bits; only permission bits travel", async () => {
   };
   await commit(paths, manifest);
   expect((await stat(join(paths.workspaceDirectory, "tool"))).mode & 0o7777).toBe(0o755);
+});
+
+test("rollback restores a workspace when its backup is on another filesystem", async () => {
+  const paths = await target();
+  await mkdir(paths.workspaceDirectory, { recursive: true });
+  await Bun.write(join(paths.workspaceDirectory, "MEMORY.md"), "old target");
+  const source = await sourceWorkspace({ "MEMORY.md": "moved" });
+  await commit(paths, await transfer(source, paths));
+  const rename = fileSystem.rename;
+  const renameAcrossDevices = spyOn(fileSystem, "rename").mockImplementation(async (from, to) => {
+    if (
+      String(from).startsWith(paths.backupDirectory + sep) &&
+      !String(to).startsWith(paths.backupDirectory + sep)
+    ) {
+      throw Object.assign(new Error("cross-device rename"), { code: "EXDEV" });
+    }
+    await rename(from, to);
+  });
+  try {
+    await rollBackAgentMigrationPlacement({ ...paths, ...migration });
+    expect(await Bun.file(join(paths.workspaceDirectory, "MEMORY.md")).text()).toBe("old target");
+  } finally {
+    renameAcrossDevices.mockRestore();
+  }
 });

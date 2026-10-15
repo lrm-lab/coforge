@@ -290,10 +290,6 @@ async function treeBytes(root: string): Promise<number> {
 }
 
 /**
- * Moves a workspace out of the way, intact. Across devices it is copied beside the backup name,
- * checked against the original, renamed into place, and only then removed from where it was.
- */
-/**
  * Undoes this migration's placement on the target when the switch did not land: the placed
  * workspace goes, and the workspace it moved aside comes back. A workspace that does not carry this
  * migration's marker is left alone, since it is not one this placement put there.
@@ -309,11 +305,24 @@ export async function rollBackAgentMigrationPlacement(
     marker.generation !== input.generation
   )
     return;
-  await rm(input.workspaceDirectory, { recursive: true, force: true });
   const preexisting = join(input.backupDirectory, `preexisting-${input.migrationId}`);
-  if (await exists(preexisting)) await rename(preexisting, input.workspaceDirectory);
+  // Stage the original beside the workspace before discarding the placed copy. The same verified
+  // cross-device move used for backups keeps both copies intact if preparing the restore fails.
+  const restored = (await exists(preexisting))
+    ? await moveAside(
+        preexisting,
+        dirname(input.workspaceDirectory),
+        `rollback-${input.migrationId}-${crypto.randomUUID()}`,
+      )
+    : undefined;
+  await rm(input.workspaceDirectory, { recursive: true, force: true });
+  if (restored) await rename(restored, input.workspaceDirectory);
 }
 
+/**
+ * Moves a workspace out of the way, intact. Across devices it is copied beside the backup name,
+ * checked against the original, renamed into place, and only then removed from where it was.
+ */
 async function moveAside(workspaceDirectory: string, backupDirectory: string, migrationId: string) {
   const stats = await lstat(workspaceDirectory);
   if (!stats.isDirectory() || stats.isSymbolicLink())

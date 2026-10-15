@@ -54,7 +54,7 @@ export type AgentMigrationRunnerOptions = {
   outcomePollMs?: number;
 };
 
-type Run = { stop: AbortController; done: Promise<void> };
+type Run = { owner: symbol; stop: AbortController; done: Promise<void> };
 
 /** The route's grammar for a failure code. */
 const ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/;
@@ -84,8 +84,8 @@ const runKey = (migrationId: string, generation: number, role: string) =>
 
 export class AgentMigrationRunner {
   readonly #runs = new Map<string, Run>();
-  /** Agents a source run is moving, with the run that holds each; their workspace must not change. */
-  readonly #held = new Map<string, string>();
+  /** Individual source runs holding an Agent; one run's cleanup cannot release another's hold. */
+  readonly #held = new Map<string, Set<symbol>>();
 
   constructor(private readonly options: AgentMigrationRunnerOptions) {}
 
@@ -104,11 +104,17 @@ export class AgentMigrationRunner {
     const current = this.#runs.get(key);
     if (current && !current.stop.signal.aborted) return current.done;
     const stop = new AbortController();
-    if (lease.role === "source") this.#held.set(lease.agentId, key);
+    const owner = Symbol(key);
+    if (lease.role === "source") {
+      const held = this.#held.get(lease.agentId) ?? new Set<symbol>();
+      held.add(owner);
+      this.#held.set(lease.agentId, held);
+    }
     const run: Run = {
+      owner,
       stop,
       done: (current?.done ?? Promise.resolve())
-        .then(() => this.#run(key, lease, stop.signal))
+        .then(() => this.#run(owner, lease, stop.signal))
         .finally(() => {
           if (this.#runs.get(key) === run) this.#runs.delete(key);
         }),
@@ -120,13 +126,28 @@ export class AgentMigrationRunner {
   /** Ends the attempt's run here; the target drops its chunks, the source lets the Agent go. */
   async cancel(cancel: AgentMigrationCancel): Promise<void> {
     const key = runKey(cancel.migrationId, cancel.generation, cancel.role);
-    // At once, before the run winds down: the server's Start follows the cancel on the same
-    // channel, and the Agent must be startable here when it arrives.
-    this.#release(cancel.agentId, key);
-    const run = this.#runs.get(key);
-    run?.stop.abort();
-    await run?.done;
-    if (cancel.role === "target") await this.#dropAttempt(cancel.migrationId);
+    const current = this.#runs.get(key);
+    // Release this run synchronously so the server's following Start can proceed.
+    if (current) this.#release(cancel.agentId, current.owner);
+    current?.stop.abort();
+    // Keep cleanup in the tracked run: a replacement lease must wait until it is finished.
+    const stop = new AbortController();
+    stop.abort();
+    const barrier: Run = {
+      owner: Symbol(key),
+      stop,
+      done: (current?.done ?? Promise.resolve())
+        .finally(async () => {
+          if (current) this.#release(cancel.agentId, current.owner);
+          if (cancel.role === "target")
+            await this.#dropAttempt(cancel.migrationId, cancel.generation);
+        })
+        .finally(() => {
+          if (this.#runs.get(key) === barrier) this.#runs.delete(key);
+        }),
+    };
+    this.#runs.set(key, barrier);
+    await barrier.done;
     logger.info("agent_migration:canceled", {
       migration_id: cancel.migrationId,
       role: cancel.role,
@@ -141,11 +162,13 @@ export class AgentMigrationRunner {
     await Promise.all(runs.map((run) => run.done));
   }
 
-  #release(agentId: string, key: string) {
-    if (this.#held.get(agentId) === key) this.#held.delete(agentId);
+  #release(agentId: string, owner: symbol) {
+    const held = this.#held.get(agentId);
+    held?.delete(owner);
+    if (held?.size === 0) this.#held.delete(agentId);
   }
 
-  async #run(key: string, lease: AgentMigrationLeaseGrant, signal: AbortSignal) {
+  async #run(owner: symbol, lease: AgentMigrationLeaseGrant, signal: AbortSignal) {
     const fields = { migration_id: lease.migrationId, role: lease.role, agent_id: lease.agentId };
     const transfer: AgentMigrationTransfer = {
       migrationId: lease.migrationId,
@@ -160,7 +183,7 @@ export class AgentMigrationRunner {
     } catch (error) {
       if (signal.aborted) return;
       // Before the report: the server answers it by starting the Agent here again.
-      if (lease.role === "source") this.#release(lease.agentId, key);
+      if (lease.role === "source") this.#release(lease.agentId, owner);
       const errorCode = failureCode(error);
       logger.warn("agent_migration:run_failed", {
         ...fields,
@@ -178,7 +201,7 @@ export class AgentMigrationRunner {
           }),
         );
     } finally {
-      if (lease.role === "source") this.#release(lease.agentId, key);
+      if (lease.role === "source") this.#release(lease.agentId, owner);
     }
   }
 
@@ -302,11 +325,14 @@ export class AgentMigrationRunner {
       placed = true;
       await this.#switch(transfer, revision);
     } catch (error) {
-      // The switch did not land, so the source still owns the Agent: undo what was placed here.
-      if (placed) await rollBackAgentMigrationPlacement(placement);
+      // An unavailable outcome is not proof that the switch failed. Keep the placed copy and
+      // its backup until ownership can be confirmed, including a cancel after the switch.
+      const unknown =
+        error instanceof AgentMigrationTransferError && error.code === "switch_unknown";
+      if (placed && !unknown) await rollBackAgentMigrationPlacement(placement);
       throw error;
     } finally {
-      await this.#dropAttempt(lease.migrationId);
+      await this.#dropAttempt(lease.migrationId, lease.generation);
     }
   }
 
@@ -316,13 +342,18 @@ export class AgentMigrationRunner {
       await this.#step(transfer, revision, "switch");
     } catch (error) {
       const now = await this.#view(transfer).catch(() => null);
-      if (now?.migration.state === "switched" || now?.migration.state === "completed") return;
-      throw error;
+      const migration = now?.migration;
+      if (migration?.generation === transfer.generation) {
+        if (migration.state === "switched" || migration.state === "completed") return;
+        if (UNDECIDED.has(migration.state) || migration.state === "failed") throw error;
+      }
+      // `canceled` alone does not say whether ownership had already switched.
+      throw new AgentMigrationTransferError("switch_unknown", "ownership could not be confirmed");
     }
   }
 
-  async #dropAttempt(migrationId: string) {
-    await rm(join(this.options.stateDirectory, "migrations", migrationId), {
+  async #dropAttempt(migrationId: string, generation: number) {
+    await rm(join(this.options.stateDirectory, "migrations", migrationId, String(generation)), {
       recursive: true,
       force: true,
     });

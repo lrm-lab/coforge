@@ -15,8 +15,11 @@ import {
 import type { AgentMigrationBundleManifest } from "#src/agent-migration/bundle-writer";
 
 const roots: string[] = [];
+const runners: AgentMigrationRunner[] = [];
 afterEach(async () => {
+  const closed = await Promise.allSettled(runners.splice(0).map((runner) => runner.close()));
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  for (const result of closed) if (result.status === "rejected") throw result.reason;
 });
 
 async function temp(prefix: string) {
@@ -159,6 +162,7 @@ async function computer(name: string, shared: ReturnType<typeof cloud>, role: "s
     stateDirectory: join(root, "state"),
     outcomePollMs: 5,
   });
+  runners.push(runner);
   return {
     root,
     runner,
@@ -245,7 +249,7 @@ test("a leased source and then a leased target move the Agent's workspace betwee
   expect(await exists(join(target.workspace, "work"))).toBe(false);
   expect(await exists(join(target.workspace, ".env"))).toBe(false);
   // The attempt's chunks are gone once the Agent has switched.
-  expect(await exists(join(target.state, "migrations", migrationId))).toBe(false);
+  expect(await exists(join(target.state, "migrations", migrationId, "1"))).toBe(false);
 });
 
 test("a lease delivered again joins the run already going", async () => {
@@ -293,7 +297,7 @@ test("a switch the server refuses puts the target's previous workspace back", as
   await target.runner.lease(lease("target", shared.record.revision));
   expect(shared.reports.at(-1)).toBe("target:fail:agent_moved");
   expect(await readFile(join(target.workspace, "MEMORY.md"), "utf8")).toBe("what was here before");
-  expect(await exists(join(target.state, "migrations", migrationId))).toBe(false);
+  expect(await exists(join(target.state, "migrations", migrationId, "1"))).toBe(false);
   await run;
 });
 
@@ -327,10 +331,9 @@ test("a cancel stops the target's run without reporting a failure, and drops its
   const { run } = await uploaded(shared, { "MEMORY.md": "m" });
   const target = await computer("target", shared, "target");
   const get = shared.bucket.get;
-  let fetched = 0;
-  // The first chunk arrives; every one after it stays unavailable, so the run is mid-download.
+  // Chunk zero arrives; the other chunk stays unavailable, so the run is mid-download.
   shared.bucket.get = async (url, sizeBytes, signal) => {
-    if (fetched++ === 0) return get(url, sizeBytes, signal);
+    if (url === "chunk/0") return get(url, sizeBytes, signal);
     throw new AgentMigrationRemoteError("bucket_unavailable", true);
   };
   shared.record.manifest = {
@@ -341,8 +344,8 @@ test("a cancel stops the target's run without reporting a failure, and drops its
     ],
   };
   const targetRun = target.runner.lease(lease("target", shared.record.revision));
-  const attempt = join(target.state, "migrations", migrationId);
-  await until(() => exists(join(attempt, "1", "chunks", "0.chunk")));
+  const attempt = join(target.state, "migrations", migrationId, "1");
+  await until(() => exists(join(attempt, "chunks", "0.chunk")));
   await target.runner.cancel({
     protocolMajor: 1,
     requestId: "cancel-1",
@@ -401,4 +404,118 @@ test("the source lets the Agent go before the server can answer with a Start", a
   expect(other.runner.holds(agentId)).toBe(false);
   await canceled;
   await run;
+});
+
+test("a switched target remains intact when its outcome cannot be confirmed", async () => {
+  const shared = cloud();
+  const { source, run } = await uploaded(shared, { "MEMORY.md": "moved" });
+  const target = await computer("unknown-target", shared, "target");
+  try {
+    await write(target.workspace, { "MEMORY.md": "old target" });
+    const baseServerFor = shared.serverFor;
+    let switched = false;
+    shared.serverFor = (role) => {
+      const server = baseServerFor(role);
+      if (role === "source") return server;
+      return {
+        ...server,
+        view: async () => {
+          if (switched) throw new AgentMigrationRemoteError("invalid_response", false);
+          return server.view(migrationId);
+        },
+        step: async (input) => {
+          const result = await server.step(input);
+          if (input.step === "switch") {
+            switched = true;
+            throw new AgentMigrationRemoteError("invalid_response", false);
+          }
+          return result;
+        },
+        fail: async (input) => {
+          if (shared.record.state === "switched")
+            throw new AgentMigrationRemoteError("past_switch", false);
+          return server.fail(input);
+        },
+      };
+    };
+    await target.runner.lease(lease("target", shared.record.revision));
+    expect(shared.record.state).toBe("switched");
+    expect(await Bun.file(join(target.workspace, "MEMORY.md")).text()).toBe("moved");
+  } finally {
+    await Promise.all([source.runner.close(), target.runner.close()]);
+    await run;
+  }
+});
+
+test("a source run replacing a canceled run retains its hold", async () => {
+  const shared = cloud();
+  const root = await temp("review-replacement-");
+  const workspace = join(root, "workspace");
+  await write(workspace, { "MEMORY.md": "moved" });
+  let startedFirst = () => {};
+  let startedSecond = () => {};
+  let releaseFirst = () => {};
+  let releaseSecond = () => {};
+  const firstStarted = new Promise<void>((resolve) => {
+    startedFirst = resolve;
+  });
+  const secondStarted = new Promise<void>((resolve) => {
+    startedSecond = resolve;
+  });
+  const firstGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const secondGate = new Promise<void>((resolve) => {
+    releaseSecond = resolve;
+  });
+  let stops = 0;
+  const runner = new AgentMigrationRunner({
+    server: () => shared.serverFor("source"),
+    bucket: shared.bucket,
+    agents: {
+      stop: async () => {
+        if (++stops === 1) {
+          startedFirst();
+          await firstGate;
+        } else {
+          startedSecond();
+          await secondGate;
+        }
+      },
+      isRunning: () => false,
+    },
+    workspaceDirectory: () => workspace,
+    stateDirectory: join(root, "state"),
+    outcomePollMs: 5,
+  });
+  const grant = lease("source", 0);
+  runners.push(runner);
+  const first = runner.lease(grant);
+  let canceled: Promise<void> | undefined;
+  let replacement: Promise<void> | undefined;
+  try {
+    await firstStarted;
+    canceled = runner.cancel({ ...grant, switched: false });
+    replacement = runner.lease(grant);
+    releaseFirst();
+    await secondStarted;
+    expect(runner.holds(agentId)).toBe(true);
+  } finally {
+    releaseFirst();
+    releaseSecond();
+    await runner.close();
+    await Promise.allSettled([first, canceled, replacement].filter(Boolean));
+  }
+});
+
+test("a stale-generation cancel leaves newer chunks intact", async () => {
+  const target = await computer("target", cloud(), "target");
+  const chunk = join(target.state, "migrations", migrationId, "2", "chunks", "0.chunk");
+  await write(dirname(chunk), { "0.chunk": "newer generation" });
+  try {
+    await target.runner.cancel({ ...lease("target", 0), switched: false });
+    expect(await exists(chunk)).toBe(true);
+  } finally {
+    await target.runner.close();
+  }
 });
