@@ -2,28 +2,30 @@
 
 The release authority is the Hands API, not the CDN. Read the official [Hands
 Public API Reference](https://app.hands.build/docs/public-api-reference/) and
-pin **1.0.45** before downloading an artifact. Record the selected target,
-release id, binary hash, and observation date in the research note.
+resolve the latest release before downloading an artifact. Record the resolved
+version, target, release id, binary hash, and observation date in the research
+note.
 
 ## Download and verify
 
-1. Resolve the release with a version-pinned `updates/check` request:
+1. Resolve the latest release with an `updates/check` request that names no
+   version:
 
    ```sh
    H=https://hands.build/public/v2/apps/raft-computer-cli
-   curl -fsSL "$H/updates/check?product_type=cli-binary&platform=darwin&arch=arm64&current_version=0.0.0&current_version_code=0&version=1.0.45"
+   curl -fsSL "$H/updates/check?product_type=cli-binary&platform=darwin&arch=arm64&current_version=0.0.0&current_version_code=0"
    ```
 
-   Use the returned artifact `download_url` and `sha256`. Do not copy a
-   release id or hash from an older research note. The unpinned `latest`
-   endpoint is useful for discovery but does not prove that the artifact is
-   1.0.45.
+   Its `release.version` is the version under study. Use the returned artifact
+   `download_url` and `sha256`; do not copy a release id or hash from an older
+   research note. To re-check an earlier conclusion against the release it
+   cites, add `&version=<x.y.z>`.
 
 2. Download the selected gzip asset, verify it against the release metadata,
    and retain the sidecar metadata if one is supplied:
 
    ```sh
-   curl -fsSL -o raft.gz '<official-1.0.45-download-url>'
+   curl -fsSL -o raft.gz '<download_url from step 1>'
    gunzip raft.gz
    shasum -a 256 raft
    ```
@@ -32,14 +34,14 @@ release id, binary hash, and observation date in the research note.
    and extracted tree in session scratch space; never commit either to this
    repository.
 
-3. The user-facing install path can pin the same version:
+3. The user-facing install path can select the same version:
 
    ```sh
-   curl -fsSL https://cdn.raft.build/computer/install.sh | RAFT_COMPUTER_VERSION=1.0.45 sh
+   curl -fsSL https://cdn.raft.build/computer/install.sh | RAFT_COMPUTER_VERSION=<version from step 1> sh
    ```
 
    Read the installer source or release metadata first and record the exact
-   asset it selects. Do not use an unpinned `latest` artifact as 1.0.45 evidence.
+   asset it selects.
 
 ## Extract the source
 
@@ -59,19 +61,21 @@ segment, rather than a V8 snapshot or code cache.
    same name. Record offsets in the research note because they are artifact
    specific.
 
-2. Strip the SEA header by locating the 1.0.45 banner:
+2. Strip the SEA header by locating the banner of the version resolved in
+   step 1:
 
    ```python
+   version = "x.y.z"  # release.version from step 1
    blob = open("sea.bin", "rb").read()
-   start = blob.find(b"/* raft-computer SEA bundle v1.0.45 */")
+   start = blob.find(f"/* raft-computer SEA bundle v{version} */".encode())
    if start < 0:
-       raise SystemExit("wrong artifact: v1.0.45 banner not found")
-   open("raft-computer-1.0.45.cjs", "wb").write(blob[start:])
+       raise SystemExit(f"wrong artifact: v{version} banner not found")
+   open(f"raft-computer-{version}.cjs", "wb").write(blob[start:])
    ```
 
-   Confirm the banner says `v1.0.45` before drawing any implementation
-   conclusion. Record the extracted bundle hash separately from the binary
-   hash.
+   Confirm the banner names the resolved version before drawing any
+   implementation conclusion. Record the extracted bundle hash separately from
+   the binary hash.
 
 3. Split the bundle at path comments: lines matching
    `^// (packages|node_modules)/\S+$`, for example

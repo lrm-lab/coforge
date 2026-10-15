@@ -49,7 +49,7 @@ The architecture invariants every change must respect are in
 | [docs/agents/testing.md](docs/agents/testing.md) | Testing guidance for agents |
 | [docs/agents/e2e-testing/](docs/agents/e2e-testing/README.md) | Live OpenRouter integration test |
 | [docs/agents/mise-tasks.md](docs/agents/mise-tasks.md) | Mise task policy |
-| [docs/agents/reference-cli-research/](docs/agents/reference-cli-research/README.md) | Studying the Raft Computer 1.0.45 reference binary, source tree, and installer |
+| [docs/agents/reference-cli-research/](docs/agents/reference-cli-research/README.md) | Studying the latest Raft Computer reference binary, source tree, and installer |
 | [docs/research/](docs/research/README.md) | Evidence-backed research reports |
 | [apps/web/README.md](apps/web/README.md) | Web app setup and scripts |
 | [apps/web/src/components/ui/README.md](apps/web/src/components/ui/README.md) | UI component inventory and exceptions |

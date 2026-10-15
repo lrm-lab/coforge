@@ -1,7 +1,7 @@
-# What the 1.0.45 tree contains
+# What the extracted tree contains
 
 Module counts, package file counts, bundle size, and command lists are
-version-specific. Record the values observed during each 1.0.45 extraction in
+version-specific. Record the values observed during each extraction in
 the research note instead of carrying forward counts from an older release.
 
 The first-party tree includes the human-facing Computer client, shared
@@ -18,12 +18,12 @@ can be indirect, so validate the resulting command list against the bundle
 instead of relying on one grep pattern.
 
 When comparing a behavior, record the exact command name and extracted module
-path. Do not infer that a command exists in 1.0.45 because it existed in an
-older release.
+path. Do not infer that a command exists in the current release because it existed
+in an older one.
 
 ## The human-facing commands
 
-Start with `packages/computer/src/cli.ts` and `index.ts`. The 1.0.45 client
+Start with `packages/computer/src/cli.ts` and `index.ts`. The current client
 contains the setup, lifecycle, status, diagnosis, logs, runners, and upgrade
 surfaces. Search the recovered `cli.ts` for the exact command registration
 before comparing it with CoForge; in particular, verify whether a proposed
@@ -47,7 +47,7 @@ delete, remove, or detach operation is actually present.
 
 ## Vendored dependencies
 
-Record provider and protocol dependencies from the 1.0.45 tree when they
+Record provider and protocol dependencies from the extracted tree when they
 matter to the comparison. Treat dependency presence as evidence of bundled
 code only; it does not prove that a CLI command or product capability is
 enabled.
