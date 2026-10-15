@@ -87,6 +87,10 @@ export function EmojiPicker({
     grid = (
       <Picker
         theme={(dark ? "dark" : "light") as Theme}
+        // `width: 100%`: the picker's own mount sizing hardcodes a 350px inline width; filling
+        // the host lets the host's own max-width (call site) or the narrow-screen tokens below
+        // (styles.css) decide the real width.
+        width="100%"
         lazyLoadEmojis
         previewConfig={{ showPreview: false }}
         labels={zh ? zhLabels : { searchPlaceholder: "Search emoji" }}

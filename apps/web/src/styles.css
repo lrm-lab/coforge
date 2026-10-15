@@ -266,9 +266,15 @@ input[type="search"]::-webkit-search-cancel-button {
   --epr-skin-tone-picker-menu-color: var(--color-bg-primary);
 }
 
-/* Narrow screens: six columns instead of eight keeps the grid inside a 320px pane. */
+/* Narrow screens: a smaller emoji cell keeps the eight-column grid inside a 320px pane
+   (the width is 100% of the host, so the cell size is what fits it). */
 @media (max-width: 380px) {
   [data-epr-host] {
-    --epr-columns: 6;
+    --epr-emoji-size: 1.5rem;
+    --epr-emoji-padding: 0.25rem;
+    --epr-horizontal-padding: 0.5rem;
+    --epr-search-bar-inner-padding: 0.5rem;
+    --epr-category-padding: 0.5rem 0.75rem;
+    --epr-search-input-height: 2rem;
   }
 }
