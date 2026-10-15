@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
+
+import { Button } from "#src/components/base/buttons/button";
 import { getLocale } from "#src/paraglide/runtime";
 
 import type { EmojiClickData, PickerLabels, Theme } from "emoji-picker-react";
@@ -102,13 +104,9 @@ export function EmojiPicker({
     grid = (
       <div className="flex min-h-90 flex-col items-center justify-center gap-2 text-sm text-tertiary">
         <span>{zh ? "加载失败" : "Failed to load"}</span>
-        <button
-          type="button"
-          onClick={() => setAttempt((n) => n + 1)}
-          className="font-medium text-brand-secondary hover:underline"
-        >
+        <Button color="link-gray" size="sm" onPress={() => setAttempt((n) => n + 1)}>
           {zh ? "重试" : "Retry"}
-        </button>
+        </Button>
       </div>
     );
   } else {
