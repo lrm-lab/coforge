@@ -6,6 +6,7 @@ import {
   channelAgentRecipients,
 } from "#src/server/conversations/public-channels.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { unreadAgentMessagesFragment } from "#src/server/db/repositories/agent-attention.repositories.server";
 
 test("Memory observes undirected and Task-directed updates and reads the full increment once", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -86,6 +87,13 @@ test("Memory observes undirected and Task-directed updates and reads the full in
       orderBy: { sequence: "asc" },
     });
     expect(deliveries.map((d) => d.messageId)).toEqual([first.id, second.id]);
+    const unreadCount = async () =>
+      (
+        await db.$queryRaw<{ count: number }[]>`
+      SELECT COUNT(*)::int AS count FROM (${unreadAgentMessagesFragment(workspace.id, memory.id)}) unread
+      WHERE "conversationId" = ${room.id}::uuid`
+      )[0]!.count;
+    expect(await unreadCount()).toBe(2);
     const repository = new PrismaDirectConversationRepository(db);
     const read = () => repository.readMessagesPage(workspace.id, memory.id, "#team", { limit: 1 });
     const page1 = await read();
@@ -94,6 +102,7 @@ test("Memory observes undirected and Task-directed updates and reads the full in
     const page2 = await read();
     expect(page2.messages.map((m) => m.id)).toEqual([second.id]);
     expect((await read()).messages).toEqual([]);
+    expect(await unreadCount()).toBe(0);
     const recipients = await db.$transaction((tx) =>
       channelAgentRecipients(tx, {
         conversationId: room.id,

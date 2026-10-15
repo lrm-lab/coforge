@@ -5,10 +5,15 @@ type Batch = {
   target: string;
   messages: Map<string, AgentMessageDelivery>;
   cancel?: () => void;
-  flushing?: Promise<void>;
+  flushing?: Promise<boolean | void>;
 };
 
-const schedule = (callback: () => void, milliseconds: number) => {
+export type MemoryChannelUpdateSchedule = (
+  callback: () => Promise<void>,
+  milliseconds: number,
+) => () => void;
+
+const schedule: MemoryChannelUpdateSchedule = (callback, milliseconds) => {
   const timer = setTimeout(callback, milliseconds);
   timer.unref();
   return () => clearTimeout(timer);
@@ -20,7 +25,7 @@ export class MemoryChannelUpdates {
   readonly #batches = new Map<string, Batch>();
 
   constructor(
-    private readonly notify: (messages: readonly AgentMessageDelivery[]) => Promise<void>,
+    private readonly notify: (messages: readonly AgentMessageDelivery[]) => Promise<boolean | void>,
     private readonly options: {
       schedule?: typeof schedule;
       onError?: (error: unknown) => void;
@@ -41,14 +46,17 @@ export class MemoryChannelUpdates {
 
   #arm(key: string, batch: Batch): void {
     if (batch.cancel || !batch.messages.size) return;
-    batch.cancel = (this.options.schedule ?? schedule)(() => {
+    batch.cancel = (this.options.schedule ?? schedule)(async () => {
       batch.cancel = undefined;
-      void this.#flush(key, batch).catch((error) => this.options.onError?.(error));
+      await this.#flush(key, batch).catch((error) => this.options.onError?.(error));
     }, 30_000);
   }
 
   async #flush(key: string, batch: Batch): Promise<void> {
-    if (batch.flushing) return batch.flushing;
+    if (batch.flushing) {
+      await batch.flushing;
+      return;
+    }
     if (this.#batches.get(key) !== batch || !batch.messages.size) return;
     batch.cancel?.();
     batch.cancel = undefined;
@@ -57,7 +65,10 @@ export class MemoryChannelUpdates {
     const notification = Promise.resolve().then(() => this.notify(messages));
     batch.flushing = notification;
     try {
-      await notification;
+      if ((await notification) === false) {
+        for (const message of messages) batch.messages.set(message.deliveryId, message);
+        return;
+      }
     } catch (error) {
       for (const message of messages) batch.messages.set(message.deliveryId, message);
       throw error;

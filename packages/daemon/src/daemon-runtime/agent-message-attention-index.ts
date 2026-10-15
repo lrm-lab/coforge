@@ -21,7 +21,7 @@ import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manag
 import { CLI_CHANNEL_MESSAGE_EXAMPLE } from "#src/code-agent/agent-instructions";
 import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
 import { isTrackedMention } from "./mention-delivery-tracker";
-import { MemoryChannelUpdates } from "./memory-channel-updates";
+import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
 import type {
   AgentConsumedSeqEntry,
   AgentConsumedSeqPort,
@@ -243,6 +243,7 @@ export class AgentMessageAttentionIndex {
        * exactly as volatile as it was: the cursor then only lives as long as this process. */
       consumedSeqs?: AgentConsumedSeqPort;
     } = { shouldHold: () => false, enqueue: () => {}, busy: () => {} },
+    updateOptions: { schedule?: MemoryChannelUpdateSchedule } = {},
   ) {
     this.#workspaceId = workspaceId;
     this.#runtimes = runtimes;
@@ -254,11 +255,11 @@ export class AgentMessageAttentionIndex {
           .filter((message) => !this.#consumed(message));
         const agentId = pending[0]?.agentId;
         if (!agentId) return;
-        if (this.hold.shouldHold(agentId)) {
-          for (const message of pending) this.hold.enqueue(agentId, message);
-        } else await this.flush(agentId, pending);
+        if (this.hold.shouldHold(agentId)) return false;
+        await this.flush(agentId, pending);
       },
       {
+        ...updateOptions,
         onError: (error) =>
           logger.warn("Memory channel update notice failed", {
             event: "agent.memory_channel_updates.failed",

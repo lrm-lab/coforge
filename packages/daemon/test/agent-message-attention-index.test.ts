@@ -112,7 +112,7 @@ test("fenced Memory inbox notices teach native reads and no CLI", async () => {
   await index.recover("agent-1", [], { "#software-engineering": 1 });
   expect(notices).toHaveLength(2);
   expect(notices[0]).toContain("Read each listed target with message_read");
-  expect(notices[1]).toContain("once, retrying only a failed read");
+  expect(notices[1]).toContain("continuing while hasNewer is true");
   for (const notice of notices) {
     expect(notice).toContain("message_read");
     expect(notice).not.toContain("coforge message");
@@ -160,6 +160,66 @@ test("ordinary Memory channel updates are batched while personal mentions notify
   });
   expect(notices).toHaveLength(2);
   index.clearAgent("agent-1");
+});
+
+test("Memory keeps a held batch and retries a refused notification after the hold lifts", async () => {
+  await captureDaemonLogs(async () => {
+    const timers: (() => Promise<void>)[] = [];
+    const notices: string[] = [];
+    let held = true;
+    let refuse = true;
+    const memorySession = {
+      ...session(),
+      async notify(notice: string) {
+        if (refuse) {
+          refuse = false;
+          throw new Error("notify refused");
+        }
+        notices.push(notice);
+      },
+    };
+    const index = new AgentMessageAttentionIndex(
+      "workspace-1",
+      {
+        session: () => memorySession,
+        runtime: () => ({
+          session: memorySession,
+          config: {
+            provider: "coforge",
+            model: "eval",
+            reasoning: "",
+            toolProfile: "openviking-memory",
+          },
+        }),
+      },
+      async () => {},
+      () => {},
+      {
+        shouldHold: () => held,
+        enqueue: () => {
+          throw new Error("batch must remain retryable until notified");
+        },
+        busy: () => {},
+      },
+      {
+        schedule(callback) {
+          timers.push(callback);
+          return () => {};
+        },
+      },
+    );
+    for (const sequence of [1, 2, 3, 4, 5]) {
+      await index.receive({ ...delivery(`held-${sequence}`), target: "#team", sequence });
+    }
+    expect(notices).toEqual([]);
+    held = false;
+    await timers.at(-1)!();
+    expect(notices).toEqual([]);
+    await timers.at(-1)!();
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toContain("message_read");
+    index.clearAgent("agent-1");
+  });
 });
 
 test("server-authored assignment attention preserves system identity", async () => {

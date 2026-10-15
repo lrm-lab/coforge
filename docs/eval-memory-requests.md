@@ -11,7 +11,7 @@ Agent HTTPS 接口和 OpenViking 工具运行。经验与证据文档统一由 M
    收到通知后使用不带范围锚点的 `message_read`，从服务端已读位置分页读取正文，`hasNewer=true` 时继续。通知与 custody ACK 不推进已读位置；成功读取才推进。`message_check` 只消费投递集合，不能代替频道增量阅读。读完判断是否需要检索或发言。
 3. Memory 使用 `ov_find` 检索、按需 `ov_read`，用 `memory_offer` 返回带引用的 Hint。要求 `ov_find` 只走 BM25，Memory 不暴露 `ov_search_context`；对应后端和词法索引准备改造尚未完成，不能使用旧 ready 文件宣称已验证此检索路径。
 4. Task 调用原生 `memory_disposition` 记录 adopt / reject / defer 和原因，再决定如何执行。
-5. 最后一条不包含对 Memory 的结构化 @mention 的 Task 消息是最终答案；IR 的 `Exact Answer:` / `Confidence:` 完整答案允许在解释中提及 Memory。两者结束运行且最新回复、Hint 和运行进展经过 settle 窗口后才结束该题，仍受 quiet 和总 deadline 预算限制。
+5. 最后一条不包含对 Memory 的结构化 @mention 的 Task 消息是最终答案；IR 的 `Exact Answer:` / `Confidence:` 完整答案允许在解释中提及 Memory。两者结束运行、Memory 没有待消费的观察消息，且最新回复、Hint 和运行进展经过 settle 窗口后才结束该题，避免在 30 秒批通知发出前清理 workspace。仍受 quiet 和总 deadline 预算限制。
 
 harness 不做 pre-turn recall，不自动检索、选技能或注入经验，也不向 Task 工作目录复制
 原始语料、技能 ledger 或 `ir_search.py`。Task 保留产品正常执行工具；角色指令要求检索走

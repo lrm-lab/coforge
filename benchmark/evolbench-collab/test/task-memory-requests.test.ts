@@ -37,6 +37,9 @@ function fixture(
     taskAgentId: "task",
     memoryAgentId: "memory",
     db: {
+      async $queryRaw() {
+        return [{ count: 0 }];
+      },
       conversationMember: {
         async findFirst() {
           return { id: "member" };
@@ -196,4 +199,16 @@ test("a late Memory reply gives Task another settlement window", async () => {
   );
   const result = await runEpisode({ ...input, settleMs: 1000 });
   expect(result.terminationReason).not.toBe("final_settled");
+});
+
+test("a settled Task answer waits for Memory's batched but unread channel updates", async () => {
+  const input = fixture([
+    { id: "answer", body: "Exact Answer: bird", createdAt: new Date(), mentions: [] },
+  ]);
+  input.workspace.db.$queryRaw = (async () => [
+    { count: 1 },
+  ]) as typeof input.workspace.db.$queryRaw;
+  const result = await runEpisode(input);
+  expect(result.terminationReason).not.toBe("final_settled");
+  expect(result.finalOutput).toBe("Exact Answer: bird");
 });

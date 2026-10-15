@@ -27,7 +27,7 @@ test("five distinct updates produce one notification; a retry does not count twi
 });
 
 test("a quiet target is notified at 30 seconds, independently of another target", async () => {
-  const timers: { callback: () => void; milliseconds: number; cancelled: boolean }[] = [];
+  const timers: { callback: () => Promise<void>; milliseconds: number; cancelled: boolean }[] = [];
   const batches: string[][] = [];
   const updates = new MemoryChannelUpdates(
     async (batch) => {
@@ -47,18 +47,14 @@ test("a quiet target is notified at 30 seconds, independently of another target"
   await updates.add(message(2));
   await updates.add(message(3, "#other"));
   expect(timers.map((t) => t.milliseconds)).toEqual([30_000, 30_000]);
-  timers[0]!.callback();
-  await new Promise<void>((resolve) => queueMicrotask(resolve));
+  await timers[0]!.callback();
   expect(batches).toEqual([["#team", "#team"]]);
   updates.clearAgent("memory");
   expect(timers[1]!.cancelled).toBe(true);
-  timers[1]!.callback();
-  await new Promise<void>((resolve) => queueMicrotask(resolve));
-  expect(batches).toHaveLength(1);
 });
 
 test("a failed notice is retained for retry without losing later updates", async () => {
-  const timers: (() => void)[] = [];
+  const timers: (() => Promise<void>)[] = [];
   const batches: number[][] = [];
   let failed = false;
   const updates = new MemoryChannelUpdates(

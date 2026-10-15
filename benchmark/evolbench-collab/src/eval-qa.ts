@@ -3,6 +3,7 @@ import { RedisClient } from "bun";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { PublicChannels } from "../../../apps/web/src/server/conversations/public-channels.server";
 import { RedisMessageRequestIdempotency } from "../../../apps/web/src/server/conversations/redis-message-request-idempotency.server";
+import { unreadAgentMessagesFragment } from "../../../apps/web/src/server/db/repositories/agent-attention.repositories.server";
 import type { EvalEnv } from "./env";
 import type { EpisodeTerminationReason, ManifestEpisode } from "./types";
 import type { EvalWorkspace } from "./workspace";
@@ -323,7 +324,11 @@ export async function runEpisode(input: {
       !runtime?.memoryRunning &&
       Date.now() - lastInteractionAt >= input.settleMs
     ) {
-      return finish("final_settled");
+      const pending = await input.workspace.db.$queryRaw<{ count: number }[]>`
+        SELECT COUNT(*)::int AS count
+        FROM (${unreadAgentMessagesFragment(input.workspace.workspaceId, input.workspace.memoryAgentId)}) unread
+        WHERE "conversationId" = ${input.workspace.channelId}::uuid`;
+      if (pending[0]?.count === 0) return finish("final_settled");
     }
     // An @memory request is work in progress, not a candidate final answer.
     const progressAt = input.runtimeDiagnostics?.snapshot().lastProgressAt ?? 0;

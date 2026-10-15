@@ -18,10 +18,13 @@ export function agentStartupCatchupInput(
     ? "message_read with the exact target"
     : "\`coforge message read --target <target>\`";
   const check = fenced ? "message_check" : "\`coforge message check\`";
+  const reading = fenced
+    ? "with no before/after/around anchor, continuing while hasNewer is true"
+    : "once, retrying only a failed read";
   return `[CoForge inbox notice (restart recovery):
 Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
 ${rows.join("\n")}
-Read each listed conversation with ${command} once, retrying only a failed read, then end this turn. Do not call ${check} in this catch-up mode. Continue working only if you find a direct request, assignment, personal mention, review request, or task addressed to you. Otherwise do not send a reply.]`;
+Read each listed conversation with ${command} ${reading}, then end this turn. Do not call ${check} in this catch-up mode. Continue working only if you find a direct request, assignment, personal mention, review request, or task addressed to you. Otherwise do not send a reply.]`;
 }
 export const AGENT_STARTUP_TIMEOUT_MS = 120_000;
 
