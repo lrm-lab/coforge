@@ -465,4 +465,81 @@ describe("AgentProcessManager", () => {
     expect(starts).toBe(1);
     expect(manager.status("agent-1")).toBe("active");
   });
+
+  test("release ends the process but keeps what a later wake needs, reporting stopping meanwhile", async () => {
+    const session = sessionSpy();
+    const exit = Promise.withResolvers<void>();
+    session.dispose = async function () {
+      this.disposeCalls += 1;
+      await exit.promise;
+      this.exit();
+    };
+    const manager = new AgentProcessManager(() => ({
+      provider: "pi",
+      async createAgentSession() {
+        return session;
+      },
+    }));
+    await manager.start("agent-1", config, join(testWorkspaceRoot, "release", "agent-1"));
+    manager.rememberServerLaunch("agent-1", {
+      requestId: "start-1",
+      controlEpoch: 1,
+      launchId: "launch-1",
+    });
+    manager.recordClientSeq("agent-1", 7);
+
+    const released = manager.release("agent-1", 1_000);
+    expect(manager.isStopping("agent-1")).toBe(true);
+    exit.resolve();
+    await released;
+
+    expect(manager.isStopping("agent-1")).toBe(false);
+    expect(manager.session("agent-1")).toBeUndefined();
+    expect(manager.restartConfig("agent-1")).toMatchObject({ config });
+    expect(manager.serverLaunch("agent-1")).toMatchObject({ launchId: "launch-1" });
+    expect(manager.lastClientSeq("agent-1")).toBe(7);
+    expect(manager.status("agent-1")).toBe("active");
+  });
+
+  test("a release whose process will not exit in time rejects and leaves the runtime registered", async () => {
+    const session = sessionSpy();
+    session.dispose = () => new Promise<void>(() => {});
+    const manager = new AgentProcessManager(() => ({
+      provider: "pi",
+      async createAgentSession() {
+        return session;
+      },
+    }));
+    await manager.start("agent-1", config, join(testWorkspaceRoot, "release-hang", "agent-1"));
+
+    await expect(manager.release("agent-1", 10)).rejects.toThrow("did not exit");
+    expect(manager.session("agent-1")).toBe(session);
+    expect(manager.isStopping("agent-1")).toBe(false);
+  });
+
+  test("a stop during a release waits for it, then forgets the Agent as usual", async () => {
+    const session = sessionSpy();
+    const exit = Promise.withResolvers<void>();
+    session.dispose = async function () {
+      this.disposeCalls += 1;
+      await exit.promise;
+      this.exit();
+    };
+    const manager = new AgentProcessManager(() => ({
+      provider: "pi",
+      async createAgentSession() {
+        return session;
+      },
+    }));
+    await manager.start("agent-1", config, join(testWorkspaceRoot, "release-stop", "agent-1"));
+
+    const released = manager.release("agent-1", 1_000);
+    const stopped = manager.stop("agent-1");
+    exit.resolve();
+    await Promise.all([released, stopped]);
+
+    expect(session.disposeCalls).toBe(1);
+    expect(manager.restartConfig("agent-1")).toBeUndefined();
+    expect(manager.status("agent-1")).toBe("inactive");
+  });
 });

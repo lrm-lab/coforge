@@ -7,7 +7,6 @@ import {
   type CodeAgentProvider,
   type UsageSnapshot,
 } from "#src/code-agent/contract";
-import { withDeadline } from "#src/code-agent/deadline";
 import { mkdirSync } from "node:fs";
 import { readOperatingSystem } from "#src/platform/operating-system";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
@@ -3118,6 +3117,9 @@ export class DaemonRuntime {
       if (!(await this.#endStalledRuntime(agentId, stalled))) return;
       // Before the relaunch reports its session, which is what makes the server issue them again.
       await this.#mentionDeliveries.handBackForRelaunch(agentId);
+      // A Stop that arrived meanwhile wins: the Agent is not woken again.
+      if (this.#stoppingAgents.has(agentId) || !this.#agentProcessManager.restartConfig(agentId))
+        return;
       const sessionId =
         this.#sessionReferences.get(agentId)?.sessionId ?? stalled.restart.sessionId;
       // A relaunch that fails reports its own launch error; the waiting messages stay queued,
@@ -3159,13 +3161,8 @@ export class DaemonRuntime {
     });
     launch.stopping = true;
     try {
-      await withDeadline(
-        session.dispose(),
-        STALLED_RECOVERY_EXIT_TIMEOUT_MS,
-        () => new Error("the stalled Agent runtime did not exit in time"),
-      );
-      if (this.#agentProcessManager.session(agentId) !== session) return true;
-      throw new Error("the stalled Agent runtime did not exit");
+      await this.#agentProcessManager.release(agentId, STALLED_RECOVERY_EXIT_TIMEOUT_MS);
+      return true;
     } catch (error) {
       launch.progress = undefined;
       // A process that is still running gets its Activity back.

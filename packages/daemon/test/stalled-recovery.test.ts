@@ -381,3 +381,22 @@ test.each([
     }
   },
 );
+
+test("a Stop during the restart wins: the Agent is not woken again", async () => {
+  const disposeGate = Promise.withResolvers<void>();
+  const h = await harness({ disposeGate: disposeGate.promise });
+  try {
+    h.sessions[0]!.emit({ type: "progress" });
+    setSystemTime(minutes(16));
+    const recovery = h.deliver(1);
+    const stopped = h.runtime.stopAgent("agent-a");
+    disposeGate.resolve();
+    await Promise.all([recovery, stopped]);
+
+    expect(h.sessions).toHaveLength(1);
+    expect(h.runtime.agentProcessManager.restartConfig("agent-a")).toBeUndefined();
+  } finally {
+    disposeGate.resolve();
+    await h.runtime.stop();
+  }
+});

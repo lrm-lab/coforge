@@ -2,6 +2,7 @@ import { AgentStateMachine, type AgentStatus } from "./agent-state-machine";
 import type { AgentRuntimeConfig, AgentSession } from "@coforge/agent";
 import type { CodeAgentProviderFactory } from "#src/code-agent/contract";
 import { AgentProcessCleanupError } from "#src/code-agent/contract";
+import { withDeadline } from "#src/code-agent/deadline";
 import {
   buildCoforgeAgentInstructions,
   type AgentLaunchIdentity,
@@ -48,6 +49,8 @@ export class AgentProcessManager {
   readonly #restartConfigs = new Map<string, AgentRestartConfig>();
   readonly #states = new Map<string, AgentStateMachine>();
   readonly #stopping = new Set<string>();
+  /** Releases in flight (`release`), which a `stop` waits out before stopping. */
+  readonly #releases = new Map<string, Promise<void>>();
   /** The Activity `clientSeq` last sent for this Agent. Kept in its own map,
    * separate from `AgentRestartConfig`, because `start()` replaces that whole entry on every
    * call and this counter must survive that replacement to let a woken launch continue it
@@ -150,7 +153,43 @@ export class AgentProcessManager {
     return runtime;
   }
 
+  /**
+   * Ends the Agent's process but keeps what a later wake needs: its restart config, server launch
+   * identity and Activity `clientSeq`. The Agent reports stopping until the process has exited.
+   * Rejects, leaving the runtime registered, when the process does not exit within `timeoutMs`.
+   */
+  async release(agentId: string, timeoutMs: number): Promise<void> {
+    const runtime = this.#runtimes.get(agentId);
+    if (!runtime) return;
+    if (this.#stopping.has(agentId)) throw new Error(`Agent runtime is stopping: ${agentId}`);
+    this.#stopping.add(agentId);
+    const releasing = (async () => {
+      try {
+        await withDeadline(
+          runtime.session.dispose(),
+          timeoutMs,
+          () => new Error(`Agent runtime did not exit in time: ${agentId}`),
+        );
+        if (this.#runtimes.get(agentId)?.session === runtime.session) {
+          this.#runtimes.delete(agentId);
+          this.#stateFor(agentId).transition("runtime_released");
+        }
+      } finally {
+        this.#stopping.delete(agentId);
+      }
+    })();
+    this.#releases.set(agentId, releasing);
+    try {
+      await releasing;
+    } finally {
+      this.#releases.delete(agentId);
+    }
+  }
+
   async stop(agentId: string): Promise<void> {
+    // A stop overrides a release in flight: it waits that out, then forgets the Agent as usual.
+    const releasing = this.#releases.get(agentId);
+    if (releasing) await releasing.catch(() => {});
     if (this.#stopping.has(agentId)) throw new Error(`Agent runtime is stopping: ${agentId}`);
     const runtime = this.#runtimes.get(agentId);
     if (!runtime) {
