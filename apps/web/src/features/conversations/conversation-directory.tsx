@@ -282,7 +282,6 @@ function DirectorySection({
   label,
   icon: Icon,
   expanded,
-  saving,
   onToggle,
   action,
   headingProps,
@@ -295,7 +294,6 @@ function DirectorySection({
    * gives Channels and Direct messages a chevron and no second mark. */
   icon?: FC<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
   expanded?: boolean;
-  saving?: boolean;
   /** Absent on a section that cannot collapse: its rows are always shown, and its title row is
    * not a control at all, so it draws no chevron and takes no hover highlight. */
   onToggle?: () => void;
@@ -342,9 +340,6 @@ function DirectorySection({
                 aria-expanded={expanded}
                 aria-controls={listId}
                 onPress={onToggle}
-                isLoading={saving}
-                isDisabled={saving}
-                showTextWhileLoading
                 className="min-w-0 flex-1 justify-start pr-2 pl-0 hover:bg-transparent! [&_[data-text]]:min-w-0 [&_[data-text]]:flex-1 [&_[data-text]]:text-left"
                 iconLeading={
                   <ChevronRight
@@ -911,7 +906,6 @@ export function ConversationDirectory({
                   expanded={
                     !drag.sortingSections && (!section.collapsed || drag.hoveredSection === key)
                   }
-                  saving={saving}
                   onToggle={() =>
                     changeSection(
                       () => actions.updateSection(section.id, { collapsed: !section.collapsed }),
