@@ -212,16 +212,20 @@ export class AgentMigrationTransport {
   ) {
     const migration = await this.migrations.view(participant, input.migrationId);
     if (!migration) return { status: "refused" as const, code: "not_found" as const };
+    if (roleOf(migration, participant) !== "source")
+      return { status: "refused" as const, code: "wrong_computer" as const };
     const manifest = agentMigrationManifestSchema.safeParse(input.manifest);
     if (!manifest.success) return { status: "refused" as const, code: "invalid_manifest" as const };
+    if (input.generation !== migration.generation)
+      return { status: "refused" as const, code: "stale_generation" as const };
+    // A future revision must not become current between this read and advance's read: it would
+    // otherwise skip HEADs here and then become an accepting transition there. Older revisions
+    // still reach advance, which preserves already-applied retries.
+    if (input.expectedRevision > migration.revision)
+      return { status: "refused" as const, code: "stale_revision" as const };
     // Only a pending completion needs storage. Let the state machine answer refusals and applied
     // retries independently of the bucket, and recheck its revision after the HEADs.
-    if (
-      roleOf(migration, participant) === "source" &&
-      input.generation === migration.generation &&
-      input.expectedRevision === migration.revision &&
-      migration.state === "source_stopped"
-    ) {
+    if (input.expectedRevision === migration.revision && migration.state === "source_stopped") {
       if (!this.objects) return { status: "refused" as const, code: "unavailable" as const };
       if (!(await this.#allUploaded(migration, manifest.data)))
         return { status: "refused" as const, code: "chunks_missing" as const };

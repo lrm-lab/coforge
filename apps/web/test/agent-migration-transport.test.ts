@@ -229,6 +229,32 @@ test("completion preserves state fencing and applied retries when chunks are abs
   });
 });
 
+test("completion cannot skip missing chunks when the source stops during its first read", async () => {
+  const context = await setup();
+  const find = context.store.find;
+  let stopDuringRead = true;
+  context.store.find = async (id) => {
+    const snapshot = await find(id);
+    if (stopDuringRead) {
+      stopDuringRead = false;
+      await stopSource(context);
+    }
+    return snapshot;
+  };
+  expect(
+    await context.transport.completeUpload(source, {
+      migrationId: context.id,
+      generation: 1,
+      expectedRevision: 1,
+      manifest: MANIFEST,
+    }),
+  ).toEqual({ status: "refused", code: "stale_revision" });
+  expect(await context.transport.view(source, context.id)).toMatchObject({
+    migration: { state: "source_stopped", revision: 1 },
+    manifest: null,
+  });
+});
+
 test("refuses a manifest whose chunks do not line up with the bundle", async () => {
   const context = await setup();
   await stopSource(context);
