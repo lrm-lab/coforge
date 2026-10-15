@@ -59,6 +59,8 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   prompt budget is 3KB excluding dynamic identity data. Ordinary questions and untracked DM work need no Task or per-turn memory bookkeeping;
   only before a long task does the Agent note where it is in
   `notes/active-context.md` (not MEMORY.md) so it can resume.
+  The reply body goes on stdin as a quoted heredoc, never a redirected file
+  (a failed write leaves stale content that would be sent).
   An inbox notice lists targets — `check --target` those and reply; do not
   read MEMORY.md first. Replies default to where the conversation is (top
   level, its thread, or a claimed Task's thread); a new topic or a thread's

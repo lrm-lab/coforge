@@ -37,10 +37,18 @@ test("retains reply instructions and thread addressing without provider tool nam
   expect(instructions).toContain("Reply to direct user messages");
   expect(instructions).toContain("exact `target=`");
   expect(instructions).toContain("including its thread suffix");
-  expect(instructions).toContain(
-    "Send the reply on stdin with `coforge message send --target <target>`",
-  );
   expect(instructions).not.toContain("Bash tool");
+});
+
+test("sends the reply body through a quoted heredoc, never through a file", () => {
+  // A body redirected from a file sends whatever the file holds: when writing it failed, that is
+  // stale or another user's content, sent under this Agent's name.
+  expect(instructions).toContain(
+    "Pass the reply body on stdin as a quoted heredoc, never by writing it to a file and redirecting:",
+  );
+  expect(instructions).toContain(
+    "```\ncoforge message send --target <target> <<'COFORGE_MESSAGE'\nreply body\nCOFORGE_MESSAGE\n```",
+  );
 });
 
 test("replies where the conversation is, by default rather than as a hard rule", () => {

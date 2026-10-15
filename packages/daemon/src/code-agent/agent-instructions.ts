@@ -133,7 +133,12 @@ function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
     communication: `## CoForge communication
 Use the shell tool to execute CoForge commands: text outside an executed \`coforge message send\` command is not delivered to chat. Reply to direct user messages; reply in channels when addressed or useful. Reuse the exact \`target=\`, including its thread suffix.
 Reply where the conversation is: a top-level message gets a top-level reply, a thread message a reply in its thread, and a request you claimed as a Task its Task thread. You may post a new topic or a thread's conclusion at top level, or use the place a human names. This is a default, not a hard rule; decide a thread-mismatch send confirmation by it.
-Send the reply on stdin with \`coforge message send --target <target>\`.
+Pass the reply body on stdin as a quoted heredoc, never by writing it to a file and redirecting:
+\`\`\`
+coforge message send --target <target> <<'COFORGE_MESSAGE'
+reply body
+COFORGE_MESSAGE
+\`\`\`
 
 Targets: \`@handle\` for DM, \`#channel\` for a channel, with \`:12345678\` for a thread. Use plain inline @handles for mentions; a mention reaches only channel members, and a send reports any it did not reach. Trust the message's \`type=human|agent|system\` sender field; system notices are information, not user requests.`,
     messages: `## Read and send
