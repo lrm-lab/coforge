@@ -26,16 +26,35 @@ export type ChannelSuggestion = {
  * is never recognized inside code, so completion does not open there.
  */
 function caretInCode(beforeCaret: string): boolean {
-  const fences = beforeCaret.split("```");
-  if (fences.length % 2 === 0) return true;
-  const afterLastFence = fences[fences.length - 1];
-  const line = afterLastFence.slice(afterLastFence.lastIndexOf("\n") + 1);
-  return line.split("`").length % 2 === 0;
+  let fenced = false;
+  let lastFenceEnd = 0;
+  for (
+    let fence = beforeCaret.indexOf("```");
+    fence !== -1;
+    fence = beforeCaret.indexOf("```", lastFenceEnd)
+  ) {
+    fenced = !fenced;
+    // Match split's nonoverlapping triples, including runs longer than three backticks.
+    lastFenceEnd = fence + 3;
+  }
+  if (fenced) return true;
+
+  const lineStart = Math.max(lastFenceEnd, beforeCaret.lastIndexOf("\n") + 1);
+  let inline = false;
+  for (
+    let tick = beforeCaret.indexOf("`", lineStart);
+    tick !== -1;
+    tick = beforeCaret.indexOf("`", tick + 1)
+  ) {
+    inline = !inline;
+  }
+  return inline;
 }
 
 /** An `@query` (any run without whitespace, `@` or `#`) or a `#query` (channel-name characters),
  * at the text start or after whitespace, running to the caret. */
-const REFERENCE_QUERY = /(?:^|\s)(?:@([^\s@#]*)|#([a-z0-9_-]*))$/;
+// Keep the strict boundary as an assertion so matches can start at the trigger itself.
+const REFERENCE_QUERY = /(?<!\S)(?:@([^\s@#]*)|#([a-z0-9_-]*))$/;
 
 /**
  * The completion query at the caret: the in-progress token starts at `@` or `#` (at the text

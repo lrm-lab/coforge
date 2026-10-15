@@ -6,6 +6,7 @@ import {
   moveInDirectory,
   pinsAfterDrag,
   splitPinnedConversations,
+  sectionChangeAfterDrag,
   type DirectoryLayout,
 } from "#src/features/conversations/pinned-conversations";
 
@@ -160,4 +161,31 @@ test("the row under the dragged one decides by its halves, including a midline c
 test("a move that leaves every row where it is returns the same layout, so nothing re-renders", () => {
   expect(moveInDirectory(layout, natural, "channel:ops", "pinned", 0)).toBe(layout);
   expect(moveInDirectory(layout, natural, "channel:eng", "channels", 0)).toBe(layout);
+});
+
+test("a conversation can cross custom groups, reorder inside one, and return to its default group", () => {
+  const grouped = {
+    ...layout,
+    channels: ["channel:general"],
+    agents: [],
+    "custom:first": ["direct:scout", "channel:eng"],
+    "custom:second": [],
+  };
+  const moved = moveInDirectory(grouped, natural, "direct:scout", "custom:second", 0);
+  expect(moved["custom:first"]).toEqual(["channel:eng"]);
+  expect(moved["custom:second"]).toEqual(["direct:scout"]);
+  expect(sectionChangeAfterDrag(grouped, moved, "direct:scout")).toEqual({
+    target: { kind: "direct", conversationId: "scout" },
+    sectionId: "second",
+    beforeConversationId: null,
+  });
+  const reordered = moveInDirectory(grouped, natural, "channel:eng", "custom:first", 0);
+  expect(reordered["custom:first"]).toEqual(["channel:eng", "direct:scout"]);
+  expect(sectionChangeAfterDrag(grouped, reordered, "channel:eng")?.beforeConversationId).toBe(
+    "scout",
+  );
+  const restored = moveInDirectory(moved, natural, "direct:scout", "agents", 0);
+  expect(restored.agents).toEqual(["direct:scout"]);
+  expect(sectionChangeAfterDrag(moved, restored, "direct:scout")?.sectionId).toBeNull();
+  expect(moveInDirectory(grouped, natural, "direct:scout", "channels", 0)).toBe(grouped);
 });

@@ -106,3 +106,20 @@ export function fileFromDropItems(
 ): File | undefined {
   return filesFromPaste(dataTransfer)[0];
 }
+
+/**
+ * A fresh id for composer-local state (pending attachments, outbox messages, idempotency keys).
+ * `crypto.randomUUID` exists only in secure contexts (`https://` or `localhost`); in a plain
+ * `http://` origin it throws or is missing, which used to kill the entire attachment flow
+ * before any card could render — a silently dead send button. The fallback keeps local
+ * uniqueness without depending on secure-context globals; only local state ever consumes it.
+ */
+export function localId(now: () => number = Date.now): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
+      return crypto.randomUUID();
+  } catch {
+    // Secure-context violation or absence; the fallback below still produces a unique string.
+  }
+  return `local-${now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}

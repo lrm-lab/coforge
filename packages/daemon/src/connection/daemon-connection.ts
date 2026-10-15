@@ -159,7 +159,12 @@ import { controlPayloadShape } from "./control-payload";
 import { connectionLiveness, INBOUND_STALLED_MS } from "./connection-liveness";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
 import { getLogger } from "@logtape/logtape";
-import { AGENT_RPC_TIMEOUT_MS, agentHeaders, channelEndpointFor } from "./agent-http-wire";
+import {
+  AGENT_RPC_TIMEOUT_MS,
+  agentHeaders,
+  channelEndpointFor,
+  sendAgentJson,
+} from "./agent-http-wire";
 import {
   adaptAgentHistoryResponse,
   adaptAgentSearchResponse,
@@ -417,6 +422,7 @@ export interface DaemonConnectionClient {
     request: import("./weekly-report-memory").WeeklyReportMemoryCommand,
     agentApiKey: string,
   ): Promise<import("./weekly-report-memory").WeeklyReportMemoryResult>;
+  agentMemoryDisposition?(request: unknown, agentApiKey: string): Promise<unknown>;
   agentOpenviking?(request: OpenVikingAgentProxyCommand, agentApiKey: string): Promise<unknown>;
   agentAttachment?(attachmentId: string, agentApiKey: string): Promise<Response>;
   agentAttachmentUpload?(request: Request, agentApiKey: string): Promise<Response>;
@@ -1494,6 +1500,22 @@ export class DaemonConnection implements DaemonConnectionClient {
   async requestSnapshot(request: ReminderSnapshotRequest): Promise<ReminderSync> {
     const reply = await this.#rpc(REMINDER_SNAPSHOT_METHOD, encodeReminderSnapshotRequest(request));
     return decodeReminderSync(rpcData(reply));
+  }
+
+  async agentMemoryDisposition(request: unknown, agentApiKey: string): Promise<unknown> {
+    this.#assertConnected();
+    return sendAgentJson(fetch, {
+      url: this.#serverEndpoint(
+        "Agent Memory disposition",
+        agentApiRoutes.cloud.memoryDisposition.path,
+      ),
+      agentApiKey,
+      daemonApiKey: this.#token,
+      method: "POST",
+      body: request,
+      what: "Memory disposition",
+      timeoutMs: 30_000,
+    });
   }
 
   async agentOpenviking(

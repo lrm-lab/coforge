@@ -55,6 +55,7 @@ export type AgentMessagesReactionRequest = {
 };
 
 export type AgentMessage = {
+  memoryHint?: import("./memory-disposition").MemoryHintDelivery;
   id: string;
   sequence: number;
   senderKind: MessageSenderKind;

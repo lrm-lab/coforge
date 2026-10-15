@@ -1011,3 +1011,61 @@ test("an acknowledgement reads past an unreadable receipt file to the daemon's o
   };
   expect(await scheduler.acknowledge("agent-a", job.reminderId, job.version)).toBe(true);
 });
+
+/** A clock whose `cancel` cannot stop a timer, the way a real timer can already be queued to run
+ * when it is cancelled: only the scheduler's own bookkeeping can make such a callback a no-op. */
+class LeakyClock extends Clock {
+  override cancel() {}
+}
+
+function countingScheduler(clock: Clock) {
+  const fires: string[] = [];
+  const scheduler = new ReminderScheduler(
+    { workspaceId: "workspace-a", computerId: "computer-a" },
+    new MemoryStore(),
+    async (request) => {
+      fires.push(request.requestId);
+      return { ...request, result: "accepted", fired: true, catchup: false };
+    },
+    async () => true,
+    clock,
+  );
+  return { scheduler, fires };
+}
+
+test("a timer replaced by a later arm does nothing even when the clock still runs it", async () => {
+  const clock = new LeakyClock();
+  const { scheduler, fires } = countingScheduler(clock);
+  await scheduler.apply(snapshot([job]));
+  await scheduler.apply(snapshot([job]));
+  expect(clock.timers).toHaveLength(2);
+  await clock.advance(1000);
+  await scheduler.awaitIdle();
+  expect(fires).toHaveLength(1);
+});
+
+test("a timer the clock still runs after stop() does nothing", async () => {
+  const clock = new LeakyClock();
+  const { scheduler, fires } = countingScheduler(clock);
+  await scheduler.apply(snapshot([job]));
+  scheduler.stop();
+  await clock.advance(1000);
+  await scheduler.awaitIdle();
+  expect(fires).toEqual([]);
+});
+
+test("a reminder due beyond one day re-arms at the day cap instead of firing early", async () => {
+  const clock = new Clock();
+  const { scheduler, fires } = countingScheduler(clock);
+  const day = 24 * 60 * 60_000;
+  const fireAt = clock.time + day + 6 * 60 * 60_000;
+  await scheduler.apply(snapshot([{ ...job, fireAt: new Date(fireAt).toISOString() }]));
+  expect(clock.timers.map((timer) => timer.at)).toEqual([clock.time + day]);
+  await clock.advance(day);
+  await scheduler.awaitIdle();
+  expect(fires).toEqual([]);
+  expect(clock.timers.map((timer) => timer.at)).toEqual([fireAt]);
+  await clock.advance(6 * 60 * 60_000);
+  await scheduler.awaitIdle();
+  expect(fires).toHaveLength(1);
+});

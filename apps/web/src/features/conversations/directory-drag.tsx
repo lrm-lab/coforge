@@ -1,16 +1,30 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type DOMAttributes, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
+  closestCenter,
+  DragOverlay,
+  KeyboardSensor,
+  MeasuringStrategy,
   MouseSensor,
+  TouchSensor,
   pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
   type CollisionDetection,
+  type DraggableSyntheticListeners,
   type DragEndEvent,
   type DragMoveEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core";
-import { SortableContext, useSortable } from "@dnd-kit/sortable";
-
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import type { DirectorySectionId } from "./directory-sections";
 import {
@@ -18,121 +32,179 @@ import {
   dropTarget,
   moveInDirectory,
   pinsAfterDrag,
+  sectionChangeAfterDrag,
   type DirectoryLayout,
   type HomeSection,
 } from "./pinned-conversations";
 
-type PinChange = NonNullable<ReturnType<typeof pinsAfterDrag>>;
 type DragData =
-  | { type: "row"; section: DirectorySectionId }
-  | { type: "section"; section: DirectorySectionId };
+  | { type: "row" | "section"; section: DirectorySectionId; label: string }
+  | { type: "group"; section: DirectorySectionId; label: string };
 
-/**
- * Drag-to-pin for the Chat sidebar ([dnd-kit Sortable](https://docs.dndkit.com/presets/sortable),
- * multiple containers). A row dragged into Pinned is pinned where it is dropped, Pinned rows
- * reorder among themselves, and a Pinned row dragged back to its own section is unpinned; the
- * rules live in `moveInDirectory`. The lists are re-laid out while the row is dragged (it goes
- * above or below the row it is over by which half it is over), so what is on screen when the
- * mouse is released is what is saved; that layout stays until the server's list comes back.
- *
- * A mouse drag starts after 6px of movement so a click still opens the conversation. There is no
- * touch or keyboard drag: a long press on a row opens its menu, which pins and unpins too.
- */
+/** dnd-kit's multiple-container pattern: preview row placement on drag-over, keep an overlay
+ * outside the scroll area, and persist only the placement the member actually drops. Section
+ * headers (built-in and custom) use their own SortableContext in the same DndContext, so rows can
+ * reach them too. `sectionIds` is the sections' order, top to bottom. */
 export function useDirectoryDrag({
   layout: base,
   natural,
-  commit,
+  sectionIds,
+  commitPins,
+  commitSection,
+  commitOrder,
 }: {
   layout: DirectoryLayout;
   natural: Record<HomeSection, readonly string[]>;
-  /** Applies the change to the lists (`layout`) at once and saves it, reporting its own failure. */
-  commit: (change: PinChange) => void;
+  sectionIds: readonly DirectorySectionId[];
+  commitPins: (change: NonNullable<ReturnType<typeof pinsAfterDrag>>) => void;
+  commitSection: (change: NonNullable<ReturnType<typeof sectionChangeAfterDrag>>) => void;
+  commitOrder: (order: DirectorySectionId[]) => void;
 }) {
   const [dragging, setDragging] = useState<DirectoryLayout | null>(null);
+  const [active, setActive] = useState<{
+    id: string;
+    group: boolean;
+    label: string;
+    width: number;
+  } | null>(null);
+  const [hoveredSection, setHoveredSection] = useState<DirectorySectionId | null>(null);
   const start = useRef<DirectoryLayout | null>(null);
-  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }));
-  // `commit` changes the lists in the same event as the drop, so they already show it.
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: { start: ["Space"], end: ["Space"], cancel: ["Escape"] },
+    }),
+  );
   const layout = dragging ?? base;
-
-  const moved = (current: DirectoryLayout, { active, over }: DragMoveEvent) => {
+  const moved = (current: DirectoryLayout, { active: item, over }: DragMoveEvent) => {
     const data = over?.data.current as DragData | undefined;
-    if (!over || !data) return current;
-    const dragged = active.rect.current.translated;
+    if (!over || !data || item.data.current?.type === "group") return current;
+    const rect = item.rect.current.translated;
     const to = dropTarget(
       current,
-      String(active.id),
-      { key: String(over.id), ...data },
-      dragged
-        ? { dragged: dragged.top + dragged.height / 2, over: over.rect.top + over.rect.height / 2 }
+      String(item.id),
+      {
+        key: String(over.id),
+        section: data.section,
+        type: data.type === "row" ? "row" : "section",
+      },
+      rect
+        ? { dragged: rect.top + rect.height / 2, over: over.rect.top + over.rect.height / 2 }
         : null,
     );
-    return to
-      ? moveInDirectory(current, natural, String(active.id), to.section, to.index)
-      : current;
+    return to ? moveInDirectory(current, natural, String(item.id), to.section, to.index) : current;
   };
-
-  // `onDragOver` fires when the row under the pointer changes and `onDragMove` on every move, so
-  // crossing the middle of the same row re-lays the list out too.
   const relayout = (event: DragMoveEvent) => {
+    const data = event.over?.data.current as DragData | undefined;
+    setHoveredSection(data?.section ?? null);
     const current = dragging ?? base;
     const next = moved(current, event);
     if (next !== current) setDragging(next);
   };
-
-  const onDragEnd = (event: DragEndEvent) => {
-    const before = start.current ?? base;
-    // Released over nothing that takes the row, the drag changes nothing.
-    const released = event.over ? moved(dragging ?? base, event) : before;
+  const reset = () => {
     start.current = null;
     setDragging(null);
-    const change = pinsAfterDrag(before, released);
-    if (change) commit(change);
+    setActive(null);
+    setHoveredSection(null);
   };
-
+  const onDragEnd = (event: DragEndEvent) => {
+    const before = start.current ?? base;
+    if (event.active.data.current?.type === "group") {
+      const keyOf = (id: string | number) =>
+        String(id).slice("group:".length) as DirectorySectionId;
+      const from = sectionIds.indexOf(keyOf(event.active.id));
+      const to = event.over ? sectionIds.indexOf(keyOf(event.over.id)) : -1;
+      reset();
+      if (from >= 0 && to >= 0 && from !== to) commitOrder(arrayMove([...sectionIds], from, to));
+      return;
+    }
+    const released = event.over ? moved(dragging ?? base, event) : before;
+    const section = sectionChangeAfterDrag(before, released, String(event.active.id));
+    const pins = pinsAfterDrag(before, released);
+    reset();
+    if (section) commitSection(section);
+    else if (pins) commitPins(pins);
+  };
   const context = {
     sensors,
-    collisionDetection: rowsFirst,
-    accessibility: { announcements: SILENT_ANNOUNCEMENTS },
-    onDragStart: () => {
+    collisionDetection: directoryCollision,
+    measuring: { droppable: { strategy: MeasuringStrategy.Always } },
+    accessibility: {
+      screenReaderInstructions: { draggable: m.chat_drag_instructions() },
+      announcements: {
+        onDragStart: ({
+          active: item,
+        }: {
+          active: { data: { current?: Record<string, unknown> } };
+        }) => m.chat_drag_start({ name: String(item.data.current?.label ?? "") }),
+        onDragEnd: () => m.chat_drag_end(),
+        onDragOver: ({ over }: DragOverEvent) =>
+          over ? m.chat_drag_over({ name: String(over.data.current?.label ?? "") }) : undefined,
+        onDragCancel: () => m.chat_drag_cancel(),
+      },
+    },
+    onDragStart: (event: {
+      active: {
+        id: string | number;
+        data: { current?: Record<string, unknown> };
+        rect: { current: { initial: { width: number } | null } };
+      };
+      activatorEvent: Event | null;
+    }) => {
       start.current = base;
       setDragging(base);
+      setActive({
+        id: String(event.active.id),
+        group: event.active.data.current?.type === "group",
+        label: String(event.active.data.current?.label ?? ""),
+        // dnd-kit measures `rect.initial` after this callback, so it is still empty here: the
+        // overlay takes the width of the row or section that was pressed instead.
+        width:
+          event.active.rect.current.initial?.width ||
+          draggedWidth(event.activatorEvent?.target ?? null),
+      });
     },
     onDragOver: relayout,
     onDragMove: relayout,
     onDragEnd,
-    onDragCancel: () => {
-      start.current = null;
-      setDragging(null);
-    },
+    onDragCancel: reset,
   };
-  return { layout, context, dragging: dragging !== null };
+  return {
+    layout,
+    context,
+    dragging: active !== null,
+    active,
+    hoveredSection,
+    sortingSections: active?.group === true,
+  };
 }
 
-/** The drop target under the pointer that takes the dragged row, a row before its section.
- * Released anywhere else, the drag drops nothing. */
-const rowsFirst: CollisionDetection = (args) => {
-  const dataOf = (hit: ReturnType<CollisionDetection>[number]) =>
-    hit.data?.droppableContainer.data.current as DragData | undefined;
-  const within = pointerWithin(args).filter((hit) => {
-    const data = dataOf(hit);
-    return data !== undefined && canDropInto(String(args.active.id), data.section);
+/** The width of the row (`li`) or section that a drag started on, from the pressed element. */
+function draggedWidth(target: EventTarget | null): number {
+  if (!(target instanceof Element)) return 0;
+  const item = target.closest("[data-chat-section-sortable], li");
+  return item?.getBoundingClientRect().width ?? 0;
+}
+
+/** Pointer drops must be inside a valid target. Keyboard drags use closestCenter, as the
+ * framework recommends; group sorting considers group headers only. Rows win over containers. */
+const directoryCollision: CollisionDetection = (args) => {
+  const group = args.active.data.current?.type === "group";
+  const droppableContainers = args.droppableContainers.filter((container) => {
+    const data = container.data.current as DragData | undefined;
+    return (
+      data && (group ? data.type === "group" : canDropInto(String(args.active.id), data.section))
+    );
   });
-  const rows = within.filter((hit) => dataOf(hit)?.type === "row");
-  return rows.length > 0 ? rows : within;
+  const scoped = { ...args, droppableContainers };
+  if (group || !args.pointerCoordinates) return closestCenter(scoped);
+  const hits = pointerWithin(scoped);
+  const rows = hits.filter((hit) => hit.data?.droppableContainer.data.current?.type === "row");
+  return rows.length > 0 ? rows : hits;
 };
 
-/** Rows are dragged with a pointer only, so there is nothing to announce. */
-const SILENT_ANNOUNCEMENTS = {
-  onDragStart: () => undefined,
-  onDragOver: () => undefined,
-  onDragEnd: () => undefined,
-  onDragCancel: () => undefined,
-};
-
-/**
- * One section's list as a drop target. Its rows are drawn where the layout puts them, not shifted
- * by the sortable preset, so the list on screen is always the layout a drop would save.
- */
 export function DirectoryDropList({
   section,
   keys,
@@ -146,16 +218,19 @@ export function DirectoryDropList({
 }) {
   const { setNodeRef, isOver, active } = useDroppable({
     id: `section:${section}`,
-    data: { type: "section", section } satisfies DragData,
+    data: { type: "section", section, label } satisfies DragData,
   });
   return (
-    <SortableContext id={section} items={[...keys]} strategy={keepStill}>
+    <SortableContext id={section} items={[...keys]} strategy={verticalListSortingStrategy}>
       <ul
         ref={setNodeRef}
         aria-label={label}
         className={cx(
-          "flex flex-col rounded-md",
-          isOver && active && canDropInto(String(active.id), section) && "bg-primary_hover",
+          "flex min-h-9 flex-col rounded-md",
+          isOver &&
+            active &&
+            canDropInto(String(active.id), section) &&
+            "bg-primary_hover ring-1 ring-secondary",
         )}
       >
         {children}
@@ -164,54 +239,166 @@ export function DirectoryDropList({
   );
 }
 
-const keepStill = () => null;
+/** Capture activates before React Aria handles the row/title press. A drag suppresses the
+ * following click; a normal press still navigates or collapses. Touch movement before the
+ * sensor's hold delay cancels activation, leaving list scrolling available. */
+export type DirectoryDragActivation = Pick<
+  DOMAttributes<HTMLElement>,
+  "onMouseDownCapture" | "onTouchStartCapture" | "onKeyDownCapture" | "onClickCapture"
+> & { "aria-describedby"?: string };
 
-/**
- * A draggable sidebar row. The row's link handles its own presses, so the drag listens in the
- * capture phase; the click that ends a drag is swallowed so a drop never opens the conversation.
- */
+function useItemDragActivation(
+  listeners: DraggableSyntheticListeners,
+  isDragging: boolean,
+): DirectoryDragActivation {
+  const dragged = useRef(false);
+  if (isDragging) dragged.current = true;
+  return {
+    onMouseDownCapture: (event) => {
+      if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+      dragged.current = false;
+      listeners?.onMouseDown?.(event);
+    },
+    onTouchStartCapture: (event) => {
+      if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+      dragged.current = false;
+      listeners?.onTouchStart?.(event);
+    },
+    onKeyDownCapture: (event) => {
+      if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+      if (event.target === event.currentTarget && event.key === "Enter") {
+        event.preventDefault();
+        event.currentTarget.querySelector<HTMLElement>("a[href], button[aria-controls]")?.click();
+        return;
+      }
+      listeners?.onKeyDown?.(event);
+      if (event.defaultPrevented) event.stopPropagation();
+    },
+    onClickCapture: (event) => {
+      if (!dragged.current || event.detail === 0) return;
+      dragged.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+  };
+}
+
+/** The conversation itself is draggable; it has no separate handle or tooltip. */
 export function DirectoryDragRow({
   id,
   section,
   disabled,
+  label,
   children,
 }: {
   id: string;
   section: DirectorySectionId;
-  /** A row the member cannot pin (an unjoined channel, an Agent with no DM yet) stays put. */
   disabled: boolean;
+  label: string;
   children: ReactNode;
 }) {
-  const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id,
     disabled,
-    data: { type: "row", section } satisfies DragData,
+    data: { type: "row", section, label } satisfies DragData,
   });
-  const dragged = useRef(false);
-  if (isDragging) dragged.current = true;
+  const activation = useItemDragActivation(listeners, isDragging);
   return (
     <li
       ref={setNodeRef}
-      onMouseDownCapture={(event) => {
-        dragged.current = false;
-        listeners?.onMouseDown?.(event);
-      }}
-      onClickCapture={(event) => {
-        // `detail` is 0 for a click from the keyboard, which is never the end of a drag.
-        if (!dragged.current || event.detail === 0) return;
-        dragged.current = false;
-        event.preventDefault();
-        event.stopPropagation();
-      }}
+      {...activation}
+      tabIndex={disabled ? undefined : 0}
+      aria-label={label}
+      aria-describedby={attributes["aria-describedby"]}
       data-dragging={isDragging || undefined}
-      className="relative py-px select-none [-webkit-touch-callout:none] data-dragging:z-10 data-dragging:cursor-grabbing data-dragging:opacity-60"
+      className="relative rounded-md py-px touch-manipulation outline-focus-ring select-none focus-visible:outline-2 focus-visible:outline-offset-2 data-dragging:bg-primary_hover data-dragging:opacity-30"
       style={{
-        // Rows only move along the list.
-        transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
+        transform: !isDragging && transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
         transition,
       }}
     >
       {children}
     </li>
+  );
+}
+
+/** A section's title row is its drag activator: the collapse button of one that collapses, the
+ * title itself of one that does not (Pinned). */
+export function DirectorySortableSection({
+  id,
+  label,
+  disabled,
+  className,
+  children,
+}: {
+  id: DirectorySectionId;
+  /** The wrapper's own classes, e.g. hiding an empty section. */
+  className?: string;
+  label: string;
+  disabled: boolean;
+  children: (headingProps: DirectoryDragActivation) => ReactNode;
+}) {
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
+    id: `group:${id}`,
+    disabled,
+    data: { type: "group", section: id, label } satisfies DragData,
+  });
+  const { onKeyDownCapture, ...activation } = useItemDragActivation(listeners, isDragging);
+  return (
+    <div
+      ref={setNodeRef}
+      role="group"
+      aria-label={label}
+      aria-describedby={attributes["aria-describedby"]}
+      tabIndex={disabled ? undefined : 0}
+      onKeyDownCapture={(event) => {
+        if (event.target === event.currentTarget) onKeyDownCapture?.(event);
+      }}
+      data-chat-section-sortable
+      className={cx(
+        "relative touch-manipulation outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2",
+        isDragging && "opacity-30",
+        className,
+      )}
+      style={{
+        transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
+        transition,
+      }}
+    >
+      {children({ ...activation, "aria-describedby": attributes["aria-describedby"] })}
+    </div>
+  );
+}
+
+/** Always mounted for the framework's drop animation; the preview is presentational, never a
+ * second sortable item. Its measured width is the source row's width, independent of scroll. */
+export function DirectoryDragOverlay({
+  active,
+  children,
+}: {
+  active: { group: boolean; label: string; width: number } | null;
+  children: ReactNode;
+}) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <DragOverlay dropAnimation={{ duration: 150, easing: "ease-out" }}>
+      {active ? (
+        <div
+          aria-hidden="true"
+          data-directory-drag-overlay
+          style={{ width: active.width }}
+          className="pointer-events-none rounded-md bg-primary p-1 shadow-lg ring-1 ring-secondary"
+        >
+          {active.group ? (
+            <span className="block truncate px-2 py-2 text-sm font-medium text-primary uppercase">
+              {active.label}
+            </span>
+          ) : (
+            children
+          )}
+        </div>
+      ) : null}
+    </DragOverlay>,
+    document.body,
   );
 }

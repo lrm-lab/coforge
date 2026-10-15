@@ -43,6 +43,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "userInfo"
     | "profileShow"
     | "profileUpdate"
+    | "agentMemoryDisposition"
     | "agentOpenviking"
     | "mentionPending"
     | "mentionExecute"
@@ -191,6 +192,15 @@ export class AgentRequestForwarder {
       request,
       agentApiKey,
     );
+  }
+
+  async agentMemoryDisposition(
+    context: string,
+    request: unknown,
+    agentApiKey: string,
+  ): Promise<unknown> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall("agentMemoryDisposition", NOT_CONNECTED)(request, agentApiKey);
   }
 
   async agentOpenviking(

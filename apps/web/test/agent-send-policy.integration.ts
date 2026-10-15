@@ -41,7 +41,7 @@ test("an Agent send forwards past its seen boundary, holds a newer reply, and re
       undefined,
       root.id,
     );
-    const target = `@${username}:${root.id.slice(0, 8)}`;
+    const target = `@${username}:${root.id}`;
 
     const idempotency = { execute: async (_scope: unknown, persist: () => unknown) => persist() };
     const sender = new SendDirectMessage(repo, idempotency as any, {} as any);

@@ -4,6 +4,7 @@ import {
   classifyRuntimeErrorText,
   type RuntimeErrorClassification,
 } from "./runtime-error-classification";
+import type { RuntimeErrorFingerprintFenceState } from "./runtime-error-recovery";
 
 /**
  * The single place a provider's error, crash or reconnect report becomes an Activity: a
@@ -23,9 +24,9 @@ const MAX_VISIBLE_ERROR_CHARS = 512;
  * `key=value`-shaped credential assignments (`token=...`, `password=...`), not
  * just recognized token prefixes. Reused by every provider's `error`/
  * `reconnecting` event, so there is exactly one redaction implementation for
- * runtime-failure text (the pre-existing `scrubActivityText` in runtime.ts,
- * which still applies the same rules to warning-level and other error-adjacent
- * Activity text, delegates to this function so the two never drift apart).
+ * runtime-failure text. The daemon runtime also calls this function directly
+ * for warning-level and other error-adjacent Activity text, keeping those
+ * rules in the same implementation.
  *
  * The `key=value` pattern keeps its prefix via a real capturing group, matching
  * `redactTrajectoryText` in activity-trajectory.ts (`$1[REDACTED]`) — the
@@ -87,6 +88,27 @@ export function buildRuntimeErrorActivity(
       errorClass: event.providerErrorClass ?? event.providerErrorCode ?? classified.errorClass,
       errorReason: event.providerErrorReason ?? classified.errorReason,
       fingerprint: fingerprintRuntimeError(detail),
+    },
+  };
+}
+
+/** Overrides a runtime_error Activity's wording once the fingerprint fence has tripped: same
+ * detailKind/level (still an ordinary runtime_error, so nothing new appears in a client that
+ * does not yet know about fencing), but a distinguishable `errorReason` and a detail that names
+ * the repeat and how to recover — CoForge's own words, not the last raw provider message alone. */
+export function buildRuntimeErrorFingerprintFenceActivity(
+  built: ReturnType<typeof buildRuntimeErrorActivity>,
+  fence: RuntimeErrorFingerprintFenceState,
+): ReturnType<typeof buildRuntimeErrorActivity> {
+  const lastErrorMessage = built.detail;
+  const detail = `Runtime stopped retrying after ${fence.attempts} consecutive failures with the same underlying error. Last error: ${lastErrorMessage} Restart this Agent once the issue is fixed.`;
+  return {
+    ...built,
+    detail,
+    entries: [{ kind: "text", text: `Error: ${detail}` }],
+    runtimeError: built.runtimeError && {
+      ...built.runtimeError,
+      errorReason: "runtime_error_fenced",
     },
   };
 }

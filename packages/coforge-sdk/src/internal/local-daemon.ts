@@ -1,3 +1,4 @@
+import { memoryHintMessage, readMemoryHint } from "./memory-hint";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   DaemonHandshakeRequestSchema,
@@ -251,6 +252,7 @@ export type LocalAttachment = {
   sizeBytes: number;
 };
 export type AgentMessageRecord = {
+  memoryHint?: import("#src/agent/memory-disposition").MemoryHintDelivery;
   id: string;
   sequence: number;
   senderKind: MessageSenderKind;
@@ -397,6 +399,7 @@ function encodeAgentMessageRecords(records: readonly AgentMessageRecord[]) {
     createdAt: m.createdAt,
     attachments: encodeLocalAttachments(m.attachments),
     task: m.task,
+    memoryHint: memoryHintMessage(m.memoryHint),
   }));
 }
 
@@ -413,6 +416,7 @@ function decodeAgentMessageRecords(
     attachments: readonly RawLocalAttachment[];
     task?: Parameters<typeof decodeMessageTask>[0];
     mentionsAgent?: boolean;
+    memoryHint?: { hintId: string; tool: string };
   }[],
 ): AgentMessageRecord[] {
   return records.map((m) => {
@@ -429,6 +433,7 @@ function decodeAgentMessageRecords(
       attachments: decodeLocalAttachments(m.attachments),
       ...(m.task ? { task: decodeMessageTask(m.task) } : {}),
       ...(m.mentionsAgent ? { mentionsAgent: true } : {}),
+      ...(m.memoryHint ? { memoryHint: readMemoryHint(m.memoryHint) } : {}),
     };
   });
 }

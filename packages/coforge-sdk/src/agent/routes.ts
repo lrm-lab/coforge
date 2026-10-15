@@ -71,6 +71,7 @@ export const agentApiRoutes = {
     githubCommitTrailers: { method: "POST", path: "/api/agent/v1/github-commit-trailers" },
     channels: { method: "POST", path: "/api/agent/v1/channels" },
     openviking: { method: "POST", path: "/api/agent/v1/openviking" },
+    memoryDisposition: { method: "POST", path: "/api/agent/v1/memory-dispositions" },
     users: USERS_ROUTE,
     mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
@@ -94,6 +95,7 @@ export const agentApiRoutes = {
     githubCommitTrailers: { method: "POST", path: "/api/agent/v1/github-commit-trailers" },
     channels: { method: "POST", path: "/api/agent/v1/channels" },
     openviking: { method: "POST", path: "/api/agent/v1/openviking" },
+    memoryDisposition: { method: "POST", path: "/api/agent/v1/memory-dispositions" },
     attachments: {
       method: "GET",
       /** Served by Web ahead of the id route: what a client may upload, and whether it uploads
@@ -204,6 +206,7 @@ export const agentApiRoutes = {
     githubCredentials: { method: "POST", path: "/api/agent/v1/github-credentials" },
     githubCommitTrailers: { method: "POST", path: "/api/agent/v1/github-commit-trailers" },
     openviking: { method: "POST", path: "/api/agent/v1/openviking" },
+    memoryDisposition: { method: "POST", path: "/api/agent/v1/memory-dispositions" },
     attachments: {
       method: "GET",
       collectionPath: "/api/agent/v1/attachments",

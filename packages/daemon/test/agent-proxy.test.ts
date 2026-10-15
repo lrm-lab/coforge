@@ -1209,7 +1209,9 @@ test("proxy forwards an authorized multipart attachment upload without exposing 
 
 test("proxy rejects an attachment upload without a trustworthy content-length", async () => {
   let calls = 0;
+  let requests = 0;
   const proxy = startAgentProxy({
+    onRequest: () => void requests++,
     runtime: {
       agentMessage: async () => ({}),
       agentAttachmentUpload: async () => {
@@ -1227,6 +1229,7 @@ test("proxy rejects an attachment upload without a trustworthy content-length", 
 
   // A streamed body carries no known length, so `fetch` sends it chunked without a
   // content-length header at all (verified against `Bun.serve` directly).
+  // Use independent connections so each length case reaches the proxy's own validation.
   const chunkedBody = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(new Uint8Array([1]));
@@ -1235,6 +1238,7 @@ test("proxy rejects an attachment upload without a trustworthy content-length", 
   });
   const missingLength = await fetch(uploadUrl, {
     method: "POST",
+    keepalive: false,
     headers: {
       authorization: `Bearer ${token}`,
       "content-type": "multipart/form-data; boundary=b",
@@ -1249,6 +1253,7 @@ test("proxy rejects an attachment upload without a trustworthy content-length", 
   const oversizedBody = new Uint8Array(10 * 1024 * 1024 + 64 * 1024 + 1);
   const overCap = await fetch(uploadUrl, {
     method: "POST",
+    keepalive: false,
     headers: {
       authorization: `Bearer ${token}`,
       "content-type": "multipart/form-data; boundary=b",
@@ -1257,6 +1262,8 @@ test("proxy rejects an attachment upload without a trustworthy content-length", 
   });
   expect(overCap.status).toBe(413);
   expect(calls).toBe(0);
+  // Both rejections must reach the application's length check, not just Bun's HTTP parser.
+  expect(requests).toBe(2);
 });
 
 test("proxy forwards the direct-upload session create route as plain JSON", async () => {

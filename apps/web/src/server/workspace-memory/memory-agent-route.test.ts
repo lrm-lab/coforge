@@ -61,7 +61,15 @@ function commands(
         return { messageId: "offer-msg" };
       },
     },
+    hints: {
+      async prepare() {
+        return { hint_id: "test-hint", tool: "memory_disposition" as const };
+      },
+    },
     channels: {
+      async isMemoryAgent() {
+        return false;
+      },
       async isActiveChannelAgent() {
         return true;
       },

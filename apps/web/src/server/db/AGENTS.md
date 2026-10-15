@@ -57,3 +57,4 @@ These rules apply to `src/server/db/`.
   deadlock or serialization failure (Prisma P2034, or a raw query's P2010 with
   the adapter's `TransactionWriteConflict`). Retry only those, a bounded number
   of times, and only a transaction that takes its locks in the writers' order.
+- `memory-disposition.repositories.server.ts` freezes Hint provenance at delivery, serializes receipts per Hint with a PostgreSQL row lock, and appends disposition/citation events atomically.

@@ -93,6 +93,54 @@ test("a caret before any @ finds nothing", () => {
   expect(activeReferenceQuery("@alice", 0)).toBeUndefined();
 });
 
+test("only the final trigger can form a query when mentions and channels compete", () => {
+  expect(activeReferenceQuery("@first @last", 12)).toEqual({
+    trigger: "@",
+    start: 7,
+    query: "last",
+  });
+  expect(activeReferenceQuery("#first @last", 12)).toEqual({
+    trigger: "@",
+    start: 7,
+    query: "last",
+  });
+  expect(activeReferenceQuery("@first #ops", 11)).toEqual({
+    trigger: "#",
+    start: 7,
+    query: "ops",
+  });
+  for (const text of ["@first abc@last", "@first#ops", "#old #UPPER", "@old @@last"]) {
+    expect(activeReferenceQuery(text, end(text))).toBeUndefined();
+  }
+});
+
+test("the trigger boundary keeps Unicode whitespace and UTF-16 offsets", () => {
+  expect(activeReferenceQuery("😀\u2003@张", 5)).toEqual({ trigger: "@", start: 3, query: "张" });
+  expect(activeReferenceQuery("text\u00a0#ops", 9)).toEqual({
+    trigger: "#",
+    start: 5,
+    query: "ops",
+  });
+  expect(activeReferenceQuery("text\ufeff@Ada", 9)).toEqual({
+    trigger: "@",
+    start: 5,
+    query: "Ada",
+  });
+  expect(activeReferenceQuery("text\u200b@Ada", 9)).toBeUndefined();
+});
+
+test("a trailing line break ends the query even when the preceding token is otherwise valid", () => {
+  for (const text of ["@ada\n", "#ops\r", "@ada\r\n", "@ada\u2028", "@ada\u2029"]) {
+    expect(activeReferenceQuery(text, end(text))).toBeUndefined();
+  }
+});
+
+test("another trigger after the caret does not change the active draft prefix", () => {
+  const text = "hi @Ada #ops";
+  expect(activeReferenceQuery(text, 7)).toEqual({ trigger: "@", start: 3, query: "Ada" });
+  expect(activeReferenceQuery(text, end(text))).toEqual({ trigger: "#", start: 8, query: "ops" });
+});
+
 test("a #query opens at the start of the text and after whitespace, like an @query", () => {
   expect(activeReferenceQuery("#", 1)).toEqual({ trigger: "#", start: 0, query: "" });
   expect(activeReferenceQuery("see #r", 6)).toEqual({ trigger: "#", start: 4, query: "r" });
@@ -152,6 +200,70 @@ test("a fenced code block keeps both triggers closed until it is fenced off agai
   });
   // After a closed fence on the same line, an open backtick still starts inline code.
   expect(activeReferenceQuery("```\nx\n``` `y #r", end("```\nx\n``` `y #r"))).toBeUndefined();
+});
+
+test("backtick runs retain nonoverlapping triple-fence and remaining inline-tick parity", () => {
+  const cases: [number, boolean][] = [
+    [0, true],
+    [1, false],
+    [2, true],
+    [3, false],
+    [4, false],
+    [5, false],
+    [6, true],
+    [7, false],
+    [8, true],
+    [9, false],
+    [10, false],
+    [11, false],
+    [12, true],
+    [13, false],
+    [14, true],
+  ];
+  for (const [ticks, opens] of cases) {
+    const text = "`".repeat(ticks) + " @ada";
+    expect(activeReferenceQuery(text, end(text))).toEqual(
+      opens ? { trigger: "@", start: ticks + 1, query: "ada" } : undefined,
+    );
+  }
+});
+
+test("only ticks on the current line after the last closed fence affect inline-code parity", () => {
+  for (const text of ["`stray ```code``` @ada", "```code``` `open\n @ada"]) {
+    expect(activeReferenceQuery(text, end(text))).toEqual({
+      trigger: "@",
+      start: text.length - 4,
+      query: "ada",
+    });
+  }
+  const open = "```code``` `open @ada";
+  expect(activeReferenceQuery(open, end(open))).toBeUndefined();
+});
+
+test("inline-code line resets retain the distinction between LF and other whitespace", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    const text = "`open" + newline + " @张";
+    expect(activeReferenceQuery(text, end(text))).toEqual({
+      trigger: "@",
+      start: text.length - 2,
+      query: "张",
+    });
+  }
+  for (const whitespace of ["\r", "\u2028", "\u2029"]) {
+    const text = "`open" + whitespace + " @张";
+    expect(activeReferenceQuery(text, end(text))).toBeUndefined();
+  }
+});
+
+test("a closed fence after the caret does not close the draft prefix's code region", () => {
+  const text = "```ts\n @ada ``` #ops";
+  const caret = text.indexOf("@ada") + 4;
+  expect(activeReferenceQuery(text, caret)).toBeUndefined();
+  expect(activeReferenceQuery(text, end(text))).toEqual({
+    trigger: "#",
+    start: text.length - 4,
+    query: "ops",
+  });
 });
 
 test("channel suggestions keep every channel whose name contains the query", () => {

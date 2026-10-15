@@ -134,7 +134,7 @@ test("A claim answers every selector, naming why a refused one failed and who ho
     expect(result.tasks.map((task) => task.number)).toEqual([open]);
 
     // A refused Task named by its message still answers with its number.
-    const doneMessage = created.tasks[3]!.messageId.slice(0, 8);
+    const doneMessage = created.tasks[3]!.messageId;
     const byMessage = await byAgent({ operation: "claim", messageId: doneMessage });
     expect(byMessage.claims).toEqual([
       { messageId: doneMessage, number: done, success: false, reason: "task is done" },

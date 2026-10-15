@@ -49,6 +49,40 @@ function storedBody(
   };
 }
 
+test("long unchanged Unicode prose keeps exact reference offsets and every surrounding byte", () => {
+  const prefix = "普通😀正文 ".repeat(300);
+  const body = `${prefix}@ada\n续行 #product task #68 尾文`;
+  const read = readMessageReferences(body);
+  expect(read.candidates).toEqual({
+    handles: ["ada"],
+    taskNumbers: [68],
+    channelNames: ["product"],
+    threads: [],
+  });
+  expect(read.resolve({ mention: () => ADA, channel, task: (number) => number === 68 })).toBe(
+    `${prefix}<@human:${ADA.id}>\n续行 ${channelReferenceToken(PRODUCT.id, PRODUCT.name)} ${taskReferenceToken(68)} 尾文`,
+  );
+});
+
+test("a recursive ampersand before an autolink keeps later unpositioned reference offsets", () => {
+  const body = "@ada &amp;amp; https://example.com @helper #product";
+  const read = readMessageReferences(body);
+  expect(read.candidates.handles).toEqual(["ada", "helper"]);
+  expect(read.resolve({ mention: (handle) => (handle === "ada" ? ADA : HELPER), channel })).toBe(
+    `<@human:${ADA.id}> &amp;amp; https://example.com <@agent:${HELPER.id}> ${channelReferenceToken(PRODUCT.id, PRODUCT.name)}`,
+  );
+});
+
+test("literal backslashes before an autolink and escaped channel text remain byte-for-byte", () => {
+  const body = String.raw`@ada \\https://example.com @helper \#product #random`;
+  const read = readMessageReferences(body);
+  expect(read.candidates.handles).toEqual(["ada", "helper"]);
+  expect(read.candidates.channelNames).toEqual(["random"]);
+  expect(read.resolve({ mention: (handle) => (handle === "ada" ? ADA : HELPER), channel })).toBe(
+    String.raw`<@human:${ADA.id}> \\https://example.com <@agent:${HELPER.id}> \#product ${channelReferenceToken(RANDOM.id, RANDOM.name)}`,
+  );
+});
+
 // Channels.
 
 test("a #name that names a channel becomes a token; any other #name stays byte-for-byte", () => {
@@ -156,6 +190,50 @@ test("HTML-looking lines are prose, the way the renderer shows them", () => {
       channel,
     }),
   ).toBe(`hi <b><@human:${ADA.id}></b> and a < b ${channelReferenceToken(PRODUCT.id, "product")}`);
+});
+
+test("long HTML-looking Unicode prose maps references past unchanged code, autolinks and entities", () => {
+  const untouched =
+    "`<code @helper #random>` <https://example.com/@helper#random> <ada@example.com>";
+  const prefix = "普通😀 <section> &lt;aside> ".repeat(200);
+  const body = `@ada ${untouched}\n${prefix}@helper #product task #68 <tail> @ada`;
+  const read = readMessageReferences(body);
+  expect(read.candidates).toEqual({
+    handles: ["ada", "helper"],
+    taskNumbers: [68],
+    channelNames: ["product"],
+    threads: [],
+  });
+  expect(
+    read.resolve({
+      mention: (handle) => (handle === "ada" ? ADA : HELPER),
+      channel,
+      task: (number) => number === 68,
+    }),
+  ).toBe(
+    `<@human:${ADA.id}> ${untouched}\n${prefix}<@agent:${HELPER.id}> ${channelReferenceToken(PRODUCT.id, PRODUCT.name)} ${taskReferenceToken(68)} <tail> <@human:${ADA.id}>`,
+  );
+});
+
+test("HTML-looking quote lines keep reference order and every surrounding byte", () => {
+  const body =
+    "> <section> @ada\n> `<code @helper>`\n> &lt;aside> #product\n> <b>task #68</b>\n\n<tail> @helper";
+  const read = readMessageReferences(body);
+  expect(read.candidates).toEqual({
+    handles: ["ada", "helper"],
+    taskNumbers: [68],
+    channelNames: ["product"],
+    threads: [],
+  });
+  expect(
+    read.resolve({
+      mention: (handle) => (handle === "ada" ? ADA : HELPER),
+      channel,
+      task: (number) => number === 68,
+    }),
+  ).toBe(
+    `> <section> <@human:${ADA.id}>\n> \`<code @helper>\`\n> &lt;aside> ${channelReferenceToken(PRODUCT.id, PRODUCT.name)}\n> <b>${taskReferenceToken(68)}</b>\n\n<tail> <@agent:${HELPER.id}>`,
+  );
 });
 
 test("an @mention in a link's label is part of the link, not a mention", () => {

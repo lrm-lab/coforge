@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package coforge.rpc.v1;
 
+import "coforge/rpc/v1/memory_hint.proto";
+
 message WorkspaceListRequest {
   uint32 protocol_major = 1;
   string request_id = 2;
@@ -198,6 +200,7 @@ message AgentRecoveryMessage {
   string body = 9;
   // True when the Agent is not in the channel and was notified of this one message.
   optional bool non_member_mention = 10;
+  MemoryHintDelivery memory_hint = 11;
 }
 
 message AgentUnreadSummaryEntry {
@@ -273,6 +276,7 @@ message AgentMessageDelivery {
   // Present on a tracked @mention delivery: the daemon answers it with an ACK that echoes this
   // envelope once the mention is drained into that launch's session, or with a terminal error.
   MentionDeliveryEnvelope mention_delivery = 18;
+  MemoryHintDelivery memory_hint = 19;
 }
 
 // The recipient Agent's launch and native session a tracked @mention delivery was issued for.

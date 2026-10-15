@@ -11,6 +11,8 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useHydrated } from "@tanstack/react-router";
+
+import { useAppToast } from "#src/components/ui/toast";
 import { FileIcon as FileTypeIcon } from "@untitledui/file-icons";
 import {
   AlertCircle,
@@ -33,8 +35,10 @@ import {
   dragCarriesFiles,
   fileFromDropItems,
   filesFromPaste,
+  localId,
   shouldSendOnEnter,
 } from "./composer-behavior";
+import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
 import { useComposerRequests, useMessageOutbox } from "./use-message-outbox";
 import {
@@ -290,6 +294,7 @@ export function MessageComposer({
 }) {
   const composerId = useId();
   const hydrated = useHydrated();
+  const toast = useAppToast();
   // Device-local draft, scoped to this chat (and thread): typing here never touches another
   // conversation, and the text survives switching chats, reloads, and restarts on this device.
   const draftKey = composerDraftKey(conversationId, threadRootId);
@@ -450,7 +455,7 @@ export function MessageComposer({
     const accepted = files.slice(0, room);
     if (accepted.length === 0) return;
     const pendingItems: PendingAttachment[] = accepted.map((file) => ({
-      localId: crypto.randomUUID(),
+      localId: localId(),
       file,
       progress: 0,
       failed: false,
@@ -490,11 +495,11 @@ export function MessageComposer({
     const idempotencyKey =
       retryRef.current?.body === text && retryRef.current.asTask === asTask
         ? retryRef.current.idempotencyKey
-        : crypto.randomUUID();
+        : localId();
     // Only files that finished uploading and were not removed.
     const uploaded = attachments.filter((item) => item.id);
     const message: OutgoingMessage = {
-      localId: crypto.randomUUID(),
+      localId: localId(),
       draftKey,
       body: text,
       pins: pinsInText(text, pins),
@@ -565,13 +570,30 @@ export function MessageComposer({
     lastCompositionEndAtRef.current = Date.now();
   }
 
-  /** Paste one or more files (e.g. copied in Finder, or a clipboard screenshot) through the
-   * same upload path as the paperclip button. Text-only pastes are left to the browser. */
-  function paste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const files = filesFromPaste(event.clipboardData);
-    if (files.length === 0) return;
+  /** Paste images through the same upload path as the paperclip button. Covers three clipboard
+   * shapes: real file bytes (Finder copies, screenshot tools), image URLs without bytes (copied
+   * from a web page — fetched to a blob here), and non-inline rasters (e.g. TIFF — re-encoded to
+   * PNG). A paste with nothing image-like now says so instead of staying silent, which used to
+   * read as a broken send button. Plain-text pastes are still left to the browser. */
+  async function paste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const clipboard = event.clipboardData;
+    const files = filesFromPaste(clipboard);
+    const urls = files.length > 0 ? [] : imageUrlsFromPaste(clipboard);
+    if (files.length === 0 && urls.length === 0) return;
     event.preventDefault();
-    void addFiles(files);
+    const inlineReady = await Promise.all(files.map((file) => ensureInlineImage(file)));
+    const fetched: File[] = [];
+    for (const url of urls) {
+      if (fetched.length + inlineReady.length + attachments.length >= MAX_ATTACHMENTS) break;
+      const file = await imageFileFromUrl(url);
+      if (file) fetched.push(await ensureInlineImage(file));
+    }
+    const ready = [...inlineReady, ...fetched];
+    if (ready.length === 0) {
+      toast.error(m.conversation_paste_no_image());
+      return;
+    }
+    void addFiles(ready);
   }
 
   /**

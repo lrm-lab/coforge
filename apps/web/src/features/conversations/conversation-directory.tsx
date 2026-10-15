@@ -1,7 +1,8 @@
 import { Bookmark, ChevronRight, Hash01 as Hash, Pin01, Plus } from "@untitledui/icons";
-import { useEffect, useId, useMemo, useState, type FC, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FC, type ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { DndContext } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Link as AriaLink } from "react-aria-components";
 
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
@@ -19,9 +20,21 @@ import { StartDirectMessagePopover } from "./start-direct-message-popover";
 import { useSavedEntries } from "./conversation-host";
 import { ConversationRowMenu } from "./conversation-row-menu";
 import { conversationRowMenuEnabled } from "./conversation-row-menu-model";
-import { useSidebarActions } from "./sidebar-lists";
+import { useChatSections, useSidebarActions } from "./sidebar-lists";
+import { ChatSectionDialog } from "./chat-section-dialog";
+import { ChatSectionCreateMenu, ChatSectionMenu } from "./chat-section-menu";
+import { sortSectionRows, type SortableRow } from "./chat-section-sort";
+import { directorySectionOrder, storedSectionOrder } from "./directory-section-order";
+import type { ChatSection } from "./chat-section.schemas";
 import type { DirectRow } from "./sidebar-rows";
-import { DirectoryDragRow, DirectoryDropList, useDirectoryDrag } from "./directory-drag";
+import {
+  DirectoryDragOverlay,
+  DirectoryDragRow,
+  DirectoryDropList,
+  DirectorySortableSection,
+  useDirectoryDrag,
+  type DirectoryDragActivation,
+} from "./directory-drag";
 import {
   channelRowKey,
   directRowKey,
@@ -36,7 +49,11 @@ import {
   type CollapsibleSectionId,
   type DirectorySectionId,
 } from "./directory-sections";
-import { EMPTY_SECTION_HIDDEN_CLASS } from "#src/features/settings/hide-empty-sidebar-sections";
+import {
+  EMPTY_SECTION_HIDDEN_CLASS,
+  readHideEmptySidebarSections,
+  writeHideEmptySidebarSections,
+} from "#src/features/settings/hide-empty-sidebar-sections";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { getLocale } from "#src/paraglide/runtime";
@@ -170,9 +187,11 @@ function ConversationRow({
       className={cx(
         // `-webkit-user-drag: none`: a sidebar drag moves the row (see `directory-drag.tsx`), never
         // the browser's own link drag.
-        "flex w-full cursor-pointer items-center gap-2 p-2 outline-focus-ring transition duration-100 ease-linear select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
+        "flex w-full cursor-pointer items-center p-2 outline-focus-ring transition duration-100 ease-linear select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
         card ? "rounded-xl border" : "rounded-md",
-        !lastMessage && "max-h-9",
+        // A single-line row (Saved) lines up with a section title: its 16px icon on the chevron's
+        // x and its text on the title's (`gap-1.5`, as a non-collapsible title uses).
+        lastMessage ? "gap-2" : "max-h-9 gap-1.5",
         current ? (card ? "bg-chat-selected-bg" : "bg-sidebar-accent") : "hover:bg-primary_hover",
         card && (current ? "border-chat-selected-border" : "border-transparent"),
       )}
@@ -180,7 +199,7 @@ function ConversationRow({
       {lastMessage ? (
         <span className="flex shrink-0 items-center justify-center">{icon}</span>
       ) : (
-        <span className="flex size-5 shrink-0 items-center justify-center">{icon}</span>
+        <span className="flex h-5 w-4 shrink-0 items-center justify-center">{icon}</span>
       )}
       {lastMessage ? (
         <span className="flex min-w-0 flex-1 flex-col justify-center">
@@ -222,12 +241,9 @@ function ConversationRow({
       ) : (
         <span
           className={cx(
-            "min-w-0 flex-1 truncate text-sm",
-            current
-              ? "font-semibold text-brand-secondary"
-              : muted
-                ? "text-tertiary"
-                : "text-secondary",
+            // The section titles' size, weight and colour, so Saved reads as one of them.
+            "min-w-0 flex-1 truncate text-sm font-medium",
+            current ? "text-brand-secondary" : muted ? "text-tertiary" : "text-primary",
           )}
         >
           {children}
@@ -264,8 +280,11 @@ function DirectorySection({
   label,
   icon: Icon,
   expanded,
+  saving,
   onToggle,
   action,
+  headingProps,
+  wrapTitle,
   children,
 }: {
   label: string;
@@ -274,19 +293,27 @@ function DirectorySection({
    * gives Channels and Direct messages a chevron and no second mark. */
   icon?: FC<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
   expanded?: boolean;
+  saving?: boolean;
   /** Absent on a section that cannot collapse: its rows are always shown, and its title row is
    * not a control at all, so it draws no chevron and takes no hover highlight. */
   onToggle?: () => void;
   /** Optional trailing control on the header row, e.g. a "+" that creates a channel. It sits
    * outside the toggle button so it is its own click target, not part of collapsing. */
   action?: ReactNode;
+  /** The title row's drag activation, when the section can be dragged to a new place. */
+  headingProps?: DirectoryDragActivation;
+  /** Wraps the title's toggle, e.g. in the section's context menu (`ChatSectionMenu`). */
+  wrapTitle?: (toggle: ReactNode) => ReactNode;
   children: ReactNode;
 }) {
   const listId = useId();
+  const wrap = wrapTitle ?? ((toggle: ReactNode) => toggle);
   // The title carries its own size, weight and colour, so it reads as a title of the list rather
   // than a caption above it (and beats the Button's own `font-semibold`, which belongs to a real
   // button).
-  const title = <span className="truncate text-sm font-medium text-primary">{label}</span>;
+  const title = (
+    <span className="block truncate text-sm font-medium text-primary uppercase">{label}</span>
+  );
   return (
     <>
       {/* One unified hover surface for the whole header row: the row itself carries the
@@ -302,35 +329,44 @@ function DirectorySection({
           )}
         >
           {onToggle ? (
-            // The whole caption row is the toggle, and `flex-1` fills the row width, so the hit
-            // area is large both ways (the user reported the old target was too small);
-            // `justify-start pl-0` puts the chevron on the same x as a row's own icon.
-            <Button
-              color="tertiary"
-              size="sm"
-              aria-expanded={expanded}
-              aria-controls={listId}
-              onPress={onToggle}
-              className="min-w-0 flex-1 justify-start pr-2 pl-0 hover:bg-transparent!"
-              iconLeading={
-                <ChevronRight
-                  aria-hidden="true"
-                  className={cx(
-                    "size-4 shrink-0 transition-transform duration-100 ease-linear",
-                    expanded && "rotate-90",
-                  )}
-                />
-              }
-            >
-              {title}
-            </Button>
+            wrap(
+              // The whole caption row is the toggle, and `flex-1` fills the row width, so the hit
+              // area is large both ways (the user reported the old target was too small);
+              // `justify-start pl-0` puts the chevron on the same x as a row's own icon.
+              <Button
+                {...headingProps}
+                color="tertiary"
+                size="sm"
+                aria-expanded={expanded}
+                aria-controls={listId}
+                onPress={onToggle}
+                isLoading={saving}
+                isDisabled={saving}
+                showTextWhileLoading
+                className="min-w-0 flex-1 justify-start pr-2 pl-0 hover:bg-transparent! [&_[data-text]]:min-w-0 [&_[data-text]]:flex-1 [&_[data-text]]:text-left"
+                iconLeading={
+                  <ChevronRight
+                    aria-hidden="true"
+                    className={cx(
+                      "size-4 shrink-0 transition-transform duration-100 ease-linear",
+                      expanded && "rotate-90",
+                    )}
+                  />
+                }
+              >
+                {title}
+              </Button>,
+            )
           ) : (
             // Nothing to press: the mark takes the chevron's gutter and the title keeps its x, so
             // this title line reads the same as the others without pretending to be a control.
             // `gap-1.5`, not the Button's own `gap-1`: the Button's label span adds 2px of its
             // own, so 6px here is what puts this title on the same x as a collapsible section's
             // (measured in the browser, both at 262px in the 1440 layout).
-            <span className="flex min-w-0 flex-1 items-center gap-1.5 pr-2">
+            <span
+              {...headingProps}
+              className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"
+            >
               {Icon ? (
                 <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
               ) : null}
@@ -340,8 +376,9 @@ function DirectorySection({
           {action}
         </div>
       </div>
-      {/* Kept mounted but hidden: collapsing must not throw away the rows' realtime state. */}
-      <div id={listId} hidden={onToggle ? !expanded : undefined}>
+      {/* Kept mounted but hidden: collapsing must not throw away the rows' realtime state. A
+          section that cannot collapse still folds while the sections are being reordered. */}
+      <div id={listId} hidden={expanded === false}>
         {children}
       </div>
     </>
@@ -379,6 +416,7 @@ export function ConversationDirectory({
   const timeZone = useTimeZone();
   const timeFormat = useTimeFormat();
   const timeContext = { now: new Date(), locale: getLocale(), timeZone, timeFormat };
+  const groups = useChatSections();
   // Derived once per list change, not per render: the drag reads `base` and `natural` on every
   // pointer move.
   const { sortedChannels, directRows, base, natural } = useMemo(() => {
@@ -411,19 +449,103 @@ export function ConversationDirectory({
         .filter((direct) => direct.pinned || !direct.hidden)
         .map((direct) => directRowKey(direct.conversationId)),
     };
+    const keyById = new Map([
+      ...sortedChannels.map((channel) => [channel.id, channelRowKey(channel.id)] as const),
+      ...directRows.map(
+        (direct) => [direct.conversationId, directRowKey(direct.conversationId)] as const,
+      ),
+    ]);
+    const available = new Set([...base.channels, ...base.agents]);
+    /** What a custom section's sort reads from each row. */
+    const sortable = new Map<string, SortableRow>([
+      ...sortedChannels.map((channel) => {
+        const key = channelRowKey(channel.id);
+        const row = {
+          key,
+          name: channel.name,
+          lastMessageAt: channel.lastMessage?.createdAt ?? null,
+        };
+        return [key, row] as const;
+      }),
+      ...directRows.map((direct) => {
+        const key = directRowKey(direct.conversationId);
+        return [key, { key, name: direct.name, lastMessageAt: direct.lastMessageAt }] as const;
+      }),
+    ]);
+    for (const group of groups.sections) {
+      const rows = group.conversationIds.flatMap((id) => {
+        const key = keyById.get(id);
+        const row = key && available.has(key) ? sortable.get(key) : undefined;
+        return row ? [row] : [];
+      });
+      const keys = sortSectionRows(rows, group.sortMode, getLocale());
+      base[`custom:${group.id}`] = keys;
+      const grouped = new Set(keys);
+      base.channels = base.channels.filter((key) => !grouped.has(key));
+      base.agents = base.agents.filter((key) => !grouped.has(key));
+    }
     return { sortedChannels, directRows, base, natural };
-  }, [channels, agents, directRowList, viewerId]);
+  }, [channels, agents, directRowList, viewerId, groups.sections]);
   const toast = useAppToast();
   const actions = useSidebarActions();
+  const [sectionRetry, setSectionRetry] = useState<{
+    save: () => Promise<void>;
+    sectionId?: string;
+  } | null>(null);
+  const pendingSectionIds = useRef(new Set<string>());
+  const [savingSections, setSavingSections] = useState<ReadonlySet<string>>(new Set());
+  const sectionFailed = (save: () => Promise<void>, sectionId?: string) =>
+    setSectionRetry({ save, sectionId });
+  const changeSection = (save: () => Promise<void>, sectionId?: string) => {
+    if (sectionId && pendingSectionIds.current.has(sectionId)) return;
+    if (sectionId) {
+      pendingSectionIds.current.add(sectionId);
+      setSavingSections(new Set(pendingSectionIds.current));
+    }
+    setSectionRetry(null);
+    save()
+      .catch(() => sectionFailed(save, sectionId))
+      .finally(() => {
+        if (sectionId) {
+          pendingSectionIds.current.delete(sectionId);
+          setSavingSections(new Set(pendingSectionIds.current));
+        }
+      });
+  };
+  const [editingSection, setEditingSection] = useState<ChatSection | "new" | null>(null);
+  const [deletingSection, setDeletingSection] = useState<ChatSection | null>(null);
+  const newSection = () => setEditingSection("new");
+  const sectionOrder = useMemo(
+    () =>
+      directorySectionOrder(
+        groups.order,
+        groups.sections.map((section) => section.id),
+      ),
+    [groups.order, groups.sections],
+  );
+  const [hideEmpty, setHideEmpty] = useState(false);
+  useEffect(() => setHideEmpty(readHideEmptySidebarSections()), []);
+  const changeHideEmpty = (hide: boolean) => {
+    writeHideEmptySidebarSections(hide);
+    setHideEmpty(hide);
+  };
   const drag = useDirectoryDrag({
     layout: base,
     natural,
-    commit: (change) => {
+    sectionIds: sectionOrder,
+    commitPins: (change) => {
       actions.arrange(change).catch((cause: unknown) => {
         console.error("pinned conversations could not be saved", cause);
         toast.error(m.conversation_menu_action_error());
       });
     },
+    commitSection: ({ target, sectionId, beforeConversationId }) =>
+      changeSection(
+        () => actions.moveToSection(target, sectionId, beforeConversationId),
+        sectionId ?? undefined,
+      ),
+    commitOrder: (order) =>
+      changeSection(() => actions.reorderSections(storedSectionOrder(order)), "section-order"),
   });
   /** All groups start expanded so SSR and the first client render agree; the stored preference
    * is applied right after mount (`localStorage` is unavailable during SSR). */
@@ -441,7 +563,12 @@ export function ConversationDirectory({
   const channelRow = (channel: DirectoryChannel) => {
     const current = channel.id === selectedChannelId;
     return (
-      <ConversationRowMenu target={{ kind: "channel", ...channel }}>
+      <ConversationRowMenu
+        target={{ kind: "channel", ...channel }}
+        sections={groups.sections}
+        sectionsReady={!groups.isPending && !groups.isError}
+        onSectionError={sectionFailed}
+      >
         <ConversationRow
           target={{ channelId: channel.id }}
           current={current}
@@ -494,7 +621,12 @@ export function ConversationDirectory({
     lastMessageAt,
     lastMessagePreview,
   }: DirectEntry) => (
-    <ConversationRowMenu target={{ kind: "direct", conversationId, pinned }}>
+    <ConversationRowMenu
+      target={{ kind: "direct", conversationId, pinned }}
+      sections={groups.sections}
+      sectionsReady={!groups.isPending && !groups.isError}
+      onSectionError={sectionFailed}
+    >
       <ConversationRow
         target={{ dmId: conversationId }}
         current={conversationId === selectedDmId}
@@ -531,17 +663,24 @@ export function ConversationDirectory({
     </ConversationRowMenu>
   );
   /** Every row by key, with whether it can be pinned (only a conversation the member is in). */
-  const rows = new Map<string, { node: ReactNode; draggable: boolean }>([
+  const rows = new Map<string, { node: ReactNode; draggable: boolean; label: string }>([
     ...sortedChannels.map(
       (channel) =>
         [
           channelRowKey(channel.id),
-          { node: channelRow(channel), draggable: conversationRowMenuEnabled(channel) },
+          {
+            node: channelRow(channel),
+            draggable: conversationRowMenuEnabled(channel),
+            label: channel.name,
+          },
         ] as const,
     ),
     ...directRows.map(
       (row) =>
-        [directRowKey(row.conversationId), { node: directRow(row), draggable: true }] as const,
+        [
+          directRowKey(row.conversationId),
+          { node: directRow(row), draggable: true, label: row.name },
+        ] as const,
     ),
   ]);
   const list = (section: DirectorySectionId) =>
@@ -549,7 +688,13 @@ export function ConversationDirectory({
       const row = rows.get(key);
       if (!row) return null;
       return (
-        <DirectoryDragRow key={key} id={key} section={section} disabled={!row.draggable}>
+        <DirectoryDragRow
+          key={key}
+          id={key}
+          section={section}
+          disabled={!row.draggable}
+          label={row.label}
+        >
           {row.node}
         </DirectoryDragRow>
       );
@@ -578,90 +723,247 @@ export function ConversationDirectory({
           {m.conversation_saved_nav()}
         </ConversationRow>
       </div>
-      {/* Pinned channels and DMs, together and in the order they were pinned. Empty, it shows
-          where to drop a row; a device without a mouse cannot drag, so it leaves it out there
-          (its rows pin from their long-press menu), and so does Hide empty sidebar sections until
-          a row is dragged. */}
-      <div
-        className={cx(
-          pinnedEmpty && "hidden any-pointer-fine:block",
-          directorySectionHideable({
-            itemCount: base.pinned.length,
-            dragging: drag.dragging,
-            revealWhileDragging: true,
-          }) && EMPTY_SECTION_HIDDEN_CLASS,
-        )}
+      {(groups.isError || groups.orderError) && (
+        <div role="alert" className={cx(DIRECTORY_INSET, "py-2 text-sm text-error-primary")}>
+          <p>{m.chat_section_load_error()}</p>
+          <Button color="link-gray" size="sm" onPress={() => void groups.retry()}>
+            {m.controls_retry()}
+          </Button>
+        </div>
+      )}
+      {sectionRetry && (
+        <div role="alert" className={cx(DIRECTORY_INSET, "py-2 text-sm text-error-primary")}>
+          <p>{m.chat_section_save_error()}</p>
+          <Button
+            color="link-gray"
+            size="sm"
+            onPress={() => changeSection(sectionRetry.save, sectionRetry.sectionId)}
+          >
+            {m.controls_retry()}
+          </Button>
+        </div>
+      )}
+      {/* Every section, in the member's order: each is dragged by its title row, and while one
+          is dragged they all fold to their titles so the list is short enough to aim at. */}
+      <SortableContext
+        items={sectionOrder.map((key) => `group:${key}`)}
+        strategy={verticalListSortingStrategy}
       >
-        {/* Pinned does not collapse (design mockup): it is the list's drop target, and a member
-            who pinned a handful of rows is saying those rows should stay in sight. Its pin takes
-            the gutter the other sections give their chevron. */}
-        <DirectorySection label={m.conversation_pinned_section()} icon={Pin01}>
-          <div className={DIRECTORY_INSET}>
-            <DirectoryDropList
-              section="pinned"
-              keys={drag.layout.pinned}
-              label={m.conversation_pinned_section()}
+        {sectionOrder.map((key) => {
+          // Not while the order is being saved, nor before it is known.
+          const reordering = savingSections.has("section-order") || !groups.orderReady;
+          if (key === "pinned")
+            return (
+              // Pinned channels and DMs, together and in the order they were pinned. Empty, it
+              // shows where to drop a row; a device without a mouse cannot drag, so it leaves it
+              // out there (its rows pin from their long-press menu), and so does Hide empty
+              // sidebar sections until a row is dragged.
+              <DirectorySortableSection
+                key={key}
+                id={key}
+                label={m.conversation_pinned_section()}
+                disabled={reordering}
+                className={cx(
+                  pinnedEmpty && "hidden any-pointer-fine:block",
+                  directorySectionHideable({
+                    itemCount: base.pinned.length,
+                    dragging: drag.dragging,
+                    revealWhileDragging: true,
+                  }) && EMPTY_SECTION_HIDDEN_CLASS,
+                )}
+              >
+                {(headingProps) => (
+                  // Pinned does not collapse (design mockup): it is the list's drop target, and a
+                  // member who pinned a handful of rows is saying those rows should stay in
+                  // sight. Its pin takes the gutter the other sections give their chevron.
+                  <DirectorySection
+                    label={m.conversation_pinned_section()}
+                    icon={Pin01}
+                    headingProps={headingProps}
+                    expanded={drag.sortingSections ? false : undefined}
+                  >
+                    <div className={DIRECTORY_INSET}>
+                      <DirectoryDropList
+                        section="pinned"
+                        keys={drag.layout.pinned}
+                        label={m.conversation_pinned_section()}
+                      >
+                        {pinnedEmpty ? (
+                          <li className="flex min-h-9 items-center px-2 text-xs text-quaternary">
+                            {m.conversation_pinned_empty_hint()}
+                          </li>
+                        ) : (
+                          list("pinned")
+                        )}
+                      </DirectoryDropList>
+                    </div>
+                  </DirectorySection>
+                )}
+              </DirectorySortableSection>
+            );
+          if (key === "channels")
+            return (
+              <DirectorySortableSection
+                key={key}
+                id={key}
+                label={m.channels_title()}
+                disabled={reordering}
+              >
+                {(headingProps) => (
+                  <DirectorySection
+                    label={m.channels_title()}
+                    headingProps={headingProps}
+                    expanded={!drag.sortingSections && !collapsed.includes("channels")}
+                    onToggle={() => toggle("channels")}
+                    action={
+                      onCreateChannel ? (
+                        <ButtonUtility
+                          icon={Plus}
+                          size="xs"
+                          color="tertiary"
+                          tooltip={m.channel_create()}
+                          aria-label={m.channel_create()}
+                          onClick={onCreateChannel}
+                          className="shrink-0 hover:bg-transparent!"
+                        />
+                      ) : null
+                    }
+                  >
+                    <div className={DIRECTORY_INSET}>
+                      <DirectoryDropList
+                        section="channels"
+                        keys={drag.layout.channels}
+                        label={m.channels_title()}
+                      >
+                        {list("channels")}
+                      </DirectoryDropList>
+                    </div>
+                  </DirectorySection>
+                )}
+              </DirectorySortableSection>
+            );
+          if (key === "agents")
+            return (
+              <DirectorySortableSection
+                key={key}
+                id={key}
+                label={m.messages_agents_action()}
+                disabled={reordering}
+              >
+                {(headingProps) => (
+                  <DirectorySection
+                    label={m.messages_agents_action()}
+                    headingProps={headingProps}
+                    expanded={!drag.sortingSections && !collapsed.includes("agents")}
+                    onToggle={() => toggle("agents")}
+                    action={<StartDirectMessagePopover />}
+                  >
+                    <div className={DIRECTORY_INSET}>
+                      <DirectoryDropList
+                        section="agents"
+                        keys={drag.layout.agents}
+                        label={m.messages_agents_action()}
+                      >
+                        {list("agents")}
+                      </DirectoryDropList>
+                    </div>
+                  </DirectorySection>
+                )}
+              </DirectorySortableSection>
+            );
+          const section = groups.sections.find((entry) => `custom:${entry.id}` === key);
+          if (!section) return null;
+          const keys = drag.layout[key] ?? [];
+          const label = `${section.emoji ? `${section.emoji} ` : ""}${section.name}`;
+          const saving = savingSections.has(section.id);
+          return (
+            <DirectorySortableSection
+              key={key}
+              id={key}
+              label={label}
+              disabled={saving || reordering}
+              className={
+                directorySectionHideable({
+                  itemCount: base[key]?.length ?? 0,
+                  dragging: drag.dragging,
+                  revealWhileDragging: true,
+                })
+                  ? EMPTY_SECTION_HIDDEN_CLASS
+                  : undefined
+              }
             >
-              {pinnedEmpty ? (
-                <li className="flex min-h-9 items-center px-2 text-xs text-quaternary">
-                  {m.conversation_pinned_empty_hint()}
-                </li>
-              ) : (
-                list("pinned")
+              {(headingProps) => (
+                <DirectorySection
+                  label={label}
+                  headingProps={headingProps}
+                  expanded={
+                    !drag.sortingSections && (!section.collapsed || drag.hoveredSection === key)
+                  }
+                  saving={saving}
+                  onToggle={() =>
+                    changeSection(
+                      () => actions.updateSection(section.id, { collapsed: !section.collapsed }),
+                      section.id,
+                    )
+                  }
+                  wrapTitle={(toggle) => (
+                    <ChatSectionMenu
+                      section={section}
+                      hideEmpty={hideEmpty}
+                      onSort={(sortMode) =>
+                        changeSection(
+                          () => actions.updateSection(section.id, { sortMode }),
+                          section.id,
+                        )
+                      }
+                      onHideEmptyChange={changeHideEmpty}
+                      onEdit={() => setEditingSection(section)}
+                      onCreate={newSection}
+                      onDelete={() => setDeletingSection(section)}
+                    >
+                      {toggle}
+                    </ChatSectionMenu>
+                  )}
+                >
+                  <div className={DIRECTORY_INSET}>
+                    <DirectoryDropList section={key} keys={keys} label={section.name}>
+                      {keys.length > 0 ? (
+                        list(key)
+                      ) : (
+                        <li className="flex min-h-9 items-center px-2 text-xs text-quaternary">
+                          {m.chat_section_empty()}
+                        </li>
+                      )}
+                    </DirectoryDropList>
+                  </div>
+                </DirectorySection>
               )}
-            </DirectoryDropList>
-          </div>
-        </DirectorySection>
-      </div>
-      <div>
-        <DirectorySection
-          label={m.channels_title()}
-          expanded={!collapsed.includes("channels")}
-          onToggle={() => toggle("channels")}
-          action={
-            onCreateChannel ? (
-              <ButtonUtility
-                icon={Plus}
-                size="xs"
-                color="tertiary"
-                tooltip={m.channel_create()}
-                aria-label={m.channel_create()}
-                onClick={onCreateChannel}
-                className="shrink-0 hover:bg-transparent!"
-              />
-            ) : undefined
-          }
-        >
-          <div className={DIRECTORY_INSET}>
-            <DirectoryDropList
-              section="channels"
-              keys={drag.layout.channels}
-              label={m.channels_title()}
-            >
-              {list("channels")}
-            </DirectoryDropList>
-          </div>
-        </DirectorySection>
-      </div>
-
-      <div>
-        <DirectorySection
-          label={m.messages_agents_action()}
-          expanded={!collapsed.includes("agents")}
-          onToggle={() => toggle("agents")}
-          action={<StartDirectMessagePopover />}
-        >
-          <div className={cx(DIRECTORY_INSET, "pb-3")}>
-            <DirectoryDropList
-              section="agents"
-              keys={drag.layout.agents}
-              label={m.messages_agents_action()}
-            >
-              {list("agents")}
-            </DirectoryDropList>
-          </div>
-        </DirectorySection>
-      </div>
+            </DirectorySortableSection>
+          );
+        })}
+      </SortableContext>
+      {/* Room under the last section; also the blank space whose context menu creates one. */}
+      <div className="pb-3" />
+      <ChatSectionCreateMenu
+        onCreate={newSection}
+        disabled={groups.isPending || groups.isError || drag.dragging}
+      />
+      {editingSection && (
+        <ChatSectionDialog
+          section={editingSection === "new" ? undefined : editingSection}
+          onClose={() => setEditingSection(null)}
+        />
+      )}
+      {deletingSection && (
+        <ChatSectionDialog
+          section={deletingSection}
+          deleting
+          onClose={() => setDeletingSection(null)}
+        />
+      )}
+      <DirectoryDragOverlay active={drag.active}>
+        {drag.active && !drag.active.group ? rows.get(drag.active.id)?.node : null}
+      </DirectoryDragOverlay>
     </DndContext>
   );
 }

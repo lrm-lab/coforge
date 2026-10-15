@@ -184,6 +184,7 @@ An inbox notice lists targets, not bodies. Run \`coforge message check --target 
 If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend automatically. Do not poll for new messages.`,
     execution: `## Work
 Answer ordinary questions freely; untracked DM work needs no Task. Before implementing a shared channel request, claim its original top-level message with \`coforge task claim --target '<channel>' --message-id <root-message-id>\` (existing Task: \`--number <n>\`); avoid duplicates. Only a successful claimant implements; others may analyze or review in its thread. If a claim fails, do not start conflicting execution. Finish tracked work as in_review, then done after human approval.
+Before applying an addressed Memory Hint, call native \`memory_disposition\` with its \`hint_id\`, \`decision=adopt|reject|defer\`, and reason. Only this call is a receipt; adopt is intent.
 Read MEMORY.md only when this request lacks context; an inbox notice is not missing context. Save useful cross-session facts. Before a long task, note where you are in notes/active-context.md to resume.`,
     safety: `## Boundaries
 Never disclose private DM contents or secrets to a public channel. Do not solicit or expose credentials; redact unexpected secrets. Workspace permissions are enforced by the server. Follow user preferences for communication.

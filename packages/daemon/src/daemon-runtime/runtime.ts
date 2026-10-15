@@ -13,23 +13,16 @@ import { FileConversationSessionStore } from "#src/persistence/conversation-sess
 import { escapePathIdentity } from "#src/persistence/path-scope";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
 import { CompactionTracker } from "#src/agent-runtime/compaction-tracker";
-import { RuntimeProgressTracker } from "#src/agent-runtime/runtime-progress";
 import {
   buildRuntimeErrorActivity,
+  buildRuntimeErrorFingerprintFenceActivity,
   buildRuntimeCrashedActivity,
   buildRuntimeReconnectingActivity,
   scrubRuntimeErrorText,
   fingerprintRuntimeError,
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
-import {
-  classifyRuntimeErrorText,
-  type RuntimeErrorClassification,
-} from "#src/agent-runtime/runtime-error-classification";
-import {
-  runtimeErrorFingerprintFenceDetail,
-  type RuntimeErrorFingerprintFenceState,
-} from "#src/agent-runtime/runtime-error-recovery";
+import { classifyRuntimeErrorText } from "#src/agent-runtime/runtime-error-classification";
 import {
   AgentProcessManager,
   type CodeAgentProviderFactory,
@@ -487,9 +480,6 @@ export class DaemonRuntime {
         ),
       );
   });
-  /** Liveness bookkeeping for the content-free "progress" signal - see
-   * agent-runtime/runtime-progress.ts. */
-  readonly #runtimeProgress = new RuntimeProgressTracker();
   readonly #codeAgentDiscovery: CodeAgentDiscovery;
 
   constructor(
@@ -2026,9 +2016,7 @@ export class DaemonRuntime {
     if (activityLaunch) activityLaunch.stopping = true;
     this.#interruptIfBusy(agentId, activityLaunch);
     this.#activityPublisher.forgetBusy(agentId);
-    this.#compactionTracker.dispose(agentId);
-    this.#runtimeProgress.dispose(agentId);
-    this.#lastContextUsage.delete(agentId);
+    this.#disposeLaunchObservations(agentId);
     for (const key of this.#contextHandoffs.keys())
       if (key === agentId || key.startsWith(`${agentId}:`)) this.#contextHandoffs.delete(key);
     this.#revokeLocalLaunch(agentId);
@@ -2130,7 +2118,6 @@ export class DaemonRuntime {
     this.#currentActivityLaunches.set(agentId, launch);
     this.#activityPublisher.forgetBusy(agentId);
     this.#compactionTracker.dispose(agentId);
-    this.#runtimeProgress.dispose(agentId);
     // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
     // #deliveryQueue.shouldHold on every delivery for this Agent from now on.
     this.#deliveryQueue.setProvider(agentId, config.provider);
@@ -2338,14 +2325,12 @@ export class DaemonRuntime {
       runtime.session.onExit(() => {
         launch.startup?.dispose();
         trajectory.dispose();
+        if (this.#currentActivityLaunches.get(agentId) !== launch) return;
         // No leaked watchdog timer, and a later launch for this Agent starts clean.
-        this.#compactionTracker.dispose(agentId);
-        this.#runtimeProgress.dispose(agentId);
-        this.#lastContextUsage.delete(agentId);
+        this.#disposeLaunchObservations(agentId);
         for (const key of this.#contextHandoffs.keys())
           if (key === agentId || key.startsWith(`${agentId}:`)) this.#contextHandoffs.delete(key);
         this.#collectSkillAgents.delete(agentId);
-        if (this.#currentActivityLaunches.get(agentId) !== launch) return;
         this.#messageAttention.clearAgent(agentId);
         // An unexpected exit only clears busy — whatever a queue_until_idle provider
         // was still holding stays queued for the next launch; only explicit Stop discards it
@@ -2432,9 +2417,7 @@ export class DaemonRuntime {
       }
       if (this.#currentActivityLaunches.get(agentId) === launch) {
         this.#activityPublisher.forgetBusy(agentId);
-        this.#compactionTracker.dispose(agentId);
-        this.#runtimeProgress.dispose(agentId);
-        this.#lastContextUsage.delete(agentId);
+        this.#disposeLaunchObservations(agentId);
         this.#currentActivityLaunches.delete(agentId);
       }
       throw error;
@@ -2568,6 +2551,8 @@ export class DaemonRuntime {
     controlled: boolean,
     event: AgentRuntimeEvent,
   ): void {
+    // A late trajectory flush must not mutate the replacement launch's Agent state.
+    if (this.#currentActivityLaunches.get(agentId) !== launch) return;
     const publish = (id: string, source: PublishedActivityLaunch, activity: ActivityDraft) =>
       this.#activityPublisher.publish(id, source, {
         ...activity,
@@ -2646,22 +2631,17 @@ export class DaemonRuntime {
       // Resumed output or a new tool call means a still-open compaction is done; report
       // that first.
       if (
-        (event.type === "tool-start" ||
-          activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_RESPONSE_STARTED ||
-          activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED) &&
-        this.#compactionTracker.finish(agentId) === "finished"
+        event.type === "tool-start" ||
+        activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_RESPONSE_STARTED ||
+        activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED
       )
-        publish(
+        this.#finishCompaction(
           agentId,
           launch,
-          this.#activity(
-            agentId,
-            AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED,
-            "info",
-            event.type === "tool-start"
-              ? "Compaction finished (inferred from a new tool call)."
-              : "Compaction finished (inferred from resumed output).",
-          ),
+          event.type === "tool-start"
+            ? "Compaction finished (inferred from a new tool call)."
+            : "Compaction finished (inferred from resumed output).",
+          event.conversation,
         );
       const carriesEntries =
         activity.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING &&
@@ -2712,12 +2692,7 @@ export class DaemonRuntime {
       return;
     }
     if (event.type === "compaction-finished") {
-      if (this.#compactionTracker.finish(agentId) === "finished")
-        publish(
-          agentId,
-          launch,
-          this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED, "info", ""),
-        );
+      this.#finishCompaction(agentId, launch, "", event.conversation);
       return;
     }
     if (event.type === "compaction-interrupted") {
@@ -2726,16 +2701,12 @@ export class DaemonRuntime {
       return;
     }
     if (event.type === "progress") {
-      this.#runtimeProgress.observe(
-        agentId,
-        this.#activityPublisher.lastBusy(agentId)?.launch === launch,
-        () =>
-          publish(
-            agentId,
-            launch,
-            this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS, "info", ""),
-          ),
-      );
+      if (this.#activityPublisher.lastBusy(agentId)?.launch !== launch)
+        publish(
+          agentId,
+          launch,
+          this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS, "info", ""),
+        );
       return;
     }
     // Single conversion for every provider (agent-runtime/runtime-error-activity.ts): formatting,
@@ -2747,18 +2718,20 @@ export class DaemonRuntime {
       // Classified once here: the Activity's fallback class/reason and this failure's retry
       // decision are the same reading of the same text.
       const classification = classifyRuntimeErrorText(event.message);
-      const built = this.#noteRuntimeErrorRecovery(
+      const built = buildRuntimeErrorActivity(event, classification);
+      // Retry policy uses the failure's text classification, never provider-native class/reason hints.
+      const fence = this.#runtimeErrorHold.noteFailure(
         agentId,
-        event,
-        buildRuntimeErrorActivity(event, classification),
         classification,
+        built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
       );
+      const reported = fence ? buildRuntimeErrorFingerprintFenceActivity(built, fence) : built;
       publish(
         agentId,
         launch,
-        this.#activity(agentId, built.detailKind, built.level, built.detail, {
-          entries: built.entries,
-          runtimeError: built.runtimeError,
+        this.#activity(agentId, reported.detailKind, reported.level, reported.detail, {
+          entries: reported.entries,
+          runtimeError: reported.runtimeError,
         }),
       );
       return;
@@ -2808,17 +2781,12 @@ export class DaemonRuntime {
       void this.#mentionDeliveries.settleTurnEnd(agentId, event.conversation?.conversationId);
     // A turn ending means a still-open compaction is done; report that before the turn's own
     // idle/failed/interrupted Activity.
-    if (this.#compactionTracker.finish(agentId) === "finished")
-      publish(
-        agentId,
-        launch,
-        this.#activity(
-          agentId,
-          AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED,
-          "info",
-          "Compaction finished (inferred from turn end).",
-        ),
-      );
+    this.#finishCompaction(
+      agentId,
+      launch,
+      "Compaction finished (inferred from turn end).",
+      event.conversation,
+    );
     // A turn outcome (of any status) resolves any error observed mid-turn; a crash wording only
     // applies to a process exit with no such outcome in between. A failed turn that already
     // showed its own runtime_error Activity this turn (`crashDetail` set by the `error` event
@@ -2850,6 +2818,22 @@ export class DaemonRuntime {
     if (collectorFailReason && this.#collectSkillAgents.has(agentId))
       void this.#failCollectorRunningSlots(agentId, collectorFailReason).catch(() => {});
     void this.drainAppInboxNotices(agentId).catch(() => {});
+  }
+
+  /** Ends an open compaction once, before the Activity that established its completion. */
+  #finishCompaction(
+    agentId: string,
+    launch: ActivityLaunch,
+    detail: string,
+    conversation?: AgentRuntimeEvent["conversation"],
+  ): void {
+    if (this.#compactionTracker.finish(agentId) !== "finished") return;
+    this.#activityPublisher.publish(agentId, launch, {
+      ...this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED, "info", detail),
+      ...(conversation
+        ? { conversationId: conversation.conversationId, conversationTarget: conversation.target }
+        : {}),
+    });
   }
 
   /**
@@ -3291,9 +3275,7 @@ export class DaemonRuntime {
     if (activityLaunch) activityLaunch.stopping = true;
     this.#interruptIfBusy(agentId, activityLaunch);
     this.#activityPublisher.forgetBusy(agentId);
-    this.#compactionTracker.dispose(agentId);
-    this.#runtimeProgress.dispose(agentId);
-    this.#lastContextUsage.delete(agentId);
+    this.#disposeLaunchObservations(agentId);
     this.#revokeLocalLaunch(agentId);
     const stopping = this.#stopAgent(agentId)
       .catch((error) => {
@@ -3344,6 +3326,12 @@ export class DaemonRuntime {
       this.#activityPublisher.publish(agentId, activityLaunch, this.#stoppedActivity(agentId));
     this.#activityPublisher.forgetBusy(agentId);
     this.#currentActivityLaunches.delete(agentId);
+  }
+
+  /** Forgets one ended launch's observation state without affecting another Agent. */
+  #disposeLaunchObservations(agentId: string): void {
+    this.#compactionTracker.dispose(agentId);
+    this.#lastContextUsage.delete(agentId);
   }
 
   #readyRunningAgentIds(): string[] {
@@ -3437,49 +3425,6 @@ export class DaemonRuntime {
       detail,
       runtimeError ? { runtimeError } : {},
     );
-  }
-
-  /**
-   * Decides what a mid-turn runtime error means for this Agent's queued deliveries —
-   * retry after a backoff, stop retrying, or stop retrying because the same fingerprint has now
-   * failed `RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD` times in a row — and returns the Activity
-   * that should actually be reported (unchanged, unless the fence just tripped). The retry
-   * decision is always taken from this failure's own text (`classifyRuntimeErrorText`), never
-   * from a provider's own class/reason hint: an arbitrary provider-native string is not something
-   * a fixed retry table can look up.
-   */
-  #noteRuntimeErrorRecovery(
-    agentId: string,
-    event: RuntimeErrorEvent,
-    built: ReturnType<typeof buildRuntimeErrorActivity>,
-    classification: RuntimeErrorClassification,
-  ): ReturnType<typeof buildRuntimeErrorActivity> {
-    const fence = this.#runtimeErrorHold.noteFailure(
-      agentId,
-      classification,
-      built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
-    );
-    return fence ? this.#runtimeErrorFingerprintFenceActivity(built, fence) : built;
-  }
-
-  /** Overrides a runtime_error Activity's wording once the fingerprint fence has tripped: same
-   * detailKind/level (still an ordinary runtime_error, so nothing new appears in a client that
-   * does not yet know about fencing), but a distinguishable `errorReason` and a detail that names
-   * the repeat and how to recover — CoForge's own words, not the last raw provider message alone. */
-  #runtimeErrorFingerprintFenceActivity(
-    built: ReturnType<typeof buildRuntimeErrorActivity>,
-    fence: RuntimeErrorFingerprintFenceState,
-  ): ReturnType<typeof buildRuntimeErrorActivity> {
-    const detail = runtimeErrorFingerprintFenceDetail(fence, built.detail);
-    return {
-      ...built,
-      detail,
-      entries: [{ kind: "text", text: `Error: ${detail}` }],
-      runtimeError: built.runtimeError && {
-        ...built.runtimeError,
-        errorReason: "runtime_error_fenced",
-      },
-    };
   }
 
   /** Attempts delivery of everything just released from an explicit or busy-gated hold, as one
@@ -4125,7 +4070,6 @@ export class DaemonRuntime {
     for (const launch of this.#currentActivityLaunches.values()) launch.startup?.dispose();
     this.#compactionTracker.disposeAll();
     this.#runtimeErrorHold.disposeAll();
-    this.#runtimeProgress.disposeAll();
     this.#lastContextUsage.clear();
     for (const agentId of this.#agentInputQueues.keys())
       this.#closeAgentInputQueue(agentId, new Error("daemon runtime is stopping"));
@@ -4241,17 +4185,17 @@ export class DaemonRuntime {
 
 function safeRuntimeActivityMessage(activity: string, level: string, message: string): string {
   if (level === "error") return truncateCodePoints(message, 512);
-  if (level === "warning") return scrubActivityText(message);
+  if (level === "warning") return scrubRuntimeErrorText(message);
   if (activity === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS) return "";
   if (activity === AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND)
-    return truncateCodePoints(scrubActivityText(message), 200);
+    return truncateCodePoints(scrubRuntimeErrorText(message), 200);
   if (
     activity === AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED ||
     activity === AGENT_ACTIVITY_DETAIL_KIND.CHECKING_MESSAGES ||
     activity === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING ||
     activity === AGENT_ACTIVITY_DETAIL_KIND.THINKING_END
   ) {
-    return scrubActivityText(message);
+    return scrubRuntimeErrorText(message);
   }
   // The content-free run-start announcement (ActivityTrajectory#startRun) carries no
   // message; let it through empty instead of falling to the generic sentence below.
@@ -4265,15 +4209,8 @@ function safeRuntimeActivityMessage(activity: string, level: string, message: st
   return "Agent activity observed.";
 }
 
-// Delegates to agent-runtime/runtime-error-activity.ts's shared scrubber/fingerprint so
-// warning-level Activity text and runtime-failure classification never drift from the single
-// redaction/fingerprint implementation the new `error`/`reconnecting` event path also uses.
-function scrubActivityText(message: string): string {
-  return scrubRuntimeErrorText(message);
-}
-
 function runtimeFailureDiagnostic(message: string) {
-  const safe = scrubActivityText(message);
+  const safe = scrubRuntimeErrorText(message);
   return {
     errorClass: "AgentRuntimeError",
     errorReason: "runtime_failure",

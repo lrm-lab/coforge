@@ -897,7 +897,7 @@ test("an Agent's channel message reaches other Agents without an @mention: unmut
       idempotencyKey: crypto.randomUUID(),
       body: "Who takes the release notes?",
     });
-    const thread = root.id.slice(0, 8);
+    const thread = root.id;
     const first = await repo.sendAgentMessage(general.id, helper.id, "I can.", [], thread);
     expect(recipients(first)).toEqual([]);
     const second = await repo.sendAgentMessage(general.id, scout.id, "Me too.", [], thread);
@@ -2291,7 +2291,7 @@ test("a #name:shortid naming a channel thread is stored as a thread token, and e
       });
     const short = root.id.slice(0, 8);
     const token = `<@thread:${product.id}:${root.id}:product>`;
-    const target = `#product:${short}`;
+    const target = `#product:${root.id.slice(0, 13)}`;
 
     // Every spelling of the root resolves: eight, seven or six hex characters, the whole id, any
     // case. A reply's id, a prefix two messages share, an unknown channel and code stay as written,
@@ -2300,7 +2300,7 @@ test("a #name:shortid naming a channel thread is stored as a thread token, and e
       `@helper see #product:${short},`,
       `#PRODUCT:${root.id.slice(0, 7).toUpperCase()},`,
       `#product:${root.id.slice(0, 6)} and 看#product:${root.id}的讨论;`,
-      `not #product:${reply.id.slice(0, 8)}, #product:${prefix}, #nope:${short} or \`#product:${short}\``,
+      `not #product:${reply.id}, #product:${prefix}, #nope:${short} or \`#product:${short}\``,
     ].join(" ");
     const human = await send(general.id, typed);
     expect(human.body).toBe(
@@ -2308,17 +2308,17 @@ test("a #name:shortid naming a channel thread is stored as a thread token, and e
         `<@agent:${helper.id}> see ${token},`,
         `${token},`,
         `${token} and 看${token}的讨论;`,
-        `not #product:${reply.id.slice(0, 8)}, #product:${prefix}, #nope:${short} or \`#product:${short}\``,
+        `not #product:${reply.id}, #product:${prefix}, #nope:${short} or \`#product:${short}\``,
       ].join(" "),
     );
     const readable = [
       `@helper see ${target},`,
       `${target},`,
       `${target} and 看${target}的讨论;`,
-      `not #product:${reply.id.slice(0, 8)}, #product:${prefix}, #nope:${short} or \`#product:${short}\``,
+      `not #product:${reply.id}, #product:${prefix}, #nope:${short} or \`#product:${short}\``,
     ].join(" ");
 
-    // Every body that reaches the daemon or the Agent's CLI reads `#product:<8 hex>`.
+    // Every body that reaches the daemon or the Agent's CLI reads `#product:xxxxxxxx-xxxx`.
     expect(publishedBody(human.id)).toBe(readable);
     const bodyOf = (messages: readonly { id?: string; messageId?: string; body: string }[]) =>
       messages.find((message) => (message.id ?? message.messageId) === human.id)?.body;
@@ -2573,9 +2573,11 @@ test("channel threads enforce channel scope and isolate reads, recovery, notific
       root.id,
     ]);
     expect(
-      (await repo.readMessages(workspace.id, agent.id, `#threads:${root.id.slice(0, 8)}`)).map(
-        (message) => [message.id, message.target, message.attachments.at(0)?.id],
-      ),
+      (await repo.readMessages(workspace.id, agent.id, `#threads:${root.id}`)).map((message) => [
+        message.id,
+        message.target,
+        message.attachments.at(0)?.id,
+      ]),
     ).toEqual([
       [quietReply.id, target, undefined],
       [mentionedReply.id, target, undefined],
@@ -2592,7 +2594,7 @@ test("channel threads enforce channel scope and isolate reads, recovery, notific
       agent.id,
       "Agent thread response",
       undefined,
-      root.id.slice(0, 8),
+      root.id,
     );
     expect(agentReply.target).toBe(target);
     expect(
@@ -2715,7 +2717,7 @@ test("channel threads enforce channel scope and isolate reads, recovery, notific
       agent.id,
       "first Agent reply",
       undefined,
-      agentOnlyRoot.id.slice(0, 8),
+      agentOnlyRoot.id,
     );
     const aliceMember = await db.conversationMember.findFirstOrThrow({
       where: { conversationId: general.id, userId: alice.id },
@@ -2743,7 +2745,7 @@ test("channel threads enforce channel scope and isolate reads, recovery, notific
       agent.id,
       "second Agent reply",
       undefined,
-      agentOnlyRoot.id.slice(0, 8),
+      agentOnlyRoot.id,
     );
     expect(
       await db.threadFollow.findUnique({
@@ -4167,7 +4169,7 @@ test("an Agent's thread reply enrolls exactly the members its stored mention row
       helper.id,
       `@${bob.username} please look; not \`@${carol.username}\` or [ask @${carol.username}](https://example.com)`,
       undefined,
-      root.id.slice(0, 8),
+      root.id,
     );
     const followers = await db.threadFollow.findMany({
       where: { rootMessageId: root.id },
@@ -4274,7 +4276,7 @@ test("a thread reply from a person or an Agent enrolls its sender, the members i
       helper.id,
       `@${dave.username} and scout, please take this.`,
       [],
-      root.id.slice(0, 8),
+      root.id,
       [{ type: "agent", id: scout.id, name: "scout" }],
     );
     expect(await followers(root.id)).toEqual(
@@ -4290,7 +4292,7 @@ test("a thread reply from a person or an Agent enrolls its sender, the members i
       idempotencyKey: crypto.randomUUID(),
       body: "root by erin",
     });
-    await repo.sendAgentMessage(general.id, scout.id, "On it.", [], erinRoot.id.slice(0, 8));
+    await repo.sendAgentMessage(general.id, scout.id, "On it.", [], erinRoot.id);
     await channels.send({
       workspaceId: workspace.id,
       userId: dave.id,

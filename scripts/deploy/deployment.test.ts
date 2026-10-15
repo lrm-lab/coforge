@@ -388,7 +388,7 @@ describe("remote-deploy.sh compose invocation shape", () => {
 });
 
 describe("candidate failure diagnostics", () => {
-  for (const mode of ["available", "unavailable", "oversized"]) {
+  for (const mode of ["available", "unavailable", "oversized", "invalid_version"]) {
     test(`diagnostics precede rollback without leaking logs (${mode})`, async () => {
       const root = await mkdtemp(join(tmpdir(), "coforge-deploy-failure-"));
       try {
@@ -465,9 +465,27 @@ elif [[ "$1" = inspect ]]; then
   if [[ "$*" = *RestartCount* ]]; then
     if [[ "$*" = *cadd1e* ]]; then echo 'running 0 0 healthy'; else echo 'running 0 3 unhealthy'; fi
   else echo healthy; fi
+elif [[ "$1" = exec ]]; then
+  echo fixture-private-value >&2
+  shift 2
+  shift
+  exec "$TEST_BUN" --preload "$FIXTURE_ROOT/feed-preload.ts" "$@"
 fi
 `,
           { mode: 0o700 },
+        );
+        await Bun.write(
+          join(root, "feed-preload.ts"),
+          `globalThis.fetch = async () => {
+            if (Bun.env.DIAGNOSTICS_MODE === "invalid_version") {
+              return new Response("0.1.2-dev..1\\n");
+            }
+            throw Object.assign(new Error("fixture-private-value"), {
+              code: Bun.env.DIAGNOSTICS_MODE === "oversized"
+                ? "unknown-private-value".repeat(2000)
+                : "ENOTFOUND",
+            });
+          };`,
         );
         await writeFile(
           join(root, "bin/curl"),
@@ -499,6 +517,8 @@ if [[ "$*" = *http_code* ]]; then echo 500; fi
               PATH: `${join(root, "bin")}:${Bun.env.PATH}`,
               FIXTURE_ROOT: root,
               DIAGNOSTICS_MODE: mode,
+              TEST_BUN: process.execPath,
+              COFORGE_RELEASE_FEED_URL: "https://releases-staging.coforge.cn",
             },
             stdout: "pipe",
             stderr: "pipe",
@@ -528,8 +548,16 @@ if [[ "$*" = *http_code* ]]; then echo 500; fi
           // application's own health cannot: classify it without printing its log.
           expect(stderr).toContain("proxy state/exit/restarts/health: running 0 0 healthy");
           expect(stderr).toContain("proxy_signature=acme_challenge_unreachable");
+          expect(stderr).toContain(
+            mode === "oversized"
+              ? "candidate release feed: network_error"
+              : mode === "invalid_version"
+                ? "candidate release feed: invalid_version"
+                : "candidate release feed: dns_error",
+          );
         } else {
           expect(stderr).not.toContain("proxy_signature=");
+          expect(stderr).not.toContain("candidate release feed:");
         }
         const calls = await Bun.file(join(root, "calls")).text();
         expect(calls).toContain(
@@ -543,6 +571,8 @@ if [[ "$*" = *http_code* ]]; then echo 500; fi
           expect(calls).toContain(
             "timeout --kill-after=1s 5s docker logs --tail 120 --since 10m cadd1e",
           );
+        if (mode !== "unavailable")
+          expect(calls).toContain("timeout --kill-after=1s 5s docker exec abc123 bun -e");
       } finally {
         await rm(root, { recursive: true, force: true });
       }

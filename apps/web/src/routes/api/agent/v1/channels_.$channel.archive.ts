@@ -5,9 +5,7 @@ import {
   type AgentChannelManagementRepository,
 } from "#src/server/conversations/agent-channel-management.server";
 import {
-  channelManagementErrorResponse,
-  readJsonBody,
-  idempotencyKeyFrom,
+  handleAgentChannelArchiveStatePost,
   type AgentChannelManagementPrincipal,
 } from "#src/server/agents/agent-channel-routes.server";
 
@@ -17,19 +15,7 @@ export async function handleAgentChannelArchivePost(
   principal: AgentChannelManagementPrincipal,
   repository: AgentChannelManagementRepository,
 ): Promise<Response> {
-  const body = await readJsonBody(request);
-  const idempotencyKey = idempotencyKeyFrom(body);
-  try {
-    const result = await repository.setArchived(
-      principal.workspaceId,
-      principal.agentId,
-      channel,
-      true,
-    );
-    return Response.json({ idempotencyKey, ...result });
-  } catch (error) {
-    return channelManagementErrorResponse(error, "channel archive failed");
-  }
+  return handleAgentChannelArchiveStatePost(request, channel, principal, repository, true);
 }
 
 export const Route = createFileRoute("/api/agent/v1/channels_/$channel/archive")({

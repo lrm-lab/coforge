@@ -1,5 +1,7 @@
 import { textResponse } from "#src/server/http/text-response.server";
 import { AgentChannelManagementError } from "#src/server/conversations/agent-channel-management-error.server";
+import type { AgentChannelManagementRepository } from "#src/server/conversations/agent-channel-management.server";
+import { agentIdempotencyKey, readAgentJsonBody } from "./agent-http-routes.server";
 
 /** Who a channel-management route acts as: one Agent, in one Workspace. Declared once here because
  * the whole family shares it - the route files under `routes/api/agent/v1/channels*` each used to
@@ -13,6 +15,32 @@ export {
   agentIdempotencyKeyFromQuery as idempotencyKeyFromQuery,
   readAgentJsonBody as readJsonBody,
 } from "./agent-http-routes.server";
+
+/** Apply the archive state selected by the route, preserving the shared response envelope. */
+export async function handleAgentChannelArchiveStatePost(
+  request: Request,
+  channel: string,
+  principal: AgentChannelManagementPrincipal,
+  repository: AgentChannelManagementRepository,
+  archived: boolean,
+): Promise<Response> {
+  const body = await readAgentJsonBody(request);
+  const idempotencyKey = agentIdempotencyKey(body);
+  try {
+    const result = await repository.setArchived(
+      principal.workspaceId,
+      principal.agentId,
+      channel,
+      archived,
+    );
+    return Response.json({ idempotencyKey, ...result });
+  } catch (error) {
+    return channelManagementErrorResponse(
+      error,
+      `channel ${archived ? "archive" : "unarchive"} failed`,
+    );
+  }
+}
 
 /**
  * Maps a channel-management failure onto its declared HTTP status and body; anything else (an

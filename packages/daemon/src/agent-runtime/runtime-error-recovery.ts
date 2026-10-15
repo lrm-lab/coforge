@@ -125,14 +125,3 @@ export class RuntimeErrorFingerprintFence {
     this.#state.clear();
   }
 }
-
-/** English detail text for a tripped fingerprint fence: names the streak length and the last
- * error, and gives the one thing that actually recovers it — the daemon has no finer-grained
- * user-facing recovery flow for this yet (that is a later CR's territory), so the only truthful
- * instruction here is to restart the Agent once the underlying issue is fixed. */
-export function runtimeErrorFingerprintFenceDetail(
-  state: RuntimeErrorFingerprintFenceState,
-  lastErrorMessage: string,
-): string {
-  return `Runtime stopped retrying after ${state.attempts} consecutive failures with the same underlying error. Last error: ${lastErrorMessage} Restart this Agent once the issue is fixed.`;
-}

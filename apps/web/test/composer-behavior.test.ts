@@ -7,6 +7,8 @@ import {
   IME_ENTER_GUARD_MS,
   shouldSendOnEnter,
 } from "#src/features/conversations/composer-behavior";
+import { localId } from "#src/features/conversations/composer-behavior";
+import { INLINE_IMAGE_TYPES, imageUrlsFromPaste } from "#src/features/conversations/paste-image";
 
 const baseEnter = { key: "Enter", shiftKey: false, isComposing: false, keyCode: 13 };
 const noComposition = { lastCompositionEndAt: null, now: 0 };
@@ -141,5 +143,97 @@ describe("fileFromDropItems", () => {
     const first = new File(["a"], "first.txt");
     const second = new File(["b"], "second.txt");
     expect(fileFromDropItems({ files: [first, second], items: [] })).toBe(first);
+  });
+});
+
+describe("imageUrlsFromPaste", () => {
+  const makeClipboard = (
+    data: Record<string, string>,
+    types: string[] = Object.keys(data),
+  ): Parameters<typeof imageUrlsFromPaste>[0] => ({
+    getData: (type: string) => data[type] ?? "",
+    types,
+  });
+
+  test("returns [] for empty pastes and pastes without link payloads", () => {
+    expect(imageUrlsFromPaste(null)).toEqual([]);
+    expect(imageUrlsFromPaste({ getData: () => "", types: ["text/plain"] })).toEqual([]);
+    expect(imageUrlsFromPaste({ getData: () => "", types: ["text/html"] })).toEqual([]);
+  });
+
+  test("never claims a plain-text link — those stay browser default, unprevented", () => {
+    expect(
+      imageUrlsFromPaste(
+        makeClipboard({ "text/plain": "https://github.com/lrm-lab/coforge/pull/1" }),
+      ),
+    ).toEqual([]);
+    expect(
+      imageUrlsFromPaste(
+        makeClipboard({
+          "text/plain": "https://github.com/lrm-lab/coforge/pull/1",
+          "text/html": '<a href="https://github.com/lrm-lab/coforge/pull/1">PR</a>',
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  test("takes the single <img> from html-only pastes (web apps that ship no file bytes)", () => {
+    expect(
+      imageUrlsFromPaste(
+        makeClipboard({
+          "text/html": '<div><img alt="i" src="https://cdn.example.com/pic.jpg"></div>',
+        }),
+      ),
+    ).toEqual(["https://cdn.example.com/pic.jpg"]);
+  });
+
+  test("several <img> elements read as rich text, not an intended image", () => {
+    expect(
+      imageUrlsFromPaste(
+        makeClipboard({
+          "text/html":
+            '<div><img src="https://cdn.example.com/a.jpg"><img src="https://cdn.example.com/b.webp"></div>',
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  test("ignores javascript: and data: sources", () => {
+    expect(
+      imageUrlsFromPaste(
+        makeClipboard({
+          "text/html": '<img src="data:image/png;base64,AAAA"><img src="javascript:alert(1)">',
+        }),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("INLINE_IMAGE_TYPES", () => {
+  test("matches the server's inline-image whitelist", () => {
+    expect(INLINE_IMAGE_TYPES.has("image/tiff")).toBe(false);
+    expect(INLINE_IMAGE_TYPES.has("image/png")).toBe(true);
+  });
+});
+
+describe("localId", () => {
+  test("returns a UUID shape when crypto.randomUUID is available (secure contexts, Bun tests)", () => {
+    const id = localId();
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(id).not.toBe(localId());
+  });
+
+  test("falls back to a unique non-UUID string when randomUUID throws", () => {
+    const original = globalThis.crypto.randomUUID;
+    try {
+      globalThis.crypto.randomUUID = () => {
+        throw new TypeError("randomUUID is not available in this secure context");
+      };
+      const id = localId();
+      expect(id).toMatch(/^local-[0-9a-z]+-[0-9a-z]+$/);
+      expect(id).not.toBe(localId());
+    } finally {
+      globalThis.crypto.randomUUID = original;
+    }
   });
 });

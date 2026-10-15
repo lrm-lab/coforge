@@ -91,10 +91,10 @@ Activity（`apps/web/src/server/agents/computer-lifecycle-activity.server.ts`）
 产生的、没有可渲染文本的 stream/system 事件（例如 Claude Code 的部分 stream 帧、Codex 的
 原始 reasoning 增量、Kiro 的 `tool_call_update`/`plan`/`usage_update` 通知、Pi/CoForge 的
 turn/message 生命周期事件）；这些信号自 2026-09-18 起统一上报为归一化的 `progress` 事件
-（`packages/agent/src/contract.ts`），由 Daemon core（`packages/daemon/src/agent-runtime/
-runtime-progress.ts`）决定是否上报——不再是固定的“每 10 秒最多一条”限流，而是只在 Agent
+（`packages/agent/src/contract.ts`），由 Daemon core（`packages/daemon/src/daemon-runtime/runtime.ts`）
+决定是否上报——不再是固定的“每 10 秒最多一条”限流，而是只在 Agent
 当前这次 launch 尚未显示为忙碌（working/thinking）时才上报一次；一旦已经忙碌，同样的信号
-只刷新存活时间戳，不重复产生 Activity，同样不产生新的 Agent 业务状态。
+不重复产生 Activity，存活展示由上述忙碌 Activity 心跳维护，也不产生新的 Agent 业务状态。
 
 心跳只覆盖续租，不覆盖租约已经到期之后的情形：租约一旦到期，服务端没有可信来源，只能在
 下一次读写时把 Agent 惰性投影为 `online`。为此服务端自己运行一个 liveness sweep，而不是等浏览器按需触发：`OBSERVE_ACTIVITY`/`OBSERVE_STATUS` 维护一个按

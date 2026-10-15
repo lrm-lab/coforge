@@ -39,3 +39,4 @@ export type {
   UsageSnapshot,
   UsageWindow,
 } from "#src/contract";
+export { createMemoryDispositionTool } from "#src/memory-disposition-tool";

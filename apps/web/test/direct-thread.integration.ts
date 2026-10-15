@@ -37,7 +37,7 @@ test("thread send and unread ranges stay separate from the main conversation", a
       user.id,
       "root",
     );
-    const shortTarget = `@${username}:${root.id.slice(0, 8)}`;
+    const shortTarget = `@${username}:${root.id.slice(0, 13)}`;
     const target = `@${username}:${root.id}`;
     const reply = await repo.sendMessage(
       opened.conversationId,
@@ -59,7 +59,7 @@ test("thread send and unread ranges stay separate from the main conversation", a
     expect(
       (
         await repo.readMessages(workspace.id, agent.id, `@${username}`, {
-          around: root.id.slice(0, 8),
+          around: root.id,
           limit: 1,
         })
       ).map((m) => m.id),
@@ -80,7 +80,7 @@ test("thread send and unread ranges stay separate from the main conversation", a
       user.id,
       "other root",
     );
-    const otherShortTarget = `@${username}:${other.id.slice(0, 8)}`;
+    const otherShortTarget = `@${username}:${other.id.slice(0, 13)}`;
     const otherTarget = `@${username}:${other.id}`;
     await repo.sendMessage(
       opened.conversationId,
@@ -103,7 +103,7 @@ test("thread send and unread ranges stay separate from the main conversation", a
       agent.id,
       "thread response",
       undefined,
-      root.id.slice(0, 8),
+      root.id,
     );
     expect(
       (
@@ -129,7 +129,7 @@ test("thread send and unread ranges stay separate from the main conversation", a
     expect(
       (
         await repo.readMessages(workspace.id, agent.id, target, {
-          after: reply.id.slice(0, 8),
+          after: reply.id,
         })
       ).map((m) => m.body),
     ).toEqual<string[]>(["new thread message", "thread response"]);
@@ -426,7 +426,7 @@ test("an Agent history page reports the boundary it joins and the conversation i
     const fifth = await send("five");
     // An anchored read never joins; a page after an unread anchor leaves a gap.
     expect(
-      (await repo.readMessagesPage(workspace.id, agent.id, dm, { around: fourth.id.slice(0, 8) }))
+      (await repo.readMessagesPage(workspace.id, agent.id, dm, { around: fourth.id }))
         .modelSeenUpToSeq,
     ).toBeNull();
     expect(
@@ -444,7 +444,7 @@ test("an Agent history page reports the boundary it joins and the conversation i
     const thread = await repo.readMessagesPage(
       workspace.id,
       agent.id,
-      `${dm}:${first.id.slice(0, 8)}`,
+      `${dm}:${first.id.slice(0, 13)}`,
     );
     expect(thread.modelSeenUpToSeq).toBe(reply.sequence);
     expect(thread.consumptionScope).toEqual({

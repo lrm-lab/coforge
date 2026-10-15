@@ -266,3 +266,82 @@ test("a person in both lists while they refetch is one candidate, and a name tha
   expect(byLabel.get("张三")).toEqual([people[0]]);
   expect(byLabel.has("bob")).toBe(false);
 });
+
+test("code-only names across plain segments claim no pins or hand-typed mentions", () => {
+  const pins = Object.freeze([ZHANG, SCOUT]);
+  const body = "普通段 😀 `@张三` 间隔\n```\n@小侦察\n```\n普通末段";
+  expect(rewriteMentionPins(body, pins)).toEqual({ body, mentions: [] });
+  expect(pinsInText(body, pins)).toBe(NO_PINS);
+  expect(unpinnedLabelMentions(body, pins, mentionsByLabel(people))).toEqual([]);
+});
+
+test("prose names after plain and code segments keep offsets, binding order and references", () => {
+  const pins = Object.freeze([ZHANG, SCOUT]);
+  const body = "前言 😀 `@张三` 间隔\n```\n@小侦察\n```\nplain before @小侦察 and @张三 done";
+  expect(rewriteMentionPins(body, pins)).toEqual({
+    body: "前言 😀 `@张三` 间隔\n```\n@小侦察\n```\nplain before @scout and @zhangsan done",
+    mentions: [binding(SCOUT), binding(ZHANG)],
+  });
+  expect(pinsInText(body, pins)).toBe(pins);
+  const byLabel = mentionsByLabel(people);
+  const found = unpinnedLabelMentions(body, [], byLabel);
+  expect(found.map((mention) => mention.label)).toEqual(["小侦察", "张三"]);
+  expect(found[0]!.candidates).toBe(byLabel.get("小侦察")!);
+  expect(found[1]!.candidates).toBe(byLabel.get("张三")!);
+});
+
+test("a label containing an at sign still binds in prose and stays untouched in code", () => {
+  const person = candidate("user", "u-nested", "nested", "A@B");
+  const pins = Object.freeze([mentionPinFor(person)]);
+  const body = "gap `@A@B` plain @A@B ok";
+  expect(rewriteMentionPins(body, pins)).toEqual({
+    body: "gap `@A@B` plain @nested ok",
+    mentions: [{ type: "user", id: "u-nested", name: "nested" }],
+  });
+  expect(pinsInText(body, pins)).toBe(pins);
+  const byLabel = mentionsByLabel([person]);
+  const found = unpinnedLabelMentions(body, [], byLabel);
+  expect(found).toEqual([{ label: "A@B", candidates: [person] }]);
+  expect(found[0]!.candidates).toBe(byLabel.get("A@B")!);
+});
+
+test("hand-typed names before and after many claimed ranges retain text order and candidate references", () => {
+  const pins = Object.freeze([ZHANG]);
+  const body = "😀 @李四 " + "@张三 `@小侦察`\n".repeat(200) + "@小侦察 @李四";
+  const byLabel = mentionsByLabel(people);
+  const found = unpinnedLabelMentions(body, pins, byLabel);
+  expect(found.map((mention) => mention.label)).toEqual(["李四", "小侦察"]);
+  expect(found[0]!.candidates).toBe(byLabel.get("李四")!);
+  expect(found[1]!.candidates).toBe(byLabel.get("小侦察")!);
+  expect(pinsInText(body, pins)).toBe(pins);
+});
+
+test("a blocked longer candidate does not hide the unclaimed name beyond the pin", () => {
+  const pin = Object.freeze({ kind: "user" as const, id: "pair", handle: "pair", label: "A @B" });
+  const byLabel = mentionsByLabel([
+    candidate("user", "long", "long", "A @B @C"),
+    candidate("user", "a", "a", "A"),
+    candidate("user", "b", "b", "B"),
+    candidate("user", "c", "c", "C"),
+    candidate("user", "d", "d", "D"),
+  ]);
+  const found = unpinnedLabelMentions("@A @B @C,@D", Object.freeze([pin]), byLabel);
+  expect(found.map((mention) => mention.label)).toEqual(["C", "D"]);
+  expect(found[0]!.candidates).toBe(byLabel.get("C")!);
+  expect(found[1]!.candidates).toBe(byLabel.get("D")!);
+});
+
+test("an ambiguous picked name blocks nothing while a separate unambiguous pin still does", () => {
+  const other = Object.freeze({ ...ZHANG, id: "u-other", handle: "other" });
+  const pins = Object.freeze([ZHANG, other, SCOUT]);
+  const body = "@小侦察,@张三 @张三 @张三 @李四";
+  const byLabel = mentionsByLabel(people);
+  const found = unpinnedLabelMentions(body, pins, byLabel);
+  expect(found.map((mention) => mention.label)).toEqual(["张三", "李四"]);
+  expect(found[0]!.candidates).toBe(byLabel.get("张三")!);
+  expect(pinsInText(body, pins)).toEqual([SCOUT]);
+  expect(rewriteMentionPins(body, pins)).toEqual({
+    body: "@scout,@张三 @张三 @张三 @李四",
+    mentions: [binding(SCOUT)],
+  });
+});

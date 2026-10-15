@@ -275,20 +275,31 @@ export class ReminderScheduler {
     if (!this.#running) return;
     const key = this.#scheduleKey(job.ownerAgentId, job.reminderId);
     const due = Date.parse(job.fireAt);
+    this.#armTimer(this.#scheduleTimers, key, due, () => {
+      const current = this.#jobs.get(job.ownerAgentId)?.get(job.reminderId);
+      if (current?.version !== job.version) return;
+      if (this.clock.now() < due) return this.#armSchedule(current);
+      this.#track(this.#serial(job.ownerAgentId, () => this.#prepareDue(job)));
+    });
+  }
+
+  /**
+   * Arms the timer for `key` in `timers`, replacing any earlier one. It runs `onDue` once at `at` —
+   * or after `MAX_TIMER_MS` if that is sooner, so a far deadline re-checks itself — unless a later
+   * arm for the same key replaced it or the scheduler stopped in between.
+   */
+  #armTimer(timers: Map<string, unknown>, key: string, at: number, onDue: () => void): void {
     const timer = this.clock.schedule(
       () => {
-        if (this.#scheduleTimers.get(key) !== timer) return;
-        this.#scheduleTimers.delete(key);
+        if (timers.get(key) !== timer) return;
+        timers.delete(key);
         if (!this.#running) return;
-        const current = this.#jobs.get(job.ownerAgentId)?.get(job.reminderId);
-        if (current?.version !== job.version) return;
-        if (this.clock.now() < due) return this.#armSchedule(current);
-        this.#track(this.#serial(job.ownerAgentId, () => this.#prepareDue(job)));
+        onDue();
       },
-      Math.min(Math.max(0, due - this.clock.now()), MAX_TIMER_MS),
+      Math.min(Math.max(0, at - this.clock.now()), MAX_TIMER_MS),
     );
-    this.#cancelTimer(this.#scheduleTimers, key);
-    this.#scheduleTimers.set(key, timer);
+    this.#cancelTimer(timers, key);
+    timers.set(key, timer);
   }
 
   async #prepareDue(job: ReminderJob): Promise<void> {
@@ -566,28 +577,20 @@ export class ReminderScheduler {
     const key = this.#receiptKey(receipt.agentId, receipt.reminderId, receipt.version);
     const nextAt = Math.min(receipt.deadline, at);
     receipt.nextAt = nextAt;
-    const timer = this.clock.schedule(
-      () => {
-        if (this.#receiptTimers.get(key) !== timer) return;
-        this.#receiptTimers.delete(key);
-        if (!this.#running) return;
-        if (this.clock.now() < receipt.nextAt)
-          return this.#armReceipt(receipt, receipt.nextAt, proceed, afterPersistence);
-        this.#track(
-          this.#serial(receipt.agentId, async () => {
-            const current = proceed
-              ? await this.#fresh(key, receipt.agentId)
-              : this.#receipts.get(key);
-            if (!current || current.consumed || current.terminal) return;
-            if (proceed) this.#startEffect(current);
-            else await this.#persistOrRetry(current, afterPersistence);
-          }),
-        );
-      },
-      Math.min(Math.max(0, nextAt - this.clock.now()), MAX_TIMER_MS),
-    );
-    this.#cancelTimer(this.#receiptTimers, key);
-    this.#receiptTimers.set(key, timer);
+    this.#armTimer(this.#receiptTimers, key, nextAt, () => {
+      if (this.clock.now() < receipt.nextAt)
+        return this.#armReceipt(receipt, receipt.nextAt, proceed, afterPersistence);
+      this.#track(
+        this.#serial(receipt.agentId, async () => {
+          const current = proceed
+            ? await this.#fresh(key, receipt.agentId)
+            : this.#receipts.get(key);
+          if (!current || current.consumed || current.terminal) return;
+          if (proceed) this.#startEffect(current);
+          else await this.#persistOrRetry(current, afterPersistence);
+        }),
+      );
+    });
   }
 
   async #fresh(key: string, agentId: string): Promise<ReminderReceipt | undefined> {
@@ -649,19 +652,11 @@ export class ReminderScheduler {
     // Reached after a receipt delete that may have been under way when `stop()` cleared the timers.
     if (!this.#running) return;
     const key = this.#scheduleKey(job.ownerAgentId, job.reminderId);
-    const timer = this.clock.schedule(
-      () => {
-        if (this.#scheduleTimers.get(key) !== timer) return;
-        this.#scheduleTimers.delete(key);
-        if (!this.#running) return;
-        const current = this.#jobs.get(job.ownerAgentId)?.get(job.reminderId);
-        if (current?.version !== job.version) return;
-        this.#track(this.#serial(job.ownerAgentId, () => this.#prepareDue(current)));
-      },
-      Math.min(Math.max(0, retryAt - this.clock.now()), MAX_TIMER_MS),
-    );
-    this.#cancelTimer(this.#scheduleTimers, key);
-    this.#scheduleTimers.set(key, timer);
+    this.#armTimer(this.#scheduleTimers, key, retryAt, () => {
+      const current = this.#jobs.get(job.ownerAgentId)?.get(job.reminderId);
+      if (current?.version !== job.version) return;
+      this.#track(this.#serial(job.ownerAgentId, () => this.#prepareDue(current)));
+    });
   }
 
   #backoff(attempt: number) {

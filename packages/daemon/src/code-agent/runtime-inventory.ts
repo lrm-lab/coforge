@@ -57,21 +57,28 @@ export type ExternalCodeAgentProbe = CodeAgentProbe;
 
 const bunProbe: ExternalCodeAgentProbe = {
   which: (name, searchPath) => Bun.which(name, { PATH: searchPath }) ?? undefined,
-  spawn: (executable) =>
-    Bun.spawn({ cmd: [executable, "--version"], stdout: "pipe", stderr: "ignore" }),
-  probe: async (provider, executable) => {
+  spawn: (executable, env) =>
+    Bun.spawn({
+      cmd: [executable, "--version"],
+      stdout: "pipe",
+      stderr: "ignore",
+      // Discovery augmented the PATH (npm prefix, nvm versions); a bare npm launcher only works
+      // when the probe child sees the same environment the discovery saw.
+      env: env ?? agentEnvironment(undefined),
+    }),
+  probe: async (provider, executable, env) => {
     if (provider !== RUNTIME_PROVIDER.CODEX) return undefined;
     const child = new JsonlProcess(
       [executable, "app-server"],
       process.cwd(),
-      agentEnvironment(undefined),
+      agentEnvironment(undefined, env ?? Bun.env),
     );
     try {
       await initializeCodex(child);
     } finally {
       await child.dispose().catch(() => undefined);
     }
-    return readVersionWithBun(executable);
+    return readVersionWithBun(executable, env);
   },
   resolve: async (provider, name, searchPath) =>
     provider === RUNTIME_PROVIDER.CLAUDE_CODE
@@ -105,18 +112,26 @@ async function probeRuntimeVersion(
   name: string,
   executable: string,
   probe: ExternalCodeAgentProbe,
+  /** The discovery environment: discovery already augmented its PATH the way an eventual
+   * Agent process would get it, so version probing sees the same launchers. */
+  environment: Readonly<Record<string, string | undefined>>,
 ): Promise<RuntimeMetadata | undefined> {
+  const probeEnvironment = agentEnvironment(undefined, environment);
   const providerProbe =
-    provider === RUNTIME_PROVIDER.CODEX ? probe.probe?.(provider, executable) : undefined;
+    provider === RUNTIME_PROVIDER.CODEX
+      ? probe.probe?.(provider, executable, probeEnvironment)
+      : undefined;
   if (providerProbe !== undefined) {
     const version = await within(providerProbe);
     return version ? { provider, version, displayName: "Codex" } : undefined;
   }
   if (provider === RUNTIME_PROVIDER.CLAUDE_CODE) {
-    const version = await probeClaudeCodeVersion(executable, probe.spawn);
+    const version = await probeClaudeCodeVersion(executable, (child) =>
+      probe.spawn(child, probeEnvironment),
+    );
     return version ? { provider, version, displayName: "Claude Code" } : undefined;
   }
-  const { output, exitCode } = await versionProbeOutput(probe.spawn(executable));
+  const { output, exitCode } = await versionProbeOutput(probe.spawn(executable, probeEnvironment));
   if (exitCode !== 0) {
     logger.warning("Code Agent version probe exited unsuccessfully", {
       event: "code_agent_runtime:probe_failed",
@@ -205,7 +220,7 @@ export async function discoverExternalCodeAgents(
             });
             return { runtime: cached.runtime, cacheKey: undefined };
           }
-          const runtime = await probeRuntimeVersion(provider, name, executable, probe);
+          const runtime = await probeRuntimeVersion(provider, name, executable, probe, environment);
           if (runtime) return { runtime, cacheKey };
           // A transient version/app-server failure must not make an installed runtime vanish
           // from the Computer inventory. Keep the last successful result when the executable
@@ -898,8 +913,16 @@ function lastWord(output: string): string | undefined {
   return output.trim().split(/\s+/).pop() || undefined;
 }
 
-async function readVersionWithBun(executable: string): Promise<string | undefined> {
-  const process = Bun.spawn({ cmd: [executable, "--version"], stdout: "pipe", stderr: "ignore" });
+async function readVersionWithBun(
+  executable: string,
+  env?: Readonly<Record<string, string>>,
+): Promise<string | undefined> {
+  const process = Bun.spawn({
+    cmd: [executable, "--version"],
+    stdout: "pipe",
+    stderr: "ignore",
+    env: env ?? agentEnvironment(undefined),
+  });
   try {
     const { output, exitCode } = await versionProbeOutput(process);
     return exitCode === 0 ? lastWord(output) : undefined;

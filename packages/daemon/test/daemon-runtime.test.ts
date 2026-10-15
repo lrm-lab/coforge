@@ -7464,6 +7464,170 @@ describe("DaemonRuntime", () => {
     }
   });
 
+  test.each(["stop", "exit"] as const)(
+    "%s resets context-window readings for a new launch without resetting another Agent",
+    async (ending) => {
+      const credentials = new InMemoryDaemonCredentialStore();
+      await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+      const sessions = new Map<string, ReturnType<typeof deliveryQueueSession>>();
+      const readings: import("@lrm/coforge-sdk/internal").AgentContextUsage[] = [];
+      const runtime = new DaemonRuntime(
+        connection,
+        () => ({
+          provider: "pi",
+          async createAgentSession(options) {
+            if (!options.agentId) throw new Error("Test session requires an Agent ID");
+            const fake = deliveryQueueSession();
+            sessions.set(options.agentId, fake);
+            return fake.session;
+          },
+        }),
+        credentials,
+        {
+          create: () => ({
+            async start() {},
+            async ready() {},
+            async stop() {},
+            async requestAgentLaunchConfig() {
+              return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+            },
+            async revokeAgentApiKey() {},
+            sendAgentContextUsage(message) {
+              readings.push(message);
+            },
+          }),
+        },
+        undefined,
+        emptyCodeAgentDiscovery,
+      );
+      const reading = {
+        type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
+        usedTokens: 27_908,
+        windowTokens: 200_000,
+      } as const;
+      try {
+        await runtime.start(connection);
+        await runtime.startAgent("agent-a", config, "session-a-first");
+        await runtime.startAgent("agent-b", config, "session-b");
+        sessions.get("agent-a")!.emit(reading);
+        sessions.get("agent-b")!.emit(reading);
+        expect(readings.map(({ agentId, sessionId }) => [agentId, sessionId])).toEqual([
+          ["agent-a", "session-a-first"],
+          ["agent-b", "session-b"],
+        ]);
+
+        if (ending === "stop") await runtime.stopAgent("agent-a");
+        else sessions.get("agent-a")!.exit();
+        await runtime.startAgent("agent-a", config, "session-a-next");
+        sessions.get("agent-a")!.emit(reading);
+        sessions.get("agent-b")!.emit(reading);
+        expect(readings.map(({ agentId, sessionId }) => [agentId, sessionId])).toEqual([
+          ["agent-a", "session-a-first"],
+          ["agent-b", "session-b"],
+          ["agent-a", "session-a-next"],
+        ]);
+        expect(readings.at(-1)).toMatchObject({ usedTokens: 27_908, windowTokens: 200_000 });
+      } finally {
+        await runtime.stop();
+      }
+    },
+  );
+
+  test.each([
+    ["delayed", "empty"],
+    ["repeated", "empty"],
+    ["delayed", "text-delta"],
+    ["delayed", "thinking-delta"],
+  ] as const)(
+    "a %s old Session exit with %s output preserves the replacement launch's reading and compaction",
+    async (exitMode, pendingOutput) => {
+      const credentials = new InMemoryDaemonCredentialStore();
+      await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+      const sessions: ReturnType<typeof deliveryQueueSession>[] = [];
+      const readings: import("@lrm/coforge-sdk/internal").AgentContextUsage[] = [];
+      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+      const runtime = new DaemonRuntime(
+        connection,
+        () => ({
+          provider: "pi",
+          async createAgentSession() {
+            const fake = deliveryQueueSession();
+            sessions.push(fake);
+            return {
+              ...fake.session,
+              async dispose() {
+                if (exitMode === "repeated") fake.exit();
+              },
+            };
+          },
+        }),
+        credentials,
+        {
+          create: () => ({
+            async start() {},
+            async ready() {},
+            async stop() {},
+            async requestAgentLaunchConfig() {
+              return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+            },
+            async revokeAgentApiKey() {},
+            sendAgentContextUsage(message) {
+              readings.push(message);
+            },
+            sendAgentActivity(message) {
+              activities.push(message);
+            },
+          }),
+        },
+        undefined,
+        emptyCodeAgentDiscovery,
+      );
+      const reading = {
+        type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
+        usedTokens: 27_908,
+        windowTokens: 200_000,
+      } as const;
+      try {
+        await runtime.start(connection);
+        await runtime.startAgent("agent-a", config, "session-first");
+        sessions[0]!.emit(reading);
+        if (pendingOutput !== "empty") {
+          // Hold the old trajectory's 350ms buffer until its delayed exit flushes it.
+          jest.useFakeTimers();
+          sessions[0]!.emit({ type: pendingOutput, text: "Old launch output" });
+        }
+        await runtime.stopAgent("agent-a");
+        await runtime.startAgent("agent-a", config, "session-next");
+        activities.length = 0;
+        sessions[1]!.emit(reading);
+        sessions[1]!.emit({ type: "compaction-started" });
+        expect(readings.map(({ sessionId }) => sessionId)).toEqual([
+          "session-first",
+          "session-next",
+        ]);
+        expect(activities.map(({ detailKind }) => detailKind)).toEqual(["compacting_context"]);
+
+        // Stop has settled; only the previous Session's exit notification arrives late.
+        sessions[0]!.exit();
+        sessions[1]!.emit(reading);
+        sessions[1]!.emit({ type: "compaction-finished" });
+        expect({
+          readingSessions: readings.map(({ sessionId }) => sessionId),
+          compaction: activities.map(({ detailKind }) => detailKind),
+        }).toEqual({
+          readingSessions: ["session-first", "session-next"],
+          compaction: ["compacting_context", "compaction_finished"],
+        });
+      } finally {
+        try {
+          await runtime.stop();
+        } finally {
+          jest.useRealTimers();
+        }
+      }
+    },
+  );
+
   test("skips a context-window reading while the current native session id is not yet known", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -7919,7 +8083,10 @@ describe("DaemonRuntime", () => {
     const revokeAuthorizations: Array<string | null> = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = Object.assign(
-      async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        // Background requests from other runtimes must not enter this test's revoke records.
+        if (String(input) !== "https://server.example/api/agent-api-keys")
+          return new Response(null, { status: 503 });
         if (init?.method === "POST") return Response.json({ apiKey: credential });
         revokeAuthorizations.push(new Headers(init?.headers).get("authorization"));
         return new Response(null, { status: 503 });
@@ -7943,6 +8110,12 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(configuredConnection);
       await runtime.startAgent("agent-a", config);
+      // Neither another host nor another path on this host is an Agent key revocation.
+      for (const [url, method] of [
+        ["https://unrelated.example/resource", "GET"],
+        ["https://server.example/unrelated", "DELETE"],
+      ] as const)
+        await fetch(url, { method, headers: { authorization: "Bearer unrelated-fixture" } });
       // Revoke stays best-effort at shutdown: the 503 above never fails the
       // Stop. It is not retried either, so the second stop() sends nothing and
       // the transport is recreated regardless of the revoke outcome.
@@ -9213,39 +9386,112 @@ describe("Agent delivery queue", () => {
       expect(fake.notices).toHaveLength(1);
     });
 
-    test("three consecutive failures with the same fingerprint trip the fence, reporting it in CoForge's own words", async () => {
-      const acks = ackGate(2);
-      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { fake, deliver } = await deliveryQueueHarness("pi", acks, undefined, (activity) =>
-        activities.push(activity),
-      );
-      jest.useFakeTimers();
+    test.each([
+      ["classified", {}, "ProviderConnectionError", "provider_connection_error"],
+      [
+        "provider class",
+        {
+          providerErrorClass: "fixture_native_class",
+          providerErrorReason: "fixture_native_reason",
+        },
+        "fixture_native_class",
+        "fixture_native_reason",
+      ],
+      [
+        "provider code",
+        { providerErrorCode: "FIXTURE_NATIVE_CODE", providerErrorReason: "fixture_native_reason" },
+        "FIXTURE_NATIVE_CODE",
+        "fixture_native_reason",
+      ],
+    ] as const)(
+      "three consecutive failures with the same fingerprint trip the fence, reporting it in CoForge's own words (%s)",
+      async (_hint, hints, errorClass, errorReason) => {
+        const acks = ackGate(2);
+        const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+        const { runtime, fake, deliver } = await deliveryQueueHarness(
+          "pi",
+          acks,
+          undefined,
+          (activity) => activities.push(activity),
+        );
+        const error = { type: "error", message: "connect ECONNRESET", ...hints } as const;
+        jest.useFakeTimers();
+        try {
+          // Two failures back off and release normally.
+          fake.emit(error);
+          fake.emit({ type: "completed", status: "failed" });
+          const initial = activities.find((activity) => activity.detailKind === "runtime_error");
+          expect(initial).toMatchObject({
+            agentId: "agent-a",
+            detailKind: "runtime_error",
+            level: "error",
+            detail: "connect ECONNRESET",
+            entries: [{ kind: "text", text: "Error: connect ECONNRESET" }],
+            runtimeError: { errorClass, errorReason },
+          });
+          expect(initial!.runtimeError!.fingerprint).toMatch(/^[0-9a-f]{8}$/);
+          await deliver(1);
+          jest.advanceTimersByTime(10_000 * 1.1 + 1);
+          await fake.waitForNotices(1);
 
-      // Two failures back off and release normally.
-      fake.emit({ type: "error", message: "connect ECONNRESET" });
-      fake.emit({ type: "completed", status: "failed" });
-      await deliver(1);
-      jest.advanceTimersByTime(10_000 * 1.1 + 1);
-      await fake.waitForNotices(1);
+          fake.emit(error);
+          fake.emit({ type: "completed", status: "failed" });
+          await deliver(2);
+          jest.advanceTimersByTime(20_000 * 1.1 + 1);
+          await fake.waitForNotices(2);
+          await acks.done;
 
-      fake.emit({ type: "error", message: "connect ECONNRESET" });
-      fake.emit({ type: "completed", status: "failed" });
-      await deliver(2);
-      jest.advanceTimersByTime(20_000 * 1.1 + 1);
-      await fake.waitForNotices(2);
-      await acks.done;
+          // The third consecutive failure with the same fingerprint trips the fence.
+          activities.length = 0;
+          fake.emit(error);
+          fake.emit({ type: "completed", status: "failed" });
 
-      // The third consecutive failure with the same fingerprint trips the fence.
-      activities.length = 0;
-      fake.emit({ type: "error", message: "connect ECONNRESET" });
-      fake.emit({ type: "completed", status: "failed" });
+          const fenced = activities.find((activity) => activity.detailKind === "runtime_error");
+          expect(fenced).toBeDefined();
+          expect(fenced!.runtimeError?.errorReason).toBe("runtime_error_fenced");
+          expect(fenced!.detail).toContain("3");
+          expect(fenced!.detail.toLowerCase()).toContain("restart");
+          const detail =
+            "Runtime stopped retrying after 3 consecutive failures with the same underlying error. Last error: connect ECONNRESET Restart this Agent once the issue is fixed.";
+          expect(fenced).toMatchObject({
+            agentId: "agent-a",
+            detailKind: "runtime_error",
+            level: "error",
+            detail,
+            entries: [{ kind: "text", text: `Error: ${detail}` }],
+            runtimeError: { errorClass, errorReason: "runtime_error_fenced" },
+          });
+          expect(fenced!.runtimeError!.fingerprint).toBe(initial!.runtimeError!.fingerprint);
+          expect(
+            activities.filter((activity) => activity.detailKind === "runtime_error"),
+          ).toHaveLength(1);
 
-      const fenced = activities.find((activity) => activity.detailKind === "runtime_error");
-      expect(fenced).toBeDefined();
-      expect(fenced!.runtimeError?.errorReason).toBe("runtime_error_fenced");
-      expect(fenced!.detail).toContain("3");
-      expect(fenced!.detail.toLowerCase()).toContain("restart");
-    });
+          // Further failures still name the current streak, even after retrying stopped.
+          activities.length = 0;
+          fake.emit(error);
+          fake.emit({ type: "completed", status: "failed" });
+          const laterErrors = activities.filter(
+            (activity) => activity.detailKind === "runtime_error",
+          );
+          expect(laterErrors).toHaveLength(1);
+          const laterDetail =
+            "Runtime stopped retrying after 4 consecutive failures with the same underlying error. Last error: connect ECONNRESET Restart this Agent once the issue is fixed.";
+          expect(laterErrors[0]).toMatchObject({
+            agentId: "agent-a",
+            level: "error",
+            detail: laterDetail,
+            entries: [{ kind: "text", text: `Error: ${laterDetail}` }],
+            runtimeError: {
+              errorClass,
+              errorReason: "runtime_error_fenced",
+              fingerprint: initial!.runtimeError!.fingerprint,
+            },
+          });
+        } finally {
+          await runtime.stop();
+        }
+      },
+    );
 
     test("a fenced Agent stops delivering entirely: a new delivery is held, not notified, with no timer left to release it", async () => {
       const acks = ackGate(2);

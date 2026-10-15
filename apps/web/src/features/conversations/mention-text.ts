@@ -134,15 +134,17 @@ export function filterMentionables(
     if (!recencyByHandle.has(key)) recencyByHandle.set(key, index);
   });
 
+  let finiteScores = true;
   const ranked = mentionables
     .map((item) => {
       const tier = nameMatchTier(item.label, mentionSearchNames(item), lowerQuery);
       if (tier === undefined) return undefined;
+      if (!Number.isFinite(item.mentionScore)) finiteScores = false;
       return { item, tier, recency: recencyByHandle.get(item.handle.toLowerCase()) };
     })
     .filter((entry) => entry !== undefined);
 
-  ranked.sort((left, right) => {
+  const compare = (left: (typeof ranked)[number], right: (typeof ranked)[number]) => {
     if (left.tier !== right.tier) return left.tier - right.tier;
     if (left.item.mentionScore !== right.item.mentionScore) {
       return right.item.mentionScore - left.item.mentionScore;
@@ -156,7 +158,28 @@ export function filterMentionables(
       left.item.label.localeCompare(right.item.label) ||
       left.item.handle.localeCompare(right.item.handle)
     );
-  });
+  };
 
+  // Small lists, unusual limits and nonfinite scores retain the native sort/slice behavior.
+  if (Number.isInteger(limit) && limit > 0 && limit <= 8 && ranked.length > 128 && finiteScores) {
+    const best = ranked.slice(0, limit).sort(compare);
+    let replacements = 0;
+    for (let index = limit; index < ranked.length; index++) {
+      const entry = ranked[index]!;
+      if (compare(entry, best[best.length - 1]!) >= 0) continue;
+      // Native sort handles ordered input cheaply; bound selection work on a reversed list.
+      if (++replacements >= limit * 16) {
+        ranked.sort(compare);
+        return ranked.slice(0, limit).map((entry) => entry.item);
+      }
+      let position = best.length - 1;
+      while (position > 0 && compare(entry, best[position - 1]!) < 0) position--;
+      best.splice(position, 0, entry);
+      best.pop();
+    }
+    return best.map((entry) => entry.item);
+  }
+
+  ranked.sort(compare);
   return ranked.slice(0, limit).map((entry) => entry.item);
 }

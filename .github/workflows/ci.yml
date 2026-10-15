@@ -368,6 +368,10 @@ jobs:
           # subdirectory; external Windows readers must not fail functional tests.
           COFORGE_RELEASE_TEST_ARTIFACT_ROOT: ${{ runner.temp }}
         run: bun test scripts/release/compile-targets.test.ts --test-name-pattern "published Computer"
+      - name: Test the code-agent search path on real Windows
+        # Exercise the host-shaped path cases and the native executable fixture whose
+        # interpreter exists only on the discovered PATH.
+        run: bun test packages/daemon/test/code-agent-path.test.ts
 
   # install.sh is gated by shellcheck in the Computer job; install.ps1 had no machine gate at all,
   # which is how a top-level `exit` - fatal under the documented `irm ... | iex` entry point,

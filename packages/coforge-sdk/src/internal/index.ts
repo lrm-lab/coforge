@@ -704,6 +704,7 @@ export type AgentInboxPurge = {
   reason: AgentInboxPurgeReason;
 };
 export type AgentRecoveryMessage = {
+  memoryHint?: import("#src/agent/memory-disposition").MemoryHintDelivery;
   messageId: string;
   deliveryId: string;
   conversationId: string;
@@ -717,6 +718,7 @@ export type AgentRecoveryMessage = {
   nonMemberMention?: boolean;
 };
 export type AgentMessageDelivery = {
+  memoryHint?: import("#src/agent/memory-disposition").MemoryHintDelivery;
   protocolMajor: number;
   requestId: string;
   messageId: string;

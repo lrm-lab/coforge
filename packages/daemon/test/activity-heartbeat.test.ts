@@ -514,15 +514,15 @@ test("a progress event announces runtime_progress while the Agent is not yet vis
     emitEvent({ type: "progress" });
     expect(activities).toHaveLength(1);
     expect(activities[0]).toMatchObject({ detailKind: "runtime_progress", detail: "" });
-    // A second ping before anything else makes the Agent look busy still announces: the first
-    // progress activity itself is now the Agent's last busy signal, so this is the "already
-    // working" case exercised by the next test, not a rate-limit window.
+    // The first announcement makes this launch busy, so another ping stays silent.
+    emitEvent({ type: "progress" });
+    expect(activities).toHaveLength(1);
   } finally {
     await runtime.stop();
   }
 });
 
-test("a progress event is suppressed once the Agent already looks busy, but keeps refreshing liveness", async () => {
+test("a progress event is suppressed once the Agent already looks busy", async () => {
   const { runtime, activities, emitEvent } = await harness();
   try {
     activities.length = 0;
@@ -546,32 +546,87 @@ test("a progress event is suppressed once the Agent already looks busy, but keep
   }
 });
 
-test("a progress event never flushes buffered text or ends thinking", async () => {
+test("a progress event announces again after the turn becomes idle", async () => {
   const { runtime, activities, emitEvent } = await harness();
-  jest.useFakeTimers();
   try {
     activities.length = 0;
     emitEvent({ type: "progress" });
-    // Not yet busy: the ping announces runtime_progress.
-    expect(activities.map((a) => a.detailKind)).toEqual(["runtime_progress"]);
-    emitEvent({ type: "text-delta", text: "still writing" });
+    emitEvent({ type: "completed", status: "completed" });
+    expect(activities.map((a) => a.detailKind)).toEqual(["runtime_progress", "idle"]);
     emitEvent({ type: "progress" });
-    // Already busy (the run-start frame): the ping announces nothing and flushes nothing.
     expect(activities.map((a) => a.detailKind)).toEqual([
       "runtime_progress",
-      "model_response_started",
-    ]);
-    jest.advanceTimersByTime(350);
-    expect(activities.map((a) => a.detailKind)).toEqual([
+      "idle",
       "runtime_progress",
-      "model_response_started",
-      "model_response_started",
     ]);
-    expect(activities[2]?.entries).toMatchObject([{ kind: "text", text: "still writing" }]);
+    expect(activities[2]).toMatchObject({ agentId: "agent-a", level: "info", detail: "" });
   } finally {
     await runtime.stop();
   }
 });
+
+test.each([
+  ["text-delta", "model_response_started", "text"],
+  ["thinking-delta", "thinking_started", "thinking"],
+] as const)(
+  "a progress event never flushes buffered %s or ends its run",
+  async (type, detailKind, entryKind) => {
+    const { runtime, activities, emitEvent } = await harness();
+    jest.useFakeTimers();
+    try {
+      activities.length = 0;
+      emitEvent({ type: "progress" });
+      // Not yet busy: the ping announces runtime_progress.
+      expect(activities.map((a) => a.detailKind)).toEqual(["runtime_progress"]);
+      emitEvent({ type, text: "still writing" });
+      emitEvent({ type: "progress" });
+      // Already busy (the run-start frame): the ping announces nothing and flushes nothing.
+      expect(activities.map((a) => a.detailKind)).toEqual(["runtime_progress", detailKind]);
+      jest.advanceTimersByTime(350);
+      expect(activities.map((a) => a.detailKind)).toEqual([
+        "runtime_progress",
+        detailKind,
+        detailKind,
+      ]);
+      expect(activities[2]?.entries).toMatchObject([{ kind: entryKind, text: "still writing" }]);
+    } finally {
+      await runtime.stop();
+    }
+  },
+);
+
+test.each([
+  ["warning", "runtime_progress", 463],
+  ["info", "running_command", 151],
+  ["info", "tool_started", 463],
+  ["info", "checking_messages", 463],
+  ["info", "runtime_reconnecting", 463],
+  ["info", "thinking_end", 463],
+] as const)(
+  "scrubs %s %s Activity text and preserves its Unicode cap",
+  async (level, detailKind, emojiCount) => {
+    const { runtime, activities, emit } = await harness();
+    try {
+      activities.length = 0;
+      emit({
+        detailKind,
+        level,
+        detail: `password=fixture-secret Bearer fixture-token sk-fixture-key ${"🙂".repeat(600)}`,
+      });
+      expect(activities).toHaveLength(1);
+      // The redacted prefix is 49 code points: 463 more fill the 512-point cap,
+      // while a command's 200-point cap leaves room for 151. Emoji must stay whole.
+      expect(activities[0]).toMatchObject({
+        agentId: "agent-a",
+        detailKind,
+        level,
+        detail: `password=[REDACTED] Bearer [REDACTED] [REDACTED] ${"🙂".repeat(emojiCount)}`,
+      });
+    } finally {
+      await runtime.stop();
+    }
+  },
+);
 
 test("compaction-started reports Compacting context once, and a repeat is deduped", async () => {
   const { runtime, activities, emitEvent } = await harness();
@@ -596,7 +651,14 @@ test("compaction-finished ends an open compaction, and without one is a no-op", 
     activities.length = 0;
     emitEvent({ type: "compaction-finished" });
     expect(activities).toHaveLength(1);
-    expect(activities[0]).toMatchObject({ detailKind: "compaction_finished" });
+    expect(activities[0]).toMatchObject({
+      agentId: "agent-a",
+      detailKind: "compaction_finished",
+      level: "info",
+      detail: "",
+    });
+    emitEvent({ type: "compaction-finished" });
+    expect(activities).toHaveLength(1);
   } finally {
     await runtime.stop();
   }
@@ -656,6 +718,13 @@ test("resumed text after an open compaction infers it finished, reported before 
       "model_response_started",
       "model_response_started",
     ]);
+    expect(activities[0]).toMatchObject({
+      agentId: "agent-a",
+      level: "info",
+      detail: "Compaction finished (inferred from resumed output).",
+    });
+    emitEvent({ type: "compaction-finished" });
+    expect(activities).toHaveLength(3);
   } finally {
     await runtime.stop();
   }
@@ -668,6 +737,13 @@ test("a started tool after an open compaction infers it finished, reported befor
     activities.length = 0;
     emitEvent({ type: "tool-start", id: "tool-1", name: "Bash", input: { command: "ls" } });
     expect(activities.map((a) => a.detailKind)).toEqual(["compaction_finished", "running_command"]);
+    expect(activities[0]).toMatchObject({
+      agentId: "agent-a",
+      level: "info",
+      detail: "Compaction finished (inferred from a new tool call).",
+    });
+    emitEvent({ type: "compaction-finished" });
+    expect(activities).toHaveLength(2);
   } finally {
     await runtime.stop();
   }
@@ -680,6 +756,13 @@ test("a turn ending after an open compaction infers it finished, reported before
     activities.length = 0;
     emitEvent({ type: "completed", status: "completed" });
     expect(activities.map((a) => a.detailKind)).toEqual(["compaction_finished", "idle"]);
+    expect(activities[0]).toMatchObject({
+      agentId: "agent-a",
+      level: "info",
+      detail: "Compaction finished (inferred from turn end).",
+    });
+    emitEvent({ type: "compaction-finished" });
+    expect(activities).toHaveLength(2);
   } finally {
     await runtime.stop();
   }

@@ -61,6 +61,8 @@ const INLINE_CODE = /`[^`\n]*`/g;
 
 /** Removes fenced and inline code spans so a mention inside a code sample is never counted. */
 export function stripCodeSpans(body: string): string {
+  // Neither code pattern can match a body without a backtick.
+  if (!body.includes("`")) return body;
   return body.replace(FENCED_CODE, "").replace(INLINE_CODE, "");
 }
 
@@ -70,7 +72,9 @@ export const MENTION_PATTERN = /(?<![a-zA-Z0-9_@])@([a-z0-9][a-z0-9_-]*)(?![a-zA
 /** The set of `@handle` references present in `body` outside fenced/inline code. */
 export function mentionsInContent(body: string): Set<string> {
   const stripped = stripCodeSpans(body);
-  return new Set([...stripped.matchAll(MENTION_PATTERN)].map((match) => match[1]!));
+  const handles = new Set<string>();
+  for (const match of stripped.matchAll(MENTION_PATTERN)) handles.add(match[1]!);
+  return handles;
 }
 
 /**
@@ -114,6 +118,8 @@ export type BodySegment = { text: string; code: boolean };
  * never applies inside code, and writers need the code text preserved.
  */
 export function splitCodeSpans(body: string): BodySegment[] {
+  // Neither code pattern can match a body without a backtick.
+  if (!body.includes("`")) return body ? [{ text: body, code: false }] : [];
   const fenced = new RegExp(FENCED_CODE.source, "g");
   const inline = new RegExp(INLINE_CODE.source, "g");
   const segments: BodySegment[] = [];
@@ -170,10 +176,11 @@ export function resolveMentionTargets(
 ): { mentions: ResolvedMention[]; target: (handle: string) => MentionTarget | undefined } {
   const byKey = new Map<string, ResolvedMention>();
   for (const binding of bindings) {
+    const bindingId = binding.id.toLowerCase();
     const match = targets.find(
       (target) =>
         target.type === binding.type &&
-        target.id.toLowerCase() === binding.id.toLowerCase() &&
+        target.id.toLowerCase() === bindingId &&
         target.handle === binding.name,
     );
     if (match) byKey.set(match.key, match);

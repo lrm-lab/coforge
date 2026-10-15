@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@tanstack/react-db";
 
@@ -17,6 +17,7 @@ import {
 import { directListsOf, type DirectRow } from "./sidebar-rows";
 import { sidebarRefreshQueue, type ChatList } from "./conversation-unread";
 import { compareChannelNames, type ChannelSignal } from "./channel-signals";
+import { chatSectionOrderQuery, chatSectionsQuery } from "./chat-sections";
 
 // React access to the Chat sidebar's lists (`sidebar-collections.ts`).
 
@@ -159,4 +160,34 @@ export function useRefreshSidebarLists() {
 /** The sidebar's changes (pin, mark unread, close, drag). */
 export function useSidebarActions() {
   return useSidebar().actions;
+}
+
+const EMPTY_ORDER: readonly string[] = [];
+
+/** Personal groups share the sidebar's optimistic transactions, including a move's unpin. */
+export function useChatSections() {
+  const workspaceId = useCurrentWorkspaceId() ?? "";
+  const query = useQuery(chatSectionsQuery(workspaceId));
+  // The built-in sections' places; until it loads (or if it fails) they keep the default order.
+  const order = useQuery(chatSectionOrderQuery(workspaceId));
+  const sidebar = useSidebar();
+  const live = useLiveQuery({
+    queryKey: ["chat-sections", workspaceId],
+    query: (q) =>
+      q
+        .from({ section: sidebar.sections })
+        .orderBy(({ section }) => section.sortOrder, "asc")
+        .orderBy(({ section }) => section.id, "asc"),
+  });
+  return {
+    sections: live.isReady ? live.data : (query.data ?? []),
+    order: order.data ?? EMPTY_ORDER,
+    /** Sections may be dragged only once their saved order is known: a drag from the default
+     * order would overwrite it. */
+    orderReady: order.isSuccess,
+    isPending: query.isPending,
+    isError: query.isError,
+    orderError: order.isError,
+    retry: () => Promise.all([query.refetch(), order.refetch()]),
+  };
 }

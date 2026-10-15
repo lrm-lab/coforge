@@ -9,11 +9,30 @@ export function nameMatchTier(
   others: readonly string[],
   lowerQuery: string,
 ): 0 | 1 | 2 | 3 | undefined {
-  const fields = [label, ...others].map((field) => field.toLowerCase());
-  if (fields.some((field) => field === lowerQuery)) return 0;
-  if (fields.some((field) => field.startsWith(lowerQuery))) return 1;
-  const laterWords = fields[0]!.split(/\s+/).filter(Boolean).slice(1);
-  if (laterWords.some((word) => word.startsWith(lowerQuery))) return 2;
-  if (fields.some((field) => field.includes(lowerQuery))) return 3;
+  const lowerLabel = label.toLowerCase();
+  if (lowerLabel === lowerQuery) return 0;
+  let hasPrefix = lowerLabel.startsWith(lowerQuery);
+  let otherContainsQuery = false;
+  // An exact match in another field still outranks a label prefix.
+  for (const other of others) {
+    const field = other.toLowerCase();
+    if (field === lowerQuery) return 0;
+    if (!hasPrefix) {
+      if (field.startsWith(lowerQuery)) hasPrefix = true;
+      else if (!otherContainsQuery) otherContainsQuery = field.includes(lowerQuery);
+    }
+  }
+  if (hasPrefix) return 1;
+
+  let firstWord = true;
+  for (const word of lowerLabel.split(/\s+/)) {
+    if (!word) continue;
+    if (firstWord) {
+      firstWord = false;
+      continue;
+    }
+    if (word.startsWith(lowerQuery)) return 2;
+  }
+  if (otherContainsQuery || lowerLabel.includes(lowerQuery)) return 3;
   return undefined;
 }
