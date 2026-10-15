@@ -161,6 +161,8 @@ import { connectionLiveness, INBOUND_STALLED_MS } from "./connection-liveness";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
 import { getLogger } from "@logtape/logtape";
 import { AGENT_RPC_TIMEOUT_MS, agentHeaders, channelEndpointFor } from "./agent-http-wire";
+import { AgentMigrationHttpClient } from "./agent-migration-http-client";
+import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import {
   adaptAgentHistoryResponse,
   adaptAgentSearchResponse,
@@ -1157,6 +1159,14 @@ export class DaemonConnection implements DaemonConnectionClient {
       AGENT_MENTION_DELIVERY_TERMINAL_ERROR_METHOD,
       encodeAgentMentionDeliveryTerminalError(report),
     );
+  }
+
+  /** The server's Agent migration route, over HTTPS with this daemon's API key. */
+  agentMigrationServer(): AgentMigrationServer {
+    return new AgentMigrationHttpClient({
+      endpoint: () => this.#serverEndpoint("Agent migration", "/api/daemon/agent-migrations"),
+      daemonApiKey: () => this.#token,
+    });
   }
 
   /** Credentials for one Agent-scoped HTTP call: the Agent's own key plus the daemon key. */

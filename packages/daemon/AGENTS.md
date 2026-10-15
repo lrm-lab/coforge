@@ -88,7 +88,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/agent-runtime/`       | Agent lifecycle state machine, control, native Session state, and Activity                      |
 | `src/code-agent/`          | `CodeAgentProvider` seam, provider adapters, runtime inventory, standing instructions           |
 | `src/code-agent/per-turn/` | The one Session and process wrapper under the Cursor, Grok, OpenCode, and Antigravity providers |
-| `src/agent-migration/`     | Agent migration on this Computer: select and pack a workspace; verify, unpack and commit one    |
+| `src/agent-migration/`     | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit |
 | `src/agent-app-inbox/`     | Typed Agent App items, kept separate from chat Message attention                                |
 | `src/agent-reminder/`      | Cloud reminder schedule mirror, version-fenced timers, and fire receipts                        |
 | `src/credentials/`         | Daemon credential store and Agent API keys                                                      |
