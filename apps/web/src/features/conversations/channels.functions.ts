@@ -485,6 +485,7 @@ export const sendPublicChannelMessage = createServerFn({ method: "POST" })
       senderHandle: username,
       // A human-sent echo never carries an Agent id, and a human sender is never deleted.
       senderAgentId: undefined,
+      senderUserId: userId,
       senderDeleted: false,
       senderAvatarUrl: workspaceUserAvatarUrl(
         workspaceId,

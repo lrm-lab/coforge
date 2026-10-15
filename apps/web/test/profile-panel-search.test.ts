@@ -3,11 +3,10 @@ import { describe, expect, test } from "bun:test";
 import {
   agentIdFromProfileParam,
   agentProfileSearchWithoutThread,
-  agentProfileParamSchema,
   agentProfileTabParamSchema,
   formatAgentProfileParam,
   formatPersonProfileParam,
-  memberProfileParamSchema,
+  profileParamSchema,
   personIdFromProfileParam,
   resolveAgentProfileTab,
   visibleAgentProfileTabs,
@@ -16,37 +15,18 @@ import {
 
 const AGENT_ID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
 
-describe("agentProfileParamSchema", () => {
-  test("accepts a well-formed agent: token", () => {
-    expect(agentProfileParamSchema.parse(formatAgentProfileParam(AGENT_ID))).toBe(
-      `agent:${AGENT_ID}`,
-    );
+describe("profileParamSchema", () => {
+  test("opens either an Agent or a person", () => {
+    expect(profileParamSchema.parse(formatAgentProfileParam(AGENT_ID))).toBe(`agent:${AGENT_ID}`);
+    expect(profileParamSchema.parse(formatPersonProfileParam(AGENT_ID))).toBe(`user:${AGENT_ID}`);
   });
 
-  test("accepts a missing value", () => {
-    expect(agentProfileParamSchema.parse(undefined)).toBeUndefined();
-  });
-
-  test("falls back to undefined for a malformed token instead of throwing", () => {
-    expect(agentProfileParamSchema.parse("agent:not-a-uuid")).toBeUndefined();
-    expect(agentProfileParamSchema.parse("user:" + AGENT_ID)).toBeUndefined();
-    expect(agentProfileParamSchema.parse("")).toBeUndefined();
-  });
-});
-
-describe("memberProfileParamSchema", () => {
-  test("opens either an Agent or a person on the Members page", () => {
-    expect(memberProfileParamSchema.parse(formatAgentProfileParam(AGENT_ID))).toBe(
-      `agent:${AGENT_ID}`,
-    );
-    expect(memberProfileParamSchema.parse(formatPersonProfileParam(AGENT_ID))).toBe(
-      `user:${AGENT_ID}`,
-    );
-  });
-
-  test("falls back to undefined for a malformed token", () => {
-    expect(memberProfileParamSchema.parse("user:not-a-uuid")).toBeUndefined();
-    expect(memberProfileParamSchema.parse(`channel:${AGENT_ID}`)).toBeUndefined();
+  test("accepts a missing value and falls back to undefined for a malformed token", () => {
+    expect(profileParamSchema.parse(undefined)).toBeUndefined();
+    expect(profileParamSchema.parse("")).toBeUndefined();
+    expect(profileParamSchema.parse("agent:not-a-uuid")).toBeUndefined();
+    expect(profileParamSchema.parse("user:not-a-uuid")).toBeUndefined();
+    expect(profileParamSchema.parse(`channel:${AGENT_ID}`)).toBeUndefined();
   });
 });
 

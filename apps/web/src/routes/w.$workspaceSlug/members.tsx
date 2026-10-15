@@ -26,7 +26,7 @@ import {
 import {
   agentIdFromProfileParam,
   agentProfileTabParamSchema,
-  memberProfileParamSchema,
+  profileParamSchema,
   personIdFromProfileParam,
 } from "#src/features/agents/profile-panel/profile-panel-search";
 
@@ -34,7 +34,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/members")({
   validateSearch: z.object({
     memberType: z.enum(["agent", "human"]).default("agent").catch("agent"),
     owner: z.enum(["all", "mine"]).default("all").catch("all"),
-    profile: memberProfileParamSchema,
+    profile: profileParamSchema,
     agentTab: agentProfileTabParamSchema,
   }),
   loaderDeps: ({ search }) => ({

@@ -2,7 +2,10 @@ import type { ReactNode } from "react";
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
-import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
+import type {
+  OpenAgentProfile,
+  OpenPersonProfile,
+} from "#src/features/agents/profile-panel/open-agent-profile";
 import type { ThreadFollow } from "./thread-pane-header";
 import type { SendOptions } from "./composer-outbox";
 import type { Mentionable } from "./mention-text";
@@ -128,7 +131,14 @@ export type ConversationProps = {
   /** The Agent profile panel's URL state, owned by the route (`profile`/`agentTab` search
    * params via `features/agents/profile-panel/`), not by this feature. `agentId` undefined means
    * the panel is closed. */
-  agentProfile?: { agentId: string | undefined; tab: AgentProfileTab | undefined };
+  agentProfile?: {
+    agentId: string | undefined;
+    tab: AgentProfileTab | undefined;
+    /** A person's profile shown in the same slot instead (`profile=user:<id>`). */
+    personId?: string;
+  };
+  /** Opens a person's profile panel from a person sender's avatar/name. */
+  onOpenPersonProfile?: OpenPersonProfile;
   onAgentProfileTabChange?: (tab: AgentProfileTab) => void;
   onCloseAgentProfile?: () => void;
   /** The conversation's Tasks tab. When given it replaces the message stream in the main pane;

@@ -90,6 +90,10 @@ export function mapBrowserMessage(message: BrowserMessageRow, workspaceId: strin
     /** The sender's Agent id, present only for an Agent-sent message; opens the Agent profile
      * panel from a message row (`features/agents/profile-panel/`). */
     senderAgentId: message.sender?.agentId ?? undefined,
+    /** The sender's user id, present only for a person's message; opens their profile panel.
+     * Typed optional so a message the browser cached before it existed still reads
+     * (`persisted-queries.ts`); the key itself is always written. */
+    ...({ senderUserId: message.sender?.userId ?? undefined } as { senderUserId?: string }),
     /** True when the sending Agent has since been deleted: the row renders its sender
      * greyed with a `DELETED` marker, and no longer opens that Agent's profile. */
     senderDeleted: Boolean(message.sender?.agent?.deletedAt),

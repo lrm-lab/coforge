@@ -79,6 +79,7 @@ export function ConversationPane({
   onCreateTask,
   onToggleReaction,
   onOpenAgentProfile,
+  onOpenPersonProfile,
   plainMentions,
   onOpenTask,
   channelNames,
@@ -173,6 +174,7 @@ export function ConversationPane({
       : undefined,
   );
   const openAgentProfile = useLatestCallback(onOpenAgentProfile);
+  const openPersonProfile = useLatestCallback(onOpenPersonProfile);
   const openTaskReference = useLatestCallback(onOpenTask);
   const openThread = useLatestCallback(onOpenThread);
   // Saving (#127) is viewer-global state with a conversation-scoped write: the pane owns the
@@ -893,6 +895,7 @@ export function ConversationPane({
                     onToggleReaction={toggleReaction}
                     onToggleSave={onToggleSave}
                     onOpenAgentProfile={openAgentProfile}
+                    onOpenPersonProfile={openPersonProfile}
                     viewerId={conversation.viewerId}
                     plainMentions={plainMentions}
                     onOpenTask={openTaskReference}
@@ -1049,6 +1052,7 @@ export function ConversationPane({
                       onToggleReaction={toggleReaction}
                       onToggleSave={onToggleSave}
                       onOpenAgentProfile={openAgentProfile}
+                      onOpenPersonProfile={openPersonProfile}
                       viewerId={conversation.viewerId}
                       plainMentions={plainMentions}
                       onOpenTask={openTaskReference}

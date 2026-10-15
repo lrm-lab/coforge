@@ -386,6 +386,8 @@ describe("WorkspaceMembers", () => {
         role: "admin",
         joinedAt: new Date("2026-06-24T00:00:00.000Z"),
         isViewer: false,
+        canChangeRole: false,
+        canRemove: false,
         createdAgents: [
           {
             id: "agent-1",
@@ -416,6 +418,51 @@ describe("WorkspaceMembers", () => {
         },
       }).person("workspace-1", "viewer", "viewer");
       expect(result).toMatchObject({ id: "viewer", displayName: "viewer", isViewer: true });
+    });
+
+    test("offers an owner or admin the role change and removal Settings → Members allows", async () => {
+      const member = (role: string, id = "target") => ({
+        role,
+        createdAt: new Date("2026-06-24T00:00:00.000Z"),
+        user: {
+          id,
+          username: id,
+          displayName: null,
+          description: "",
+          email: null,
+          avatarObjectKey: null,
+          agents: [],
+        },
+      });
+      const actions = async (viewerRole: string, target: string, targetRole: string) => {
+        const result = await personOf({
+          viewer: target === "viewer" ? member(viewerRole, "viewer") : { role: viewerRole },
+          ...(target === "viewer" ? {} : { target: member(targetRole) }),
+        }).person("workspace-1", "viewer", target);
+        return { canChangeRole: result.canChangeRole, canRemove: result.canRemove };
+      };
+      expect(await actions("admin", "target", "member")).toEqual({
+        canChangeRole: true,
+        canRemove: true,
+      });
+      expect(await actions("owner", "target", "admin")).toEqual({
+        canChangeRole: true,
+        canRemove: true,
+      });
+      // Nobody changes or removes the owner; a plain member manages no one.
+      expect(await actions("admin", "target", "owner")).toEqual({
+        canChangeRole: false,
+        canRemove: false,
+      });
+      expect(await actions("member", "target", "member")).toEqual({
+        canChangeRole: false,
+        canRemove: false,
+      });
+      // An admin may change their own role but leaves instead of removing themself.
+      expect(await actions("admin", "viewer", "admin")).toEqual({
+        canChangeRole: true,
+        canRemove: false,
+      });
     });
   });
 });

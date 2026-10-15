@@ -31,7 +31,10 @@ import {
 } from "#src/components/application/modals/modal";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
-import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
+import type {
+  OpenAgentProfile,
+  OpenPersonProfile,
+} from "#src/features/agents/profile-panel/open-agent-profile";
 import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
 import { AgentModelLabel } from "#src/features/agents/agent-model-label";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
@@ -78,6 +81,8 @@ export type MessageView = {
   /** The sender's Agent id, present only when `senderKind === "agent"`; opens the Agent profile
    * panel (`features/agents/profile-panel/`) from the avatar or the sender name. */
   senderAgentId?: string;
+  /** The sender's user id, present only when `senderKind === "user"`; opens their profile panel. */
+  senderUserId?: string;
   /** True when the sending Agent has since been deleted: the sender renders greyed
    * with a `DELETED` marker, and no longer opens that Agent's profile. */
   senderDeleted?: boolean;
@@ -563,6 +568,7 @@ export const MessageRow = memo(function MessageRow({
   onToggleReaction,
   onToggleSave,
   onOpenAgentProfile,
+  onOpenPersonProfile,
   viewerId,
   plainMentions,
   onOpenTask,
@@ -603,6 +609,9 @@ export const MessageRow = memo(function MessageRow({
    * conversation owns that slot (`features/agents/profile-panel/`'s `openAgentProfile`). Absent, the
    * avatar/name render inert and the avatar has no hover card. */
   onOpenAgentProfile?: OpenAgentProfile;
+  /** Opens a person's profile panel from a person sender's avatar or name; absent, they render
+   * inert. Your own messages open yours too. */
+  onOpenPersonProfile?: OpenPersonProfile;
   /** The viewing user's id; a mention of them renders with the stronger "me" chip, and a reaction
    * with them among its reactors is theirs. */
   viewerId?: string;
@@ -631,6 +640,10 @@ export const MessageRow = memo(function MessageRow({
     message.senderAgentId &&
     onOpenAgentProfile
       ? message.senderAgentId
+      : undefined;
+  const openablePersonId =
+    message.senderKind === "user" && message.senderUserId && onOpenPersonProfile
+      ? message.senderUserId
       : undefined;
   // A deleted sender is inert and visually muted: no profile affordance, a grey avatar tone, and
   // a `DELETED` badge beside the name.
@@ -914,6 +927,16 @@ export const MessageRow = memo(function MessageRow({
               trigger={avatar}
               onOpenProfile={onOpenAgentProfile}
             />
+          ) : openablePersonId ? (
+            <Button
+              color="link-gray"
+              noTextPadding
+              aria-label={m.member_person_open_profile({ name: message.senderName })}
+              className="shrink-0 rounded-full!"
+              onPress={() => onOpenPersonProfile?.(openablePersonId)}
+            >
+              {avatar}
+            </Button>
           ) : (
             avatar
           )}
@@ -921,11 +944,15 @@ export const MessageRow = memo(function MessageRow({
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {!grouped && (
             <p className="flex min-h-5 items-baseline gap-2 pr-8">
-              {openableAgentId ? (
+              {openableAgentId || openablePersonId ? (
                 <Button
                   color="tertiary"
                   noTextPadding
-                  onPress={() => onOpenAgentProfile?.(openableAgentId)}
+                  onPress={() =>
+                    openableAgentId
+                      ? onOpenAgentProfile?.(openableAgentId)
+                      : openablePersonId && onOpenPersonProfile?.(openablePersonId)
+                  }
                   className="h-auto min-w-0 truncate rounded p-0 text-sm font-semibold text-primary hover:bg-transparent hover:text-primary hover:underline"
                 >
                   {displayName}

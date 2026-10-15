@@ -9,6 +9,7 @@ import { useAppToast } from "#src/components/ui/toast";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { SettingsPending } from "#src/features/settings/settings-pending";
 import { chooseAvatarPreset, saveUserProfile } from "#src/features/profiles/profile.functions";
+import { MEMBER_DIRECTORY_KEY } from "#src/features/agents/member-directory-queries";
 import {
   browserNotificationPermission,
   showPageNotification,
@@ -300,6 +301,8 @@ function SettingsPage() {
   async function changeProfile(input: { displayName: string; description: string }) {
     await saveProfile({ data: input });
     await router.invalidate({ sync: true });
+    // The Members page's cards and person panel show the name and description too.
+    await queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY });
   }
 
   // The switcher and this page both read the Workspace from the loaders, so a reload shows the
@@ -336,12 +339,14 @@ function SettingsPage() {
     if (!response.ok) throw new Error("Profile image upload failed");
     await router.invalidate({ sync: true });
     await queryClient.invalidateQueries({ queryKey: ["conversation"] });
+    await queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY });
   }
 
   async function choosePresetAvatar(presetId: string) {
     await saveAvatarPreset({ data: { presetId } });
     await router.invalidate({ sync: true });
     await queryClient.invalidateQueries({ queryKey: ["conversation"] });
+    await queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY });
   }
 
   async function removeAvatar() {
@@ -349,6 +354,7 @@ function SettingsPage() {
     if (!response.ok) throw new Error("Profile image removal failed");
     await router.invalidate({ sync: true });
     await queryClient.invalidateQueries({ queryKey: ["conversation"] });
+    await queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY });
   }
 
   return (

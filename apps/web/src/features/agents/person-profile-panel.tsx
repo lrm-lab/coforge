@@ -1,8 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
-import { getRouteApi, Link, useHydrated, useNavigate } from "@tanstack/react-router";
-import { MessageSquare01 as MessageSquare, UserX01, XClose as X } from "@untitledui/icons";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getRouteApi, Link, useHydrated, useNavigate, useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  AlertCircle,
+  Edit01,
+  MessageSquare01 as MessageSquare,
+  UserMinus01,
+  UserX01,
+  XClose as X,
+} from "@untitledui/icons";
+import { Heading, Text } from "react-aria-components";
 
+import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { Badge } from "#src/components/base/badges/badges";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Button } from "#src/components/base/buttons/button";
 import {
@@ -13,18 +26,24 @@ import {
   EmptyTitle,
 } from "#src/components/ui/empty";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { useAppToast } from "#src/components/ui/toast";
+import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { formatCalendarDate } from "#src/lib/dates";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
+import {
+  removeWorkspaceMember,
+  updateWorkspaceMemberRole,
+} from "#src/features/workspaces/members.functions";
 import { workspaceRoleLabel } from "#src/features/workspaces/workspace-members-panel";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { MemberPersonProfile } from "#src/features/workspaces/workspaces.functions";
 import { AgentDisplayAvatar } from "./agent-display-avatar";
-import { memberPersonQuery } from "./member-directory-queries";
-import { useLiveAgentDisplay } from "./workspace-agents-realtime";
+import { MEMBER_DIRECTORY_KEY, memberPersonQuery } from "./member-directory-queries";
+import { useCurrentWorkspaceId, useLiveAgentDisplay } from "./workspace-agents-realtime";
 import { SECTION_CAPTION_CLASS, SUBFIELD_LABEL_CLASS } from "./profile-panel/inline-edit-field";
 import { PanelMessage } from "./profile-panel/panel-message";
 import { formatAgentProfileParam } from "./profile-panel/profile-panel-search";
@@ -34,19 +53,17 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
 /**
  * The Members page's right-hand panel for a person (`profile=user:<id>`), the human counterpart of
  * `AgentProfilePanel`: who they are (name, description, email), their Workspace role and join
- * date, and the Agents they created that the viewer may see. Read-only; a person edits their own
- * profile in Settings → Account, and owners/admins change roles in Settings → Members.
+ * date, and the Agents they created that the viewer may see. Owners and admins change the
+ * person's role and remove them here as in Settings → Members; a person edits their own profile
+ * in Settings → Account.
  */
-export function PersonProfilePanel({
-  workspaceId,
-  userId,
-  onClose,
-}: {
-  workspaceId: string;
-  userId: string;
-  onClose: () => void;
-}) {
-  const person = useQuery(memberPersonQuery(workspaceId, userId));
+export function PersonProfilePanel({ userId, onClose }: { userId: string; onClose: () => void }) {
+  // The app shell's Workspace, which every page hosting this panel sits under.
+  const workspaceId = useCurrentWorkspaceId();
+  const person = useQuery({
+    ...memberPersonQuery(workspaceId ?? "", userId),
+    enabled: workspaceId !== undefined,
+  });
   const openDirectConversation = useOpenDirectConversation();
 
   if (person.isPending) {
@@ -119,7 +136,7 @@ export function PersonProfilePanel({
         />
         <CloseButton onClose={onClose} />
       </header>
-      <PersonProfileBody profile={profile} />
+      <PersonProfileBody profile={profile} onRemoved={onClose} />
     </aside>
   );
 }
@@ -137,8 +154,19 @@ function CloseButton({ onClose }: { onClose: () => void }) {
   );
 }
 
-function PersonProfileBody({ profile }: { profile: MemberPersonProfile }) {
+function PersonProfileBody({
+  profile,
+  onRemoved,
+}: {
+  profile: MemberPersonProfile;
+  /** The person was removed from the Workspace: the panel has nothing left to show. */
+  onRemoved: () => void;
+}) {
   const workspaceSlug = useWorkspaceSlug();
+  const { changeRole, remove, removeOpen, setRemoveOpen, removing } = useMemberActions(
+    profile,
+    onRemoved,
+  );
   const navigate = useNavigate();
   const timeZone = appRoute.useLoaderData().timeZone;
   const locale = getLocale();
@@ -201,10 +229,35 @@ function PersonProfileBody({ profile }: { profile: MemberPersonProfile }) {
         <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4">
           <div>
             <dt className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_role()}</dt>
-            <dd className="mt-1">
+            <dd className="mt-1 flex items-center gap-1">
               <Badge size="sm" color="gray">
                 {workspaceRoleLabel(profile.role)}
               </Badge>
+              {profile.canChangeRole && (
+                <Dropdown.Root>
+                  <ButtonUtility
+                    icon={Edit01}
+                    size="xs"
+                    color="tertiary"
+                    tooltip={m.agent_profile_edit_role()}
+                  />
+                  <Dropdown.Popover placement="bottom start" className="w-48">
+                    <Dropdown.Menu
+                      aria-label={m.agent_profile_edit_role()}
+                      onAction={() => changeRole(profile.role === "admin" ? "member" : "admin")}
+                    >
+                      <Dropdown.Item
+                        id="change-role"
+                        label={
+                          profile.role === "admin"
+                            ? m.workspace_member_make_member()
+                            : m.workspace_member_make_admin()
+                        }
+                      />
+                    </Dropdown.Menu>
+                  </Dropdown.Popover>
+                </Dropdown.Root>
+              )}
             </dd>
           </div>
           <div>
@@ -241,12 +294,14 @@ function PersonProfileBody({ profile }: { profile: MemberPersonProfile }) {
             {profile.createdAgents.map((agent) => (
               <li key={agent.id}>
                 <Link
-                  to="/w/$workspaceSlug/members"
-                  params={{ workspaceSlug }}
+                  // The page the panel is on (Members or a conversation) shows the Agent's panel
+                  // in the same slot.
+                  to="."
                   resetScroll={false}
-                  search={(previous) => ({
+                  search={(previous: { profile?: string; agentTab?: string }) => ({
                     ...previous,
                     profile: formatAgentProfileParam(agent.id),
+                    agentTab: undefined,
                   })}
                   aria-label={m.agent_open_profile({ name: agent.displayName })}
                   className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left ring-1 ring-secondary outline-focus-ring ring-inset hover:bg-primary_hover focus-visible:outline-2"
@@ -270,7 +325,116 @@ function PersonProfileBody({ profile }: { profile: MemberPersonProfile }) {
           <p className="mt-2 text-sm text-quaternary italic">{m.member_person_no_agents()}</p>
         )}
       </section>
+
+      {profile.canRemove && (
+        <section className="border-t border-secondary px-6 py-5">
+          <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_actions()}</p>
+          <Button
+            size="sm"
+            color="secondary-destructive"
+            iconLeading={UserMinus01}
+            className="mt-3"
+            onPress={() => setRemoveOpen(true)}
+          >
+            {m.member_person_remove()}
+          </Button>
+          <RemoveMemberDialog
+            name={profile.displayName}
+            open={removeOpen}
+            busy={removing}
+            onOpenChange={setRemoveOpen}
+            onConfirm={remove}
+          />
+        </section>
+      )}
     </div>
+  );
+}
+
+/**
+ * The owner/admin actions on a person, through the same writes Settings → Members uses (the
+ * server re-checks who may do what). Each refreshes the Members directory and the page; a
+ * failure says so in a toast, as Settings → Members does.
+ */
+function useMemberActions(profile: MemberPersonProfile, onRemoved: () => void) {
+  const updateRole = useServerFn(updateWorkspaceMemberRole);
+  const removeMember = useServerFn(removeWorkspaceMember);
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const toast = useAppToast();
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removing, guard] = useSubmitGuard();
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY }),
+      router.invalidate({ sync: true }),
+    ]);
+  const changeRole = (role: "admin" | "member") =>
+    void updateRole({ data: { userId: profile.id, role } })
+      .then(refresh)
+      .catch(() => toast.error(m.workspace_members_action_failed()));
+  const remove = () =>
+    void guard(async () => {
+      try {
+        await removeMember({ data: { userId: profile.id } });
+      } catch {
+        toast.error(m.workspace_members_action_failed());
+        return;
+      }
+      setRemoveOpen(false);
+      onRemoved();
+      await refresh();
+    });
+  return { changeRole, remove, removeOpen, setRemoveOpen, removing };
+}
+
+/** Confirms removing a person from the Workspace; the confirm is the dialog's one red button. */
+function RemoveMemberDialog({
+  name,
+  open,
+  busy,
+  onOpenChange,
+  onConfirm,
+}: {
+  name: string;
+  open: boolean;
+  busy: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <ModalOverlay isOpen={open} onOpenChange={(value) => !busy && onOpenChange(value)}>
+      <Modal className="w-[calc(100vw-2rem)] max-w-md">
+        <Dialog className="p-6">
+          {({ close }) => (
+            <>
+              <div className="flex items-start gap-3">
+                <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
+                <div className="min-w-0 space-y-2">
+                  <Heading
+                    slot="title"
+                    className="text-md font-semibold text-primary wrap-anywhere"
+                  >
+                    {m.member_person_remove_confirm_title({ name })}
+                  </Heading>
+                  <Text slot="description" className="text-sm text-secondary">
+                    {m.member_person_remove_confirm_description()}
+                  </Text>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <Button color="secondary" size="sm" isDisabled={busy} onPress={close}>
+                  {m.controls_cancel()}
+                </Button>
+                <Button color="primary-destructive" size="sm" isLoading={busy} onPress={onConfirm}>
+                  {m.member_person_remove()}
+                </Button>
+              </div>
+            </>
+          )}
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }
 

@@ -254,6 +254,7 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
           senderHandle: user.username,
           // A human-sent echo never carries an Agent id, and a human sender is never deleted.
           senderAgentId: undefined,
+          senderUserId: user.id,
           senderDeleted: false,
           senderAvatarUrl: workspaceUserAvatarUrl(
             workspaceId,

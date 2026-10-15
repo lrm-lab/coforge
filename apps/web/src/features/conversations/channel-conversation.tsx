@@ -28,6 +28,7 @@ import {
 import type { ChannelSuggestion } from "./reference-completion";
 import { m } from "#src/paraglide/messages";
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
+import type { ConversationProps } from "./conversation-types";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 
@@ -181,6 +182,7 @@ export function ChannelConversation({
   onShowTasks,
   onShowFiles,
   onOpenAgentProfile,
+  onOpenPersonProfile,
   agentProfile,
   onAgentProfileTabChange,
   onCloseAgentProfile,
@@ -226,7 +228,8 @@ export function ChannelConversation({
   /** Opens the Agent profile panel from an Agent sender's avatar/name in the message list, on a
    * given tab when one is named. */
   onOpenAgentProfile?: OpenAgentProfile;
-  agentProfile?: { agentId: string | undefined; tab: AgentProfileTab | undefined };
+  onOpenPersonProfile?: ConversationProps["onOpenPersonProfile"];
+  agentProfile?: ConversationProps["agentProfile"];
   onAgentProfileTabChange?: (tab: AgentProfileTab) => void;
   onCloseAgentProfile?: () => void;
   /** The channel's Tasks tab, shown in place of the message stream (see `ThreadedConversation`). */
@@ -307,6 +310,7 @@ export function ChannelConversation({
       onReadThread={onReadThread}
       onReadLatest={onReadLatest}
       onOpenAgentProfile={onOpenAgentProfile}
+      onOpenPersonProfile={onOpenPersonProfile}
       agentProfile={agentProfile}
       onAgentProfileTabChange={onAgentProfileTabChange}
       onCloseAgentProfile={onCloseAgentProfile}

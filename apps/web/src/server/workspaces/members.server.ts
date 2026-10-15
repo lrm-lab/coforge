@@ -9,6 +9,7 @@ import {
   visibleAgentWhere,
   type AgentVisibilityViewer,
 } from "#src/server/agents/agent-visibility.server";
+import { canManageMembers } from "#src/features/workspaces/workspace-roles";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { CREATED_AGENT_FACES, MEMBER_PAGE_MAX } from "#src/features/workspaces/member-directory";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
@@ -319,7 +320,7 @@ export class WorkspaceMembers {
    * created that the viewer may see. NOT_FOUND when the person is not a member of this Workspace.
    */
   async person(workspaceId: string, viewerId: string, personId: string) {
-    const { visibleAgents } = await this.viewer(workspaceId, viewerId);
+    const { role: viewerRole, visibleAgents } = await this.viewer(workspaceId, viewerId);
     const membership = await this.db.workspaceMembership.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: personId } },
       select: {
@@ -340,6 +341,11 @@ export class WorkspaceMembers {
     });
     if (!membership) throw new AppError("NOT_FOUND");
     const person = membership.user;
+    const isViewer = person.id === viewerId;
+    // What Settings → Members offers, which the member directory re-checks on the write: an
+    // owner or admin changes anyone's role but the owner's, and removes anyone but the owner and
+    // themself (they leave instead).
+    const manageable = canManageMembers(viewerRole) && membership.role !== "owner";
     await this.storeAssistantNames(
       workspaceId,
       person.agents.map((agent) => ({ ...agent, owner: person })),
@@ -352,7 +358,9 @@ export class WorkspaceMembers {
       avatarUrl: workspaceUserAvatarUrl(workspaceId, person.id, person.avatarObjectKey),
       role: membership.role,
       joinedAt: membership.createdAt,
-      isViewer: person.id === viewerId,
+      isViewer,
+      canChangeRole: manageable,
+      canRemove: manageable && !isViewer,
       createdAgents: person.agents.map((agent) => ({
         ...createdAgentView(workspaceId, agent, person),
         description: agent.description,

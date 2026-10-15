@@ -4,6 +4,8 @@ import {
   agentIdFromProfileParam,
   agentProfileSearchWithoutThread,
   formatAgentProfileParam,
+  formatPersonProfileParam,
+  personIdFromProfileParam,
   type AgentProfileTab,
 } from "./profile-panel-search";
 
@@ -19,6 +21,9 @@ type AgentProfileSearch = {
 
 /** Opens the Agent profile panel, on `tab` when one is named. */
 export type OpenAgentProfile = (agentId: string, tab?: AgentProfileTab) => void;
+
+/** Opens a person's profile panel in the same slot (`profile=user:<id>`). */
+export type OpenPersonProfile = (userId: string) => void;
 
 /**
  * The one way a conversation page or the Members directory opens/closes/switches the Agent
@@ -41,6 +46,14 @@ export function useOpenAgentProfile() {
         ...(tab ? { agentTab: tab } : {}),
       }),
     });
+  const openPersonProfile: OpenPersonProfile = (userId) =>
+    void router.navigate({
+      to: ".",
+      search: (previous: AgentProfileSearch) => {
+        const { agentTab: _agentTab, ...rest } = agentProfileSearchWithoutThread(previous);
+        return { ...rest, profile: formatPersonProfileParam(userId) };
+      },
+    });
   const setAgentProfileTab = (tab: AgentProfileTab) =>
     void router.navigate({
       to: ".",
@@ -56,7 +69,7 @@ export function useOpenAgentProfile() {
         return agentProfileSearchWithoutThread(rest);
       },
     });
-  return { openAgentProfile, setAgentProfileTab, closeAgentProfile };
+  return { openAgentProfile, openPersonProfile, setAgentProfileTab, closeAgentProfile };
 }
 
 /**
@@ -71,10 +84,16 @@ export function useConversationAgentProfile({
   profile?: string;
   agentTab?: AgentProfileTab;
 }) {
-  const { openAgentProfile, setAgentProfileTab, closeAgentProfile } = useOpenAgentProfile();
+  const { openAgentProfile, openPersonProfile, setAgentProfileTab, closeAgentProfile } =
+    useOpenAgentProfile();
   return {
     onOpenAgentProfile: openAgentProfile,
-    agentProfile: { agentId: agentIdFromProfileParam(profile), tab: agentTab },
+    onOpenPersonProfile: openPersonProfile,
+    agentProfile: {
+      agentId: agentIdFromProfileParam(profile),
+      tab: agentTab,
+      personId: personIdFromProfileParam(profile),
+    },
     onAgentProfileTabChange: setAgentProfileTab,
     onCloseAgentProfile: closeAgentProfile,
   };

@@ -6,6 +6,7 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
+import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
 import { resolveVisibleConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
 import { TaskDetailDialog } from "#src/features/tasks/task-detail-dialog";
 import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-demand";
@@ -180,9 +181,10 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   // profile panel (`profile` search) are mutually exclusive. Their open hooks clear the other
   // search param; the resolver remains defensive for legacy URLs containing both.
   const profileAgentId = agentProfile?.agentId;
+  const profilePersonId = agentProfile?.personId;
   const visibleSlot = resolveVisibleConversationSlot({
     threadOpen: Boolean(selected),
-    profileOpen: Boolean(profileAgentId),
+    profileOpen: Boolean(profileAgentId || profilePersonId),
   });
   const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
   // The thread/profile pane's share of the width is the user's to set; remembered across visits,
@@ -281,6 +283,13 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           agentId={profileAgentId}
           requestedTab={agentProfile?.tab}
           onTabChange={(tab) => onAgentProfileTabChange?.(tab)}
+          onClose={() => onCloseAgentProfile?.()}
+        />
+      )}
+      {visibleSlot === "profile" && !profileAgentId && profilePersonId && (
+        <PersonProfilePanel
+          key={profilePersonId}
+          userId={profilePersonId}
           onClose={() => onCloseAgentProfile?.()}
         />
       )}

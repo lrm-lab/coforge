@@ -179,7 +179,6 @@ export function AgentsContent({
     <PersonProfilePanel
       // A fresh panel per person, so one never shows another's state while it loads.
       key={profilePersonId}
-      workspaceId={summary.workspaceId}
       userId={profilePersonId}
       onClose={closeAgentProfile}
     />
