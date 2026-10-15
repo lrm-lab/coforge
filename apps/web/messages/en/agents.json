@@ -221,7 +221,7 @@
   "agent_workspace_binary": "Binary file — cannot display",
   "agent_workspace_too_large": "File too large to display",
   "agent_workspace_file_error": "This file could not be loaded. Try refreshing.",
-  "agent_workspace_preview_error": "This file preview could not be loaded. Open another file or reload the page to try again.",
+  "agent_workspace_preview_error": "Failed to load file preview. Please refresh and try again.",
   "agent_workspace_reload": "Reload page",
   "agent_workspace_back": "Back",
   "agent_workspace_select_file": "Select a file to preview.",

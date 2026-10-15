@@ -221,7 +221,7 @@
   "agent_workspace_binary": "二进制文件，无法预览",
   "agent_workspace_too_large": "文件过大，无法预览",
   "agent_workspace_file_error": "无法加载此文件，请刷新重试。",
-  "agent_workspace_preview_error": "无法预览此文件。可打开其他文件，或刷新页面后重试。",
+  "agent_workspace_preview_error": "文件预览加载失败，请刷新重试。",
   "agent_workspace_reload": "刷新页面",
   "agent_workspace_back": "返回",
   "agent_workspace_select_file": "选择一个文件以预览。",
