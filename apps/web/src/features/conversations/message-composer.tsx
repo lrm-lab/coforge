@@ -129,10 +129,10 @@ function uploadAttachment(
 }
 
 /**
- * The chosen file next to the paperclip. An image uses the message avatar's frame:
- * 2.25rem by 2.5rem, rounded, with the violet edge. Any other file stays a small chip
- * with its type icon. Clicking it opens the preview with the file's details, upload
- * progress, and the download and remove actions.
+ * The chosen file next to the paperclip. An image uses the message avatar's size and
+ * corner (2.25rem by 2.5rem) without the violet identity edge. Any other file stays a
+ * small chip with its type icon. Clicking it opens the preview with the file's details,
+ * upload progress, and the download and remove actions.
  */
 function AttachmentChip({
   attachment,
@@ -182,7 +182,7 @@ function AttachmentChip({
           alt=""
           className={
             isImage
-              ? undefined
+              ? "attachment-thumb"
               : "overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset"
           }
           placeholder={icon(isImage ? "size-5" : "size-4")}
