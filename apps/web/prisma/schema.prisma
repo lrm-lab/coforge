@@ -60,6 +60,7 @@ model Workspace {
   memoryOfferCitations   MemoryOfferCitation[]
   memoryCleanupWork      WorkspaceMemoryCleanupWork[]
   formerSlugs            WorkspaceFormerSlug[]
+  agentMigrations        AgentMigration[]
 
   @@map("workspaces")
 }
@@ -146,6 +147,7 @@ model User {
   recordNotesAuthored         RecordNote[]                    @relation("RecordNoteAuthor")
   recordCommentsAuthored      RecordComment[]                 @relation("RecordCommentAuthor")
   committedActionCards        ActionCard[]
+  requestedAgentMigrations    AgentMigration[]
 
   @@map("users")
 }
@@ -297,6 +299,7 @@ model Agent {
   weeklyReportCollectorBinding  WeeklyReportCollectorBinding?
   attachments               Attachment[]
   attachmentUploadSessions  AttachmentUploadSession[]
+  migrations                AgentMigration[]
 
   @@unique([workspaceId, name])
   @@unique([id, workspaceId])
@@ -698,6 +701,8 @@ model Computer {
   reminders                     Reminder[]
   weeklyReportCollectorBindings WeeklyReportCollectorBinding[]
   weeklyReportCollectSlots      WeeklyReportCollectSlot[]
+  migrationsOut                 AgentMigration[]       @relation("AgentMigrationSource")
+  migrationsIn                  AgentMigration[]       @relation("AgentMigrationTarget")
   owner                         User                   @relation(fields: [ownerId], references: [id])
 
   @@unique([ownerId, machineId])
@@ -1759,4 +1764,42 @@ model HostJob {
   @@unique([requestedByUserId, idempotencyKey])
   @@index([hostId, reportedAt])
   @@map("host_jobs")
+}
+
+/// One move of an Agent and its workspace files from one Computer to another. The state machine,
+/// its fencing and who may take each step live in `server/agent-migrations/`; this row is its only
+/// persistence. A Computer is soft-deleted (`deletedAt`), so its migrations stay; the switch refuses a
+/// target that is no longer a live Computer of the Workspace. The cascades only follow a hard delete.
+model AgentMigration {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  workspaceId       String    @db.Uuid
+  agentId           String    @db.Uuid
+  sourceComputerId  String    @db.Uuid
+  targetComputerId  String    @db.Uuid
+  requestedByUserId String    @db.Uuid
+  /// requested | source_stopped | uploaded | placing | switched | completed | canceled | failed
+  state             String    @default("requested")
+  /// Bumped by every transition; a step applies only at the revision it read.
+  revision          Int       @default(0)
+  /// Bumped when a new transfer attempt replaces the previous one; fences a stale attempt.
+  generation        Int       @default(1)
+  /// When `Agent.computerId` moved to the target. Before it the source owns the Agent and a cancel
+  /// leaves it there; after it the target keeps the Agent and a cancel only cleans up.
+  switchedAt        DateTime?
+  errorCode         String?
+  errorDetail       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  finishedAt        DateTime?
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent             Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  sourceComputer    Computer  @relation("AgentMigrationSource", fields: [sourceComputerId], references: [id], onDelete: Cascade)
+  targetComputer    Computer  @relation("AgentMigrationTarget", fields: [targetComputerId], references: [id], onDelete: Cascade)
+  requestedBy       User      @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId], map: "agent_migrations_one_active", where: raw("\"state\" <> 'completed' AND \"state\" <> 'canceled' AND \"state\" <> 'failed'"))
+  @@index([sourceComputerId])
+  @@index([targetComputerId])
+  @@index([workspaceId])
+  @@map("agent_migrations")
 }

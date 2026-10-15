@@ -1,4 +1,4 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { enrollGeneralChannel } from "#src/server/conversations/public-channels.server";
@@ -216,6 +216,23 @@ export class PrismaAgentRepository implements AgentRepository {
   ) {
     return mapAgent(await this.db.agent.update({ where: { id }, data: input }));
   }
+}
+
+/**
+ * Moves a live Agent to another Computer inside the caller's transaction, only while it is still on
+ * `fromComputerId`. False means it had already moved (or was deleted) and nothing was written. An
+ * Agent migration's switch is the caller: it must not re-home an Agent that a concurrent edit has
+ * already moved somewhere else.
+ */
+export async function moveAgentToComputer(
+  tx: Prisma.TransactionClient,
+  input: { agentId: string; fromComputerId: string; toComputerId: string },
+): Promise<boolean> {
+  const { count } = await tx.agent.updateMany({
+    where: { id: input.agentId, computerId: input.fromComputerId, ...ACTIVE_AGENT_WHERE },
+    data: { computerId: input.toComputerId },
+  });
+  return count === 1;
 }
 
 /**

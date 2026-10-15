@@ -34,6 +34,7 @@ export REDIS_URL="$redis"
 # scripts/ci/integration-env.test.ts keeps this in step with what the suites read.
 for name in \
   AGENT_ACTIVITY_TEST_DATABASE_URL \
+  AGENT_MIGRATION_TEST_DATABASE_URL \
   AGENT_SESSION_TEST_DATABASE_URL \
   ATTACHMENT_UPLOAD_SESSION_TEST_DATABASE_URL \
   CHANNEL_TEST_DATABASE_URL \

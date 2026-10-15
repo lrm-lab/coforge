@@ -26,8 +26,15 @@ describe("Prisma id generation uses time-ordered UUIDv7", () => {
     expect(schema).not.toContain("@default(uuid())");
   });
 
-  test("all 51 key tables generate uuid(7)", () => {
-    const v7Count = schema.split("@default(uuid(7))").length - 1;
-    expect(v7Count).toBe(51);
+  // Tables keyed by another row's id (`userId`, `workspaceId`, `messageId`, a key hash) or by a
+  // composite `@@id` carry no generated id. Every surrogate `id`, and every other `@id` the schema
+  // generates (`deliveryId`), must generate uuid(7).
+  test("every generated id is uuid(7)", () => {
+    const lines = schema.split("\n");
+    const generated = lines.filter(
+      (line) => /^\s+id\s+String\s+@id\b/.test(line) || /@id\b.*@default\(/.test(line),
+    );
+    expect(generated.length).toBe(schema.split("@default(uuid(7))").length - 1);
+    expect(generated.filter((line) => !line.includes("@default(uuid(7))"))).toEqual([]);
   });
 });
