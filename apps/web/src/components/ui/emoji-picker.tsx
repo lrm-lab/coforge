@@ -65,8 +65,16 @@ export function EmojiPicker({
         ]);
         if (alive) {
           // TEMP DEBUG
-          console.log("[epr-debug]", typeof eprModule.default, eprModule.default?.name, Object.keys(eprModule).slice(0, 8), typeof eprModule);
-          setEpr(eprModule.default);
+          const Orig = eprModule.default;
+          const Wrapped = function (props: never) {
+            try {
+              return (Orig as (p: never) => unknown)(props);
+            } catch (e) {
+              console.error("[epr-debug] props", JSON.stringify(props ?? null)?.slice(0, 200), "stack", (e as Error).stack?.slice(0, 500));
+              throw e;
+            }
+          };
+          setEpr(Wrapped);
           setData(dataModule.default);
         }
       } catch (cause) {
