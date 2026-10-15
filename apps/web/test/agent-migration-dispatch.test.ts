@@ -129,3 +129,22 @@ test("a Computer that reconnects is leased again for the part each active migrat
     { migrationId: uploaded.migration.id, role: "target", expectedRevision: 2 },
   ]);
 });
+
+test("reissuing a failed lease still attempts the Computer's other active migrations", async () => {
+  const migrations = new AgentMigrations(memoryStore().store);
+  const first = await migrations.request(request);
+  const second = await migrations.request({ ...request, agentId: "agent-2" });
+  if (first.status !== "created" || second.status !== "created") throw new Error("setup");
+  const attempted: string[] = [];
+  const dispatch = new AgentMigrationDispatch({
+    publish: async (_channel, data) => {
+      const lease = decodeAgentMigrationLease(data);
+      attempted.push(lease.migrationId);
+      if (lease.migrationId === first.migration.id) throw new Error("first lease failed");
+    },
+  });
+  await expect(dispatch.reissue(migrations, workspaceId, "computer-a")).rejects.toThrow(
+    "first lease failed",
+  );
+  expect(attempted).toEqual([first.migration.id, second.migration.id]);
+});

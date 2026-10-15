@@ -4333,21 +4333,25 @@ test("a migration lease for this Computer reaches its slot with a deadline in th
     leases.push({ migrationId: lease.migrationId, deadline: lease.deadline }),
   );
   transport.onAgentMigrationCancel((cancel) => cancels.push(cancel));
-  await transport.start("secret", config);
-  const channel = `daemon:${config.workspaceId}:${config.computerId}`;
-  const before = Date.now();
-  fake.publish(
-    channel,
-    encodeAgentMigrationLease({ ...migrationScope, expectedRevision: 0, expiresInMs: 60_000 }),
-  );
-  fake.publish(
-    channel,
-    encodeAgentMigrationCancel({ ...migrationScope, requestId: "cancel-1", switched: false }),
-  );
-  expect(leases).toHaveLength(1);
-  expect(leases[0]!.deadline).toBeGreaterThanOrEqual(before + 60_000);
-  expect(leases[0]!.deadline).toBeLessThanOrEqual(Date.now() + 60_000);
-  expect(cancels).toMatchObject([{ migrationId: "migration-1", switched: false }]);
+  try {
+    await transport.start("secret", config);
+    const channel = `daemon:${config.workspaceId}:${config.computerId}`;
+    const before = Date.now();
+    fake.publish(
+      channel,
+      encodeAgentMigrationLease({ ...migrationScope, expectedRevision: 0, expiresInMs: 60_000 }),
+    );
+    fake.publish(
+      channel,
+      encodeAgentMigrationCancel({ ...migrationScope, requestId: "cancel-1", switched: false }),
+    );
+    expect(leases).toHaveLength(1);
+    expect(leases[0]!.deadline).toBeGreaterThanOrEqual(before + 60_000);
+    expect(leases[0]!.deadline).toBeLessThanOrEqual(Date.now() + 60_000);
+    expect(cancels).toMatchObject([{ migrationId: "migration-1", switched: false }]);
+  } finally {
+    await transport.stop();
+  }
 });
 
 test("a migration lease or cancel for another Computer is refused", async () => {
@@ -4356,13 +4360,17 @@ test("a migration lease or cancel for another Computer is refused", async () => 
   let delivered = 0;
   transport.onAgentMigrationLease(() => delivered++);
   transport.onAgentMigrationCancel(() => delivered++);
-  await transport.start("secret", config);
-  const other = { ...migrationScope, computerId: "other-computer" };
-  const channel = `daemon:${config.workspaceId}:${config.computerId}`;
-  fake.publish(
-    channel,
-    encodeAgentMigrationLease({ ...other, expectedRevision: 0, expiresInMs: 60_000 }),
-  );
-  fake.publish(channel, encodeAgentMigrationCancel({ ...other, switched: true }));
-  expect(delivered).toBe(0);
+  try {
+    await transport.start("secret", config);
+    const other = { ...migrationScope, computerId: "other-computer" };
+    const channel = `daemon:${config.workspaceId}:${config.computerId}`;
+    fake.publish(
+      channel,
+      encodeAgentMigrationLease({ ...other, expectedRevision: 0, expiresInMs: 60_000 }),
+    );
+    fake.publish(channel, encodeAgentMigrationCancel({ ...other, switched: true }));
+    expect(delivered).toBe(0);
+  } finally {
+    await transport.stop();
+  }
 });

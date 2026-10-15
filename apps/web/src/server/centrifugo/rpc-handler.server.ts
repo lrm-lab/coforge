@@ -5,7 +5,7 @@ import {
   utf8Encoder,
   utf8Decoder,
 } from "@lrm/coforge-sdk/internal";
-import { AGENT_MIGRATION_CAPABILITY, isRecord, thrownMessage } from "@lrm/coforge-sdk/internal";
+import { AGENT_MIGRATION_CAPABILITY, isRecord } from "@lrm/coforge-sdk/internal";
 import { ComputerRegistrationError } from "#src/server/computers/registration.server";
 import {
   handleRequestError,
@@ -424,9 +424,11 @@ export const createDaemonRuntimeReadyMethod =
           console.warn(
             JSON.stringify({
               event: "agent_migration:reissue_failed",
+              request_id: request.requestId,
               workspace_id: request.workspaceId,
               computer_id: request.computerId,
-              reason: thrownMessage(error),
+              outcome: "failed",
+              error_type: errorType(error),
             }),
           ),
         );

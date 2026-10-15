@@ -83,13 +83,20 @@ export class AgentMigrationDispatch {
    * transfer work from it: a lease published while it was offline is not kept for it.
    */
   async reissue(migrations: AgentMigrations, workspaceId: string, computerId: string) {
+    const failures: unknown[] = [];
     for (const migration of await migrations.activeFor({ workspaceId, computerId }))
       for (const role of ["source", "target"] as const)
         if (
           computerOf(migration, role) === computerId &&
           LEASED_STATES[role].includes(migration.state)
-        )
-          await this.lease(migration, role);
+        ) {
+          try {
+            await this.lease(migration, role);
+          } catch (error) {
+            failures.push(error);
+          }
+        }
+    if (failures.length) throw failures[0];
   }
 }
 
