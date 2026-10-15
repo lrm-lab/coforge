@@ -106,6 +106,20 @@ export function parseIgnoredPaths(text: string, root: string): Set<string> {
   return ignored;
 }
 
+/** Characters and forms no workspace-relative path may hold: NUL, backslashes, a drive prefix. */
+function hasForeignPathForm(path: string) {
+  return path.includes("\0") || path.includes("\\") || /^[A-Za-z]:/.test(path);
+}
+
+/**
+ * Whether `path` is a plain workspace-relative POSIX path: not empty, not absolute, and with no
+ * empty, `.` or `..` segment, so it can only name something inside the workspace.
+ */
+export function isSafeRelativePath(path: string): boolean {
+  if (!path || path.startsWith("/") || hasForeignPathForm(path)) return false;
+  return path.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+
 /**
  * Whether a symlink in `directory` may move with the workspace: its target must be relative and
  * resolve to a path strictly inside the workspace root, never the root itself.
@@ -115,12 +129,6 @@ export function isWorkspaceSymlinkTarget(
   directory: string,
   linkTarget: string,
 ): boolean {
-  if (
-    !linkTarget ||
-    linkTarget.includes("\0") ||
-    isAbsolute(linkTarget) ||
-    /^[A-Za-z]:/.test(linkTarget)
-  )
-    return false;
+  if (!linkTarget || isAbsolute(linkTarget) || hasForeignPathForm(linkTarget)) return false;
   return resolve(directory, linkTarget).startsWith(root + sep);
 }
