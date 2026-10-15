@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
-import { AGENT_RUNTIME_EVENT_TYPE, type AgentRuntimeEvent } from "#src/code-agent/contract";
+import {
+  AGENT_RUNTIME_EVENT_TYPE,
+  type AgentRuntimeEvent,
+  type AgentSession,
+} from "#src/code-agent/contract";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
@@ -568,33 +572,69 @@ test("Claude Code emits no context-usage event when no modelUsage entry carries 
   }
 });
 
-test("Claude Code rejects overlapping turns and interrupts without replacing its CLI process", async () => {
-  const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-lifecycle-"));
-  const adapter = fixtureAdapter();
+test(
+  "Claude Code rejects overlapping turns and interrupts an initialized CLI without replacing it",
+  async () => {
+    const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-lifecycle-"));
+    const launchLog = join(agentWorkspaceDirectory, "launches");
+    const adapter = fixtureAdapter("--launch-log", launchLog);
+    const initRequested = Promise.withResolvers<void>();
+    const releaseInit = Promise.withResolvers<void>();
+    const initialized = Promise.withResolvers<void>();
+    let gate: Bun.Server<undefined> | undefined;
+    let session: AgentSession | undefined;
 
-  try {
-    const session = await adapter.createAgentSession({
-      agentWorkspaceDirectory,
-      instructions: TEST_AGENT_INSTRUCTIONS,
-    });
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
+    try {
+      gate = Bun.serve({
+        port: 0,
+        async fetch() {
+          initRequested.resolve();
+          await releaseInit.promise;
+          return new Response("ready");
+        },
+      });
+      session = await adapter.createAgentSession({
+        agentWorkspaceDirectory,
+        instructions: TEST_AGENT_INSTRUCTIONS,
+        environment: { COFORGE_CLAUDE_INIT_GATE: gate.url.href },
+        async onSessionId() {
+          initialized.resolve();
+        },
+      });
+      const events: AgentRuntimeEvent[] = [];
+      let completion = Promise.withResolvers<void>();
+      session.subscribe((event) => {
+        events.push(event);
+        if (event.type === "completed") completion.resolve();
+      });
 
-    await session.sendMessage("wait");
-    await expect(session.sendMessage("overlap")).rejects.toThrow("already running");
-    await session.interrupt();
-    await waitForEvent(events, "completed");
-    expect(events.at(-1)).toEqual({ type: "completed", status: "interrupted" });
+      await session.sendMessage("wait");
+      await initRequested.promise;
+      await expect(session.sendMessage("overlap")).rejects.toThrow("already running");
+      releaseInit.resolve();
+      await initialized.promise;
+      await session.interrupt();
+      await completion.promise;
+      expect(events.at(-1)).toEqual({ type: "completed", status: "interrupted" });
 
-    events.length = 0;
-    await session.sendMessage("finish");
-    await waitForEvent(events, "completed");
-    expect(events.at(-1)).toEqual({ type: "completed", status: "completed" });
-    await session.dispose();
-  } finally {
-    await rm(agentWorkspaceDirectory, { recursive: true, force: true });
-  }
-});
+      events.length = 0;
+      completion = Promise.withResolvers<void>();
+      await session.sendMessage("finish");
+      await completion.promise;
+      expect(events.at(-1)).toEqual({ type: "completed", status: "completed" });
+      expect(await readFile(launchLog, "utf8")).toBe("fresh\n");
+    } finally {
+      releaseInit.resolve();
+      try {
+        await session?.dispose();
+      } finally {
+        gate?.stop(true);
+        await rm(agentWorkspaceDirectory, { recursive: true, force: true });
+      }
+    }
+  },
+  5_000 + 2 * PROCESS_TREE_EXIT_GRACE_MS,
+);
 
 test("Claude Code accepts busy notifications in the existing session", async () => {
   const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-notify-"));
