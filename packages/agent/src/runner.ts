@@ -358,7 +358,7 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.find]: openvikingTool(
       OPENVIKING_TOOL_NAMES.find,
       "OpenViking find",
-      "Decide from channel context whether facts, methods or both are needed. Use BM25 to find cited factual documents; proactively search viking://resources/causal/forks with abstract method/failure-pattern queries for complex or stalled tasks. BM25 uses OR-matched words, not phrase/date-range filters. No embedding or vector fallback is used.",
+      "Decide from channel context whether facts, methods or both are needed. Use BM25 to discover factual documents; discovery snippets are partial, not verification of all Task constraints. Use short discriminating words: BM25 OR-matches words, not quoted phrases, wildcards or date-range filters. Read promising returned document URIs with ov_read before more keyword variants; test one missing constraint and seek counterevidence to the leading candidate. If no candidate is relevant, explain why and pivot to a different constraint. Proactively search viking://resources/causal/forks using abstract method/failure-pattern queries for complex or stalled tasks. Inspect relevant served branch_steps before adopting a method; irrelevant Fork hits do not justify method claims. No embedding or vector fallback is used.",
       "find",
       {
         operationId: Type.String({
