@@ -89,7 +89,8 @@ jobs:
     needs: image
     runs-on: ubuntu-latest
     environment: staging
-    timeout-minutes: 15
+    # Image pulls have their own 20-minute remote budget; health checks stay bounded separately.
+    timeout-minutes: 35
     permissions:
       contents: read
       packages: read

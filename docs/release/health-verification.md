@@ -20,6 +20,18 @@ documented timeout:
 Compose health is necessary but does not replace external or functional
 verification. Capture failure diagnostics without secrets.
 
+Image downloads have a separate cumulative 20-minute budget, shared by the
+Centrifugo, Caddy, and Web pulls. `remote-deploy.sh --pull-timeout SECONDS`
+can reduce that budget (1–1200 seconds). Each pull shows progress on stderr;
+GNU `timeout` terminates its process group at the remaining deadline and
+forces termination five seconds later. A failed Web pull restores the last
+healthy configuration and `.env`, reports failure, and never reaches the
+migration or container switch. The deployment jobs allow 35 minutes overall;
+the application health timeout remains 120 seconds and public readiness 180
+seconds. A cancelled SSH session does not guarantee immediate remote
+termination: the remote pull deadline still applies. Do not start another
+deployment until any remaining remote deployment process has exited.
+
 The Web Docker build also starts the isolated runtime payload as its runtime
 user, with networking disabled and fixture configuration only, and checks
 `/health` plus both Computer installer responses before publication. The

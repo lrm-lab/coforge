@@ -22,12 +22,13 @@
 set -euo pipefail
 
 usage() {
-	printf 'usage: %s --image IMAGE --compose-file FILE --secrets-dir DIR --state-file FILE --web-health-url URL --public-health-url URL [--project NAME] [--timeout SECONDS] [--public-health-timeout SECONDS]\n' "$0" >&2
+	printf 'usage: %s --image IMAGE --compose-file FILE --secrets-dir DIR --state-file FILE --web-health-url URL --public-health-url URL [--project NAME] [--timeout SECONDS] [--public-health-timeout SECONDS] [--pull-timeout SECONDS]\n' "$0" >&2
 	exit 2
 }
 
 project=coforge-staging
 timeout=120
+pull_timeout=1200
 # How long the public HTTPS check keeps trying once the stack is healthy. A first deployment has
 # no certificate when Caddy starts: it obtains one after it is up, and until then a TLS handshake
 # fails with an internal-error alert, so one attempt reads as a broken release.
@@ -51,6 +52,10 @@ while [ "$#" -gt 0 ]; do
 		;;
 	--public-health-timeout)
 		public_health_timeout="${2:?}"
+		shift 2
+		;;
+	--pull-timeout)
+		pull_timeout="${2:?}"
 		shift 2
 		;;
 	--image)
@@ -90,6 +95,7 @@ done
 [ -n "$state_file" ] || usage
 [ -n "$web_health_url" ] || usage
 [ -n "$public_health_url" ] || usage
+[[ "$pull_timeout" =~ ^[1-9][0-9]*$ ]] && [ "$pull_timeout" -le 1200 ] || usage
 
 readonly COMPOSE_ARGS=(-p "$project" -f "$compose_file")
 
@@ -137,6 +143,13 @@ load_compose_secrets() {
 }
 
 compose() {
+	local -a pull_limit=()
+	if [ "${1:-}" = pull ]; then
+		local remaining=$((pull_deadline - SECONDS))
+		[ "$remaining" -gt 0 ] || return 124
+		printf 'image pull: %s (remaining budget %ss)\n' "${*: -1}" "$remaining" >&2
+		pull_limit=(timeout --kill-after=5s "${remaining}s")
+	fi
 	AUTHING_APP_ID="$AUTHING_APP_ID" \
 		AUTHING_APP_SECRET="$AUTHING_APP_SECRET" \
 		COFORGE_SESSION_SECRET="$COFORGE_SESSION_SECRET" \
@@ -151,7 +164,7 @@ compose() {
 		COFORGE_GITHUB_APP_SLUG="$COFORGE_GITHUB_APP_SLUG" \
 		COFORGE_GITHUB_APP_BOT_USER_ID="$COFORGE_GITHUB_APP_BOT_USER_ID" \
 		COFORGE_GITHUB_WEBHOOK_SECRET="$COFORGE_GITHUB_WEBHOOK_SECRET" \
-		docker compose "${COMPOSE_ARGS[@]}" "$@"
+		"${pull_limit[@]}" docker compose "${COMPOSE_ARGS[@]}" "$@"
 }
 
 # Fail closed on a mutable reference instead of guessing the intended digest.
@@ -538,7 +551,8 @@ fi
 # Pull the pinned image first, with its own reason: the one-off container
 # below would otherwise pull it implicitly, and a registry failure must not
 # be reported as a configuration failure.
-if ! compose pull --quiet centrifugo >/dev/null; then
+pull_deadline=$((SECONDS + pull_timeout))
+if ! compose pull centrifugo >/dev/null; then
 	discard_candidate_configuration
 	report "$current_image" "failed: Centrifugo image pull failed" "failed" ""
 	exit 0
@@ -562,7 +576,7 @@ fi
 # recreated. `caddy validate` loads and provisions the file with the pinned
 # image without starting servers or obtaining certificates; `--no-deps` keeps
 # web and Centrifugo untouched and `run` publishes no ports.
-if ! compose pull --quiet caddy >/dev/null; then
+if ! compose pull caddy >/dev/null; then
 	discard_candidate_configuration
 	report "$current_image" "failed: Caddy image pull failed" "failed" ""
 	exit 0
@@ -574,7 +588,11 @@ if ! compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfi
 	exit 0
 fi
 
-compose pull --quiet web >/dev/null
+if ! compose pull web >/dev/null; then
+	discard_candidate_configuration
+	report "$current_image" "failed: Web image pull failed" "failed" ""
+	exit 0
+fi
 
 if ! compose run --rm --entrypoint sh migrate \
 	-c 'cd .migrate && bun node_modules/prisma/build/index.js migrate deploy' </dev/null 1>&2; then

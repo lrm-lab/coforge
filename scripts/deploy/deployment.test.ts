@@ -241,7 +241,10 @@ describe("remote-deploy.sh compose invocation shape", () => {
   test("passes secrets only to Compose and places global arguments before its subcommand", async () => {
     const script = await Bun.file(new URL("./remote-deploy.sh", import.meta.url)).text();
     const directInvocations = script.split("\n").filter((line) => line.includes("docker compose"));
-    expect(directInvocations).toEqual(['\t\tdocker compose "${COMPOSE_ARGS[@]}" "$@"']);
+    // Pulls use a process-group timeout; credentials and global Compose arguments stay here.
+    expect(directInvocations).toEqual([
+      '\t\t"${pull_limit[@]}" docker compose "${COMPOSE_ARGS[@]}" "$@"',
+    ]);
     expect(script).not.toContain("export AUTHING_APP_ID");
   });
 
@@ -598,6 +601,116 @@ const requiredSecretNames = [
   "worker_jwt_private_jwk",
 ];
 
+async function rejectedWebPull(timedOut = false) {
+  const root = await mkdtemp(join(tmpdir(), "coforge-deploy-web-pull-"));
+  try {
+    for (const directory of ["bin", "secrets", "centrifugo", "caddy", "last-healthy"])
+      await mkdir(join(root, directory));
+    for (const name of requiredSecretNames)
+      await writeFile(join(root, "secrets", name), "fixture-private-value");
+    await writeFile(join(root, "centrifugo/config.yaml"), "client: {}\n");
+    await writeFile(join(root, "caddy/Caddyfile"), "example.test {}\n");
+    await writeFile(join(root, "docker-compose.yml"), "candidate configuration\n");
+    await writeFile(join(root, "last-healthy/docker-compose.yml"), "healthy configuration\n");
+    const previous = `coforge/web@sha256:${"c".repeat(64)}`;
+    const state = `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`;
+    await writeFile(join(root, "state.env"), state);
+    await writeFile(
+      join(root, "bin/timeout"),
+      `#!/bin/bash
+echo "timeout $*" >> "$FIXTURE_ROOT/calls"
+if [[ "$TIMED_OUT" = true && "\${*: -1}" = web ]]; then exit 124; fi
+shift 2
+exec "$@"
+`,
+      { mode: 0o700 },
+    );
+    await writeFile(
+      join(root, "bin/docker"),
+      `#!/bin/bash
+echo "$*" >> "$FIXTURE_ROOT/calls"
+if [[ "$1" = compose ]]; then
+  shift 5
+  if [[ "$1" = pull && "\${*: -1}" = web ]]; then exit 1; fi
+fi
+exit 0
+`,
+      { mode: 0o700 },
+    );
+    const proc = Bun.spawn(
+      [
+        "bash",
+        new URL("./remote-deploy.sh", import.meta.url).pathname,
+        "--image",
+        registryImage,
+        "--compose-file",
+        join(root, "docker-compose.yml"),
+        "--secrets-dir",
+        join(root, "secrets"),
+        "--state-file",
+        join(root, "state.env"),
+        "--web-health-url",
+        "http://127.0.0.1/health",
+        "--public-health-url",
+        "https://example.test/health",
+        ...(timedOut ? ["--pull-timeout", "60"] : []),
+      ],
+      {
+        env: {
+          ...Bun.env,
+          PATH: `${join(root, "bin")}:${Bun.env.PATH}`,
+          FIXTURE_ROOT: root,
+          TIMED_OUT: String(timedOut),
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    expect(code, stderr).toBe(0);
+    expect(parseRemoteOutputs(stdout).healthResult).toBe("failed: Web image pull failed");
+    expect(parseRemoteOutputs(stdout).outcome).toBe("failed");
+    expect(await readFile(join(root, "state.env"), "utf8")).toBe(state);
+    expect(await readFile(join(root, "docker-compose.yml"), "utf8")).toBe(
+      "healthy configuration\n",
+    );
+    expect(await readFile(join(root, ".env"), "utf8")).toContain(`COFORGE_WEB_IMAGE=${previous}\n`);
+    const calls = await readFile(join(root, "calls"), "utf8");
+    expect(calls).not.toContain("migrate deploy");
+    expect(calls).not.toContain("up -d");
+    expect(stdout + stderr).not.toContain("fixture-private-value");
+    return { calls, stderr };
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+test("a failed Web pull restores the healthy configuration without migrating or switching", async () => {
+  await rejectedWebPull();
+});
+
+test("a timed-out Web pull restores configuration and cannot reach migration or switching", async () => {
+  const { calls, stderr } = await rejectedWebPull(true);
+  expect(calls).toMatch(/timeout --kill-after=5s [1-6][0-9]?s docker compose/);
+  expect(stderr).toContain("image pull: web");
+});
+
+test("Web deployment jobs leave room for bounded pulls and the unchanged health checks", async () => {
+  for (const environment of ["staging", "production"]) {
+    const workflow = Bun.YAML.parse(
+      await readFile(
+        new URL(`../../.github/workflows/deploy-${environment}.yml`, import.meta.url),
+        "utf8",
+      ),
+    ) as { jobs: { deploy: { "timeout-minutes": number } } };
+    expect(workflow.jobs.deploy["timeout-minutes"]).toBeGreaterThanOrEqual(35);
+  }
+});
+
 describe("Centrifugo configuration guard and release snapshot", () => {
   test("a Centrifugo configuration the pinned image rejects stops the deployment before anything is recreated", async () => {
     const root = await mkdtemp(join(tmpdir(), "coforge-deploy-centrifugo-reject-"));
@@ -667,8 +780,8 @@ exit 0
       );
       const calls = await Bun.file(join(root, "calls")).text();
       expect(calls).not.toMatch(/ up -d/);
-      expect(calls).toContain("pull --quiet centrifugo");
-      expect(calls).not.toContain("pull --quiet web");
+      expect(calls).toContain("pull centrifugo");
+      expect(calls).not.toContain("pull web");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -817,7 +930,7 @@ exit 0
       const calls = await Bun.file(join(root, "calls")).text();
       expect(calls).not.toMatch(/ up -d/);
       expect(calls).toContain("run --rm --no-deps caddy caddy validate");
-      expect(calls).not.toContain("pull --quiet web");
+      expect(calls).not.toContain("pull web");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
