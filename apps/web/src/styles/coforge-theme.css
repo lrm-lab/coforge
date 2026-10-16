@@ -47,6 +47,9 @@
      in the row component. Re-pointed under `.dark-mode` below. */
   --color-chat-selected-bg: #f4f6fa;
   --color-chat-selected-border: #e0e5f1;
+  /* A message row's hover/focus fill (design spec): opaque, not the border grey (#e0e5f1 is for
+     borders and dividers only). Re-pointed under `.dark-mode` below. */
+  --color-message-hover: #f7f8fb;
   /* The reply count on a thread preview card ("3 replies"), from the design spec's text grey;
      the unread count after it stays the brand accent. Re-pointed under `.dark-mode` below. */
   --color-thread-reply-count: #777d8d;
@@ -181,6 +184,9 @@
        and near-white, which on the dark list rendered as a white card under light-grey text. */
     --color-chat-selected-bg: var(--color-sidebar-accent);
     --color-chat-selected-border: #4c4081;
+
+    /* Untitled's own opaque row hover; the light value is a near-white tuned for a white page. */
+    --color-message-hover: var(--color-bg-primary_hover);
 
     /* Untitled's own dark tertiary text: the light value is a mid grey tuned for white. */
     --color-thread-reply-count: var(--color-text-tertiary);
