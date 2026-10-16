@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import { readdir, readFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 /**
  * The Web integration suites only run when someone points a scratch database at them, and each one
@@ -32,4 +33,39 @@ test("the integration runner sets every test URL the suites read", async () => {
 
   const missing = [...names].filter((name) => !runner.includes(name)).sort();
   expect(missing).toEqual([]);
+});
+
+test("the canonical integration runner supplies and cleans its branch schema fixture", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "integration-schema-"));
+  try {
+    await Bun.write(
+      join(temporary, "node"),
+      '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do\n if [ "$1" = "--output" ]; then shift; printf \'CREATE TABLE "users" ();\\n\' > "$1"; exit 0; fi\n shift\ndone\nexit 2\n',
+    );
+    await Bun.write(
+      join(temporary, "bun"),
+      '#!/bin/sh\n[ -n "${MEMORY_THREAD_TEST_SCHEMA_SQL:-}" ] || exit 9\n[ -s "$MEMORY_THREAD_TEST_SCHEMA_SQL" ] || exit 8\nprintf "%s\\n" "$MEMORY_THREAD_TEST_SCHEMA_SQL"\n',
+    );
+    await chmod(join(temporary, "node"), 0o700);
+    await chmod(join(temporary, "bun"), 0o700);
+    const child = Bun.spawn(["bash", root("scripts/test/run-web-integration.sh")], {
+      env: {
+        ...Bun.env,
+        PATH: `${temporary}:${Bun.env.PATH}`,
+        TMPDIR: temporary,
+        MEMORY_THREAD_TEST_SCHEMA_SQL: undefined,
+        INTEGRATION_DATABASE_URL: "postgresql://unused/unused",
+        INTEGRATION_REDIS_URL: "redis://unused",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [exit, output] = await Promise.all([child.exited, new Response(child.stdout).text()]);
+    expect(exit).toBe(0);
+    const fixture = output.trim();
+    expect(fixture.startsWith(temporary)).toBe(true);
+    expect(await Bun.file(fixture).exists()).toBe(false);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 });

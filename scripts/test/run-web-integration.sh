@@ -57,6 +57,12 @@ export SKILLS_TEST_REDIS_URL="$redis"
 export MODEL_CATALOG_TEST_REDIS_URL="$redis"
 
 cd "$root/apps/web"
+if [ -z "${MEMORY_THREAD_TEST_SCHEMA_SQL:-}" ]; then
+  fixture_directory=$(mktemp -d "${TMPDIR:-/tmp}/memory-thread-schema.XXXXXX")
+  trap 'rm -rf -- "$fixture_directory"' EXIT
+  export MEMORY_THREAD_TEST_SCHEMA_SQL="$fixture_directory/schema.sql"
+  node node_modules/prisma/build/index.js migrate diff --from-empty --to-schema prisma/schema.prisma --script --output "$MEMORY_THREAD_TEST_SCHEMA_SQL"
+fi
 files=()
 for file in "$root"/apps/web/test/*.integration*.ts; do
   # A glob that matched nothing would leave `bun test` with no arguments, and it would then discover
@@ -67,4 +73,4 @@ for file in "$root"/apps/web/test/*.integration*.ts; do
   }
   files+=("$file")
 done
-exec bun test "${files[@]}"
+bun test "${files[@]}"

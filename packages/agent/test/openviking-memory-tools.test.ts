@@ -471,3 +471,56 @@ test("even unchanged findings need a fresh Offer id for a new triggering request
   expect(() => budget.consume(offer)).toThrow("earlier triggering request");
   expect(budget.snapshot().offers).toBe(0);
 });
+
+test("Fork discovery supplies an executable served-relation example before a method is adopted", async () => {
+  const uri = "viking://resources/causal/forks/method.md";
+  const proxy = fakeProxy((_path, raw) => ({
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "find",
+    operationId: (raw as { operationId: string }).operationId,
+    duplicate: false,
+    items: [
+      {
+        kind: "openviking",
+        citationId: `ov:${uri}`,
+        workspaceId: "ws",
+        accountId: "acct",
+        uri,
+        contentHash: "sha256:fixture",
+        matchedLevel: "L2",
+        excerpt: "Candidate counterfactual method",
+      },
+    ],
+    retrieval: {
+      mode: "bm25",
+      chainRef: "served-chain",
+      step: 0,
+      remainingHops: 4,
+      exhausted: false,
+      nodes: [
+        {
+          uri,
+          kind: "fork_overlay",
+          status: "counterfactual",
+          sourceRef: "fork-a",
+          relations: ["branch_steps"],
+        },
+      ],
+    },
+  }));
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  const result = await executeTool(tools, "ov_find", {
+    operationId: "find-method",
+    query: "constraint intersection",
+    targetUri: "viking://resources/causal/forks",
+  });
+  const guidance = result.content
+    .slice(1)
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n");
+  expect(guidance).toContain('"chainRef":"served-chain"');
+  expect(guidance).toContain('"relation":"branch_steps"');
+  expect(guidance).toContain(uri);
+  expect(proxy.calls).toHaveLength(1);
+});
