@@ -4,6 +4,8 @@ import type { AgentDisplay } from "./agent-display.server";
 
 type DetailComputer = {
   id: string;
+  /** The Computer's owner: only they may scan or delete an Agent workspace on it. */
+  ownerId?: string;
   name: string;
   displayName: string;
   kind: string;
@@ -39,6 +41,8 @@ type DetailAgent = {
   avatarObjectKey?: string | null;
   /** Set once the Agent is deleted; its profile stays readable. */
   deletedAt?: Date | null;
+  /** Who deleted it, when that was recorded. */
+  deletedBy?: { id: string; username: string; displayName?: string | null } | null;
 };
 
 export type AgentDetailSource = {
@@ -57,6 +61,7 @@ function assignedComputer(agent: DetailAgent) {
     label: computer.displayName.trim() || computer.name.trim(),
     kind: computer.kind,
     computerVersion: computer.computerVersion ?? null,
+    ...(computer.ownerId ? { ownerId: computer.ownerId } : {}),
   };
 }
 
@@ -103,6 +108,7 @@ export class AgentDetailQuery {
       visibility: agent.visibility,
       avatarObjectKey: agent.avatarObjectKey ?? null,
       deletedAt: agent.deletedAt ?? null,
+      deletedBy: agent.deletedBy ?? null,
       ...(display ? { display } : {}),
       status: {
         value: statusReadFailed ? ("unknown" as const) : (status?.status ?? ("inactive" as const)),

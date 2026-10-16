@@ -177,6 +177,7 @@ export function AgentProfileTab({
   envVars,
   onStartDelete,
   migration,
+  archive,
   contextUsage,
 }: {
   profile: NonNullable<AgentProfile>;
@@ -186,6 +187,8 @@ export function AgentProfileTab({
   contextUsage?: { usedTokens: number; windowTokens: number; observedAtMs: number } | null;
   /** The Agent's moves between Computers (`AgentMigrationSection`), shown under ACTIONS. */
   migration?: ReactNode;
+  /** An archived Agent's ARCHIVE section (`AgentArchiveSection`), for those who managed it. */
+  archive?: ReactNode;
   /** `canManageAgentRole || ownedByCurrentUser` — gates every pencil, the ACTIONS section. */
   canManage: boolean;
   controls: AgentRuntimeControls;
@@ -449,6 +452,8 @@ export function AgentProfileTab({
           </div>
         )}
       </section>
+
+      {archive}
 
       {profile.ownedByCurrentUser && onLoadSkills && (
         <div className="border-b border-secondary px-6">

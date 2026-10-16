@@ -25,6 +25,7 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
     agentId: string;
     workspaceId: string;
     deletedAt: Date;
+    deletedByUserId?: string;
   }): Promise<AgentDeletionOutcome> {
     return this.db.$transaction(async (tx) => {
       const assistant = await tx.weeklyReportAssistant.findFirst({
@@ -34,7 +35,7 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
       if (assistant) return { outcome: "protected" as const };
       const deleted = await tx.agent.updateMany({
         where: { id: input.agentId, workspaceId: input.workspaceId, ...ACTIVE_AGENT_WHERE },
-        data: { deletedAt: input.deletedAt },
+        data: { deletedAt: input.deletedAt, deletedByUserId: input.deletedByUserId ?? null },
       });
       // Already deleted: leave the original `deletedAt` and the first delete's effects alone.
       if (deleted.count === 0) return { outcome: "already-deleted" as const };

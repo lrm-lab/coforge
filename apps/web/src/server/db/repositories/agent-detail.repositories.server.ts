@@ -21,6 +21,7 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
       where: { id, workspaceId, workspace: { members: { some: { userId } } } },
       select: {
         deletedAt: true,
+        deletedBy: { select: { id: true, username: true, displayName: true } },
         id: true,
         workspaceId: true,
         name: true,
@@ -33,6 +34,7 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
         computer: {
           select: {
             id: true,
+            ownerId: true,
             name: true,
             displayName: true,
             kind: true,

@@ -46,6 +46,8 @@ export interface AgentDeletionStore {
     agentId: string;
     workspaceId: string;
     deletedAt: Date;
+    /** Who deleted (archived) it, shown on its profile. */
+    deletedByUserId?: string;
   }): Promise<AgentDeletionOutcome>;
 }
 
@@ -86,6 +88,7 @@ export class AgentDeletion {
         agentId: agent.id,
         workspaceId: agent.workspaceId,
         deletedAt: this.now(),
+        deletedByUserId: principal.userId,
       });
       // A repeated delete is an idempotent no-op; never send a second stop for it.
       if (outcome.outcome === "deleted") await this.#stopRuntime(agent, principal.userId);

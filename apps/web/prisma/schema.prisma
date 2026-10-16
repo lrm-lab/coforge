@@ -131,7 +131,8 @@ model User {
   memberships                 WorkspaceMembership[]
   pendingMentionActions       PendingMentionAction[]
   createdJoinLinks            WorkspaceJoinLink[]
-  agents                      Agent[]
+  agents                      Agent[]                     @relation("AgentOwner")
+  deletedAgents               Agent[]                     @relation("AgentDeletedBy")
   weeklyReportAssistants        WeeklyReportAssistant[]
   weeklyReportAssistantChatSessions WeeklyReportAssistantChatSession[]
   weeklyReportCollectorBindings WeeklyReportCollectorBinding[]
@@ -277,17 +278,21 @@ model Agent {
   /// Set when a user stopped this Agent: nothing may start or wake it except an
   /// explicit user Start, Restart, Reset session or Full reset. Independent of `controlState`.
   stoppedAt                 DateTime?
-  /// Soft delete: a deleted Agent is hidden from every directory, list, wake and
-  /// profile lookup, but its Messages, Tasks and Action cards are kept so history stays
-  /// readable. Never hard-deleted: `Message.sender`, `Task.creator/owner` and
+  /// Soft delete (shown to users as archiving): a deleted Agent is hidden from every directory,
+  /// list and wake, but its profile (read-only), Messages, Tasks and Action cards are kept so
+  /// history stays readable. Never hard-deleted: `Message.sender`, `Task.creator/owner` and
   /// `ActionCard.preparedByAgent` are `onDelete: Restrict`, the same blocker `leftAt` solved
   /// for channel membership.
   deletedAt                 DateTime?
+  /// Who deleted (archived) the Agent; null for one deleted before this was recorded, or whose
+  /// deleting User is gone.
+  deletedByUserId           String?                    @db.Uuid
   currentSessionId          String?                    @db.Uuid
   currentSession            AgentSession?              @relation("CurrentAgentSession", fields: [currentSessionId], references: [id], onDelete: SetNull)
   sessions                  AgentSession[]             @relation("AgentSessions")
   workspace                 Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  owner                     User                       @relation(fields: [ownerId], references: [id])
+  owner                     User                       @relation("AgentOwner", fields: [ownerId], references: [id])
+  deletedBy                 User?                      @relation("AgentDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
   computer                  Computer?                  @relation(fields: [computerId], references: [id], onDelete: SetNull)
   conversations             ConversationMember[]
   coordinatedConversations Conversation[]         @relation("ConversationCoordinator")

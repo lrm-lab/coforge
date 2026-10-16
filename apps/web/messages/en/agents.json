@@ -404,5 +404,17 @@
   "agent_delete_error": "Could not archive this Agent. Try again.",
   "agent_delete_access_denied": "Only a Workspace owner or admin can archive an Agent.",
   "agent_delete_protected": "This Agent is managed by CoForge and cannot be archived.",
-  "agent_deleted_conversation_notice": "This Agent is archived. You can read its history, but new messages cannot be sent."
+  "agent_deleted_conversation_notice": "This Agent is archived. You can read its history, but new messages cannot be sent.",
+  "agent_archive_section": "Archive",
+  "agent_archive_archived_at": "Archived",
+  "agent_archive_archived_at_by": "{date}, by {name}",
+  "agent_archive_workspace": "Workspace",
+  "agent_archive_workspace_no_computer": "No Computer was assigned, so there is no workspace.",
+  "agent_archive_workspace_not_owner": "On {computer}. Only that Computer's owner can view or delete it.",
+  "agent_archive_workspace_checking": "Checking…",
+  "agent_archive_workspace_unavailable": "{computer} is not connected, so this cannot be checked now.",
+  "agent_archive_workspace_removed": "Deleted from the Computer",
+  "agent_archive_workspace_on_computer": "On {computer}",
+  "agent_archive_delete_workspace": "Delete workspace from Computer",
+  "agent_archive_delete_workspace_description": "Deletes every file in this Agent's workspace on {computer}. This cannot be undone. The profile and messages stay."
 }

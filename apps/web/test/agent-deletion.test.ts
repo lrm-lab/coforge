@@ -101,6 +101,7 @@ describe("AgentDeletion", () => {
         agentId: "agent-1",
         workspaceId: "workspace-1",
         deletedAt: new Date("2026-09-18T04:00:00Z"),
+        deletedByUserId: "user-1",
       },
     ]);
     expect(stops).toEqual([{ agentId: "agent-1", userId: "user-1" }]);

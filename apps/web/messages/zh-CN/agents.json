@@ -402,5 +402,17 @@
   "agent_delete_error": "无法归档该智能体，请重试。",
   "agent_delete_access_denied": "只有工作区所有者或管理员可以归档智能体。",
   "agent_delete_protected": "该智能体由 CoForge 管理，无法归档。",
-  "agent_deleted_conversation_notice": "该智能体已归档。你仍可查看历史消息，但无法再发送新消息。"
+  "agent_deleted_conversation_notice": "该智能体已归档。你仍可查看历史消息，但无法再发送新消息。",
+  "agent_archive_section": "归档",
+  "agent_archive_archived_at": "归档时间",
+  "agent_archive_archived_at_by": "{date}，由 {name} 归档",
+  "agent_archive_workspace": "工作区",
+  "agent_archive_workspace_no_computer": "没有分配 Computer，也就没有工作区。",
+  "agent_archive_workspace_not_owner": "在 {computer} 上。只有这台 Computer 的所有者可以查看或删除它。",
+  "agent_archive_workspace_checking": "正在检查…",
+  "agent_archive_workspace_unavailable": "{computer} 当前没有连接，暂时无法确认。",
+  "agent_archive_workspace_removed": "已从 Computer 删除",
+  "agent_archive_workspace_on_computer": "在 {computer} 上",
+  "agent_archive_delete_workspace": "从 Computer 删除工作区",
+  "agent_archive_delete_workspace_description": "会删除 {computer} 上该智能体工作区里的全部文件，无法恢复。资料页和消息仍然保留。"
 }

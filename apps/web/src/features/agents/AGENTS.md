@@ -122,7 +122,10 @@ These rules apply to `src/features/agents/`.
 - Users see deleting an Agent as archiving it ("Archive", `ARCHIVED`, 已归档);
   code and data keep `deleted`/`deletedAt`. An archived Agent's profile opens
   read-only: the Profile tab alone, no runtime control, message, edit, role,
-  visibility, migration or archive.
+  visibility, migration or archive. Its managers also see the ARCHIVE section
+  (`agent-archive-section.tsx`): when and by whom (`Agent.deletedByUserId`), and
+  its workspace, which only the Computer's owner may scan or delete, through
+  the Computer page's own server functions.
 - `deleted-agent.tsx` owns archived-sender rendering (grey avatar and `ARCHIVED`
   badge) for every message-history surface. Use it rather than local styling.
 - `agent-avatar-dialog.tsx` is the creator's change-avatar dialog, opened by

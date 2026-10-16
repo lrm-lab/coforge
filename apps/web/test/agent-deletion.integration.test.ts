@@ -759,6 +759,8 @@ test.skipIf(!connectionString)(
       const profile = await profileFor(memberViewer);
       expect(profile).toMatchObject({ id: agent.id, name: agent.name, displayName: "Doomed" });
       expect(profile?.deletedAt).toBeInstanceOf(Date);
+      // The profile names who archived it.
+      expect(profile?.deletedBy).toMatchObject({ id: owner.id, displayName: owner.displayName });
 
       // Deleting changes nothing about who may see it: a private Agent stays its creator's.
       await db.agent.update({ where: { id: agent.id }, data: { visibility: "private" } });

@@ -40,6 +40,7 @@ import {
 import { ActionCards } from "#src/server/conversations/action-cards.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { AgentDetailQuery } from "#src/server/agents/agent-detail.server";
+import { humanLabel } from "#src/lib/human-label";
 import { PrismaAgentDetailSource } from "#src/server/db/repositories/agent-detail.repositories.server";
 import {
   agentVisibilityViewerForUser,
@@ -529,7 +530,19 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
     // Always the same shape (`online` present, possibly `undefined`) whether or not a Computer is
     // assigned, so callers never have to narrow a union between "has computer without online" and
     // "has computer with online".
-    computer: result.computer ? { ...result.computer, online: computerOnline } : undefined,
+    computer: result.computer
+      ? {
+          ...result.computer,
+          online: computerOnline,
+          // Only the Computer's owner may scan or delete the Agent's workspace on it.
+          ownedByViewer: result.computer.ownerId === user.id,
+        }
+      : undefined,
+    // Who archived it, labelled the way the rest of the product names a person; absent when
+    // that was not recorded.
+    deletedBy: result.deletedBy
+      ? { id: result.deletedBy.id, label: humanLabel(result.deletedBy) }
+      : null,
   };
 }
 

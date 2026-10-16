@@ -58,6 +58,7 @@ import {
   previewAgentVisibilityChange,
 } from "#src/features/agents/agents.functions";
 import { AgentDeleteDialog } from "#src/features/agents/agent-delete-dialog";
+import { AgentArchiveSection } from "./agent-archive-section";
 import { AgentMigrationSection } from "./agent-migration-section";
 import { AgentVisibilityConfirmDialog } from "#src/features/agents/agent-visibility-confirm-dialog";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
@@ -487,6 +488,18 @@ export function AgentProfilePanel({
             onLoadSkills={owned ? onLoadSkills : undefined}
             envVars={owned ? (envQuery.data ?? {}) : undefined}
             onStartDelete={profile.canDeleteAgent ? () => setDeleteDialogOpen(true) : undefined}
+            archive={
+              profile.deletedAt && canManageAgent(profile) ? (
+                <AgentArchiveSection
+                  agentId={profile.id}
+                  agentName={profile.displayName || profile.name}
+                  deletedAt={profile.deletedAt}
+                  deletedBy={profile.deletedBy?.label ?? null}
+                  computer={profile.computer}
+                  timeZone={timeZone}
+                />
+              ) : undefined
+            }
             migration={
               profile.computer && !deleted ? (
                 <AgentMigrationSection
