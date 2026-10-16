@@ -147,7 +147,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 ## Agent HTTPS forwarding
 
 - `agent-message-operations.ts` owns the Agent's `coforge message` operations
-  (check, send, and the forwarded rest). `runtime.ts` only validates the
+  (check, send, the forwarded rest, and Memory's pending-thread read guard). `runtime.ts` only validates the
   request and resolves its canonical target.
 - `agent-request-forwarder.ts` (`DaemonRuntime.agentRequests`) holds the
   requests the daemon only authorizes and forwards, keeping no state. A

@@ -450,11 +450,12 @@ export function createMemoryFenceTools(
     messageTool(
       "message_read",
       "Read messages",
-      "Read public-channel messages through the CoForge message route.",
+      "Read messages at the exact target in the inbox notice. A parent channel and its threads have independent read cursors: reading #channel does not read #channel:root-message-id. When a Task reply is in a thread, read that full thread target before concluding there is no new request or deciding whether diagnosis is useful.",
       "read",
       {
         target: Type.String({
-          description: "Required. Public channel target. Example: #general.",
+          description:
+            "Required. Exact target from the inbox notice, including the full :root-message-id for a thread. Do not replace a thread target with its parent channel.",
         }),
         before: Type.Optional(
           Type.String({ description: "Optional. Read messages before this message id." }),

@@ -90,6 +90,7 @@ function heldFreshnessDecision(
 export type AgentMessageOperationsPorts = Readonly<{
   connection: Readonly<{ workspaceId: string; computerId: string }>;
   attention: AgentMessageAttentionIndex;
+  isMemoryAgent?(agentId: string): boolean;
   /** The Agent's send drafts. */
   inbox(agentId: string): AgentInboxStateMachine;
   /** The current transport, read at each request; the runtime has checked it can carry Agent
@@ -546,6 +547,25 @@ export class AgentMessageOperations {
     // An unpaged read looks at what is unread now; when it finds nothing, the attention the daemon
     // held for the target up to this point is stale.
     const unpaged = operation === "read" && !request.before && !request.after && !request.around;
+    if (
+      unpaged &&
+      target?.startsWith("#") &&
+      !target.includes(":") &&
+      this.#ports.isMemoryAgent?.(agentId)
+    ) {
+      const threads = this.#ports.attention
+        .check(agentId)
+        .filter((item) => item.target.startsWith(`${target}:`))
+        .map((item) => item.target);
+      if (threads.length) {
+        throw new AgentPreflightError(
+          `Unread Task thread updates remain under ${target}: ${threads.join(", ")}. ` +
+            "Use message_read with each exact thread target before reading the parent channel. " +
+            "The parent read was not issued and no thread update was consumed.",
+          "MEMORY_THREAD_READ_REQUIRED",
+        );
+      }
+    }
     const attentionUpperBound =
       unpaged && target
         ? this.#ports.attention.check(agentId).find((item) => item.target === target)
