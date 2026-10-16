@@ -20,6 +20,10 @@ import {
   sidebarDirectsQuery,
 } from "#src/features/conversations/sidebar-collections";
 import { agentWorkspaceScanQuery } from "#src/features/computers/agent-workspace-scan.query";
+import {
+  chatSectionOrderQuery,
+  chatSectionsQuery,
+} from "#src/features/conversations/chat-sections";
 
 /**
  * What the browser's copy of the Query cache holds is read back by later builds, so the shape of
@@ -249,6 +253,18 @@ const fixtures = [
       },
     ],
   }),
+  fixture("chat sections", chatSectionsQuery("w1"), [
+    {
+      id: "section-1",
+      name: "Project",
+      emoji: null,
+      collapsed: false,
+      sortOrder: 0,
+      sortMode: "manual",
+      conversationIds: ["c1", "d1"],
+    },
+  ]),
+  fixture("chat section order", chatSectionOrderQuery("w1"), ["pinned", "section-1", "channels"]),
   fixture("agent workspace scan", agentWorkspaceScanQuery("w1", "computer-1"), {
     scannedAt: 1_790_000_000_000,
     workspaces: [
@@ -342,6 +358,9 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "channel names": "331d221481674004",
     "saved messages": "af3437c73adfddaa",
     "agent workspace scan": "d45d053aa4368e73",
+    // A member's sections and their order were added as kinds.
+    "chat sections": "4c7716ab24622fdc",
+    "chat section order": "89829726781b01aa",
   },
 };
 

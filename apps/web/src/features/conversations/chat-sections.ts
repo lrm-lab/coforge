@@ -1,3 +1,5 @@
+import type { NotifyOnChangeProps } from "@tanstack/react-query";
+
 import type { ChatSection, ChatSectionSortMode } from "./chat-section.schemas";
 import {
   listChatSections,
@@ -59,6 +61,9 @@ export const chatSectionOrderQuery = (workspaceId: string, api = serverChatSecti
   queryFn: api.order,
   refetchOnWindowFocus: "always" as const,
   refetchInterval: 30_000,
+  // `chatSectionOrderReady` reads the invalidation flag, which is not on the result: a read starts
+  // whenever the query is invalidated, so a view of it renders again when one starts or ends.
+  notifyOnChangeProps: ["data", "status", "fetchStatus"] satisfies NotifyOnChangeProps,
 });
 
 /** Whether the sidebar has its sections to show. A re-read that fails keeps the sections already
@@ -71,3 +76,9 @@ export function chatSectionsStatus(sections: {
   if (sections.data !== undefined) return "ready";
   return sections.isLoadingError ? "failed" : "loading";
 }
+
+/** Whether the sections may be dragged: a drag saves the whole order, so it must start from the
+ * order the server holds now. One restored from the browser copy, or invalidated by a save, is not
+ * that until its own read succeeds; a drag from it could overwrite a reorder made elsewhere since. */
+export const chatSectionOrderReady = (order: { status: string; isInvalidated: boolean }) =>
+  order.status === "success" && !order.isInvalidated;

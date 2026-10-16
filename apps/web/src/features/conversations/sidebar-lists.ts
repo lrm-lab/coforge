@@ -17,7 +17,12 @@ import {
 import { directListsOf, type DirectRow } from "./sidebar-rows";
 import { sidebarRefreshQueue, type ChatList } from "./conversation-unread";
 import { compareChannelNames, type ChannelSignal } from "./channel-signals";
-import { chatSectionOrderQuery, chatSectionsQuery, chatSectionsStatus } from "./chat-sections";
+import {
+  chatSectionOrderQuery,
+  chatSectionOrderReady,
+  chatSectionsQuery,
+  chatSectionsStatus,
+} from "./chat-sections";
 
 // React access to the Chat sidebar's lists (`sidebar-collections.ts`).
 
@@ -167,9 +172,11 @@ const EMPTY_ORDER: readonly string[] = [];
 /** Personal groups share the sidebar's optimistic transactions, including a move's unpin. */
 export function useChatSections() {
   const workspaceId = useCurrentWorkspaceId() ?? "";
+  const queryClient = useQueryClient();
   const query = useQuery(chatSectionsQuery(workspaceId));
   // The built-in sections' places; until it loads (or if it fails) they keep the default order.
-  const order = useQuery(chatSectionOrderQuery(workspaceId));
+  const orderQuery = chatSectionOrderQuery(workspaceId);
+  const order = useQuery(orderQuery);
   const sidebar = useSidebar();
   const live = useLiveQuery({
     queryKey: ["chat-sections", workspaceId],
@@ -182,9 +189,12 @@ export function useChatSections() {
   return {
     sections: live.isReady ? live.data : (query.data ?? []),
     order: order.data ?? EMPTY_ORDER,
-    /** Sections may be dragged only once their saved order is known: a drag from the default
-     * order would overwrite it. */
-    orderReady: order.isSuccess,
+    /** Sections may be dragged only once their saved order is read: a drag from the default
+     * order, or from a restored copy, would overwrite it. */
+    orderReady: chatSectionOrderReady({
+      status: order.status,
+      isInvalidated: queryClient.getQueryState(orderQuery.queryKey)?.isInvalidated ?? false,
+    }),
     /** A failed order read is not reported: the sections keep the default order. */
     status: chatSectionsStatus(query),
     retry: () => Promise.all([query.refetch(), order.refetch()]),

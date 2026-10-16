@@ -24,6 +24,10 @@ import {
   type PersistedQueryStore,
 } from "#src/features/cache-persistence/query-cache-persistence";
 import { agentActivityKeys } from "#src/features/agents/agent-activity-queries";
+import {
+  chatSectionOrderQuery,
+  chatSectionsQuery,
+} from "#src/features/conversations/chat-sections";
 import { agentEnvironmentKey } from "#src/features/agents/profile-panel/agent-profile-queries";
 import {
   channelNamesQuery,
@@ -1551,7 +1555,7 @@ describe("queries nobody opened again", () => {
 });
 
 describe("the queries the app really defines", () => {
-  test("a conversation, the sidebar lists and the channel names are kept", () => {
+  test("a conversation, the sidebar lists, its sections and the channel names are kept", () => {
     expect(persistsQuery(publicChannelQuery("c1").query.queryKey)).toBe(true);
     expect(persistsQuery(directConversationQuery("c1").query.queryKey)).toBe(true);
     expect(persistsQuery(sidebarChannelsQuery("w1").queryKey)).toBe(true);
@@ -1559,6 +1563,8 @@ describe("the queries the app really defines", () => {
     expect(persistsQuery(channelNamesQuery("w1").queryKey)).toBe(true);
     expect(persistsQuery(savedMessagesQuery("w1").queryKey)).toBe(true);
     expect(persistsQuery(agentWorkspaceScanQuery("w1", "computer-1").queryKey)).toBe(true);
+    expect(persistsQuery(chatSectionsQuery("w1").queryKey)).toBe(true);
+    expect(persistsQuery(chatSectionOrderQuery("w1").queryKey)).toBe(true);
   });
 
   test("what is volatile, secret or another query's business is not", () => {

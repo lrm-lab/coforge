@@ -35,6 +35,8 @@ export const STORED_KINDS = [
   "channel-names",
   "saved-messages",
   "agent-workspace-scan",
+  "chat-sections",
+  "chat-section-order",
 ] as const;
 export type StoredKind = (typeof STORED_KINDS)[number];
 
@@ -95,6 +97,10 @@ export function storedKindOf(queryKey: QueryKey): StoredKind | undefined {
   if (scope === "channel-names" && list === undefined) return "channel-names";
   if (scope === "sidebar" && list === "directs") return "sidebar-directs";
   if (scope === "sidebar" && list === "channels") return "sidebar-channels";
+  // A member's own sections and their order (`chat-sections.ts`): without them the sidebar opens
+  // with every conversation in Channels and DMs until the read lands.
+  if (scope === "sidebar" && list === "sections") return "chat-sections";
+  if (scope === "sidebar" && list === "section-order") return "chat-section-order";
   return undefined;
 }
 
@@ -208,6 +214,8 @@ function firstPaintOf(queryKey: QueryKey, data: unknown): unknown {
         : undefined;
     case "sidebar-channels":
     case "channel-names":
+    case "chat-sections":
+    case "chat-section-order":
       return data;
     case "agent-workspace-scan":
       // Nothing scanned yet (the query's own read is `null`) is not kept.
@@ -237,6 +245,9 @@ export function isStoredData(queryKey: QueryKey, data: unknown): boolean {
       return hasList(data, "entries");
     case "agent-workspace-scan":
       return isAgentWorkspaceScan(data);
+    case "chat-sections":
+    case "chat-section-order":
+      return Array.isArray(data);
     case undefined:
       return false;
   }
