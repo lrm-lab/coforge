@@ -346,12 +346,12 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.find]: openvikingTool(
       OPENVIKING_TOOL_NAMES.find,
       "OpenViking find",
-      "Use BM25 only to find cited documents, experiences, Fork nodes, and AIG nodes for the current question. No embedding or vector fallback is used.",
+      "Decide from channel context whether facts, methods or both are needed. Use BM25 to find cited factual documents; proactively search viking://resources/causal/forks with abstract method/failure-pattern queries for complex or stalled tasks. BM25 uses OR-matched words, not phrase/date-range filters. No embedding or vector fallback is used.",
       "find",
       {
         operationId: Type.String({
           description:
-            "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: find-1. Use a new id on every call.",
+            "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: find-1. Use a fresh id for each new logical operation or changed arguments; preserve the id only for an identical retry.",
         }),
         query: Type.String({
           description: "Required. Search text. Example: deploy rollback.",
@@ -378,7 +378,7 @@ export function createMemoryFenceTools(
       {
         operationId: Type.String({
           description:
-            "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: read-1. Use a new id on every call.",
+            "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: read-1. Use a fresh id for each new logical operation or changed arguments; preserve the id only for an identical retry.",
         }),
         uri: Type.String({
           description:
@@ -389,12 +389,12 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.offer]: openvikingTool(
       OPENVIKING_TOOL_NAMES.offer,
       "Publish Memory Offer",
-      "Publish one visible, cited Memory Offer. Partial findings and explicit unresolved constraints are valid; do not wait to solve the whole Task. This is the only visible answer to an explicit @memory question. citationRefs are citation ids already returned in this workspace. The server binds the channel and recipient.",
+      "Publish one visible, cited Memory Offer. Partial findings and explicit unresolved constraints are valid; do not wait to solve the whole Task. This is the only visible answer to an explicit @memory question. citationRefs are citation ids already returned in this workspace. The server binds the channel and recipient. This completes the retrieval round: include unresolved constraints and suggested next queries; do not promise autonomous continued searching.",
       "offer",
       {
         operationId: Type.String({
           description:
-            "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: offer-1. Use a new id on every call.",
+            "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: offer-request123-1. New request or changed findings require a new id; identical retries keep the same id.",
         }),
         citationRefs: Type.Array(
           Type.String({

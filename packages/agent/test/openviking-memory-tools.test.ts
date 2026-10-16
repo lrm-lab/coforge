@@ -390,3 +390,84 @@ test("unchanged retrieval nudges a partial Offer without blocking further reads"
   ).not.toContain("No new evidence");
   expect(proxy.calls).toHaveLength(4);
 });
+
+test("a new trigger cannot silently replay an old Offer with a different body", () => {
+  const budget = new MemoryAgentTurnBudget();
+  budget.consume({
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "offer",
+    operationId: "progress-1",
+    body: "First partial finding",
+    citationRefs: ["ov:known"],
+  });
+  budget.reset();
+  expect(() =>
+    budget.consume({
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "offer",
+      operationId: "progress-1",
+      body: "New findings after the follow-up",
+      citationRefs: ["ov:known"],
+    }),
+  ).toThrow("operationId already used for a different Offer");
+  expect(budget.snapshot().offers).toBe(0);
+  expect(() =>
+    budget.consume({
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "offer",
+      operationId: "progress-2",
+      body: "New findings after the follow-up",
+      citationRefs: ["ov:known"],
+    }),
+  ).not.toThrow();
+});
+
+test("changing search snippets for the same source prompts a strategy pivot without capping reads", async () => {
+  const proxy = fakeProxy((_path, raw) => {
+    const command = raw as { protocol: string; op: string; operationId: string; query: string };
+    return {
+      ...emptyItemsResponse(command.protocol, command.op, command.operationId),
+      items: [
+        {
+          kind: "openviking",
+          citationId: "ov:known",
+          workspaceId: "ws",
+          accountId: "acct",
+          uri: "viking://resources/doc.md",
+          contentHash: "sha256:fixture",
+          matchedLevel: "L2",
+          excerpt: `Snippet selected for ${command.query}`,
+        },
+      ],
+    };
+  });
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  let result;
+  for (let i = 0; i < 4; i++)
+    result = await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+      operationId: `query-${i}`,
+      query: `rephrasing ${i}`,
+    });
+  const text = result!.content
+    .filter((item) => item.type === "text")
+    .map((item) => item.text)
+    .join("\n");
+  expect(text).toContain("causal/forks");
+  expect(text).toContain("ov_read");
+  expect(proxy.calls).toHaveLength(4);
+});
+
+test("even unchanged findings need a fresh Offer id for a new triggering request", () => {
+  const budget = new MemoryAgentTurnBudget();
+  const offer = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "offer" as const,
+    operationId: "old-request",
+    body: "Same supported findings",
+    citationRefs: ["ov:known"],
+  };
+  budget.consume(offer);
+  budget.reset();
+  expect(() => budget.consume(offer)).toThrow("earlier triggering request");
+  expect(budget.snapshot().offers).toBe(0);
+});

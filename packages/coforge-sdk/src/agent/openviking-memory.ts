@@ -225,7 +225,7 @@ export const OPENVIKING_OPERATION_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}
 
 /** Copyable rule for models that echo prompt text instead of reading JSON Schema. */
 export const OPENVIKING_OPERATION_ID_RULE =
-  "operationId is a client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$ (starts with a letter or digit, may contain hyphens and underscores, at most 128 characters). Use a new id on every call.";
+  "operationId is a client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$ (starts with a letter or digit, may contain hyphens and underscores, at most 128 characters). Use a fresh id for each new logical operation or changed arguments; preserve the id only for an identical retry.";
 
 /** One complete arguments object per operation. Placeholders are meant to be copied. */
 export const OPENVIKING_ARGUMENT_EXAMPLES: Record<OpenVikingAgentOperation, string> = {

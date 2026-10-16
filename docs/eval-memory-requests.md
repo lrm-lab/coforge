@@ -11,7 +11,8 @@ Agent HTTPS 接口和 OpenViking 工具运行。经验与证据文档统一由 M
    收到通知后使用不带范围锚点的 `message_read`，从服务端已读位置分页读取正文，`hasNewer=true` 时继续。通知与 custody ACK 不推进已读位置；成功读取才推进。`message_check` 只消费投递集合，不能代替频道增量阅读。读完判断是否需要检索或发言。
 3. Memory 使用 `ov_find` 检索、按需 `ov_read`，用 `memory_offer` 返回带引用的 Hint。`ov_find` 显式发送 `retrieval_mode=bm25`，Memory 不暴露 `ov_search_context`。后端未明确返回 BM25 标识时返回 `bm25_backend_required`，不回退 embedding。已发布的 frozen AIG/Fork 摘要可由 `ov_find` 发现，再使用返回的 chainRef、URI 和关系调用 `ov_expand` 逐跳探索；链绑定用户、已返回节点、权限和预算。Fork 分支标明反事实，不能当作真实执行证据。
    `ov_find`、`ov_read`、`ov_expand` 没有每个触发消息的读取次数上限；客户端和 Web 均只记录读取次数。单次查询最多 10 个候选，每个触发最多发布 1 个 Offer，检索链自身的跳数与权限校验仍生效。
-   Memory 可以及时交付带引用的部分发现并列出未解决约束，无需独自解完整题目；后续检索由 Task 继续请求。成功发布 Offer 后当前模型轮次正常结束。连续空频道轮询也正常结束轮次，后续消息继续使用同一会话。
+   Memory 根据原题、群聊增量及未解决约束判断检索事实、方法或两者：简单事实查文档；复杂多跳题、检索停滞或策略调整主动用抽象方法/失败模式查询 `viking://resources/causal/forks`，按返回关系展开相关 Fork。Fork 是未执行的方法建议，不能代替事实证据；文档 BM25 按词项 OR 匹配，不支持引号短语或日期范围过滤。
+   Memory 可以及时交付带引用的部分发现并列出未解决约束，无需独自解完整题目；后续检索由 Task 明确继续请求，或诚实提交证据不足的最终答案；不得双方互等或承诺 Offer 后自动继续。成功发布 Offer 后当前模型轮次正常结束。连续空频道轮询也正常结束轮次，后续消息继续使用同一会话。新请求/新内容必须使用新 `operationId`，相同逻辑调用重试保持原 ID；活跃 session 会拒绝不同 Offer 内容复用旧 ID，防止静默回放旧消息。
 4. Task 调用原生 `memory_disposition` 记录 adopt / reject / defer 和原因，再决定如何执行。
 5. 最终答案来自不属于 Memory 检索请求的 Task 消息；IR 只选含非空 `Exact Answer:` 的答案，后续完成通知不会覆盖答案。IR 的 `Exact Answer:` / `Confidence:` 完整答案允许在解释中提及 Memory。两者结束运行、Memory 没有待消费的观察消息，且最新回复、Hint 和运行进展经过 settle 窗口后才结束该题，避免在 30 秒批通知发出前清理 workspace。仍受 quiet 和总 deadline 预算限制。
 
