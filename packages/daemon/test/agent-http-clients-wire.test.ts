@@ -3,6 +3,8 @@ import type { AgentMessageRequest } from "@lrm/coforge-sdk/internal";
 import { createAgentMessageHttpClient } from "../src/connection/agent-http-clients";
 import { AgentTransportError } from "../src/connection/agent-transport-error";
 import { AgentManualRequestError } from "../src/connection/agent-manual-request-error";
+import { AgentMentionActionRequestError } from "../src/connection/agent-mention-action-request-error";
+import { AgentProfileRequestError } from "../src/connection/agent-profile-request-error";
 
 // Pins what the message client puts on the wire for the routes that share `sendAgentJson` /
 // `getAgentJson`: method, URL, headers, body and whether a deadline is attached.
@@ -197,34 +199,86 @@ test("manual get and search GET their query fields with the Agent headers", asyn
 });
 
 test("a manual error envelope becomes AgentManualRequestError; anything else is a transport error", async () => {
-  const respond = (body: string, status: number) =>
+  const respondGet = (body: string, status: number) =>
     createAgentMessageHttpClient(async () => new Response(body, { status })).requestManualGet!({
       ...keys,
       request: { topic: "tasks", intent: "i", reason: "r" },
     }).catch((thrown: unknown) => thrown);
+  const respondSearch = (body: string, status: number) =>
+    createAgentMessageHttpClient(async () => new Response(body, { status })).requestManualSearch!({
+      ...keys,
+      request: { query: "tasks", intent: "i", reason: "r" },
+    }).catch((thrown: unknown) => thrown);
 
-  const refused = await respond(
-    JSON.stringify({ ok: false, errorCode: "TOPIC_NOT_FOUND", error: "no such topic" }),
-    404,
+  for (const respond of [respondGet, respondSearch]) {
+    const refused = await respond(
+      JSON.stringify({ ok: false, errorCode: "TOPIC_NOT_FOUND", error: "no such topic" }),
+      404,
+    );
+    expect(refused).toBeInstanceOf(AgentManualRequestError);
+    expect(refused).toMatchObject({
+      errorCode: "TOPIC_NOT_FOUND",
+      message: "no such topic",
+      status: 404,
+    });
+
+    expect(await respond(JSON.stringify({ error: "plain" }), 502)).toMatchObject({
+      failureClass: "upstream_http_response",
+      causeCode: "HTTP_502",
+      upstreamStatus: 502,
+    });
+    expect(await respond("not json", 500)).toMatchObject({
+      failureClass: "protocol_mismatch",
+      upstreamStatus: 500,
+    });
+    expect(await respond("not json", 200)).toMatchObject({
+      failureClass: "protocol_mismatch",
+      upstreamStatus: 200,
+    });
+  }
+});
+
+test("profile and mention-action envelope routes map structured errors to their route error types", async () => {
+  const profileClient = createAgentMessageHttpClient(
+    async () =>
+      new Response(
+        JSON.stringify({ ok: false, errorCode: "TARGET_NOT_FOUND", error: "missing profile" }),
+        { status: 404 },
+      ),
   );
-  expect(refused).toBeInstanceOf(AgentManualRequestError);
-  expect(refused).toMatchObject({
-    errorCode: "TOPIC_NOT_FOUND",
-    message: "no such topic",
-    status: 404,
-  });
+  for (const attempt of [
+    profileClient.requestProfileShow!({ ...keys, request: { target: "@alice" } }),
+    profileClient.requestProfileUpdate!({ ...keys, request: { description: "updated" } }),
+  ]) {
+    const error = await attempt.catch((thrown: unknown) => thrown);
+    expect(error).toBeInstanceOf(AgentProfileRequestError);
+    expect(error).toMatchObject({
+      errorCode: "TARGET_NOT_FOUND",
+      message: "missing profile",
+      status: 404,
+    });
+  }
 
-  expect(await respond(JSON.stringify({ error: "plain" }), 502)).toMatchObject({
-    failureClass: "upstream_http_response",
-    causeCode: "HTTP_502",
-    upstreamStatus: 502,
-  });
-  expect(await respond("not json", 500)).toMatchObject({
-    failureClass: "protocol_mismatch",
-    upstreamStatus: 500,
-  });
-  expect(await respond("not json", 200)).toMatchObject({
-    failureClass: "protocol_mismatch",
-    upstreamStatus: 200,
-  });
+  const mentionClient = createAgentMessageHttpClient(
+    async () =>
+      new Response(
+        JSON.stringify({ ok: false, errorCode: "MENTION_NOT_FOUND", error: "missing mention" }),
+        { status: 404 },
+      ),
+  );
+  for (const attempt of [
+    mentionClient.requestMentionPending!({ ...keys, request: {} }),
+    mentionClient.requestMentionExecute!({
+      ...keys,
+      request: { action: "notify", resolutionIds: ["r-1"] },
+    }),
+  ]) {
+    const error = await attempt.catch((thrown: unknown) => thrown);
+    expect(error).toBeInstanceOf(AgentMentionActionRequestError);
+    expect(error).toMatchObject({
+      errorCode: "MENTION_NOT_FOUND",
+      message: "missing mention",
+      status: 404,
+    });
+  }
 });

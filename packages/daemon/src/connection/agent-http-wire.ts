@@ -1,10 +1,7 @@
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
-import type { AgentManualErrorCode, AgentMentionActionErrorCode } from "@lrm/coforge-sdk/agent";
 import { isRecord, type ChannelOperation } from "@lrm/coforge-sdk/internal";
 import { AgentExplainedRefusalError } from "./agent-explained-refusal-error";
 import { AgentMessageRequestError } from "./agent-message-request-error";
-import { AgentManualRequestError } from "./agent-manual-request-error";
-import { AgentMentionActionRequestError } from "./agent-mention-action-request-error";
 import { AgentTransportError } from "./agent-transport-error";
 import { getLogger } from "@logtape/logtape";
 
@@ -192,27 +189,6 @@ export async function sendAgentJson<Result>(
 }
 
 /**
- * GETs an Agent Manual route, whose JSON error body is always `{ ok: false, errorCode, error }`,
- * unlike the plain-text/allowlisted `messages` error contract `getAgentJson` assumes. A
- * well-formed error body becomes a typed `AgentManualRequestError` carrying its `errorCode`
- * through to the CLI; anything else is a genuine transport failure.
- */
-export function getAgentManualJson<Result extends { ok: true }>(
-  fetcher: HttpFetch,
-  input: Omit<AgentHttpInput<never>, "request"> & {
-    query: Record<string, string | undefined>;
-    what: string;
-  },
-): Promise<Result> {
-  return getAgentEnvelopeJson<Result>(
-    fetcher,
-    input,
-    (errorCode, message, status) =>
-      new AgentManualRequestError(errorCode as AgentManualErrorCode, message, status),
-  );
-}
-
-/**
  * Shared GET helper for a route whose JSON error body is always `{ ok: false, errorCode, error }`
  * (the Manual, `user info`, `profile show` and mention routes). `makeError` turns a well-formed
  * error body into the route family's own typed error; anything else is a genuine transport
@@ -247,14 +223,6 @@ export async function readUpstreamErrorCode(response: Response): Promise<string 
   } catch {
     return undefined;
   }
-}
-
-export function mentionActionError(errorCode: string, message: string, status: number): Error {
-  return new AgentMentionActionRequestError(
-    errorCode as AgentMentionActionErrorCode,
-    message,
-    status,
-  );
 }
 
 /** Same envelope convention as `getAgentEnvelopeJson`, for a POST route (`profile update`). */
