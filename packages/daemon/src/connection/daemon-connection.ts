@@ -145,6 +145,12 @@ import {
   type ReminderFireResponse,
   type ReminderSnapshotRequest,
   type ReminderSync,
+  APP_CONFIG_SNAPSHOT_METHOD,
+  APP_CONFIG_SYNC_MESSAGE_TYPE,
+  decodeAppConfigSync,
+  encodeAppConfigSnapshotRequest,
+  type AppConfigSnapshotRequest,
+  type AppConfigSync,
   type AgentMigrationCancel,
   type AgentMigrationLease,
   type TaskRequest,
@@ -371,10 +377,12 @@ export interface DaemonConnectionClient {
   onAgentInboxPurge?(callback: (purge: AgentInboxPurge) => void): () => void;
   onAgentMessage?(callback: (message: AgentMessageDelivery) => void): () => void;
   onReminderSync?(callback: (sync: ReminderSync) => void): () => void;
+  onAppConfigSync?(callback: (sync: AppConfigSync) => void): () => void;
   onAgentMigrationLease?(callback: (lease: ReceivedAgentMigrationLease) => void): () => void;
   onAgentMigrationCancel?(callback: (cancel: AgentMigrationCancel) => void): () => void;
   agentMigrationServer?(): AgentMigrationServer;
   requestSnapshot?(request: ReminderSnapshotRequest): Promise<ReminderSync>;
+  requestAppConfigSnapshot?(request: AppConfigSnapshotRequest): Promise<AppConfigSync>;
   fireReminder?(request: ReminderFireRequest): Promise<ReminderFireResponse>;
   agentReminder?(
     request: AgentReminderOperationRequest,
@@ -525,6 +533,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   readonly #agentWorkspaceReset = new ListenerSlot<(request: AgentWorkspaceResetRequest) => void>();
   readonly #agentMessage = new ListenerSlot<(message: AgentMessageDelivery) => void>();
   readonly #reminderSync = new ListenerSlot<(sync: ReminderSync) => void>();
+  readonly #appConfigSync = new ListenerSlot<(sync: AppConfigSync) => void>();
   readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
   readonly #agentMigrationCancel = new ListenerSlot<(cancel: AgentMigrationCancel) => void>();
   readonly #skillsList = new ListenerSlot<(request: AgentSkillsListRequest) => Promise<void>>();
@@ -837,6 +846,10 @@ export class DaemonConnection implements DaemonConnectionClient {
 
   onReminderSync(callback: (sync: ReminderSync) => void): () => void {
     return this.#reminderSync.set(callback);
+  }
+
+  onAppConfigSync(callback: (sync: AppConfigSync) => void): () => void {
+    return this.#appConfigSync.set(callback);
   }
 
   onAgentMigrationLease(callback: (lease: ReceivedAgentMigrationLease) => void): () => void {
@@ -1533,6 +1546,14 @@ export class DaemonConnection implements DaemonConnectionClient {
     return decodeReminderSync(rpcData(reply));
   }
 
+  async requestAppConfigSnapshot(request: AppConfigSnapshotRequest): Promise<AppConfigSync> {
+    const reply = await this.#rpc(
+      APP_CONFIG_SNAPSHOT_METHOD,
+      encodeAppConfigSnapshotRequest(request),
+    );
+    return decodeAppConfigSync(rpcData(reply));
+  }
+
   async agentMemoryDisposition(request: unknown, agentApiKey: string): Promise<unknown> {
     this.#assertConnected();
     return sendAgentJson(fetch, {
@@ -1878,6 +1899,11 @@ export class DaemonConnection implements DaemonConnectionClient {
       this.#route(data, decodeReminderSync, (sync) => {
         if (sync.messageType !== REMINDER_SYNC_MESSAGE_TYPE || !ownsDaemon(sync)) return false;
         this.#deliver(this.#reminderSync, sync);
+        return true;
+      }) ||
+      this.#route(data, decodeAppConfigSync, (sync) => {
+        if (sync.messageType !== APP_CONFIG_SYNC_MESSAGE_TYPE || !ownsDaemon(sync)) return false;
+        this.#deliver(this.#appConfigSync, sync);
         return true;
       }) ||
       this.#route(data, decodeAgentMigrationLease, (lease) => {
@@ -2391,6 +2417,7 @@ export class DaemonConnection implements DaemonConnectionClient {
       this.#agentWorkspaceReset,
       this.#agentMessage,
       this.#reminderSync,
+      this.#appConfigSync,
       this.#agentMigrationLease,
       this.#agentMigrationCancel,
       this.#reconnect,

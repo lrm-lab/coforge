@@ -1,4 +1,8 @@
-import { AGENT_MIGRATION_CAPABILITY } from "@lrm/coforge-sdk/internal";
+import {
+  AGENT_MIGRATION_CAPABILITY,
+  APP_CONFIG_CAPABILITY,
+  APP_CONFIG_SYNC_MESSAGE_TYPE,
+} from "@lrm/coforge-sdk/internal";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import type { ReceivedAgentMigrationLease } from "#src/connection/daemon-connection";
 import {
@@ -11217,6 +11221,64 @@ test("a daemon that can migrate says so in its ready, and starts no Agent a sour
     await expect(runtime.startAgent("moving-agent", config)).rejects.toThrow(
       "moving to another Computer",
     );
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("a daemon advertises App config and asks for each launched Agent's snapshot once per connection", async () => {
+  const credentials = new InMemoryDaemonCredentialStore();
+  await credentials.save(connection.workspaceId, connection.computerId, "token-app-config");
+  let snapshot: (() => import("@lrm/coforge-sdk/internal").DaemonRuntimeReadyRequest) | undefined;
+  let reconnect: (() => void) | undefined;
+  const requested: string[] = [];
+  const answered = Promise.withResolvers<void>();
+  const runtime = new DaemonRuntime(
+    connection,
+    () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
+    credentials,
+    {
+      create: () => ({
+        async start() {},
+        async stop() {},
+        async ready(get) {
+          snapshot = get;
+        },
+        onReconnect(callback) {
+          reconnect = callback;
+          return () => {};
+        },
+        async requestAgentLaunchConfig() {
+          return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+        },
+        async revokeAgentApiKey() {},
+        async requestAppConfigSnapshot(request) {
+          requested.push(request.agentId);
+          if (requested.length === 3) answered.resolve();
+          return {
+            ...request,
+            operation: "snapshot" as const,
+            configs: [],
+            messageType: APP_CONFIG_SYNC_MESSAGE_TYPE,
+          };
+        },
+      }),
+    },
+    undefined,
+    emptyCodeAgentDiscovery,
+  );
+  try {
+    await runtime.start(connection);
+    expect(snapshot!().capabilities).toContain(APP_CONFIG_CAPABILITY);
+    await runtime.startAgent("agent-a", config);
+    await runtime.stopAgent("agent-a");
+    await runtime.startAgent("agent-a", config);
+    expect(requested).toEqual(["agent-a"]);
+    // A new connection asks again for every running Agent.
+    reconnect!();
+    await runtime.startAgent("agent-b", config);
+    await answered.promise;
+    expect(requested.toSorted()).toEqual(["agent-a", "agent-a", "agent-b"]);
   } finally {
     await runtime.stop();
   }

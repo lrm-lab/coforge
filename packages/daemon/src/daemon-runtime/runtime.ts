@@ -95,6 +95,7 @@ import {
   type UsageScanResponse,
   REMINDER_CAPABILITY,
   AGENT_MIGRATION_CAPABILITY,
+  APP_CONFIG_CAPABILITY,
   type AgentReminderOperationRequest,
   type LocalReminderRequest,
   type ReminderJob,
@@ -184,6 +185,7 @@ import {
   reminderAppInboxSummary,
 } from "#src/agent-reminder/reminder-scheduler";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
+import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { diagnosticErrorCode, diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
@@ -460,6 +462,7 @@ export class DaemonRuntime {
     flush: (agentId, held) => this.#flushHeldDeliveries(agentId, held),
   });
   readonly #reminders: ReminderScheduler;
+  readonly #appConfigs: AgentAppConfigSync;
   /** This Computer's Agent migration runs; absent when the transport cannot reach the route. */
   readonly #migrations: AgentMigrationRunner | undefined;
   #migrationsClosed: Promise<void> | undefined;
@@ -695,6 +698,14 @@ export class DaemonRuntime {
         if (this.#isWorking(agentId)) return;
         await this.#notifyAppItem(agentId, itemId, { startStopped: false });
       },
+    });
+    this.#appConfigs = new AgentAppConfigSync({
+      requestSnapshot: (agentId) => {
+        if (!this.#transport.requestAppConfigSnapshot)
+          throw new Error("app config snapshot is unavailable");
+        return this.#transport.requestAppConfigSnapshot({ ...this.#envelope(), agentId });
+      },
+      apps: {},
     });
     // The transport is replaced on each start, so the runner reaches the route through whichever
     // one is current.
@@ -997,6 +1008,9 @@ export class DaemonRuntime {
             .catch(() => {});
           for (const agentId of this.#readyRunningAgentIds())
             void this.#requestReminderSnapshot(agentId).catch(() => {});
+          this.#appConfigs.connected();
+          for (const agentId of this.#readyRunningAgentIds())
+            this.#requestAppConfigSnapshot(agentId);
           void this.#agentControl
             .replay()
             .then(() => this.#agentSessions.replay())
@@ -1183,6 +1197,7 @@ export class DaemonRuntime {
           void this.#reminders.apply(sync).catch(() => {});
         }),
       );
+      this.#subscribe(this.#transport.onAppConfigSync?.((sync) => this.#appConfigs.apply(sync)));
       const migrations = this.#migrations;
       if (migrations) {
         // Before any lease is taken, so nothing it clears can belong to a run.
@@ -1233,6 +1248,7 @@ export class DaemonRuntime {
           recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds ?? [],
           capabilities: [
             REMINDER_CAPABILITY,
+            APP_CONFIG_CAPABILITY,
             ...(this.#migrations ? [AGENT_MIGRATION_CAPABILITY] : []),
           ],
         }),
@@ -1242,6 +1258,8 @@ export class DaemonRuntime {
       await Promise.all(
         this.#readyRunningAgentIds().map((agentId) => this.#requestReminderSnapshot(agentId)),
       );
+      this.#appConfigs.connected();
+      for (const agentId of this.#readyRunningAgentIds()) this.#requestAppConfigSnapshot(agentId);
       const heldNotices = heldMessages.take();
       if (heldNotices.dropped > 0)
         logger.warn("Delivery notices held during start were dropped; the cloud resends them", {
@@ -1750,6 +1768,7 @@ export class DaemonRuntime {
     } catch (error) {
       return Promise.reject(error);
     }
+    this.#requestAppConfigSnapshot(agentId);
     const enqueueRecovery = (context: AgentRecoveryContext) =>
       this.#enqueueAgentInput(agentId, (completion) => ({ kind: "recovery", context, completion }));
     const enqueueTurn = (text: string) =>
@@ -4078,6 +4097,12 @@ export class DaemonRuntime {
       summary: reminderAppInboxSummary(job, late),
     });
     return this.#notifyAppItem(job.ownerAgentId, item.itemId);
+  }
+
+  /** Asks once per connection for the Agent's App config; the cloud resends on the next one. */
+  #requestAppConfigSnapshot(agentId: string): void {
+    if (!this.#transport.requestAppConfigSnapshot) return;
+    void this.#appConfigs.request(agentId).catch(() => {});
   }
 
   async #requestReminderSnapshot(agentId: string): Promise<void> {
