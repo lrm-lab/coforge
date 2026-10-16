@@ -14,22 +14,17 @@ import { useHydrated } from "@tanstack/react-router";
 
 import { useAppToast } from "#src/components/ui/toast";
 import { FileIcon as FileTypeIcon } from "@untitledui/file-icons";
-import {
-  AlertCircle,
-  ArrowUp,
-  CheckSquare,
-  Download01,
-  Paperclip,
-  Trash01,
-  XClose,
-} from "@untitledui/icons";
+import { AlertCircle, Download01, Plus, Send01, Trash01, XClose } from "@untitledui/icons";
 import { Popover as AriaPopover } from "react-aria-components";
 
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
+import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { ProgressBar } from "#src/components/base/progress-indicators/progress-indicators";
+import {
+  ProgressBar,
+  ProgressBarBase,
+} from "#src/components/base/progress-indicators/progress-indicators";
 import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
 import {
   dragCarriesFiles,
@@ -129,12 +124,12 @@ function uploadAttachment(
 }
 
 /**
- * The chosen file beside the paperclip. An image is a square the same size as that icon
- * (1.25rem) with a small corner, so it is not a circle and not an avatar. Any other file
- * stays a small chip with its type icon. Clicking it opens the preview with the file's
- * details, upload progress, and the download and remove actions.
+ * One chosen file in the tray under the text, as Slack shows them: an image
+ * is a 4rem thumbnail, any other file a card with its type icon, name and size, so a chosen
+ * file is visible at a glance. While it uploads it is dimmed with a progress bar along its
+ * foot; a failed upload rings it red. Clicking the tile opens the preview with the file's details, download, remove, and retry for a failed upload.
  */
-function AttachmentChip({
+function AttachmentTile({
   attachment,
   uploading,
   onRemove,
@@ -162,98 +157,130 @@ function AttachmentChip({
       <FileTypeIcon className={`${size} not-dark:hidden`} type={iconType} theme="dark" />
     </>
   );
+  const status = attachment.failed
+    ? m.conversation_attachment_failed()
+    : uploading
+      ? m.conversation_attachment_uploading({ progress: attachment.progress })
+      : `${kind} · ${getReadableFileSize(file.size)}`;
   return (
-    <DialogTrigger>
-      <Button
-        color="tertiary"
-        size="sm"
-        noTextPadding
-        aria-label={file.name}
-        className={
-          isImage
-            ? "size-5 shrink-0 overflow-hidden rounded-sm p-0 ring-1 ring-secondary ring-inset hover:bg-transparent"
-            : "h-auto rounded-md p-0 hover:bg-transparent"
-        }
-      >
-        {isImage ? (
-          previewUrl ? (
-            <img src={previewUrl} alt="" className="size-5 object-cover" />
+    <li className="relative">
+      <DialogTrigger>
+        <Button
+          color="tertiary"
+          size="sm"
+          noTextPadding
+          aria-label={`${file.name} · ${status}`}
+          className={cx(
+            "overflow-hidden rounded-lg border border-primary bg-primary p-0 shadow-xs hover:bg-primary_hover",
+            isImage ? "size-16" : "h-16 w-[13rem] justify-start px-3",
+            attachment.failed && "border-error",
+          )}
+        >
+          {isImage ? (
+            previewUrl ? (
+              <img
+                src={previewUrl}
+                alt=""
+                className={cx("size-full object-cover", uploading && "opacity-60")}
+              />
+            ) : (
+              <span className="flex size-full items-center justify-center bg-secondary">
+                {icon("size-8")}
+              </span>
+            )
           ) : (
-            <span className="flex size-full items-center justify-center bg-secondary">
-              {icon("size-3")}
+            <span className="flex min-w-0 items-center gap-2.5 text-left">
+              <span className="flex size-9 shrink-0 items-center justify-center">
+                {icon("size-9")}
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-sm font-medium text-secondary">{file.name}</span>
+                <span
+                  className={cx(
+                    "truncate text-xs",
+                    attachment.failed ? "text-error-primary" : "text-tertiary",
+                  )}
+                >
+                  {status}
+                </span>
+              </span>
             </span>
-          )
-        ) : (
-          <Avatar
-            size="xs"
-            rounded={false}
-            alt=""
-            className="overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset"
-            placeholder={icon("size-4")}
-          />
-        )}
-      </Button>
-      <AriaPopover
-        placement="top start"
-        offset={8}
-        className="w-[min(24rem,calc(100vw-2rem))] rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
-      >
-        <Dialog className="flex flex-col outline-none">
-          {({ close }) => (
-            <>
-              {isImage && previewUrl && (
-                <div className="flex justify-center rounded-t-xl bg-secondary p-3">
-                  <img
-                    src={previewUrl}
-                    alt=""
-                    className="max-h-56 max-w-full rounded-md object-contain"
+          )}
+        </Button>
+        <AriaPopover
+          placement="top start"
+          offset={8}
+          className="w-[min(24rem,calc(100vw-2rem))] rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
+        >
+          <Dialog className="flex flex-col outline-none">
+            {({ close }) => (
+              <>
+                {isImage && previewUrl && (
+                  <div className="flex justify-center rounded-t-xl bg-secondary p-3">
+                    <img
+                      src={previewUrl}
+                      alt=""
+                      className="max-h-56 max-w-full rounded-md object-contain"
+                    />
+                  </div>
+                )}
+                <div className="flex items-center gap-3 p-3">
+                  {!isImage && (
+                    <span className="flex size-10 shrink-0 items-center justify-center">
+                      {icon("size-10")}
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-primary">{file.name}</p>
+                    <p className="truncate text-sm text-tertiary">
+                      {uploading
+                        ? `${attachment.progress}% · ${getReadableFileSize(file.size)}`
+                        : `${kind} · ${getReadableFileSize(file.size)}`}
+                    </p>
+                    {uploading && <ProgressBar value={attachment.progress} className="mt-1.5" />}
+                    {attachment.failed && (
+                      <Button color="link-color" size="sm" onPress={onRetry} className="mt-1">
+                        {m.controls_retry()}
+                      </Button>
+                    )}
+                  </div>
+                  <ButtonUtility
+                    icon={Download01}
+                    size="sm"
+                    color="tertiary"
+                    tooltip={m.conversation_attachment_download()}
+                    href={previewUrl}
+                    download={file.name}
+                  />
+                  <ButtonUtility
+                    icon={Trash01}
+                    size="sm"
+                    color="tertiary"
+                    tooltip={m.conversation_attachment_remove()}
+                    onClick={() => {
+                      close();
+                      onRemove();
+                    }}
                   />
                 </div>
-              )}
-              <div className="flex items-center gap-3 p-3">
-                {!isImage && (
-                  <span className="flex size-10 shrink-0 items-center justify-center">
-                    {icon("size-10")}
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-primary">{file.name}</p>
-                  <p className="truncate text-sm text-tertiary">
-                    {uploading
-                      ? `${attachment.progress}% · ${getReadableFileSize(file.size)}`
-                      : `${kind} · ${getReadableFileSize(file.size)}`}
-                  </p>
-                  {uploading && <ProgressBar value={attachment.progress} className="mt-1.5" />}
-                  {attachment.failed && (
-                    <Button color="link-color" size="sm" onPress={onRetry} className="mt-1">
-                      {m.controls_retry()}
-                    </Button>
-                  )}
-                </div>
-                <ButtonUtility
-                  icon={Download01}
-                  size="sm"
-                  color="tertiary"
-                  tooltip={m.conversation_attachment_download()}
-                  href={previewUrl}
-                  download={file.name}
-                />
-                <ButtonUtility
-                  icon={Trash01}
-                  size="sm"
-                  color="tertiary"
-                  tooltip={m.conversation_attachment_remove()}
-                  onClick={() => {
-                    close();
-                    onRemove();
-                  }}
-                />
-              </div>
-            </>
-          )}
-        </Dialog>
-      </AriaPopover>
-    </DialogTrigger>
+              </>
+            )}
+          </Dialog>
+        </AriaPopover>
+      </DialogTrigger>
+      {uploading && (
+        <ProgressBarBase
+          value={attachment.progress}
+          className="pointer-events-none absolute inset-x-2 bottom-1.5 h-1 w-auto"
+        />
+      )}
+      {attachment.failed && isImage && (
+        <AlertCircle
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary text-fg-error-primary"
+        />
+      )}
+    </li>
   );
 }
 
@@ -267,6 +294,7 @@ export function MessageComposer({
   conversationId,
   threadRootId,
   inThread,
+  target,
   mentionables,
   mentionOutsiders,
   recentHandles,
@@ -283,6 +311,8 @@ export function MessageComposer({
   threadRootId?: string;
   /** Thread composers cannot create Tasks. */
   inThread: boolean;
+  /** Who the main pane's messages go to (`#channel`, `@name`), named in its placeholder. */
+  target?: string;
   /** The conversation's @-completion candidates; absent or empty, `@` opens no popup. */
   mentionables?: readonly Mentionable[];
   /** The channel's people and public Agents outside it, offered after the members. */
@@ -659,7 +689,7 @@ export function MessageComposer({
       onDragLeave={dragLeave}
       onDrop={drop}
       className={cx(
-        "relative mx-4 mt-2 mb-3 flex shrink-0 flex-col gap-1 rounded-xl border border-primary bg-primary p-2 focus-within:ring-2 focus-within:ring-brand md:mx-6",
+        "relative mx-4 mt-2 mb-3 flex shrink-0 flex-col gap-1 rounded-xl border border-primary bg-primary p-2 transition-shadow focus-within:border-fg-quaternary focus-within:shadow-xs md:mx-6",
         draggingFile && "ring-2 ring-brand",
       )}
     >
@@ -765,9 +795,11 @@ export function MessageComposer({
         placeholder={
           inThread
             ? m.conversation_thread_message_placeholder()
-            : m.conversation_message_placeholder()
+            : target
+              ? m.conversation_message_placeholder_to({ target })
+              : m.conversation_message_placeholder()
         }
-        className="max-h-40 min-h-10 w-full resize-none bg-transparent px-2 py-1 text-md outline-none [field-sizing:content] placeholder:text-placeholder disabled:opacity-50"
+        className="max-h-40 min-h-8 w-full resize-none bg-transparent px-3 py-1 text-md outline-none [field-sizing:content] placeholder:text-placeholder disabled:opacity-50"
       />
       {completion.open && completion.trigger && (
         <ReferenceSuggestionList
@@ -780,31 +812,40 @@ export function MessageComposer({
           onHighlight={completion.setActiveIndex}
         />
       )}
+      {attachments.length > 0 && (
+        <ul
+          aria-label={m.conversation_attachment_tray()}
+          className="flex flex-wrap gap-2 px-3 pt-1 pb-1"
+        >
+          {attachments.map((item) => (
+            <AttachmentTile
+              key={item.localId}
+              attachment={item}
+              uploading={!item.id && !item.failed}
+              onRemove={() =>
+                setAttachments((current) =>
+                  current.filter((other) => other.localId !== item.localId),
+                )
+              }
+              onRetry={() => void uploadOne(item)}
+            />
+          ))}
+        </ul>
+      )}
       {attachments.length > MAX_ATTACHMENTS && (
         <p className="px-2 text-sm text-error-primary">
           {m.conversation_attachment_limit({ max: MAX_ATTACHMENTS })}
         </p>
       )}
-      <div className="flex items-center gap-2">
-        <ButtonUtility
-          icon={Paperclip}
-          size="sm"
+      <div className="flex items-center gap-2 px-1 pb-0.5">
+        <Button
           color="tertiary"
+          size="xs"
+          iconLeading={Plus}
+          aria-label={m.conversation_attachment_label()}
           isDisabled={composerDisabled}
-          tooltip={m.conversation_attachment_label()}
-          onClick={() => fileInputRef.current?.click()}
+          onPress={() => fileInputRef.current?.click()}
         />
-        {attachments.map((item) => (
-          <AttachmentChip
-            key={item.localId}
-            attachment={item}
-            uploading={!item.id && !item.failed}
-            onRemove={() =>
-              setAttachments((current) => current.filter((other) => other.localId !== item.localId))
-            }
-            onRetry={() => void uploadOne(item)}
-          />
-        ))}
         <input
           ref={fileInputRef}
           type="file"
@@ -817,38 +858,29 @@ export function MessageComposer({
           }}
           className="sr-only"
         />
-        {/* The Add-task control sits directly left of Send (the boss's ruling, #137). Both live
-            in a right-aligned group (`ml-auto`), so the entry tucks against Send instead of
-            stranding itself at the far left next to the paperclip. While the task chip is active
-            the entry yields to it (the chip is the pressed state with its X). */}
-        <div className="ml-auto flex items-center gap-2">
-          {taskMode && asTask && (
-            <Button
-              color="secondary"
-              size="xs"
-              iconTrailing={XClose}
-              aria-pressed={true}
-              isDisabled={composerDisabled}
-              onPress={() => setAsTask(false)}
-            >
-              {m.tasks_as_task()}
-            </Button>
+        {/* "As task" sits directly left of Send (the boss's ruling, #137), as a labelled checkbox
+            that is always shown, as Raft's composer has it: the label says what it does, and one
+            control holds both states. */}
+        <div className="ml-auto flex items-center gap-3">
+          {taskMode && (
+            <>
+              <Checkbox
+                size="sm"
+                label={m.tasks_as_task()}
+                isSelected={asTask}
+                isDisabled={composerDisabled}
+                onChange={setAsTask}
+              />
+              <span aria-hidden="true" className="h-5 w-px bg-border-secondary" />
+            </>
           )}
-          {taskMode && !asTask && (
-            <ButtonUtility
-              icon={CheckSquare}
-              size="sm"
-              color="tertiary"
-              isDisabled={composerDisabled}
-              tooltip={m.tasks_as_task()}
-              onClick={() => setAsTask(true)}
-            />
-          )}
-          <ButtonUtility
+          <Button
             type="submit"
-            icon={ArrowUp}
-            size="sm"
-            color="tertiary"
+            color="primary"
+            size="xs"
+            iconLeading={Send01}
+            aria-label={m.conversation_send()}
+            className="*:data-icon:text-white hover:*:data-icon:text-white"
             isDisabled={
               composerDisabled ||
               uploading ||
@@ -856,8 +888,6 @@ export function MessageComposer({
               attachments.length > MAX_ATTACHMENTS ||
               (!body.trim() && attachments.length === 0)
             }
-            tooltip={m.conversation_send()}
-            className="rounded-full bg-brand-solid text-white hover:bg-brand-solid_hover hover:text-white"
           />
         </div>
       </div>

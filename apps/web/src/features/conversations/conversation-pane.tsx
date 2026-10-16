@@ -66,6 +66,7 @@ export function ConversationPane({
   openAtTop,
   onClose,
   threadContext,
+  composerTarget,
   onViewInConversation,
   threadFollow,
   onOpenThread,
@@ -104,6 +105,8 @@ export function ConversationPane({
   onClose?: () => void;
   /** Where a thread lives, named after "Thread" in its header: `#channel` or `@name`. */
   threadContext?: string;
+  /** Who the main stream's composer sends to (`#channel`, `@name`), named in its placeholder. */
+  composerTarget?: string;
   /** Leaves the thread for its root message in the conversation's stream. */
   onViewInConversation?: () => void;
   /** The viewer's follow state for this thread, where following is offered (channels). */
@@ -1156,6 +1159,7 @@ export function ConversationPane({
             conversationId={conversation.conversationId}
             threadRootId={root?.id}
             inThread={Boolean(root)}
+            target={root ? undefined : composerTarget}
             mentionables={mentionCandidates}
             mentionOutsiders={conversation.mentionOutsiders}
             recentHandles={recentHandles}

@@ -272,6 +272,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         onReadLatest={onReadLatest}
         header={header}
         conversation={conversation}
+        composerTarget={threadContext}
         onOpenThread={openThread}
       />
     </ThreadStoreProvider>
