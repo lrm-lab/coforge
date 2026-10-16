@@ -19,7 +19,8 @@ import { Popover as AriaPopover } from "react-aria-components";
 
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
-import { Checkbox } from "#src/components/base/checkbox/checkbox";
+import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import {
   ProgressBar,
@@ -31,6 +32,7 @@ import {
   filesFromDrop,
   filesFromPaste,
   localId,
+  shouldSendAsTaskOnEnter,
   shouldSendOnEnter,
 } from "./composer-behavior";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
@@ -532,12 +534,15 @@ export function MessageComposer({
     if (hydrated && window.matchMedia("(pointer: fine)").matches) focusComposer();
   }, [draftKey, hydrated]);
 
-  function submit(event?: FormEvent<HTMLFormElement>) {
+  /** Sends the draft; `forceAsTask` (the Cmd/Ctrl+Shift+Enter shortcut) sends it as a Task
+   * whether or not "As task" is ticked, as Raft's composer does. */
+  function submit(event?: FormEvent<HTMLFormElement>, forceAsTask = false) {
     event?.preventDefault();
     const text = body.trim() || attachments[0]?.file.name || "";
     if (!text || uploading || anyFailed || attachments.length > MAX_ATTACHMENTS) return;
+    const sendAsTask = (asTask || forceAsTask) && !inThread && Boolean(canSendAsTask);
     const idempotencyKey =
-      retryRef.current?.body === text && retryRef.current.asTask === asTask
+      retryRef.current?.body === text && retryRef.current.asTask === sendAsTask
         ? retryRef.current.idempotencyKey
         : localId();
     // Only files that finished uploading and were not removed.
@@ -548,7 +553,7 @@ export function MessageComposer({
       body: text,
       pins: pinsInText(text, pins),
       idempotencyKey,
-      asTask: asTask && !inThread && Boolean(canSendAsTask),
+      asTask: sendAsTask,
       attachments: uploaded.flatMap((item) =>
         item.id ? [{ id: item.id, fileName: item.file.name }] : [],
       ),
@@ -590,16 +595,21 @@ export function MessageComposer({
     // The open completion owns navigation and confirmation keys; Enter must not send while a
     // candidate is being picked. During IME composition the keys belong to the IME.
     if (completion.handleKeyDown(event, isComposingRef.current)) return;
-    const send = shouldSendOnEnter(
-      {
-        key: event.key,
-        shiftKey: event.shiftKey,
-        isComposing: event.nativeEvent.isComposing || isComposingRef.current,
-        keyCode: event.keyCode,
-      },
-      { lastCompositionEndAt: lastCompositionEndAtRef.current, now: Date.now() },
-    );
-    if (send) {
+    const composition = { lastCompositionEndAt: lastCompositionEndAtRef.current, now: Date.now() };
+    const key = {
+      key: event.key,
+      shiftKey: event.shiftKey,
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      isComposing: event.nativeEvent.isComposing || isComposingRef.current,
+      keyCode: event.keyCode,
+    };
+    if (taskMode && shouldSendAsTaskOnEnter(key, composition)) {
+      event.preventDefault();
+      submit(undefined, true);
+      return;
+    }
+    if (shouldSendOnEnter(key, composition)) {
       event.preventDefault();
       submit();
     }
@@ -861,13 +871,19 @@ export function MessageComposer({
             control holds both states. No hairline between the checkbox and Send (task #265). */}
         <div className="ml-auto flex items-center gap-3">
           {taskMode && (
-            <Checkbox
-              size="sm"
-              label={m.tasks_as_task()}
-              isSelected={asTask}
-              isDisabled={composerDisabled}
-              onChange={setAsTask}
-            />
+            // A toggle with the shortcut in its tooltip, as Raft's "As Task" is: the official
+            // Tooltip needs a pressable trigger, which a Checkbox's label is not.
+            <Tooltip title={m.tasks_send_as_task_shortcut()}>
+              <TooltipTrigger
+                aria-pressed={asTask}
+                isDisabled={composerDisabled}
+                onPress={() => setAsTask((current) => !current)}
+                className="flex items-center gap-2 text-sm font-medium text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <CheckboxBase size="sm" isSelected={asTask} isDisabled={composerDisabled} />
+                {m.tasks_as_task()}
+              </TooltipTrigger>
+            </Tooltip>
           )}
           <Button
             type="submit"

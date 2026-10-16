@@ -59,6 +59,19 @@ export function shouldSendOnEnter(
   return true;
 }
 
+/**
+ * Whether a keydown on the composer textarea is "send as task": Cmd/Ctrl+Shift+Enter, as Raft's
+ * composer binds it. It sends as a task whether or not the composer's "As task" box is ticked, and
+ * stays ignored while (or just after) an IME composition is being confirmed, as Enter does.
+ */
+export function shouldSendAsTaskOnEnter(
+  event: EnterKeyLikeEvent,
+  composition: { lastCompositionEndAt: number | null; now: number },
+): boolean {
+  if (event.key !== "Enter" || !event.shiftKey || !(event.metaKey || event.ctrlKey)) return false;
+  return shouldSendOnEnter({ ...event, shiftKey: false }, composition);
+}
+
 export type ClipboardDataLike = {
   files?: ArrayLike<File> | null;
   items?: ArrayLike<{ kind: string; getAsFile(): File | null }> | null;

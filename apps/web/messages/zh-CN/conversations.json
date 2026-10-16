@@ -376,6 +376,7 @@
     }
   ],
   "tasks_as_task": "作为任务",
+  "tasks_send_as_task_shortcut": "作为任务发送（⌘/Ctrl-Shift-Enter）",
   "tasks_loading": "正在加载任务…",
   "tasks_empty": "此会话暂无任务",
   "tasks_group_empty": "暂无任务",

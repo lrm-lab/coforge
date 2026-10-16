@@ -5,6 +5,7 @@ import {
   filesFromDrop,
   filesFromPaste,
   IME_ENTER_GUARD_MS,
+  shouldSendAsTaskOnEnter,
   shouldSendOnEnter,
 } from "#src/features/conversations/composer-behavior";
 import { localId } from "#src/features/conversations/composer-behavior";
@@ -12,6 +13,32 @@ import { INLINE_IMAGE_TYPES, imageUrlsFromPaste } from "#src/features/conversati
 
 const baseEnter = { key: "Enter", shiftKey: false, isComposing: false, keyCode: 13 };
 const noComposition = { lastCompositionEndAt: null, now: 0 };
+
+describe("shouldSendAsTaskOnEnter", () => {
+  test("sends as a task on Cmd+Shift+Enter and Ctrl+Shift+Enter, as Raft's composer does", () => {
+    expect(
+      shouldSendAsTaskOnEnter({ ...baseEnter, shiftKey: true, metaKey: true }, noComposition),
+    ).toBe(true);
+    expect(
+      shouldSendAsTaskOnEnter({ ...baseEnter, shiftKey: true, ctrlKey: true }, noComposition),
+    ).toBe(true);
+  });
+
+  test("leaves Enter, Shift+Enter and Cmd/Ctrl+Enter to the ordinary keys", () => {
+    expect(shouldSendAsTaskOnEnter(baseEnter, noComposition)).toBe(false);
+    expect(shouldSendAsTaskOnEnter({ ...baseEnter, shiftKey: true }, noComposition)).toBe(false);
+    expect(shouldSendAsTaskOnEnter({ ...baseEnter, metaKey: true }, noComposition)).toBe(false);
+  });
+
+  test("ignores the shortcut while an IME composition is being confirmed", () => {
+    const shortcut = { ...baseEnter, shiftKey: true, metaKey: true };
+    expect(shouldSendAsTaskOnEnter({ ...shortcut, isComposing: true }, noComposition)).toBe(false);
+    expect(shouldSendAsTaskOnEnter({ ...shortcut, keyCode: 229 }, noComposition)).toBe(false);
+    expect(
+      shouldSendAsTaskOnEnter(shortcut, { lastCompositionEndAt: 0, now: IME_ENTER_GUARD_MS - 1 }),
+    ).toBe(false);
+  });
+});
 
 describe("shouldSendOnEnter", () => {
   test("sends on plain Enter outside composition", () => {
