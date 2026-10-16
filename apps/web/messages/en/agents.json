@@ -232,6 +232,7 @@
   "agent_migration_cancel_after_switch": "The Agent has already switched to the new Computer, so it stays there. Canceling only cleans up what the move left.",
   "agent_migration_cancel_keep": "Keep moving",
   "agent_migration_cancel_confirm": "Cancel move",
+  "agent_migration_error_runtime_detecting": "{computer} is still detecting its runtimes. Try again in a moment.",
   "agent_migration_error_runtime_unconfirmed": "{computer} has not reported which runtimes it has yet. Start or restart CoForge Computer there and wait for it to detect them, or choose another Computer.",
   "agent_migration_error_runtime_missing": "{computer} does not support {runtime}. Install or enable {runtime} there, or choose another Computer.",
   "agent_migration_error_runtime_not_shared": "{runtime} on {computer} belongs to that Computer's owner and is not shared. Ask them to make it public in the Computer's settings, or choose another Computer.",

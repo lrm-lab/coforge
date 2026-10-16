@@ -37,6 +37,7 @@ import { getUsageCache } from "#src/server/centrifugo/usage-cache.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
 import { ComputerModelCatalogRefresh } from "#src/server/computers/computer-model-catalog-refresh.server";
+import { getComputerRuntimeDetection } from "#src/server/computers/computer-runtime-detection.server";
 import { computerCreatorAvatarUrl } from "#src/server/computers/computer-creator-avatar.server";
 import { isWorkspaceMemberComputer } from "#src/server/computers/computer-membership.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
@@ -198,6 +199,12 @@ export const listComputers = createServerFn({ method: "GET" })
       computer.agents.map((agent) => ({ workspaceId, computerId: computer.id, agentId: agent.id })),
     );
     const agentDisplays = await getAgentDisplay().snapshotMany(agentScopes);
+    const runtimeDetection = getComputerRuntimeDetection();
+    const detecting = await Promise.all(
+      connections.map(({ computer }) =>
+        runtimeDetection.detecting({ workspaceId, computerId: computer.id }).catch(() => false),
+      ),
+    );
     const agentDisplayById = new Map(
       agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
     );
@@ -226,6 +233,7 @@ export const listComputers = createServerFn({ method: "GET" })
           ownedByCurrentUser: computer.ownerId === user.id,
           canManageAgents: agentViewer.role === "owner" || agentViewer.role === "admin",
           online: statuses[index] ?? false,
+          runtimeDetecting: detecting[index] ?? false,
           agents: computer.agents.map((agent) => ({
             id: agent.id,
             name: agent.name,
@@ -439,6 +447,7 @@ export const refreshComputerRuntimeCatalog = createServerFn({ method: "POST" })
     const api = createCentrifugoServerApi();
     const refreshed = await new ComputerModelCatalogRefresh({
       results: getModelCatalogRefreshResults(),
+      detection: getComputerRuntimeDetection(),
       publish: (request) =>
         api.publish(
           daemonControlChannel(workspaceId, data.computerId),

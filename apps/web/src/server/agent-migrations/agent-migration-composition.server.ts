@@ -10,6 +10,7 @@ import {
 } from "#src/server/agents/computer-runtime-availability.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
+import { getComputerRuntimeDetection } from "#src/server/computers/computer-runtime-detection.server";
 import { getAgentMigrationCapabilityLease } from "./agent-migration-capability.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { agentStartIntent, agentStopIntent } from "#src/server/agents/manage-agents.server";
@@ -139,6 +140,10 @@ export function agentMigrationRequests(db: PrismaClient) {
         storedRuntimeSelection(config),
       );
     },
+    runtimeDetecting: (workspaceId, computerId) =>
+      getComputerRuntimeDetection()
+        .detecting({ workspaceId, computerId })
+        .catch(() => false),
     agentComputer: async (workspaceId, agentId) =>
       (
         await db.agent.findFirst({

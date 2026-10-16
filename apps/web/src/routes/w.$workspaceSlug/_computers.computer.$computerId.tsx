@@ -20,6 +20,7 @@ import {
   scanAgentWorkspaces,
   deleteAgentWorkspace,
   deleteComputer,
+  refreshComputerRuntimeCatalog,
   setRuntimeVisibility,
   updateComputerDisplayName,
   upgradeComputer,
@@ -81,6 +82,7 @@ function ComputerDetailPage() {
   const create = useServerFn(createAgent);
   const executeControl = useServerFn(executeAgentControl);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
+  const rescanRuntimes = useServerFn(refreshComputerRuntimeCatalog);
 
   return (
     <ComputerDetail
@@ -131,6 +133,16 @@ function ComputerDetailPage() {
       }
       onExecuteAgentControl={(data) => executeControl({ data })}
       onLoadRuntimeCatalog={(id) => loadRuntimeCatalog({ data: { computerId: id } })}
+      onRescanRuntimes={
+        // As the reference Computer: its creator, or whoever manages the Workspace's Computers.
+        computer.ownedByCurrentUser || computer.canManageAgents
+          ? async () => {
+              const { status } = await rescanRuntimes({ data: { computerId } });
+              await router.invalidate({ sync: true });
+              return status === "refreshed";
+            }
+          : undefined
+      }
       onSelectAgent={(agentId) =>
         void router.navigate({
           to: "/w/$workspaceSlug/members",

@@ -91,6 +91,8 @@ export type ComputerDetailView = ComputerIdentity & {
   ownedByCurrentUser: boolean;
   canManageAgents: boolean;
   online: boolean;
+  /** A rescan of its runtimes is in flight; the runtimes listed are the last confirmed ones. */
+  runtimeDetecting?: boolean;
   connectedAt: Date | string;
   computerVersion?: string | null;
   platform?: string | null;
@@ -164,6 +166,7 @@ export function ComputerDetail({
   onDeleteComputer,
   onCreateAgent,
   onLoadRuntimeCatalog,
+  onRescanRuntimes,
   onSelectAgent,
   onExecuteAgentControl,
 }: {
@@ -183,6 +186,8 @@ export function ComputerDetail({
   onDeleteComputer?: () => Promise<void>;
   onCreateAgent?: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
   onLoadRuntimeCatalog?: (computerId: string) => Promise<RuntimeCatalog[]>;
+  /** Asks the Computer which runtimes it has, now; resolves whether it answered. */
+  onRescanRuntimes?: () => Promise<boolean>;
   onSelectAgent?: (agentId: string) => void;
   onExecuteAgentControl?: AgentControlExecute;
   latestComputerVersion?: string | null;
@@ -202,6 +207,20 @@ export function ComputerDetail({
   );
   const [createAgentOpen, setCreateAgentOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
+  const [rescanFailed, setRescanFailed] = useState(false);
+  const rescan = async () => {
+    if (!onRescanRuntimes || rescanning) return;
+    setRescanning(true);
+    setRescanFailed(false);
+    try {
+      setRescanFailed(!(await onRescanRuntimes()));
+    } catch {
+      setRescanFailed(true);
+    } finally {
+      setRescanning(false);
+    }
+  };
   const [updatingRuntimeIds, setUpdatingRuntimeIds] = useState<ReadonlySet<string>>(new Set());
   const [runtimeVisibilityErrorIds, setRuntimeVisibilityErrorIds] = useState<ReadonlySet<string>>(
     new Set(),
@@ -543,7 +562,29 @@ export function ComputerDetail({
               )}
             </dl>
             <div className="border-t border-secondary py-3">
-              <h3 className="text-sm font-medium text-primary">{m.computer_runtimes()}</h3>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-medium text-primary">{m.computer_runtimes()}</h3>
+                {onRescanRuntimes && computer.online && (
+                  <Button
+                    size="sm"
+                    color="link-color"
+                    isDisabled={rescanning}
+                    onPress={() => void rescan()}
+                  >
+                    {rescanning ? m.computer_runtime_rescanning() : m.computer_runtime_rescan()}
+                  </Button>
+                )}
+              </div>
+              {(rescanning || computer.runtimeDetecting) && (
+                <p className="mt-1 text-sm text-tertiary" role="status">
+                  {m.computer_runtime_detection_pending()}
+                </p>
+              )}
+              {rescanFailed && !rescanning && (
+                <p className="mt-1 text-sm text-error-primary" role="alert">
+                  {m.computer_runtime_rescan_failed()}
+                </p>
+              )}
               {computer.runtimes.length ? (
                 <ul className="mt-2 flex flex-wrap gap-1.5">
                   {computer.runtimes.map((runtime) => (

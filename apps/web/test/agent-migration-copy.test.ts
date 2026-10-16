@@ -115,6 +115,11 @@ test("a move that cannot start says which Computer holds it back, and where to f
   const names = { computer: "Studio Mac", runtime: "Claude Code", model: "sonnet" };
   const runtimeRefusal = (errorId: string) =>
     agentMigrationRefusal(new AppError("INVALID_INPUT", { errorId }), names);
+  expect(runtimeRefusal("agent-migration-runtime-detecting")).toEqual({
+    message: m.agent_migration_error_runtime_detecting(names),
+    fixAt: "target",
+  });
+  expect(m.agent_migration_error_runtime_detecting(names)).toContain("Studio Mac");
   expect(runtimeRefusal("agent-migration-runtime-unconfirmed")).toEqual({
     message: m.agent_migration_error_runtime_unconfirmed(names),
     fixAt: "target",

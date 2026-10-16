@@ -17,6 +17,7 @@ function setup(
     available?: boolean;
     fails?: "stop" | "lease";
     runtimeRefusal?: AgentRuntimeSelectionRefusal;
+    runtimeDetecting?: boolean;
     readiness?: Record<string, Readiness>;
   } = {},
 ) {
@@ -40,6 +41,7 @@ function setup(
     computerName: async (computerId) =>
       ({ "computer-a": "Computer A", "computer-b": "Studio Mac" })[computerId] ?? null,
     runtimeRefusal: async () => options.runtimeRefusal ?? null,
+    runtimeDetecting: async () => options.runtimeDetecting ?? false,
     agentComputer: async () => "computer-a",
     computerReadiness: async (_workspaceId, computerId) =>
       options.readiness?.[computerId] ?? "ready",
@@ -177,6 +179,23 @@ test("a Computer that cannot run the Agent's runtime is refused before anything 
   }
 });
 
+test("a target still detecting its runtimes says so, instead of lacking the Agent's runtime", async () => {
+  const cases: [AgentRuntimeSelectionRefusal, string][] = [
+    ["runtime_unconfirmed", "agent-migration-runtime-detecting"],
+    ["runtime_missing", "agent-migration-runtime-detecting"],
+    // A rescan cannot share a runtime or add a model, so those refusals stand.
+    ["runtime_not_shared", "agent-migration-runtime-not-shared"],
+    ["model_missing", "agent-migration-model-missing"],
+  ];
+  for (const [runtimeRefusal, errorId] of cases) {
+    const { requests, requested } = setup({ runtimeRefusal, runtimeDetecting: true });
+    await expect(
+      requests.request(owner, { agentId: "agent-1", targetComputerId: "computer-b" }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId });
+    expect(requested).toEqual([]);
+  }
+});
+
 test("a move checks the target against the Agent's stored selection, key included", () => {
   const base = {
     runtime: "pi" as const,
@@ -214,6 +233,7 @@ test("reading a move needs nothing it would take to start one", async () => {
     isWorkspaceAdmin: async () => false,
     computerName: async () => null,
     runtimeRefusal: async () => null,
+    runtimeDetecting: async () => false,
     agentComputer: async () => "computer-a",
     computerReadiness: async () => "ready",
     otherComputers: async () => [],
