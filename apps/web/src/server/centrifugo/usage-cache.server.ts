@@ -33,6 +33,22 @@ export type UsageSnapshot = {
     windowDurationMinutes: number;
     resetsAt?: string;
   };
+  /** Official groups from a Computer that reports them. Older Computers omit this. */
+  officialGroups?: {
+    name?: string;
+    description?: string;
+    buckets: {
+      id?: string;
+      name?: string;
+      description?: string;
+      window?: string;
+      remainingFraction?: number;
+      usedPercent?: number;
+      status?: "ok" | "limit_reached" | "parse_unavailable";
+      windowDurationMinutes?: number;
+      resetsAt?: string;
+    }[];
+  }[];
   credits?: { hasCredits: boolean; unlimited: boolean };
   creditUsage?: { used: number; limit: number; overage: number };
   /** ISO instant the Computer actually observed this snapshot at. Older Computers omit it. */

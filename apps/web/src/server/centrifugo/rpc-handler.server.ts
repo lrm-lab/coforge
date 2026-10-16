@@ -932,6 +932,8 @@ function decodeUsageSnapshot(
     return undefined;
   const primary = usageWindow(snapshot.primary);
   const secondary = usageWindow(snapshot.secondary);
+  const officialGroups = usageOfficialGroups(snapshot.officialGroups);
+  if (snapshot.officialGroups !== undefined && !officialGroups) return undefined;
   if (
     (snapshot.primary !== undefined && !primary) ||
     (snapshot.secondary !== undefined && !secondary)
@@ -983,6 +985,7 @@ function decodeUsageSnapshot(
     ...(typeof planType === "string" ? { planType } : {}),
     ...(primary ? { primary } : {}),
     ...(secondary ? { secondary } : {}),
+    ...(officialGroups ? { officialGroups } : {}),
     ...(parsedCredits ? { credits: parsedCredits } : {}),
     ...(creditUsage ? { creditUsage } : {}),
     ...(typeof collectedAt === "string" ? { collectedAt } : {}),
@@ -1002,6 +1005,79 @@ function isValidAccountLabel(value: unknown): value is string {
     // oxlint-disable-next-line no-control-regex -- Reject control bytes in a masked address.
     !/[\x00-\x1f\x7f]/u.test(value)
   );
+}
+
+function usageOfficialGroups(value: unknown): UsageSnapshot["officialGroups"] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 12) return undefined;
+  const groups = [];
+  for (const raw of value) {
+    const group = record(raw);
+    if (
+      !group ||
+      !Array.isArray(group.buckets) ||
+      group.buckets.length === 0 ||
+      group.buckets.length > 12
+    )
+      return undefined;
+    const name = officialText(group.name, 200);
+    const description = officialText(group.description, 2_000);
+    if (name === null || description === null) return undefined;
+    const buckets = [];
+    for (const rawBucket of group.buckets) {
+      const bucket = record(rawBucket);
+      if (!bucket) return undefined;
+      const id = officialText(bucket.id, 100);
+      const bucketName = officialText(bucket.name, 200);
+      const bucketDescription = officialText(bucket.description, 2_000);
+      const windowKey = officialText(bucket.window, 40);
+      if (id === null || bucketName === null || bucketDescription === null || windowKey === null) {
+        return undefined;
+      }
+      const remaining = bucket.remainingFraction;
+      if (
+        remaining !== undefined &&
+        (typeof remaining !== "number" ||
+          !Number.isFinite(remaining) ||
+          remaining < 0 ||
+          remaining > 1)
+      )
+        return undefined;
+      const parsed = usageWindow({
+        ...bucket,
+        windowDurationMinutes:
+          typeof bucket.windowDurationMinutes === "number" ? bucket.windowDurationMinutes : 1,
+      });
+      if (!parsed && bucket.windowDurationMinutes !== undefined) return undefined;
+      buckets.push({
+        ...(id ? { id } : {}),
+        ...(bucketName ? { name: bucketName } : {}),
+        ...(bucketDescription ? { description: bucketDescription } : {}),
+        ...(windowKey ? { window: windowKey } : {}),
+        ...(typeof remaining === "number" ? { remainingFraction: remaining } : {}),
+        ...(parsed?.usedPercent !== undefined ? { usedPercent: parsed.usedPercent } : {}),
+        ...(parsed?.status ? { status: parsed.status } : {}),
+        ...(typeof bucket.windowDurationMinutes === "number"
+          ? { windowDurationMinutes: parsed?.windowDurationMinutes }
+          : {}),
+        ...(parsed?.resetsAt ? { resetsAt: parsed.resetsAt } : {}),
+      });
+    }
+    groups.push({
+      ...(name ? { name } : {}),
+      ...(description ? { description } : {}),
+      buckets,
+    });
+  }
+  return groups;
+}
+
+/** `undefined` when the field is absent or blank. `null` when it is present but unusable. */
+function officialText(value: unknown, max: number): string | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (text.length > max) return null;
+  return text.length > 0 ? text : undefined;
 }
 
 function usageWindow(value: unknown): UsageSnapshot["primary"] | undefined {

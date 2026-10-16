@@ -3,6 +3,8 @@ import { runCatalogCommand } from "#src/code-agent/catalog-command";
 import {
   UsageUnavailableError,
   UsageUnsupportedError,
+  type UsageOfficialBucket,
+  type UsageOfficialGroup,
   type UsageSnapshot,
   type UsageWindow,
 } from "#src/code-agent/contract";
@@ -18,15 +20,22 @@ const SIGNED_OUT = /sign(?:ed)?[ -]?in|log(?:ged)?[ -]?in|auth/iu;
 
 const WINDOW_MINUTES: Readonly<Record<string, number>> = { "5h": 300, weekly: 10_080 };
 
-type QuotaBucket = { id: string; window: string; remaining: number; resetsAt?: string };
-type QuotaGroup = { name: string; buckets: QuotaBucket[] };
+type QuotaBucket = {
+  id: string;
+  name?: string;
+  description?: string;
+  window: string;
+  remaining: number;
+  resetsAt?: string;
+};
+type QuotaGroup = { name: string; description?: string; buckets: QuotaBucket[] };
 
 /**
- * Reads the account's quota with `agy -p /usage --output-format json`. agy groups its models
- * (Gemini; Claude and GPT) and gives each group a 5-hour and a weekly limit as a remaining
- * fraction. The snapshot shows the group with the least quota left - the one that stops an Agent
- * first - as its 5-hour (primary) and weekly (secondary) windows. A group name is not a plan, so
- * `planType` stays unset.
+ * Reads the account's quota with `agy -p /usage --output-format json`. Every returned group and
+ * bucket is kept on `officialGroups`, including a group that has only a weekly bucket. `primary`
+ * and `secondary` stay the tightest group's 5-hour and weekly windows so an older Web still has
+ * its two slots. A group name is not a plan, so `planType` stays unset. The response has no
+ * pacing field, so none is derived.
  */
 export async function readAntigravityUsage(
   workingDirectory: string,
@@ -63,10 +72,14 @@ export async function readAntigravityUsage(
   );
   const primary = group && usageWindow(group, "5h");
   const secondary = group && usageWindow(group, "weekly");
-  if (!group || (!primary && !secondary)) throw new UsageUnsupportedError();
-  const exhausted = group.buckets.some((bucket) => bucket.remaining <= 0);
+  const officialGroups = groups.map(officialGroup);
+  if (officialGroups.length === 0 || officialGroups.every((item) => item.buckets.length === 0)) {
+    throw new UsageUnsupportedError();
+  }
+  const exhausted = groups.some((item) => item.buckets.some((bucket) => bucket.remaining <= 0));
   return {
     provider: RUNTIME_PROVIDER.ANTIGRAVITY,
+    officialGroups,
     ...(primary ? { primary } : {}),
     ...(secondary ? { secondary } : {}),
     health: exhausted ? "rate_limited" : "ok",
@@ -89,12 +102,52 @@ function quotaGroups(value: unknown): QuotaGroup[] {
       )
         return [];
       const resetsAt = instant(bucket.reset_time);
+      const name = text(bucket.name);
+      const description = text(bucket.description);
       return [
-        { id: bucket.id, window: bucket.window, remaining, ...(resetsAt ? { resetsAt } : {}) },
+        {
+          id: bucket.id,
+          window: bucket.window,
+          remaining,
+          ...(name ? { name } : {}),
+          ...(description ? { description } : {}),
+          ...(resetsAt ? { resetsAt } : {}),
+        },
       ];
     });
-    return buckets.length ? [{ name: group.name, buckets }] : [];
+    const description = text(group.description);
+    return buckets.length
+      ? [{ name: group.name, ...(description ? { description } : {}), buckets }]
+      : [];
   });
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function officialGroup(group: QuotaGroup): UsageOfficialGroup {
+  return {
+    name: group.name,
+    ...(group.description ? { description: group.description } : {}),
+    buckets: group.buckets.map(officialBucket),
+  };
+}
+
+function officialBucket(bucket: QuotaBucket): UsageOfficialBucket {
+  const minutes = WINDOW_MINUTES[bucket.window];
+  const used = Math.min(1, Math.max(0, 1 - bucket.remaining));
+  return {
+    id: bucket.id,
+    ...(bucket.name ? { name: bucket.name } : {}),
+    ...(bucket.description ? { description: bucket.description } : {}),
+    window: bucket.window,
+    remainingFraction: bucket.remaining,
+    usedPercent: Math.round(used * 10_000) / 100,
+    status: bucket.remaining <= 0 ? "limit_reached" : "ok",
+    ...(minutes !== undefined ? { windowDurationMinutes: minutes } : {}),
+    ...(bucket.resetsAt ? { resetsAt: bucket.resetsAt } : {}),
+  };
 }
 
 function leastRemaining(group: QuotaGroup): number {

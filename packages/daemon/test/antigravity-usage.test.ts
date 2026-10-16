@@ -44,6 +44,20 @@ test(
       usedPercent: 0.52,
       resetsAt: "2026-10-05T01:34:48.000Z",
     });
+    expect(snapshot?.officialGroups?.map((group) => group.name)).toEqual([
+      "Gemini Models",
+      "Claude and GPT models",
+    ]);
+    expect(snapshot?.officialGroups?.[0]?.buckets.map((bucket) => bucket.window)).toEqual([
+      "weekly",
+      "5h",
+    ]);
+    expect(snapshot?.officialGroups?.[0]?.buckets[1]).toMatchObject({
+      id: "gemini-5h",
+      name: "Five Hour Limit Remaining",
+      window: "5h",
+      remainingFraction: 0.9876195192337036,
+    });
   },
   USAGE_BUDGET_MS,
 );

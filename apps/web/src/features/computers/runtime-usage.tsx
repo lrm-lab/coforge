@@ -169,7 +169,10 @@ function usageBadge(
   const rateLimited =
     result.snapshot?.health === "rate_limited" ||
     result.snapshot?.primary?.status === "limit_reached" ||
-    result.snapshot?.secondary?.status === "limit_reached";
+    result.snapshot?.secondary?.status === "limit_reached" ||
+    result.snapshot?.officialGroups?.some((group) =>
+      group.buckets.some((bucket) => bucket.status === "limit_reached"),
+    ) === true;
   return rateLimited
     ? { color: "warning", label: m.computer_usage_limit_reached() }
     : { color: "success", label: m.computer_usage_badge_ok() };
@@ -308,18 +311,49 @@ export function RuntimeUsagePopoverContent({
           ) : (
             <>
               {reason && <p className="mt-2 text-sm text-tertiary">{reason}</p>}
-              {windows.length > 0 && (
-                <div className="mt-3 space-y-3">
-                  {windows.map(({ key, window }) => (
-                    <UsageWindow
-                      key={key}
-                      label={usageWindowLabel(runtime.provider, key, window)}
-                      window={window}
-                      creditUsage={key === "primary" ? snapshot?.creditUsage : undefined}
-                      timeZone={timeZone}
-                    />
+              {snapshot?.officialGroups && snapshot.officialGroups.length > 0 ? (
+                <div className="mt-3 space-y-4">
+                  {snapshot.officialGroups.map((group, index) => (
+                    <div key={`${group.name ?? "group"}-${index}`} className="space-y-3">
+                      {group.name && (
+                        <h4 className="text-sm font-medium text-primary">{group.name}</h4>
+                      )}
+                      {group.description && (
+                        <p className="text-xs text-tertiary">{group.description}</p>
+                      )}
+                      {group.buckets.map((bucket, bucketIndex) => (
+                        <UsageWindow
+                          key={bucket.id ?? `${bucket.window ?? "bucket"}-${bucketIndex}`}
+                          label={bucket.name ?? bucket.window ?? m.computer_usage_available()}
+                          detail={bucket.description}
+                          window={{
+                            ...(bucket.usedPercent !== undefined
+                              ? { usedPercent: bucket.usedPercent }
+                              : {}),
+                            ...(bucket.status ? { status: bucket.status } : {}),
+                            windowDurationMinutes: bucket.windowDurationMinutes ?? 1,
+                            ...(bucket.resetsAt ? { resetsAt: bucket.resetsAt } : {}),
+                          }}
+                          timeZone={timeZone}
+                        />
+                      ))}
+                    </div>
                   ))}
                 </div>
+              ) : (
+                windows.length > 0 && (
+                  <div className="mt-3 space-y-3">
+                    {windows.map(({ key, window }) => (
+                      <UsageWindow
+                        key={key}
+                        label={usageWindowLabel(runtime.provider, key, window)}
+                        window={window}
+                        creditUsage={key === "primary" ? snapshot?.creditUsage : undefined}
+                        timeZone={timeZone}
+                      />
+                    ))}
+                  </div>
+                )
               )}
             </>
           )}
@@ -333,11 +367,13 @@ export function RuntimeUsagePopoverContent({
 
 function UsageWindow({
   label,
+  detail,
   window,
   creditUsage,
   timeZone,
 }: {
   label: string;
+  detail?: string;
   window: NonNullable<NonNullable<UsageResultRecord["snapshot"]>["primary"]>;
   creditUsage?: NonNullable<UsageResultRecord["snapshot"]>["creditUsage"];
   timeZone: string | null;
@@ -393,6 +429,7 @@ function UsageWindow({
             m.computer_usage_credit_overage({ overage: formatCredits(creditUsage.overage) })}
         </p>
       )}
+      {detail && <p className="mt-1 text-xs text-tertiary">{detail}</p>}
     </div>
   );
 }

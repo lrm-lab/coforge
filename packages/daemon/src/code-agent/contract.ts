@@ -16,7 +16,12 @@ export type {
   AgentSession,
   AgentSessionOptions,
 } from "@coforge/agent";
-export type { UsageSnapshot, UsageWindow } from "@coforge/agent";
+export type {
+  UsageOfficialBucket,
+  UsageOfficialGroup,
+  UsageSnapshot,
+  UsageWindow,
+} from "@coforge/agent";
 export interface CodeAgentProvider {
   readonly provider: RuntimeProvider;
   createAgentSession(options: AgentSessionOptions): Promise<AgentSession>;

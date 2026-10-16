@@ -42,6 +42,8 @@ export type {
   AgentSessionIdentity,
   AgentGitHookPlan,
   AgentSessionOptions,
+  UsageOfficialBucket,
+  UsageOfficialGroup,
   UsageSnapshot,
   UsageWindow,
 } from "#src/contract";
