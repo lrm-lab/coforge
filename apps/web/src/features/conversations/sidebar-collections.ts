@@ -7,6 +7,7 @@ import {
   UpdateOperationItemNotFoundError,
 } from "@tanstack/query-db-collection";
 
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { assertBrowserOnly } from "#src/lib/browser-only";
 import { nextPinOrder, pinOrdersAfterArrange } from "#src/lib/pin-order";
 import {
@@ -275,6 +276,18 @@ type SidebarFields = {
   hidden: boolean;
 };
 
+/** How long a section change waits before each retry of a save that failed on the way (the
+ * network, or the server briefly unavailable). The change stays on screen meanwhile; only when the
+ * last retry fails too does it go back. A few seconds in all: while a save is pending the lists
+ * take channel events by re-reading (`applyChannelSignal`). */
+export const SAVE_RETRY_DELAYS_MS: readonly number[] = [1_000, 3_000];
+
+/** A failure the same save may not meet again: the request did not get an answer, or the server
+ * said it was briefly unavailable. A refusal (gone, not allowed, invalid) is final. */
+function isTransient(error: unknown) {
+  return !isAppError(error) || isAppErrorCode(error, "TEMPORARILY_UNAVAILABLE");
+}
+
 /**
  * The sidebar's two collections, over the same Query keys the loader fills, and the changes a
  * member makes from the sidebar. Each change shows at once and resolves when saved; it rejects
@@ -284,8 +297,70 @@ export function createSidebar(
   queryClient: QueryClient,
   workspaceId: string,
   api: SidebarApi = serverSidebarApi,
+  {
+    saveRetryDelaysMs = SAVE_RETRY_DELAYS_MS,
+    sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  }: { saveRetryDelaysMs?: readonly number[]; sleep?: (ms: number) => Promise<void> } = {},
 ) {
   assertBrowserOnly("The Chat sidebar's collections");
+  /** Saves waiting to be tried again, for the header to say changes are still being saved. */
+  let retryingCount = 0;
+  const retryingListeners = new Set<() => void>();
+  const setRetrying = (change: number) => {
+    retryingCount += change;
+    for (const listener of retryingListeners) listener();
+  };
+  const savesRetrying = {
+    count: () => retryingCount,
+    subscribe: (listener: () => void) => {
+      retryingListeners.add(listener);
+      return () => void retryingListeners.delete(listener);
+    },
+  };
+  /** The newest save of each thing a save sets (a conversation's section, a section's field, the
+   * order), so an older one waiting to be retried gives way to it. */
+  const newest = new Map<string, symbol>();
+  /**
+   * Saves `save`, trying again after a failure on the way. Resolves `true` when saved, and `false`
+   * when a newer save of `key` took over while this one waited: that one now decides what the
+   * rows show, so this one changes nothing (it neither confirms its rows nor rolls them back,
+   * which would roll the newer change back with it).
+   */
+  const withRetries = async (key: string, save: () => Promise<unknown>): Promise<boolean> => {
+    const mine = Symbol(key);
+    newest.set(key, mine);
+    let retrying = false;
+    try {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          await save();
+          return true;
+        } catch (error) {
+          const delay = saveRetryDelaysMs[attempt];
+          if (delay === undefined || !isTransient(error)) throw error;
+          if (!retrying) setRetrying(+1);
+          retrying = true;
+          await sleep(delay);
+          if (newest.get(key) !== mine) return false;
+        }
+      }
+    } finally {
+      if (newest.get(key) === mine) newest.delete(key);
+      if (retrying) setRetrying(-1);
+    }
+  };
+  /** The section saves that set a state outright, so saving one twice is saving it once: those
+   * are retried. Creating a section is not (a retry could make two), nor removing one. */
+  const sectionSaves = {
+    update: (id: string, patch: Parameters<ChatSectionsApi["update"]>[1]) =>
+      withRetries(`update:${id}:${Object.keys(patch).sort().join()}`, () =>
+        api.sections.update(id, patch),
+      ),
+    reorder: (order: readonly string[]) =>
+      withRetries("reorder", () => api.sections.reorder(order)),
+    move: (...args: Parameters<ChatSectionsApi["move"]>) =>
+      withRetries(`move:${args[0]}`, () => api.sections.move(...args)),
+  };
   const channels = createCollection(
     queryCollectionOptions({
       id: `sidebar-channels:${workspaceId}`,
@@ -398,8 +473,7 @@ export function createSidebar(
       if (sections.has(id)) sections.update(id, (section) => Object.assign(section, patch));
     },
     mutationFn: async ({ id, patch }, { transaction }) => {
-      await api.sections.update(id, patch);
-      confirm(transaction);
+      if (await sectionSaves.update(id, patch)) confirm(transaction);
     },
   });
   const removeSection = createOptimisticAction<string>({
@@ -427,8 +501,7 @@ export function createSidebar(
       });
     },
     mutationFn: async (order, { transaction }) => {
-      await api.sections.reorder(order);
-      confirm(transaction);
+      if (await sectionSaves.reorder(order)) confirm(transaction);
     },
   });
   const moveToSection = createOptimisticAction<{
@@ -462,12 +535,12 @@ export function createSidebar(
       });
     },
     mutationFn: async ({ target, sectionId, beforeConversationId }, { transaction }) => {
-      await api.sections.move(
+      const saved = await sectionSaves.move(
         target.kind === "channel" ? target.channelId : target.conversationId,
         sectionId,
         beforeConversationId,
       );
-      confirm(transaction);
+      if (saved) confirm(transaction);
     },
   });
 
@@ -533,6 +606,8 @@ export function createSidebar(
   const channelsKey = sidebarChannelsQueryKey(workspaceId);
   const directsKey = sidebarDirectsQueryKey(workspaceId);
   const listOf = (target: PinRef) => [target.kind === "channel" ? channelsKey : directsKey];
+  /** The order of the latest section drag, which the order query shows until the server's. */
+  let newestOrder: readonly string[] | undefined;
   const actions = {
     /** `order` is the whole sidebar (built-in keys and custom ids): the custom sections move in
      * the synced list, the built-in ones in the order query, which a failed save puts back. */
@@ -544,14 +619,16 @@ export function createSidebar(
       // Never read (or the read failed): the sidebar showed the default order, which `[]` is.
       const before = queryClient.getQueryData<string[]>(orderKey) ?? [];
       queryClient.setQueryData(orderKey, [...order]);
+      newestOrder = order;
       try {
-        await saved(reorderSections(order), () => api.sections.reorder(order), [
+        await saved(reorderSections(order), () => sectionSaves.reorder(order), [
           chatSectionsQuery(workspaceId).queryKey,
         ]);
-        // A read that started during the save may have brought the old order back meanwhile.
-        queryClient.setQueryData(orderKey, [...order]);
+        // A read that started during the save may have brought the old order back meanwhile. A
+        // newer drag's order stands over this one's, whichever settles first.
+        if (newestOrder === order) queryClient.setQueryData(orderKey, [...order]);
       } catch (cause) {
-        queryClient.setQueryData(orderKey, before);
+        if (newestOrder === order) queryClient.setQueryData(orderKey, before);
         throw cause;
       } finally {
         // Either way the server now holds the truth; read it rather than trust this tab's copy.
@@ -564,7 +641,7 @@ export function createSidebar(
       return section;
     },
     updateSection: (id: string, patch: Parameters<ChatSectionsApi["update"]>[1]) =>
-      saved(updateSection({ id, patch }), () => api.sections.update(id, patch), [
+      saved(updateSection({ id, patch }), () => sectionSaves.update(id, patch), [
         chatSectionsQuery(workspaceId).queryKey,
       ]),
     removeSection: (id: string) =>
@@ -579,7 +656,7 @@ export function createSidebar(
       saved(
         moveToSection({ target, sectionId, beforeConversationId }),
         () =>
-          api.sections.move(
+          sectionSaves.move(
             target.kind === "channel" ? target.channelId : target.conversationId,
             sectionId,
             beforeConversationId,
@@ -634,7 +711,7 @@ export function createSidebar(
     return true;
   };
 
-  return { channels, directs, sections, actions, applyChannelSignal };
+  return { channels, directs, sections, actions, applyChannelSignal, savesRetrying };
 }
 
 export type Sidebar = ReturnType<typeof createSidebar>;

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@tanstack/react-db";
@@ -160,6 +160,12 @@ export function useRefreshSidebarChannels() {
 export function useRefreshSidebarLists() {
   const refresh = useRefreshSidebar();
   return useMemo(() => () => refresh(["channels", "dms"]), [refresh]);
+}
+
+/** How many sidebar section changes are being saved again after a failed try. */
+export function useSavesRetrying() {
+  const { savesRetrying } = useSidebar();
+  return useSyncExternalStore(savesRetrying.subscribe, savesRetrying.count, () => 0);
 }
 
 /** The sidebar's changes (pin, mark unread, close, drag). */

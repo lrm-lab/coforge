@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Loading02, WifiOff } from "@untitledui/icons";
 import { Popover as AriaPopover } from "react-aria-components";
 
@@ -15,13 +16,20 @@ import { useRealtimeConnection } from "./browser-realtime";
 /**
  * The page's realtime connection beside a list's title, shown only while it is down: a gray pill
  * that says it is reconnecting, then that the page is offline. Offline opens what that means and
- * a Retry. The list under it keeps what it shows; nothing is greyed out.
+ * a Retry. The list under it keeps what it shows; nothing is greyed out. While the connection is
+ * fine the place shows `whenConnected` instead (the sidebar's "Saving N changes…").
  */
-export function ConnectionStatusPill() {
+export function ConnectionStatusPill({
+  whenConnected,
+}: {
+  /** What the place shows while the connection is fine (a list's own saving status). */
+  whenConnected?: ReactNode;
+}) {
   const connection = useRealtimeConnection();
   // One live region, present while quiet too, so a change is announced when the pill appears.
   return (
     <div role="status" className="flex shrink-0 items-center">
+      {(!connection || connection.status === "quiet") && whenConnected}
       {connection?.status === "reconnecting" && (
         <BadgeWithIcon
           size="sm"

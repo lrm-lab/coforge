@@ -523,26 +523,49 @@ export function ConversationDirectory({
     save: () => Promise<void>;
     sectionId?: string;
   } | null>(null);
-  const pendingSectionIds = useRef(new Set<string>());
+  /** Saves under way per section (or `section-order`). A second change is not turned away while
+   * one saves: a newer save takes over from an older one still waiting to be retried. */
+  const pendingSaves = useRef(new Map<string, number>());
   const [savingSections, setSavingSections] = useState<ReadonlySet<string>>(new Set());
+  const countSave = (sectionId: string, change: number) => {
+    const count = (pendingSaves.current.get(sectionId) ?? 0) + change;
+    if (count > 0) pendingSaves.current.set(sectionId, count);
+    else pendingSaves.current.delete(sectionId);
+    setSavingSections(new Set(pendingSaves.current.keys()));
+  };
   const sectionFailed = (save: () => Promise<void>, sectionId?: string) =>
     setSectionRetry({ save, sectionId });
   const changeSection = (save: () => Promise<void>, sectionId?: string) => {
-    if (sectionId && pendingSectionIds.current.has(sectionId)) return;
-    if (sectionId) {
-      pendingSectionIds.current.add(sectionId);
-      setSavingSections(new Set(pendingSectionIds.current));
-    }
+    if (sectionId) countSave(sectionId, +1);
     setSectionRetry(null);
     save()
       .catch(() => sectionFailed(save, sectionId))
       .finally(() => {
-        if (sectionId) {
-          pendingSectionIds.current.delete(sectionId);
-          setSavingSections(new Set(pendingSectionIds.current));
-        }
+        if (sectionId) countSave(sectionId, -1);
       });
   };
+  /** A section change that failed for good, under the section it was for: what happened and a
+   * Retry, in the place the person was looking (§13, not a toast). */
+  /** The open section a failed change shows under; none for the order or a folded section. */
+  const retryInSection = groups.sections.find(
+    (section) => section.id === sectionRetry?.sectionId && !section.collapsed,
+  )?.id;
+  const sectionRetryNote = sectionRetry && (
+    <p
+      role="alert"
+      className="flex flex-wrap items-baseline gap-x-1 px-2 pb-1 text-xs text-error-primary"
+    >
+      {m.chat_section_change_failed()}
+      <Button
+        color="link-gray"
+        size="sm"
+        className="text-xs"
+        onPress={() => changeSection(sectionRetry.save, sectionRetry.sectionId)}
+      >
+        {m.controls_retry()}
+      </Button>
+    </p>
+  );
   const [editingSection, setEditingSection] = useState<ChatSection | "new" | null>(null);
   const [deletingSection, setDeletingSection] = useState<ChatSection | null>(null);
   const newSection = () => setEditingSection("new");
@@ -765,17 +788,10 @@ export function ConversationDirectory({
           </Button>
         </div>
       )}
-      {sectionRetry && (
-        <div role="alert" className={cx(DIRECTORY_INSET, "py-2 text-sm text-error-primary")}>
-          <p>{m.chat_section_save_error()}</p>
-          <Button
-            color="link-gray"
-            size="sm"
-            onPress={() => changeSection(sectionRetry.save, sectionRetry.sectionId)}
-          >
-            {m.controls_retry()}
-          </Button>
-        </div>
+      {/* A change no open section shows (the sections' order, or a folded section's) says it
+          failed above them all. */}
+      {sectionRetry && retryInSection === undefined && (
+        <div className={DIRECTORY_INSET}>{sectionRetryNote}</div>
       )}
       {/* Every section, in the member's order: each is dragged by its title row, and while one
           is dragged they all fold to their titles so the list is short enough to aim at. */}
@@ -975,6 +991,7 @@ export function ConversationDirectory({
                   )}
                 >
                   <div className={DIRECTORY_INSET}>
+                    {retryInSection === section.id && sectionRetryNote}
                     <DirectoryDropList section={key} keys={keys} label={section.name}>
                       {keys.length > 0 ? (
                         list(key)

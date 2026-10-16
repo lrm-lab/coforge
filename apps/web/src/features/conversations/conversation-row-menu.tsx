@@ -51,7 +51,8 @@ export function ConversationRowMenu({
   target: ConversationRowMenuTarget;
   sections: readonly ChatSection[];
   sectionsReady: boolean;
-  onSectionError: (retry: () => Promise<void>) => void;
+  /** A move that failed for good, with the section it was moving the row into. */
+  onSectionError: (retry: () => Promise<void>, sectionId?: string) => void;
   /** The row, whose link must be a React Aria link (`ConversationRow`): the trigger attaches to the
    * first pressable inside it. */
   children: ReactNode;
@@ -67,12 +68,14 @@ export function ConversationRowMenu({
       : { kind: "direct", conversationId: target.conversationId };
 
   /** Applies the change to the row at once (the menu closes as it would for any choice) and saves
-   * it; a failed save puts the row back, and the toast says it failed (§13). */
+   * it; a save that fails for good puts the row back, and the section it was moving into says so
+   * (§13). */
   function handleAction(key: unknown) {
     if (String(key).startsWith("section:")) {
       const id = String(key).slice("section:".length);
-      const save = () => actions.moveToSection(row, id === "home" ? null : id);
-      save().catch(() => onSectionError(save));
+      const sectionId = id === "home" ? null : id;
+      const save = () => actions.moveToSection(row, sectionId);
+      save().catch(() => onSectionError(save, sectionId ?? undefined));
       return;
     }
     const run = {

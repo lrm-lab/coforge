@@ -42,7 +42,9 @@ These rules apply to `src/features/conversations/`.
   what an event cannot place, and a list being read or while a sidebar change is saving (a failed
   save's rollback undoes a direct write made meanwhile).
 - Read the lists with `useSidebarLists` and change them only through `useSidebarActions`
-  (optimistic; a saved change is written into the synced list, a failed save rolls it back); never
+  (optimistic; a saved change is written into the synced list, a failed save rolls it back; a
+  section update, reorder or move whose save failed on the way is retried first,
+  `SAVE_RETRY_DELAYS_MS`, never a create or remove); never
   `router.invalidate` for a sidebar change. A message that brings a closed or unlisted chat in
   re-reads only its own list (`closedConversationLists`), plus the Agent roster for a new Agent
   (`unknownAgentOf`). A top-level message in a DM the sidebar already lists re-reads only the

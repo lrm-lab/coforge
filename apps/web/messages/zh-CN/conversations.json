@@ -667,5 +667,16 @@
   "chat_drag_start": "正在移动{name}。",
   "chat_drag_end": "移动完成。",
   "chat_drag_cancel": "已取消移动。",
-  "chat_drag_over": "移动到{name}附近。"
+  "chat_drag_over": "移动到{name}附近。",
+  "chat_saving_changes": [
+    {
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
+      "match": {
+        "p=one": "正在保存 {count} 项改动…",
+        "p=other": "正在保存 {count} 项改动…"
+      }
+    }
+  ],
+  "chat_section_change_failed": "这项改动没有保存成功。"
 }

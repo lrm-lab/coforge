@@ -20,6 +20,7 @@ import {
 } from "#src/features/conversations/conversation-query-keys";
 import type { ChatList } from "#src/features/conversations/conversation-unread";
 import { chatSectionOrderQuery } from "#src/features/conversations/chat-sections";
+import { AppError } from "#src/lib/app-error";
 import { savedMessagesQueryKey } from "#src/features/conversations/saved-messages-collection";
 import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 
@@ -72,7 +73,15 @@ const sectionApi = {
   move: async () => {},
 };
 
-async function sidebarWith(overrides: Partial<SidebarApi> = {}, { synced = true } = {}) {
+/** The sidebar over a fake server. A save is not retried unless `saveRetryDelaysMs` says so. */
+async function sidebarWith(
+  overrides: Partial<SidebarApi> = {},
+  {
+    synced = true,
+    saveRetryDelaysMs = [] as readonly number[],
+    sleep = undefined as ((ms: number) => Promise<void>) | undefined,
+  } = {},
+) {
   const saves: string[] = [];
   const server = {
     channels: [channel("general"), channel("random", { unreadCount: 2 })],
@@ -124,7 +133,7 @@ async function sidebarWith(overrides: Partial<SidebarApi> = {}, { synced = true 
   // As after hydration: the loader has filled both Query keys.
   await queryClient.query(sidebarChannelsQuery("w", api));
   await queryClient.query(sidebarDirectsQuery("w", { api }));
-  const sidebar = createSidebar(queryClient, "w", api);
+  const sidebar = createSidebar(queryClient, "w", api, { saveRetryDelaysMs, sleep });
   if (synced) await Promise.all([sidebar.channels.preload(), sidebar.directs.preload()]);
   return { sidebar, saves, server, queryClient };
 }
@@ -818,4 +827,125 @@ test("an order read that answers during the save does not outlive it", async () 
   save.resolve();
   await ordering;
   expect(queryClient.getQueryData<string[]>(orderKey)).toEqual(["channels", "pinned", "section-a"]);
+});
+
+describe("a section change whose save fails", () => {
+  const helper = { kind: "direct", conversationId: "dm-helper" } as const;
+
+  test("is retried in the background and stays where it was dropped", async () => {
+    let calls = 0;
+    const secondCall = Promise.withResolvers<void>();
+    const retried = Promise.withResolvers<void>();
+    const { sidebar } = await sidebarWith(
+      {
+        sections: {
+          ...sectionApi,
+          move: async () => {
+            calls += 1;
+            if (calls === 1) throw new Error("offline");
+            secondCall.resolve();
+            await retried.promise;
+          },
+        },
+      },
+      { saveRetryDelaysMs: [0] },
+    );
+    await sidebar.sections.preload();
+    const counts: number[] = [];
+    const stop = sidebar.savesRetrying.subscribe(() => counts.push(sidebar.savesRetrying.count()));
+    const saving = sidebar.actions.moveToSection(helper, "section-a");
+    try {
+      await secondCall.promise;
+      expect(calls).toBe(2);
+      expect(sidebar.savesRetrying.count()).toBe(1);
+      expect(sidebar.sections.get("section-a")?.conversationIds).toEqual(["dm-helper"]);
+    } finally {
+      retried.resolve();
+      await saving;
+      stop();
+    }
+    expect(sidebar.sections.get("section-a")?.conversationIds).toEqual(["dm-helper"]);
+    expect(sidebar.savesRetrying.count()).toBe(0);
+    expect(counts).toEqual([1, 0]);
+  });
+
+  test("that the server refuses is not retried, and rolls back", async () => {
+    let calls = 0;
+    const { sidebar } = await sidebarWith(
+      {
+        sections: {
+          ...sectionApi,
+          move: async () => {
+            calls += 1;
+            throw new AppError("NOT_FOUND");
+          },
+        },
+      },
+      { saveRetryDelaysMs: [0, 0] },
+    );
+    await sidebar.sections.preload();
+    await expect(sidebar.actions.moveToSection(helper, "section-a")).rejects.toThrow();
+    expect(calls).toBe(1);
+    expect(sidebar.sections.get("section-a")?.conversationIds).toEqual([]);
+  });
+
+  test("waiting to be retried gives way to a newer move of the same conversation", async () => {
+    const moves: Array<string | null> = [];
+    const waiting = Promise.withResolvers<void>();
+    const retryDue = Promise.withResolvers<void>();
+    const { sidebar } = await sidebarWith(
+      {
+        sections: {
+          ...sectionApi,
+          list: async () => [
+            { ...(await sectionApi.list())[0]!, id: "section-a" },
+            { ...(await sectionApi.list())[0]!, id: "section-b", sortOrder: 1 },
+          ],
+          move: async (_conversationId, sectionId) => {
+            moves.push(sectionId);
+            if (sectionId === "section-a") throw new Error("offline");
+          },
+        },
+      },
+      {
+        saveRetryDelaysMs: [0],
+        sleep: () => {
+          waiting.resolve();
+          return retryDue.promise;
+        },
+      },
+    );
+    await sidebar.sections.preload();
+    const toA = sidebar.actions.moveToSection(helper, "section-a");
+    await waiting.promise;
+    await sidebar.actions.moveToSection(helper, "section-b");
+    retryDue.resolve();
+    await toA;
+
+    expect(moves).toEqual(["section-a", "section-b"]);
+    expect(sidebar.sections.get("section-a")?.conversationIds).toEqual([]);
+    expect(sidebar.sections.get("section-b")?.conversationIds).toEqual(["dm-helper"]);
+    expect(sidebar.savesRetrying.count()).toBe(0);
+  });
+
+  test("that keeps failing rolls back once its retries are spent", async () => {
+    let calls = 0;
+    const { sidebar } = await sidebarWith(
+      {
+        sections: {
+          ...sectionApi,
+          move: async () => {
+            calls += 1;
+            throw new Error("offline");
+          },
+        },
+      },
+      { saveRetryDelaysMs: [0, 0] },
+    );
+    await sidebar.sections.preload();
+    await expect(sidebar.actions.moveToSection(helper, "section-a")).rejects.toThrow("offline");
+    expect(calls).toBe(3);
+    expect(sidebar.sections.get("section-a")?.conversationIds).toEqual([]);
+    expect(sidebar.savesRetrying.count()).toBe(0);
+  });
 });

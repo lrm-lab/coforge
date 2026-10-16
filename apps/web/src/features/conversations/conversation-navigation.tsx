@@ -10,6 +10,8 @@ import {
 import { useParams, useRouter, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { Loading02 } from "@untitledui/icons";
+import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { PageHeader } from "#src/components/layout/page-header";
 import { ConnectionStatusPill } from "#src/features/realtime/connection-status-pill";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -46,6 +48,7 @@ import {
   useApplyChannelSignal,
   useListReadPosition,
   useRefreshSidebar,
+  useSavesRetrying,
   useSidebarLists,
 } from "./sidebar-lists";
 import { listedDirectIds } from "./sidebar-rows";
@@ -241,7 +244,10 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                 showList ? "flex" : "hidden",
               )}
             >
-              <PageHeader heading={m.navigation_chat()} meta={<ConnectionStatusPill />} />
+              <PageHeader
+                heading={m.navigation_chat()}
+                meta={<ConnectionStatusPill whenConnected={<SavingChangesBadge />} />}
+              />
               {/* 0.75rem under the header rule. Saved's icon is centered in the 2.25rem
                   row and the bookmark path is inset another 0.125rem, so the rule
                   sits 1.5rem above the bookmark. Bottom padding stays 1rem. */}
@@ -302,5 +308,21 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
         </UnreadContext>
       </ConversationHostProvider>
     </ConversationListContext>
+  );
+}
+
+/** Sidebar changes kept on screen while their save is tried again (`createSidebar`). */
+function SavingChangesBadge() {
+  const count = useSavesRetrying();
+  if (count === 0) return null;
+  return (
+    <BadgeWithIcon
+      size="sm"
+      color="gray"
+      iconLeading={Loading02}
+      className="[&_svg]:motion-safe:animate-spin"
+    >
+      {m.chat_saving_changes({ count })}
+    </BadgeWithIcon>
   );
 }

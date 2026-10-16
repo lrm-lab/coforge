@@ -687,5 +687,16 @@
   "chat_drag_start": "Moving {name}.",
   "chat_drag_end": "Move complete.",
   "chat_drag_cancel": "Move canceled.",
-  "chat_drag_over": "Over {name}."
+  "chat_drag_over": "Over {name}.",
+  "chat_saving_changes": [
+    {
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
+      "match": {
+        "p=one": "Saving {count} change…",
+        "p=other": "Saving {count} changes…"
+      }
+    }
+  ],
+  "chat_section_change_failed": "Couldn't save this change."
 }
