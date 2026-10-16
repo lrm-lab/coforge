@@ -49,6 +49,8 @@ export type UsageSnapshot = {
       resetsAt?: string;
     }[];
   }[];
+  /** The provider's own note above `officialGroups`. Older Computers omit this. */
+  officialDescription?: string;
   credits?: { hasCredits: boolean; unlimited: boolean };
   creditUsage?: { used: number; limit: number; overage: number };
   /** ISO instant the Computer actually observed this snapshot at. Older Computers omit it. */

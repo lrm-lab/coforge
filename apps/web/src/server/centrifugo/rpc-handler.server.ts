@@ -934,6 +934,8 @@ function decodeUsageSnapshot(
   const secondary = usageWindow(snapshot.secondary);
   const officialGroups = usageOfficialGroups(snapshot.officialGroups);
   if (snapshot.officialGroups !== undefined && !officialGroups) return undefined;
+  const officialDescription = officialText(snapshot.officialDescription, 2_000);
+  if (officialDescription === null) return undefined;
   if (
     (snapshot.primary !== undefined && !primary) ||
     (snapshot.secondary !== undefined && !secondary)
@@ -986,6 +988,7 @@ function decodeUsageSnapshot(
     ...(primary ? { primary } : {}),
     ...(secondary ? { secondary } : {}),
     ...(officialGroups ? { officialGroups } : {}),
+    ...(officialDescription ? { officialDescription } : {}),
     ...(parsedCredits ? { credits: parsedCredits } : {}),
     ...(creditUsage ? { creditUsage } : {}),
     ...(typeof collectedAt === "string" ? { collectedAt } : {}),
@@ -1033,33 +1036,31 @@ function usageOfficialGroups(value: unknown): UsageSnapshot["officialGroups"] | 
       if (id === null || bucketName === null || bucketDescription === null || windowKey === null) {
         return undefined;
       }
-      const remaining = bucket.remainingFraction;
+      const remaining = officialUnit(bucket.remainingFraction);
+      const usedPercent = officialPercent(bucket.usedPercent);
+      const status = officialBucketStatus(bucket.status);
+      const minutes = officialMinutes(bucket.windowDurationMinutes);
+      const resetsAt = officialInstant(bucket.resetsAt);
+      // A present field that cannot be read rejects the snapshot. Dropping it would show a
+      // bucket whose official number or reset had been thrown away.
       if (
-        remaining !== undefined &&
-        (typeof remaining !== "number" ||
-          !Number.isFinite(remaining) ||
-          remaining < 0 ||
-          remaining > 1)
+        remaining === null ||
+        usedPercent === null ||
+        status === null ||
+        minutes === null ||
+        resetsAt === null
       )
         return undefined;
-      const parsed = usageWindow({
-        ...bucket,
-        windowDurationMinutes:
-          typeof bucket.windowDurationMinutes === "number" ? bucket.windowDurationMinutes : 1,
-      });
-      if (!parsed && bucket.windowDurationMinutes !== undefined) return undefined;
       buckets.push({
         ...(id ? { id } : {}),
         ...(bucketName ? { name: bucketName } : {}),
         ...(bucketDescription ? { description: bucketDescription } : {}),
         ...(windowKey ? { window: windowKey } : {}),
         ...(typeof remaining === "number" ? { remainingFraction: remaining } : {}),
-        ...(parsed?.usedPercent !== undefined ? { usedPercent: parsed.usedPercent } : {}),
-        ...(parsed?.status ? { status: parsed.status } : {}),
-        ...(typeof bucket.windowDurationMinutes === "number"
-          ? { windowDurationMinutes: parsed?.windowDurationMinutes }
-          : {}),
-        ...(parsed?.resetsAt ? { resetsAt: parsed.resetsAt } : {}),
+        ...(typeof usedPercent === "number" ? { usedPercent } : {}),
+        ...(status ? { status } : {}),
+        ...(typeof minutes === "number" ? { windowDurationMinutes: minutes } : {}),
+        ...(resetsAt ? { resetsAt } : {}),
       });
     }
     groups.push({
@@ -1069,6 +1070,51 @@ function usageOfficialGroups(value: unknown): UsageSnapshot["officialGroups"] | 
     });
   }
   return groups;
+}
+
+/** `undefined` when absent. `null` when present but not a finite share from 0 to 1. */
+function officialUnit(value: unknown): number | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) return null;
+  return value;
+}
+
+/** `undefined` when absent. `null` when present but not a finite percent from 0 to 100. */
+function officialPercent(value: unknown): number | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) return null;
+  return value;
+}
+
+/** `undefined` when absent. `null` when present but not a positive finite number of minutes. */
+function officialMinutes(value: unknown): number | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+/** `undefined` when absent. `null` for an unknown status, including a non-string. */
+function officialBucketStatus(
+  value: unknown,
+): "ok" | "limit_reached" | "parse_unavailable" | undefined | null {
+  if (value === undefined) return undefined;
+  if (value === "ok" || value === "available") return "ok";
+  if (value === "limit_reached" || value === "rate-limited") return "limit_reached";
+  if (value === "parse_unavailable") return "parse_unavailable";
+  return null;
+}
+
+/** `undefined` when absent. `null` when present but not a short parseable instant. */
+function officialInstant(value: unknown): string | undefined | null {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > 100 ||
+    Number.isNaN(Date.parse(value))
+  )
+    return null;
+  return value;
 }
 
 /** `undefined` when the field is absent or blank. `null` when it is present but unusable. */

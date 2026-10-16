@@ -141,7 +141,7 @@ export function RuntimeUsage({
       label={label}
       trigger={resolvedTrigger}
       triggerClassName={triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME}
-      className="text-sm"
+      className="max-h-[calc(100dvh-4rem)] text-sm"
       working={usage.scanning}
     >
       {content()}
@@ -313,13 +313,20 @@ export function RuntimeUsagePopoverContent({
               {reason && <p className="mt-2 text-sm text-tertiary">{reason}</p>}
               {snapshot?.officialGroups && snapshot.officialGroups.length > 0 ? (
                 <div className="mt-3 space-y-4">
+                  {snapshot.officialDescription && (
+                    <p className="text-xs break-words text-tertiary">
+                      {snapshot.officialDescription}
+                    </p>
+                  )}
                   {snapshot.officialGroups.map((group, index) => (
                     <div key={`${group.name ?? "group"}-${index}`} className="space-y-3">
                       {group.name && (
-                        <h4 className="text-sm font-medium text-primary">{group.name}</h4>
+                        <h4 className="text-sm font-medium break-words text-primary">
+                          {group.name}
+                        </h4>
                       )}
                       {group.description && (
-                        <p className="text-xs text-tertiary">{group.description}</p>
+                        <p className="text-xs break-words text-tertiary">{group.description}</p>
                       )}
                       {group.buckets.map((bucket, bucketIndex) => (
                         <UsageWindow
@@ -327,11 +334,10 @@ export function RuntimeUsagePopoverContent({
                           label={bucket.name ?? bucket.window ?? m.computer_usage_available()}
                           detail={bucket.description}
                           window={{
-                            ...(bucket.usedPercent !== undefined
-                              ? { usedPercent: bucket.usedPercent }
-                              : {}),
+                            // The official name says how much is left, so the meter is
+                            // `remainingFraction`, not the derived used share.
+                            ...officialMeter(bucket),
                             ...(bucket.status ? { status: bucket.status } : {}),
-                            windowDurationMinutes: bucket.windowDurationMinutes ?? 1,
                             ...(bucket.resetsAt ? { resetsAt: bucket.resetsAt } : {}),
                           }}
                           timeZone={timeZone}
@@ -365,6 +371,18 @@ export function RuntimeUsagePopoverContent({
   );
 }
 
+/** Percent the meter draws for one official bucket. A remaining fraction wins, because the
+ * provider's bucket name is the remaining label (`Weekly Limit Remaining`). */
+function officialMeter(bucket: { remainingFraction?: number; usedPercent?: number }): {
+  usedPercent?: number;
+} {
+  if (bucket.remainingFraction === undefined) {
+    return bucket.usedPercent !== undefined ? { usedPercent: bucket.usedPercent } : {};
+  }
+  const remaining = Math.min(1, Math.max(0, bucket.remainingFraction));
+  return { usedPercent: Math.round(remaining * 10_000) / 100 };
+}
+
 function UsageWindow({
   label,
   detail,
@@ -374,7 +392,11 @@ function UsageWindow({
 }: {
   label: string;
   detail?: string;
-  window: NonNullable<NonNullable<UsageResultRecord["snapshot"]>["primary"]>;
+  window: {
+    usedPercent?: number;
+    status?: "ok" | "limit_reached" | "parse_unavailable";
+    resetsAt?: string;
+  };
   creditUsage?: NonNullable<UsageResultRecord["snapshot"]>["creditUsage"];
   timeZone: string | null;
 }) {
@@ -429,7 +451,7 @@ function UsageWindow({
             m.computer_usage_credit_overage({ overage: formatCredits(creditUsage.overage) })}
         </p>
       )}
-      {detail && <p className="mt-1 text-xs text-tertiary">{detail}</p>}
+      {detail && <p className="mt-1 text-xs break-words text-tertiary">{detail}</p>}
     </div>
   );
 }

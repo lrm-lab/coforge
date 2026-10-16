@@ -32,10 +32,11 @@ type QuotaGroup = { name: string; description?: string; buckets: QuotaBucket[] }
 
 /**
  * Reads the account's quota with `agy -p /usage --output-format json`. Every returned group and
- * bucket is kept on `officialGroups`, including a group that has only a weekly bucket. `primary`
- * and `secondary` stay the tightest group's 5-hour and weekly windows so an older Web still has
- * its two slots. A group name is not a plan, so `planType` stays unset. The response has no
- * pacing field, so none is derived.
+ * bucket is kept on `officialGroups`, including a group that has only a weekly bucket. The
+ * provider's own `command.data.description` is kept as `officialDescription`. `primary` and
+ * `secondary` stay the tightest group's 5-hour and weekly windows so an older Web still has its
+ * two slots. A group name is not a plan, so `planType` stays unset. The response has no pacing
+ * field, so none is derived.
  */
 export async function readAntigravityUsage(
   workingDirectory: string,
@@ -64,7 +65,9 @@ export async function readAntigravityUsage(
     if (SIGNED_OUT.test(error)) throw new UsageUnavailableError();
     throw new Error(`agy /usage failed: ${error || String(answer.status)}`);
   }
-  const groups = quotaGroups(asRecord(asRecord(answer.command)?.data)?.groups);
+  const data = asRecord(asRecord(answer.command)?.data);
+  const groups = quotaGroups(data?.groups);
+  const officialDescription = text(data?.description);
   const group = groups.reduce<QuotaGroup | undefined>(
     (tightest, candidate) =>
       !tightest || leastRemaining(candidate) < leastRemaining(tightest) ? candidate : tightest,
@@ -79,6 +82,7 @@ export async function readAntigravityUsage(
   const exhausted = groups.some((item) => item.buckets.some((bucket) => bucket.remaining <= 0));
   return {
     provider: RUNTIME_PROVIDER.ANTIGRAVITY,
+    ...(officialDescription ? { officialDescription } : {}),
     officialGroups,
     ...(primary ? { primary } : {}),
     ...(secondary ? { secondary } : {}),

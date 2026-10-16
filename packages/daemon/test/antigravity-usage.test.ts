@@ -16,8 +16,14 @@ function readUsage(environment: Record<string, string> = {}) {
   });
 }
 
-function usageOutput(groups: unknown[], status = "SUCCESS"): string {
-  return JSON.stringify({ status, command: { name: "usage", data: { groups } } });
+function usageOutput(groups: unknown[], status = "SUCCESS", description?: string): string {
+  return JSON.stringify({
+    status,
+    command: {
+      name: "usage",
+      data: { ...(description ? { description } : {}), groups },
+    },
+  });
 }
 
 test(
@@ -58,6 +64,114 @@ test(
       window: "5h",
       remainingFraction: 0.9876195192337036,
     });
+    expect(snapshot?.officialDescription).toMatch(
+      /^Within each group, models share a weekly limit/,
+    );
+    expect(snapshot?.officialGroups?.[0]?.description).toBe(
+      "Models within this group: Gemini Flash, Gemini Pro",
+    );
+    // Claude's buckets in this capture have no description key. That absence stays absent.
+    expect(snapshot?.officialGroups?.[1]?.buckets[0]?.description).toBeUndefined();
+  },
+  USAGE_BUDGET_MS,
+);
+
+test(
+  "a weekly-only group stays one bucket, and the provider description is kept",
+  async () => {
+    // Shape of a live agy 1.3.6 /usage read: three groups, Argon weekly only, Claude buckets
+    // without a description, and the top-level shared-limit note.
+    const description =
+      "Within each group, models share a weekly limit and a 5-hour limit. Quota is consumed proportionally to the cost of the tokens.";
+    const snapshot = await readUsage({
+      COFORGE_ANTIGRAVITY_USAGE_OUTPUT: usageOutput(
+        [
+          {
+            name: "Gemini Models",
+            description: "Models within this group: Gemini Flash, Gemini Pro",
+            buckets: [
+              {
+                id: "gemini-weekly",
+                name: "Weekly Limit Remaining",
+                description: "You have used some of your weekly limit.",
+                window: "weekly",
+                remaining_fraction: 0.9689806699752808,
+                reset_time: "2026-10-23T02:34:47Z",
+              },
+              {
+                id: "gemini-5h",
+                name: "Five Hour Limit Remaining",
+                description: "You have used some of your 5-hour limit.",
+                window: "5h",
+                remaining_fraction: 0.9064322710037231,
+                reset_time: "2026-10-16T07:34:47Z",
+              },
+            ],
+          },
+          {
+            name: "Claude and GPT models",
+            description: "Models within this group: Claude Opus, Claude Sonnet, GPT-OSS",
+            buckets: [
+              {
+                id: "3p-weekly",
+                name: "Weekly Limit Remaining",
+                window: "weekly",
+                remaining_fraction: 1,
+                reset_time: "2026-10-23T05:31:46Z",
+              },
+              {
+                id: "3p-5h",
+                name: "Five Hour Limit Remaining",
+                window: "5h",
+                remaining_fraction: 1,
+                reset_time: "2026-10-16T10:31:46Z",
+              },
+            ],
+          },
+          {
+            name: "Gemini 4 Argon",
+            description:
+              "For paid Pro plans, Argon quota is separate. Higher Argon quota is available on Ultra plans.",
+            buckets: [
+              {
+                id: "gemini-argon-wtu-weekly",
+                name: "Gemini 4 Argon Weekly Limit",
+                description: "You have used some of your weekly limit.",
+                window: "weekly",
+                remaining_fraction: 0.19419866800308228,
+                reset_time: "2026-10-23T02:37:01Z",
+              },
+            ],
+          },
+        ],
+        "SUCCESS",
+        description,
+      ),
+    });
+    expect(snapshot?.officialDescription).toBe(description);
+    expect(snapshot?.officialGroups?.map((group) => group.name)).toEqual([
+      "Gemini Models",
+      "Claude and GPT models",
+      "Gemini 4 Argon",
+    ]);
+    expect(snapshot?.officialGroups?.[2]?.buckets).toMatchObject([
+      {
+        id: "gemini-argon-wtu-weekly",
+        name: "Gemini 4 Argon Weekly Limit",
+        window: "weekly",
+        remainingFraction: 0.19419866800308228,
+        windowDurationMinutes: 10_080,
+      },
+    ]);
+    expect(snapshot?.officialGroups?.[1]?.buckets[0]?.description).toBeUndefined();
+    // Argon is the tightest group and has no 5-hour bucket, so the old primary slot stays empty.
+    expect(snapshot?.primary).toBeUndefined();
+    expect(snapshot?.secondary).toMatchObject({
+      id: "antigravity-gemini-argon-wtu-weekly",
+      usedPercent: 80.58,
+      status: "ok",
+    });
+    expect(Buffer.byteLength(JSON.stringify(snapshot))).toBeLessThan(16_384);
   },
   USAGE_BUDGET_MS,
 );
