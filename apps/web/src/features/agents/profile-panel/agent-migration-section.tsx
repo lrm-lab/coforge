@@ -208,13 +208,13 @@ export function AgentMigrationSection({
   agentId,
   agentName,
   currentComputerId,
-  isOwner,
+  canMove,
 }: {
   agentId: string;
   agentName: string;
   currentComputerId: string | null;
-  /** Only the Agent's owner moves it (`AgentMigrationRequests`). */
-  isOwner: boolean;
+  /** Whoever manages the Agent moves it: its owner or a Workspace owner/admin (`AgentMigrationRequests`). */
+  canMove: boolean;
 }) {
   const queryClient = useQueryClient();
   const workspaceSlug = useWorkspaceSlug();
@@ -325,7 +325,7 @@ export function AgentMigrationSection({
           targetName={migration.targetComputerName || m.agent_computer_unnamed()}
           sourceName={migration.sourceComputerName || m.agent_computer_unnamed()}
           onCancel={
-            isOwner
+            canMove
               ? () => {
                   setCancelError("");
                   setConfirmCancel(true);
@@ -335,7 +335,7 @@ export function AgentMigrationSection({
           canceling={canceling}
         />
       )}
-      {isOwner && status.data.available && !inProgress && (
+      {canMove && status.data.available && !inProgress && (
         <Button
           color="secondary"
           className="w-full justify-center"

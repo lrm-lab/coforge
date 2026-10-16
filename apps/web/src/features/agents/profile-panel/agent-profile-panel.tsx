@@ -489,7 +489,7 @@ export function AgentProfilePanel({
                   agentId={profile.id}
                   agentName={profile.displayName || profile.name}
                   currentComputerId={profile.computer.id}
-                  isOwner={profile.ownedByCurrentUser}
+                  canMove={canManage}
                 />
               ) : undefined
             }

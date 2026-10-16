@@ -7,9 +7,9 @@ import type { AgentMigrationRequestRefusal, AgentMigrations } from "./agent-migr
 
 /**
  * A person's side of moving an Agent to another Computer: asking for the move, canceling it, and
- * seeing how it is going. Only the Agent's owner moves it, the same rule as changing its Computer
- * (`ManageAgents.update`); the owner and the Workspace's owners and admins, who manage the Agent,
- * see the move, and nobody else learns even that it exists. Each refusal is an `AppError` whose
+ * seeing how it is going. Whoever manages the Agent moves it, as in the reference Computer: its
+ * owner and the Workspace's owners and admins, who also see the move; nobody else learns even that
+ * it exists. Each refusal is an `AppError` whose
  * `errorId` names the reason, so the dialog can say it.
  */
 
@@ -109,7 +109,7 @@ export class AgentMigrationRequests {
   }
 
   async request(principal: Principal, input: { agentId: string; targetComputerId: string }) {
-    await this.#assertOwner(principal, input.agentId);
+    await this.#assertManager(principal, input.agentId);
     if (!(await this.deps.available()))
       throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "agent-migration-unavailable" });
     // Before anything stops: an old daemon on either side would ignore the move, leaving the
@@ -152,7 +152,7 @@ export class AgentMigrationRequests {
 
   /** Cancels the move; one that has already ended is left as it is. */
   async cancel(principal: Principal, input: { agentId: string; migrationId: string }) {
-    await this.#assertOwner(principal, input.agentId);
+    await this.#assertManager(principal, input.agentId);
     const latest = await this.deps.migrations.latestForAgent(principal.workspaceId, input.agentId);
     if (latest?.id !== input.migrationId) throw new AppError("NOT_FOUND");
     await this.deps.orchestrator().cancel({
@@ -162,11 +162,11 @@ export class AgentMigrationRequests {
   }
 
   /**
-   * The Computers the owner could move the Agent to: every other one, unmarked. Whether one can
+   * The Computers the Agent could be moved to: every other one, unmarked. Whether one can
    * take part is decided when the move is asked for (`request`).
    */
   async targets(principal: Principal, agentId: string) {
-    await this.#assertOwner(principal, agentId);
+    await this.#assertManager(principal, agentId);
     const current = await this.deps.agentComputer(principal.workspaceId, agentId);
     return this.deps.otherComputers(principal.workspaceId, current);
   }
@@ -176,10 +176,13 @@ export class AgentMigrationRequests {
     return computerId ? this.deps.computerReadiness(workspaceId, computerId) : null;
   }
 
-  async #assertOwner(principal: Principal, agentId: string) {
+  async #assertManager(principal: Principal, agentId: string) {
     const owner = await this.deps.agentOwner(principal.workspaceId, agentId);
     if (!owner) throw new AppError("NOT_FOUND");
-    if (owner !== principal.userId)
+    if (
+      owner !== principal.userId &&
+      !(await this.deps.isWorkspaceAdmin(principal.workspaceId, principal.userId))
+    )
       throw new AppError("ACCESS_DENIED", { errorId: "agent-not-authorized" });
   }
 }

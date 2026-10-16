@@ -78,7 +78,24 @@ test("the owner moves the Agent; the owner and Workspace admins see the move, no
   await expect(requests.status(stranger, "agent-1")).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
 
-test("only the owner may move or cancel, and each refusal names its reason", async () => {
+test("a Workspace admin moves and cancels another member's Agent, as the reference does", async () => {
+  const { requests, requested } = setup();
+  expect(await requests.targets(admin, "agent-1")).toEqual([
+    { id: "computer-b", name: "Studio Mac" },
+    { id: "computer-c", name: "Old Laptop" },
+  ]);
+  const moved = await requests.request(admin, {
+    agentId: "agent-1",
+    targetComputerId: "computer-b",
+  });
+  expect(requested).toEqual(["computer-b"]);
+  await requests.cancel(admin, { agentId: "agent-1", migrationId: moved.id });
+  expect(await requests.status(owner, "agent-1")).toMatchObject({
+    migration: { state: "canceled" },
+  });
+});
+
+test("only the owner or a Workspace admin may move or cancel, and each refusal names its reason", async () => {
   const { requests } = setup();
   const move = (input: { agentId?: string; targetComputerId: string }, who = owner) =>
     requests.request(who, { agentId: "agent-1", ...input });
