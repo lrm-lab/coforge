@@ -15,7 +15,9 @@ function database() {
 
 async function member(db: PrismaClient) {
   const suffix = crypto.randomUUID();
-  const user = await db.user.create({ data: { username: `tab-order-${suffix}` } });
+  const user = await db.user.create({
+    data: { displayName: `tab-order-${suffix}`, username: `tab-order-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `tab-order-${suffix}`,

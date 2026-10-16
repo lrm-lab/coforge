@@ -1,4 +1,9 @@
-import { hasErrorCode, truncateCodePoints, thrownMessage } from "@lrm/coforge-sdk/internal";
+import {
+  hasErrorCode,
+  refusalText,
+  thrownMessage,
+  truncateCodePoints,
+} from "@lrm/coforge-sdk/internal";
 import { RuntimeModelNotFoundError } from "#src/code-agent/contract";
 import { fingerprintRuntimeError, scrubRuntimeErrorText } from "./runtime-error-activity";
 import { RUNTIME_ERROR_CLASS } from "./runtime-error-classification";
@@ -176,7 +181,7 @@ export function launchFailureActivity(
 export function launchFailureLogFields(error: unknown) {
   return {
     failure_reason: launchFailureReason(error),
-    error_message: scrubRuntimeErrorText(thrownMessage(error)),
+    error_message: scrubRuntimeErrorText(refusalText(error)),
     ...launchFailureTrace(error),
   };
 }

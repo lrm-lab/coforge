@@ -51,6 +51,7 @@ function repositoryFor(record: AgentRecord | undefined): AgentRepository {
     listInWorkspace: async () => (record ? [record] : []),
     listForComputer: async () => (record ? [record] : []),
     listDeletedForComputer: async () => [],
+    hasActiveMigration: async () => false,
     listOwnedInWorkspace: async () => (record ? [record] : []),
     create: async () => record!,
     update: async () => record!,

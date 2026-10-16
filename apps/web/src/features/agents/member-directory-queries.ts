@@ -1,9 +1,10 @@
-import { infiniteQueryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import { MEMBER_PAGE_SIZE } from "#src/features/workspaces/member-directory";
 import {
   loadMemberAgentPage,
   loadMemberPeoplePage,
+  loadMemberPersonProfile,
 } from "#src/features/workspaces/workspaces.functions";
 
 export type MemberAgentFilters = {
@@ -37,4 +38,11 @@ export const memberPeopleQuery = (workspaceId: string, query: string) =>
       loadMemberPeoplePage({ data: { query, cursor: pageParam, limit: MEMBER_PAGE_SIZE } }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
+  });
+
+/** One person's profile panel, under the directory key so a member change refreshes it too. */
+export const memberPersonQuery = (workspaceId: string, userId: string) =>
+  queryOptions({
+    queryKey: [...workspaceDirectoryKey(workspaceId), "person", userId],
+    queryFn: () => loadMemberPersonProfile({ data: { userId } }),
   });

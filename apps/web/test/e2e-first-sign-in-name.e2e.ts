@@ -120,7 +120,9 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
 
     await removeSeeded();
     // An account that predates the step: it has a Workspace and no display name.
-    const existingUser = await db.user.create({ data: { username: "e2e-fsn-existing" } });
+    const existingUser = await db.user.create({
+      data: { displayName: "e2e-fsn-existing", username: "e2e-fsn-existing" },
+    });
     await db.userIdentity.create({
       data: { userId: existingUser.id, provider: "authing", providerSubject: people.existing.sub },
     });
@@ -258,7 +260,7 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
     // ── An existing session that predates the step ──────────────────────────────────────────────
     // The session is still valid, and the person has no display name: a page in a Workspace sends
     // them to the name step and back to that page; Computer device approval is not gated.
-    await db.user.update({ where: { id: existingUser.id }, data: { displayName: null } });
+    await db.user.update({ where: { id: existingUser.id }, data: { welcomedAt: null } });
     await browser("open", `${origin}/en/oauth/verify`);
     await waitFor(
       `location.pathname === "/oauth/verify" && document.body.innerText.includes("Signed in as")`,

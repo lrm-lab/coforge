@@ -161,8 +161,17 @@ function PeopleDirectConversationPage({
       data={data}
       name={conversation.peer.displayName}
       header={(tabs) => <PeopleDirectConversationHeader conversation={conversation} {...tabs} />}
-      // No Agent profile here: a member DM has no Agent to open.
-      conversation={({ jumpMessage, tasksPane, onShowTasks, onShowFiles, onReadLatest }) => (
+      // No Agent profile here (a member DM has no Agent to open), only the people's own.
+      conversation={({
+        jumpMessage,
+        tasksPane,
+        onShowTasks,
+        onShowFiles,
+        onReadLatest,
+        agentProfile,
+        onOpenPersonProfile,
+        onCloseAgentProfile,
+      }) => (
         <PeopleDirectConversation
           key={conversation.conversationId}
           {...data.conversationProps}
@@ -172,6 +181,9 @@ function PeopleDirectConversationPage({
           onShowTasks={onShowTasks}
           onShowFiles={onShowFiles}
           onReadLatest={onReadLatest}
+          agentProfile={agentProfile}
+          onOpenPersonProfile={onOpenPersonProfile}
+          onCloseAgentProfile={onCloseAgentProfile}
         />
       )}
     />

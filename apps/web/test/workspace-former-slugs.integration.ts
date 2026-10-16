@@ -25,7 +25,12 @@ test("a changed Workspace URL keeps its old slug for that Workspace and no other
   try {
     const [owner, outsider] = await Promise.all(
       ["owner", "outsider"].map((name) =>
-        db.user.create({ data: { username: `former-slug-${name}-${suffix}` } }),
+        db.user.create({
+          data: {
+            displayName: `former-slug-${name}-${suffix}`,
+            username: `former-slug-${name}-${suffix}`,
+          },
+        }),
       ),
     );
     const workspace = await catalog.createForUser(owner!.id, {
@@ -60,7 +65,9 @@ test("a changed Workspace URL keeps its old slug for that Workspace and no other
       new AppError("CONFLICT"),
     );
     // A personal Workspace made at first sign-in steps around it, as around a taken slug.
-    const newcomer = await db.user.create({ data: { username: slug("user") } });
+    const newcomer = await db.user.create({
+      data: { displayName: slug("user"), username: slug("user") },
+    });
     const { workspaceId } = await new WorkspaceEnrollment(
       new PrismaWorkspaceEnrollmentStore(db),
     ).ensureForUser({ id: newcomer.id, username: slug("user"), displayName: "Newcomer" }, "en");
@@ -89,7 +96,9 @@ test("two URL changes of one Workspace at once leave every slug it ever had rese
   const slug = (label: string) => `${label}-${suffix}`;
   const catalog = new WorkspaceCatalog(new PrismaWorkspaceCatalogStore(db));
   try {
-    const owner = await db.user.create({ data: { username: `former-slug-race-${suffix}` } });
+    const owner = await db.user.create({
+      data: { displayName: `former-slug-race-${suffix}`, username: `former-slug-race-${suffix}` },
+    });
     const workspace = await catalog.createForUser(owner.id, { name: "Race", slug: slug("a") });
 
     const moves = await Promise.allSettled(
@@ -126,7 +135,12 @@ test("first sign-in makes the personal Workspace at the chosen URL, never at one
   try {
     const [owner, newcomer] = await Promise.all(
       ["owner", "newcomer"].map((name) =>
-        db.user.create({ data: { username: `first-url-${name}-${suffix}` } }),
+        db.user.create({
+          data: {
+            displayName: `first-url-${name}-${suffix}`,
+            username: `first-url-${name}-${suffix}`,
+          },
+        }),
       ),
     );
     const theirs = await catalog.createForUser(owner!.id, { name: "Theirs", slug: slug("old") });
@@ -145,7 +159,7 @@ test("first sign-in makes the personal Workspace at the chosen URL, never at one
       expect(await ask(taken)).toEqual({ ok: false, problem: "slug_taken" });
     }
     expect(
-      (await db.user.findUniqueOrThrow({ where: { id: newcomer!.id } })).displayName,
+      (await db.user.findUniqueOrThrow({ where: { id: newcomer!.id } })).welcomedAt,
     ).toBeNull();
 
     expect(await workspaceSlugAvailable({ db, slug: slug("mine") })).toEqual({ available: true });

@@ -16,6 +16,7 @@ import {
   TreeItem,
   TreeItemContent,
 } from "react-aria-components";
+import { CatchBoundary } from "@tanstack/react-router";
 import type {
   AgentWorkspaceFileEntry,
   AgentWorkspaceFileReadResult,
@@ -596,18 +597,23 @@ function FilePane({ state, onRetry }: { state: FileState | undefined; onRetry: (
     // to the existing image renderer: ProjectFileView is a text viewer and would show the data URL
     // as source. Everything else — text, and any read without an image payload — stays with it.
     const imageSource = workspaceImageSource(state.result);
-    if (imageSource) return <WorkspaceImagePreview name={name} url={imageSource} />;
     return (
-      <Suspense fallback={<ProjectFileViewSkeleton name={name} />}>
-        <ProjectFileView
-          key={state.path}
-          path={state.path}
-          name={name}
-          byteSize={state.result.sizeBytes}
-          text={state.result.text}
-          githubUrl={undefined}
-        />
-      </Suspense>
+      <CatchBoundary getResetKey={() => state.path} errorComponent={FilePreviewError}>
+        {imageSource ? (
+          <WorkspaceImagePreview name={name} url={imageSource} />
+        ) : (
+          <Suspense fallback={<ProjectFileViewSkeleton name={name} />}>
+            <ProjectFileView
+              key={state.path}
+              path={state.path}
+              name={name}
+              byteSize={state.result.sizeBytes}
+              text={state.result.text}
+              githubUrl={undefined}
+            />
+          </Suspense>
+        )}
+      </CatchBoundary>
     );
   }
   if (state.status === "offline") return <EmptyFileState text={m.agent_workspace_offline()} />;
@@ -628,13 +634,36 @@ function WorkspaceImagePreview({ name, url }: { name: string; url: string }) {
   );
 }
 
-function EmptyFileState({ text, onRetry }: { text: string; onRetry?: () => void }) {
+function FilePreviewError() {
+  return (
+    <EmptyFileState
+      text={m.agent_workspace_preview_error()}
+      alert
+      onRetry={() => window.location.reload()}
+      retryLabel={m.agent_workspace_reload()}
+    />
+  );
+}
+
+function EmptyFileState({
+  text,
+  onRetry,
+  retryLabel = m.agent_workspace_retry(),
+  alert = false,
+}: {
+  text: string;
+  onRetry?: () => void;
+  retryLabel?: string;
+  alert?: boolean;
+}) {
   return (
     <div className="flex flex-col items-center gap-3 px-5 py-16 text-center">
-      <p className="text-sm text-tertiary">{text}</p>
+      <p role={alert ? "alert" : undefined} className="text-sm text-tertiary">
+        {text}
+      </p>
       {onRetry && (
         <Button size="sm" color="secondary" onPress={onRetry}>
-          {m.agent_workspace_retry()}
+          {retryLabel}
         </Button>
       )}
     </div>

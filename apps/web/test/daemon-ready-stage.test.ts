@@ -1,6 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 
-import { encodeDaemonRuntimeReadyRequest } from "@lrm/coforge-sdk/internal";
+import {
+  decodeDaemonRuntimeReadyRequest,
+  encodeDaemonRuntimeReadyRequest,
+} from "@lrm/coforge-sdk/internal";
 
 import { createDaemonRuntimeReadyMethod } from "#src/server/centrifugo/rpc-handler.server";
 
@@ -89,4 +92,63 @@ test("a failing ready names the stage that failed", async () => {
 test("a ready that completes still answers with bytes, not a stage", async () => {
   const method = createDaemonRuntimeReadyMethod({ recovery: { recoverWorkspace: async () => {} } });
   expect(await method(readyPayload(), { principal: principal() })).toBeInstanceOf(Uint8Array);
+});
+
+test("a daemon that runs migrations is leased again on ready; a failure there does not fail the ready", async () => {
+  const reissued: string[] = [];
+  const method = (fail: boolean) =>
+    createDaemonRuntimeReadyMethod({
+      migrationRecovery: {
+        recover: async (workspaceId, computerId) => {
+          reissued.push(`${workspaceId}:${computerId}`);
+          if (fail) throw new Error("centrifugo is down");
+        },
+      },
+    });
+  const payload = (capabilities: string[]) =>
+    encodeDaemonRuntimeReadyRequest({
+      ...decodeDaemonRuntimeReadyRequest(readyPayload()),
+      capabilities,
+    });
+  expect(await method(false)(payload(["reminder:v1"]), { principal: principal() })).toBeInstanceOf(
+    Uint8Array,
+  );
+  expect(reissued).toEqual([]);
+  expect(
+    await method(true)(payload(["agent-migration:v1"]), { principal: principal() }),
+  ).toBeInstanceOf(Uint8Array);
+  expect(reissued).toEqual(["workspace-1:computer-1"]);
+});
+
+test("migration recovery logs a stable error type without external diagnostic text", async () => {
+  const warnings: string[] = [];
+  const warning = spyOn(console, "warn").mockImplementation((message: string) => {
+    warnings.push(message);
+  });
+  try {
+    const method = createDaemonRuntimeReadyMethod({
+      migrationRecovery: {
+        recover: async () => {
+          throw new Error("private external diagnostic");
+        },
+      },
+    });
+    const payload = encodeDaemonRuntimeReadyRequest({
+      ...decodeDaemonRuntimeReadyRequest(readyPayload()),
+      capabilities: ["agent-migration:v1"],
+    });
+    expect(await method(payload, { principal: principal() })).toBeInstanceOf(Uint8Array);
+    expect(warnings.map((line) => JSON.parse(line))).toEqual([
+      {
+        event: "agent_migration:recovery_failed",
+        request_id: "ready-1",
+        workspace_id: "workspace-1",
+        computer_id: "computer-1",
+        outcome: "failed",
+        error_type: "Error",
+      },
+    ]);
+  } finally {
+    warning.mockRestore();
+  }
 });

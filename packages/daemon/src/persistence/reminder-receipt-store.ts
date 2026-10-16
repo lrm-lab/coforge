@@ -133,6 +133,17 @@ export class FileReminderReceiptStore implements ReminderReceiptStore {
       "receipts.json",
     );
   }
+  #validateReceipts(agentId: string, values: readonly unknown[]): ReminderReceipt[] {
+    const validated = values.map((item) =>
+      receipt(item, this.workspaceId, this.computerId, agentId),
+    );
+    if (
+      new Set(validated.map((item) => `${item.reminderId}:${item.version}`)).size !==
+      validated.length
+    )
+      throw new Error("reminder receipts are corrupt");
+    return validated;
+  }
   async read(agentId: string): Promise<ReminderReceipt[]> {
     const path = this.#path(agentId);
     if (!(await Bun.file(path).exists())) return [];
@@ -142,25 +153,11 @@ export class FileReminderReceiptStore implements ReminderReceiptStore {
     };
     if (value.version !== 1 || !Array.isArray(value.receipts))
       throw new Error("reminder receipts are corrupt");
-    const receipts = value.receipts.map((item) =>
-      receipt(item, this.workspaceId, this.computerId, agentId),
-    );
-    if (
-      new Set(receipts.map((item) => `${item.reminderId}:${item.version}`)).size !== receipts.length
-    )
-      throw new Error("reminder receipts are corrupt");
-    return receipts;
+    return this.#validateReceipts(agentId, value.receipts);
   }
   async write(agentId: string, receipts: readonly ReminderReceipt[]): Promise<void> {
     const path = this.#path(agentId);
-    const validated = receipts.map((item) =>
-      receipt(item, this.workspaceId, this.computerId, agentId),
-    );
-    if (
-      new Set(validated.map((item) => `${item.reminderId}:${item.version}`)).size !==
-      validated.length
-    )
-      throw new Error("reminder receipts are corrupt");
+    const validated = this.#validateReceipts(agentId, receipts);
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     await chmod(dirname(path), 0o700);
     const temporary = `${path}.${crypto.randomUUID()}.tmp`;

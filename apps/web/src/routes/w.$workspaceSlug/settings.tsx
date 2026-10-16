@@ -9,6 +9,7 @@ import { useAppToast } from "#src/components/ui/toast";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { SettingsPending } from "#src/features/settings/settings-pending";
 import { chooseAvatarPreset, saveUserProfile } from "#src/features/profiles/profile.functions";
+import { MEMBER_DIRECTORY_KEY } from "#src/features/agents/member-directory-queries";
 import {
   browserNotificationPermission,
   showPageNotification,
@@ -68,6 +69,7 @@ const settingsSections = [
   "preferences",
   "notifications",
   "integrations",
+  "server-connection",
 ] as const;
 
 export const Route = createFileRoute("/w/$workspaceSlug/settings")({
@@ -286,9 +288,16 @@ function SettingsPage() {
     }
   }
 
+  /** After the viewer's own name, description or picture changed: the page, and the Members
+   * page's cards and person panel, which show them too. */
+  async function refreshOwnProfile() {
+    await router.invalidate({ sync: true });
+    await queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY });
+  }
+
   async function changeProfile(input: { displayName: string; description: string }) {
     await saveProfile({ data: input });
-    await router.invalidate({ sync: true });
+    await refreshOwnProfile();
   }
 
   // The switcher and this page both read the Workspace from the loaders, so a reload shows the
@@ -323,20 +332,20 @@ function SettingsPage() {
       body: form,
     });
     if (!response.ok) throw new Error("Profile image upload failed");
-    await router.invalidate({ sync: true });
+    await refreshOwnProfile();
     await queryClient.invalidateQueries({ queryKey: ["conversation"] });
   }
 
   async function choosePresetAvatar(presetId: string) {
     await saveAvatarPreset({ data: { presetId } });
-    await router.invalidate({ sync: true });
+    await refreshOwnProfile();
     await queryClient.invalidateQueries({ queryKey: ["conversation"] });
   }
 
   async function removeAvatar() {
     const response = await fetch("/api/me/avatar", { method: "DELETE" });
     if (!response.ok) throw new Error("Profile image removal failed");
-    await router.invalidate({ sync: true });
+    await refreshOwnProfile();
     await queryClient.invalidateQueries({ queryKey: ["conversation"] });
   }
 

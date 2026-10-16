@@ -83,7 +83,7 @@ test("a re-read gives a new object only to the message that changed", () => {
               userId: "user-ada",
               agentId: null,
               agent: null,
-              user: { username: "ada", displayName: null },
+              user: { username: "ada", displayName: "ada" },
             },
           },
         ],

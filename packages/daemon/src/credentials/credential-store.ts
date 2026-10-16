@@ -13,9 +13,7 @@ export interface DaemonCredentialStore {
 export class FileDaemonCredentialStore implements DaemonCredentialStore {
   readonly #directory: string;
 
-  constructor(
-    directory = process.env.COFORGE_DAEMON_HOME ?? join(homedir(), ".coforge", "daemon"),
-  ) {
+  constructor(directory = Bun.env.COFORGE_DAEMON_HOME ?? join(homedir(), ".coforge", "daemon")) {
     this.#directory = join(directory, "credentials");
   }
 

@@ -110,7 +110,7 @@ function ComputerDetailPage() {
           : undefined
       }
       onDeleteComputer={
-        computer.ownedByCurrentUser
+        computer.ownedByCurrentUser && computer.cloudSlot !== "default"
           ? async () => {
               await removeComputer({ data: { computerId } });
               await router.navigate({

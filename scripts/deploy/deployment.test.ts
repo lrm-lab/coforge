@@ -1556,6 +1556,70 @@ describe("staging user file persistence", () => {
     expect(workflow).not.toMatch(/echo "\$COFORGE_FILE_DELIVERY_KEY"/);
   });
 
+  test("staging web receives the cloud cluster token from its secret file", async () => {
+    const compose = await Bun.file(
+      new URL("../../infra/staging/docker-compose.yml", import.meta.url),
+    ).text();
+    const webStart = compose.indexOf("\n  web:\n");
+    const migrateStart = compose.indexOf("\n  migrate:\n");
+    const webBlock = compose.slice(webStart, migrateStart);
+    expect(webBlock).toContain(
+      "COFORGE_CLOUD_CLUSTER_TOKEN: ${COFORGE_CLOUD_CLUSTER_TOKEN:?staging cloud cluster token}",
+    );
+
+    const script = await Bun.file(new URL("./remote-deploy.sh", import.meta.url)).text();
+    const functions = script.slice(
+      script.indexOf("load_compose_secrets()"),
+      script.indexOf("# Fail closed on a mutable"),
+    );
+    const directory = await mkdtemp(join(tmpdir(), "coforge-cluster-token-"));
+    try {
+      for (const name of [
+        "authing_app_id",
+        "authing_app_secret",
+        "coforge_session_secret",
+        "coforge_agent_credential_encryption_key",
+        "coforge_web_push_public_key",
+        "coforge_web_push_private_key",
+        "coforge_file_delivery_key",
+        "centrifugo_token_hmac_secret_key",
+      ])
+        await writeFile(join(directory, name), "fixture");
+      for (const token of ["", "0123456789abcdef0123456789abcdef"]) {
+        if (token) await writeFile(join(directory, "coforge_cloud_cluster_token"), token);
+        const child = Bun.spawn(
+          [
+            "bash",
+            "-euc",
+            `${functions}
+            secrets_dir="$1"
+            COMPOSE_ARGS=()
+            docker() { test "\${COFORGE_CLOUD_CLUSTER_TOKEN-unset}" = "$2"; }
+            load_compose_secrets
+            compose "$2"
+          `,
+            "test",
+            directory,
+            token,
+          ],
+          { stdout: "pipe", stderr: "pipe" },
+        );
+        expect(await child.exited).toBe(0);
+        expect(await new Response(child.stdout).text()).toBe("");
+        expect(await new Response(child.stderr).text()).toBe("");
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+
+    const workflow = await Bun.file(
+      new URL("../../.github/workflows/deploy-staging.yml", import.meta.url),
+    ).text();
+    expect(workflow).toContain("secrets.COFORGE_CLOUD_CLUSTER_TOKEN");
+    expect(workflow).toContain("coforge_cloud_cluster_token");
+    expect(workflow).not.toMatch(/echo "\$COFORGE_CLOUD_CLUSTER_TOKEN"/);
+  });
+
   test("staging serves install.sh pointing at the staging feed, not the production one", async () => {
     const compose = await Bun.file(
       new URL("../../infra/staging/docker-compose.yml", import.meta.url),

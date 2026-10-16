@@ -13,9 +13,19 @@ export type WeeklyReportPresentationInput = {
   members: readonly WeeklyReportPresentationMember[];
 };
 
+/** XML text cannot carry control bytes; tab, line feed and carriage return are legal and kept. */
+function stripControlBytes(value: string): string {
+  let kept = "";
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    const control = code <= 8 || code === 11 || code === 12 || (code >= 14 && code <= 31);
+    if (!control) kept += character;
+  }
+  return kept;
+}
+
 function encodeXml(value: string): string {
-  return value
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
+  return stripControlBytes(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")

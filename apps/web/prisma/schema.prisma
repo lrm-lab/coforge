@@ -17,6 +17,8 @@ model Workspace {
   members                WorkspaceMembership[]
   joinLinks              WorkspaceJoinLink[]
   computers              WorkspaceComputer[]
+  serverConnection       WorkspaceServerConnection?
+  hostJobs               HostJob[]
   computerRuntimes       ComputerRuntime[]
   modelCatalogs          ComputerModelCatalog[]
   agents                 Agent[]
@@ -60,6 +62,7 @@ model Workspace {
   memoryCleanupWork      WorkspaceMemoryCleanupWork[]
   workspaceMemoryAgent   WorkspaceMemoryAgent?
   formerSlugs            WorkspaceFormerSlug[]
+  agentMigrations        AgentMigration[]
 
   @@map("workspaces")
 }
@@ -108,9 +111,13 @@ model User {
   username                    String                          @unique
   /// The latest email the identity provider reported at login. Not unique and never an identity key.
   email                       String?
-  /// The name teammates see, asked for at first sign-in. Nullable: an account created before it
-  /// has none until it is asked, and is then labelled by `username`.
-  displayName                 String?
+  /// The name teammates see. Required, as Slack requires a name: an account starts with the name
+  /// its sign-in provider reported (`initialDisplayName`), and a person confirms it at first
+  /// sign-in. A person is never shown by `username`.
+  displayName                 String
+  /// When the person finished first sign-in (confirmed their name and made their Workspace); null
+  /// until then, which is what sends them to that step.
+  welcomedAt                  DateTime?
   description                 String                          @default("")
   /// An image object key, or `preset:<id>` for a platform picture the app serves itself.
   avatarObjectKey             String?
@@ -132,6 +139,8 @@ model User {
   agentApiKeys                AgentApiKey[]
   daemonApiKeys               DaemonApiKey[]
   computers                   Computer[]
+  submittedServerConnections  WorkspaceServerConnection[]
+  requestedHostJobs           HostJob[]
   conversationMembers         ConversationMember[]
   webPushSubscriptions        WebPushSubscription[]
   attachments                 Attachment[]
@@ -144,6 +153,7 @@ model User {
   recordNotesAuthored         RecordNote[]                    @relation("RecordNoteAuthor")
   recordCommentsAuthored      RecordComment[]                 @relation("RecordCommentAuthor")
   committedActionCards        ActionCard[]
+  requestedAgentMigrations    AgentMigration[]
 
   @@map("users")
 }
@@ -296,6 +306,7 @@ model Agent {
   attachments               Attachment[]
   attachmentUploadSessions  AttachmentUploadSession[]
   workspaceMemoryAgent      WorkspaceMemoryAgent?
+  migrations                AgentMigration[]
 
   @@unique([workspaceId, name])
   @@unique([id, workspaceId])
@@ -680,21 +691,34 @@ model Computer {
   osVersion         String?
   metadataStartedAt BigInt?
   /// Where this Computer runs: "local" on a machine the User controls,
-  /// "cloud" on a CoForge-hosted sandbox node.
+  /// "cloud" on the deployment's Swarm cluster.
   kind              String                 @default("local")
+  /// "default" or "extra" for a cloud Computer. Local Computers leave this empty.
+  /// One live default per account, and one live extra per Workspace, are partial unique indexes below.
+  cloudSlot         String?
+  /// The Workspace an extra cloud Computer is for. Empty for the default and for local Computers.
+  homeWorkspaceId   String?                @db.Uuid
+  /// Set when the cluster reports that an extra cloud Computer's service is gone.
+  /// That Workspace's extra slot stays taken until then. The default Computer is never deleted.
+  deletedAt         DateTime?
   workspaces        WorkspaceComputer[]
   runtimes          ComputerRuntime[]
   modelCatalogs     ComputerModelCatalog[]
   agents                        Agent[]
   agentApiKeys                  AgentApiKey[]
   daemonApiKeys                 DaemonApiKey[]
+  hostJobs                      HostJob[]
   agentActivity                 AgentActivity[]
   reminders                     Reminder[]
   weeklyReportCollectorBindings WeeklyReportCollectorBinding[]
   weeklyReportCollectSlots      WeeklyReportCollectSlot[]
+  migrationsOut                 AgentMigration[]       @relation("AgentMigrationSource")
+  migrationsIn                  AgentMigration[]       @relation("AgentMigrationTarget")
   owner                         User                   @relation(fields: [ownerId], references: [id])
 
   @@unique([ownerId, machineId])
+  @@unique([ownerId], map: "computers_one_live_cloud_default", where: raw("\"kind\" = 'cloud' AND \"cloudSlot\" = 'default' AND \"deletedAt\" IS NULL"))
+  @@unique([ownerId, homeWorkspaceId], map: "computers_one_live_cloud_extra_per_workspace", where: raw("\"kind\" = 'cloud' AND \"cloudSlot\" = 'extra' AND \"deletedAt\" IS NULL AND \"homeWorkspaceId\" IS NOT NULL"))
   @@map("computers")
 }
 
@@ -741,6 +765,21 @@ model WorkspaceComputer {
 
   @@unique([workspaceId, computerId])
   @@map("workspace_computers")
+}
+
+/// One submitted server connection per Workspace. The install command is not stored: a later
+/// read shows who submitted it and whether a Daemon is online, and does not mint another command.
+model WorkspaceServerConnection {
+  workspaceId       String    @id @db.Uuid
+  installOrigin     String
+  workspaceSlug     String
+  submittedByUserId String    @db.Uuid
+  submittedAt       DateTime
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  submittedBy       User      @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([submittedByUserId])
+  @@map("workspace_server_connections")
 }
 
 model Conversation {
@@ -1764,4 +1803,88 @@ model MemoryDispositionCitation {
 
   @@unique([dispositionId, citationId])
   @@map("memory_disposition_citations")
+}
+
+/// The one Swarm cluster this deployment controls. The token is stored only as a hash of
+/// COFORGE_CLOUD_CLUSTER_TOKEN. accepting is the runtime's latest "can place another service" flag.
+model HostNode {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  name       String
+  nodeKey    String?   @unique @map("node_key")
+  tokenHash  String    @unique @map("token_hash")
+  accepting  Boolean   @default(true)
+  lastSeenAt DateTime? @map("last_seen_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  jobs       HostJob[]
+
+  @@index([lastSeenAt])
+  @@map("host_nodes")
+}
+
+/// One create, attach, or delete for a cloud Computer. The daemon key stays here until the
+/// cluster reports the job, then it is cleared. The browser never receives it.
+model HostJob {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  hostId            String    @map("host_id") @db.Uuid
+  /// "create", "delete", or "attach".
+  operation         String    @default("create")
+  workspaceId       String    @map("workspace_id") @db.Uuid
+  workspaceSlug     String    @map("workspace_slug")
+  computerId        String    @map("computer_id") @db.Uuid
+  requestedByUserId String    @map("requested_by_user_id") @db.Uuid
+  idempotencyKey    String    @map("idempotency_key")
+  name              String
+  daemonApiKey      String?   @map("daemon_api_key")
+  containerId       String?   @map("container_id")
+  createdAt         DateTime  @map("created_at")
+  reportedAt        DateTime? @map("reported_at")
+  host              HostNode  @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  computer          Computer  @relation(fields: [computerId], references: [id], onDelete: Cascade)
+  requestedBy       User      @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([requestedByUserId, idempotencyKey])
+  @@index([hostId, reportedAt])
+  @@map("host_jobs")
+}
+
+/// One move of an Agent and its workspace files from one Computer to another. The state machine,
+/// its fencing and who may take each step live in `server/agent-migrations/`; this row is its only
+/// persistence. A Computer is soft-deleted (`deletedAt`), so its migrations stay; the switch refuses a
+/// target that is no longer a live Computer of the Workspace. The cascades only follow a hard delete.
+model AgentMigration {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  workspaceId       String    @db.Uuid
+  agentId           String    @db.Uuid
+  sourceComputerId  String    @db.Uuid
+  targetComputerId  String    @db.Uuid
+  requestedByUserId String    @db.Uuid
+  /// requested | source_stopped | uploaded | placing | switched | completed | canceled | failed
+  state             String    @default("requested")
+  /// Bumped by every transition; a step applies only at the revision it read.
+  revision          Int       @default(0)
+  /// Bumped when a new transfer attempt replaces the previous one; fences a stale attempt.
+  generation        Int       @default(1)
+  /// When `Agent.computerId` moved to the target. Before it the source owns the Agent and a cancel
+  /// leaves it there; after it the target keeps the Agent and a cancel only cleans up.
+  switchedAt        DateTime?
+  errorCode         String?
+  errorDetail       String?
+  /// The bundle manifest the source sent with `upload_complete`: chunk digests and totals the
+  /// target verifies against. Opaque to the state machine.
+  manifest          Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  finishedAt        DateTime?
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent             Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  sourceComputer    Computer  @relation("AgentMigrationSource", fields: [sourceComputerId], references: [id], onDelete: Cascade)
+  targetComputer    Computer  @relation("AgentMigrationTarget", fields: [targetComputerId], references: [id], onDelete: Cascade)
+  requestedBy       User      @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId], map: "agent_migrations_one_active", where: raw("\"state\" <> 'completed' AND \"state\" <> 'canceled' AND \"state\" <> 'failed'"))
+  @@index([sourceComputerId])
+  @@index([targetComputerId])
+  @@index([workspaceId])
+  @@map("agent_migrations")
 }

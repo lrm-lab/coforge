@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { thrownMessage } from "./thrown-message";
+import { refusalText, thrownMessage } from "./thrown-message";
 
 describe("thrownMessage", () => {
   test("reads the message of an Error, including a subclass and an empty message", () => {
@@ -15,5 +15,12 @@ describe("thrownMessage", () => {
     expect(thrownMessage(null)).toBe("null");
     // An Error-shaped object that is not an Error is stringified, not read for `.message`.
     expect(thrownMessage({ message: "not an Error" })).toBe("[object Object]");
+  });
+
+  test("reads the message of a realtime rejection that is not an Error", () => {
+    expect(refusalText({ code: 403, message: "Agent Session snapshot is not authorized" })).toBe(
+      "Agent Session snapshot is not authorized",
+    );
+    expect(refusalText(new Error("gone"))).toBe("gone");
   });
 });

@@ -162,7 +162,7 @@ function usageBadge(
   if (result.status === "reauth")
     return { color: "warning", label: m.computer_usage_badge_reauth() };
   if (result.status === "unavailable")
-    return { color: "error", label: m.computer_usage_badge_unavailable() };
+    return { color: "warning", label: m.computer_usage_badge_unavailable() };
   if (result.status === "error") return { color: "error", label: m.computer_usage_badge_error() };
   if (result.status === "unsupported")
     return { color: "warning", label: m.computer_usage_badge_unsupported() };

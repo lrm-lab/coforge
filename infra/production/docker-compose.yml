@@ -106,6 +106,9 @@ services:
       # writing somewhere unintended.
       COFORGE_IMAGE_OSS_BUCKET: coforge-images-prod
       COFORGE_IMAGE_DELIVERY_URL: https://images.coforge.cn
+      # Agent migration bundles move between Computers through this bucket, by presigned URL;
+      # see docs/operations/aliyun-oss-cdn/agent-migration-bucket.md.
+      COFORGE_MIGRATION_OSS_BUCKET: coforge-agent-migrations-prod
     secrets:
       - source: authing_app_id
         uid: "1000"

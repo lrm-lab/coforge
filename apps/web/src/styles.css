@@ -237,3 +237,45 @@ input[type="search"]::-webkit-search-cancel-button {
     box-shadow: 0 0 0 calc(var(--avatar-size) * 0.046875) var(--color-bg-primary);
   }
 }
+
+/* The shared emoji grid (`components/ui/emoji-picker.tsx`). The library paints its surfaces by
+   reading these epr variables off its own root, where it also re-declares its defaults inline,
+   so the app's values are asserted on the root itself (`!important` wins the cascade against
+   both). Each maps to the nearest app token, and the tokens re-resolve per theme, so dark mode
+   needs no second block. Narrow screens shrink the cell, not the columns, which is what fits a
+   320px pane. */
+[data-epr-host] .EmojiPickerReact {
+  --epr-bg-color: var(--color-bg-primary) !important;
+  --epr-text-color: var(--color-text-secondary) !important;
+  --epr-emoji-hover-color: var(--color-bg-secondary_hover) !important;
+  --epr-focus-bg-color: var(--color-bg-secondary_hover) !important;
+  --epr-hover-bg-color: var(--color-bg-secondary_hover) !important;
+  --epr-highlight-color: var(--color-bg-secondary_hover) !important;
+  --epr-active-skin-hover-color: var(--color-bg-secondary_hover) !important;
+  --epr-emoji-variation-indicator-color: var(--color-bg-secondary_hover) !important;
+  --epr-category-label-bg-color: var(--color-bg-primary) !important;
+  --epr-category-label-text-color: var(--color-text-tertiary) !important;
+  --epr-category-icon-inactive-color: var(--color-text-quaternary) !important;
+  --epr-category-icon-active-color: var(--color-text-primary) !important;
+  --epr-search-input-bg-color: var(--color-bg-secondary) !important;
+  --epr-search-input-bg-color-active: var(--color-bg-secondary_hover) !important;
+  --epr-search-input-text-color: var(--color-text-primary) !important;
+  --epr-search-input-placeholder-color: var(--color-text-quaternary) !important;
+  --epr-search-border-color: transparent !important;
+  --epr-search-border-color-active: transparent !important;
+  --epr-picker-border-color: transparent !important;
+  --epr-picker-border-radius: 0.75rem !important;
+  --epr-emoji-variation-picker-bg-color: var(--color-bg-primary) !important;
+  --epr-skin-tone-picker-menu-color: var(--color-bg-primary) !important;
+}
+
+@media (max-width: 380px) {
+  [data-epr-host] .EmojiPickerReact {
+    --epr-emoji-size: 1.5rem !important;
+    --epr-emoji-padding: 0.25rem !important;
+    --epr-horizontal-padding: 0.5rem !important;
+    --epr-search-bar-inner-padding: 0.5rem !important;
+    --epr-category-padding: 0.5rem 0.75rem !important;
+    --epr-search-input-height: 2rem !important;
+  }
+}

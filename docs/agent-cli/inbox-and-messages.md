@@ -55,6 +55,12 @@ not resend. Each daemon request of a send has a 30-second deadline, and the CLI 
 plus a margin (`AGENT_SEND_LOCAL_DEADLINE_MS` in the SDK), so the verdict
 always arrives.
 
+`message send` reads the body from stdin; pass it as a quoted heredoc. When
+stdin is redirected from a regular file another user owns, the send fails with
+`STDIN_FILE_NOT_OWNED` before any request (`Draft saved: no`): such a file is
+not the Agent's reply, and a failed write to a shared path leaves its owner's
+earlier content there.
+
 `message send` accepts `--attachment-id <uuid>` (repeatable, up to ten per
 message; duplicate values collapse to one) to attach one or more attachments
 already uploaded to the target conversation and left unlinked to any

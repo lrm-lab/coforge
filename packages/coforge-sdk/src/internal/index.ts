@@ -465,6 +465,7 @@ export const COMPUTER_CLI_COMMANDS = [
   "foreground",
   "logs",
   "status",
+  "host",
 ] as const;
 export type ComputerCliCommand = (typeof COMPUTER_CLI_COMMANDS)[number];
 export type RuntimeMetadata = {
@@ -762,7 +763,7 @@ export {
   stableNormalizeFreshnessFact,
 } from "./freshness-decision";
 export type { FreshnessDecisionAction, FreshnessDecisionFactInput } from "./freshness-decision";
-export { codePointLength, truncateCodePoints } from "./truncate";
+export { codePointLength, truncateCodePoints, truncateCodePointsWithEllipsis } from "./truncate";
 export {
   compareReleaseVersions,
   isValidReleaseVersion,
@@ -1010,6 +1011,7 @@ export {
 export * from "./agent-skills";
 export * from "./agent-workspace-files";
 export * from "./agent-control";
+export * from "./agent-migration";
 export * from "./reminder";
 export * from "./tasks";
 export * from "./task-codec";

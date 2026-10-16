@@ -1,5 +1,10 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AgentControl } from "./agent-control.server";
+import { PublishAgentRuntimeControl } from "./agent-runtime-control.server";
+import {
+  RepositoryAgentAuthorization,
+  type PrismaAgentRepository,
+} from "#src/server/db/repositories/agent.repositories.server";
 import { getAgentControlSignal } from "./agent-control-signal.server";
 import { getAgentRuntimeLock } from "./agent-runtime-lock.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -27,5 +32,31 @@ export function userAgentControl(db: PrismaClient) {
     getAgentControlSignal(),
     conversations,
     mentions,
+  );
+}
+
+/** The runtime Start and Stop publisher an owner's Agent changes go through. */
+export function userAgentRuntimeControl(db: PrismaClient, agents: PrismaAgentRepository) {
+  const centrifugo = createCentrifugoServerApi();
+  const conversations = new PrismaDirectConversationRepository(db);
+  const mentions = new MentionDeliveryReports(
+    new PrismaMentionDeliveryRepository(db),
+    centrifugo,
+    conversations,
+  );
+  const sessions = createAgentSessions(db, mentions);
+  return new PublishAgentRuntimeControl(
+    new RepositoryAgentAuthorization(agents),
+    centrifugo,
+    async () => {},
+    sessions,
+    new AgentControl(
+      new PrismaAgentControlStore(db),
+      centrifugo,
+      getAgentRuntimeLock(),
+      undefined,
+      sessions,
+      getAgentControlSignal(),
+    ),
   );
 }

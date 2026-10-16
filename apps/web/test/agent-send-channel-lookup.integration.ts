@@ -47,7 +47,9 @@ async function withChannel(
   process.env.COFORGE_CENTRIFUGO_API_URL = `http://127.0.0.1:${centrifugo.port}/api`;
   process.env.COFORGE_CENTRIFUGO_API_KEY = "test-key";
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `lookup-owner-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `lookup-owner-${suffix}`, username: `lookup-owner-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `lookup-${suffix}`,

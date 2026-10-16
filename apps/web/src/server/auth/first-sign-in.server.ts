@@ -8,17 +8,20 @@ import {
 } from "#src/features/workspaces/workspace-slug";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { isWorkspaceSlugFree } from "#src/server/db/repositories/workspace-slugs.repositories.server";
+import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import {
   PrismaWorkspaceEnrollmentStore,
   WorkspaceEnrollment,
 } from "#src/server/workspaces/enrollment.server";
+import { startDefaultCloudComputer } from "#src/server/workspaces/create-workspace.server";
 
 /** Where a person's display name lives. */
 export type FirstSignInNames = {
-  /** The person's stored display name (null until they have been asked for one), or null when
-   * there is no such person: a session can outlive its user. */
+  /** The name the person confirmed at first sign-in (null until they have), or null when there is
+   * no such person: a session can outlive its user. */
   lookup(userId: string): Promise<{ displayName: string | null } | null>;
-  /** Stores `displayName` unless the person already has one; resolves with the name stored after. */
+  /** Stores `displayName` and marks first sign-in done, unless it already is; resolves with the
+   * name stored after. */
   setDisplayNameOnce(userId: string, displayName: string): Promise<string>;
 };
 
@@ -44,16 +47,24 @@ function workspaceSlugPrefill(username: string): string {
   return isValidWorkspaceSlug(slug) && !isReservedWorkspaceSlug(slug) ? slug : "";
 }
 
+export type CloudComputerStart = (input: {
+  userId: string;
+  workspaceId: string;
+  now: Date;
+}) => Promise<unknown>;
+
 /**
  * The step of first sign-in that asks a person for their display name and their personal
  * Workspace's URL: what the page needs to know (`readNameStep`) and what submitting it does
- * (`complete`): the Workspace is made at that URL, titled with the name, and the name is saved. Sign-in itself finishes without either; a person without a
+ * (`complete`): the Workspace is made at that URL, titled with the name, the default cloud
+ * computer is started for it, and the name is saved. Sign-in itself finishes without either; a person without a
  * name is sent here before anything is created for them.
  */
 export class FirstSignIn {
   constructor(
     private readonly names: FirstSignInNames,
     private readonly enrollment: WorkspaceEnrollment,
+    private readonly startCloudComputer?: CloudComputerStart,
   ) {}
 
   /** Whether to ask at all, and what the fields start with: the provider's own name, when it reads
@@ -102,6 +113,11 @@ export class FirstSignIn {
       if (isUniqueViolation(error)) return { ok: false, problem: "slug_taken" };
       throw error;
     }
+    await this.startCloudComputer?.({
+      userId: input.user.id,
+      workspaceId,
+      now: new Date(),
+    });
     await this.names.setDisplayNameOnce(input.user.id, checked.name);
     return { ok: true, workspaceId };
   }
@@ -110,22 +126,27 @@ export class FirstSignIn {
 class PrismaFirstSignInNames implements FirstSignInNames {
   constructor(private readonly db: PrismaClient) {}
 
-  lookup(userId: string) {
-    return this.db.user.findUnique({ where: { id: userId }, select: { displayName: true } });
+  async lookup(userId: string) {
+    const row = await this.db.user.findUnique({
+      where: { id: userId },
+      select: { displayName: true, welcomedAt: true },
+    });
+    // Every account has a name; it counts as confirmed once first sign-in is done.
+    return row && { displayName: row.welcomedAt ? row.displayName : null };
   }
 
   async setDisplayNameOnce(userId: string, displayName: string) {
     // One statement decides who was first, so two tabs cannot each believe theirs was saved.
     const { count } = await this.db.user.updateMany({
-      where: { id: userId, displayName: null },
-      data: { displayName },
+      where: { id: userId, welcomedAt: null },
+      data: { displayName, welcomedAt: new Date() },
     });
     if (count === 1) return displayName;
     const row = await this.db.user.findUniqueOrThrow({
       where: { id: userId },
       select: { displayName: true },
     });
-    return row.displayName ?? displayName;
+    return row.displayName;
   }
 }
 
@@ -133,6 +154,11 @@ function firstSignIn(db: PrismaClient): FirstSignIn {
   return new FirstSignIn(
     new PrismaFirstSignInNames(db),
     new WorkspaceEnrollment(new PrismaWorkspaceEnrollmentStore(db)),
+    (request) =>
+      startDefaultCloudComputer(
+        (input) => productionCloudComputers(db).ensureDefault(input),
+        request,
+      ),
   );
 }
 

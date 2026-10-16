@@ -36,8 +36,12 @@ function recordingRealtime() {
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const ada = await db.user.create({ data: { username: `ve-ada-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `ve-bob-${suffix}` } });
+  const ada = await db.user.create({
+    data: { displayName: `ve-ada-${suffix}`, username: `ve-ada-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `ve-bob-${suffix}`, username: `ve-bob-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `ve-${suffix}`,
@@ -163,7 +167,7 @@ test.skipIf(!connectionString)(
     const { db, teardown, suffix, workspace, ada, bob, team, channels, announced } = await setup();
     try {
       const carol = await db.user.create({
-        data: { username: `ve-carol-${suffix}` },
+        data: { displayName: `ve-carol-${suffix}`, username: `ve-carol-${suffix}` },
       });
       await db.workspaceMembership.create({
         data: { workspaceId: workspace.id, userId: carol.id, role: "member" },

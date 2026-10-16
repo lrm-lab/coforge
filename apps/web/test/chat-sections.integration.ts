@@ -20,7 +20,9 @@ async function withMember(
 ) {
   const db = database();
   const suffix = crypto.randomUUID();
-  const user = await db.user.create({ data: { username: `section-order-${suffix}` } });
+  const user = await db.user.create({
+    data: { displayName: `section-order-${suffix}`, username: `section-order-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: { slug: suffix, name: "Section order", members: { create: { userId: user.id } } },
   });
@@ -116,7 +118,9 @@ test("a section's sort and the sidebar's section order, built-in sections includ
 test("personal Chat sections survive a new read with their name, emoji and collapse state", async () => {
   const db = database();
   const suffix = crypto.randomUUID();
-  const user = await db.user.create({ data: { username: `sections-${suffix}` } });
+  const user = await db.user.create({
+    data: { displayName: `sections-${suffix}`, username: `sections-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: { slug: suffix, name: "Sections", members: { create: { userId: user.id } } },
   });
@@ -157,7 +161,9 @@ test("personal Chat sections survive a new read with their name, emoji and colla
 test("channels and DMs move between personal sections and survive a section's deletion", async () => {
   const db = database();
   const suffix = crypto.randomUUID();
-  const user = await db.user.create({ data: { username: `section-move-${suffix}` } });
+  const user = await db.user.create({
+    data: { displayName: `section-move-${suffix}`, username: `section-move-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: { slug: suffix, name: "Move", members: { create: { userId: user.id } } },
   });
@@ -205,8 +211,12 @@ test("channels and DMs move between personal sections and survive a section's de
 test("sections isolate members and Workspaces, reject inaccessible conversations and invalid names/icons", async () => {
   const db = database();
   const suffix = crypto.randomUUID();
-  const alice = await db.user.create({ data: { username: `section-alice-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `section-bob-${suffix}` } });
+  const alice = await db.user.create({
+    data: { displayName: `section-alice-${suffix}`, username: `section-alice-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `section-bob-${suffix}`, username: `section-bob-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: suffix,
@@ -255,7 +265,9 @@ test("sections isolate members and Workspaces, reject inaccessible conversations
 test("moving a closed pinned channel into a section keeps it visible and removes its pin", async () => {
   const db = database();
   const suffix = crypto.randomUUID();
-  const user = await db.user.create({ data: { username: `section-pin-${suffix}` } });
+  const user = await db.user.create({
+    data: { displayName: `section-pin-${suffix}`, username: `section-pin-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: { slug: suffix, name: "Pins", members: { create: { userId: user.id } } },
   });

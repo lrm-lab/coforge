@@ -115,6 +115,8 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
           request,
           principal,
           new TaskBoard(db, {
+            // The Agent reads its results: a person mentioned in a title reads as their @handle.
+            reader: "agent",
             realtime: new CentrifugoConversationRealtime(createCentrifugoServerApi()),
           }),
         ),

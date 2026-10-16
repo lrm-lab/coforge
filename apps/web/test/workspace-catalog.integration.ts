@@ -17,7 +17,12 @@ test("renaming a Workspace stores the new name for every member and keeps its sl
   try {
     const [owner, member] = await Promise.all(
       ["owner", "member"].map((name) =>
-        db.user.create({ data: { username: `workspace-rename-${name}-${suffix}` } }),
+        db.user.create({
+          data: {
+            displayName: `workspace-rename-${name}-${suffix}`,
+            username: `workspace-rename-${name}-${suffix}`,
+          },
+        }),
       ),
     );
     const iconObjectKey = `workspaces/rename-${suffix}/icons/${suffix}/original`;

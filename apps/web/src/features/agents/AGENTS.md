@@ -92,6 +92,14 @@ These rules apply to `src/features/agents/`.
 - Clicking an Agent name opens the same right-hand `AgentProfilePanel` the
   conversation slot uses (`profile`/`agentTab` search params);
   `agent/$agentId` redirects there.
+- Clicking a person's name, on a card or as a message's sender, opens
+  `PersonProfilePanel` in the same slot (`profile=user:<id>`). It shows the
+  person's name (never their username), description, email when the identity
+  provider reported one (visible to every member), role, join date, and the
+  Agents they created that the viewer may see. An owner or admin changes their
+  role and removes them there with the Settings → Members writes and rules
+  (`WorkspaceMembers.person` reports which apply); one's own profile is edited
+  in Settings → Account.
 - Computer prerequisites appear only after the user requests Agent creation.
   Runtime management stays in the profile panel, not the directory.
 - Workspace directory reads belong to

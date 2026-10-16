@@ -25,15 +25,16 @@ import {
 } from "#src/features/agents/member-directory-queries";
 import {
   agentIdFromProfileParam,
-  agentProfileParamSchema,
   agentProfileTabParamSchema,
+  profileParamSchema,
+  personIdFromProfileParam,
 } from "#src/features/agents/profile-panel/profile-panel-search";
 
 export const Route = createFileRoute("/w/$workspaceSlug/members")({
   validateSearch: z.object({
     memberType: z.enum(["agent", "human"]).default("agent").catch("agent"),
     owner: z.enum(["all", "mine"]).default("all").catch("all"),
-    profile: agentProfileParamSchema,
+    profile: profileParamSchema,
     agentTab: agentProfileTabParamSchema,
   }),
   loaderDeps: ({ search }) => ({
@@ -104,6 +105,7 @@ function AgentsPage() {
       agents={visibleAgents}
       computers={computers}
       profileAgentId={agentIdFromProfileParam(profile)}
+      profilePersonId={personIdFromProfileParam(profile)}
       agentTab={agentTab}
       onLoadRuntimeCatalog={(computerId) => loadRuntimeCatalog({ data: { computerId } })}
       onCreate={async (data) => {

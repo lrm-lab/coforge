@@ -10,21 +10,21 @@ test("the channel list shows at most six members", () => {
 
 test("a person sender is named by their label and marked mine only for the viewer", () => {
   const names = {
-    users: new Map([["user-grace", { username: "grace", displayName: null }]]),
+    users: new Map([["user-grace", { username: "Grace Hopper", displayName: "Grace Hopper" }]]),
     agents: new Map(),
   };
   expect(
     previewSenderOf({ senderUserId: "user-grace", senderAgentId: null }, "user-grace", names),
   ).toEqual({
     kind: "user",
-    name: "grace",
+    name: "Grace Hopper",
     mine: true,
   });
   expect(
     previewSenderOf({ senderUserId: "user-grace", senderAgentId: null }, "user-ada", names),
   ).toEqual({
     kind: "user",
-    name: "grace",
+    name: "Grace Hopper",
     mine: false,
   });
 });

@@ -1,4 +1,7 @@
 import { checkPersonName } from "#src/features/profiles/person-name";
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
+
+export { UNNAMED_PERSON_NAME };
 
 /**
  * What the name field starts with: the name the sign-in provider reported, when it reads as one.
@@ -19,4 +22,23 @@ function looksLikePhoneNumber(value: string): boolean {
 
 function looksLikeEmail(value: string): boolean {
   return /^\S+@\S+\.\S+$/.test(value);
+}
+
+/**
+ * The display name a new account is created with, so a person always has a name and is never
+ * shown by their username (Slack requires a name the same way): the provider's name, else its
+ * nickname, else the local part of the email, each only when it reads as a name; else
+ * `UNNAMED_PERSON_NAME`.
+ */
+export function initialDisplayName(profile: {
+  name?: string | null;
+  nickname?: string | null;
+  email?: string | null;
+}): string {
+  const candidates = [profile.name, profile.nickname, profile.email?.split("@")[0]];
+  for (const candidate of candidates) {
+    const name = namePrefill(candidate ?? "");
+    if (name) return name;
+  }
+  return UNNAMED_PERSON_NAME;
 }

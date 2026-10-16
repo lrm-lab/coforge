@@ -91,6 +91,10 @@ services:
       # docs/release/local-feed-hosting.md requires a staging entry point to install the staging
       # build, never the production one.
       COFORGE_RELEASE_FEED_URL: https://releases-staging.coforge.cn
+      # Shared secret for the one Swarm this deployment controls. The Web process stores only
+      # its hash. Plaintext arrives from the host secret file via remote-deploy.sh; an empty
+      # value refuses cloud computers.
+      COFORGE_CLOUD_CLUSTER_TOKEN: ${COFORGE_CLOUD_CLUSTER_TOKEN:?staging cloud cluster token}
       # Private user files (chat attachments, avatars) live in the staging OSS bucket; see
       # docs/operations/aliyun-oss-cdn/. No AccessKey pair: the ECS instance carries the
       # `coforge-staging-web` RAM role and the SDK reads its STS token from the instance
@@ -115,6 +119,9 @@ services:
       # avatar upload loudly instead of writing somewhere unintended.
       COFORGE_IMAGE_OSS_BUCKET: coforge-images-staging
       COFORGE_IMAGE_DELIVERY_URL: https://images-staging.coforge.cn
+      # Agent migration bundles move between Computers through this bucket, by presigned URL;
+      # see docs/operations/aliyun-oss-cdn/agent-migration-bucket.md.
+      COFORGE_MIGRATION_OSS_BUCKET: coforge-agent-migrations-staging
     secrets:
       - source: authing_app_id
         uid: "1000"

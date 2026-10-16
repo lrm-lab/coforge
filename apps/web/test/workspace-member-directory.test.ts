@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { AppError } from "#src/lib/app-error";
-import { humanLabel } from "#src/lib/human-label";
+import { humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import {
   WorkspaceMemberDirectory,
   type WorkspaceMemberDirectoryStore,
@@ -124,7 +124,7 @@ test("members are listed in the order of the names they are shown by, not of the
   expect(listed.map((row) => row.username)).toEqual(["zed", "mia", "ada"]);
 });
 
-test("a member with no display name is listed by their username", async () => {
+test("a member with no display name is listed as unnamed, never by their username", async () => {
   const store = memoryStore();
   store.seedMember({
     workspaceId,
@@ -143,7 +143,9 @@ test("a member with no display name is listed by their username", async () => {
   const directory = new WorkspaceMemberDirectory(store);
 
   const listed = await directory.listMembers({ workspaceId, actorUserId: ownerId });
-  expect(listed.map(humanLabel)).toEqual(["ada", "Alice", "mia"]);
+  expect(listed.map(humanLabel)).toEqual(["Alice", UNNAMED_PERSON_NAME, UNNAMED_PERSON_NAME]);
+  // People shown alike keep a stable order by username, which is never shown.
+  expect(listed.map((row) => row.username)).toEqual(["zed", "ada", "mia"]);
 });
 
 function memoryStore(): WorkspaceMemberDirectoryStore & {

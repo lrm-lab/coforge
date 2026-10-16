@@ -17,7 +17,7 @@ import { claudeStreamEvents } from "./stream-events";
 import { claudeToolResults, claudeToolUses } from "./tool-events";
 import { claudeStaticCatalog, discoverExternalCodeAgents } from "#src/code-agent/runtime-inventory";
 import type { ProviderDiscoveryOptions } from "#src/code-agent/contract";
-import { asRecord, eventTime } from "#src/code-agent/json-record";
+import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record";
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CLAUDE_CODE;
@@ -128,6 +128,16 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
   }
 }
 
+/** Claude Code's task lifecycle `system` subtypes, by the phase each reports. */
+const TASK_LIFECYCLE_PHASE = new Map<
+  unknown,
+  Extract<AgentRuntimeEvent, { type: "subagent-progress" }>["phase"]
+>([
+  ["task_started", "started"],
+  ["task_progress", "progress"],
+  ["task_notification", "notification"],
+]);
+
 class ClaudeCodeAgentSession implements AgentSession {
   #process: JsonlProcess;
   readonly #exitListeners = new Set<() => void>();
@@ -148,6 +158,8 @@ class ClaudeCodeAgentSession implements AgentSession {
   // A fresh Claude session becomes ready at its first result.
   #sessionReadyForNotices = false;
   #compacting = false;
+  /** Subagent tasks announced by `task_started`, by task id, with their reported type. */
+  readonly #subagentTasks = new Map<string, string | undefined>();
   #inputFailure: Error | undefined;
   #recoveryFailed = false;
   readonly #outstandingTools = new Set<string>();
@@ -274,6 +286,8 @@ class ClaudeCodeAgentSession implements AgentSession {
     const fresh = this.spawnFresh!();
     this.#process = fresh.process;
     this.#sessionId = fresh.sessionId;
+    // The old process's tasks never report again.
+    this.#subagentTasks.clear();
     this.#identity = { sessionId: fresh.sessionId, state: "empty" };
     this.#bindProcess(this.#process);
     await this.ready();
@@ -443,6 +457,31 @@ class ClaudeCodeAgentSession implements AgentSession {
     }
   }
 
+  /**
+   * Relays a subagent's `task_started`/`task_progress`/`task_notification` as
+   * `subagent-progress`. Only `task_started` names the task's type, and a background command's
+   * later records look like a subagent's, so the subagent tasks it announced are remembered here.
+   */
+  #acceptTaskLifecycle(record: Readonly<Record<string, unknown>>): void {
+    const phase = TASK_LIFECYCLE_PHASE.get(record.subtype);
+    const taskId = typeof record.task_id === "string" ? record.task_id : undefined;
+    if (!phase || !taskId) return;
+    const reportedType = nonEmptyString(record.subagent_type);
+    if (phase === "started") {
+      if (record.task_type !== "local_agent" && record.task_type !== "remote_agent") return;
+      this.#subagentTasks.set(taskId, reportedType);
+    } else if (!this.#subagentTasks.has(taskId)) return;
+    const subagentType = reportedType ?? this.#subagentTasks.get(taskId);
+    if (phase === "notification") this.#subagentTasks.delete(taskId);
+    this.#emit({
+      type: "subagent-progress",
+      phase,
+      ...(subagentType ? { subagentType } : {}),
+      ...(typeof record.tool_use_id === "string" ? { parentToolUseId: record.tool_use_id } : {}),
+      occurredAt: eventTime(record),
+    });
+  }
+
   #accept(record: Readonly<Record<string, unknown>>): void {
     if (this.#recoveryFailed || this.#state === "disposed") return;
     if (
@@ -477,6 +516,7 @@ class ClaudeCodeAgentSession implements AgentSession {
         this.#emit({ type: "compaction-finished", occurredAt: eventTime(record) });
         this.#flushNotices();
       }
+      this.#acceptTaskLifecycle(record);
     }
     if (record.type === "system" && record.subtype === "init") {
       if (

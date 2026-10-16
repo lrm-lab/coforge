@@ -9,6 +9,7 @@ import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured
 import { m } from "#src/paraglide/messages";
 import { chatSectionFields, type ChatSection } from "./chat-section.schemas";
 import { useSidebarActions } from "./sidebar-lists";
+import { ChatSectionEmojiPicker, DEFAULT_SECTION_EMOJI } from "./chat-section-emoji-picker";
 
 /** Mounted for each create/edit, preserving input after an unsuccessful save. */
 export function ChatSectionDialog({
@@ -21,12 +22,15 @@ export function ChatSectionDialog({
   onClose: () => void;
 }) {
   const [name, setName] = useState(section?.name ?? "");
-  const [emoji, setEmoji] = useState(section?.emoji ?? "");
+  // A new section starts with the folder mark already chosen; an edited one keeps its own (or none).
+  const [emoji, setEmoji] = useState<string | null>(
+    section ? section.emoji : DEFAULT_SECTION_EMOJI,
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const busy = useRef(false);
   const actions = useSidebarActions();
-  const parsed = chatSectionFields.safeParse({ name, emoji: emoji.trim() || null });
+  const parsed = chatSectionFields.safeParse({ name, emoji });
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy.current || (!deleting && !parsed.success)) return;
@@ -82,21 +86,7 @@ export function ChatSectionDialog({
               </div>
             ) : (
               <div className="flex items-start gap-3">
-                <Input
-                  label={m.chat_section_emoji()}
-                  isRequired={false}
-                  hideRequiredIndicator
-                  value={emoji}
-                  onChange={setEmoji}
-                  maxLength={16}
-                  placeholder="📁"
-                  isDisabled={saving}
-                  className="w-24 shrink-0"
-                  isInvalid={
-                    emoji.length > 0 &&
-                    !chatSectionFields.shape.emoji.safeParse(emoji.trim()).success
-                  }
-                />
+                <ChatSectionEmojiPicker value={emoji} onChange={setEmoji} isDisabled={saving} />
                 <Input
                   label={m.chat_section_name()}
                   value={name}

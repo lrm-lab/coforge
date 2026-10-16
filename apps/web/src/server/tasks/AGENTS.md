@@ -17,6 +17,11 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
   history events a Task write records and how they read back. TaskBoard and
   the Activity inbox read Tasks through them; do not map a Task row or parse
   its status anywhere else.
+- A Task's text (its title, a history title change) keeps its message's
+  mention tokens and is read per reader (`TaskReader`): people see a mentioned
+  person's name, never their username; an Agent sees their `@handle`.
+  `TaskBoard` reads for people unless the Agent Task route passes
+  `reader: "agent"`; a realtime Task copy always reads for people.
 - `claim` answers every selector with a result row and never throws for a
   refused one: `reason` says why (not found, done, closed, held), and a Task
   another member holds adds `conflict` (holder, `claimedAt`, `observedAt`),

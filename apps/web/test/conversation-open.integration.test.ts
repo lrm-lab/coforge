@@ -41,7 +41,9 @@ test.skipIf(!connectionString)(
     const handle = crypto.randomUUID().slice(0, 8);
     const [owner, member, leaver, bystander, stranger] = await Promise.all(
       ["owner", "member", "leaver", "bystander", "stranger"].map((name) =>
-        db.user.create({ data: { username: `open-${name}-${handle}` } }),
+        db.user.create({
+          data: { displayName: `open-${name}-${handle}`, username: `open-${name}-${handle}` },
+        }),
       ),
     );
     const workspace = await db.workspace.create({
@@ -281,7 +283,9 @@ test.skipIf(!connectionString)(
   async () => {
     const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
     const handle = crypto.randomUUID().slice(0, 8);
-    const viewer = await db.user.create({ data: { username: `dm-open-${handle}` } });
+    const viewer = await db.user.create({
+      data: { displayName: `dm-open-${handle}`, username: `dm-open-${handle}` },
+    });
     const workspace = await db.workspace.create({
       data: {
         slug: `dm-open-${handle}`,

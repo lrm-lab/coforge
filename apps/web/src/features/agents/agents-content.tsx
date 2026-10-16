@@ -62,8 +62,10 @@ import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-prof
 import { useOpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import {
   formatAgentProfileParam,
+  formatPersonProfileParam,
   type AgentProfileTab,
 } from "#src/features/agents/profile-panel/profile-panel-search";
+import { PersonProfilePanel } from "./person-profile-panel";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 
 type ComputerOption = {
@@ -96,6 +98,7 @@ export function AgentsContent({
   agents,
   computers,
   profileAgentId,
+  profilePersonId,
   agentTab,
   onCreate,
   onLoadRuntimeCatalog,
@@ -109,6 +112,8 @@ export function AgentsContent({
   agents: AgentView[];
   computers: ComputerOption[];
   profileAgentId?: string;
+  /** The person whose profile the panel shows (`profile=user:<id>`). */
+  profilePersonId?: string;
   agentTab?: AgentProfileTab;
   onCreate: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
   onLoadRuntimeCatalog: (computerId: string) => Promise<RuntimeCatalog[]>;
@@ -163,7 +168,22 @@ export function AgentsContent({
   const loadMore = () => {
     if (pages.hasNextPage && !pages.isFetchingNextPage) void pages.fetchNextPage();
   };
-  const profileOpen = Boolean(profileAgentId);
+  const profile = profileAgentId ? (
+    <AgentProfilePanel
+      agentId={profileAgentId}
+      requestedTab={agentTab}
+      onTabChange={setAgentProfileTab}
+      onClose={closeAgentProfile}
+    />
+  ) : profilePersonId ? (
+    <PersonProfilePanel
+      // A fresh panel per person, so one never shows another's state while it loads.
+      key={profilePersonId}
+      userId={profilePersonId}
+      onClose={closeAgentProfile}
+    />
+  ) : null;
+  const profileOpen = profile !== null;
   // `useBreakpoint` is true during SSR for a desktop's request (a phone's request assumes narrow,
   // `AssumedViewportProvider`), which cannot tell a narrow desktop window. Stay stacked until after
   // mount so a phone never first-paints the profile as a 35% column with a blank left side.
@@ -177,16 +197,6 @@ export function AgentsContent({
     onlySaveAfterUserInteractions: true,
     storage: localLayoutStorage,
   });
-
-  const profile =
-    profileOpen && profileAgentId ? (
-      <AgentProfilePanel
-        agentId={profileAgentId}
-        requestedTab={agentTab}
-        onTabChange={setAgentProfileTab}
-        onClose={closeAgentProfile}
-      />
-    ) : null;
 
   const directoryPane = (
     <Tabs
@@ -292,7 +302,11 @@ export function AgentsContent({
             className="mt-4 grid gap-4 outline-none md:grid-cols-[repeat(auto-fill,minmax(18rem,1fr))]"
           >
             {listedPeople.map((person) => (
-              <PersonCard key={person.id} person={person} />
+              <PersonCard
+                key={person.id}
+                person={person}
+                selected={person.id === profilePersonId}
+              />
             ))}
             {listedAgents.map((member) => (
               <AgentCard
@@ -468,13 +482,18 @@ const SEARCH_DEBOUNCE_MS = 250;
 const CARD_CLASS =
   "flex min-w-0 flex-col gap-2.5 rounded-xl bg-primary p-4 shadow-xs ring-1 ring-secondary outline-focus-ring ring-inset data-focus-visible:outline-2 data-focus-visible:outline-offset-2";
 
-function PersonCard({ person }: { person: DirectoryPerson }) {
+function PersonCard({ person, selected }: { person: DirectoryPerson; selected: boolean }) {
   const { total, items } = person.createdAgents;
   const more = total - items.length;
   const online = useMemberOnline(person.id);
   const openDirectConversation = useOpenDirectConversation();
+  const workspaceSlug = useWorkspaceSlug();
   return (
-    <GridListItem id={person.id} textValue={person.displayName} className={CARD_CLASS}>
+    <GridListItem
+      id={person.id}
+      textValue={person.displayName}
+      className={cn(CARD_CLASS, selected && "ring-2 ring-brand")}
+    >
       <div className="flex items-start justify-between gap-3">
         <MemberAvatar
           size="lg"
@@ -495,7 +514,21 @@ function PersonCard({ person }: { person: DirectoryPerson }) {
       </div>
       <div className="min-w-0">
         <h2 className="truncate text-md font-semibold text-primary">
-          {person.displayName}
+          <Link
+            to="/w/$workspaceSlug/members"
+            params={{ workspaceSlug }}
+            resetScroll={false}
+            search={(previous) => ({
+              ...previous,
+              profile: formatPersonProfileParam(person.id),
+              agentTab: undefined,
+            })}
+            aria-label={m.member_person_open_profile({ name: person.displayName })}
+            aria-current={selected ? "page" : undefined}
+            className="inline-flex min-h-11 items-center rounded-sm outline-focus-ring outline-offset-4 hover:underline focus-visible:outline-2 sm:min-h-0"
+          >
+            {person.displayName}
+          </Link>
           {online !== undefined && (
             <span className="sr-only">, {online ? m.member_online() : m.member_offline()}</span>
           )}

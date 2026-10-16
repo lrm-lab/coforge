@@ -34,7 +34,7 @@ beforeAll(async () => {
   [ada, grace, lin] = await Promise.all(
     usernames.map((username, index) =>
       db.user.create({
-        data: { username, displayName: index === 1 ? "Grace Hopper" : null },
+        data: { username, displayName: index === 1 ? "Grace Hopper" : username },
       }),
     ),
   );
@@ -70,7 +70,7 @@ afterAll(async () => {
 async function newMember(name: string) {
   const username = `dl-${name}-${suffix}`;
   usernames.push(username);
-  const user = await db.user.create({ data: { username } });
+  const user = await db.user.create({ data: { displayName: username, username } });
   await db.workspaceMembership.create({ data: { workspaceId, userId: user.id } });
   return user;
 }

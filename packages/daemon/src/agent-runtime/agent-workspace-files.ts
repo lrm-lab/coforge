@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { lstat, open, readdir, realpath, rm } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
-import { getCoforgeAgentDir, getCoforgeSessionDir } from "@coforge/agent";
+import { COFORGE_RUNTIME_STORAGE_DIRS } from "@coforge/agent";
 import { RPC_PAYLOAD_MAX_BYTES } from "@lrm/coforge-sdk/internal";
 
 export type AgentWorkspaceFileEntry = {
@@ -79,10 +79,6 @@ function sniffImageContentType(bytes: Uint8Array): string | null {
   return null;
 }
 
-// Directory names a workspace browse must never surface, matching the runtime's own reserved
-// storage (packages/agent/src/paths.ts). Resolved through the package's exported helpers rather
-// than duplicated literals, so a rename there cannot silently reopen this boundary.
-const BUILTIN_DIR_NAMES = [getCoforgeAgentDir(""), getCoforgeSessionDir("")];
 // A workspace listing may contain hundreds of entries. Keep metadata probes concurrent enough
 // to avoid making the UI wait for one filesystem round-trip per entry, but bounded so a large
 // directory cannot flood the host with stat requests.
@@ -101,8 +97,9 @@ function isSafeRelativePath(value: string): boolean {
   return segments.every((segment) => segment !== "." && segment !== "..");
 }
 
+/** A browse never surfaces the runtime's own reserved storage, named by the package that owns it. */
 function containsBuiltinSegment(value: string): boolean {
-  return value.split("/").some((segment) => BUILTIN_DIR_NAMES.includes(segment));
+  return value.split("/").some((segment) => COFORGE_RUNTIME_STORAGE_DIRS.includes(segment));
 }
 
 type DirectoryResolution =
@@ -205,7 +202,8 @@ export async function listAgentWorkspaceFiles(params: {
     }
     const visibleNames = names.filter(
       (name) =>
-        !BUILTIN_DIR_NAMES.includes(name) && (params.includeHidden || !name.startsWith(".")),
+        !COFORGE_RUNTIME_STORAGE_DIRS.includes(name) &&
+        (params.includeHidden || !name.startsWith(".")),
     );
     const entries: AgentWorkspaceFileEntry[] = [];
     for (let offset = 0; offset < visibleNames.length; offset += LIST_STAT_CONCURRENCY) {

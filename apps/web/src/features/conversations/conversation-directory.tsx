@@ -130,7 +130,7 @@ function MentionBadge() {
 // collage with one or more members) in a two-line row (`lastMessage` given), and a 20px icon for
 // Saved and for a channel with no member. A two-line row has a second line with the
 // last message's preview under its name. Both share the text start and the current/hover
-// treatment. A channel's selected row is a card (`card`).
+// treatment. A channel's or direct message's selected row is a card (`card`).
 function ConversationRow({
   target,
   current,
@@ -146,7 +146,7 @@ function ConversationRow({
 }: {
   target: ConversationTarget;
   current?: boolean;
-  /** The selected row is a bordered card, as a channel's is. */
+  /** The selected row is a bordered card, as a channel's and a direct message's are. */
   card?: boolean;
   /** The member pinned this row: its name draws the sidebar foreground colour (design spec),
    * darker than an unpinned row's, until it is selected or muted. */
@@ -176,6 +176,8 @@ function ConversationRow({
       // `href` is always set, so React Aria renders an `<a>`; the check narrows the props type.
       render={(props) => ("href" in props ? <Link {...props} {...route} /> : <span {...props} />)}
       aria-current={current ? "page" : undefined}
+      // Lets the section list measure its bottom space from a bordered card's avatar.
+      data-row-card={card || undefined}
       aria-label={
         rowLabel(unreadCount, label, lastMessage?.mentioned) ??
         (count ? `${label}, ${count.label}` : lastMessage ? label : undefined)
@@ -276,11 +278,22 @@ const DIRECTORY_INSET = "px-3";
  * leading 20px gutter. A group that cannot (Pinned, per the design mockup) draws its own mark in
  * that same gutter instead, so every title in the list keeps the same x either way.
  */
+/** The line an expanded section shows when it has no conversations. One 2.25rem row, so the
+ * next title sits 36px below this one. */
+function DirectoryEmptyNote({ children }: { children: ReactNode }) {
+  return (
+    <li className="flex h-9 items-center px-2 text-xs text-quaternary">
+      <span className="truncate">{children}</span>
+    </li>
+  );
+}
+
 function DirectorySection({
   label,
+  count,
+  empty,
   icon: Icon,
   expanded,
-  saving,
   onToggle,
   action,
   headingProps,
@@ -288,12 +301,15 @@ function DirectorySection({
   children,
 }: {
   label: string;
+  /** Conversations in this section, including zero. Stays beside the title when the section is folded. */
+  count: number;
+  /** Nothing to list: the body is the empty note alone, without the avatar-to-title padding. */
+  empty?: boolean;
   /** A non-collapsible section's own mark, in the gutter a collapsible one gives its chevron —
    * the way the Saved entry carries a bookmark. Ignored on a collapsible section: the mockup
    * gives Channels and Direct messages a chevron and no second mark. */
   icon?: FC<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
   expanded?: boolean;
-  saving?: boolean;
   /** Absent on a section that cannot collapse: its rows are always shown, and its title row is
    * not a control at all, so it draws no chevron and takes no hover highlight. */
   onToggle?: () => void;
@@ -312,7 +328,11 @@ function DirectorySection({
   // than a caption above it (and beats the Button's own `font-semibold`, which belongs to a real
   // button).
   const title = (
-    <span className="block truncate text-sm font-medium text-primary uppercase">{label}</span>
+    <span className="flex w-full min-w-0 items-center gap-2">
+      <span className="min-w-0 truncate text-sm font-medium text-primary uppercase">{label}</span>
+      <span className="sr-only">, </span>
+      <span className="shrink-0 text-sm font-normal text-quaternary tabular-nums">{count}</span>
+    </span>
   );
   return (
     <>
@@ -325,7 +345,7 @@ function DirectorySection({
         <div
           className={cx(
             "flex h-9 items-center gap-1 rounded-md pr-2 pl-2 transition-colors duration-100 ease-linear",
-            onToggle && "group-hover/section:bg-primary_hover",
+            onToggle ? "group-hover/section:bg-primary_hover" : "cursor-pointer",
           )}
         >
           {onToggle ? (
@@ -340,9 +360,6 @@ function DirectorySection({
                 aria-expanded={expanded}
                 aria-controls={listId}
                 onPress={onToggle}
-                isLoading={saving}
-                isDisabled={saving}
-                showTextWhileLoading
                 className="min-w-0 flex-1 justify-start pr-2 pl-0 hover:bg-transparent! [&_[data-text]]:min-w-0 [&_[data-text]]:flex-1 [&_[data-text]]:text-left"
                 iconLeading={
                   <ChevronRight
@@ -358,8 +375,8 @@ function DirectorySection({
               </Button>,
             )
           ) : (
-            // Nothing to press: the mark takes the chevron's gutter and the title keeps its x, so
-            // this title line reads the same as the others without pretending to be a control.
+            // Nothing to press: the mark takes the chevron's gutter and the title keeps its x.
+            // The row still uses the hand cursor, the same as the other section titles.
             // `gap-1.5`, not the Button's own `gap-1`: the Button's label span adds 2px of its
             // own, so 6px here is what puts this title on the same x as a collapsible section's
             // (measured in the browser, both at 262px in the 1440 layout).
@@ -368,7 +385,8 @@ function DirectorySection({
               className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"
             >
               {Icon ? (
-                <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+                // Same ink as the Saved bookmark: text colour, #101319 in light mode.
+                <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" />
               ) : null}
               {title}
             </span>
@@ -378,7 +396,20 @@ function DirectorySection({
       </div>
       {/* Kept mounted but hidden: collapsing must not throw away the rows' realtime state. A
           section that cannot collapse still folds while the sections are being reordered. */}
-      <div id={listId} hidden={expanded === false}>
+      {/* Design spec: 36px from the last row's avatar to the next section's title. A row pads its
+          avatar by 0.5rem and its list item by 1px, so the list adds the 27px left (1.6875rem);
+          when the last row is a bordered card (a channel or direct message), its 1px border takes
+          one of those (1.625rem). An empty section is the 2.25rem note alone. A folded section
+          adds nothing: folded titles stay one 2.25rem row apart. */}
+      <div
+        id={listId}
+        hidden={expanded === false}
+        className={
+          empty
+            ? undefined
+            : "pb-[1.6875rem] has-[>div>ul>li:last-child_[data-row-card]]:pb-[1.625rem]"
+        }
+      >
         {children}
       </div>
     </>
@@ -630,6 +661,7 @@ export function ConversationDirectory({
       <ConversationRow
         target={{ dmId: conversationId }}
         current={conversationId === selectedDmId}
+        card
         pinned={pinned}
         unreadCount={unreadCounts[conversationId]}
         label={self ? m.conversation_dm_self_name({ name }) : name}
@@ -703,7 +735,9 @@ export function ConversationDirectory({
 
   return (
     <DndContext {...drag.context}>
-      <div className={cx("mt-2", DIRECTORY_INSET)}>
+      {/* No top margin. The list pane's 0.75rem padding is the whole gap above
+          this row, so the header rule lands 24px above the bookmark. */}
+      <div className={DIRECTORY_INSET}>
         <ConversationRow
           target={{ view: "saved" }}
           current={selectedSaved}
@@ -716,7 +750,7 @@ export function ConversationDirectory({
           icon={
             <Bookmark
               aria-hidden="true"
-              className={cx("size-4", selectedSaved ? "text-brand-secondary" : "text-tertiary")}
+              className={cx("size-4", selectedSaved ? "text-brand-secondary" : "text-primary")}
             />
           }
         >
@@ -778,6 +812,8 @@ export function ConversationDirectory({
                   // sight. Its pin takes the gutter the other sections give their chevron.
                   <DirectorySection
                     label={m.conversation_pinned_section()}
+                    count={drag.layout.pinned.length}
+                    empty={pinnedEmpty}
                     icon={Pin01}
                     headingProps={headingProps}
                     expanded={drag.sortingSections ? false : undefined}
@@ -789,9 +825,9 @@ export function ConversationDirectory({
                         label={m.conversation_pinned_section()}
                       >
                         {pinnedEmpty ? (
-                          <li className="flex min-h-9 items-center px-2 text-xs text-quaternary">
+                          <DirectoryEmptyNote>
                             {m.conversation_pinned_empty_hint()}
-                          </li>
+                          </DirectoryEmptyNote>
                         ) : (
                           list("pinned")
                         )}
@@ -812,6 +848,8 @@ export function ConversationDirectory({
                 {(headingProps) => (
                   <DirectorySection
                     label={m.channels_title()}
+                    count={drag.layout.channels.length}
+                    empty={drag.layout.channels.length === 0}
                     headingProps={headingProps}
                     expanded={!drag.sortingSections && !collapsed.includes("channels")}
                     onToggle={() => toggle("channels")}
@@ -835,7 +873,11 @@ export function ConversationDirectory({
                         keys={drag.layout.channels}
                         label={m.channels_title()}
                       >
-                        {list("channels")}
+                        {drag.layout.channels.length > 0 ? (
+                          list("channels")
+                        ) : (
+                          <DirectoryEmptyNote>{m.chat_section_empty()}</DirectoryEmptyNote>
+                        )}
                       </DirectoryDropList>
                     </div>
                   </DirectorySection>
@@ -853,6 +895,8 @@ export function ConversationDirectory({
                 {(headingProps) => (
                   <DirectorySection
                     label={m.messages_agents_action()}
+                    count={drag.layout.agents.length}
+                    empty={drag.layout.agents.length === 0}
                     headingProps={headingProps}
                     expanded={!drag.sortingSections && !collapsed.includes("agents")}
                     onToggle={() => toggle("agents")}
@@ -864,7 +908,11 @@ export function ConversationDirectory({
                         keys={drag.layout.agents}
                         label={m.messages_agents_action()}
                       >
-                        {list("agents")}
+                        {drag.layout.agents.length > 0 ? (
+                          list("agents")
+                        ) : (
+                          <DirectoryEmptyNote>{m.chat_section_empty()}</DirectoryEmptyNote>
+                        )}
                       </DirectoryDropList>
                     </div>
                   </DirectorySection>
@@ -895,11 +943,12 @@ export function ConversationDirectory({
               {(headingProps) => (
                 <DirectorySection
                   label={label}
+                  count={keys.length}
+                  empty={keys.length === 0}
                   headingProps={headingProps}
                   expanded={
                     !drag.sortingSections && (!section.collapsed || drag.hoveredSection === key)
                   }
-                  saving={saving}
                   onToggle={() =>
                     changeSection(
                       () => actions.updateSection(section.id, { collapsed: !section.collapsed }),
@@ -930,9 +979,7 @@ export function ConversationDirectory({
                       {keys.length > 0 ? (
                         list(key)
                       ) : (
-                        <li className="flex min-h-9 items-center px-2 text-xs text-quaternary">
-                          {m.chat_section_empty()}
-                        </li>
+                        <DirectoryEmptyNote>{m.chat_section_empty()}</DirectoryEmptyNote>
                       )}
                     </DirectoryDropList>
                   </div>

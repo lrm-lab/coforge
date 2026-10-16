@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/internal";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { FINISHED_AGENT_MIGRATION_STATES } from "#src/server/agent-migrations/agent-migrations.server";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import type {
   AgentControlAgent,
@@ -79,6 +80,12 @@ export class PrismaAgentControlStore implements AgentControlStore {
         deletedAt: true,
         currentSessionId: true,
         currentSession: true,
+        migrations: {
+          // Spelled as the partial index `agent_migrations_one_active` is, plus the switch.
+          where: { state: { notIn: [...FINISHED_AGENT_MIGRATION_STATES, "switched"] } },
+          select: { id: true },
+          take: 1,
+        },
         owner: { select: { memberships: { select: { workspaceId: true } } } },
         computer: { select: { workspaces: { select: { workspaceId: true } } } },
       },
@@ -126,6 +133,7 @@ export class PrismaAgentControlStore implements AgentControlStore {
       currentSessionId: agent.currentSessionId,
       stoppedAt: agent.stoppedAt,
       deletedAt: agent.deletedAt,
+      ...(agent.migrations.length > 0 ? { migrating: true } : {}),
       state,
       ...(identity ? { identity } : {}),
     };

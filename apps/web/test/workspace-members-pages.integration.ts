@@ -167,7 +167,7 @@ test("each person carries the Agents they created that the viewer can see", asyn
   const slugs = [`created-${suffix}`, `created-other-${suffix}`];
   try {
     const [viewer, creator] = await Promise.all(
-      usernames.map((username) => db.user.create({ data: { username } })),
+      usernames.map((username) => db.user.create({ data: { displayName: username, username } })),
     );
     const [workspace, otherWorkspace] = await Promise.all(
       slugs.map((slug) =>
@@ -243,8 +243,8 @@ test("people search reads the name a person is shown by, never a username they d
         data: { username: usernames[0]!, displayName: "Countess" },
       }),
       db.user.create({ data: { username: usernames[1]!, displayName: "Grace Hopper" } }),
-      // Never asked for a name: their username is the label everyone sees.
-      db.user.create({ data: { username: usernames[2]! } }),
+      // A blank name reads as the placeholder; the username is never the label.
+      db.user.create({ data: { username: usernames[2]!, displayName: "  " } }),
     ]);
     const workspace = await db.workspace.create({
       data: {
@@ -259,8 +259,9 @@ test("people search reads the name a person is shown by, never a username they d
       ).items.map((person) => person.displayName);
 
     expect(await search("countess")).toEqual(["Countess"]);
-    // A person with no name is shown by, and found by, their username.
-    expect(await search(`legacy-${uid}`)).toEqual([`legacy-${uid}`]);
+    // A person with a blank name is shown, and found, as "Unnamed", never by their username.
+    expect(await search("unnamed")).toEqual(["Unnamed"]);
+    expect(await search(`legacy-${uid}`)).toEqual([]);
     // A username nobody sees does not find a person who has a name.
     expect(await search(`ada-${uid}`)).toEqual([]);
     expect(await search(`grace-${uid}`)).toEqual([]);
@@ -283,10 +284,9 @@ test("people are paged in the order of the names they are shown by, not of their
     { username: `pg-z-${uid}`, displayName: "Ada Lovelace" },
     { username: `pg-a-${uid}`, displayName: "bea" },
     { username: `pg-m-${uid}`, displayName: "Cyd Charisse" },
-    // A blank display name is no name: the username is shown.
+    // A blank display name reads as the placeholder, never as the username.
     { username: `pg-b-${uid}`, displayName: "  " },
-    // No names at all: the username is the label.
-    { username: `pg-c-${uid}` },
+    { username: `pg-c-${uid}`, displayName: "Dee" },
     // Two people shown alike are told apart by username.
     { username: `pg-t2-${uid}`, displayName: "Sam Same" },
     { username: `pg-t1-${uid}`, displayName: "Sam Same" },
@@ -319,10 +319,10 @@ test("people are paged in the order of the names they are shown by, not of their
       "Ada Lovelace",
       "bea",
       "Cyd Charisse",
-      `pg-b-${uid}`,
-      `pg-c-${uid}`,
+      "Dee",
       "Sam Same",
       "Sam Same",
+      "Unnamed",
     ];
     expect(await walk("", 24)).toEqual(inOrder);
     // The same order whatever the page size, so a cursor resumes exactly where it stopped, even

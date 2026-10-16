@@ -31,3 +31,4 @@ profile image 域名（头像、项目图标与 Workspace 图标）
 - [9. 官方依据](references.md): 阿里云官方依据链接。
 - [10. Staging 实际配置记录（2026-09-04）](staging-record.md): Staging 已执行并验证的实际配置记录（2026-09-04 起）。
 - [11. Profile image 域名（尚未 provision）](profile-image-domain.md): Profile image 域名（头像、项目图标与 Workspace 图标）的专用执行清单与回滚。
+- [12. Agent migration bucket（已 provision）](agent-migration-bucket.md): Agent 跨 Computer 迁移用的 bucket、RAM 授权、生命周期与日志偏差。

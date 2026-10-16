@@ -32,6 +32,10 @@ export function SettingsPending() {
               label: m.settings_workspace_group(),
               items: [m.settings_workspace_profile(), m.settings_members()],
             },
+            {
+              label: m.settings_system_group(),
+              items: [m.settings_server_connection()],
+            },
           ].map((group) => (
             <SettingsNavigationGroup key={group.label} label={group.label}>
               {group.items.map((label) => (

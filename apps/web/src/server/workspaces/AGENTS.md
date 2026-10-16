@@ -35,3 +35,29 @@ These rules apply to `src/server/workspaces/`.
   returns. That record is the only way a Computer learns its Workspace is gone
   and parks the binding; without it the Computer retries forever. A soft delete
   that keeps the keys valid never parks a Computer.
+- `create-workspace.server.ts` starts the account's default cloud computer for a
+  Workspace, including after a Workspace is created. A deployment without a
+  cluster still returns the Workspace.
+- `server-connection.server.ts` stores one submitted connection per Workspace
+  and builds the cloud computer service page: the install command and the
+  system unit, neither of which carries a secret. The light is on only while
+  that host's heartbeat is under 90 seconds old.
+- `cloud-service-access.server.ts` checks the deployment operating password
+  (`COFORGE_CLOUD_SERVICE_PASSWORD`) and seals a short-lived unlock cookie.
+  The settings page withholds the install script until that cookie is valid.
+- `host-bootstrap.server.ts` builds the manager install script. The cluster
+  token is inside the file and is not shown on the page.
+
+## Role capabilities
+
+- What a Workspace role may do lives in one table, `WORKSPACE_CAPABILITY_ROLES`
+  (`src/features/workspaces/workspace-roles.ts`). Server checks answer from it
+  through `roleCan` (directly or via the named helpers built on it), and the
+  person panel's role help reads the same table. To change who may do
+  something, change the table; to add a role-gated action, add a capability,
+  never a new role comparison. `test/workspace-capabilities.test.ts` checks
+  that every listed helper and the help agree with it.
+- Rules that need more than the role stay with their owners and do not go in
+  the table: leaving (never the owner), a channel admin's own channel, and an
+  Agent's creator (private-Agent visibility, visibility changes, cancelling
+  its action cards).

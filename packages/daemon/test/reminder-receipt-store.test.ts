@@ -89,6 +89,40 @@ test("receipt persistence rejects malformed, duplicate, and inconsistent accepte
   );
 });
 
+test("receipt collections keep versions distinct and reject corrupt reads and writes", async () => {
+  const directory = join(tmpdir(), `coforge-reminder-receipts-${crypto.randomUUID()}`);
+  directories.push(directory);
+  const store = new FileReminderReceiptStore(directory, "workspace-a", "computer-a");
+  const first = storedReceipt();
+  const second: ReminderReceipt = {
+    ...first,
+    version: 2,
+    requestId: crypto.randomUUID(),
+    job: { ...first.job, version: 2 },
+  };
+  const valid = [second, first];
+  await store.write("agent-a", valid);
+  await expect(store.read("agent-a")).resolves.toEqual(valid);
+
+  const duplicate = { ...first, requestId: crypto.randomUUID() };
+  const malformed = { ...first, job: { ...first.job, version: 2 } };
+  const corruptCollections = [[first, duplicate], [malformed]];
+  for (const corrupt of corruptCollections) {
+    await expect(store.write("agent-a", corrupt)).rejects.toThrow("reminder receipts are corrupt");
+    await expect(store.read("agent-a")).resolves.toEqual(valid);
+  }
+
+  const path = join(directory, "reminder-receipts", "workspace-a", "agent-a", "receipts.json");
+  for (const corrupt of corruptCollections) {
+    await Bun.write(path, JSON.stringify({ version: 1, receipts: corrupt }));
+    await expect(
+      new FileReminderReceiptStore(directory, "workspace-a", "computer-a").read("agent-a"),
+    ).rejects.toThrow("reminder receipts are corrupt");
+  }
+  await store.write("agent-a", valid);
+  await expect(store.read("agent-a")).resolves.toEqual(valid);
+});
+
 test("a receipt whose retries ran out round-trips its exhausted record, and older receipts still load", async () => {
   const directory = join(tmpdir(), `coforge-reminder-receipts-${crypto.randomUUID()}`);
   directories.push(directory);

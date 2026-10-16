@@ -49,6 +49,7 @@ const legacyStoredState = {
 function fakeDb(initialControlState: unknown) {
   let storedControlState: unknown = initialControlState;
   const base = {
+    migrations: [],
     id: "a",
     ownerId: "owner",
     workspaceId: "w",

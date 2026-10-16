@@ -25,15 +25,19 @@ identity provider reported at login, nullable, not unique, not an identity key.
 An account registered with a phone number alone has none and signs in like any
 other; the signed session and every consumer of it treat the email as optional.
 
-`User.displayName` is the one name teammates see. It is nullable because an account created before it has none until it is
-asked for one, and `null` means not yet asked. A signed-in person with none is
-sent once to `/welcome` (a page outside the Workspace layout), from sign-in, from
+`User.displayName` is the one name teammates see, and it is required, as Slack
+requires a name: an account is created with the name its sign-in provider
+reported (`initialDisplayName`: the provider's name, else its nickname, else the
+email's local part, each only when it reads as a name; else `Unnamed`), never
+its username. `User.welcomedAt` records when the person finished first sign-in;
+`null` means not yet. A signed-in person who has not is sent once to
+`/welcome` (a page outside the Workspace layout), from sign-in, from
 `/w/<slug>`, from `/workspaces/new` and from an invite link `/join/<token>`, but
 not from `/oauth/verify`. Sign-in still issues the session, but creates nothing
 until they answer. The same page asks for their personal Workspace's URL
 (slug), starting from the username unless that is only the fallback `user…`;
 submitting makes the Workspace at that URL, titled with the name, then saves the
-name, so a URL found taken leaves them unnamed and still asked. A session whose user row is gone is sent to sign in
+name and `welcomedAt`, so a URL found taken leaves them still asked. A session whose user row is gone is sent to sign in
 again instead. The name follows the one rule for a person's name
 (`apps/web/src/features/profiles/person-name.ts`), which the profile's own name
 shares: normalized and 1 to 80 characters, counted as code points, and refused
@@ -42,18 +46,15 @@ server's sender label `System`, or starts with `@`. The first name saved at
 first sign-in stays: a second submit changes nothing and returns the memberships
 as they are. The signed session's `name` is only what the provider reported (its
 name, else its nickname), kept to start the name field (left empty when it is a
-phone number or an email); it never labels anyone.
-
-A person without a name is labelled by their username, without an `@`, until
-asked. The provider's name is not stored and never labels a person.
+phone number or an email).
 
 `humanLabel` in `apps/web/src/lib/human-label.ts` is the one rule for that label
-(`displayName`, else `username`), in messages, member lists, mentions, reactions,
-notifications, and the signed-in user's own shell. No screen shows a person's
+(`displayName`; a blank one reads as `Unnamed`, never the username), in
+messages, member lists, mentions, reactions, notifications, and the signed-in
+user's own shell. No screen shows a person's
 username, except the `@` list beside two people whose label and description are
 identical, where nothing else tells them apart. It is the handle Agents use in
-`@mentions` and the label of last resort, and a search finds a person by it only
-when it is their label. The Workspace directory that the Search page and the
+`@mentions`; a search never finds a person by it. The Workspace directory that the Search page and the
 pickers load carries a person's label, never the username, and the Members
 directory lists people by label. An Agent's `@handle` stays visible. Settings →
 Account edits `displayName` (required) by that one rule; a name it refuses is

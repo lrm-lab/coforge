@@ -29,7 +29,7 @@ let retired: { id: string };
 async function user(name: string) {
   const username = `clp-${name}-${suffix}`;
   usernames.push(username);
-  const created = await db.user.create({ data: { username } });
+  const created = await db.user.create({ data: { displayName: username, username } });
   await db.workspaceMembership.create({ data: { workspaceId, userId: created.id } });
   return { id: created.id, username };
 }

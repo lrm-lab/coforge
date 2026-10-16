@@ -28,9 +28,15 @@ const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `vis-owner-${suffix}` } });
-  const admin = await db.user.create({ data: { username: `vis-admin-${suffix}` } });
-  const member = await db.user.create({ data: { username: `vis-member-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `vis-owner-${suffix}`, username: `vis-owner-${suffix}` },
+  });
+  const admin = await db.user.create({
+    data: { displayName: `vis-admin-${suffix}`, username: `vis-admin-${suffix}` },
+  });
+  const member = await db.user.create({
+    data: { displayName: `vis-member-${suffix}`, username: `vis-member-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `vis-${suffix}`,
@@ -149,7 +155,10 @@ test.skipIf(!connectionString)(
 
       // A stranger who never had a DM cannot start one at all.
       const stranger = await db.user.create({
-        data: { username: `vis-stranger-${crypto.randomUUID().slice(0, 8)}` },
+        data: {
+          displayName: `vis-stranger-${crypto.randomUUID().slice(0, 8)}`,
+          username: `vis-stranger-${crypto.randomUUID().slice(0, 8)}`,
+        },
         select: { id: true },
       });
       await db.workspaceMembership.create({

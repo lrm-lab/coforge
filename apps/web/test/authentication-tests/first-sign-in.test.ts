@@ -20,6 +20,11 @@ function setup(
     userExists?: boolean;
     /** Slugs another Workspace has or had. */
     takenSlugs?: string[];
+    startCloudComputer?: (input: {
+      userId: string;
+      workspaceId: string;
+      now: Date;
+    }) => Promise<unknown>;
   } = {},
 ) {
   const users = new Set(input.userExists === false ? [] : [ada.id]);
@@ -50,11 +55,33 @@ function setup(
     },
   };
   return {
-    firstSignIn: new FirstSignIn(nameStore, new WorkspaceEnrollment(enrollmentStore)),
+    firstSignIn: new FirstSignIn(
+      nameStore,
+      new WorkspaceEnrollment(enrollmentStore),
+      input.startCloudComputer,
+    ),
     names,
     created,
   };
 }
+
+test("completing first sign-in assigns the default cloud computer to the personal workspace", async () => {
+  const started: Array<{ userId: string; workspaceId: string }> = [];
+  const { firstSignIn } = setup({
+    startCloudComputer: async (request) => {
+      started.push({ userId: request.userId, workspaceId: request.workspaceId });
+    },
+  });
+
+  const result = await firstSignIn.complete({
+    user: ada,
+    displayName: "Ada Lovelace",
+    acceptLanguage: "en",
+  });
+
+  expect(result).toEqual({ ok: true, workspaceId: "workspace-ada" });
+  expect(started).toEqual([{ userId: ada.id, workspaceId: "workspace-ada" }]);
+});
 
 test("a display name is saved, and the personal Workspace is titled with it", async () => {
   const { firstSignIn, names, created } = setup();

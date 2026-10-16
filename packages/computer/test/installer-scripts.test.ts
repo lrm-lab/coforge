@@ -949,6 +949,9 @@ for (const shell of ["bash", "zsh", "fish"] as const) {
         shell === "bash"
           ? ["--noprofile", "--rcfile", configuration, "-i", "-c", "command -v coforge-computer"]
           : ["-i", "-c", "command -v coforge-computer"];
+      // Ubuntu's system bashrc prints a sudo welcome in fresh homes. Silence only that
+      // host banner so stdout still verifies the installed command from the real shell.
+      await Bun.write(join(first.home, ".hushlogin"), "");
       const freshShell = Bun.spawn({
         cmd: [shellExecutable, ...shellArgs],
         env: {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { isAppError } from "#src/lib/app-error";
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { toggleUserMessageReaction } from "#src/server/conversations/user-message-reactions.server";
 
 const input = {
@@ -16,7 +17,7 @@ const input = {
 function reactionRow(
   emoji: string,
   userId: string,
-  names: { username: string; displayName?: string },
+  names: { username: string; displayName: string },
 ) {
   return {
     emoji,
@@ -24,7 +25,7 @@ function reactionRow(
       userId,
       agentId: null,
       agent: null,
-      user: { displayName: null, ...names },
+      user: names,
     },
   };
 }
@@ -107,44 +108,45 @@ describe("toggleUserMessageReaction", () => {
   test("upserts on active and returns the fresh summaries in first-reaction order", async () => {
     const { db, calls } = fakeDb({
       remaining: [
-        reactionRow("🎉", "user-alice", { username: "alice-3f9" }),
-        reactionRow("👍", "user-bob", { username: "bob-7q1" }),
-        reactionRow("👍", "user-carol", { username: "carol-2xa" }),
+        reactionRow("🎉", "user-alice", { username: "alice-3f9", displayName: "Alice" }),
+        reactionRow("👍", "user-bob", { username: "bob-7q1", displayName: "Bob" }),
+        reactionRow("👍", "user-carol", { username: "carol-2xa", displayName: "Carol" }),
       ],
     });
     const summaries = await toggleUserMessageReaction(db, input);
     expect(calls).toEqual(["message", "member", "upsert", "summaries"]);
     expect(summaries).toEqual([
-      { emoji: "🎉", count: 1, reactors: [{ id: "user-alice", label: "alice-3f9" }] },
+      { emoji: "🎉", count: 1, reactors: [{ id: "user-alice", label: "Alice" }] },
       {
         emoji: "👍",
         count: 2,
         reactors: [
-          { id: "user-bob", label: "bob-7q1" },
-          { id: "user-carol", label: "carol-2xa" },
+          { id: "user-bob", label: "Bob" },
+          { id: "user-carol", label: "Carol" },
         ],
       },
     ]);
   });
 
-  test("names a person by their display name, else username, and an Agent by its @handle", async () => {
+  test("names a person by their display name, never their username, and an Agent by its @handle", async () => {
     const { db } = fakeDb({
       remaining: [
         reactionRow("👍", "user-1", {
           username: "frank-an-4k2",
           displayName: "Frankie",
         }),
-        reactionRow("👍", "user-2", { username: "ada-9d3" }),
+        reactionRow("👍", "user-2", { username: "ada-9d3", displayName: "  " }),
         agentReactionRow("👍", "atlas"),
       ],
     });
     const summaries = await toggleUserMessageReaction(db, input);
     expect(summaries?.[0]?.reactors).toEqual([
       { id: "user-1", label: "Frankie" },
-      { id: "user-2", label: "ada-9d3" },
+      { id: "user-2", label: UNNAMED_PERSON_NAME },
       { id: "agent-atlas", label: "@atlas" },
     ]);
     expect(JSON.stringify(summaries)).not.toContain("frank-an-4k2");
+    expect(JSON.stringify(summaries)).not.toContain("ada-9d3");
   });
 
   test("deletes on inactive and reports no summaries once the last one is gone", async () => {

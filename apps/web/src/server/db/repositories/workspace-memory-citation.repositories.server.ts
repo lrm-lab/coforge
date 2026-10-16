@@ -258,8 +258,8 @@ function citationKey(citation: MemoryOfferCitationRef): string {
 }
 
 function sameOffer(stored: MemoryOfferRecord, incoming: MemoryOfferRecord): boolean {
-  const storedKeys = [...stored.citations.map(citationKey)].sort();
-  const incomingKeys = [...incoming.citations.map(citationKey)].sort();
+  const storedKeys = stored.citations.map(citationKey).sort();
+  const incomingKeys = incoming.citations.map(citationKey).sort();
   return (
     stored.conversationId === incoming.conversationId &&
     stored.recipientAgentId === incoming.recipientAgentId &&

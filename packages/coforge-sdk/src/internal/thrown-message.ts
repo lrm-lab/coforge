@@ -8,3 +8,13 @@
 export function thrownMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+/** The readable text of a thrown value. A Centrifugo RPC rejection is a plain
+ * `{ code, message }` object, so `String(error)` would be `[object Object]`. */
+export function refusalText(error: unknown): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = Reflect.get(error, "message");
+    if (typeof message === "string") return message;
+  }
+  return thrownMessage(error);
+}

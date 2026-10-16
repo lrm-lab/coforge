@@ -175,6 +175,7 @@ export function AgentProfileTab({
   onLoadSkills,
   envVars,
   onStartDelete,
+  migration,
   contextUsage,
 }: {
   profile: NonNullable<AgentProfile>;
@@ -182,6 +183,8 @@ export function AgentProfileTab({
   /** The Agent's current context-window usage, or `null` when there is no reading —
    * hidden entirely in that case. Display only; nothing triggers on it. */
   contextUsage?: { usedTokens: number; windowTokens: number; observedAtMs: number } | null;
+  /** The Agent's moves between Computers (`AgentMigrationSection`), shown under ACTIONS. */
+  migration?: ReactNode;
   /** `canManageAgentRole || ownedByCurrentUser` — gates every pencil, the ACTIONS section. */
   canManage: boolean;
   controls: AgentRuntimeControls;
@@ -456,6 +459,9 @@ export function AgentProfileTab({
         <section className="px-6 py-5">
           <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_actions()}</p>
           <div className="mt-3 flex flex-col gap-2">
+            {/* Moving comes first, as in the reference Computer: it is the action that changes
+                where the Agent lives, and its progress belongs at the top while it runs. */}
+            {migration}
             <Button
               color="secondary"
               className="w-full justify-center"

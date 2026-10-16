@@ -240,6 +240,22 @@ export class MentionDeliveryTracker {
     );
   }
 
+  /**
+   * The Agent's process was ended for a restart, and nothing settles a mention on exit: each one
+   * still received or pending for it is refused as unknown, so the server keeps it pending and
+   * issues it again for the relaunch's session report. Settles once every refusal was sent.
+   */
+  async handBackForRelaunch(agentId: string): Promise<void> {
+    const unsettled = [...this.#tracked.values()]
+      .filter((tracked) => tracked.message.agentId === agentId && tracked.state !== "drained")
+      .map((tracked) => tracked.message);
+    await Promise.all(
+      unsettled.map((message) =>
+        this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
+      ),
+    );
+  }
+
   /** Already told in the current session: pending while that turn runs, drained once idle. */
   #told(message: TrackedMentionDelivery): Promise<void> {
     return this.ports.busy(message.agentId, message.conversationId)

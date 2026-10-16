@@ -102,7 +102,9 @@ test.skipIf(!connectionString)(
         },
       ]);
       await applyMigrations(client, migrations.slice(backfill + 1));
-      const owner = await db.user.create({ data: { username: "session-owner" } });
+      const owner = await db.user.create({
+        data: { displayName: "session-owner", username: "session-owner" },
+      });
       const { id: workspaceId } = await db.workspace.create({
         data: { slug: "session", name: "Session" },
       });

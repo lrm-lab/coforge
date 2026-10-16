@@ -12,6 +12,8 @@ import { PiProvider } from "#src/code-agent/pi/provider";
 // never match and every resume would silently fall back to a fresh session.
 const tempRoot = realpathSync(tmpdir());
 
+// These tests exercise on-disk session identity, not remote model discovery.
+// An authenticated catalog refresh can use the entire 5s test budget on this host.
 const TEST_AGENT_INSTRUCTIONS = "Test instructions.";
 
 for (const Provider of [ClaudeCodeProvider, CodexProvider]) {
@@ -41,7 +43,7 @@ test("embedded Pi resumes an exact persisted session ID", async () => {
     session = await new PiProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
-      environment: { PI_CODING_AGENT_DIR: join(root, "host") },
+      environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
       sessionId: "persisted-exact",
     });
     expect(await session.readSessionIdentity!()).toEqual({
@@ -64,7 +66,7 @@ test("embedded Pi replaces a selected ID when its workspace history is missing",
     session = await new PiProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
-      environment: { PI_CODING_AGENT_DIR: join(root, "host") },
+      environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
       sessionId: "missing-history",
       async onSessionId(id, replaced) {
         reports.push([id, replaced]);
@@ -91,7 +93,7 @@ test("embedded Pi rejects empty and path-shaped session IDs", async () => {
         new PiProvider().createAgentSession({
           agentWorkspaceDirectory: workspace,
           instructions: TEST_AGENT_INSTRUCTIONS,
-          environment: { PI_CODING_AGENT_DIR: join(workspace, "host") },
+          environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(workspace, "host") },
           sessionId,
         }),
       ).rejects.toThrow("Invalid session ID");
@@ -114,7 +116,7 @@ test("embedded Pi resolves persisted sessions only inside the owning Agent works
     fresh = await new PiProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
-      environment: { PI_CODING_AGENT_DIR: join(root, "host") },
+      environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
       async onSessionId(id) {
         reports.push(id);
       },
@@ -136,7 +138,7 @@ test("embedded Pi resolves persisted sessions only inside the owning Agent works
     resumed = await new PiProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
-      environment: { PI_CODING_AGENT_DIR: join(root, "host") },
+      environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
       sessionId: "local",
     });
     expect(await resumed.readSessionIdentity!()).toEqual({
@@ -146,7 +148,7 @@ test("embedded Pi resolves persisted sessions only inside the owning Agent works
     const foreign = await new PiProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
-      environment: { PI_CODING_AGENT_DIR: join(root, "host") },
+      environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
       sessionId: "foreign",
     });
     try {
@@ -174,7 +176,7 @@ test("embedded Pi refuses a session directory linked outside its Agent workspace
       new PiProvider().createAgentSession({
         agentWorkspaceDirectory: cwd,
         instructions: TEST_AGENT_INSTRUCTIONS,
-        environment: { PI_CODING_AGENT_DIR: join(root, "host") },
+        environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
       }),
     ).rejects.toThrow("Session directory must be directly inside Agent workspace");
   } finally {

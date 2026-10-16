@@ -59,8 +59,12 @@ test("the project page's query is valid for the migrated schema", async () => {
  */
 test("the project page reads only its own channels' rows", async () => {
   const handle = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `project-owner-${handle}` } });
-  const left = await db.user.create({ data: { username: `project-left-${handle}` } });
+  const owner = await db.user.create({
+    data: { displayName: `project-owner-${handle}`, username: `project-owner-${handle}` },
+  });
+  const left = await db.user.create({
+    data: { displayName: `project-left-${handle}`, username: `project-left-${handle}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `project-detail-${handle}`,

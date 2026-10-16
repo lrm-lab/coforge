@@ -13,7 +13,9 @@ test("Memory observes undirected and Task-directed updates and reads the full in
   if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  const owner = await db.user.create({ data: { username: `memory-observer-${suffix}` } });
+  const owner = await db.user.create({
+    data: { username: `memory-observer-${suffix}`, displayName: "Memory observer owner" },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: suffix,

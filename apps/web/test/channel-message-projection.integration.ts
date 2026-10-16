@@ -22,7 +22,9 @@ test("a channel message reaches the browser in one shape from open, updates and 
       avatarObjectKey: `avatars/alice/v7/avatar.png`,
     },
   });
-  const bob = await db.user.create({ data: { username: `pb${suffix}` } });
+  const bob = await db.user.create({
+    data: { displayName: `pb${suffix}`, username: `pb${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `projection-${suffix}`,
@@ -141,6 +143,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
         senderName: "Alice Liddell",
         senderHandle: alice.username,
         senderAgentId: undefined,
+        senderUserId: alice.id,
         senderDeleted: false,
         senderAvatarUrl: `/api/workspaces/${workspace.id}/users/${alice.id}/avatar?v=v7`,
         body: `hello <@human:${bob.id}>`,
@@ -162,6 +165,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
         senderName: "Scribe",
         senderHandle: "scribe",
         senderAgentId: agent.id,
+        senderUserId: undefined,
         senderDeleted: true,
         senderAvatarUrl: `/api/workspaces/${workspace.id}/agents/${agent.id}/avatar?v=v3`,
         body: "top-level from the Agent",
@@ -180,6 +184,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
         senderName: "Scribe",
         senderHandle: "scribe",
         senderAgentId: agent.id,
+        senderUserId: undefined,
         senderDeleted: true,
         senderAvatarUrl: `/api/workspaces/${workspace.id}/agents/${agent.id}/avatar?v=v3`,
         body: "a thread reply",
@@ -198,6 +203,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
         senderName: "System",
         senderHandle: undefined,
         senderAgentId: undefined,
+        senderUserId: undefined,
         senderDeleted: false,
         senderAvatarUrl: null,
         body: "Task #1 was created",
@@ -257,7 +263,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
           kind: "user",
           actorId: bob.id,
           handle: bob.username,
-          member: { user: { displayName: null }, agent: null },
+          member: { user: { displayName: bob.username }, agent: null },
         },
       ],
       reactions: [],

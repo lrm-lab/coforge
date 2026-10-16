@@ -768,16 +768,26 @@ test("a turn ending after an open compaction infers it finished, reported before
   }
 });
 
-test("compaction-interrupted silently clears an open compaction with no visible Activity", async () => {
+test("compaction-interrupted reports an open compaction as interrupted, once", async () => {
   const { runtime, activities, emitEvent } = await harness();
   try {
-    emitEvent({ type: "compaction-started" });
     activities.length = 0;
     emitEvent({ type: "compaction-interrupted" });
     expect(activities).toHaveLength(0);
-    // Cleared: a later explicit finish is now a no-op too.
+    emitEvent({ type: "compaction-started" });
+    activities.length = 0;
+    emitEvent({ type: "compaction-interrupted" });
+    expect(activities).toHaveLength(1);
+    expect(activities[0]).toMatchObject({
+      agentId: "agent-a",
+      detailKind: "system_message",
+      level: "info",
+      detail: "Context compaction interrupted; completion was not confirmed",
+    });
+    // Cleared: a repeated interrupt and a later explicit finish are no-ops.
+    emitEvent({ type: "compaction-interrupted" });
     emitEvent({ type: "compaction-finished" });
-    expect(activities).toHaveLength(0);
+    expect(activities).toHaveLength(1);
   } finally {
     await runtime.stop();
   }
@@ -1076,19 +1086,60 @@ test("pending text is flushed before a tool-start's Activity", async () => {
   }
 });
 
-test("a subagent-scoped tool-start is reclassified as subagent_activity", async () => {
+test.each([
+  {
+    name: "Bash",
+    input: { command: "ls" },
+    detail: "Running command…",
+    detailKind: "running_command",
+    toolName: "bash",
+    toolInput: "ls",
+  },
+  {
+    name: "Read",
+    input: { file_path: "src/a.ts", content: "private contents" },
+    detail: "Reading file…",
+    detailKind: "tool_started",
+    toolName: "read_file",
+    toolInput: "src/a.ts",
+  },
+])("a subagent-scoped $name tool-start retains its entry and classification", async (tool) => {
   const { runtime, activities, emitEvent } = await harness();
   try {
     activities.length = 0;
     emitEvent({
       type: "tool-start",
       id: "1",
-      name: "Bash",
-      input: { command: "ls" },
+      name: tool.name,
+      input: tool.input,
       subagent: { parentToolUseId: "t1" },
     });
     expect(activities).toHaveLength(1);
-    expect(activities[0]).toMatchObject({ detailKind: "subagent_activity" });
+    expect(activities[0]).toMatchObject({
+      detailKind: "subagent_activity",
+      level: "info",
+      detail: tool.detail,
+    });
+    expect(activities[0]?.entries).toEqual([
+      {
+        kind: "tool_start",
+        toolName: tool.toolName,
+        toolInput: tool.toolInput,
+        subagent: { parentToolUseId: "t1" },
+      },
+    ]);
+
+    // A subsequent parent tool keeps its ordinary kind and carries no child scope.
+    emitEvent({ type: "tool-start", id: "2", name: tool.name, input: tool.input });
+    expect(activities).toHaveLength(2);
+    expect(activities[1]).toMatchObject({
+      detailKind: tool.detailKind,
+      level: "info",
+      detail: tool.detail,
+    });
+    expect(activities[1]?.entries).toEqual([
+      { kind: "tool_start", toolName: tool.toolName, toolInput: tool.toolInput },
+    ]);
   } finally {
     await runtime.stop();
   }
@@ -1147,6 +1198,64 @@ test("stopAgent does not report runtime_interrupted when the Agent was idle", as
     const kinds = activities.map((activity) => activity.detailKind);
     expect(kinds).not.toContain("runtime_interrupted");
     expect(kinds).toContain("stopped");
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("subagent progress shows each new phase once while the turn is busy, and nothing after it", async () => {
+  const { runtime, activities, emitEvent } = await harness();
+  try {
+    emitEvent({ type: "progress" });
+    activities.length = 0;
+    const lineage = { subagentType: "general-purpose", parentToolUseId: "toolu_agent" };
+    emitEvent({ type: "subagent-progress", phase: "started", ...lineage });
+    emitEvent({ type: "subagent-progress", phase: "progress", ...lineage });
+    emitEvent({ type: "subagent-progress", phase: "progress", ...lineage });
+    emitEvent({ type: "subagent-progress", phase: "notification", ...lineage });
+    emitEvent({ type: "subagent-progress", phase: "started" });
+    expect(
+      activities.map(({ detailKind, level, detail }) => ({ detailKind, level, detail })),
+    ).toEqual(
+      [
+        "Subagent started (general-purpose)",
+        "Subagent working (general-purpose)",
+        "Subagent update (general-purpose)",
+        "Subagent started",
+      ].map((detail) => ({ detailKind: "subagent_activity", level: "info", detail })),
+    );
+    // A background subagent can report after the turn ends; it must not wake an idle Agent.
+    emitEvent({ type: "completed", status: "completed" });
+    activities.length = 0;
+    emitEvent({ type: "subagent-progress", phase: "notification", ...lineage });
+    expect(activities).toHaveLength(0);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("compaction interruptions and subagent progress retain their conversation origin", async () => {
+  const { runtime, activities, emitEvent } = await harness();
+  const conversation = { conversationId: "conversation-team", target: "#team" };
+  try {
+    emitEvent({ type: "compaction-started", conversation });
+    activities.length = 0;
+    emitEvent({ type: "compaction-interrupted", conversation });
+    expect(activities).toHaveLength(1);
+    expect(activities[0]).toMatchObject({
+      detailKind: "system_message",
+      conversationId: "conversation-team",
+      conversationTarget: "#team",
+    });
+    emitEvent({ type: "progress", conversation });
+    activities.length = 0;
+    emitEvent({ type: "subagent-progress", phase: "started", conversation });
+    expect(activities).toHaveLength(1);
+    expect(activities[0]).toMatchObject({
+      detailKind: "subagent_activity",
+      conversationId: "conversation-team",
+      conversationTarget: "#team",
+    });
   } finally {
     await runtime.stop();
   }

@@ -15,7 +15,7 @@ import { userInfo } from "node:os";
 
 /** Resolves `DOMAIN\user` for Task Scheduler principals; falls back to the OS username. */
 export function windowsTaskUserId(
-  environment: NodeJS.ProcessEnv = process.env,
+  environment: NodeJS.ProcessEnv = Bun.env,
   username: string = userInfo().username,
 ): string {
   const domain = environment.USERDOMAIN?.trim();

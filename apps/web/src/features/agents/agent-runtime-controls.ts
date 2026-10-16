@@ -87,11 +87,7 @@ export function useAgentRuntimeControls({
       requestId: crypto.randomUUID(),
       ...(destructive && { confirmed: true }),
     }).catch((cause: unknown) => {
-      setRestartSubmitError(
-        isAppErrorCode(cause, "ACCESS_DENIED")
-          ? m.agent_control_access_denied()
-          : m.agent_control_submit_error(),
-      );
+      setRestartSubmitError(agentControlFailureMessage(cause));
     });
   }
 
@@ -101,12 +97,6 @@ export function useAgentRuntimeControls({
   const [startDeferred, setStartDeferred] = useState(false);
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
   const startStopBusy = startPending || stopPending;
-
-  function startStopFailureMessage(cause: unknown) {
-    return isAppErrorCode(cause, "ACCESS_DENIED")
-      ? m.agent_control_access_denied()
-      : m.agent_control_submit_error();
-  }
 
   function submitStart() {
     setStartStopError(null);
@@ -118,7 +108,7 @@ export function useAgentRuntimeControls({
         // still resumes it at the next Daemon `ready`, so this is a note, not a failure.
         if (computerOnline === false) setStartDeferred(true);
       } catch (cause) {
-        setStartStopError(startStopFailureMessage(cause));
+        setStartStopError(agentControlFailureMessage(cause));
       }
     });
   }
@@ -142,7 +132,7 @@ export function useAgentRuntimeControls({
         await onExecute({ agentId, action: "stop", requestId: crypto.randomUUID() });
         setStopConfirmOpen(false);
       } catch (cause) {
-        setStartStopError(startStopFailureMessage(cause));
+        setStartStopError(agentControlFailureMessage(cause));
       }
     });
   }
@@ -178,3 +168,11 @@ export function useAgentRuntimeControls({
 }
 
 export type AgentRuntimeControls = ReturnType<typeof useAgentRuntimeControls>;
+
+/** What a refused Start, Stop, Restart or Reset tells its user; a retry is offered only when it can help. */
+export function agentControlFailureMessage(cause: unknown) {
+  if (isAppErrorCode(cause, "ACCESS_DENIED")) return m.agent_control_access_denied();
+  if (isAppErrorCode(cause, "CONFLICT") && cause.errorId === "agent-migrating")
+    return m.agent_control_migrating();
+  return m.agent_control_submit_error();
+}

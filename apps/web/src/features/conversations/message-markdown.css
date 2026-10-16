@@ -303,18 +303,17 @@
   font-weight: 600;
 }
 
-/* Mention chips. An Agent mention (`message-markdown-mention-agent`) is an interactive control
-   that opens the Agent's profile panel, so it gets a pointer affordance and a focus ring; a
-   human mention stays a plain, non-interactive highlight. */
-.message-markdown-mention-agent {
+/* Mention chips (`message-markdown-mention-openable`) are interactive controls that open the
+   Agent's or the person's profile panel, so they get a pointer affordance and a focus ring. */
+.message-markdown-mention-openable {
   cursor: pointer;
 }
 
-.message-markdown-mention-agent:hover {
+.message-markdown-mention-openable:hover {
   filter: brightness(0.95);
 }
 
-.message-markdown-mention-agent:focus-visible {
+.message-markdown-mention-openable:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }

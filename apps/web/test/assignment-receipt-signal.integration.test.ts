@@ -22,8 +22,12 @@ test.skipIf(!connectionString)(
   async () => {
     const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
     const suffix = crypto.randomUUID().slice(0, 8);
-    const ada = await db.user.create({ data: { username: `ars-ada-${suffix}` } });
-    const bob = await db.user.create({ data: { username: `ars-bob-${suffix}` } });
+    const ada = await db.user.create({
+      data: { displayName: `ars-ada-${suffix}`, username: `ars-ada-${suffix}` },
+    });
+    const bob = await db.user.create({
+      data: { displayName: `ars-bob-${suffix}`, username: `ars-bob-${suffix}` },
+    });
     const workspace = await db.workspace.create({
       data: {
         slug: `ars-${suffix}`,

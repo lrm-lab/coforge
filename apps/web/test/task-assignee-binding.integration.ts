@@ -25,7 +25,7 @@ let agent: { id: string };
 let workspaceId: string;
 let channelId: string;
 beforeAll(async () => {
-  person = await db.user.create({ data: { username: twin } });
+  person = await db.user.create({ data: { displayName: twin, username: twin } });
   const workspace = await db.workspace.create({
     data: {
       slug: `assignee-${short}`,

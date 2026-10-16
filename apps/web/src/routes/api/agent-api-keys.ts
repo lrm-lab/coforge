@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { authenticateDaemon, parseBody } from "#src/server/auth/daemon-request.server";
 import {
   createAgentApiKey,
   findAgentApiKey,
@@ -7,9 +8,6 @@ import {
 } from "#src/server/agents/agent-api-key.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { PrismaAgentApiKeyRepository } from "#src/server/db/repositories/agent-api-key.repositories.server";
-import { getDatabaseClient } from "#src/server/db/client.server";
-import { verifyDaemonApiKey } from "#src/server/auth/daemon-api-key.server";
-import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import {
   AgentRuntimeCredentials,
@@ -41,36 +39,6 @@ const createAgentApiKeyInputSchema = z.object({
     .optional(),
 });
 const revokeAgentApiKeyInputSchema = z.object({ apiKey: z.string().min(1) });
-
-/** The daemon behind a Bearer API key and the database it was verified against, or the error response. */
-async function authenticateDaemon(request: Request) {
-  const header = request.headers.get("authorization");
-  if (!header?.startsWith("Bearer "))
-    return Response.json({ error: "unauthorized" }, { status: 401 });
-  const db = getDatabaseClient();
-  if (!db) return Response.json({ error: "service unavailable" }, { status: 503 });
-  try {
-    const principal = await verifyDaemonApiKey(
-      header.slice(7).trim(),
-      new PrismaDaemonApiKeyRepository(db),
-    );
-    return { principal, db };
-  } catch {
-    return Response.json({ error: "unauthorized" }, { status: 401 });
-  }
-}
-
-/** The parsed request body, or the error response. */
-async function parseBody<T>(request: Request, schema: z.ZodType<T>) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "bad request" }, { status: 400 });
-  }
-  const input = schema.safeParse(body);
-  return input.success ? input.data : Response.json({ error: "bad request" }, { status: 400 });
-}
 
 type LaunchIdentityComputer = AgentRuntimeContextComputer;
 

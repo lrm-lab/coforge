@@ -11,8 +11,14 @@ await db.user.upsert({
     id: DEV_BROWSER_USER.id,
     username: DEV_BROWSER_USER.username,
     displayName: DEV_BROWSER_USER.name,
+    // Past first sign-in: the dev session opens the Workspace, not the name step.
+    welcomedAt: new Date(),
   },
-  update: { username: DEV_BROWSER_USER.username, displayName: DEV_BROWSER_USER.name },
+  update: {
+    username: DEV_BROWSER_USER.username,
+    displayName: DEV_BROWSER_USER.name,
+    welcomedAt: new Date(),
+  },
 });
 await workspaceIdForUser(db, { ...DEV_BROWSER_USER, displayName: DEV_BROWSER_USER.name }, "en");
 await db.$disconnect();

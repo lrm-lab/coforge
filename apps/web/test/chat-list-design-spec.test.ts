@@ -40,6 +40,8 @@ test("Row wiring: the selected card uses the spec fill/border and pinned rows us
   expect(source).toContain("text-sidebar-fg");
   expect(source).toContain("pinned={channel.pinned}");
   expect(source).toContain("pinned={pinned}");
+  // A direct message's selected row is the same card as a channel's: no second treatment.
+  expect(source.match(/^\s+card$/gm)).toHaveLength(2);
   // The old selected treatment is gone from the directory.
   expect(source).not.toContain('border-secondary" : "border-transparent');
 });

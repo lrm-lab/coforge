@@ -32,7 +32,12 @@ async function warningsDuring(run: () => Promise<unknown>) {
 }
 
 test("a code GitHub rejects is logged with GitHub's error name and nothing else", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const connection = new GitHubConnection(db, config, async (url) => {
     if (url === "https://github.com/login/oauth/access_token")
       return Response.json({
@@ -61,7 +66,12 @@ test("a code GitHub rejects is logged with GitHub's error name and nothing else"
 });
 
 test("a browser whose state cookie does not match is logged as a state failure", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const connection = new GitHubConnection(db, config, async (url) => {
     throw new Error(`unexpected request to ${url}`);
   });
@@ -80,7 +90,12 @@ test("a browser whose state cookie does not match is logged as a state failure",
 });
 
 test("a GitHub user that cannot be read after the exchange is logged as a user failure", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const connection = new GitHubConnection(db, config, async (url) => {
     if (url === "https://github.com/login/oauth/access_token")
       return Response.json({

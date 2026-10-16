@@ -33,6 +33,7 @@ function repository(): AgentRepository {
         (agent) => agent.workspaceId === workspaceId && agent.computerId === computerId,
       ),
     listDeletedForComputer: async () => [],
+    hasActiveMigration: async () => false,
     listOwnedInWorkspace: async (workspaceId, ownerId) =>
       records.filter((agent) => agent.workspaceId === workspaceId && agent.ownerId === ownerId),
     create: async (input) => {

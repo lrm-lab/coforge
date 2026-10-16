@@ -1,3 +1,4 @@
+import { humanLabel } from "#src/lib/human-label";
 import {
   useEffect,
   useEffectEvent,
@@ -78,7 +79,7 @@ export function CreateWeeklyTemplateDialog({
     const query = recipientQuery.trim().toLowerCase();
     if (!query) return members;
     return members.filter((member) => {
-      const display = (member.displayName ?? member.username).toLowerCase();
+      const display = humanLabel(member).toLowerCase();
       const role = (member.role ?? "").toLowerCase();
       return (
         display.includes(query) ||
@@ -252,7 +253,7 @@ export function CreateWeeklyTemplateDialog({
     return recipientIds
       .map((id) => {
         const member = members.find((row) => row.userId === id);
-        return member?.displayName ?? member?.username;
+        return member && humanLabel(member);
       })
       .filter(Boolean)
       .join(", ");
@@ -390,7 +391,7 @@ export function CreateWeeklyTemplateDialog({
                                   buttonLabel={m.records_template_remove_recipient({ name })}
                                   onButtonClick={() => toggleRecipient(id)}
                                 >
-                                  {member?.displayName ?? member?.username ?? id}
+                                  {member ? humanLabel(member) : id}
                                 </BadgeWithButton>
                               );
                             })

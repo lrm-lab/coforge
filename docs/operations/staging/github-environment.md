@@ -97,6 +97,12 @@ VAPID public/private key 和 OTLP Traces 接入地址写入主机
 `http://localhost:8788/auth/callback` 和 `http://localhost:8788/`。变更必须走代码评审。改 GitHub Environment 后须重新部署才会
 进容器。不要把这些值提交进 git，也不要在主机 bootstrap 循环里用 `openssl` 生成它们。
 
+集群令牌是 GitHub Environment secret `COFORGE_CLOUD_CLUSTER_TOKEN`。部署把它写成主机
+`secrets/coforge_cloud_cluster_token`，再作为容器环境变量 `COFORGE_CLOUD_CLUSTER_TOKEN` 传给 Web。
+Web 只保存哈希。没设这个 secret 时，staging 部署在同步密钥这一步停下。不要把明文提交进 git。
+
+「云电脑服务」页的操作密码是另一份可选 secret `COFORGE_CLOUD_SERVICE_PASSWORD`，6 到 200 个字符。没设它时部署照常进行，这一页停留在密码输入，并说明密码还没配置。不要把它写成集群令牌，也不要提交进 git。
+
 VAPID pair 必须跨发布、重启和 Web 副本保持稳定。轮换会使已有浏览器 subscription
 需要重新订阅，因此必须作为受控维护操作执行；更新 GitHub Environment 中匹配的两个
 值并重新部署，不能只更新一半。

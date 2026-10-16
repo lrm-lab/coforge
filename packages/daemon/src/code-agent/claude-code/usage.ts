@@ -1,4 +1,8 @@
-import type { UsageSnapshot, UsageWindow } from "#src/code-agent/contract";
+import {
+  UsageUnavailableError,
+  type UsageSnapshot,
+  type UsageWindow,
+} from "#src/code-agent/contract";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { maskEmail } from "#src/code-agent/mask-email";
 import { claudeCliEnvironment, runClaudeCli as run } from "./process";
@@ -29,9 +33,11 @@ export async function readClaudeCodeUsage(
     timeoutMs,
   );
   if (usage.timedOut) throw new ClaudeUsageTimeoutError();
-  if (usage.exitCode !== 0) return null;
+  // Authentication succeeded above; a failed quota read must not request another sign-in.
+  if (usage.exitCode !== 0) throw new UsageUnavailableError();
   const snapshot = parseUsage(usage.stdout);
-  return snapshot ? { ...snapshot, ...account(auth.stdout) } : null;
+  if (!snapshot) throw new UsageUnavailableError();
+  return { ...snapshot, ...account(auth.stdout) };
 }
 
 export class ClaudeUsageTimeoutError extends Error {

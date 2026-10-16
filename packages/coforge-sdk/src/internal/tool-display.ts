@@ -6,7 +6,7 @@
  * needs translating twice, and the two sides cannot drift apart.
  */
 
-import { codePointLength, truncateCodePoints } from "./truncate";
+import { truncateCodePointsWithEllipsis } from "./truncate";
 
 // Every alias a provider is known to send for a canonical tool name, lowercase. A
 // canonical name also maps to itself, so a lookup never needs an `?? name` fallback to
@@ -70,7 +70,12 @@ export const TOOL_LABELS: Readonly<Record<string, string>> = {
   claim_tasks: "Claiming tasks",
   unclaim_task: "Unclaiming task",
   update_task_status: "Updating task status",
+  list_channel_members: "Listing channel members",
+  update_channel: "Updating channel",
+  archive_channel: "Archiving channel",
+  unarchive_channel: "Unarchiving channel",
   add_channel_member: "Adding channel member",
+  remove_channel_member: "Removing channel member",
   join_channel: "Joining channel",
   leave_channel: "Leaving channel",
   upload_file: "Uploading file",
@@ -104,7 +109,5 @@ export function canonicalToolName(rawName: string): { canonical: string; name: s
 export function toolActivityLabel(rawName: string): string {
   const { canonical, name } = canonicalToolName(rawName);
   const label = TOOL_LABELS[canonical];
-  return label
-    ? `${label}…`
-    : `Using ${truncateCodePoints(name, 20)}${codePointLength(name) > 20 ? "…" : ""}…`;
+  return label ? `${label}…` : `Using ${truncateCodePointsWithEllipsis(name, 20)}…`;
 }

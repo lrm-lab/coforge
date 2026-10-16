@@ -11,7 +11,9 @@ test("project images authorize members, validate uploads, replace bytes and clea
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
-  const user = await db.user.create({ data: { username: `images-${suffix}` } });
+  const user = await db.user.create({
+    data: { displayName: `images-${suffix}`, username: `images-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `images-${suffix}`,

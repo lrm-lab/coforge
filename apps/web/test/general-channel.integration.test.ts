@@ -61,8 +61,12 @@ test.skipIf(!connectionString)(
   async () => {
     const db = connect();
     const suffix = crypto.randomUUID().slice(0, 8);
-    const alice = await db.user.create({ data: { username: `gen-alice-${suffix}` } });
-    const bob = await db.user.create({ data: { username: `gen-bob-${suffix}` } });
+    const alice = await db.user.create({
+      data: { displayName: `gen-alice-${suffix}`, username: `gen-alice-${suffix}` },
+    });
+    const bob = await db.user.create({
+      data: { displayName: `gen-bob-${suffix}`, username: `gen-bob-${suffix}` },
+    });
     const created: string[] = [];
     try {
       const fromCatalog = await new PrismaWorkspaceCatalogStore(db).createForUser({
@@ -101,8 +105,12 @@ test.skipIf(!connectionString)(
   async () => {
     const db = connect();
     const suffix = crypto.randomUUID().slice(0, 8);
-    const owner = await db.user.create({ data: { username: `gen-owner-${suffix}` } });
-    const returning = await db.user.create({ data: { username: `gen-returning-${suffix}` } });
+    const owner = await db.user.create({
+      data: { displayName: `gen-owner-${suffix}`, username: `gen-owner-${suffix}` },
+    });
+    const returning = await db.user.create({
+      data: { displayName: `gen-returning-${suffix}`, username: `gen-returning-${suffix}` },
+    });
     const workspace = await new PrismaWorkspaceCatalogStore(db).createForUser({
       slug: `gen-c-${suffix}`,
       name: "General C",
@@ -222,9 +230,15 @@ test.skipIf(!connectionString)(
     const suffix = crypto.randomUUID().slice(0, 8);
     try {
       await db.$transaction(async (tx) => {
-        const owner = await tx.user.create({ data: { username: `mig-owner-${suffix}` } });
-        const leaver = await tx.user.create({ data: { username: `mig-leaver-${suffix}` } });
-        const other = await tx.user.create({ data: { username: `mig-other-${suffix}` } });
+        const owner = await tx.user.create({
+          data: { displayName: `mig-owner-${suffix}`, username: `mig-owner-${suffix}` },
+        });
+        const leaver = await tx.user.create({
+          data: { displayName: `mig-leaver-${suffix}`, username: `mig-leaver-${suffix}` },
+        });
+        const other = await tx.user.create({
+          data: { displayName: `mig-other-${suffix}`, username: `mig-other-${suffix}` },
+        });
         // One Workspace kept its archived #general, with a human who had left it.
         const archived = await tx.workspace.create({
           data: {

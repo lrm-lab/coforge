@@ -213,10 +213,7 @@ function pendingMentionActionView(
     targetHandle: row.targetHandle,
     targetLabel: agent
       ? agent.displayName?.trim() || row.targetHandle
-      : humanLabel({
-          displayName: row.targetUser?.displayName,
-          username: row.targetHandle,
-        }),
+      : humanLabel({ displayName: row.targetUser?.displayName }),
     targetAvatarUrl: agent
       ? agentAvatarUrl(workspaceId, targetId, agent.avatarObjectKey)
       : workspaceUserAvatarUrl(workspaceId, targetId, row.targetUser?.avatarObjectKey ?? null),

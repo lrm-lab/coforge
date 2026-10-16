@@ -1,5 +1,11 @@
 import { join } from "node:path";
 
+/** The Agent's memory index in its workspace root. */
+export const AGENT_MEMORY_FILE = "MEMORY.md";
+
+/** Where an Agent keeps the code it works on, in its workspace root. */
+export const AGENT_WORK_DIRECTORY = "work";
+
 const STABLE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 /** Returns the only permitted durable directory for an Agent runtime. */

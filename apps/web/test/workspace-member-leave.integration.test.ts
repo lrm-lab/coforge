@@ -56,8 +56,12 @@ const silentRealtime: ConversationRealtime = {
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `ml-owner-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `ml-bob-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `ml-owner-${suffix}`, username: `ml-owner-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `ml-bob-${suffix}`, username: `ml-bob-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `ml-${suffix}`,
@@ -688,7 +692,10 @@ test.skipIf(!connectionString || !redisUrl)(
     const { db, workspace, owner, bob } = await setup();
     const redis = new RedisClient(redisUrl!);
     const elsewhere = await db.user.create({
-      data: { username: `ml-elsewhere-${crypto.randomUUID().slice(0, 8)}` },
+      data: {
+        displayName: `ml-elsewhere-${crypto.randomUUID().slice(0, 8)}`,
+        username: `ml-elsewhere-${crypto.randomUUID().slice(0, 8)}`,
+      },
     });
     const otherWorkspace = await db.workspace.create({
       data: {

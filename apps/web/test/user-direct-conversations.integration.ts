@@ -24,7 +24,7 @@ const passThrough: MessageRequestIdempotency = { execute: (_scope, persist) => p
 
 beforeAll(async () => {
   [ada, grace, outsider, carol] = await Promise.all(
-    usernames.map((username) => db.user.create({ data: { username } })),
+    usernames.map((username) => db.user.create({ data: { displayName: username, username } })),
   );
   [workspace] = await Promise.all([
     db.workspace.create({

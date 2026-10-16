@@ -47,9 +47,15 @@ test.skipIf(!connectionString)(
   async () => {
     const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
     const suffix = crypto.randomUUID().slice(0, 8);
-    const owner = await db.user.create({ data: { username: `sos-owner-${suffix}` } });
-    const member = await db.user.create({ data: { username: `sos-member-${suffix}` } });
-    const outsider = await db.user.create({ data: { username: `sos-outsider-${suffix}` } });
+    const owner = await db.user.create({
+      data: { displayName: `sos-owner-${suffix}`, username: `sos-owner-${suffix}` },
+    });
+    const member = await db.user.create({
+      data: { displayName: `sos-member-${suffix}`, username: `sos-member-${suffix}` },
+    });
+    const outsider = await db.user.create({
+      data: { displayName: `sos-outsider-${suffix}`, username: `sos-outsider-${suffix}` },
+    });
     const workspace = await new PrismaWorkspaceCatalogStore(db).createForUser({
       slug: `sos-${suffix}`,
       name: "Stop channel Agents",

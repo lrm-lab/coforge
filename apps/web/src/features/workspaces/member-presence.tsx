@@ -131,7 +131,7 @@ export function WorkspacePresenceProvider({
 /** Whether a Workspace member is online; `undefined` while presence is still loading. */
 export function useMemberOnline(userId: string): boolean | undefined {
   const presence = useContext(WorkspacePresenceContext);
-  if (!presence) throw new Error("useMemberOnline must be called inside WorkspacePresenceProvider");
+  if (!presence) return undefined;
   return useSyncExternalStore(
     presence.subscribe,
     () => presence.isOnline(userId),

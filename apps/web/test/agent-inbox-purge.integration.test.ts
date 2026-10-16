@@ -78,7 +78,9 @@ function expectedPurge(input: {
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const owner = await db.user.create({ data: { username: `ip-owner-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `ip-owner-${suffix}`, username: `ip-owner-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `ip-${suffix}`,
@@ -206,7 +208,10 @@ test.skipIf(!connectionString)(
       teamName,
     } = await setup();
     const bob = await db.user.create({
-      data: { username: `ip-bob-${crypto.randomUUID().slice(0, 8)}` },
+      data: {
+        displayName: `ip-bob-${crypto.randomUUID().slice(0, 8)}`,
+        username: `ip-bob-${crypto.randomUUID().slice(0, 8)}`,
+      },
     });
     try {
       await db.workspaceMembership.create({ data: { workspaceId: workspace.id, userId: bob.id } });
@@ -299,7 +304,10 @@ test.skipIf(!connectionString)(
       teamName,
     } = await setup();
     const bob = await db.user.create({
-      data: { username: `ip-bob-${crypto.randomUUID().slice(0, 8)}` },
+      data: {
+        displayName: `ip-bob-${crypto.randomUUID().slice(0, 8)}`,
+        username: `ip-bob-${crypto.randomUUID().slice(0, 8)}`,
+      },
     });
     try {
       await db.workspaceMembership.create({ data: { workspaceId: workspace.id, userId: bob.id } });

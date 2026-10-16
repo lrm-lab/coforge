@@ -599,7 +599,7 @@ function parseBodyRestore(value: unknown): ReportBodyRestore | undefined {
 }
 
 function reportTabsSnapshot(content: ReportContent): Record<string, ReportTab> {
-  return { ...(normalizeReportContent(content).tabs ?? {}) };
+  return { ...normalizeReportContent(content).tabs };
 }
 
 /** Remember the body on screen, then show the assistant insert as the latest version. */
@@ -666,7 +666,7 @@ export function reportBodyRestoreView(content: ReportContent): ReportBodyRestore
 /** Copy the working body into the copy recipients already hold. */
 export function publishMemberReportDelivery(content: ReportContent): ReportContent {
   const next = normalizeReportContent(content);
-  return { ...next, delivered: { tabs: { ...(next.tabs ?? {}) } } };
+  return { ...next, delivered: { tabs: { ...next.tabs } } };
 }
 
 /**
@@ -681,7 +681,7 @@ export function retainMemberReportDelivery(
   const next = normalizeReportContent(incoming);
   return {
     ...next,
-    delivered: { tabs: { ...(previous.delivered?.tabs ?? previous.tabs ?? {}) } },
+    delivered: { tabs: { ...(previous.delivered?.tabs ?? previous.tabs) } },
   };
 }
 

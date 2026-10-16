@@ -7,6 +7,9 @@ import {
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
+import { productionCloudComputers } from "#src/server/hosts/host-production.server";
+import { HostDirectoryError } from "#src/server/hosts/host-directory.server";
+import { HostJobError } from "#src/server/hosts/host-jobs.server";
 
 import {
   computerIdInputSchema,
@@ -132,7 +135,7 @@ export const listComputerNames = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { db, workspaceId } }) => {
     const connections = await db.workspaceComputer.findMany({
-      where: { workspaceId },
+      where: { workspaceId, computer: { deletedAt: null } },
       select: { computer: { select: { id: true, name: true, displayName: true, kind: true } } },
       orderBy: { createdAt: "asc" },
     });
@@ -148,7 +151,7 @@ export const listComputers = createServerFn({ method: "GET" })
     const agentViewer = await agentVisibilityViewerForUser(db, workspaceId, user.id);
     const [connections, runtimes] = await Promise.all([
       db.workspaceComputer.findMany({
-        where: { workspaceId },
+        where: { workspaceId, computer: { deletedAt: null } },
         select: {
           createdAt: true,
           computer: {
@@ -157,6 +160,7 @@ export const listComputers = createServerFn({ method: "GET" })
               name: true,
               displayName: true,
               kind: true,
+              cloudSlot: true,
               ownerId: true,
               computerVersion: true,
               platform: true,
@@ -205,6 +209,7 @@ export const listComputers = createServerFn({ method: "GET" })
           name: computer.name,
           displayName: computer.displayName,
           kind: computer.kind,
+          cloudSlot: computer.cloudSlot,
           computerVersion: computer.computerVersion,
           platform: computer.platform,
           osVersion: computer.osVersion,
@@ -494,13 +499,34 @@ export const deleteComputer = createServerFn({ method: "POST" })
       },
       select: {
         id: true,
+        kind: true,
+        cloudSlot: true,
         agents: { where: { deletedAt: null }, select: { id: true }, take: 1 },
         workspaces: { select: { workspaceId: true } },
       },
     });
     if (!computer) throw new Error("Computer is not available");
+    if (computer.kind === "cloud" && computer.cloudSlot === "default") {
+      throw new Error("The default cloud computer cannot be deleted");
+    }
     if (computer.agents.length > 0)
       throw new Error("Delete all Agents on this Computer before deleting the Computer");
+    if (computer.kind === "cloud" && computer.cloudSlot === "extra") {
+      try {
+        await productionCloudComputers(db).deleteExtra({
+          userId: user.id,
+          workspaceId,
+          computerId: computer.id,
+          now: new Date(),
+        });
+      } catch (error) {
+        if (error instanceof HostJobError || error instanceof HostDirectoryError) {
+          throw new Error(error.message);
+        }
+        throw error;
+      }
+      return { deleted: false as const };
+    }
     await db.$transaction(async (tx) => {
       for (const binding of computer.workspaces)
         await DaemonCredentialRevocations.recordForComputer(tx, {

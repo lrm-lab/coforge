@@ -1,4 +1,5 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { FINISHED_AGENT_MIGRATION_STATES } from "#src/server/agent-migrations/agent-migrations.server";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { enrollGeneralChannel } from "#src/server/conversations/public-channels.server";
@@ -98,6 +99,8 @@ export interface AgentRepository {
   /** Deleted Agents still assigned to one Computer: recovery stops these rather than
    * starting them, so a delete whose Stop never reached an offline Daemon is reconciled. */
   listDeletedForComputer(workspaceId: string, computerId: string): Promise<AgentRecord[]>;
+  /** Whether a migration that has not finished is moving the Agent between Computers. */
+  hasActiveMigration(agentId: string): Promise<boolean>;
   listOwnedInWorkspace(workspaceId: string, ownerId: string): Promise<AgentRecord[]>;
   create(input: Omit<AgentRecord, "id" | "createdAt"> & { id?: string }): Promise<AgentRecord>;
   /** `name` (the @mention username) is fixed at creation and is never part of an update. */
@@ -150,6 +153,14 @@ export class PrismaAgentRepository implements AgentRepository {
       visibility:
         visibility === AGENT_VISIBILITY.PUBLIC ? AGENT_VISIBILITY.PUBLIC : AGENT_VISIBILITY.PRIVATE,
     }));
+  }
+
+  async hasActiveMigration(agentId: string) {
+    const active = await this.db.agentMigration.findFirst({
+      where: { agentId, state: { notIn: [...FINISHED_AGENT_MIGRATION_STATES] } },
+      select: { id: true },
+    });
+    return Boolean(active);
   }
 
   async listDeletedForComputer(workspaceId: string, computerId: string) {
@@ -216,6 +227,23 @@ export class PrismaAgentRepository implements AgentRepository {
   ) {
     return mapAgent(await this.db.agent.update({ where: { id }, data: input }));
   }
+}
+
+/**
+ * Moves a live Agent to another Computer inside the caller's transaction, only while it is still on
+ * `fromComputerId`. False means it had already moved (or was deleted) and nothing was written. An
+ * Agent migration's switch is the caller: it must not re-home an Agent that a concurrent edit has
+ * already moved somewhere else.
+ */
+export async function moveAgentToComputer(
+  tx: Prisma.TransactionClient,
+  input: { agentId: string; fromComputerId: string; toComputerId: string },
+): Promise<boolean> {
+  const { count } = await tx.agent.updateMany({
+    where: { id: input.agentId, computerId: input.fromComputerId, ...ACTIVE_AGENT_WHERE },
+    data: { computerId: input.toComputerId },
+  });
+  return count === 1;
 }
 
 /**

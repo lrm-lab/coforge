@@ -172,7 +172,7 @@ export async function listOwnedComputerSlots(
   input: { workspaceId: string; userId: string },
 ): Promise<CollectorComputerSlot[]> {
   const mounted = await db.workspaceComputer.findMany({
-    where: { workspaceId: input.workspaceId },
+    where: { workspaceId: input.workspaceId, computer: { deletedAt: null } },
     select: {
       computerId: true,
       computer: {

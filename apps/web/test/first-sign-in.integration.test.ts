@@ -16,7 +16,9 @@ const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const user = await db.user.create({ data: { username: `fsi-${suffix}` } });
+  const user = await db.user.create({
+    data: { displayName: `fsi-${suffix}`, username: `fsi-${suffix}` },
+  });
   const memberships = () =>
     db.workspaceMembership.findMany({
       where: { userId: user.id },
@@ -106,7 +108,7 @@ test.skipIf(!connectionString)(
       });
 
       expect(result).toEqual({ ok: false, problem: "refused" });
-      expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).displayName).toBeNull();
+      expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).welcomedAt).toBeNull();
       expect(await memberships()).toEqual([]);
     } finally {
       await teardown();

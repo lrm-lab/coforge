@@ -13,6 +13,9 @@ coforge action prepare --target "#design" <<'COFORGEACTION'
 COFORGEACTION
 ```
 
+As with `message send`, stdin redirected from a regular file another user owns
+fails with `STDIN_FILE_NOT_OWNED` before any request.
+
 Three kinds are supported today; the `integration:*` kinds are not implemented
 yet:
 

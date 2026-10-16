@@ -37,10 +37,15 @@ import { useAppToast } from "#src/components/ui/toast";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
+import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
 import type { AgentProfileTab as AgentProfileTabId } from "#src/features/agents/profile-panel/profile-panel-search";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
-import { ChannelMembersPage, type ChannelMembersView } from "./channel-members-page";
+import {
+  ChannelMembersPage,
+  type ChannelMembersView,
+  type RosterProfile,
+} from "./channel-members-page";
 import { useChannelMembers } from "./channel-members-query";
 import {
   deletePublicChannel,
@@ -89,11 +94,12 @@ export function ChannelSettingsPanel({
   const isMember = Boolean(conversation.senderMemberId);
   // The members page (or its add view) shown in place of the settings; null shows the settings.
   const [membersView, setMembersView] = useState<ChannelMembersView | null>(initialMembersView);
-  // An Agent's profile opened from the members page, shown in place of it; Back returns there.
-  const [profileAgentId, setProfileAgentId] = useState<string | null>(null);
+  // A member's profile (an Agent's or a person's) opened from the members page, shown in place of
+  // it; Back returns there.
+  const [profile, setProfile] = useState<RosterProfile | null>(null);
   const [profileTab, setProfileTab] = useState<AgentProfileTabId | undefined>(undefined);
   const [rosterSearch, setRosterSearch] = useState("");
-  const [returnFocusAgentId, setReturnFocusAgentId] = useState<string | undefined>(undefined);
+  const [returnFocus, setReturnFocus] = useState<RosterProfile | undefined>(undefined);
   const [unsavedPromptOpen, setUnsavedPromptOpen] = useState(false);
   const [confirming, setConfirming] = useState<ConfirmedAction | null>(null);
   const [stoppingAgents, setStoppingAgents] = useState(false);
@@ -108,9 +114,9 @@ export function ChannelSettingsPanel({
   useEffect(() => {
     if (!open) return;
     setMembersView(initialMembersViewRef.current);
-    setProfileAgentId(null);
+    setProfile(null);
     setRosterSearch("");
-    setReturnFocusAgentId(undefined);
+    setReturnFocus(undefined);
   }, [open]);
 
   function close() {
@@ -126,24 +132,24 @@ export function ChannelSettingsPanel({
     else close();
   }
   // Stable, so the memoized roster rows do not re-render with the panel.
-  const openAgentProfile = useCallback((agentId: string) => {
+  const openProfile = useCallback((next: RosterProfile) => {
     setProfileTab(undefined);
-    setProfileAgentId(agentId);
+    setProfile(next);
   }, []);
   const profileBack = useMemo(
     () => ({
       label: m.channel_members_back_to_members(),
       onPress: () => {
-        setReturnFocusAgentId(profileAgentId ?? undefined);
-        setProfileAgentId(null);
+        setReturnFocus(profile ?? undefined);
+        setProfile(null);
       },
     }),
-    [profileAgentId],
+    [profile],
   );
   // The roster's search and the focused row survive only a trip to a profile and back; any
   // other view change starts the roster afresh, as it did before it kept them.
   const changeMembersView = useCallback((view: ChannelMembersView | null) => {
-    setReturnFocusAgentId(undefined);
+    setReturnFocus(undefined);
     setRosterSearch("");
     setMembersView(view);
   }, []);
@@ -157,16 +163,27 @@ export function ChannelSettingsPanel({
       >
         <SlideoutModal className="max-w-136">
           <SlideoutDialog aria-label={m.channel_settings_open()} className="gap-0">
-            {profileAgentId ? (
+            {profile ? (
               <div className="flex min-h-0 w-full flex-1 flex-col">
-                <AgentProfilePanel
-                  key={profileAgentId}
-                  agentId={profileAgentId}
-                  requestedTab={profileTab}
-                  onTabChange={setProfileTab}
-                  onClose={() => requestClose()}
-                  back={profileBack}
-                />
+                {profile.kind === "agent" ? (
+                  <AgentProfilePanel
+                    key={profile.id}
+                    agentId={profile.id}
+                    requestedTab={profileTab}
+                    onTabChange={setProfileTab}
+                    onClose={() => requestClose()}
+                    back={profileBack}
+                  />
+                ) : (
+                  <PersonProfilePanel
+                    key={profile.id}
+                    userId={profile.id}
+                    onClose={() => requestClose()}
+                    back={profileBack}
+                    // One of their Agents opens here too, and Back still returns to the members.
+                    onOpenAgent={(agentId) => openProfile({ kind: "agent", id: agentId })}
+                  />
+                )}
               </div>
             ) : (
               <>
@@ -179,7 +196,7 @@ export function ChannelSettingsPanel({
                       key={membersView}
                       channelId={channelId}
                       view={membersView}
-                      takesFocus={!returnFocusAgentId}
+                      takesFocus={!returnFocus}
                       onBack={() => changeMembersView(membersView === "add" ? "members" : null)}
                     />
                   ) : (
@@ -215,8 +232,8 @@ export function ChannelSettingsPanel({
                       roster={{
                         search: rosterSearch,
                         onSearchChange: setRosterSearch,
-                        onOpenAgentProfile: openAgentProfile,
-                        returnFocusAgentId,
+                        onOpenProfile: openProfile,
+                        returnFocus,
                       }}
                     />
                   </div>

@@ -13,8 +13,12 @@ test("Skills authorization requires Agent ownership and current membership, not 
     adapter: new PrismaPg({ connectionString: Bun.env.SKILLS_TEST_DATABASE_URL }),
   });
   const suffix = crypto.randomUUID();
-  const owner = await db.user.create({ data: { username: `skills-owner-${suffix}` } });
-  const computerOwner = await db.user.create({ data: { username: `skills-computer-${suffix}` } });
+  const owner = await db.user.create({
+    data: { displayName: `skills-owner-${suffix}`, username: `skills-owner-${suffix}` },
+  });
+  const computerOwner = await db.user.create({
+    data: { displayName: `skills-computer-${suffix}`, username: `skills-computer-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: suffix,

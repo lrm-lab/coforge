@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AgentWorkspaceFileReadResultSchema } from "#src/internal/gen/coforge/rpc/v1/agent_workspace_files_pb";
 import {
   decodeAgentWorkspaceDeleteRequest,
   decodeAgentWorkspaceDeleteResult,
@@ -147,4 +149,100 @@ test("Workspace File read carries a previewable image's bytes and sniffed media 
   expect(() =>
     encodeAgentWorkspaceFileReadResult({ ...result, contentBase64: oversized.toString("base64") }),
   ).toThrow();
+});
+
+test("Workspace File image decoding preserves every Base64 tail and leaves wire bytes intact", () => {
+  for (const length of [1, 2, 3, 4, 5, 257, 16_384, 1024 * 1024]) {
+    const storage = new Uint8Array(length + 10);
+    const image = storage.subarray(5, 5 + length);
+    for (let index = 0; index < image.length; index++) image[index] = (index * 37 + length) & 255;
+    const result = {
+      ...readRequest,
+      status: "ok" as const,
+      sizeBytes: length,
+      modifiedAtMs: 1_700_000_000_000,
+      text: "",
+      contentType: "image/png",
+      contentBase64: Buffer.from(image).toString("base64"),
+    };
+    const wire = encodeAgentWorkspaceFileReadResult(result);
+    const originalWire = wire.slice();
+    const decoded = decodeAgentWorkspaceFileReadResult(wire);
+    expect(decoded).toEqual(result);
+    expect(wire).toEqual(originalWire);
+    expect(decodeAgentWorkspaceFileReadResult(wire)).toEqual(result);
+    wire.fill(0);
+    expect(decoded).toEqual(result);
+  }
+});
+
+test("Workspace File image decoding rejects inconsistent and oversized wire content", () => {
+  const image = {
+    ...readRequest,
+    messageType: "coforge.rpc.v1.AgentWorkspaceFileReadResult",
+    status: "ok",
+    sizeBytes: 1n,
+    modifiedAtMs: 1n,
+    text: "",
+    contentType: "image/png",
+    content: new Uint8Array([255]),
+  };
+  for (const change of [
+    { content: new Uint8Array() },
+    { contentType: "" },
+    { contentType: "png" },
+    { contentType: "image/\u0000png" },
+    { text: "a second payload" },
+    { content: new Uint8Array(1024 * 1024 + 1) },
+  ]) {
+    const wire = toBinary(
+      AgentWorkspaceFileReadResultSchema,
+      create(AgentWorkspaceFileReadResultSchema, { ...image, ...change }),
+    );
+    expect(() => decodeAgentWorkspaceFileReadResult(wire)).toThrow();
+  }
+});
+
+test("Workspace File decoding retains content and metadata errors before request scope errors", () => {
+  const image = {
+    ...readRequest,
+    messageType: "coforge.rpc.v1.AgentWorkspaceFileReadResult",
+    status: "ok",
+    sizeBytes: 1n,
+    modifiedAtMs: 1n,
+    text: "",
+    contentType: "image/png",
+    content: new Uint8Array([255]),
+    agentId: "../other",
+  };
+  for (const { change, message } of [
+    { change: { contentType: "image/\u0000png" }, message: "Invalid Workspace Files metadata" },
+    { change: { contentType: "" }, message: "Invalid Workspace File read result" },
+    { change: { content: new Uint8Array() }, message: "Invalid Workspace File read result" },
+    { change: { text: "mixed" }, message: "Invalid Workspace File read result" },
+    {
+      change: { content: new Uint8Array(1024 * 1024 + 1) },
+      message: "Invalid Workspace File read result",
+    },
+    { change: { text: "\u0000" }, message: "Invalid Workspace Files metadata" },
+    {
+      change: { text: "x".repeat(512 * 1024 + 1), contentType: "" },
+      message: "Invalid Workspace Files metadata",
+    },
+    {
+      change: { messageType: "wrong", text: "\u0000" },
+      message: "Invalid Workspace File read result",
+    },
+    {
+      change: { sizeBytes: BigInt(Number.MAX_SAFE_INTEGER) + 1n, contentType: "image/\u0000png" },
+      message: "Invalid Workspace File read result",
+    },
+    { change: {}, message: "Invalid Workspace Files request scope" },
+  ]) {
+    const wire = toBinary(
+      AgentWorkspaceFileReadResultSchema,
+      create(AgentWorkspaceFileReadResultSchema, { ...image, ...change }),
+    );
+    expect(() => decodeAgentWorkspaceFileReadResult(wire)).toThrow(message);
+  }
 });

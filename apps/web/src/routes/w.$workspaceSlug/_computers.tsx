@@ -5,6 +5,7 @@ import { latestComputerVersionQuery } from "#src/features/computers/latest-versi
 import { AddComputerDialog } from "#src/features/computers/add-computer-dialog";
 import { ComputerLayout, UpgradingComputerProvider } from "#src/features/computers/computer-layout";
 import { ComputersPending } from "#src/features/computers/computers-pending";
+import { ensureCloudComputer } from "#src/features/computers/cloud-computers.functions";
 import { listComputers } from "#src/features/computers/computers.functions";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { getInstallOrigin } from "#src/features/install/install.functions";
@@ -15,6 +16,10 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
 
 export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
   loader: async () => {
+    // Creating a Workspace already starts this. Opening the page ensures it
+    // again, including an attach that waited because the container was not
+    // ready yet. A deployment without a cluster still shows the computers it has.
+    await ensureCloudComputer();
     const [computers, preferences, installOrigin] = await Promise.all([
       listComputers(),
       getUserPreferences(),
@@ -33,6 +38,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
 
 function ComputersPage() {
   const { computers, installOrigin } = Route.useLoaderData();
+  const router = useRouter();
   const { data: latestComputerVersion } = useQuery(latestComputerVersionQuery());
   const { currentWorkspace } = appRoute.useLoaderData();
   const params = useParams({
@@ -41,7 +47,6 @@ function ComputersPage() {
   });
   const [addComputerOpen, setAddComputerOpen] = useState(false);
   const [connectedComputerName, setConnectedComputerName] = useState<string | null>(null);
-  const router = useRouter();
   const computersWhenAddOpened = useRef<ReadonlySet<string> | null>(null);
 
   useEffect(() => {
@@ -102,6 +107,16 @@ function ComputersPage() {
         installOrigin={installOrigin}
         workspaceSlug={currentWorkspace?.slug ?? null}
         connectedComputerName={connectedComputerName}
+        onCreated={async (computerId) => {
+          const workspaceSlug = currentWorkspace?.slug;
+          setAddComputerOpen(false);
+          await router.invalidate();
+          if (!workspaceSlug) return;
+          await router.navigate({
+            to: "/w/$workspaceSlug/computer/$computerId",
+            params: { workspaceSlug, computerId },
+          });
+        }}
       />
     </>
   );

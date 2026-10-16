@@ -14,7 +14,9 @@ test("recovery creates a new current AgentSession and preserves the previous nat
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const fixture = crypto.randomUUID();
   const runtimeConfig = { runtime: "pi", provider: { kind: "default" }, model: "", reasoning: "" };
-  const owner = await db.user.create({ data: { username: `session-${fixture}` } });
+  const owner = await db.user.create({
+    data: { displayName: `session-${fixture}`, username: `session-${fixture}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `session-${fixture}`,

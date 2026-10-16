@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { WindowsWorkspaceInstance } from "#src/supervisor/windows-workspace-instance";
@@ -174,3 +174,134 @@ test("identity key is stable for the state root and Workspace", async () => {
     await rm(cfg.root, { recursive: true, force: true });
   }
 });
+
+const persistedInvocation = "ABCDEF0123456789ABCDEF0123456789";
+const persistedRecord = `{"mainPid":73,"invocationId":"${persistedInvocation}","extra":"中文"}`;
+
+for (const [name, bytes] of [
+  ["UTF-8", Buffer.from(persistedRecord)],
+  [
+    "replacement-decoded UTF-8 in an unused field",
+    Buffer.concat([
+      Buffer.from(`{"mainPid":73,"invocationId":"${persistedInvocation}","extra":"`),
+      Buffer.from([255]),
+      Buffer.from('"}'),
+    ]),
+  ],
+] as const) {
+  test(`adopts an existing Windows instance record with ${name} without rewriting it`, async () => {
+    const cfg = await config();
+    try {
+      await mkdir(cfg.stateDirectory, { recursive: true });
+      const path = join(cfg.stateDirectory, "windows-instance.json");
+      await Bun.write(path, bytes);
+      const instance = new WindowsWorkspaceInstance(
+        cfg,
+        async () => {
+          throw new Error("must adopt the live child");
+        },
+        (pid) => pid === 73,
+      );
+      expect(await instance.identity()).toEqual({
+        mainPid: 73,
+        active: true,
+        invocationId: "abcdef0123456789abcdef0123456789",
+      });
+      expect(await instance.ensureStarted()).toBe(73);
+      expect(await Bun.file(path).bytes()).toEqual(new Uint8Array(bytes));
+    } finally {
+      await rm(cfg.root, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const [name, bytes] of [
+  ["UTF-8 BOM", Buffer.concat([Buffer.from([239, 187, 191]), Buffer.from(persistedRecord)])],
+  [
+    "UTF-16LE BOM",
+    Buffer.concat([Buffer.from([255, 254]), Buffer.from(persistedRecord, "utf16le")]),
+  ],
+  ["truncated JSON", Buffer.from('{"mainPid":')],
+] as const) {
+  test(`propagates a Windows instance record's ${name} parse failure before process operations`, async () => {
+    const cfg = await config();
+    try {
+      await mkdir(cfg.stateDirectory, { recursive: true });
+      const path = join(cfg.stateDirectory, "windows-instance.json");
+      await Bun.write(path, bytes);
+      const unexpected = () => {
+        throw new Error("must not operate on a damaged record");
+      };
+      const instance = new WindowsWorkspaceInstance(
+        cfg,
+        async () => unexpected(),
+        unexpected,
+        unexpected,
+      );
+      await expect(instance.identity()).rejects.toBeInstanceOf(SyntaxError);
+      await expect(instance.ensureStarted()).rejects.toBeInstanceOf(SyntaxError);
+      await expect(instance.stop()).rejects.toBeInstanceOf(SyntaxError);
+      expect(await Bun.file(path).bytes()).toEqual(new Uint8Array(bytes));
+    } finally {
+      await rm(cfg.root, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const code of ["EISDIR", "ENOTDIR"] as const) {
+  test(`propagates a Windows instance record's ${code} read failure before process operations`, async () => {
+    const cfg = await config();
+    try {
+      if (code === "EISDIR")
+        await mkdir(join(cfg.stateDirectory, "windows-instance.json"), { recursive: true });
+      else {
+        await mkdir(dirname(cfg.stateDirectory), { recursive: true });
+        await Bun.write(cfg.stateDirectory, "not a directory");
+      }
+      const unexpected = () => {
+        throw new Error("must not operate on an unreadable record");
+      };
+      const instance = new WindowsWorkspaceInstance(
+        cfg,
+        async () => unexpected(),
+        unexpected,
+        unexpected,
+      );
+      await expect(instance.identity()).rejects.toMatchObject({ code });
+      await expect(instance.ensureStarted()).rejects.toMatchObject({ code });
+      await expect(instance.stop()).rejects.toMatchObject({ code });
+    } finally {
+      await rm(cfg.root, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const record of [
+  undefined,
+  { mainPid: 0, invocationId: persistedInvocation },
+  { mainPid: 73, invocationId: "bad" },
+]) {
+  test(`starts a fresh Windows instance after ${record === undefined ? "a missing" : JSON.stringify(record)} record`, async () => {
+    const cfg = await config();
+    let started = false;
+    try {
+      if (record) {
+        await mkdir(cfg.stateDirectory, { recursive: true });
+        await Bun.write(join(cfg.stateDirectory, "windows-instance.json"), JSON.stringify(record));
+      }
+      const instance = new WindowsWorkspaceInstance(
+        cfg,
+        async () => {
+          started = true;
+          return { pid: 74 };
+        },
+        (pid) => started && pid === 74,
+      );
+      expect(await instance.identity()).toBeNull();
+      expect(await instance.ensureStarted()).toBe(74);
+      expect(await instance.identity()).toMatchObject({ mainPid: 74, active: true });
+    } finally {
+      await rm(cfg.root, { recursive: true, force: true });
+    }
+  });
+}

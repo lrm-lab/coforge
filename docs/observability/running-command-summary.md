@@ -7,40 +7,44 @@ file…」，已知工具取其标签，未知工具退化为「Using `<name>`�
 标签从不由参数推导，Agent 状态栏标题因此不可能泄漏原始命令或路径。命令、路径、pattern、URL
 等参数摘要改为只出现在同一帧 `tool_start` entry 的 `toolInput` 字段里，不再拼入 `message`。
 非 CoForge CLI 的 shell 命令，`toolInput` 先复用 trajectory 文本相同的脱敏规则
-（`redactTrajectoryText`），随后截断到前 200 个 Unicode 码点；命令参数与 heredoc 正文中能被规则
-识别的 token/secret/password 等敏感片段会被替换为 `[REDACTED]`，但这仍是尽力而为的脱敏，不保证
-覆盖所有敏感文本。这里**不再**在第一个 `<<` 处截断：参考客户端直接上报 `input.command`
-（`summaryKind: "command"`）并只做长度截断，我们此前
-「heredoc 正文永不进入 `toolInput`」的规则是自己加的，会让 `cd x && python3 - <<'EOF' …` 这类命令在
-界面上只剩 `cd x && python3 -`，读不出它在做什么；对齐后内联脚本的开头可见（代价是 heredoc 正文
-进入尽力脱敏的范围）。`toolInput` 还要满足 SDK 的 `validToolInput`（至多 200 个 Unicode 码点、不含控制字符）：换行等控制字符先被替换为空格再合并空白，一条多行命令也不会因此
-无法解码。全篇的长度上限统一按 Unicode 码点计算（见 `truncate.ts`），不会把代理对拆散。
+（`redactTrajectoryText`），超过 100 个 Unicode 码点时截到前 100 个并追加 `…`（与参考客户端
+`summaryKind: "command"` 一致）；命令参数与 heredoc 正文中能被规则识别的 token/secret/password 等
+敏感片段会被替换为 `[REDACTED]`，但这仍是尽力而为的脱敏，不保证覆盖所有敏感文本。这里**不**在第一个
+`<<` 处截断，`cd x && python3 - <<'EOF' …` 这类命令的内联脚本开头可见（代价是 heredoc 正文进入尽力
+脱敏的范围）。`toolInput` 还要满足 SDK 的 `validToolInput`（至多 200 个 Unicode 码点、不含控制字符）：
+换行等控制字符先被替换为空格再合并空白，一条多行命令也不会因此无法解码。全篇的长度上限统一按 Unicode 码点计算（见 `truncate.ts`），不会把代理对拆散。
 
-当命令的第一个 token 是 `coforge` 或以 `/coforge` 结尾的路径时，Daemon 把它解析为语义
-工具，只记录该工具预先约定的安全摘要字段作为 `toolInput`，从不使用原始命令行或消息正文
-（`message send` 之后的 heredoc 消息体同样不会出现在 `message` 或 `toolInput` 里）；
-`message check` 使用 `checking_messages` 而不是 `running_command`/`tool_started`。语义工具集是
-一个封闭集合，与参考客户端保持一致：
-集合内的子命令才有语义身份，集合外的一律照普通命令上报，不再有代表"某个 CoForge 命令"的
-占位工具名。`inbox check` 不在集合内——它问的是 Computer 本地还握着什么，服务端 drain 才是
-`message check`：
+命令里的 `coforge` 调用（可执行文件名为 `coforge`，可以是路径）会被解析为语义工具，识别方式与参考
+客户端一致：跳过开头的 `NAME=value` 环境赋值；先看开头的 `sh`/`bash`/`zsh -c`（含 `-lc` 等）脚本；
+再在 `|`、`;`、`&&`、`||` 分隔的各段里找第一个 `coforge`。参数接受 `--flag value` 和 `--flag=value`，
+重复时取最后一个；遇到第一个 `<<` 或换行即停止读取，heredoc 正文（例如 `message send` 的消息体）
+永远不进入 `message` 或 `toolInput`。Daemon 只记录该工具预先约定的安全摘要字段作为 `toolInput`，
+从不使用原始命令行。`message check` 使用 `checking_messages`，provider 自带的
+`check_messages`/`receive_message` 工具同样如此。
+
+语义工具集是一个封闭集合，子命令、工具名与摘要格式都照参考客户端 1.0.47
+（`resolveRaftCliInvocation`、`summarizeToolInput`），标签共用 `tool-display.ts` 的 `TOOL_LABELS`。
+唯一有意的差别：参考客户端没有给下表 5 个频道工具写标签，会显示 `Using <name>…` 且无摘要；
+我们给它们补了标签，并上报频道。
 
 | CoForge CLI 子命令 | 语义工具 | `toolInput` 摘要 |
 | --- | --- | --- |
 | `message send` | `send_message` | `--target` |
 | `message check` | `check_messages`（`checking_messages`） | 无 |
 | `message read` | `read_history` | `--target` |
-| `message search` | `search_messages` | `--query`（截断到 120 个 Unicode 码点） |
-| `message resolve` / `message react` | `resolve_message` / `react_message` | 无 |
-| `channel mute` / `unmute` | `mute_channel` / `unmute_channel` | `--target` |
-| `thread unfollow` | `unfollow_thread` | `--target` |
-| `task list/create/convert/claim/unclaim/assign/update/amend/history/delete/receipt` | `list_tasks` 等对应的 `*_task(s)` | `--target`，若有 `--number` 则附加 `#<n>` |
+| `message search` | `search_messages` | `--query` |
+| `channel add-member` / `join` / `leave` | `add_channel_member` / `join_channel` / `leave_channel` | `--target` |
+| `channel update` / `lifecycle archive` / `lifecycle unarchive` / `remove-member` | `update_channel` / `archive_channel` / `unarchive_channel` / `remove_channel_member` | `--target`（参考客户端无标签、无摘要） |
+| `channel members <channel>` | `list_channel_members` | 位置参数里的频道（参考客户端无标签、无摘要） |
+| `task list` / `task create` | `list_tasks` / `create_tasks` | `--target` |
+| `task claim` | `claim_tasks` | `--target #t<n>,#t<m>`（没有 `--number` 时只有 `--target`） |
+| `task unclaim` / `task update` | `unclaim_task` / `update_task_status` | `--target #t<n>`，缺任一项则无 |
+| `attachment upload` | `upload_file` | `--path` |
 | `attachment view` | `view_file` | 无 |
-| `reminder schedule` | `schedule_reminder` | `--title`（截断到 40 个 Unicode 码点） |
+| `reminder schedule` | `schedule_reminder` | `--title`，超过 40 个 Unicode 码点截断并追加 `…` |
 | `reminder list` | `list_reminders` | 无 |
-| `reminder update/snooze/cancel/log/ack/dismiss` | 对应的 `*_reminder`/`reminder_log` | `--id` 前 8 个 Unicode 码点 |
-| `weekly-report *` | `weekly_report` | 无 |
-| 其他 `coforge` 子命令（含 `inbox check`、`workspace info`） | 无语义工具：照普通命令上报 `bash`/`running_command`，`toolInput` 为脱敏截断后的命令本身 |
+| `reminder cancel` | `cancel_reminder` | `#` + `--id` 前 8 个 Unicode 码点 |
+| 其他 `coforge` 子命令（如 `inbox check`、`workspace info`、`channel mute`、`task assign`、`reminder snooze`、`whoami`） | 无语义工具：照普通命令上报 `bash`/`running_command`，`toolInput` 为脱敏截断后的命令本身 |
 
 `glob`、`grep`、`web_fetch`、`web_search`、`todo_write` 等 Code Agent 工具同样只从一个预先
 约定的参数字段取 `toolInput` 摘要（`pattern`/`query`/`url`，均有长度上限），或在没有对应

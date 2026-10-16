@@ -25,10 +25,7 @@ import {
   canHideGeneralChannel,
   canListArchivedChannels,
 } from "./channel-authority.server";
-import {
-  assertCanManageWorkspaceSettings,
-  canCreateAgents,
-} from "#src/server/workspaces/member-role.server";
+import { canCreateAgents } from "#src/server/workspaces/member-role.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-purge.server";
 import { channelThreadRootWhere } from "#src/server/db/message-anchor.server";
@@ -1212,11 +1209,11 @@ export class PublicChannels {
     return { id: general.id, hidden };
   }
 
-  /** `#general` as a Workspace setting sees it, hidden or not; only an owner or admin may. */
+  /** `#general` as a Workspace setting sees it, hidden or not; only a role that manages every
+   * channel may, as `canHideGeneralChannel` says. */
   private async generalForSettings(workspaceId: string, userId: string) {
-    assertCanManageWorkspaceSettings(
-      await resolveActorServerRole(this.db, workspaceId, { userId }),
-    );
+    const role = await resolveActorServerRole(this.db, workspaceId, { userId });
+    if (!canHideGeneralChannel("general", role)) throw new AppError("ACCESS_DENIED");
     const general = await this.db.conversation.findUnique({
       where: { workspaceId_channelName: { workspaceId, channelName: "general" } },
       select: { id: true, hiddenFromWorkspaceAt: true },
@@ -1551,6 +1548,7 @@ export class PublicChannels {
               id: true,
               username: true,
               displayName: true,
+              description: true,
               avatarObjectKey: true,
             },
           },
@@ -1644,6 +1642,7 @@ export class PublicChannels {
             // roster (`agent-channel-management.server.ts`), which names people by it.
             username: row.user!.username,
             displayName: humanLabel(row.user!),
+            description: row.user!.description,
             avatarUrl: workspaceUserAvatarUrl(workspaceId, row.user!.id, row.user!.avatarObjectKey),
             serverRole,
             channelRole: row.channelRole,

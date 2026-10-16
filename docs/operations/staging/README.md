@@ -15,4 +15,5 @@ HTTPS.
 - [Container logs](container-logs.md): The journald logging driver, moving the journal to the data disk, and reading logs.
 - [GitHub Environment secrets (repository `staging` environment)](github-environment.md): GitHub Environment secrets and variables, bulk configuration, and when each kind of value takes effect.
 - [触发 Computer 本地分发发布](computer-release-trigger.md): Triggering a local Computer distribution release to staging, and why published versions are immutable.
+- [在 staging 上启用云电脑](../cloud-swarm/staging-bring-up.md): Staging Swarm token, Computer publish, computer image, and the manager `host` process.
 - [Personal GitHub connection](github-connection.md): The staging GitHub App configuration, its Environment values, and manual acceptance.

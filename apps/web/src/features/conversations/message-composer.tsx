@@ -129,9 +129,10 @@ function uploadAttachment(
 }
 
 /**
- * The chosen file as a small square next to the paperclip: an image thumbnail, or the
- * file-type icon for other files. Clicking it opens the preview with the file's details,
- * upload progress, and the download and remove actions.
+ * The chosen file beside the paperclip. An image is a square the same size as that icon
+ * (1.25rem) with a small corner, so it is not a circle and not an avatar. Any other file
+ * stays a small chip with its type icon. Clicking it opens the preview with the file's
+ * details, upload progress, and the download and remove actions.
  */
 function AttachmentChip({
   attachment,
@@ -168,16 +169,29 @@ function AttachmentChip({
         size="sm"
         noTextPadding
         aria-label={file.name}
-        className="h-auto rounded-md p-0 hover:bg-transparent"
+        className={
+          isImage
+            ? "size-5 shrink-0 overflow-hidden rounded-sm p-0 ring-1 ring-secondary ring-inset hover:bg-transparent"
+            : "h-auto rounded-md p-0 hover:bg-transparent"
+        }
       >
-        <Avatar
-          size="xs"
-          rounded={false}
-          src={isImage ? previewUrl : undefined}
-          alt=""
-          className="overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset"
-          placeholder={icon("size-4")}
-        />
+        {isImage ? (
+          previewUrl ? (
+            <img src={previewUrl} alt="" className="size-5 object-cover" />
+          ) : (
+            <span className="flex size-full items-center justify-center bg-secondary">
+              {icon("size-3")}
+            </span>
+          )
+        ) : (
+          <Avatar
+            size="xs"
+            rounded={false}
+            alt=""
+            className="overflow-hidden rounded-md bg-secondary ring-1 ring-secondary ring-inset"
+            placeholder={icon("size-4")}
+          />
+        )}
       </Button>
       <AriaPopover
         placement="top start"

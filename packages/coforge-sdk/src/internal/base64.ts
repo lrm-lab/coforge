@@ -8,20 +8,69 @@
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-const DIGITS = new Map<string, number>([...ALPHABET].map((character, digit) => [character, digit]));
+const ENCODING_DIGITS = Uint8Array.from({ length: ALPHABET.length }, (_, index) =>
+  ALPHABET.charCodeAt(index),
+);
+const ASCII_DECODER = new TextDecoder();
+const ENCODING_PAIRS = Uint16Array.from(
+  { length: 4096 },
+  (_, value) => (ENCODING_DIGITS[value >> 6]! << 8) | ENCODING_DIGITS[value & 0x3f]!,
+);
+
+const DIGITS = new Int16Array(128).fill(-1);
+for (let digit = 0; digit < ALPHABET.length; digit++) DIGITS[ALPHABET.charCodeAt(digit)] = digit;
+
+const DECODE_PAIRS = new Int16Array(128 * 128).fill(-1);
+for (let first = 0; first < ALPHABET.length; first++) {
+  for (let second = 0; second < ALPHABET.length; second++)
+    DECODE_PAIRS[(ALPHABET.charCodeAt(first) << 7) | ALPHABET.charCodeAt(second)] =
+      (first << 6) | second;
+}
 
 export function encodeBase64(bytes: Uint8Array): string {
-  let encoded = "";
-  for (let index = 0; index < bytes.length; index += 3) {
+  if (bytes.length === 0) return "";
+  const encoded = new Uint8Array(Math.ceil(bytes.length / 3) * 4);
+  let offset = 0;
+  let index = 0;
+  if (bytes.length >= 3) {
+    const words = new DataView(encoded.buffer);
+    for (; index + 5 < bytes.length; index += 6) {
+      const first = bytes[index]!;
+      const second = bytes[index + 1]!;
+      const third = bytes[index + 2]!;
+      const high = ENCODING_PAIRS[(first << 4) | (second >> 4)]!;
+      const low = ENCODING_PAIRS[((second & 0x0f) << 8) | third]!;
+      words.setUint32(offset, (high << 16) | low, false);
+      const fourth = bytes[index + 3]!;
+      const fifth = bytes[index + 4]!;
+      const sixth = bytes[index + 5]!;
+      const nextHigh = ENCODING_PAIRS[(fourth << 4) | (fifth >> 4)]!;
+      const nextLow = ENCODING_PAIRS[((fifth & 0x0f) << 8) | sixth]!;
+      words.setUint32(offset + 4, (nextHigh << 16) | nextLow, false);
+      offset += 8;
+    }
+    for (; index + 2 < bytes.length; index += 3) {
+      const first = bytes[index]!;
+      const second = bytes[index + 1]!;
+      const third = bytes[index + 2]!;
+      const high = ENCODING_PAIRS[(first << 4) | (second >> 4)]!;
+      const low = ENCODING_PAIRS[((second & 0x0f) << 8) | third]!;
+      words.setUint32(offset, (high << 16) | low, false);
+      offset += 4;
+    }
+  }
+  if (index < bytes.length) {
     const first = bytes[index]!;
     const second = bytes[index + 1];
     const third = bytes[index + 2];
-    encoded += ALPHABET[first >> 2];
-    encoded += ALPHABET[((first & 0x03) << 4) | ((second ?? 0) >> 4)];
-    encoded += second === undefined ? "=" : ALPHABET[((second & 0x0f) << 2) | ((third ?? 0) >> 6)];
-    encoded += third === undefined ? "=" : ALPHABET[third & 0x3f];
+    encoded[offset++] = ENCODING_DIGITS[first >> 2]!;
+    encoded[offset++] = ENCODING_DIGITS[((first & 0x03) << 4) | ((second ?? 0) >> 4)]!;
+    encoded[offset++] =
+      second === undefined ? 61 : ENCODING_DIGITS[((second & 0x0f) << 2) | ((third ?? 0) >> 6)]!;
+    encoded[offset++] = third === undefined ? 61 : ENCODING_DIGITS[third & 0x3f]!;
   }
-  return encoded;
+  // Every output byte is ASCII, so non-streaming UTF-8 decoding preserves the base64 spelling.
+  return ASCII_DECODER.decode(encoded);
 }
 
 export function decodeBase64(value: string): Uint8Array {
@@ -30,24 +79,36 @@ export function decodeBase64(value: string): Uint8Array {
   const bytes = new Uint8Array((value.length / 4) * 3);
   let offset = 0;
   const trailingPadding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
-  for (let index = 0; index < value.length; index += 4) {
-    const lastGroup = index + 4 === value.length;
-    // Padding is only ever the tail of the final group; `=` anywhere else is not base64.
-    const padding = lastGroup ? trailingPadding : 0;
-    if (!lastGroup && (value[index + 2] === "=" || value[index + 3] === "="))
-      throw new Error("Invalid base64 padding");
-    const digits: number[] = [];
+  let index = 0;
+  for (; index + 4 < value.length; index += 4) {
+    const first = value.charCodeAt(index);
+    const second = value.charCodeAt(index + 1);
+    const third = value.charCodeAt(index + 2);
+    const fourth = value.charCodeAt(index + 3);
+    // Earlier groups cannot contain padding, even when another character is invalid.
+    if (third === 61 || fourth === 61) throw new Error("Invalid base64 padding");
+    if ((first | second | third | fourth) > 127) throw new Error("Invalid base64 character");
+    const high = DECODE_PAIRS[(first << 7) | second]!;
+    const low = DECODE_PAIRS[(third << 7) | fourth]!;
+    if ((high | low) < 0) throw new Error("Invalid base64 character");
+    const group = (high << 12) | low;
+    bytes[offset++] = (group >> 16) & 0xff;
+    bytes[offset++] = (group >> 8) & 0xff;
+    bytes[offset++] = group & 0xff;
+  }
+  if (index < value.length) {
+    const padding = trailingPadding;
+    let group = 0;
     for (let position = 0; position < 4 - padding; position++) {
-      const digit = DIGITS.get(value[index + position]!);
-      if (digit === undefined) throw new Error("Invalid base64 character");
-      digits.push(digit);
+      const digit = DIGITS[value.charCodeAt(index + position)];
+      if (digit === undefined || digit < 0) throw new Error("Invalid base64 character");
+      group = (group << 6) | digit;
     }
     // Refuse a group whose unused trailing bits are set: `Zh==` decodes to `f` the way `Zg==` does,
     // so accepting it would admit a second spelling of the same bytes.
-    if (padding === 2 && (digits[1]! & 0x0f) !== 0) throw new Error("Invalid base64 padding");
-    if (padding === 1 && (digits[2]! & 0x03) !== 0) throw new Error("Invalid base64 padding");
-    const group =
-      (digits[0]! << 18) | ((digits[1] ?? 0) << 12) | ((digits[2] ?? 0) << 6) | (digits[3] ?? 0);
+    if (padding === 2 && (group & 0x0f) !== 0) throw new Error("Invalid base64 padding");
+    if (padding === 1 && (group & 0x03) !== 0) throw new Error("Invalid base64 padding");
+    group <<= padding * 6;
     bytes[offset++] = (group >> 16) & 0xff;
     if (padding < 2) bytes[offset++] = (group >> 8) & 0xff;
     if (padding < 1) bytes[offset++] = group & 0xff;

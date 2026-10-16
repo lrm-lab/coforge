@@ -1,47 +1,16 @@
 import { RedisClient } from "bun";
-import { redisUrlFor } from "#src/server/redis-url.server";
 import { REMINDER_CAPABILITY } from "@lrm/coforge-sdk/internal";
-import type { ReminderCapabilityLease } from "./reminders.server";
-import { workspaceRedisKey } from "#src/server/redis-keys.server";
+import { RedisComputerCapabilityLease } from "#src/server/computers/computer-capability-lease.server";
+import { redisUrlFor } from "#src/server/redis-url.server";
 
-const TTL_SECONDS = "90";
-export class RedisReminderCapabilityLease implements ReminderCapabilityLease {
-  constructor(
-    private readonly redis: {
-      set(key: string, value: string, ex: "EX", seconds: string): Promise<unknown>;
-      get(key: string): Promise<string | null>;
-    },
-  ) {}
-  record(workspaceId: string, computerId: string, capabilities: readonly string[]) {
-    return this.redis.set(
-      this.key(workspaceId, computerId),
-      capabilities.includes(REMINDER_CAPABILITY) ? "supported" : "unsupported",
-      "EX",
-      TTL_SECONDS,
-    );
-  }
-  async supports(workspaceId: string, computerId: string) {
-    return (await this.redis.get(this.key(workspaceId, computerId))) === "supported";
-  }
-  async refresh(workspaceId: string, computerId: string) {
-    const key = this.key(workspaceId, computerId);
-    if ((await this.redis.get(key)) === "supported")
-      await this.redis.set(key, "supported", "EX", TTL_SECONDS);
-  }
-  private key(workspaceId: string, computerId: string) {
-    return workspaceRedisKey({
-      workspaceId,
-      computerId,
-      name: "reminder-capability",
-      version: "v1",
-    });
-  }
-}
+let lease: RedisComputerCapabilityLease | undefined;
 
-let lease: RedisReminderCapabilityLease | undefined;
+/** Whether a Computer's daemon runs reminders (`reminder:v1`). */
 export function getReminderCapabilityLease() {
-  lease ??= new RedisReminderCapabilityLease(
+  lease ??= new RedisComputerCapabilityLease(
     new RedisClient(redisUrlFor("reminder capability leases")),
+    REMINDER_CAPABILITY,
+    "reminder-capability",
   );
   return lease;
 }

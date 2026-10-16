@@ -5,7 +5,7 @@ import {
   utf8Encoder,
   utf8Decoder,
 } from "@lrm/coforge-sdk/internal";
-import { isRecord } from "@lrm/coforge-sdk/internal";
+import { AGENT_MIGRATION_CAPABILITY, isRecord } from "@lrm/coforge-sdk/internal";
 import { ComputerRegistrationError } from "#src/server/computers/registration.server";
 import {
   handleRequestError,
@@ -333,6 +333,8 @@ export type DaemonRuntimeReadyPorts = {
     record(workspaceId: string, computerId: string, values: readonly string[]): Promise<unknown>;
   };
   reminderRecovery?: { snapshotAssigned(workspaceId: string, computerId: string): Promise<void> };
+  /** Moves on the Computer's Agent migrations after it was away (`AgentMigrationOrchestrator.recover`). */
+  migrationRecovery?: { recover(workspaceId: string, computerId: string): Promise<void> };
   observe?: (
     scope: { workspaceId: string; computerId: string },
     metadata: ComputerObservation,
@@ -348,6 +350,7 @@ export const createDaemonRuntimeReadyMethod =
     restarts,
     capabilities,
     reminderRecovery,
+    migrationRecovery,
     observe,
     upgrades,
     lifecycle,
@@ -414,6 +417,22 @@ export const createDaemonRuntimeReadyMethod =
       stage = "reminder_recovery";
       if (request.capabilities?.includes("reminder:v1"))
         await reminderRecovery?.snapshotAssigned(request.workspaceId, request.computerId);
+      // Not a stage, and not awaited: moving the Computer's migrations on takes Agent locks and
+      // publishes, and none of that may keep the whole Computer from coming back. A recovery
+      // that fails is tried again on the next reconnect.
+      if (request.capabilities?.includes(AGENT_MIGRATION_CAPABILITY))
+        void migrationRecovery?.recover(request.workspaceId, request.computerId).catch((error) =>
+          console.warn(
+            JSON.stringify({
+              event: "agent_migration:recovery_failed",
+              request_id: request.requestId,
+              workspace_id: request.workspaceId,
+              computer_id: request.computerId,
+              outcome: "failed",
+              error_type: errorType(error),
+            }),
+          ),
+        );
       stage = "upgrade_recovery";
       if (upgrades && request.computerVersion?.trim())
         await upgrades.ready(

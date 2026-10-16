@@ -104,7 +104,9 @@ test("live OpenRouter Pi delivery writes an Agent reply to canonical DB", async 
   });
   const piProvider = new DiagnosticPiProvider();
   try {
-    user = await db.user.create({ data: { username: `e2e-${suffix.slice(0, 8)}` } });
+    user = await db.user.create({
+      data: { displayName: `e2e-${suffix.slice(0, 8)}`, username: `e2e-${suffix.slice(0, 8)}` },
+    });
     workspace = await db.workspace.create({
       data: {
         slug: `e2e-${suffix}`,

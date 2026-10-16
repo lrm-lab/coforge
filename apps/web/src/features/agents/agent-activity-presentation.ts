@@ -157,13 +157,14 @@ function activityAtoms(observation: ActivityObservation): ActivityAtom[] {
   const { detailKind: kind, level, detail } = observation;
   // Any activity reclassified as subagent_activity (a trajectory
   // entry carrying a subagent scope) shows one unified label, regardless of
-  // its underlying entries.
+  // its underlying entries. A subagent progress row's phase ("Subagent started
+  // (Explore)") is its detail; a reclassified trajectory row has none.
   if (kind === AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY && level !== "error") {
     return [
       {
         row: {
           label: "Subagent working",
-          detail: "",
+          detail,
           recentLabel: "Subagent working…",
           currentLabel: "Subagent working…",
           tone: "working",

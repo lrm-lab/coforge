@@ -22,7 +22,12 @@ const config = {
 };
 
 test("authorization binds the browser and issues the Agent owner's current user token", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const now = Date.parse("2026-09-16T20:00:00Z");
   let exchanges = 0;
   let verifier = "";
@@ -90,7 +95,12 @@ test("authorization binds the browser and issues the Agent owner's current user 
 });
 
 test("account replacement preserves the old connection until a new authorization succeeds", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   let failExchange = false;
   let identity = 81;
   const connection = new GitHubConnection(db, config, async (url, init) => {
@@ -131,7 +141,12 @@ test("account replacement preserves the old connection until a new authorization
 });
 
 test("reauthorization binds the original GitHub identity while replacement may change it", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   let identity = 91;
   const connection = new GitHubConnection(db, config, async (url, init) => {
     if (url.endsWith("/access_token"))
@@ -169,7 +184,12 @@ test("reauthorization binds the original GitHub identity while replacement may c
 });
 
 test("sync() drives pending installation, suspended installs, and usable paginated installations; overview() reflects each sync from the database", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   let phase = "empty";
   const installation = (id: number, suspended: boolean) => ({
     id,
@@ -235,7 +255,12 @@ test("sync() drives pending installation, suspended installs, and usable paginat
 });
 
 test("authorization cannot replay after token exchange followed by a transaction abort", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   let abort = false;
   let exchanges = 0;
   const connection = new GitHubConnection(
@@ -274,7 +299,12 @@ test("authorization cannot replay after token exchange followed by a transaction
 });
 
 test("concurrent reads rotate an expired token once; revocation requires reauthorization", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   let now = Date.now();
   let refreshes = 0;
   let revoked = false;
@@ -314,7 +344,12 @@ test("concurrent reads rotate an expired token once; revocation requires reautho
 });
 
 test("repository reads use the personal installation endpoint, paginate, and disconnect cancels pending authorization", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const connection = new GitHubConnection(db, config, async (url) => {
     if (url.endsWith("/access_token"))
       return Response.json({
@@ -394,7 +429,12 @@ function graphqlBody(init: RequestInit): { query: string; variables: Record<stri
 const isOverviewQuery = (init: RequestInit) => graphqlBody(init).query.includes("history(first: 5");
 
 test("repository overview verifies the selected installation and maps GitHub repository data via GraphQL", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const requested: string[] = [];
   const connection = new GitHubConnection(db, config, async (url, init) => {
     requested.push(url);
@@ -673,7 +713,12 @@ test("repository overview verifies the selected installation and maps GitHub rep
 });
 
 test("repository overview denies identity mismatches and treats a null default branch ref as empty", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   let metadataId = 100;
   let graphqlReads = 0;
   const connection = new GitHubConnection(db, config, async (url) => {
@@ -738,7 +783,12 @@ test("repository overview denies identity mismatches and treats a null default b
 });
 
 test("repository overview chunks per-path history requests and leaves entries beyond the cap without a last commit", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const ENTRY_COUNT = 120;
   const entries = Array.from({ length: ENTRY_COUNT }, (_, index) => ({
     name: `file${String(index).padStart(3, "0")}`,
@@ -834,7 +884,12 @@ test("repository overview chunks per-path history requests and leaves entries be
 });
 
 test("repository overview denies a forbidden top-level GraphQL error but tolerates a field-level error", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   let forbidden = true;
   const connection = new GitHubConnection(db, config, async (url) => {
     if (url.endsWith("/access_token"))
@@ -948,7 +1003,12 @@ test("repository overview denies a forbidden top-level GraphQL error but tolerat
 });
 
 test("expired and superseded attempts fail; a transient API error preserves the rotated token", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   let now = Date.now();
   let failRead = false;
   let refreshes = 0;
@@ -995,7 +1055,12 @@ test("expired and superseded attempts fail; a transient API error preserves the 
 });
 
 test("disconnect waits for an in-flight refresh and no later read can resurrect credentials", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const refreshing = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let now = Date.now();
@@ -1038,7 +1103,12 @@ test("disconnect waits for an in-flight refresh and no later read can resurrect 
 });
 
 test("a slow GitHub read does not block a concurrent disconnect (only token refresh holds the advisory lock)", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const reading = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let slow = false;
@@ -1082,7 +1152,12 @@ test("a slow GitHub read does not block a concurrent disconnect (only token refr
 });
 
 test("overview() reads only the database and reflects rows written by sync()", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const installationPayload = (suspended: boolean) => ({
     id: 501,
     app_id: config.appId,
@@ -1152,7 +1227,12 @@ test("overview() reads only the database and reflects rows written by sync()", a
 });
 
 test("sync() fetches /user and /user/installations concurrently, paginates, drops suspended installations, and deletes stale rows", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const installation = (id: number, suspended: boolean) => ({
     id,
     app_id: config.appId,
@@ -1231,8 +1311,18 @@ test("sync() fetches /user and /user/installations concurrently, paginates, drop
 });
 
 test("webhook events keep the installation cache in sync without calling GitHub", async () => {
-  const userA = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
-  const userB = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const userA = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
+  const userB = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const throwingConnection = new GitHubConnection(db, config, async () => {
     throw new Error("webhook processing must not call GitHub");
   });
@@ -1368,7 +1458,12 @@ test("webhook events keep the installation cache in sync without calling GitHub"
 });
 
 test("overview() rotates a token expiring within the hour in the background, once per minute per user", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   let now = 1_800_000_000_000;
   let refreshes = 0;
   const http = async (url: string, init: RequestInit) => {
@@ -1413,7 +1508,12 @@ const isForbiddenReadEndpoint = (url: string) =>
   url === "https://api.github.com/user" || url.includes("/user/installations");
 
 test("repositoryTree fetches the recursive default-branch tree and maps entry types", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const repositoryId = randomRepositoryId();
   const requested: string[] = [];
   const connection = new GitHubConnection(db, config, async (url, init) => {
@@ -1479,9 +1579,19 @@ test("repositoryTree fetches the recursive default-branch tree and maps entry ty
 });
 
 test("repositoryTree revalidates with If-None-Match per User and serves the cached tree on 304", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const repositoryId = randomRepositoryId();
-  const otherUser = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const otherUser = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   let treeRequests = 0;
   let githubUserId = 502;
   const connection = new GitHubConnection(db, config, async (url, init) => {
@@ -1545,7 +1655,12 @@ test("repositoryTree revalidates with If-None-Match per User and serves the cach
 });
 
 test("repositoryTree denies a repository identity mismatch and never requests the tree", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const repositoryId = randomRepositoryId();
   const requested: string[] = [];
   const connection = new GitHubConnection(db, config, async (url) => {
@@ -1603,7 +1718,12 @@ test("repositoryObject rejects invalid paths before touching GitHub or the datab
 });
 
 test("repositoryObject resolves a path against HEAD, sorts entries dirs-first, and makes exactly one request", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const repositoryId = randomRepositoryId();
   const requested: string[] = [];
   let graphqlCalls = 0;
@@ -1668,7 +1788,12 @@ test("repositoryObject resolves a path against HEAD, sorts entries dirs-first, a
 });
 
 test("repositoryObject addresses content by oid, denies a databaseId mismatch, and treats a null object as NOT_FOUND", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const repositoryId = randomRepositoryId();
   const oid = "8".repeat(40);
   let response: { databaseId: number; object: unknown } = {
@@ -1719,7 +1844,12 @@ test("repositoryObject addresses content by oid, denies a databaseId mismatch, a
 });
 
 test("repositoryObject returns Blob text for a small file and marks binary, truncated, and oversized blobs unpreviewable", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const repositoryId = randomRepositoryId();
   let object: {
     oid: string;
@@ -1817,7 +1947,12 @@ test("repositoryObject returns Blob text for a small file and marks binary, trun
 });
 
 test("repositoryDirectoryCommits returns the directory's latest commit and each entry's last commit, and rejects a blob path", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const repositoryId = randomRepositoryId();
   const connection = new GitHubConnection(db, config, async (url, init) => {
     if (url.endsWith("/access_token"))
@@ -1978,7 +2113,12 @@ test("repositoryDirectoryCommits returns the directory's latest commit and each 
 });
 
 test("repositoryRaw fetches raw contents after an identity check and reports empty or missing paths as NOT_FOUND", async () => {
-  const user = await db.user.create({ data: { username: `github-${crypto.randomUUID()}` } });
+  const user = await db.user.create({
+    data: {
+      displayName: `github-${crypto.randomUUID()}`,
+      username: `github-${crypto.randomUUID()}`,
+    },
+  });
   const repositoryId = randomRepositoryId();
   const requested: string[] = [];
   const connection = new GitHubConnection(db, config, async (url, init) => {

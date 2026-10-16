@@ -41,6 +41,7 @@ import {
   LocalDaemonLauncher,
   readOperatingSystem,
   resolveDaemonExecutablePath,
+  COFORGE_DAEMON_SERVER_URL,
   runMachineSupervisor,
 } from "@lrm/coforge-daemon";
 import { createWorkspaceLookup } from "#src/workspace/lookup";
@@ -55,6 +56,8 @@ import { followComputerLogs } from "#src/logging/computer-logs";
 import { COFORGE_COMPUTER_VERSION as VERSION } from "./version";
 import { createStatusPorts } from "#src/status/create-status-ports";
 import { createStatusCommand, type StatusCommand } from "#src/status/status-command";
+import { prepareContainerBinding } from "#src/host/container-binding";
+import { runHostProcess } from "#src/host/run-host";
 import { runInstallationSource } from "#src/release/installation-source";
 
 export interface LoginCommand {
@@ -96,6 +99,17 @@ export interface ForegroundCommand {
   run(): Promise<void>;
 }
 
+export interface HostCommand {
+  run(options: {
+    serverUrl: string;
+    token: string;
+    nodeKey: string;
+    name: string;
+    image: string;
+    pollIntervalMs: number;
+  }): Promise<void>;
+}
+
 export type { StatusCommand };
 
 interface CliDependencies {
@@ -106,6 +120,7 @@ interface CliDependencies {
   logs?: LogsCommand;
   foreground?: ForegroundCommand;
   status?: StatusCommand;
+  host?: HostCommand;
 }
 
 export async function runCli(
@@ -269,6 +284,36 @@ export async function runCli(
       json = options.json ?? false;
       return requireStatus(dependencies).run({ json });
     });
+  program
+    .command("host")
+    .description("Run the Swarm manager process that places cloud Computer services.")
+    .option("--server-url <url>", "CoForge server URL. Defaults to COFORGE_SERVER_URL.")
+    .option("--token <token>", "Cluster token. Defaults to COFORGE_CLUSTER_TOKEN.")
+    .option(
+      "--node-key <key>",
+      "Stable key for this manager. Defaults to COFORGE_CLUSTER_NODE_KEY.",
+    )
+    .option("--name <name>", "Name reported for this cluster. Defaults to COFORGE_CLUSTER_NAME.")
+    .option("--image <image>", "Computer image. Defaults to COFORGE_COMPUTER_IMAGE.")
+    .option("--poll-interval <ms>", "Milliseconds between claim polls", "5000")
+    .action(
+      (options: {
+        serverUrl?: string;
+        token?: string;
+        nodeKey?: string;
+        name?: string;
+        image?: string;
+        pollInterval: string;
+      }) =>
+        requireHost(dependencies).run({
+          serverUrl: hostSetting(options.serverUrl, "COFORGE_SERVER_URL"),
+          token: hostSetting(options.token, "COFORGE_CLUSTER_TOKEN"),
+          nodeKey: hostSetting(options.nodeKey, "COFORGE_CLUSTER_NODE_KEY"),
+          name: hostSetting(options.name, "COFORGE_CLUSTER_NAME"),
+          image: hostSetting(options.image, "COFORGE_COMPUTER_IMAGE"),
+          pollIntervalMs: Number(options.pollInterval),
+        }),
+    );
 
   if (args.length === 0) {
     program.outputHelp();
@@ -335,6 +380,17 @@ function requireForeground(dependencies: CliDependencies): ForegroundCommand {
 function requireStatus(dependencies: CliDependencies): StatusCommand {
   if (!dependencies.status) throw new Error("Status is unavailable in this build");
   return dependencies.status;
+}
+
+function hostSetting(flag: string | undefined, envName: string): string {
+  const value = flag?.trim() || process.env[envName]?.trim() || "";
+  if (!value) throw new Error(`host requires ${envName}`);
+  return value;
+}
+
+function requireHost(dependencies: CliDependencies): HostCommand {
+  if (!dependencies.host) throw new Error("Host process is unavailable in this build");
+  return dependencies.host;
 }
 
 function createLoginCommand(
@@ -759,14 +815,17 @@ export async function runComputer(): Promise<void> {
           }),
         ),
         foreground: {
-          run: () =>
-            runMachineSupervisor([
+          run: async () => {
+            await prepareContainerBinding(process.env, stateDirectory, COFORGE_DAEMON_SERVER_URL);
+            await runMachineSupervisor([
               "--socket",
               resolveDaemonSocketPath({ platform: platform.os, stateDirectory }),
               "--state-directory",
               stateDirectory,
-            ]),
+            ]);
+          },
         },
+        host: { run: runHostProcess },
       },
       io,
     );

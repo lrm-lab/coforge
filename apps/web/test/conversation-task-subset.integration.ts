@@ -17,7 +17,9 @@ async function fixture() {
   const short = crypto.randomUUID().slice(0, 8);
   const [alice, bob, outsider] = await Promise.all(
     ["alice", "bob", "outsider"].map((name) =>
-      db.user.create({ data: { username: `subset-${name}-${short}` } }),
+      db.user.create({
+        data: { displayName: `subset-${name}-${short}`, username: `subset-${name}-${short}` },
+      }),
     ),
   );
   const workspace = await db.workspace.create({

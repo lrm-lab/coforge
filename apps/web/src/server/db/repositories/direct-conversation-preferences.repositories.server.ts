@@ -12,8 +12,14 @@ import {
   viewerDirectConversationSql,
   viewerDirectConversationWhere,
 } from "#src/server/conversations/viewer-direct-conversations.server";
-import { messagePreviewLine } from "#src/server/conversations/message-preview-line.server";
-import type { MessageMentionRef } from "#src/server/conversations/mentions.server";
+import {
+  messagePreviewLine,
+  type PreviewMentionRef,
+} from "#src/server/conversations/message-preview-line.server";
+import {
+  BROWSER_MESSAGE_MENTIONS_SELECT,
+  browserMessageMention,
+} from "#src/server/conversations/mentions.server";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import {
   peoplePeer,
@@ -216,13 +222,13 @@ export class PrismaDirectConversationPreferences {
     if (latest.length === 0) return new Map<string, { createdAt: string; preview: string }>();
     const mentionRows = await this.db.messageMention.findMany({
       where: { messageId: { in: latest.map((row) => row.messageId) } },
-      select: { messageId: true, kind: true, actorId: true, handle: true },
+      select: { messageId: true, ...BROWSER_MESSAGE_MENTIONS_SELECT.select },
     });
-    const mentionsByMessage = new Map<string, MessageMentionRef[]>();
-    for (const { messageId, kind, actorId, handle } of mentionRows) {
-      const mentions = mentionsByMessage.get(messageId) ?? [];
-      mentions.push({ kind, actorId, handle });
-      mentionsByMessage.set(messageId, mentions);
+    const mentionsByMessage = new Map<string, PreviewMentionRef[]>();
+    for (const row of mentionRows) {
+      const mentions = mentionsByMessage.get(row.messageId) ?? [];
+      mentions.push(browserMessageMention(row));
+      mentionsByMessage.set(row.messageId, mentions);
     }
     return new Map(
       latest.map((row) => [

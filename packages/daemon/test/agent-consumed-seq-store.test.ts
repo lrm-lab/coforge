@@ -30,6 +30,50 @@ const storeDirectory = (root: string, agentId = "agent-1") =>
 const storePath = (root: string, agentId = "agent-1") =>
   join(storeDirectory(root, agentId), "consumed-seqs.json");
 
+test("cursor roots capture the environment at construction while explicit and empty roots keep their meaning", () => {
+  const firstRoot = temporaryStateDirectory();
+  const secondRoot = temporaryStateDirectory();
+  const explicitRoot = temporaryStateDirectory();
+  const previous = Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR;
+  const firstState = {
+    targets: { "@ada": { conversationId: "conversation-1", seq: 7 } },
+    aliases: {},
+    nextReadOrder: 1,
+  };
+  const secondState = {
+    targets: { "@ada": { conversationId: "conversation-1", seq: 8 } },
+    aliases: {},
+    nextReadOrder: 1,
+  };
+  const explicitState = {
+    targets: { "@ada": { conversationId: "conversation-1", seq: 9 } },
+    aliases: {},
+    nextReadOrder: 1,
+  };
+  try {
+    Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = firstRoot;
+    const first = new AgentConsumedSeqStore();
+    Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = secondRoot;
+    const second = new AgentConsumedSeqStore();
+    const explicit = new AgentConsumedSeqStore(explicitRoot);
+
+    first.write("agent-1", firstState);
+    second.write("agent-1", secondState);
+    explicit.write("agent-1", explicitState);
+    expect(new AgentConsumedSeqStore(firstRoot).read("agent-1")).toEqual(firstState);
+    expect(new AgentConsumedSeqStore(secondRoot).read("agent-1")).toEqual(secondState);
+
+    Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = "";
+    expect(() => new AgentConsumedSeqStore()).toThrow(
+      "consumed-sequence state directory is required",
+    );
+    expect(new AgentConsumedSeqStore(explicitRoot).read("agent-1")).toEqual(explicitState);
+  } finally {
+    if (previous === undefined) delete Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR;
+    else Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = previous;
+  }
+});
+
 test("writes one snapshot in the consumed-seqs shape and reads it back", async () => {
   const stateDirectory = temporaryStateDirectory();
   const store = new AgentConsumedSeqStore(stateDirectory);

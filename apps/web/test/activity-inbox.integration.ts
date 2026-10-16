@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
@@ -791,12 +792,14 @@ test("direct messages between members, and a member's with themself, are listed 
     ).toEqual([withSelf.conversationId]);
     expect(await inbox.navAttention(workspace.id, alice.id)).toEqual({ unread: 0 });
 
-    // A member without a display name goes by their username.
+    // A member with a blank display name reads as the placeholder, never by their username.
     const withCarol = await openPeopleDirectConversation(db, workspace.id, alice.id, carol.id);
     const carolWithAlice = await memberOf(withCarol.conversationId, carol.id);
     await post(withCarol.conversationId, carolWithAlice.id, "hi alice");
     const [newest] = (await inbox.list(workspace.id, alice.id, { filter: "all" })).items;
-    expect(newest!.place.kind === "direct" && newest!.place.peer.displayName).toBe(carol.username);
+    expect(newest!.place.kind === "direct" && newest!.place.peer.displayName).toBe(
+      UNNAMED_PERSON_NAME,
+    );
   } finally {
     await cleanup(db, suffix);
   }

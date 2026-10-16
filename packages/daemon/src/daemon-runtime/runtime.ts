@@ -3,6 +3,7 @@ import {
   AgentProcessCleanupError,
   type AgentRuntimeConfig,
   type AgentRuntimeEvent,
+  type AgentSession,
   type CodeAgentProvider,
   type UsageSnapshot,
 } from "#src/code-agent/contract";
@@ -13,6 +14,7 @@ import { FileConversationSessionStore } from "#src/persistence/conversation-sess
 import { escapePathIdentity } from "#src/persistence/path-scope";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
 import { CompactionTracker } from "#src/agent-runtime/compaction-tracker";
+import { subagentProgressDetail } from "#src/agent-runtime/subagent-progress-activity";
 import {
   buildRuntimeErrorActivity,
   buildRuntimeErrorFingerprintFenceActivity,
@@ -43,7 +45,7 @@ import {
   agentStartupInput,
 } from "#src/agent-runtime/agent-startup";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
-import { toolActivity } from "#src/code-agent/tool-activity";
+import { toolStartActivity } from "#src/code-agent/tool-activity";
 export type DaemonConfig = {
   workspaceId: string;
   computerId: string;
@@ -92,6 +94,7 @@ import {
   type CodeAgentModelCatalog,
   type UsageScanResponse,
   REMINDER_CAPABILITY,
+  AGENT_MIGRATION_CAPABILITY,
   type AgentReminderOperationRequest,
   type LocalReminderRequest,
   type ReminderJob,
@@ -113,6 +116,8 @@ import {
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
+import { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
+import { AgentMigrationBucketClient } from "#src/connection/agent-migration-bucket-client";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
 import {
   agentContextReportOutcome,
@@ -136,6 +141,11 @@ import {
   readAgentWorkspaceFile,
 } from "#src/agent-runtime/agent-workspace-files";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
+import {
+  ProviderProgress,
+  STALLED_RECOVERY_EXIT_TIMEOUT_MS,
+  shouldRecoverStalledRuntime,
+} from "./stalled-recovery";
 import { AgentMessageOperations } from "./agent-message-operations";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
@@ -178,6 +188,9 @@ import { diagnosticErrorCode, diagnosticErrorName } from "#src/platform/diagnost
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
+
+/** Per-provider reading deadline supplied by a runtime usage scan. */
+export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
 
 /**
  * The injectable half of Code Agent discovery. `runtimes` is the fast, always-awaited probe;
@@ -288,12 +301,22 @@ type AgentInputQueue = {
 type ActivityLaunch = PublishedActivityLaunch & {
   startup?: AgentStartup;
   trajectory?: Pick<ActivityTrajectory, "flush" | "dispose">;
+  /** When the provider last reported anything, and its open tool calls (`stalled-recovery.ts`). */
+  progress?: ProviderProgress;
   // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
   // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
   // — `AgentSession.onExit` itself carries no exit code/signal, so this is the only fact the
   // core has for that decision (see agent-runtime/runtime-error-activity.ts).
   crashDetail?: RuntimeErrorEvent;
 };
+
+/** A launch found stalled, and what its restart needs (`#stalledRuntime`). */
+type StalledRuntime = Readonly<{
+  launch: ActivityLaunch;
+  session: AgentSession;
+  restart: AgentRestartConfig;
+  silentForMs: number;
+}>;
 
 const TURN_ACTIVITY_EVENT_TYPES = new Set<AgentRuntimeEvent["type"]>([
   "text-delta",
@@ -428,6 +451,8 @@ export class DaemonRuntime {
   readonly #startBuffers = new Map<string, AgentMessageDelivery[]>();
   /** Agents whose in-flight launch is a message wake, which presents what waits as one notice. */
   readonly #wakeLaunches = new Set<string>();
+  /** Agents whose stalled provider is being restarted; messages meanwhile wait for the relaunch. */
+  readonly #stalledRecoveries = new Set<string>();
   /** Per-Agent delivery hold after retryable runtime errors: backoff, fingerprint fence, and the
    * backoff's release timer. */
   readonly #runtimeErrorHold = new RuntimeErrorDeliveryHold({
@@ -435,6 +460,9 @@ export class DaemonRuntime {
     flush: (agentId, held) => this.#flushHeldDeliveries(agentId, held),
   });
   readonly #reminders: ReminderScheduler;
+  /** This Computer's Agent migration runs; absent when the transport cannot reach the route. */
+  readonly #migrations: AgentMigrationRunner | undefined;
+  #migrationsClosed: Promise<void> | undefined;
   readonly #agentInboxes = new Map<string, AgentInboxStateMachine>();
   readonly #appInboxes = new Map<string, Promise<AgentAppInbox>>();
   readonly #notifiedAppItems = new Map<string, Map<string, Promise<boolean>>>();
@@ -593,7 +621,11 @@ export class DaemonRuntime {
         shouldHold: (agentId) => this.#deliveryQueue.shouldHold(agentId),
         queued: (agentId) => this.#deliveryQueue.pending(agentId),
         enqueue: (agentId, message) => this.#deliveryQueue.enqueue(agentId, message),
-        busy: (agentId) => this.#deliveryQueue.busy(agentId),
+        busy: (agentId) => {
+          if (!this.#deliveryQueue.isBusy(agentId))
+            this.#currentActivityLaunches.get(agentId)?.progress?.noteTurnStarted();
+          this.#deliveryQueue.busy(agentId);
+        },
         noticeSettled: (agentId) => {
           const launch = this.#currentActivityLaunches.get(agentId);
           if (launch) this.#reconcileIdleTurn(agentId, launch);
@@ -644,6 +676,21 @@ export class DaemonRuntime {
       },
       (job, occurrence) => this.#acceptReminderDue(job, occurrence.late),
     );
+    // The transport is replaced on each start, so the runner reaches the route through whichever
+    // one is current.
+    this.#migrations = this.#transport.agentMigrationServer
+      ? new AgentMigrationRunner({
+          server: () => this.#transport.agentMigrationServer!(),
+          bucket: new AgentMigrationBucketClient(),
+          agents: {
+            stop: (agentId) => this.stopAgent(agentId),
+            isRunning: (agentId) => this.#agentProcessManager.runningAgentIds().includes(agentId),
+          },
+          workspaceDirectory: (agentId) =>
+            agentWorkspaceDirectory(connection.workspaceRoot, connection.workspaceId, agentId),
+          stateDirectory,
+        })
+      : undefined;
     const state = new AgentRuntimeState(
       // Control state lives only in this process: the server
       // re-dispatches what should still be running after a restart, so a persisted record could
@@ -760,7 +807,7 @@ export class DaemonRuntime {
       const snapshot =
         (await codeAgentProvider.readUsage({
           workingDirectory: this.#connection.workspaceRoot,
-          timeoutMs: 10_000,
+          timeoutMs: USAGE_SCAN_READ_TIMEOUT_MS,
         })) ?? this.#currentObservedUsage(provider);
       return usageScanReading(snapshot, now);
     } catch (error) {
@@ -1115,6 +1162,26 @@ export class DaemonRuntime {
           void this.#reminders.apply(sync).catch(() => {});
         }),
       );
+      const migrations = this.#migrations;
+      if (migrations) {
+        // Before any lease is taken, so nothing it clears can belong to a run.
+        await migrations.pruneLeftovers().catch((error: unknown) =>
+          logger.warn("Clearing what Agent migrations left behind failed", {
+            event: "agent_migration:prune_failed",
+            error_code: diagnosticErrorName(error),
+          }),
+        );
+        this.#subscribe(
+          this.#transport.onAgentMigrationLease?.((lease) => {
+            void migrations.lease(lease);
+          }),
+        );
+        this.#subscribe(
+          this.#transport.onAgentMigrationCancel?.((cancel) => {
+            void migrations.cancel(cancel).catch(() => {});
+          }),
+        );
+      }
       await this.#transport.start(token, {
         workspaceId: connection.workspaceId,
         computerId: connection.computerId,
@@ -1143,7 +1210,10 @@ export class DaemonRuntime {
           ...readOperatingSystem(),
           recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds ?? [],
           recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds ?? [],
-          capabilities: [REMINDER_CAPABILITY],
+          capabilities: [
+            REMINDER_CAPABILITY,
+            ...(this.#migrations ? [AGENT_MIGRATION_CAPABILITY] : []),
+          ],
         }),
         signal,
       );
@@ -1650,6 +1720,11 @@ export class DaemonRuntime {
     try {
       this.#assertRunning();
       this.#assertAgentNotStopping(agentId);
+      if (this.#migrations?.holds(agentId))
+        throw new AgentPreflightError(
+          `Agent workspace is moving to another Computer: ${agentId}`,
+          "AGENT_MIGRATING",
+        );
     } catch (error) {
       return Promise.reject(error);
     }
@@ -2311,7 +2386,10 @@ export class DaemonRuntime {
         },
       };
       launch.trajectory = trajectory;
+      const progress = new ProviderProgress();
+      launch.progress = progress;
       const unsubscribe = runtime.session.subscribe((event) => {
+        progress.observe(event);
         const startupFailed = current() && launch.startup?.observe(event);
         const turnActivity =
           event.type === "activity"
@@ -2627,7 +2705,7 @@ export class DaemonRuntime {
       // Providers report only WHAT happened (tool-start: name + raw input); the
       // daemon core alone decides what Activity that is, via the same
       // `toolActivity` allowlist every provider used to call for itself.
-      const activity = event.type === "activity" ? event.activity : this.#toolStartActivity(event);
+      const activity = event.type === "activity" ? event.activity : toolStartActivity(event);
       // Resumed output or a new tool call means a still-open compaction is done; report
       // that first.
       if (
@@ -2696,8 +2774,38 @@ export class DaemonRuntime {
       return;
     }
     if (event.type === "compaction-interrupted") {
-      // Silent: only the internal state clears.
-      this.#compactionTracker.interrupt(agentId);
+      // The provider's signal does not say whether the compaction was aborted or failed (a
+      // failure also arrives as its own error), so the row says only that it did not complete.
+      if (this.#compactionTracker.interrupt(agentId) === "interrupted")
+        publish(
+          agentId,
+          launch,
+          this.#activity(
+            agentId,
+            AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
+            "info",
+            "Context compaction interrupted; completion was not confirmed",
+          ),
+        );
+      return;
+    }
+    if (event.type === "subagent-progress") {
+      // Shown only while this launch's turn is busy: a background subagent can report after the
+      // turn ended, and a busy kind would wake an idle Agent. A repeat of the row just shown
+      // (one per subagent tool call) adds nothing.
+      const last = this.#activityPublisher.lastBusy(agentId);
+      if (last?.launch !== launch) return;
+      const detail = subagentProgressDetail(event);
+      if (
+        last.activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY &&
+        last.activity.detail === detail
+      )
+        return;
+      publish(
+        agentId,
+        launch,
+        this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY, "info", detail),
+      );
       return;
     }
     if (event.type === "progress") {
@@ -3006,6 +3114,18 @@ export class DaemonRuntime {
     if (isTrackedMention(message)) return this.#handleTrackedMention(message);
     if (this.#stoppingAgents.has(message.agentId))
       throw new Error(`Agent runtime is stopping: ${message.agentId}`);
+    // A stalled provider is restarted for this message, which waits for the relaunch rather than
+    // the stalled session; so does one arriving meanwhile (nor does it wake the Agent a second
+    // time once the old process is gone).
+    if (this.#runnerHold === undefined) {
+      const recovering = this.#stalledRecoveries.has(message.agentId);
+      const stalled = recovering ? undefined : this.#stalledRuntime(message.agentId);
+      if (recovering || stalled) {
+        this.#keepForNextLaunch(message.agentId, message);
+        if (stalled) return this.#recoverStalledRuntime(message.agentId, stalled);
+        return;
+      }
+    }
     const exited =
       this.#runnerHold === undefined &&
       !this.#agentProcessManager.session(message.agentId) &&
@@ -3055,9 +3175,13 @@ export class DaemonRuntime {
     const { agentId } = message;
     const refusal = this.#mentionDeliveries.admissionRefusal(message);
     if (refusal) return this.#mentionDeliveries.refuse(message, refusal);
+    // A stalled provider being restarted is no session to tell: refused as unknown, the server
+    // keeps the mention pending and issues it again for the relaunch's session report.
     if (
       this.#runnerHold === undefined &&
-      (this.#stoppingAgents.has(agentId) || !this.#agentProcessManager.session(agentId))
+      (this.#stoppingAgents.has(agentId) ||
+        this.#stalledRecoveries.has(agentId) ||
+        !this.#agentProcessManager.session(agentId))
     ) {
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
       return Promise.resolve();
@@ -3088,6 +3212,109 @@ export class DaemonRuntime {
       launchId: report.launchId,
       sessionId: report.sessionId,
     });
+  }
+
+  /** What a stalled-provider restart works on, when a message arriving now should restart this
+   * Agent's provider (`stalled-recovery.ts`): its busy turn has been silent too long with nothing
+   * still running. */
+  #stalledRuntime(agentId: string): StalledRuntime | undefined {
+    const launch = this.#currentActivityLaunches.get(agentId);
+    const session = this.#agentProcessManager.session(agentId);
+    const restart = this.#agentProcessManager.restartConfig(agentId);
+    const progress = launch?.progress;
+    if (!launch || !progress || !session || !restart) return undefined;
+    const stalled = shouldRecoverStalledRuntime({
+      turnBusy:
+        this.#activityPublisher.lastBusy(agentId)?.launch === launch &&
+        session.hasLiveTurn !== false,
+      silentForMs: progress.silentForMs(),
+      hasOpenToolCall: progress.hasOpenToolCall,
+      resumable: this.#runningMentionIdentity(agentId) !== undefined,
+    });
+    return stalled ? { launch, session, restart, silentForMs: progress.silentForMs() } : undefined;
+  }
+
+  /**
+   * Restarts a stalled provider for the message(s) now waiting for it, as the reference client
+   * does: announce it, end the stalled process without a stopped/crashed Activity, then wake the
+   * Agent on the same launch, resuming the session it last reported. Messages meanwhile wait for
+   * the relaunch.
+   */
+  async #recoverStalledRuntime(agentId: string, stalled: StalledRuntime): Promise<void> {
+    this.#stalledRecoveries.add(agentId);
+    try {
+      if (!(await this.#endStalledRuntime(agentId, stalled))) return;
+      // Before the relaunch reports its session, which is what makes the server issue them again.
+      await this.#mentionDeliveries.handBackForRelaunch(agentId);
+      // A Stop that arrived meanwhile wins: the Agent is not woken again.
+      if (this.#stoppingAgents.has(agentId) || !this.#agentProcessManager.restartConfig(agentId))
+        return;
+      const sessionId =
+        this.#sessionReferences.get(agentId)?.sessionId ?? stalled.restart.sessionId;
+      // A relaunch that fails reports its own launch error; the waiting messages stay queued,
+      // acknowledged, for the Agent's next launch.
+      await this.#wakeAgent(agentId, { ...stalled.restart, sessionId }).catch((error: unknown) =>
+        logger.error("Agent stalled-runtime relaunch failed", {
+          event: "agent.runtime.stalled_recovery_failed",
+          agent_id: agentId,
+          error: thrownMessage(error),
+        }),
+      );
+    } finally {
+      this.#stalledRecoveries.delete(agentId);
+    }
+  }
+
+  /** Announces the restart and ends the stalled process; false, with an error Activity, when it
+   * will not exit. Once is enough: that launch is never judged stalled again. */
+  async #endStalledRuntime(
+    agentId: string,
+    { launch, session, restart, silentForMs }: StalledRuntime,
+  ): Promise<boolean> {
+    const runtimeName = runtimeDisplayName(restart.config.provider);
+    // Before `stopping`, which mutes everything but stopped/interrupted/error Activity.
+    this.#activityPublisher.publish(
+      agentId,
+      launch,
+      this.#activity(
+        agentId,
+        AGENT_ACTIVITY_DETAIL_KIND.STALLED_RECOVERY,
+        "info",
+        `Restarting stalled ${runtimeName} runtime for queued message`,
+      ),
+    );
+    logger.warn("Agent runtime stalled; restarting it for a queued message", {
+      event: "agent.runtime.stalled_recovery",
+      agent_id: agentId,
+      silent_for_ms: silentForMs,
+    });
+    launch.stopping = true;
+    try {
+      await this.#agentProcessManager.release(agentId, STALLED_RECOVERY_EXIT_TIMEOUT_MS);
+      return true;
+    } catch (error) {
+      launch.progress = undefined;
+      // A process that is still running gets its Activity back.
+      const stillRunning = this.#agentProcessManager.session(agentId) === session;
+      if (stillRunning) launch.stopping = false;
+      this.#activityPublisher.publish(
+        agentId,
+        launch,
+        this.#activity(
+          agentId,
+          AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
+          "error",
+          `Restarting the stalled ${runtimeName} runtime failed`,
+        ),
+      );
+      logger.error("Agent stalled-runtime restart failed", {
+        event: "agent.runtime.stalled_recovery_failed",
+        agent_id: agentId,
+        still_running: stillRunning,
+        error: thrownMessage(error),
+      });
+      return false;
+    }
   }
 
   /** A delivery for an Agent with no hold, session, or launch in flight. */
@@ -3356,18 +3583,6 @@ export class DaemonRuntime {
     if (proxyToken && this.#agentProxyTokens.get(agentId) === proxyToken)
       this.#agentProxyTokens.delete(agentId);
     if (proxyToken) this.#agentProxy?.revoke(proxyToken);
-  }
-
-  /** The single place a `tool-start` event becomes an Activity: resolves the
-   * provider's raw name/input through the shared `toolActivity` allowlist, then reattaches
-   * subagent lineage the provider reported alongside the tool call. */
-  #toolStartActivity(event: Extract<AgentRuntimeEvent, { type: "tool-start" }>) {
-    const activity = toolActivity(event.name, event.input, event.occurredAt);
-    const { subagent } = event;
-    return {
-      ...activity,
-      entries: activity.entries.map((entry) => ({ ...entry, ...(subagent ? { subagent } : {}) })),
-    };
   }
 
   #activity(
@@ -4078,6 +4293,8 @@ export class DaemonRuntime {
     // as long as the cloud stays unreachable.
     this.#startAbort?.abort(new DaemonConnectionStoppedError());
     this.#reminders.stop();
+    // Each attempt is leased again on the next ready, and its run picks up from the server's state.
+    this.#migrationsClosed = this.#migrations?.close();
     for (const token of this.#agentProxyTokens.values()) this.#agentProxy?.revoke(token);
     this.#agentProxyTokens.clear();
     this.#agentContexts.clear();
@@ -4125,6 +4342,27 @@ export class DaemonRuntime {
     }
   }
 
+  /**
+   * Waits, on the same bound as `#settleReminders`, for the migration runs `stop()` aborted: a
+   * placement's rename or an attempt's removal under the state directory must not outlive it. A
+   * run that is still going when the bound passes is picked up from the server's state next time.
+   */
+  async #settleMigrations(): Promise<void> {
+    const closed = this.#migrationsClosed;
+    if (!closed) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        closed,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async #stop(shutdownReason: DaemonShutdownReason): Promise<void> {
     if (this.#startPromise) {
       try {
@@ -4164,6 +4402,7 @@ export class DaemonRuntime {
     // work already running settles alongside too, on the same bound, before the transport closes.
     await Promise.all([
       this.#settleReminders(),
+      this.#settleMigrations(),
       this.#connection.computerId
         ? this.#transport.sendShutdownNotice?.({
             ...this.#envelope(),

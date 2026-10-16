@@ -138,7 +138,7 @@ test("file_path, pattern and url toolInput summaries are truncated and never fal
   expect(nested.entries[0]).not.toHaveProperty("toolInput");
 });
 
-test("non-CoForge bash commands: detail is always the generic label, toolInput is redacted and truncated to 200 Unicode characters", () => {
+test("non-CoForge bash commands: detail is always the generic label, toolInput is redacted and cut to 100 Unicode characters plus an ellipsis", () => {
   const secretCommand =
     'curl -H "Authorization: Bearer sk-liveTESTsecretTOKEN123" --data "password=hunter2" https://example.com';
   const result = toolActivity("bash", { command: secretCommand });
@@ -156,8 +156,9 @@ test("non-CoForge bash commands: detail is always the generic label, toolInput i
   const truncated = toolActivity("bash", { command: long });
   expect(truncated.detail).toBe("Running command…");
   const truncatedInput = truncated.entries[0]!.toolInput!;
-  expect([...truncatedInput].length).toBe(200);
-  expect(truncatedInput).toBe(long.slice(0, 200));
+  expect(truncatedInput).toBe(`${long.slice(0, 100)}…`);
+  const exact = "echo " + "a".repeat(95);
+  expect(toolActivity("bash", { command: exact }).entries[0]!.toolInput).toBe(exact);
 
   // An inline script's opening is visible, so a `cat <<'EOF'` no longer collapses to `cat `.
   // Redaction is best-effort and now covers the heredoc body: the credential-shaped values are
@@ -176,8 +177,7 @@ test("bash truncation budgets Unicode code points, never splitting surrogate pai
   const command = `echo ${"😀".repeat(300)}`;
   const result = toolActivity("bash", { command });
   const toolInput = result.entries[0]!.toolInput!;
-  expect([...toolInput].length).toBe(200);
-  expect(toolInput).toBe(`echo ${"😀".repeat(195)}`);
+  expect(toolInput).toBe(`echo ${"😀".repeat(95)}…`);
   expect([...toolInput].join("")).toBe(toolInput);
 });
 
@@ -198,233 +198,276 @@ test("a multi-line bash command with no heredoc is sanitized to a single-line to
   expect(toolInput).not.toContain("hunter2");
 });
 
-test("CoForge CLI invocations resolve to a semantic tool and an allowlisted toolInput summary, never the raw command", () => {
+test("CoForge CLI invocations resolve to the reference client's semantic tools and summaries, never the raw command", () => {
+  // The closed set and the summary formats follow the reference Computer 1.0.47
+  // (`resolveRaftCliInvocation` and `summarizeToolInput`); the five channel tools it leaves
+  // unlabeled get a label and their channel here. `detail` is pinned as literal
+  // text: computing it with `toolActivityLabel` would not notice a name missing from the
+  // label vocabulary, which is how `Using update_reminder…` reached the UI.
   const cases: {
     command: string;
     detailKind: string;
+    detail: string;
     toolName: string;
     toolInput?: string;
   }[] = [
     {
+      command: "coforge message send --target @bob",
+      detailKind: "tool_started",
+      detail: "Sending message…",
+      toolName: "send_message",
+      toolInput: "@bob",
+    },
+    {
       command: "coforge message check",
       detailKind: "checking_messages",
+      detail: "Checking messages…",
+      toolName: "check_messages",
+    },
+    {
+      command: "coforge message check --target #general",
+      detailKind: "checking_messages",
+      detail: "Checking messages…",
       toolName: "check_messages",
     },
     {
       command: "coforge message read --target @alice --limit 20",
       detailKind: "tool_started",
+      detail: "Reading history…",
       toolName: "read_history",
       toolInput: "@alice",
     },
     {
       command: "coforge message search --query hello --target #general",
       detailKind: "tool_started",
+      detail: "Searching messages…",
       toolName: "search_messages",
       toolInput: "hello",
     },
     {
-      command: "coforge message resolve deadbeef",
+      command: "coforge channel members #general",
       detailKind: "tool_started",
-      toolName: "resolve_message",
-    },
-    {
-      command: "coforge message react --message-id deadbeef --emoji :+1:",
-      detailKind: "tool_started",
-      toolName: "react_message",
-    },
-
-    {
-      command: "coforge channel mute --target '#general'",
-      detailKind: "tool_started",
-      toolName: "mute_channel",
+      detail: "Listing channel members…",
+      toolName: "list_channel_members",
       toolInput: "#general",
     },
     {
-      command: "coforge channel unmute --target '#general'",
+      command: "coforge channel update --target #general --name renamed",
       detailKind: "tool_started",
-      toolName: "unmute_channel",
+      detail: "Updating channel…",
+      toolName: "update_channel",
       toolInput: "#general",
     },
     {
-      command: "coforge thread unfollow --target '#general:deadbeef'",
+      command: "coforge channel lifecycle archive --target #general",
       detailKind: "tool_started",
-      toolName: "unfollow_thread",
-      toolInput: "#general:deadbeef",
+      detail: "Archiving channel…",
+      toolName: "archive_channel",
+      toolInput: "#general",
     },
     {
-      command: "coforge task list --target #general",
+      command: "coforge channel lifecycle unarchive --target #general",
       detailKind: "tool_started",
+      detail: "Unarchiving channel…",
+      toolName: "unarchive_channel",
+      toolInput: "#general",
+    },
+    {
+      command: "coforge channel add-member --target #general --user @bob",
+      detailKind: "tool_started",
+      detail: "Adding channel member…",
+      toolName: "add_channel_member",
+      toolInput: "#general",
+    },
+    {
+      command: "coforge channel remove-member --target #general --agent @scout",
+      detailKind: "tool_started",
+      detail: "Removing channel member…",
+      toolName: "remove_channel_member",
+      toolInput: "#general",
+    },
+    {
+      command: "coforge channel join --target #general",
+      detailKind: "tool_started",
+      detail: "Joining channel…",
+      toolName: "join_channel",
+      toolInput: "#general",
+    },
+    {
+      command: "coforge channel leave --target #general",
+      detailKind: "tool_started",
+      detail: "Leaving channel…",
+      toolName: "leave_channel",
+      toolInput: "#general",
+    },
+    {
+      command: "coforge task list --target #general --status all",
+      detailKind: "tool_started",
+      detail: "Listing tasks…",
       toolName: "list_tasks",
       toolInput: "#general",
     },
     {
       command: "coforge task create --target #general --title 'Ship the thing'",
       detailKind: "tool_started",
-      toolName: "create_task",
+      detail: "Creating tasks…",
+      toolName: "create_tasks",
       toolInput: "#general",
     },
     {
-      command: "coforge task convert --target #general --message-id deadbeef",
+      command: "coforge task claim --target #general --number 7 --number 8",
       detailKind: "tool_started",
-      toolName: "convert_task",
-      toolInput: "#general",
-    },
-    {
-      command: "coforge task claim --target #general --number 7",
-      detailKind: "tool_started",
+      detail: "Claiming tasks…",
       toolName: "claim_tasks",
-      toolInput: "#general #7",
+      toolInput: "#general #t7,#t8",
+    },
+    {
+      command: "coforge task claim --target #general --message-id deadbeef",
+      detailKind: "tool_started",
+      detail: "Claiming tasks…",
+      toolName: "claim_tasks",
+      toolInput: "#general",
     },
     {
       command: "coforge task unclaim --target #general --number 7",
       detailKind: "tool_started",
+      detail: "Unclaiming task…",
       toolName: "unclaim_task",
-      toolInput: "#general #7",
-    },
-    {
-      command: "coforge task assign --target #general --number 7 --assignee @bob",
-      detailKind: "tool_started",
-      toolName: "assign_task",
-      toolInput: "#general #7",
+      toolInput: "#general #t7",
     },
     {
       command: "coforge task update --target #general --number 7 --status done",
       detailKind: "tool_started",
+      detail: "Updating task status…",
       toolName: "update_task_status",
-      toolInput: "#general #7",
+      toolInput: "#general #t7",
     },
     {
-      command: "coforge task amend --target #general --number 7 --title 'New title'",
+      command: "coforge task update --target #general --status done",
       detailKind: "tool_started",
-      toolName: "amend_task",
-      toolInput: "#general #7",
+      detail: "Updating task status…",
+      toolName: "update_task_status",
     },
     {
-      command: "coforge task history --target #general --number 7",
+      command: "coforge attachment upload --path ./shot.png --target #general",
       detailKind: "tool_started",
-      toolName: "task_history",
-      toolInput: "#general #7",
-    },
-    {
-      command: "coforge task delete --target #general --number 7",
-      detailKind: "tool_started",
-      toolName: "delete_task",
-      toolInput: "#general #7",
-    },
-    {
-      command: "coforge task receipt --target #general --number 7",
-      detailKind: "tool_started",
-      toolName: "task_receipt",
-      toolInput: "#general #7",
+      detail: "Uploading file…",
+      toolName: "upload_file",
+      toolInput: "./shot.png",
     },
     {
       command: "coforge attachment view --id deadbeef --output /tmp/out.png",
       detailKind: "tool_started",
+      detail: "Viewing file…",
       toolName: "view_file",
     },
     {
       command:
         "coforge reminder schedule --title 'Follow up with finance' --target @bob --message-id deadbeef --delay-seconds 60",
       detailKind: "tool_started",
+      detail: "Scheduling reminder…",
       toolName: "schedule_reminder",
       toolInput: "Follow up with finance",
     },
     {
+      command: `coforge reminder schedule --title '${"r".repeat(41)}' --delay-seconds 60`,
+      detailKind: "tool_started",
+      detail: "Scheduling reminder…",
+      toolName: "schedule_reminder",
+      toolInput: `${"r".repeat(40)}…`,
+    },
+    {
       command: "coforge reminder list --all",
       detailKind: "tool_started",
+      detail: "Listing reminders…",
       toolName: "list_reminders",
-    },
-    {
-      command: "coforge reminder update --id deadbeef-dead-beef-dead-beefdeadbeef --title 'New'",
-      detailKind: "tool_started",
-      toolName: "update_reminder",
-      toolInput: "deadbeef",
-    },
-    {
-      command:
-        "coforge reminder snooze --id deadbeef-dead-beef-dead-beefdeadbeef --delay-seconds 60",
-      detailKind: "tool_started",
-      toolName: "snooze_reminder",
-      toolInput: "deadbeef",
     },
     {
       command: "coforge reminder cancel --id deadbeef-dead-beef-dead-beefdeadbeef",
       detailKind: "tool_started",
+      detail: "Canceling reminder…",
       toolName: "cancel_reminder",
-      toolInput: "deadbeef",
-    },
-    {
-      command: "coforge reminder log --id deadbeef-dead-beef-dead-beefdeadbeef",
-      detailKind: "tool_started",
-      toolName: "reminder_log",
-      toolInput: "deadbeef",
-    },
-    {
-      command: "coforge reminder ack --id deadbeef-dead-beef-dead-beefdeadbeef --revision 3",
-      detailKind: "tool_started",
-      toolName: "ack_reminder",
-      toolInput: "deadbeef",
-    },
-    {
-      command: "coforge reminder dismiss --id deadbeef-dead-beef-dead-beefdeadbeef --revision 3",
-      detailKind: "tool_started",
-      toolName: "dismiss_reminder",
-      toolInput: "deadbeef",
-    },
-    {
-      command: "coforge weekly-report context --subject-type report --subject-id deadbeef",
-      detailKind: "tool_started",
-      toolName: "weekly_report",
-    },
-
-    {
-      command:
-        "coforge manual get index --intent 'Learn available CoForge workflows' --reason 'Browse the topic catalog'",
-      detailKind: "tool_started",
-      toolName: "get_manual",
-      toolInput: "index",
-    },
-    {
-      command:
-        "coforge manual search 'github pull request' --intent 'Open a PR' --reason 'Find the right command'",
-      detailKind: "tool_started",
-      toolName: "search_manual",
-      toolInput: "github pull request",
-    },
-    {
-      command: "coforge user info @alice",
-      detailKind: "tool_started",
-      toolName: "get_user_info",
-      toolInput: "@alice",
-    },
-    {
-      command: "coforge profile show @scout",
-      detailKind: "tool_started",
-      toolName: "get_profile",
-      toolInput: "@scout",
-    },
-    { command: "coforge profile show", detailKind: "tool_started", toolName: "get_profile" },
-    {
-      command: "coforge profile update --display-name Scout",
-      detailKind: "tool_started",
-      toolName: "update_profile",
+      toolInput: "#deadbeef",
     },
     {
       command: "/usr/local/bin/coforge message check",
       detailKind: "checking_messages",
+      detail: "Checking messages…",
       toolName: "check_messages",
     },
-    { command: "coforge whoami --json", detailKind: "tool_started", toolName: "whoami" },
-    { command: "coforge version --json", detailKind: "tool_started", toolName: "get_version" },
   ];
-  for (const { command, detailKind, toolName, toolInput } of cases) {
+  for (const { command, detailKind, detail, toolName, toolInput } of cases) {
     const result = toolActivity("bash", { command });
     expect(result).toMatchObject({
       detailKind,
-      detail: toolActivityLabel(toolName),
+      detail,
       entries: [{ kind: "tool_start", toolName, ...(toolInput ? { toolInput } : {}) }],
     });
     if (toolInput === undefined) expect(result.entries[0]).not.toHaveProperty("toolInput");
+  }
+});
+
+test("CoForge subcommands outside the reference client's set are ordinary commands", () => {
+  for (const command of [
+    "coforge message resolve deadbeef",
+    "coforge message react --message-id deadbeef --emoji :+1:",
+    "coforge channel mute --target #general",
+    "coforge channel unmute --target #general",
+    "coforge channel info #general",
+    "coforge channel create --name launch",
+    "coforge thread unfollow --target #general:deadbeef",
+    "coforge task convert --target #general --message-id deadbeef",
+    "coforge task assign --target #general --number 7 --assignee @bob",
+    "coforge task unassign --target #general --number 7",
+    "coforge task amend --target #general --number 7 --title New",
+    "coforge task history --target #general --number 7",
+    "coforge task delete --target #general --number 7",
+    "coforge task receipt --target #general --number 7",
+    "coforge reminder update --id deadbeef-dead-beef-dead-beefdeadbeef --title New",
+    "coforge reminder snooze --id deadbeef-dead-beef-dead-beefdeadbeef --delay-seconds 60",
+    "coforge reminder log --id deadbeef-dead-beef-dead-beefdeadbeef",
+    "coforge reminder ack --id deadbeef-dead-beef-dead-beefdeadbeef --revision 3",
+    "coforge reminder dismiss --id deadbeef-dead-beef-dead-beefdeadbeef --revision 3",
+    "coforge weekly-report context --subject-type report --subject-id deadbeef",
+    "coforge manual get index",
+    "coforge manual search github",
+    "coforge user info @alice",
+    "coforge profile show @scout",
+    "coforge profile update --display-name Scout",
+    "coforge whoami --json",
+    "coforge version --json",
+    // The Computer's local held view; only the server drain (`message check`) is semantic.
+    "coforge inbox check",
+    "coforge workspace info --agents",
+    "coforge something-new --flag value",
+    "coforge",
+  ])
+    expect(toolActivity("bash", { command })).toMatchObject({
+      detailKind: "running_command",
+      detail: "Running command…",
+      entries: [{ kind: "tool_start", toolName: "bash", toolInput: command }],
+    });
+});
+
+test("a CoForge invocation is recognized in any chained segment, behind env assignments or a shell -c wrapper", () => {
+  const cases: [string, string, string | undefined][] = [
+    ["COFORGE_X=1 coforge channel join --target #general", "join_channel", "#general"],
+    ["bash -c 'coforge channel join --target #general'", "join_channel", "#general"],
+    ['zsh -lc "coforge task list --target #general"', "list_tasks", "#general"],
+    ["sh -c 'A=1 coforge message check'", "check_messages", undefined],
+    ["cd /work && coforge channel leave --target #general", "leave_channel", "#general"],
+    ["true; B=2 coforge message read --target @alice", "read_history", "@alice"],
+    ["coforge channel join --target=#general", "join_channel", "#general"],
+    ["coforge message send --target @a --target @b", "send_message", "@b"],
+    ["coforge message check | grep unread", "check_messages", undefined],
+    ["coforge task list --target #general && echo done", "list_tasks", "#general"],
+    ["coforge message check; echo done", "check_messages", undefined],
+  ];
+  for (const [command, toolName, toolInput] of cases) {
+    const result = toolActivity("bash", { command });
+    expect(result.entries).toEqual([
+      { kind: "tool_start", toolName, ...(toolInput ? { toolInput } : {}) },
+    ]);
   }
 });
 
@@ -448,7 +491,7 @@ test("the CoForge message send heredoc form never leaks the message body", () =>
 
 test("CoForge CLI tokenising respects quotes and backslashes", () => {
   expect(
-    toolActivity("bash", { command: "coforge channel mute --target '#has spaces'" }),
+    toolActivity("bash", { command: "coforge channel join --target '#has spaces'" }),
   ).toMatchObject({ entries: [{ toolInput: "#has spaces" }] });
   expect(
     toolActivity("bash", {
@@ -456,67 +499,21 @@ test("CoForge CLI tokenising respects quotes and backslashes", () => {
     }),
   ).toMatchObject({ entries: [{ toolInput: 'say "hi" now' }] });
   expect(
-    toolActivity("bash", { command: "coforge channel mute --target \\#escaped-space" }),
+    toolActivity("bash", { command: "coforge channel join --target \\#escaped-space" }),
   ).toMatchObject({ entries: [{ toolInput: "#escaped-space" }] });
 });
 
-test("CoForge CLI tokenising stops at pipes, chains and semicolons before mapping the subcommand", () => {
-  const piped = toolActivity("bash", { command: "coforge message check | grep unread" });
-  expect(piped).toMatchObject({ detailKind: "checking_messages" });
-  expect(piped.entries).toEqual([{ kind: "tool_start", toolName: "check_messages" }]);
-  expect(
-    toolActivity("bash", { command: "coforge task list --target #general && echo done" }),
-  ).toMatchObject({ entries: [{ kind: "tool_start", toolName: "list_tasks" }] });
-  expect(toolActivity("bash", { command: "coforge message check; echo done" }).entries).toEqual([
-    { kind: "tool_start", toolName: "check_messages" },
-  ]);
-});
-
-test("a bare `coforge` with no subcommand and a non-coforge shell command are unaffected", () => {
-  expect(toolActivity("bash", { command: "coforge" })).toMatchObject({
-    detailKind: "running_command",
-    detail: "Running command…",
-    entries: [{ kind: "tool_start", toolName: "bash", toolInput: "coforge" }],
-  });
+test("a non-coforge shell command is an ordinary command", () => {
   expect(toolActivity("bash", { command: "bun test packages/daemon" })).toMatchObject({
     detailKind: "running_command",
     detail: "Running command…",
     entries: [{ kind: "tool_start", toolName: "bash", toolInput: "bun test packages/daemon" }],
   });
 });
-
-test("only the server drain is a semantic operation; the local inbox view is an ordinary command", () => {
-  // The semantic map contains `message check` and not `inbox check`, so the two commands report
-  // different things. Both expectations are pinned as literal text: the
-  // command table above expects `detail: toolActivityLabel(toolName)`, which computes the
-  // expectation with the function under test and would not notice a name missing from the label
-  // vocabulary — that is how `Using check_inbox…` reached the UI in the first place.
-  expect(toolActivity("bash", { command: "coforge message check" })).toMatchObject({
-    detailKind: "checking_messages",
-    detail: "Checking messages…",
-    entries: [{ kind: "tool_start", toolName: "check_messages" }],
-  });
-  expect(toolActivity("bash", { command: "coforge inbox check" })).toMatchObject({
-    detailKind: "running_command",
-    detail: "Running command…",
-    entries: [{ kind: "tool_start", toolName: "bash", toolInput: "coforge inbox check" }],
-  });
-});
-
-test("an unrecognized CoForge subcommand is an ordinary command, not a nameless CoForge tool", () => {
-  // No `coforge_cli`-style stand-in: a command with no semantic identity reports the command
-  // itself, redacted and truncated like any other shell command.
-  expect(toolActivity("bash", { command: "coforge workspace info --agents" })).toMatchObject({
-    detailKind: "running_command",
-    detail: "Running command…",
-    entries: [
-      { kind: "tool_start", toolName: "bash", toolInput: "coforge workspace info --agents" },
-    ],
-  });
-  expect(toolActivity("bash", { command: "coforge something-new --flag value" })).toMatchObject({
-    detailKind: "running_command",
-    entries: [
-      { kind: "tool_start", toolName: "bash", toolInput: "coforge something-new --flag value" },
-    ],
-  });
+test("a provider's own message-check tool reports checking_messages, as the CLI form does", () => {
+  for (const name of ["check_messages", "receive_message"])
+    expect(toolActivity(name, {})).toMatchObject({
+      detailKind: "checking_messages",
+      detail: "Checking messages…",
+    });
 });

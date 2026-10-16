@@ -28,6 +28,7 @@ import {
 import type { ChannelSuggestion } from "./reference-completion";
 import { m } from "#src/paraglide/messages";
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
+import type { ConversationProps } from "./conversation-types";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 
@@ -58,6 +59,9 @@ export type ChannelConversationView = Omit<DirectConversationView, "agent" | "me
   followedThreadRootIds?: string[];
   messages: DirectConversationView["messages"];
 };
+
+/** The channel header's search and settings glyphs: text colour (#101319 in light mode), 1.5 stroke. */
+const HEADER_ICON_CLASS = "text-primary hover:text-primary *:data-icon:stroke-[1.5]";
 
 export function ChannelConversationHeader({
   conversation,
@@ -109,11 +113,14 @@ export function ChannelConversationHeader({
         actions={
           // Borderless utility strip: the -mr-1.5 cancels the last button's p-1.5 so its glyph
           // lands on the pane gutter (docs/design/page-skeleton-and-density.md §8 optical alignment).
+          // Search and settings draw in the text colour with a 1.5 stroke (design spec), not the
+          // utility button's default muted 2px glyph.
           <div className="-mr-1.5 flex shrink-0 items-center gap-3">
             <ButtonUtility
               icon={SearchLg}
               size="sm"
               color="tertiary"
+              className={HEADER_ICON_CLASS}
               tooltip={m.search_this_channel()}
               onClick={() =>
                 void navigate({
@@ -133,6 +140,7 @@ export function ChannelConversationHeader({
               icon={Settings}
               size="sm"
               color="tertiary"
+              className={HEADER_ICON_CLASS}
               tooltip={m.channel_settings_open()}
               onClick={() => openPanel(null)}
             />
@@ -174,6 +182,7 @@ export function ChannelConversation({
   onShowTasks,
   onShowFiles,
   onOpenAgentProfile,
+  onOpenPersonProfile,
   agentProfile,
   onAgentProfileTabChange,
   onCloseAgentProfile,
@@ -219,7 +228,8 @@ export function ChannelConversation({
   /** Opens the Agent profile panel from an Agent sender's avatar/name in the message list, on a
    * given tab when one is named. */
   onOpenAgentProfile?: OpenAgentProfile;
-  agentProfile?: { agentId: string | undefined; tab: AgentProfileTab | undefined };
+  onOpenPersonProfile?: ConversationProps["onOpenPersonProfile"];
+  agentProfile?: ConversationProps["agentProfile"];
   onAgentProfileTabChange?: (tab: AgentProfileTab) => void;
   onCloseAgentProfile?: () => void;
   /** The channel's Tasks tab, shown in place of the message stream (see `ThreadedConversation`). */
@@ -300,6 +310,7 @@ export function ChannelConversation({
       onReadThread={onReadThread}
       onReadLatest={onReadLatest}
       onOpenAgentProfile={onOpenAgentProfile}
+      onOpenPersonProfile={onOpenPersonProfile}
       agentProfile={agentProfile}
       onAgentProfileTabChange={onAgentProfileTabChange}
       onCloseAgentProfile={onCloseAgentProfile}

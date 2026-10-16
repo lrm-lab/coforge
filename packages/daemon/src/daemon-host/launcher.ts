@@ -171,9 +171,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     requestId: string = crypto.randomUUID(),
     expectedVersion?: string,
   ) {
-    let connection: LocalDaemonConnection | undefined;
-    try {
-      connection = await this.#connect(this.options.socketPath);
+    return this.#withConnection(async (connection) => {
       await this.#verifyHandshake(connection);
       const method = `daemon:${operation}`;
       const response = await this.#request(
@@ -199,9 +197,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
         );
       }
       return commandResponse.runtimes ?? [];
-    } finally {
-      connection?.close();
-    }
+    });
   }
 
   /**
@@ -214,9 +210,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     requestId: string = crypto.randomUUID(),
   ): Promise<DaemonHoldResponse> {
     const method = operation === "hold" ? LOCAL_RPC_METHODS.HOLD : LOCAL_RPC_METHODS.RELEASE;
-    let connection: LocalDaemonConnection | undefined;
-    try {
-      connection = await this.#connect(this.options.socketPath);
+    return this.#withConnection(async (connection) => {
       const envelope = await this.#request(
         connection,
         method,
@@ -235,9 +229,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
       )
         throw new Error(`coforge-daemon returned an invalid ${operation} response`);
       return response;
-    } finally {
-      connection?.close();
-    }
+    });
   }
 
   /**
@@ -253,8 +245,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
   }
 
   async identity(timeoutMs?: number): Promise<DaemonHandshakeResponse> {
-    const connection = await this.#connect(this.options.socketPath);
-    try {
+    return this.#withConnection(async (connection) => {
       const { envelope, requestId } = await this.#requestHandshake(connection, timeoutMs);
       const result = decodeDaemonHandshakeResponse(envelope.payload);
       if (
@@ -265,6 +256,13 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
       )
         throw new Error("invalid process identity");
       return result;
+    });
+  }
+
+  async #withConnection<T>(run: (connection: LocalDaemonConnection) => Promise<T>): Promise<T> {
+    const connection = await this.#connect(this.options.socketPath);
+    try {
+      return await run(connection);
     } finally {
       connection.close();
     }

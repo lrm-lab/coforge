@@ -201,6 +201,7 @@ type StreamMessage = Pick<
       | "threadRootId"
       | "senderHandle"
       | "senderAgentId"
+      | "senderUserId"
       | "senderDeleted"
       | "reactions"
       | "actionCard"
@@ -232,6 +233,7 @@ export function optimisticSavedEntry(message: StreamMessage, conversationId: str
       senderName: message.senderName,
       senderHandle: message.senderHandle,
       senderAgentId: message.senderAgentId,
+      senderUserId: message.senderUserId,
       senderDeleted: message.senderDeleted ?? false,
       senderAvatarUrl: message.senderAvatarUrl ?? null,
       body: message.body,

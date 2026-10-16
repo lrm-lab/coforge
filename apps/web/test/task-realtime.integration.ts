@@ -28,7 +28,9 @@ let alice: { id: string };
 let agent: { id: string };
 let workspaceId: string;
 beforeAll(async () => {
-  alice = await db.user.create({ data: { username: `realtime-alice-${handle}` } });
+  alice = await db.user.create({
+    data: { displayName: `realtime-alice-${handle}`, username: `realtime-alice-${handle}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `task-realtime-${handle}`,

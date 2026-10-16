@@ -3065,3 +3065,141 @@ test("publishCurrent mints and persists a launchId for a legacy 'starting' row t
   expect(published.launchId).toBeTruthy();
   expect(agent.state?.launchId).toBe(published.launchId);
 });
+
+test("an Agent a migration is moving is never started, but can still be stopped", async () => {
+  let agent: AgentControlAgent = {
+    id: "agent-m",
+    workspaceId: "workspace-a",
+    computerId: "computer-a",
+    ownerId: "owner-a",
+    visibility: "public",
+    migrating: true,
+    runtimeConfig: {
+      runtime: "pi",
+      provider: { kind: "default" },
+      model: "",
+      modelProvider: "",
+      reasoning: "",
+    },
+    state: null,
+  };
+  const published: string[] = [];
+  const store: AgentControlStore = {
+    memberRole: async () => "owner",
+    async get() {
+      return structuredClone(agent);
+    },
+    async replace(before, state) {
+      if (JSON.stringify(before.state) !== JSON.stringify(agent.state)) return false;
+      agent = { ...agent, state };
+      return true;
+    },
+  };
+  const control = new AgentControl(
+    store,
+    {
+      async publish(_channel, bytes) {
+        try {
+          decodeAgentStartIntent(bytes);
+          published.push("start");
+          return;
+        } catch {}
+        const stop = decodeAgentStopIntent(bytes);
+        published.push("stop");
+        await control.result(stop, {
+          ...stop,
+          provider: stop.provider!,
+          epoch: stop.controlEpoch!,
+          phase: "stopped",
+          sequence: 1,
+        });
+      },
+    },
+    { run: async (_id, work) => work() },
+  );
+  const start = {
+    protocolMajor: 1,
+    requestId: "start-1",
+    workspaceId: "workspace-a",
+    computerId: "computer-a",
+    agentId: "agent-m",
+    provider: "pi" as const,
+    model: "",
+    modelProvider: "",
+    reasoning: "",
+  };
+
+  for (const action of ["start", "restart", "reset-session", "full-reset"] as const)
+    await expect(
+      control.execute({
+        userId: "owner-a",
+        workspaceId: "workspace-a",
+        agentId: "agent-m",
+        requestId: `request-${action}`,
+        action,
+        ...(action === "full-reset" ? { confirmed: true } : {}),
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT", errorId: "agent-migrating" });
+  await expect(control.publishStart(start, "owner-a")).rejects.toMatchObject({
+    errorId: "agent-migrating",
+  });
+  // A reconnecting Computer's recovery passes over it instead of failing its whole ready.
+  await control.recover(start, "owner-a");
+  expect(published).toEqual([]);
+
+  await control.publishStop(
+    { agentId: "agent-m", workspaceId: "workspace-a", requestId: "migration-stop" },
+    "owner-a",
+  );
+  expect(published).toEqual(["stop"]);
+});
+
+test("a migrating Agent refuses a user Start even when another Start is in flight", async () => {
+  const { store, current } = pendingOpStore({
+    id: "a",
+    ownerId: "owner",
+    visibility: "public",
+    workspaceId: "w",
+    computerId: "c",
+    runtimeConfig: pendingRuntimeConfig,
+    state: null,
+  });
+  const published: Uint8Array[] = [];
+  const control = new AgentControl(
+    store,
+    {
+      publish: async (_channel, bytes) => {
+        published.push(bytes);
+      },
+    },
+    { run: async (_id, work) => work() },
+    { timeoutMs: 0 },
+  );
+  await control.publishStart(
+    {
+      protocolMajor: 1,
+      requestId: "first",
+      workspaceId: "w",
+      computerId: "c",
+      agentId: "a",
+      provider: "pi",
+      model: pendingRuntimeConfig.model,
+      modelProvider: pendingRuntimeConfig.modelProvider,
+      reasoning: pendingRuntimeConfig.reasoning,
+    },
+    "owner",
+  );
+  expect(current().state?.phase).toBe("starting");
+  current().migrating = true;
+  await expect(
+    control.execute({
+      userId: "owner",
+      workspaceId: "w",
+      agentId: "a",
+      requestId: "second",
+      action: "start",
+    }),
+  ).rejects.toMatchObject({ code: "CONFLICT", errorId: "agent-migrating" });
+  expect(published).toHaveLength(1);
+  expect(current().state?.requestId).toBe("first");
+});

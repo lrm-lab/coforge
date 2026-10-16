@@ -36,6 +36,11 @@ These rules apply to `src/server/db/`.
   key hash only, with no relation to the Workspace, Computer, or key row, so
   they outlive the cascade. Expired ones are ignored on read and pruned on the
   next record.
+- `agent-migration.repositories.server.ts` persists Agent migrations: the
+  revision compare-and-set, the one-active-per-Agent partial unique index, and
+  the switch, which re-homes the Agent through `moveAgentToComputer` (Agent
+  repositories) in the same transaction. Step order and who may take a step
+  stay in `server/agent-migrations/`.
 - `agent-deletion.repositories.server.ts` makes a deleted Agent inert in one
   transaction; keep every deletion write inside it.
 - `direct-conversation-preferences.repositories.server.ts` owns the viewer's
@@ -58,3 +63,7 @@ These rules apply to `src/server/db/`.
   the adapter's `TransactionWriteConflict`). Retry only those, a bounded number
   of times, and only a transaction that takes its locks in the writers' order.
 - `memory-disposition.repositories.server.ts` freezes Hint provenance at delivery, serializes receipts per Hint with a PostgreSQL row lock, and appends disposition/citation events atomically.
+- `host-directory.repositories.server.ts` persists host-node rows. Enrollment,
+  the online window, and token checks stay in `server/hosts/`.
+- `host-job.repositories.server.ts` persists a cloud Computer and its create job.
+  Membership, the online check, and when the daemon key is cleared stay in `server/hosts/`.

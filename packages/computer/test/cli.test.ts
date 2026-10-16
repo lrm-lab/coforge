@@ -6,6 +6,7 @@ import {
   type LoginCommand,
   type SetupCommand,
   type StatusCommand,
+  type HostCommand,
 } from "#src/cli";
 import { nextUpgradeCommandHint, reportStoppedWorkspaces } from "#src/cli/upgrade-output";
 import { UpgradeFailedError } from "#src/release/upgrade-receipt";
@@ -800,5 +801,45 @@ test("upgrade and install pass --allow-downgrade to the updater only when it is 
     { operation: "upgrade", version: "1.0.16", allowDowngrade: false },
     { operation: "install", version: "1.0.16", allowDowngrade: true },
     { operation: "install", version: "1.0.16", allowDowngrade: false },
+  ]);
+});
+
+test("the host command passes its flags to the host process", async () => {
+  const calls: unknown[] = [];
+  const host: HostCommand = {
+    async run(options) {
+      calls.push(options);
+    },
+  };
+  const code = await runCli(
+    [
+      "host",
+      "--server-url",
+      "https://server.example",
+      "--token",
+      "chn_token",
+      "--node-key",
+      "machine-1",
+      "--name",
+      "lab-host",
+      "--image",
+      "coforge-computer:local",
+    ],
+    {
+      login: { async run() {} },
+      setup: { async run() {} },
+      host,
+    },
+  );
+  expect(code).toBe(0);
+  expect(calls).toEqual([
+    {
+      serverUrl: "https://server.example",
+      token: "chn_token",
+      nodeKey: "machine-1",
+      name: "lab-host",
+      image: "coforge-computer:local",
+      pollIntervalMs: 5000,
+    },
   ]);
 });

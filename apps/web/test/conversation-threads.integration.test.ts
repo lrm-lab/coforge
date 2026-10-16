@@ -21,10 +21,18 @@ const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const ada = await db.user.create({ data: { username: `th-ada-${suffix}` } });
-  const bob = await db.user.create({ data: { username: `th-bob-${suffix}` } });
-  const cy = await db.user.create({ data: { username: `th-cy-${suffix}` } });
-  const outsider = await db.user.create({ data: { username: `th-out-${suffix}` } });
+  const ada = await db.user.create({
+    data: { displayName: `th-ada-${suffix}`, username: `th-ada-${suffix}` },
+  });
+  const bob = await db.user.create({
+    data: { displayName: `th-bob-${suffix}`, username: `th-bob-${suffix}` },
+  });
+  const cy = await db.user.create({
+    data: { displayName: `th-cy-${suffix}`, username: `th-cy-${suffix}` },
+  });
+  const outsider = await db.user.create({
+    data: { displayName: `th-out-${suffix}`, username: `th-out-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `th-${suffix}`,

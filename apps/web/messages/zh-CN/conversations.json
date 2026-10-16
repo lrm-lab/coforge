@@ -651,6 +651,7 @@
   "chat_section_move": "移到分组",
   "chat_section_name": "名称",
   "chat_section_emoji": "表情",
+  "chat_section_emoji_none": "不使用表情",
   "chat_section_save_error": "分组未能保存，请重试。",
   "chat_section_load_error": "分组加载失败。",
   "chat_section_empty": "暂无会话",

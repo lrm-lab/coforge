@@ -22,6 +22,7 @@ export class PrismaUserProfileRepository {
         description: true,
         avatarObjectKey: true,
         createdAt: true,
+        welcomedAt: true,
       },
     });
     if (!profile) throw new AppError("NOT_FOUND");
@@ -32,8 +33,8 @@ export class PrismaUserProfileRepository {
        * shows it. */
       username: profile.username,
       displayName: profile.displayName,
-      /** False until the person has been asked for their name (first sign-in). */
-      named: profile.displayName !== null,
+      /** False until the person has confirmed their name (first sign-in). */
+      named: profile.welcomedAt !== null,
       description: profile.description,
       avatarUrl: avatarUrl(profile.avatarObjectKey),
       /** When the account was created, as an ISO instant. */

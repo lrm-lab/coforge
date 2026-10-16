@@ -24,6 +24,9 @@ export function nameMatchTier(
   }
   if (hasPrefix) return 1;
 
+  // A later word cannot match when the complete label contains no query.
+  if (!lowerLabel.includes(lowerQuery)) return otherContainsQuery ? 3 : undefined;
+
   let firstWord = true;
   for (const word of lowerLabel.split(/\s+/)) {
     if (!word) continue;
@@ -33,6 +36,5 @@ export function nameMatchTier(
     }
     if (word.startsWith(lowerQuery)) return 2;
   }
-  if (otherContainsQuery || lowerLabel.includes(lowerQuery)) return 3;
-  return undefined;
+  return 3;
 }

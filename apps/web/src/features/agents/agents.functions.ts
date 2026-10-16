@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { setResponseHeader } from "@tanstack/react-start/server";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import {
   agentIdInputSchema,
   agentIdSchema,
@@ -28,17 +27,11 @@ import { listVisibleAgentModels } from "#src/server/agents/agent-models.server";
 import { AgentAvatars, agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
-import {
-  PrismaAgentRepository,
-  RepositoryAgentAuthorization,
-} from "#src/server/db/repositories/agent.repositories.server";
+import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { ManageAgents } from "#src/server/agents/manage-agents.server";
 import { AgentDeletion } from "#src/server/agents/agent-deletion.server";
 import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
-import { PublishAgentRuntimeControl } from "#src/server/agents/agent-runtime-control.server";
-import { AgentControl } from "#src/server/agents/agent-control.server";
-import { getAgentControlSignal } from "#src/server/agents/agent-control-signal.server";
-import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
+import { userAgentRuntimeControl } from "#src/server/agents/user-agent-control.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import {
   workspaceUserMiddleware,
@@ -64,7 +57,7 @@ import {
 } from "#src/server/agents/agent-runtime-credentials.server";
 import { ChangeAgentRuntimeCredential } from "#src/server/agents/change-agent-runtime-credential.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
-import { agentRuntimeSelectionIsAvailable } from "#src/server/agents/agent-runtime-availability.server";
+import { computerCanRunAgent } from "#src/server/agents/computer-runtime-availability.server";
 import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-assistant.server";
 import {
   parseAgentRuntimeConfig,
@@ -72,10 +65,6 @@ import {
 } from "#src/server/agents/agent-runtime-config.server";
 import { getAgentStatusCache } from "#src/server/agents/agent-status.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
-import { createAgentSessions } from "#src/server/db/repositories/agent-session.repositories.server";
-import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
-import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { AgentEnvironment } from "#src/server/agents/agent-environment.server";
 import {
@@ -87,84 +76,18 @@ import {
 
 type Database = ReturnType<typeof requireDatabaseClient>;
 
-/** Runtime start/stop publisher wired to one database and Agent repository. */
-function runtimeControl(db: Database, agents: PrismaAgentRepository) {
-  const centrifugo = createCentrifugoServerApi();
-  const conversations = new PrismaDirectConversationRepository(db);
-  const mentions = new MentionDeliveryReports(
-    new PrismaMentionDeliveryRepository(db),
-    centrifugo,
-    conversations,
-  );
-  const sessions = createAgentSessions(db, mentions);
-  return new PublishAgentRuntimeControl(
-    new RepositoryAgentAuthorization(agents),
-    centrifugo,
-    async () => {},
-    sessions,
-    new AgentControl(
-      new PrismaAgentControlStore(db),
-      centrifugo,
-      getAgentRuntimeLock(),
-      undefined,
-      sessions,
-      getAgentControlSignal(),
-    ),
-  );
-}
-
 function manageAgents(db: Database) {
   const agents = new PrismaAgentRepository(db);
   const runtimeLock = getAgentRuntimeLock();
-  const runtimeVisibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
   const agentManagement = new ManageAgents(
     agents,
     {
-      start: (intent, ownerId) => runtimeControl(db, agents).start(intent, ownerId),
-      stop: (intent, ownerId) => runtimeControl(db, agents).stop(intent, ownerId),
+      start: (intent, ownerId) => userAgentRuntimeControl(db, agents).start(intent, ownerId),
+      stop: (intent, ownerId) => userAgentRuntimeControl(db, agents).stop(intent, ownerId),
     },
     {
-      canRun: async (workspaceId, userId, computerId, config) => {
-        const connection = await db.workspaceComputer.findFirst({
-          where: { workspaceId, computerId },
-          select: {
-            computer: {
-              select: {
-                modelCatalogs: {
-                  where: {
-                    workspaceId,
-                    provider:
-                      config.provider === RUNTIME_PROVIDER.PI && config.hasApiKey
-                        ? { in: [RUNTIME_PROVIDER.PI, RUNTIME_PROVIDER.COFORGE] }
-                        : config.provider,
-                  },
-                  select: { models: true },
-                },
-              },
-            },
-          },
-        });
-        const providers = new Set<typeof config.provider>();
-        if (await runtimeVisibility.canSelect({ workspaceId, userId }, computerId, config.provider))
-          providers.add(config.provider);
-        if (
-          config.provider === RUNTIME_PROVIDER.COFORGE &&
-          (await runtimeVisibility.canSelect(
-            { workspaceId, userId },
-            computerId,
-            RUNTIME_PROVIDER.PI,
-          ))
-        )
-          providers.add(RUNTIME_PROVIDER.PI);
-        const models = connection?.computer.modelCatalogs.flatMap((catalog) =>
-          Array.isArray(catalog.models) ? catalog.models : [],
-        );
-        return agentRuntimeSelectionIsAvailable(config, {
-          connected: Boolean(connection),
-          providers,
-          models: models ?? [],
-        });
-      },
+      canRun: (workspaceId, userId, computerId, config) =>
+        computerCanRunAgent(db, { workspaceId, userId }, computerId, config),
     },
     runtimeLock,
     () => runtimeCredentials(db, true),
@@ -185,7 +108,7 @@ async function changeRuntimeCredential(db: Database, decrypt = false) {
   return new ChangeAgentRuntimeCredential(
     agents,
     await runtimeCredentials(db, decrypt),
-    runtimeControl(db, agents),
+    userAgentRuntimeControl(db, agents),
     getAgentRuntimeLock(),
   );
 }
@@ -195,7 +118,7 @@ async function agentEnvironment(db: Database) {
   return new AgentEnvironment(
     new PrismaAgentRuntimeCredentialRepository(db),
     agents,
-    runtimeControl(db, agents),
+    userAgentRuntimeControl(db, agents),
     getAgentRuntimeLock(),
     await readAgentRuntimeCredentialEncryptionKey(process.env),
   );
@@ -206,7 +129,7 @@ function agentDeletion(db: Database) {
   return new AgentDeletion(
     agents,
     new PrismaAgentDeletionStore(db),
-    runtimeControl(db, agents),
+    userAgentRuntimeControl(db, agents),
     getAgentRuntimeLock(),
   );
 }

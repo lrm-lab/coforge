@@ -14,7 +14,12 @@ test("a Workspace icon is set by an owner or admin, replaced atomically, and rea
   const suffix = crypto.randomUUID();
   const [owner, admin, member, outsider] = await Promise.all(
     ["owner", "admin", "member", "outsider"].map((name) =>
-      db.user.create({ data: { username: `workspace-icon-${name}-${suffix}` } }),
+      db.user.create({
+        data: {
+          displayName: `workspace-icon-${name}-${suffix}`,
+          username: `workspace-icon-${name}-${suffix}`,
+        },
+      }),
     ),
   );
   const workspace = await db.workspace.create({

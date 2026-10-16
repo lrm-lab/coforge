@@ -23,7 +23,9 @@ const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 test.skipIf(!connectionString)("a person's channel message names its sender", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const ada = await db.user.create({ data: { username: `oms-ada-${suffix}` } });
+  const ada = await db.user.create({
+    data: { displayName: `oms-ada-${suffix}`, username: `oms-ada-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `oms-${suffix}`,

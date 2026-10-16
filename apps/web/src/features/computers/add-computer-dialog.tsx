@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Cloud01 as Cloud, Monitor01 as Monitor } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { m } from "#src/paraglide/messages";
 import { ComputerInstallCommand } from "./computer-install-command";
+import { CloudComputerStep } from "./cloud-computer-step";
 import { ComputerTypeOption } from "./computer-type-option";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 
@@ -15,22 +16,30 @@ export function AddComputerDialog({
   installOrigin,
   workspaceSlug,
   connectedComputerName,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   installOrigin: string;
   workspaceSlug: string | null;
   connectedComputerName: string | null;
+  onCreated: (computerId: string) => Promise<void>;
 }) {
   const [computerType, setComputerType] = useState<ComputerType>("local");
-  const [step, setStep] = useState<"choose" | "install">("choose");
+  const [step, setStep] = useState<"choose" | "install" | "cloud">("choose");
 
   function close() {
     onOpenChange(false);
-    window.setTimeout(() => {
-      setStep("choose");
-    }, 150);
   }
+
+  useEffect(() => {
+    if (open) return;
+    const timer = window.setTimeout(() => {
+      setStep("choose");
+      setComputerType("local");
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [open]);
 
   return (
     <ModalOverlay isOpen={open} onOpenChange={onOpenChange}>
@@ -46,7 +55,9 @@ export function AddComputerDialog({
                   <span id="add-computer-description">
                     {step === "choose"
                       ? m.computer_add_description()
-                      : m.computer_install_description()}
+                      : step === "cloud"
+                        ? m.computer_cloud_host_description()
+                        : m.computer_install_description()}
                   </span>
                 }
                 onClose={close}
@@ -70,6 +81,12 @@ export function AddComputerDialog({
                     onSelect={() => setComputerType("cloud")}
                   />
                 </div>
+              ) : step === "cloud" ? (
+                <CloudComputerStep
+                  workspaceSlug={workspaceSlug}
+                  onBack={() => setStep("choose")}
+                  onCreated={onCreated}
+                />
               ) : (
                 <ComputerInstallCommand
                   installOrigin={installOrigin}
@@ -78,23 +95,25 @@ export function AddComputerDialog({
                 />
               )}
 
-              <div className="flex items-center justify-end gap-3 border-t border-secondary px-6 py-4 sm:px-8">
-                <Button color="secondary" onPress={close}>
-                  {m.controls_cancel()}
-                </Button>
-                {step === "choose" ? (
+              {step !== "cloud" && (
+                <div className="flex items-center justify-end gap-3 border-t border-secondary px-6 py-4 sm:px-8">
                   <Button
-                    onPress={() => computerType === "local" && setStep("install")}
-                    isDisabled={computerType === "cloud"}
+                    color="secondary"
+                    onPress={step === "choose" ? close : () => setStep("choose")}
                   >
-                    {computerType === "cloud" ? m.computer_coming_soon() : m.controls_next()}
+                    {step === "choose" ? m.controls_cancel() : m.controls_back()}
                   </Button>
-                ) : (
-                  <Button onPress={close} isDisabled={!connectedComputerName}>
-                    {m.computer_connect_done()}
-                  </Button>
-                )}
-              </div>
+                  {step === "choose" ? (
+                    <Button onPress={() => setStep(computerType === "local" ? "install" : "cloud")}>
+                      {m.controls_next()}
+                    </Button>
+                  ) : (
+                    <Button onPress={close} isDisabled={!connectedComputerName}>
+                      {m.computer_connect_done()}
+                    </Button>
+                  )}
+                </div>
+              )}
             </>
           )}
         </Dialog>

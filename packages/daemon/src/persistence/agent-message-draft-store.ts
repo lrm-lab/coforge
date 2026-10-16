@@ -59,7 +59,7 @@ export class AgentMessageDraftStore {
 
   constructor(
     agentId: string,
-    rootDirectory = process.env.COFORGE_CLI_DRAFT_STATE_DIR ?? tmpdir(),
+    rootDirectory = Bun.env.COFORGE_CLI_DRAFT_STATE_DIR ?? tmpdir(),
     private readonly now: () => number = Date.now,
   ) {
     if (!rootDirectory) throw new Error("Agent message draft state directory is required");

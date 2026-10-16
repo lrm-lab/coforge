@@ -54,7 +54,9 @@ test("a tracked @mention is delivered to a running Agent and refused for a stopp
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const redis = new Bun.RedisClient(requireEnvironment("REDIS_URL"));
   const suffix = crypto.randomUUID();
-  const user = await db.user.create({ data: { username: `e2emd${suffix.slice(0, 8)}` } });
+  const user = await db.user.create({
+    data: { displayName: `e2emd${suffix.slice(0, 8)}`, username: `e2emd${suffix.slice(0, 8)}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `e2e-mention-${suffix}`,

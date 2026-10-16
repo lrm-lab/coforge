@@ -39,9 +39,9 @@ import type { Mentionable, MentionRef } from "./mention-text";
 const CHIP_BASE = "message-markdown-mention rounded-sm px-0.5 font-medium";
 export const MENTION_CHIP_CLASS = `${CHIP_BASE} bg-brand-primary text-brand-secondary`;
 export const MENTION_CHIP_SELF_CLASS = `${CHIP_BASE} bg-brand-solid text-white`;
-/** Added to an Agent chip so the renderer can recognise the clickable variant and the
- * stylesheet can give it a pointer/hover affordance. A human chip never gets this. */
-export const MENTION_CHIP_AGENT_CLASS = "message-markdown-mention-agent";
+/** Added to every mention chip, an Agent's or a person's, so the stylesheet gives it the pointer
+ * and hover affordance of a control that opens that profile. */
+export const MENTION_CHIP_OPENABLE_CLASS = "message-markdown-mention-openable";
 
 /**
  * Channel-reference chip classes. A `<@channel:uuid:name>` token renders with the same soft fill as
@@ -142,7 +142,7 @@ type ReferenceKind = {
  *
  * - a mention token (`<@human|agent:uuid>`) against the message's mention rows (`mentions`): a
  *   token with no row stays as written rather than becoming a phantom highlight. The chip shows the
- *   member's display label; an Agent chip carries its id (`data-mention-agent-id`) so the renderer
+ *   member's display label; a chip carries its Agent's or person's id (`data-mention-agent-id` / `data-mention-user-id`) so the renderer
  *   can open its profile. A mention is a reference, not a link — wake rules live on the server;
  * - a task token (`<@task:68>`) becomes a task reference carrying `data-task-reference-number`,
  *   written as `task #68`. The renderer checks the claim when it draws it: the part that shows the
@@ -324,19 +324,21 @@ function referenceKinds(options: ReferenceChipOptions): ReferenceKind[] {
   return kinds;
 }
 
-/** A mention chip: the self treatment for the viewer, and an Agent chip the renderer can open. */
+/** A mention chip: the self treatment for the viewer, and the id of the Agent or person whose
+ * profile the renderer opens from it. */
 function mentionChip(mention: ChipMention, viewerId: string | undefined): Element {
   // An Agent is never the viewer, whatever ids are compared.
   const self = Boolean(viewerId) && !mention.agentId && mention.actorId === viewerId;
   const className = (self ? MENTION_CHIP_SELF_CLASS : MENTION_CHIP_CLASS).split(" ");
-  // A human chip stays a plain reference: there is no human profile panel to open.
-  if (mention.agentId) className.push(MENTION_CHIP_AGENT_CLASS);
+  className.push(MENTION_CHIP_OPENABLE_CLASS);
   return {
     type: "element",
     tagName: "span",
     properties: {
       className,
-      ...(mention.agentId ? { "data-mention-agent-id": mention.agentId } : {}),
+      ...(mention.agentId
+        ? { "data-mention-agent-id": mention.agentId }
+        : { "data-mention-user-id": mention.actorId }),
     },
     children: [{ type: "text", value: `@${mention.label}` }],
   };

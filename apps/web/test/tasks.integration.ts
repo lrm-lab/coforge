@@ -14,10 +14,10 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
   const suffix = crypto.randomUUID();
   const handle = suffix.slice(0, 8);
   const alice = await db.user.create({
-    data: { username: `task-alice-${handle}` },
+    data: { displayName: `task-alice-${handle}`, username: `task-alice-${handle}` },
   });
   const bob = await db.user.create({
-    data: { username: `task-bob-${handle}` },
+    data: { displayName: `task-bob-${handle}`, username: `task-bob-${handle}` },
   });
   const workspace = await db.workspace.create({
     data: {
@@ -721,7 +721,9 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
   if (!connectionString) throw new Error("TASK_TEST_DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const human = await db.user.create({ data: { username: `receipt-${suffix}` } });
+  const human = await db.user.create({
+    data: { displayName: `receipt-${suffix}`, username: `receipt-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `receipt-${suffix}`,
@@ -1059,7 +1061,9 @@ test("a created Task's title stores its references as tokens, and its own mentio
   if (!connectionString) throw new Error("TASK_TEST_DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const human = await db.user.create({ data: { username: `tokens-${suffix}` } });
+  const human = await db.user.create({
+    data: { displayName: `tokens-${suffix}`, username: `tokens-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `task-tokens-${suffix}`,
@@ -1237,7 +1241,9 @@ test("converting by an eight-character message id finds only that channel's top-
   if (!connectionString) throw new Error("TASK_TEST_DATABASE_URL must point to local PostgreSQL");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID().slice(0, 8);
-  const human = await db.user.create({ data: { username: `short-id-${suffix}` } });
+  const human = await db.user.create({
+    data: { displayName: `short-id-${suffix}`, username: `short-id-${suffix}` },
+  });
   const workspace = await db.workspace.create({
     data: {
       slug: `task-short-id-${suffix}`,

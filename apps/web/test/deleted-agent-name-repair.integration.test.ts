@@ -24,7 +24,9 @@ test.skipIf(!connectionString)(
       adapter: new PrismaPg({ connectionString: connectionString! }),
     });
     const suffix = crypto.randomUUID().slice(0, 8);
-    const owner = await db.user.create({ data: { username: `repair-owner-${suffix}` } });
+    const owner = await db.user.create({
+      data: { displayName: `repair-owner-${suffix}`, username: `repair-owner-${suffix}` },
+    });
     const workspace = await db.workspace.create({
       data: { slug: `repair-${suffix}`, name: "Name repair" },
     });

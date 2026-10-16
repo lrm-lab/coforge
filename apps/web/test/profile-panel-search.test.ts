@@ -3,9 +3,11 @@ import { describe, expect, test } from "bun:test";
 import {
   agentIdFromProfileParam,
   agentProfileSearchWithoutThread,
-  agentProfileParamSchema,
   agentProfileTabParamSchema,
   formatAgentProfileParam,
+  formatPersonProfileParam,
+  profileParamSchema,
+  personIdFromProfileParam,
   resolveAgentProfileTab,
   visibleAgentProfileTabs,
   AGENT_PROFILE_TABS,
@@ -13,21 +15,27 @@ import {
 
 const AGENT_ID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
 
-describe("agentProfileParamSchema", () => {
-  test("accepts a well-formed agent: token", () => {
-    expect(agentProfileParamSchema.parse(formatAgentProfileParam(AGENT_ID))).toBe(
-      `agent:${AGENT_ID}`,
-    );
+describe("profileParamSchema", () => {
+  test("opens either an Agent or a person", () => {
+    expect(profileParamSchema.parse(formatAgentProfileParam(AGENT_ID))).toBe(`agent:${AGENT_ID}`);
+    expect(profileParamSchema.parse(formatPersonProfileParam(AGENT_ID))).toBe(`user:${AGENT_ID}`);
   });
 
-  test("accepts a missing value", () => {
-    expect(agentProfileParamSchema.parse(undefined)).toBeUndefined();
+  test("accepts a missing value and falls back to undefined for a malformed token", () => {
+    expect(profileParamSchema.parse(undefined)).toBeUndefined();
+    expect(profileParamSchema.parse("")).toBeUndefined();
+    expect(profileParamSchema.parse("agent:not-a-uuid")).toBeUndefined();
+    expect(profileParamSchema.parse("user:not-a-uuid")).toBeUndefined();
+    expect(profileParamSchema.parse(`channel:${AGENT_ID}`)).toBeUndefined();
   });
+});
 
-  test("falls back to undefined for a malformed token instead of throwing", () => {
-    expect(agentProfileParamSchema.parse("agent:not-a-uuid")).toBeUndefined();
-    expect(agentProfileParamSchema.parse("user:" + AGENT_ID)).toBeUndefined();
-    expect(agentProfileParamSchema.parse("")).toBeUndefined();
+describe("personIdFromProfileParam", () => {
+  test("extracts a person's id and ignores an Agent's", () => {
+    expect(personIdFromProfileParam(formatPersonProfileParam(AGENT_ID))).toBe(AGENT_ID);
+    expect(personIdFromProfileParam(formatAgentProfileParam(AGENT_ID))).toBeUndefined();
+    expect(personIdFromProfileParam("user:nope")).toBeUndefined();
+    expect(personIdFromProfileParam(undefined)).toBeUndefined();
   });
 });
 

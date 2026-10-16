@@ -11,7 +11,7 @@ test("an Agent send forwards past its seen boundary, holds a newer reply, and re
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const id = crypto.randomUUID();
   const username = `p${id.slice(0, 8)}`;
-  const user = await db.user.create({ data: { username } });
+  const user = await db.user.create({ data: { displayName: username, username } });
   const workspace = await db.workspace.create({
     data: { slug: id, name: "Send policy test", members: { create: { userId: user.id } } },
   });

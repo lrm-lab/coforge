@@ -21,7 +21,9 @@ const workspace = await db.workspace.create({
 const channel = await db.conversation.create({
   data: { workspaceId: workspace.id, channelName: "receipt-test" },
 });
-const owner = await db.user.create({ data: { username: `receipt-owner-${Date.now()}` } });
+const owner = await db.user.create({
+  data: { username: `receipt-owner-${Date.now()}`, displayName: "Receipt owner" },
+});
 const [target, memory, observer] = await Promise.all(
   ["task", "memory", "observer"].map((name) =>
     db.agent.create({

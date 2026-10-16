@@ -15,7 +15,9 @@ test("TaskBoard overview returns every visible Workspace channel task and no dir
   const short = suffix.slice(0, 8);
   const [alice, bob, outsider] = await Promise.all(
     ["alice", "bob", "outsider"].map((name) =>
-      db.user.create({ data: { username: `overview-${name}-${short}` } }),
+      db.user.create({
+        data: { displayName: `overview-${name}-${short}`, username: `overview-${name}-${short}` },
+      }),
     ),
   );
   const workspace = await db.workspace.create({
@@ -168,7 +170,9 @@ async function finishedWorkFixture() {
   const short = crypto.randomUUID().slice(0, 8);
   const [viewer, peer] = await Promise.all(
     ["viewer", "peer"].map((name) =>
-      db.user.create({ data: { username: `fin-${name}-${short}` } }),
+      db.user.create({
+        data: { displayName: `fin-${name}-${short}`, username: `fin-${name}-${short}` },
+      }),
     ),
   );
   const workspace = await db.workspace.create({

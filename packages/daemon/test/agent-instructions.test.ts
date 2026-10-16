@@ -43,6 +43,15 @@ test("retains reply instructions and thread addressing without provider tool nam
   expect(instructions).not.toContain("Bash tool");
 });
 
+test("message preparation avoids shared files and stops before sending stale contents", () => {
+  expect(instructions).toContain("Prefer a quoted here-document");
+  expect(instructions).toContain("with a delimiter absent from its body");
+  expect(instructions).toContain("do not reuse shared temporary files");
+  expect(instructions).toContain("create a unique file in your Agent workspace");
+  expect(instructions).toContain("send only after writing it successfully");
+  expect(instructions).toContain("If preparation fails, stop; never send existing file contents");
+});
+
 test("replies where the conversation is, by default rather than as a hard rule", () => {
   expect(instructions).toContain(
     "a top-level message gets a top-level reply, a thread message a reply in its thread, and a request you claimed as a Task its Task thread",

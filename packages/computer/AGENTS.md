@@ -45,6 +45,7 @@ relative to `src/`.
 | `local-config.ts`                    | Reading and validating the persisted profile                                                  |
 | `release-channel.ts`                 | Compiled official feed/server mapping                                                         |
 | `daemon-client/`                     | Daemon lifecycle requests (`start`, `stop`, `restart`) through the supervisor                 |
+| `host/`                              | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them               |
 | `status/`                            | Read-only `status` report through per-platform ports                                          |
 | `logging/`                           | Computer LogTape configuration and the `logs` follower                                        |
 | `updater.ts`                         | Reads the installed version; zod contract schemas and launcher text shared with the installer |
@@ -123,6 +124,13 @@ that environment; login, setup, and lifecycle adapters share that public seam.
   encode RPC.
 - `setup/` owns the Computer setup business flow. It coordinates domain ports
   without knowing Commander or terminal output formatting.
+- `host/` polls the server over HTTPS and places one Swarm service per cloud
+  Computer. It does not open a Daemon WebSocket or interpret Workspace messages.
+  A container's `foreground` start, and `__attach-workspace`, write the Daemon
+  API key and append one enabled workspace binding on the service volume.
+  `__attach-workspace` then asks the running supervisor to start only that
+  workspace. Agent workspaces are `/root/.coforge/agent-workspaces` on that volume.
+  `docker/Dockerfile` is the local image; its entrypoint is `coforge-computer foreground`.
 - `workspace/` owns the direct Workspace lookup used by setup intent. Computer
   never lists or interactively selects Workspaces; do not add a picker or a
   list-selection flow.

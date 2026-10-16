@@ -1,4 +1,5 @@
 import { recipientUserIdsForSend } from "./weekly-report-send-recipients.server";
+import { humanLabel } from "#src/lib/human-label";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
@@ -142,7 +143,7 @@ export async function distributeWeeklyReport(
         authorId: member.id,
         sourceTemplateId: parent.id,
         kind: "member",
-        title: memberReportTitle(member.displayName ?? member.username, year, week),
+        title: memberReportTitle(humanLabel(member), year, week),
         status: "draft",
         content: withAssignmentUnread(content, true) as Prisma.InputJsonValue,
       })),

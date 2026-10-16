@@ -43,6 +43,7 @@ export function AgentHoverCard({
   src,
   trigger,
   onOpenProfile,
+  triggerClassName,
 }: {
   agentId: string;
   conversationId?: string;
@@ -51,13 +52,17 @@ export function AgentHoverCard({
   handle?: string;
   src?: string | null;
   trigger: ReactNode;
-  onOpenProfile: OpenAgentProfile;
+  onOpenProfile?: OpenAgentProfile;
+  triggerClassName?: string;
 }) {
   return (
     <HoverPopover
       label={m.agent_open_profile({ name })}
-      onPress={() => onOpenProfile(agentId)}
-      triggerClassName="relative shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+      onPress={onOpenProfile ? () => onOpenProfile(agentId) : undefined}
+      triggerClassName={
+        triggerClassName ??
+        "relative shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+      }
       className="w-70"
       trigger={trigger}
     >
@@ -67,7 +72,7 @@ export function AgentHoverCard({
         name={name}
         handle={handle}
         src={src}
-        onOpenActivity={() => onOpenProfile(agentId, "activity")}
+        onOpenActivity={onOpenProfile ? () => onOpenProfile(agentId, "activity") : undefined}
       />
     </HoverPopover>
   );
@@ -88,7 +93,7 @@ function AgentCard({
   name: string;
   handle?: string;
   src?: string | null;
-  onOpenActivity: () => void;
+  onOpenActivity?: () => void;
 }) {
   const profile = useQuery({ ...agentProfileQuery(agentId), staleTime: CARD_PROFILE_STALE_MS });
   // Read here, beside the profile, so the two run side by side; the list itself shows only once
@@ -157,7 +162,7 @@ function AgentCard({
         </Tooltip>
       )}
       {/* The same viewers who get the profile panel's Activity tab. */}
-      {data && canManageAgent(data) && (
+      {data && canManageAgent(data) && onOpenActivity && (
         <CardRecentActivity activity={activity} onOpenActivity={onOpenActivity} />
       )}
     </>

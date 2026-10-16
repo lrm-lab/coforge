@@ -4,6 +4,15 @@ import { mkdir, readdir, realpath } from "node:fs/promises";
 const COFORGE_AGENT_DIR = ".builtin-runtime";
 const COFORGE_SESSION_DIR = ".builtin-sessions";
 
+/** The Pi runtime's Session directory in an Agent workspace root. */
+export const PI_SESSION_DIR = ".pi-sessions";
+
+/** The built-in runtime's reserved directories in an Agent workspace root (auth, models, Sessions). */
+export const COFORGE_RUNTIME_STORAGE_DIRS: readonly string[] = [
+  COFORGE_AGENT_DIR,
+  COFORGE_SESSION_DIR,
+];
+
 export function getCoforgeAgentDir(workingDirectory: string): string {
   return join(workingDirectory, COFORGE_AGENT_DIR);
 }

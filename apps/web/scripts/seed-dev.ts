@@ -72,8 +72,14 @@ await db.user.upsert({
     id: DEV_BROWSER_USER.id,
     username: DEV_BROWSER_USER.username,
     displayName: DEV_BROWSER_USER.name,
+    // Past first sign-in: the dev session opens the Workspace, not the name step.
+    welcomedAt: new Date(),
   },
-  update: { username: DEV_BROWSER_USER.username, displayName: DEV_BROWSER_USER.name },
+  update: {
+    username: DEV_BROWSER_USER.username,
+    displayName: DEV_BROWSER_USER.name,
+    welcomedAt: new Date(),
+  },
 });
 const workspaceId = await workspaceIdForUser(
   db,
@@ -91,12 +97,22 @@ const caseyId = stableId("user:casey-morgan");
 
 await db.user.upsert({
   where: { id: jordanId },
-  create: { id: jordanId, username: "jordan-lee", displayName: "Jordan Lee" },
+  create: {
+    id: jordanId,
+    username: "jordan-lee",
+    displayName: "Jordan Lee",
+    welcomedAt: new Date(),
+  },
   update: { displayName: "Jordan Lee" },
 });
 await db.user.upsert({
   where: { id: caseyId },
-  create: { id: caseyId, username: "casey-morgan", displayName: "Casey Morgan" },
+  create: {
+    id: caseyId,
+    username: "casey-morgan",
+    displayName: "Casey Morgan",
+    welcomedAt: new Date(),
+  },
   update: { displayName: "Casey Morgan" },
 });
 

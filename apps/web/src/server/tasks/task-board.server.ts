@@ -35,7 +35,6 @@ import {
   type MessageSignalScope,
 } from "#src/server/conversations/conversation-realtime.server";
 import {
-  agentReadableBody,
   MESSAGE_MENTIONS_SELECT,
   type MessageMentionRef,
 } from "#src/server/conversations/mentions.server";
@@ -67,12 +66,14 @@ import { creationChanges, historyEventView, historyRows, taskChanges } from "./t
 import {
   storedTaskStatus,
   taskMember,
+  readTaskText,
   taskSelection,
   taskView,
   CONVERSATION_KIND_WHERE,
   UNFINISHED_TASK_STATUSES,
   type FinishedTaskStatus,
   type SelectedTask,
+  type TaskReader,
 } from "./task-view.server";
 import {
   TaskOverviewReads,
@@ -82,6 +83,9 @@ import {
 } from "./task-overview.server";
 
 type Dependencies = {
+  /** Who reads this board's command results: people (the default) or an Agent, through the Agent
+   * Task route. A realtime Task copy always goes to people's pages. */
+  reader?: TaskReader;
   realtime?: ConversationRealtime;
   notifications?: MessageNotifier;
   publisher?: Pick<CentrifugoServerApi, "publish">;
@@ -296,15 +300,22 @@ export function refuseUnclaimed(result: TaskResult): void {
 /** Canonical authorization and transaction seam for message-backed Tasks. */
 export class TaskBoard {
   private readonly overviewReads: TaskOverviewReads;
+  private readonly reader: TaskReader;
 
   constructor(
     private readonly db: PrismaClient,
     private readonly dependencies: Dependencies = {},
   ) {
+    this.reader = dependencies.reader ?? "people";
     this.overviewReads = new TaskOverviewReads(db, {
       listableConversation: (viewer, conversationId) =>
         this.listableConversation(viewer, conversationId),
     });
+  }
+
+  /** A Task as this board's reader sees it. */
+  private view(task: SelectedTask) {
+    return taskView(task, this.reader);
   }
 
   // The Workspace Tasks page's reads live in `TaskOverviewReads`; these keep the board's entry
@@ -389,7 +400,7 @@ export class TaskBoard {
       });
       return {
         tasks: tasks.map((task) => ({
-          ...taskView(task),
+          ...this.view(task),
           channelRef: task.conversation.channelName
             ? `#${task.conversation.channelName}`
             : `@${task.conversation.members[0]!.user!.username}`,
@@ -412,7 +423,7 @@ export class TaskBoard {
         orderBy: { number: "asc" },
         select: taskSelection,
       });
-      return { tasks: tasks.map(taskView) };
+      return { tasks: tasks.map((task) => this.view(task)) };
     }
     const member = scope.member!;
     if (command.operation === "create") return this.create(scope, member, principal, command);
@@ -1068,7 +1079,7 @@ export class TaskBoard {
       const signalScope = scopes.message;
       const effects: Promise<unknown>[] = [
         this.announceTasks(scope, async () => scopes.task, {
-          tasks: result.tasks.map(taskView),
+          tasks: result.tasks.map((task) => taskView(task, "people")),
           publicationId: `${result.tasks[0]!.messageId}:task-created`,
         }),
       ];
@@ -1115,7 +1126,7 @@ export class TaskBoard {
     }
     const { receipt } = result;
     return {
-      tasks: result.tasks.map(taskView),
+      tasks: result.tasks.map((task) => this.view(task)),
       ...(result.held ? { state: "held" as const } : {}),
       ...(receipt && {
         assignmentReceipt: {
@@ -1412,7 +1423,7 @@ export class TaskBoard {
       return claimed;
     });
     await this.signalTaskChange(task);
-    return { tasks: [taskView(task)] };
+    return { tasks: [this.view(task)] };
   }
 
   private async claim(
@@ -1488,7 +1499,7 @@ export class TaskBoard {
       ),
     );
     await this.signalTaskChange(updated);
-    return { tasks: [taskView(updated)] };
+    return { tasks: [this.view(updated)] };
   }
 
   private async update(conversation: ConversationRef, member: Member, command: TaskCommand) {
@@ -1529,7 +1540,7 @@ export class TaskBoard {
       return updated;
     });
     await this.signalTaskChange(updated);
-    return { tasks: [taskView(updated)] };
+    return { tasks: [this.view(updated)] };
   }
 
   private async assign(
@@ -1599,7 +1610,7 @@ export class TaskBoard {
     if (receipt && result.changed)
       await this.publishAssignmentReceipt(receipt.id, command.idempotencyKey);
     return {
-      tasks: task ? [taskView(task)] : [],
+      tasks: task ? [this.view(task)] : [],
       ...(receipt && {
         assignmentReceipt: {
           messageId: receipt.id,
@@ -1641,7 +1652,7 @@ export class TaskBoard {
       return { task, changed: true };
     });
     if (result.changed) await this.signalTaskChange(result.task);
-    return { tasks: [taskView(result.task)] };
+    return { tasks: [this.view(result.task)] };
   }
 
   private async amend(
@@ -1655,11 +1666,13 @@ export class TaskBoard {
       const task = await findTaskByNumber(tx, conversationId, command.number!);
       if (!task) throw new AppError("NOT_FOUND");
       assertExpectedRevision(task, command.expectedRevision);
-      // An amended title is typed text. One that reads the same as the current title (whose stored
-      // tokens read back as `@handle`, `task #N`, `#name`) is left as stored, tokens included.
+      // An amended title is typed text. One that reads the same as the current title does for this
+      // reader (its stored tokens read back as names or `@handle`, `task #N`, `#name`) is left as
+      // stored, tokens included.
       const title = command.title?.trim();
       const retitled =
-        title !== undefined && title !== agentReadableBody(task.title, task.message.mentions);
+        title !== undefined &&
+        title !== readTaskText(task.title, this.reader, task.message.mentions);
       return this.commitTaskChange(
         tx,
         member,
@@ -1672,7 +1685,12 @@ export class TaskBoard {
       );
     });
     await this.signalTaskChange(result.task);
-    return { tasks: [taskView(result.task)], history: result.events.map(historyEventView) };
+    return {
+      tasks: [this.view(result.task)],
+      history: result.events.map((event) =>
+        historyEventView(event, this.reader, result.task.message.mentions),
+      ),
+    };
   }
 
   private async history(conversationId: string, command: TaskCommand): Promise<TaskResult> {
@@ -1687,8 +1705,10 @@ export class TaskBoard {
     });
     if (!task) throw new AppError("NOT_FOUND");
     return {
-      tasks: [taskView(task)],
-      history: task.history.map(historyEventView),
+      tasks: [this.view(task)],
+      history: task.history.map((event) =>
+        historyEventView(event, this.reader, task.message.mentions),
+      ),
     };
   }
 
@@ -1865,7 +1885,7 @@ export class TaskBoard {
         // Reminder snapshot reconciliation repairs a missed upsert.
       }
     return {
-      tasks: [taskView(result.task)],
+      tasks: [this.view(result.task)],
       resourceFollowup: {
         id: result.reminder.id,
         ownerAgentId: result.owner.id,
@@ -1894,7 +1914,7 @@ export class TaskBoard {
           }),
         ),
         this.announceTasks(task, async () => scopes.task, {
-          tasks: [taskView(task)],
+          tasks: [taskView(task, "people")],
           publicationId: `${task.messageId}:task-changed:${task.revision}`,
         }),
       ]);

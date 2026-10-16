@@ -1,7 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import type { ChannelActor } from "./public-channels.server";
-import { isElevatedServerRole } from "#src/server/workspaces/member-role.server";
+import { roleCan } from "#src/features/workspaces/workspace-roles";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 
 /**
@@ -46,7 +46,7 @@ export function deriveChannelAdminBasis(
   serverRole: string | undefined,
   channelRole: string | undefined,
 ): ChannelAdminBasis | undefined {
-  if (isElevatedServerRole(serverRole)) return "server_role";
+  if (roleCan(serverRole, "manageChannels")) return "server_role";
   if (channelRole === "admin") return "channel_role";
   return undefined;
 }
@@ -84,20 +84,20 @@ export function deriveChannelCapabilities(input: {
 
 /** Only a Workspace owner or admin hides `#general` from the Workspace, whatever their role in it. */
 export function canHideGeneralChannel(channelName: string, serverRole: string | undefined) {
-  return channelName === "general" && isElevatedServerRole(serverRole);
+  return channelName === "general" && roleCan(serverRole, "manageChannels");
 }
 
 /** Only a Workspace owner or admin deletes a channel, whatever their role in it (a channel admin
  * cannot); `#general` is never deleted. */
 export function canDeleteChannel(channelName: string, serverRole: string | undefined) {
-  return channelName !== "general" && isElevatedServerRole(serverRole);
+  return channelName !== "general" && roleCan(serverRole, "manageChannels");
 }
 
 /** Only a Workspace owner or admin sees every archived channel in Workspace settings. That same
  * role is the admin basis granting `unarchive` on every channel but `#general`, so each one listed
  * is one they may unarchive; a channel admin unarchives their own channel from its settings. */
 export function canListArchivedChannels(serverRole: string | undefined) {
-  return isElevatedServerRole(serverRole);
+  return roleCan(serverRole, "manageChannels");
 }
 
 /** A `ConversationMember` `where` clause identifying `actor`'s own row in a channel. Shared by

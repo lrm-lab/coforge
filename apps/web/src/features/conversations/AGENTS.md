@@ -3,7 +3,7 @@
 These rules apply to `src/features/conversations/`.
 
 - This feature does not own Agent state. Read Agent status and Activity through the `features/agents/` hooks, and open, close, or switch the
-  right-hand Agent profile panel through `features/agents/profile-panel/open-agent-profile.ts` instead of writing `profile`/`agentTab` search params. The channel settings sheet embeds the
+  right-hand Agent or person profile panel through `features/agents/profile-panel/open-agent-profile.ts` instead of writing `profile`/`agentTab` search params. The channel settings sheet embeds the
   profile with its own state instead (see the members page below).
 - `conversation-navigation.tsx` owns Chat list/detail selection, retained list scroll, and mounted conversation drafts on desktop and mobile. At `lg`
   and above, list and detail stay side by side; narrower viewports switch between them. Neither sidebar renders conversation lists or their creation
@@ -157,9 +157,10 @@ These rules apply to `src/features/conversations/`.
   mentioned, and which reaction is theirs, is decided by `viewerId`.
 - A channel's members are a page of its settings panel
   (`channel-members-page.tsx`): the Members summary opens the roster and its
-  "+" the add view, both in place of the settings, with Back. An Agent row
-  opens that Agent's profile inside the sheet too, and its Back returns to the
-  roster with its search kept and focus on that row. The page and the
+  "+" the add view, both in place of the settings, with Back. A member row, an
+  Agent's or a person's, opens that profile inside the sheet too (a person's
+  Agents open there as well), and its Back returns to the roster with its
+  search kept and focus on that row. The page and the
   panel's Members strip read one `channelMembersQueryKey` query; a write
   updates or invalidates it rather than keeping its own copy. Removing a
   member confirms in a dialog: no toast, no browser `confirm()`. The add

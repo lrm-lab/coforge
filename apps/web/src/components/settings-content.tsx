@@ -15,6 +15,7 @@ import {
   Mail01,
   MessageSquare01 as MessagesSquare,
   Moon01 as Moon,
+  Server01 as Server,
   Share01,
   Sliders01 as SlidersHorizontal,
   Sun,
@@ -55,6 +56,7 @@ import { WORKSPACE_NAME_MAX_LENGTH } from "#src/features/workspaces/workspace.sc
 import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
 import { IMAGE_MAX_BYTES, IMAGE_UPLOAD_TYPES } from "#src/lib/image-upload";
 import { GitHubSettings } from "#src/features/integrations/github-settings";
+import { ServerConnectionSettings } from "#src/features/settings/server-connection-settings";
 import {
   MESSAGE_FONT_SIZES,
   parseMessageFontSize,
@@ -84,7 +86,8 @@ type SettingsSection =
   | "members"
   | "preferences"
   | "notifications"
-  | "integrations";
+  | "integrations"
+  | "server-connection";
 
 interface SettingsContentProps {
   /** Controlled section; falls back to internal state when omitted (tests, previews). */
@@ -175,6 +178,7 @@ export function SettingsContent(props: SettingsContentProps) {
     preferences: m.settings_preferences(),
     notifications: m.settings_notifications(),
     integrations: m.settings_integrations(),
+    "server-connection": m.settings_server_connection(),
   };
   const sectionLabel = sectionLabels[section];
   const sectionIcons: Record<SettingsSection, typeof UserRound> = {
@@ -185,6 +189,7 @@ export function SettingsContent(props: SettingsContentProps) {
     preferences: SlidersHorizontal,
     notifications: BellRing,
     integrations: Share01,
+    "server-connection": Server,
   };
 
   function selectSection(next: SettingsSection) {
@@ -248,6 +253,14 @@ export function SettingsContent(props: SettingsContentProps) {
               icon={Users}
               label={m.settings_members()}
               onClick={() => selectSection("members")}
+            />
+          </SettingsNavigationGroup>
+          <SettingsNavigationGroup label={m.settings_system_group()}>
+            <SettingsNavigationButton
+              active={section === "server-connection"}
+              icon={Server}
+              label={m.settings_server_connection()}
+              onClick={() => selectSection("server-connection")}
             />
           </SettingsNavigationGroup>
         </div>
@@ -335,6 +348,8 @@ export function SettingsContent(props: SettingsContentProps) {
               />
             ) : section === "preferences" ? (
               <Preferences {...props} />
+            ) : section === "server-connection" ? (
+              <ServerConnectionSettings />
             ) : section === "integrations" ? (
               <GitHubSettings
                 callbackError={props.githubCallbackError ?? false}
