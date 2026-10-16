@@ -99,3 +99,5 @@ MEMORY_THREAD_TEST_SCHEMA_SQL=/tmp/memory-thread-schema.sql \
 ```
 
 `DATABASE_URL` 必须指向本地 PostgreSQL；测试不迁移共享数据库，结束时删除自己创建的隔离 schema。
+
+Memory evaluates diagnosis before repeating a failed retrieval plan. A normal search request does not prohibit diagnosis; an explicit retrieve-only instruction does. Retrieval query/Offer ordering applies to retrieval, while diagnosis publishes its report through the server without a second Offer. This policy does not require diagnosis for successful lookups or routine progress.
