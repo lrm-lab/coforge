@@ -28,7 +28,7 @@ import {
 import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
 import {
   dragCarriesFiles,
-  fileFromDropItems,
+  filesFromDrop,
   filesFromPaste,
   localId,
   shouldSendOnEnter,
@@ -674,10 +674,8 @@ export function MessageComposer({
     dragDepthRef.current = 0;
     setDraggingFile(false);
     if (dropDisabled) return;
-    // Drag-and-drop stays one file per drop event, matching `fileFromDropItems`; the paperclip
-    // picker and paste both accept several at once.
-    const file = fileFromDropItems(event.dataTransfer);
-    if (file) void addFiles([file]);
+    const files = filesFromDrop(event.dataTransfer);
+    if (files.length > 0) void addFiles(files);
   }
 
   const taskMode = !inThread && Boolean(onCreateTask);

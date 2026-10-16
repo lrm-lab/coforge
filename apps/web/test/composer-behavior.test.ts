@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   dragCarriesFiles,
-  fileFromDropItems,
+  filesFromDrop,
   filesFromPaste,
   IME_ENTER_GUARD_MS,
   shouldSendOnEnter,
@@ -119,30 +119,30 @@ describe("dragCarriesFiles", () => {
   });
 });
 
-describe("fileFromDropItems", () => {
-  test("returns undefined for a text-only drop", () => {
-    expect(fileFromDropItems({ files: [], items: [textItem()] })).toBeUndefined();
+describe("filesFromDrop", () => {
+  test("returns nothing for a text-only drop", () => {
+    expect(filesFromDrop({ files: [], items: [textItem()] })).toEqual([]);
   });
 
-  test("returns undefined when dataTransfer is missing", () => {
-    expect(fileFromDropItems(null)).toBeUndefined();
-    expect(fileFromDropItems(undefined)).toBeUndefined();
+  test("returns nothing when dataTransfer is missing", () => {
+    expect(filesFromDrop(null)).toEqual([]);
+    expect(filesFromDrop(undefined)).toEqual([]);
   });
 
   test("reads the file from dataTransfer.files", () => {
     const file = new File(["contents"], "photo.png", { type: "image/png" });
-    expect(fileFromDropItems({ files: [file], items: [] })).toBe(file);
+    expect(filesFromDrop({ files: [file], items: [] })).toEqual([file]);
   });
 
   test("falls back to items with kind 'file'", () => {
     const file = new File(["contents"], "report.pdf", { type: "application/pdf" });
-    expect(fileFromDropItems({ files: [], items: [textItem(), fileItem(file)] })).toBe(file);
+    expect(filesFromDrop({ files: [], items: [textItem(), fileItem(file)] })).toEqual([file]);
   });
 
-  test("keeps only the first file when several are dropped, matching paste's single-attachment model", () => {
+  test("keeps every file of a multi-file drop, in order, as the picker and paste do", () => {
     const first = new File(["a"], "first.txt");
     const second = new File(["b"], "second.txt");
-    expect(fileFromDropItems({ files: [first, second], items: [] })).toBe(first);
+    expect(filesFromDrop({ files: [first, second], items: [] })).toEqual([first, second]);
   });
 });
 

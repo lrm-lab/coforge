@@ -96,15 +96,12 @@ export function dragCarriesFiles(types: ArrayLike<string> | null | undefined): b
 }
 
 /**
- * The first file dropped onto the composer. Drag events carry data through the same
- * `DataTransfer` shape as paste's `ClipboardData`, so this reuses `filesFromPaste` and keeps
- * only its first result: dropping several files at once uploads the first and ignores the
- * rest, matching the composer's single-attachment paste and paperclip behaviour.
+ * The files dropped onto the composer, in order. Drag events carry data through the same
+ * `DataTransfer` shape as paste's `ClipboardData`, so this reuses `filesFromPaste`: a drop of
+ * several files attaches them all, as the file picker and paste do.
  */
-export function fileFromDropItems(
-  dataTransfer: ClipboardDataLike | null | undefined,
-): File | undefined {
-  return filesFromPaste(dataTransfer)[0];
+export function filesFromDrop(dataTransfer: ClipboardDataLike | null | undefined): File[] {
+  return filesFromPaste(dataTransfer);
 }
 
 /**
