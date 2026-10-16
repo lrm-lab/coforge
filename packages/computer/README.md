@@ -1,19 +1,20 @@
 # coforge-computer
 
-`coforge-computer` is the machine-level daemon that installs, upgrades, and
-supervises `coforge-daemon`. The current vertical slice implements interactive
-login with the OAuth 2.0 device authorization grant:
+`coforge-computer` is the sole installed native executable. It contains the
+Computer CLI and Daemon runtime, supervises Workspace Daemons, and delegates
+installation and upgrades to `coforge-installer`. Explicit re-authentication
+uses the OAuth 2.0 device authorization grant:
 
 ```bash
 mise exec -- bun run packages/computer/src/main.ts login
 ```
 
-The command discovers `device_authorization_endpoint`, `token_endpoint`, and
-the CoForge `coforge_workspaces_endpoint` extension from the server's RFC 8414
+The command discovers `device_authorization_endpoint` and `token_endpoint`
+from the server's RFC 8414
 metadata. It prints the verification URL and user code, polls according to RFC
 8628 (including `authorization_pending` and `slow_down`), saves the credential
-without printing it, and returns the Workspaces the user can access. Login does
-not bind a Workspace or start a workspace-daemon.
+without printing it, and saves the current server profile. Login does not query
+Workspaces, bind a Workspace, or start a Workspace Daemon.
 
 Official builds are bound to one environment: production uses `https://coforge.cn`, and staging
 uses `https://staging.coforge.cn`. Login and setup do not expose a `--server` override. If an
@@ -22,23 +23,17 @@ or Daemon startup rather than overwriting the profile.
 
 Use `--json` for automation. Stdout contains exactly one JSON object; progress
 and device authorization instructions use stderr. Success includes
-`server_url`, `workspaces`, `binding_created: false`, and
+`ok: true`, `server_url`, `binding_created: false`, and
 `daemon_started: false`. Failures include a stable error `code`, a safe
 `message`, and an actionable `hint`, and exit nonzero.
 
-The metadata extension is an HTTPS endpoint. The Computer performs an
-authenticated `GET` with the device grant's bearer credential and expects:
-
-```json
-{
-  "workspaces": [{ "id": "ws_01", "slug": "example", "name": "Example" }]
-}
-```
-
-The canonical flow is setup launched by a Workspace page setup intent (deep
-link or installer parameter). Computer never lists or asks the user to choose a
-Workspace. If no login credential exists, setup performs the OAuth device flow
-inline, then registers the Computer through the CoForge RPC transport.
+The canonical flow is `setup --workspace <slug>` using the command supplied by
+the Workspace page. `COFORGE_SETUP_INTENT` remains available for automation and
+end-to-end tests. Computer never lists or asks the user to choose a Workspace.
+If no login credential exists, setup performs the OAuth device flow inline.
+Setup looks up the selected Workspace with `workspace:get` and registers the
+Computer with `computer:register` through the User-authenticated HTTPS RPC
+transport; it does not use the OAuth metadata's Workspace endpoint.
 
 Computer stores independent Workspace registrations. Adding a Workspace does
 not stop or replace existing bindings. Each Workspace has its own daemon
@@ -113,13 +108,13 @@ Daemon data remains separate:
 | macOS    | `~/.coforge/daemon`             |
 | Windows  | `%USERPROFILE%\.coforge\daemon` |
 
-Credentials use `Bun.secrets`, which delegates to macOS Keychain, Linux
-libsecret, or Windows Credential Manager. This keeps tokens out of repository
-files and plaintext application state. The trade-off is that Linux requires a
-running Secret Service; when the native store is locked or unavailable, login
-returns `AUTH_CREDENTIAL_STORE_UNAVAILABLE` with a remediation hint instead of
-falling back to plaintext. Credentials never appear in command arguments,
-stdout, stderr, or generated artifacts.
+`FileCredentialStore` saves credentials as plaintext JSON in the credential
+directory described above. It requests directory mode `0700` and file mode
+`0600`, writes a temporary file, and renames it into place. File permissions
+are subject to the host platform; this store does not use a system keychain.
+A missing credential file means no saved login; an unreadable or invalid file,
+or a failed save, returns `AUTH_CREDENTIAL_STORE_UNAVAILABLE`. Tokens are not
+printed in login output or passed as command arguments.
 
 Stable `machine_id` issuance and the initial cloud registration payload are
 implemented in the Computer setup slice. Server-side validation and identity
@@ -151,4 +146,3 @@ Official references:
 - [Apple application support directory](https://developer.apple.com/documentation/foundation/url/applicationsupportdirectory)
 - [Windows `FOLDERID_LocalAppData`](https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid)
 - [Bun single-file executables](https://bun.sh/docs/bundler/executables)
-- [Bun native credential storage](https://bun.sh/docs/runtime/secrets)
