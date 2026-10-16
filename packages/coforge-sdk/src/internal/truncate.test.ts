@@ -50,7 +50,22 @@ test("codePointLength, truncateCodePoints, and truncateCodePointsWithEllipsis ma
     const spread = [...sample];
     expect(codePointLength(sample)).toBe(spread.length);
 
-    for (let max = 0; max <= spread.length + 2; max++) {
+    const budgets = [
+      Number.NEGATIVE_INFINITY,
+      -2,
+      -1.5,
+      -1,
+      -0.5,
+      -0,
+      0,
+      0.5,
+      1.5,
+      Number.POSITIVE_INFINITY,
+      Number.NaN,
+    ];
+    for (let max = 0; max <= spread.length + 2; max++) budgets.push(max, max + 0.5);
+
+    for (const max of budgets) {
       const expectedTruncated = spread.length > max ? spread.slice(0, max).join("") : sample;
       const expectedEllipsis = spread.length > max ? `${spread.slice(0, max).join("")}…` : sample;
       expect(truncateCodePoints(sample, max)).toBe(expectedTruncated);

@@ -50,8 +50,9 @@ export function codePointLength(value: string): number {
  * within budget. Never splits a surrogate pair.
  */
 export function truncateCodePoints(value: string, max: number): string {
-  if (value.length <= max) return value;
-  const end = codeUnitOffsetAfterCodePoints(value, max);
+  if (value.length <= max || Number.isNaN(max)) return value;
+  if (max < 0) return [...value].slice(0, max).join("");
+  const end = codeUnitOffsetAfterCodePoints(value, Math.floor(max));
   return end < value.length ? value.slice(0, end) : value;
 }
 
@@ -61,7 +62,8 @@ export function truncateCodePoints(value: string, max: number): string {
  * without scanning its code units.
  */
 export function truncateCodePointsWithEllipsis(value: string, max: number): string {
-  if (value.length <= max) return value;
-  const end = codeUnitOffsetAfterCodePoints(value, max);
+  if (value.length <= max || Number.isNaN(max)) return value;
+  if (max < 0) return `${[...value].slice(0, max).join("")}…`;
+  const end = codeUnitOffsetAfterCodePoints(value, Math.floor(max));
   return end < value.length ? `${value.slice(0, end)}…` : value;
 }
