@@ -133,9 +133,12 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   only verified argument fields; a `subagent` step is one `invoke_subagent`
   tool call with no input, since its prompt and local paths are not Activity.
 - Account usage is `agy -p /usage --output-format json`, which answers without
-  a turn; the snapshot shows the model group with the least quota left. Only an
-  error naming sign-in or auth is `UsageUnavailableError`; a signed-out answer
-  was never captured, so that match is assumed.
+  a turn. `officialGroups` keeps every returned group and bucket, including a
+  weekly-only group, and `officialDescription` keeps `command.data.description`.
+  `primary` and `secondary` remain the tightest group's 5-hour and weekly windows
+  so an older Web still has two slots. Only an error naming sign-in or auth is
+  `UsageUnavailableError`; a signed-out answer was never captured, so that match
+  is assumed.
 - The unknown-`--conversation` fallback, the `agy models` line format, and the
   SSH token-store switch are observed on agy 1.2.12/1.2.13, not documented.
   Re-check them when raising the version gate.
