@@ -25,6 +25,9 @@ These rules apply to `src/server/db/`.
   requested page size.
 - Agent repositories persist only the completed runtime configuration;
   runtime selection and credential encryption stay in `server/agents/`.
+- `agent-app-config.repositories.server.ts` reads Agent App config rows and a live Agent's
+  placement only; which Apps exist, their defaults and validation stay in
+  `server/agent-app-configs/` and the SDK's `APP_CONFIG_DEFINITIONS`.
 - `reminder.repositories.server.ts` owns PostgreSQL locking and persistence
   only; authorization, recurrence, and fire idempotence stay in
   `server/reminders/`.

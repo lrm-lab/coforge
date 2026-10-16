@@ -95,6 +95,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/agent-app-inbox/`     | Typed Agent App items, kept separate from chat Message attention                                |
 | `src/agent-reminder/`      | Cloud reminder schedule mirror, version-fenced timers, and fire receipts                        |
 | `src/system-cleaner/`      | Per-Agent MEMORY.md and disk measurements, and the hints they present at Working→Idle           |
+| `src/agent-app-config/`    | Agent App config sync: snapshot requests per connection, routing each config to its App runtime |
 | `src/credentials/`         | Daemon credential store and Agent API keys                                                      |
 | `src/persistence/`         | Durable local daemon state and configuration validation                                         |
 | `src/platform/`            | OS primitives: process trees, launchd jobs, Job Objects, locks, log files, OS release           |
