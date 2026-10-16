@@ -18,8 +18,9 @@ export async function followComputerLogs(input: ComputerLogsOptions): Promise<vo
   for (const suffix of [".5", ".4", ".3", ".2", ".1", ""] as const) {
     const content = await readIfPresent(`${path}${suffix}`);
     if (content) writeLines(content, input.write);
+    // Follow from the snapshot we printed, so a concurrent append is not skipped.
+    if (suffix === "") offset = content?.length ?? 0;
   }
-  offset = (await readIfPresent(path))?.length ?? 0;
 
   while (!signal.aborted) {
     const content = await readIfPresent(path);
