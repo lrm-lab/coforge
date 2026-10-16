@@ -45,6 +45,32 @@ const steps = (workflow: Workflow) =>
   Object.entries(workflow.jobs).flatMap(([name, job]) =>
     (job.steps ?? []).map((step) => ({ name, job, step })),
   );
+
+test("staging accepts only numbered development versions before acquiring publication credentials", async () => {
+  const publication = computerStaging.jobs.publish!.steps!;
+  const index = publication.findIndex(
+    (step) => step.name === "Require a numbered development version",
+  );
+  expect(index).toBeGreaterThanOrEqual(0);
+  expect(index).toBeLessThan(publication.findIndex((step) => step.name === OIDC_STEP));
+  const guard = publication[index]!;
+  expect(guard.env?.INPUT_VERSION).toBe("${{ inputs.version }}");
+  for (const [version, allowed] of [
+    ["", true],
+    ["0.1.3-dev.1", true],
+    ["0.1.3-dev.12", true],
+    ["0.1.3", false],
+    ["0.1.3.dev", false],
+    ["0.1.3-dev.0", false],
+  ] as const) {
+    const child = Bun.spawn(["bash", "-e", "-c", guard.run!], {
+      env: { ...process.env, INPUT_VERSION: version },
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    expect(await child.exited, version).toBe(allowed ? 0 : 1);
+  }
+});
 const roleOf = (workflow: Workflow, job: Job, step: Step) =>
   step.env?.ALIBABA_CLOUD_ROLE_ARN ??
   job.env?.ALIBABA_CLOUD_ROLE_ARN ??

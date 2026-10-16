@@ -10,7 +10,7 @@ on:
     inputs:
       version:
         description: >-
-          Release version to publish (e.g. 0.1.1). Leave empty to publish the release
+          Numbered development version to publish (e.g. 0.1.3-dev.1). Leave empty to publish the release
           line's next dev build (DEV_LINE below): the smallest unused <line>-dev.<N>.
         required: false
         type: string
@@ -21,7 +21,7 @@ permissions:
 env:
   # The release line staging dev builds belong to. Each line counts its own dev builds from 1
   # (scripts/release/publish.ts `nextDevVersion`); move it when a line ships as a stable version.
-  DEV_LINE: "0.1.2"
+  DEV_LINE: "0.1.3"
 
 concurrency:
   group: release-staging
@@ -52,6 +52,15 @@ jobs:
     # leaves room for a slow day without letting a stalled upload hold the job indefinitely.
     timeout-minutes: 30
     steps:
+      - name: Require a numbered development version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$INPUT_VERSION" ] && ! [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-dev\.[1-9][0-9]*$ ]]; then
+            echo "staging requires a numbered development version, for example 0.1.3-dev.1" >&2
+            exit 1
+          fi
+
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 

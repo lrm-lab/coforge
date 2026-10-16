@@ -32,16 +32,22 @@ and production binaries cannot be the same bytes: the feed a build trusts is
 compiled into it, so a staging binary copied into the production feed would keep
 updating itself from staging. Promotion therefore rebuilds:
 
-1. An Agent verifies the staging feed's `latest` resolves a stable version (no
-   prerelease suffix). It prepares that version, the source commit it was built
-   from, the staging test run and its evidence, and the production feed's
-   current `latest` for comparison.
-2. A human approves or rejects that exact commit and version. A filename,
+1. An Agent verifies the staging feed's `latest` resolves the explicitly selected
+   development candidate, such as `0.1.3-dev.1`. It prepares that candidate's
+   source commit, staging version and test evidence, the intended stable production
+   version (such as `0.1.2`), and production's current `latest` for comparison.
+   The channels may use different version numbers, but their source commit must
+   match. `release-production.yml` accepts `staging_version` for this case;
+   omitting it retains the historical same-version comparison. The candidate
+   verifier still checks staging's pointer and manifest, and rejects a manifest
+   naming another source. Do not overwrite an existing immutable version to align
+   the channel labels, or use `without_staging` to bypass this comparison.
+2. A human approves or rejects that exact commit and production version. A filename,
    branch, channel name, or unspecified "latest build" approval is invalid.
 3. After approval, the Agent builds the approved commit against the production
-   feed configuration, producing a distinct set of binaries whose only intended
-   difference from the staging set is the compiled-in environment (feed and
-   matching business server addresses).
+   feed configuration, producing a distinct set of binaries whose intended
+   differences from the staging set are the approved release version and the
+   compiled-in environment (feed and matching business server addresses).
 4. The Agent publishes the new manifest, checksum sidecars and binaries beneath
    the production feed's `<version>/` path, then performs authenticated OSS
    byte-identical read-back and verifies the unsigned-origin 403 guard for each

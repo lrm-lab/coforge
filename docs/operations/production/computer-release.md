@@ -89,12 +89,15 @@ commit ([Staging to production](../../release/staging-to-production.md#local-com
 The `production` GitHub Environment's required reviewer approves the run, whose
 title names the exact version and commit.
 
-1. Publish the stable version to staging, and test it there:
-   `gh workflow run release-staging.yml --repo lrm-lab/coforge -f version=0.1.1`.
+1. Publish a numbered development version to staging, and test it there:
+   `gh workflow run release-staging.yml --repo lrm-lab/coforge -f version=0.1.3-dev.1`.
+   Leave `version` empty to select the configured line's next unused development
+   number. Staging rejects stable or unnumbered version inputs.
 2. Read the commit staging published it from:
-   `curl -s https://releases-staging.coforge.cn/0.1.1/manifest.json | jq -r .commit`.
-3. Publish the installer first, because `install.sh` reads `installer/latest`
-   from the same feed. Its version is `crates/installer/Cargo.toml`'s at the
+   `curl -s https://releases-staging.coforge.cn/0.1.3-dev.1/manifest.json | jq -r .commit`.
+3. Ensure a compatible installer is already published to production, because
+   `install.sh` reads `installer/latest` from the same feed. If a new installer
+   is required, publish it first. Its version is `crates/installer/Cargo.toml`'s at the
    commit staging published it from
    (`curl -s https://releases-staging.coforge.cn/installer/latest`):
 
@@ -103,16 +106,20 @@ title names the exact version and commit.
      -f commit=<installer commit> -f version=<installer version>
    ```
 
-4. Publish the Computer:
+4. Publish the Computer with the approved stable version and the separate
+   staging evidence version:
 
    ```sh
    gh workflow run release-production.yml --repo lrm-lab/coforge \
-     -f commit=<commit> -f version=0.1.1
+     -f commit=<commit> -f version=0.1.2 -f staging_version=0.1.3-dev.1
    ```
 
 Each workflow first checks, without credentials, that the commit is on `main`
 and that staging published that version from it; the Computer workflow also
-requires staging's `latest` to name that stable version. A failed check stops the
+requires staging's `latest` to name the selected staging version. Its manifest
+must identify the same approved source commit. The production version need not
+match the staging version; without `staging_version`, the historical same-version
+comparison remains. A failed check stops the
 run before the approval gate.
 
 A release Frank approves without a staging publication adds

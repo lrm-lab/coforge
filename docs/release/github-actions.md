@@ -7,7 +7,7 @@
 | **Publish Computer (staging)** | Manually started from `main`        | Validate → build all six platforms → upload and verify release → update staging `latest` |
 | **Publish installer (staging)** | Manually started from `main`       | Validate → plan → build each target natively → package, upload, and verify, write the manifest, and update `installer/latest`; or with `pointer_only` move that pointer alone |
 | **Publish installer (production)** | Manually started from `main` with an approved commit and version | Verify staging published it → approval → plan → build that commit natively against the production feed → package, upload, and verify, and update `installer/latest`; or with `pointer_only` move that pointer alone |
-| **Publish Computer (production)** | Manually started from `main` with an approved commit and version | Verify staging's `latest` and manifest name it → approval → build that commit against the production feed → upload and verify → update production `latest` |
+| **Publish Computer (production)** | Manually started from `main` with an approved commit and stable version | Verify the selected staging version's `latest` and manifest identify that commit → approval → build that commit against the production feed → upload and verify → update production `latest` |
 
 The Web workflow skips image build and deployment when the commit does not
 affect Web. Computer publication is manual and its run title includes the
@@ -105,8 +105,11 @@ choosing a number at the same time. Move `DEV_LINE` when a line ships as a
 stable version. The source SHA and build time remain in the manifest rather
 than the version string. There is no nightly schedule or date-based version
 convention. Use only two routine forms: staging builds such as `0.1.2-dev.2`
-and stable versions such as `0.1.1`, selected through the explicit version
-input. No beta or release-candidate stage is required. Previously published
+and stable production versions such as `0.1.2`. Staging always uses a numbered
+`-dev.N` suffix, including explicit version inputs; production uses the stable
+version input and may name a different staging evidence version with
+`staging_version`, while requiring the same source commit. No beta or
+release-candidate stage is required. Previously published
 versions, including historical `rc` versions, remain immutable and available
 by exact version; the next successful publication moves `latest` without
 renaming or deleting them.

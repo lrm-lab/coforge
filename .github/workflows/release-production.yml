@@ -1,11 +1,12 @@
 name: Publish Computer (production)
-run-name: Publish Computer ${{ inputs.version }} from ${{ inputs.commit }} to production${{ inputs.without_staging && ' without staging' || '' }}
+run-name: Publish Computer ${{ inputs.version }} from ${{ inputs.commit }} to production${{ inputs.staging_version && format(' (staging {0})', inputs.staging_version) || '' }}${{ inputs.without_staging && ' without staging' || '' }}
 
 # Production promotion of the local Computer distribution (docs/release/staging-to-production.md).
 # The feed a build trusts is compiled into it, so production never copies staging's binaries: it
 # builds the approved commit again against https://releases.coforge.cn. The `candidate` job checks
-# that staging's `latest` names this stable version and that staging published it from this commit;
-# staging publishes only from `main` and only after the release gates. The `production` GitHub
+# that staging's `latest` names the evidence version and that staging published it from this
+# commit. The optional staging_version separates a development candidate from the stable
+# production version. Staging publishes only from `main` and only after the release gates. The `production` GitHub
 # Environment carries the required human reviewer, who approves this exact commit and version.
 # Publish the production installer (release-installer-production.yml) first: install.sh reads
 # `installer/latest` from the same feed.
@@ -17,8 +18,12 @@ on:
         required: true
         type: string
       version:
-        description: Stable version that staging's latest names, e.g. 0.1.1
+        description: Stable production version, e.g. 0.1.2
         required: true
+        type: string
+      staging_version:
+        description: Version staging's latest names; leave empty when it equals the production version
+        required: false
         type: string
       without_staging:
         description: >-
@@ -73,15 +78,17 @@ jobs:
         env:
           INPUT_COMMIT: ${{ inputs.commit }}
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_STAGING_VERSION: ${{ inputs.staging_version }}
           WITHOUT_STAGING: ${{ inputs.without_staging }}
         run: |
           flags=()
           if [ "$WITHOUT_STAGING" = true ]; then flags=(--without-staging); fi
+          if [ -n "$INPUT_STAGING_VERSION" ]; then flags+=("--staging-version=$INPUT_STAGING_VERSION"); fi
           bun scripts/release/production-candidate.ts "${flags[@]}" computer \
             "$INPUT_VERSION" "$INPUT_COMMIT" https://releases-staging.coforge.cn
           # Validated above as 40 hex characters, so it cannot be read as an option.
           git merge-base --is-ancestor "$INPUT_COMMIT" HEAD
-          echo "- Candidate: Computer ${INPUT_VERSION} from ${INPUT_COMMIT}, published to staging and on main" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Candidate: Computer ${INPUT_VERSION} from ${INPUT_COMMIT}, staging evidence ${INPUT_STAGING_VERSION:-$INPUT_VERSION}, on main" >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     name: Build and publish Computer
