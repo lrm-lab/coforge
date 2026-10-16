@@ -91,9 +91,22 @@ export function useFindInFile({ text, codeRootRef, enabled }: UseFindInFileOptio
       CSS.highlights.delete(FIND_HIGHLIGHT);
       return;
     }
+    // Small result sets are cheaper to look up directly than to index the entire file.
+    // For larger sets, index only for this rebuild; never retain elements across DOM updates.
+    const lineNumbers = matches.length >= 16 ? new Map<string, Element>() : undefined;
+    if (lineNumbers) {
+      for (const element of codeRoot.querySelectorAll("[data-line]")) {
+        const line = element.getAttribute("data-line")!;
+        // Keep querySelector's first match if a line number occurs twice.
+        if (!lineNumbers.has(line)) lineNumbers.set(line, element);
+      }
+    }
     const ranges: Range[] = [];
     for (const match of matches) {
-      const range = rangeForMatch(codeRoot, match);
+      const line = lineNumbers
+        ? lineNumbers.get(String(match.line))
+        : codeRoot.querySelector(`[data-line="${match.line}"]`);
+      const range = rangeForMatch(line, match);
       if (range) ranges.push(range);
     }
     if (ranges.length > 0) CSS.highlights.set(FIND_HIGHLIGHT, new Highlight(...ranges));
@@ -111,7 +124,7 @@ export function useFindInFile({ text, codeRootRef, enabled }: UseFindInFileOptio
       CSS.highlights.delete(FIND_ACTIVE_HIGHLIGHT);
       return;
     }
-    const found = findRow(codeRoot, match.line);
+    const found = rowForLineElement(codeRoot.querySelector(`[data-line="${match.line}"]`));
     if (!found) {
       CSS.highlights.delete(FIND_ACTIVE_HIGHLIGHT);
       return;
@@ -170,20 +183,18 @@ export function useFindInFile({ text, codeRootRef, enabled }: UseFindInFileOptio
   };
 }
 
-/** Finds the `.pfv-row`/`.pfv-code` pair for a line, scoped to the code root (never `document`-wide). */
-function findRow(
-  codeRoot: HTMLElement,
-  line: number,
+/** Resolves a line-number element already found within the code root to its row/code pair. */
+function rowForLineElement(
+  lineNoEl: Element | null | undefined,
 ): { row: HTMLElement; code: HTMLElement } | null {
-  const lineNoEl = codeRoot.querySelector(`[data-line="${line}"]`);
   const row = lineNoEl?.parentElement;
   const code = row?.querySelector<HTMLElement>(".pfv-code");
   if (row instanceof HTMLElement && code) return { row, code };
   return null;
 }
 
-function rangeForMatch(codeRoot: HTMLElement, match: FindMatch): Range | null {
-  const found = findRow(codeRoot, match.line);
+function rangeForMatch(lineNoEl: Element | null | undefined, match: FindMatch): Range | null {
+  const found = rowForLineElement(lineNoEl);
   if (!found) return null;
   return buildRangeForMatch(found.code, match.start, match.end);
 }
