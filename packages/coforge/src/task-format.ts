@@ -115,19 +115,15 @@ export function formatTasksCreated(target: string, result: TaskResult): string {
         result.assignmentReceipt.content,
       ]
     : [];
-  if (result.state === "held")
-    return [
-      `Existing task found in ${target}; no duplicate was created:`,
-      ...rows,
-      "Claim or coordinate in this task's thread before starting work:",
-      ...result.tasks.map((task) => `#${task.number} → ${threadReply(target, task)}`),
-    ].join("\n");
+  const held = result.state === "held";
   return [
-    `Created ${result.tasks.length} task(s) in ${target}:`,
+    held
+      ? `Existing task found in ${target}; no duplicate was created:`
+      : `Created ${result.tasks.length} task(s) in ${target}:`,
     ...rows,
-    ...receipt,
-    "",
-    "To follow up in each task's thread:",
+    ...(held
+      ? ["Claim or coordinate in this task's thread before starting work:"]
+      : [...receipt, "", "To follow up in each task's thread:"]),
     ...result.tasks.map((task) => `#${task.number} → ${threadReply(target, task)}`),
   ].join("\n");
 }
