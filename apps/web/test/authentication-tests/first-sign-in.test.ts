@@ -25,6 +25,11 @@ function setup(
       workspaceId: string;
       now: Date;
     }) => Promise<unknown>;
+    bindWeeklyReportAssistant?: (input: {
+      userId: string;
+      workspaceId: string;
+      computerId: string;
+    }) => Promise<unknown>;
   } = {},
 ) {
   const users = new Set(input.userExists === false ? [] : [ada.id]);
@@ -59,6 +64,7 @@ function setup(
       nameStore,
       new WorkspaceEnrollment(enrollmentStore),
       input.startCloudComputer,
+      input.bindWeeklyReportAssistant,
     ),
     names,
     created,
@@ -81,6 +87,31 @@ test("completing first sign-in assigns the default cloud computer to the persona
 
   expect(result).toEqual({ ok: true, workspaceId: "workspace-ada" });
   expect(started).toEqual([{ userId: ada.id, workspaceId: "workspace-ada" }]);
+});
+
+test("completing first sign-in binds the weekly-report assistant to the default cloud computer", async () => {
+  const bound: Array<{ userId: string; workspaceId: string; computerId: string }> = [];
+  const { firstSignIn } = setup({
+    startCloudComputer: async () => ({
+      computerId: "cloud-1",
+      slot: "default",
+      name: "Cloud",
+      containerReady: false,
+      jobId: null,
+    }),
+    bindWeeklyReportAssistant: async (request) => {
+      bound.push(request);
+    },
+  });
+
+  const result = await firstSignIn.complete({
+    user: ada,
+    displayName: "Ada Lovelace",
+    acceptLanguage: "en",
+  });
+
+  expect(result).toEqual({ ok: true, workspaceId: "workspace-ada" });
+  expect(bound).toEqual([{ userId: ada.id, workspaceId: "workspace-ada", computerId: "cloud-1" }]);
 });
 
 test("a display name is saved, and the personal Workspace is titled with it", async () => {

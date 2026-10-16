@@ -9,11 +9,15 @@ import {
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { isWorkspaceSlugFree } from "#src/server/db/repositories/workspace-slugs.repositories.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
+import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-assistant.server";
 import {
   PrismaWorkspaceEnrollmentStore,
   WorkspaceEnrollment,
 } from "#src/server/workspaces/enrollment.server";
-import { startDefaultCloudComputer } from "#src/server/workspaces/create-workspace.server";
+import {
+  defaultCloudComputerId,
+  startDefaultCloudComputer,
+} from "#src/server/workspaces/create-workspace.server";
 
 /** Where a person's display name lives. */
 export type FirstSignInNames = {
@@ -53,11 +57,18 @@ export type CloudComputerStart = (input: {
   now: Date;
 }) => Promise<unknown>;
 
+export type WeeklyReportAssistantBind = (input: {
+  userId: string;
+  workspaceId: string;
+  computerId: string;
+}) => Promise<unknown>;
+
 /**
  * The step of first sign-in that asks a person for their display name and their personal
  * Workspace's URL: what the page needs to know (`readNameStep`) and what submitting it does
  * (`complete`): the Workspace is made at that URL, titled with the name, the default cloud
- * computer is started for it, and the name is saved. Sign-in itself finishes without either; a person without a
+ * computer is started for it, the weekly-report assistant is bound to that default
+ * computer, and the name is saved. Sign-in itself finishes without either; a person without a
  * name is sent here before anything is created for them.
  */
 export class FirstSignIn {
@@ -65,6 +76,7 @@ export class FirstSignIn {
     private readonly names: FirstSignInNames,
     private readonly enrollment: WorkspaceEnrollment,
     private readonly startCloudComputer?: CloudComputerStart,
+    private readonly bindWeeklyReportAssistant?: WeeklyReportAssistantBind,
   ) {}
 
   /** Whether to ask at all, and what the fields start with: the provider's own name, when it reads
@@ -113,11 +125,18 @@ export class FirstSignIn {
       if (isUniqueViolation(error)) return { ok: false, problem: "slug_taken" };
       throw error;
     }
-    await this.startCloudComputer?.({
+    const started = await this.startCloudComputer?.({
       userId: input.user.id,
       workspaceId,
       now: new Date(),
     });
+    const computerId = defaultCloudComputerId(started);
+    if (computerId)
+      await this.bindWeeklyReportAssistant?.({
+        userId: input.user.id,
+        workspaceId,
+        computerId,
+      });
     await this.names.setDisplayNameOnce(input.user.id, checked.name);
     return { ok: true, workspaceId };
   }
@@ -159,6 +178,7 @@ function firstSignIn(db: PrismaClient): FirstSignIn {
         (input) => productionCloudComputers(db).ensureDefault(input),
         request,
       ),
+    (request) => ensureWeeklyReportAssistant(db, request),
   );
 }
 

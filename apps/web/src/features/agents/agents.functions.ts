@@ -58,7 +58,10 @@ import {
 import { ChangeAgentRuntimeCredential } from "#src/server/agents/change-agent-runtime-credential.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { computerCanRunAgent } from "#src/server/agents/computer-runtime-availability.server";
-import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-assistant.server";
+import {
+  ensureWeeklyReportAssistant,
+  userOwnsLiveComputer,
+} from "#src/server/records/weekly-report-assistant.server";
 import {
   parseAgentRuntimeConfig,
   publicAgentRuntimeConfig,
@@ -347,6 +350,12 @@ export const updateAgent = createServerFn({ method: "POST" })
       where: { agentId: data.agentId, workspaceId, userId: user.id },
       select: { agentId: true },
     });
+    if (
+      assistant &&
+      data.computerId &&
+      !(await userOwnsLiveComputer(db, { userId: user.id, computerId: data.computerId }))
+    )
+      throw new AppError("ACCESS_DENIED");
     const updated = await manageAgents(db).update(
       { userId: user.id, workspaceId },
       // The weekly-report assistant's display label (「李健的周报助手」) is server-owned; drop any

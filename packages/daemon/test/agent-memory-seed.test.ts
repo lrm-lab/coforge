@@ -71,7 +71,8 @@ test("seedAgentMemory writes MEMORY.md into the Agent workspace with owner-only 
     expect(activeContext).toContain("up to 5 lines");
     expect(activeContext.trimEnd().split("\n").length).toBeLessThanOrEqual(5);
     expect((await stat(activeContextPath)).mode & 0o777).toBe(0o600);
-    expect(await readFile(join(workspace, ".gitignore"), "utf8")).toBe("work/\n.pi-sessions/\n");
+    // As in the reference Computer, the workspace is not made ready for git: no .gitignore.
+    await expect(stat(join(workspace, ".gitignore"))).rejects.toThrow();
     expect((await stat(join(workspace, "work"))).isDirectory()).toBe(true);
     const migrateIgnore = await readFile(join(workspace, ".coforgemigrateignore"), "utf8");
     expect(migrateIgnore.split("\n").filter((line) => line && !line.startsWith("#"))).toEqual([

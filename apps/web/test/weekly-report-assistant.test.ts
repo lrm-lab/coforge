@@ -4,6 +4,7 @@ import { RecordCatalog } from "#src/server/records/record-catalog.server";
 import {
   WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
   ensureWeeklyReportAssistant,
+  userOwnsLiveComputer,
   weeklyReportAssistantAgentName,
   weeklyReportAssistantDisplayName,
 } from "#src/server/records/weekly-report-assistant.server";
@@ -444,4 +445,186 @@ test("ensureWeeklyReportAssistant reclaims an orphan Agent left without an assis
   expect(createdAgents).toBe(0);
   expect(assistants).toHaveLength(1);
   expect(agents[0]).toMatchObject({ visibility: "private" });
+});
+
+test("a new weekly-report assistant binds only to the owner's default cloud computer and uses Pi's default model", async () => {
+  const agents: Array<Record<string, unknown>> = [];
+  const computers = [
+    {
+      id: "cloud-1",
+      ownerId: "user-1",
+      kind: "cloud",
+      cloudSlot: "default",
+      deletedAt: null,
+    },
+    {
+      id: "cloud-other",
+      ownerId: "user-2",
+      kind: "cloud",
+      cloudSlot: "default",
+      deletedAt: null,
+    },
+  ];
+  const tx = {
+    user: {
+      findUnique: async () => ({ username: "lijian", displayName: "李健" }),
+    },
+    computer: {
+      findFirst: async ({
+        where,
+      }: {
+        where: { id: string; ownerId: string; deletedAt: null; kind: string; cloudSlot: string };
+      }) =>
+        computers.find(
+          (computer) =>
+            computer.id === where.id &&
+            computer.ownerId === where.ownerId &&
+            computer.deletedAt === where.deletedAt &&
+            computer.kind === where.kind &&
+            computer.cloudSlot === where.cloudSlot,
+        ) ?? null,
+    },
+    weeklyReportAssistant: {
+      findUnique: async () => null,
+      create: async ({
+        data,
+      }: {
+        data: { workspaceId: string; userId: string; agentId: string };
+      }) => ({
+        id: "assistant-1",
+        ...data,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      }),
+    },
+    agent: {
+      findUnique: async () => null,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        const agent = { ...data, id: `agent-${agents.length + 1}` };
+        agents.push(agent);
+        return agent;
+      },
+    },
+  };
+  const db = {
+    $transaction: async <T>(callback: (transaction: typeof tx) => Promise<T>) => callback(tx),
+    weeklyReportAssistant: { findUnique: async () => null },
+  };
+
+  await ensureWeeklyReportAssistant(db as never, {
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    computerId: "cloud-1",
+  });
+  await ensureWeeklyReportAssistant(db as never, {
+    workspaceId: "workspace-2",
+    userId: "user-1",
+    computerId: "cloud-other",
+  });
+
+  expect(agents[0]).toMatchObject({
+    computerId: "cloud-1",
+    runtimeConfig: {
+      runtime: "pi",
+      provider: { kind: "default" },
+      model: "",
+      modelProvider: "",
+      reasoning: "",
+    },
+  });
+  expect(agents[1]).toMatchObject({
+    runtimeConfig: { runtime: "coforge", provider: { kind: "default" } },
+  });
+  expect(agents[1]).not.toHaveProperty("computerId");
+});
+
+test("ensuring an assistant leaves a computer the user already chose", async () => {
+  const agents = [
+    {
+      id: "agent-1",
+      workspaceId: "workspace-1",
+      ownerId: "user-1",
+      name: weeklyReportAssistantAgentName("user-1"),
+      displayName: "李健的周报助手",
+      computerId: "local-1",
+      runtimeConfig: {
+        runtime: "pi",
+        provider: { kind: "default" },
+        model: "chosen",
+        modelProvider: "",
+        reasoning: "",
+      },
+    },
+  ];
+  const tx = {
+    user: {
+      findUnique: async () => ({ username: "lijian", displayName: "李健" }),
+    },
+    computer: {
+      findFirst: async () => {
+        throw new Error("must not look up a computer for an assistant that already has one");
+      },
+    },
+    weeklyReportAssistant: {
+      findUnique: async () => ({
+        id: "assistant-1",
+        workspaceId: "workspace-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      }),
+    },
+    agent: {
+      findUnique: async () => agents[0],
+      update: async () => {
+        throw new Error("must not rewrite an assistant that already has a computer");
+      },
+    },
+  };
+  const db = {
+    $transaction: async <T>(callback: (transaction: typeof tx) => Promise<T>) => callback(tx),
+  };
+
+  await ensureWeeklyReportAssistant(db as never, {
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    computerId: "cloud-1",
+  });
+
+  expect(agents[0]?.computerId).toBe("local-1");
+  expect(agents[0]?.runtimeConfig).toMatchObject({ model: "chosen" });
+});
+
+test("a weekly-report assistant can use the owner's other computers, not someone else's", async () => {
+  const computers = [
+    { id: "extra-1", ownerId: "user-1", deletedAt: null },
+    { id: "local-1", ownerId: "user-1", deletedAt: null },
+    { id: "gone-1", ownerId: "user-1", deletedAt: new Date(0) },
+    { id: "theirs-1", ownerId: "user-2", deletedAt: null },
+  ];
+  const db = {
+    computer: {
+      findFirst: async ({ where }: { where: { id: string; ownerId: string; deletedAt: null } }) =>
+        computers.find(
+          (computer) =>
+            computer.id === where.id &&
+            computer.ownerId === where.ownerId &&
+            computer.deletedAt === where.deletedAt,
+        ) ?? null,
+    },
+  };
+
+  expect(await userOwnsLiveComputer(db as never, { userId: "user-1", computerId: "extra-1" })).toBe(
+    true,
+  );
+  expect(await userOwnsLiveComputer(db as never, { userId: "user-1", computerId: "local-1" })).toBe(
+    true,
+  );
+  expect(await userOwnsLiveComputer(db as never, { userId: "user-1", computerId: "gone-1" })).toBe(
+    false,
+  );
+  expect(
+    await userOwnsLiveComputer(db as never, { userId: "user-1", computerId: "theirs-1" }),
+  ).toBe(false);
 });

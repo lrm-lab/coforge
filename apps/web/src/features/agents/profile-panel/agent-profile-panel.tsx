@@ -143,11 +143,13 @@ export function AgentProfilePanel({
   });
   const setupComputers =
     offerComputerPicker && computersQuery.isSuccess
-      ? (computersQuery.data ?? []).map((computer) => ({
-          id: computer.id,
-          displayName: computer.displayName || computer.name || m.agent_computer_unnamed(),
-          online: Boolean(computer.online),
-        }))
+      ? (computersQuery.data ?? [])
+          .filter((computer) => !profile?.isWeeklyReportAssistant || computer.ownedByCurrentUser)
+          .map((computer) => ({
+            id: computer.id,
+            displayName: computer.displayName || computer.name || m.agent_computer_unnamed(),
+            online: Boolean(computer.online),
+          }))
       : undefined;
   const tabOrder = useAgentProfileTabOrder(canManage, canSeeWorkspace);
   const tab = resolveAgentProfileTab(requestedTab, tabOrder.tabs);

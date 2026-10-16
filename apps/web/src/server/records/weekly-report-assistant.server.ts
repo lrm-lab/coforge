@@ -42,6 +42,55 @@ export function weeklyReportAssistantAgentName(userId: string): string {
   return `weekly-report-assistant-${userId}`;
 }
 
+const UNCONFIGURED_RUNTIME = {
+  runtime: RUNTIME_PROVIDER.COFORGE,
+  provider: { kind: "default" as const },
+  model: "",
+  modelProvider: "",
+  reasoning: "",
+};
+
+/** Pi with an empty model: the runtime's own default model. */
+const PI_DEFAULT_RUNTIME = {
+  runtime: RUNTIME_PROVIDER.PI,
+  provider: { kind: "default" as const },
+  model: "",
+  modelProvider: "",
+  reasoning: "",
+};
+
+type ComputerLookup = Pick<PrismaClient, "computer">;
+
+/** The owner's live default cloud computer, or undefined when the id is not that. */
+async function ownDefaultCloudComputerId(
+  db: ComputerLookup,
+  input: { userId: string; computerId: string },
+): Promise<string | undefined> {
+  const computer = await db.computer.findFirst({
+    where: {
+      id: input.computerId,
+      ownerId: input.userId,
+      deletedAt: null,
+      kind: "cloud",
+      cloudSlot: "default",
+    },
+    select: { id: true },
+  });
+  return computer?.id;
+}
+
+/** A live Computer this User owns. Extra cloud computers and local computers count. */
+export async function userOwnsLiveComputer(
+  db: ComputerLookup,
+  input: { userId: string; computerId: string },
+): Promise<boolean> {
+  const computer = await db.computer.findFirst({
+    where: { id: input.computerId, ownerId: input.userId, deletedAt: null },
+    select: { id: true },
+  });
+  return computer !== null;
+}
+
 export type WeeklyReportAssistantRecord = {
   id: string;
   workspaceId: string;
@@ -64,7 +113,7 @@ export type WeeklyReportAssistantRecord = {
  */
 export async function ensureWeeklyReportAssistant(
   db: PrismaClient,
-  input: { workspaceId: string; userId: string },
+  input: { workspaceId: string; userId: string; computerId?: string },
 ): Promise<WeeklyReportAssistantRecord> {
   const agentName = weeklyReportAssistantAgentName(input.userId);
   try {
@@ -83,12 +132,24 @@ export async function ensureWeeklyReportAssistant(
           where: {
             workspaceId_name: { workspaceId: input.workspaceId, name: agentName },
           },
-          select: { id: true, displayName: true },
+          select: { id: true, displayName: true, computerId: true },
         });
-        if (agent && agent.displayName !== label) {
+        const patch: { displayName?: string; computerId?: string; runtimeConfig?: object } = {};
+        if (agent && agent.displayName !== label) patch.displayName = label;
+        if (agent && !agent.computerId && input.computerId) {
+          const computerId = await ownDefaultCloudComputerId(tx, {
+            userId: input.userId,
+            computerId: input.computerId,
+          });
+          if (computerId) {
+            patch.computerId = computerId;
+            patch.runtimeConfig = PI_DEFAULT_RUNTIME;
+          }
+        }
+        if (agent && Object.keys(patch).length > 0) {
           await tx.agent.update({
             where: { id_workspaceId: { id: agent.id, workspaceId: input.workspaceId } },
-            data: { displayName: label },
+            data: patch,
           });
         }
         return existing;
@@ -98,7 +159,7 @@ export async function ensureWeeklyReportAssistant(
         where: {
           workspaceId_name: { workspaceId: input.workspaceId, name: agentName },
         },
-        select: { id: true, ownerId: true, deletedAt: true, visibility: true },
+        select: { id: true, ownerId: true, deletedAt: true, visibility: true, computerId: true },
       });
 
       let agentId: string;
@@ -108,6 +169,8 @@ export async function ensureWeeklyReportAssistant(
           deletedAt?: null;
           displayName?: string;
           visibility?: typeof AGENT_VISIBILITY.PRIVATE;
+          computerId?: string;
+          runtimeConfig?: object;
         } = {};
         if (orphan.deletedAt) {
           patch.deletedAt = null;
@@ -115,6 +178,16 @@ export async function ensureWeeklyReportAssistant(
         }
         if (orphan.visibility !== AGENT_VISIBILITY.PRIVATE) {
           patch.visibility = AGENT_VISIBILITY.PRIVATE;
+        }
+        if (!orphan.computerId && input.computerId) {
+          const computerId = await ownDefaultCloudComputerId(tx, {
+            userId: input.userId,
+            computerId: input.computerId,
+          });
+          if (computerId) {
+            patch.computerId = computerId;
+            patch.runtimeConfig = PI_DEFAULT_RUNTIME;
+          }
         }
         if (Object.keys(patch).length > 0) {
           await tx.agent.update({
@@ -124,6 +197,12 @@ export async function ensureWeeklyReportAssistant(
         }
         agentId = orphan.id;
       } else {
+        const computerId = input.computerId
+          ? await ownDefaultCloudComputerId(tx, {
+              userId: input.userId,
+              computerId: input.computerId,
+            })
+          : undefined;
         const agent = await tx.agent.create({
           data: {
             workspaceId: input.workspaceId,
@@ -132,13 +211,8 @@ export async function ensureWeeklyReportAssistant(
             displayName: await assistantLabelForUser(tx, input.userId),
             description: "",
             visibility: AGENT_VISIBILITY.PRIVATE,
-            runtimeConfig: {
-              runtime: RUNTIME_PROVIDER.COFORGE,
-              provider: { kind: "default" },
-              model: "",
-              modelProvider: "",
-              reasoning: "",
-            },
+            ...(computerId ? { computerId } : {}),
+            runtimeConfig: computerId ? PI_DEFAULT_RUNTIME : UNCONFIGURED_RUNTIME,
           },
         });
         agentId = agent.id;

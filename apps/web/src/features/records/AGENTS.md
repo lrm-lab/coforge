@@ -74,6 +74,11 @@ These rules also cover `src/server/records/`.
   the existing HTTPS weekly-reports endpoint; no generic job or mailbox is added.
 - The Records tools menu has dashboard, stats and settings; the private assistant
   DM is the conversational entry point. Do not restore a duplicate assistant page.
+- Creating a Workspace, including the personal Workspace at first sign-in, binds
+  that User's weekly-report assistant to their own default cloud computer and
+  Pi's default model. Another person's computer is refused. Their own extra
+  cloud computer or local computer can replace it later. A deployment without a
+  cluster leaves the assistant unconfigured.
 - Agent template discovery does not require a cycle or submitted member reports.
   DM and page-scoped explicit requests use the same workflow operations. Do not
   intercept send or summarize phrases with side-panel keyword rules. A stored

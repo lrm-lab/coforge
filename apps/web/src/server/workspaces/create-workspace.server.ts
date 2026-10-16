@@ -1,16 +1,27 @@
 import { HostDirectoryError } from "#src/server/hosts/host-directory.server";
 import type { WorkspaceRecord } from "#src/server/workspaces/catalog.server";
 
+/** The default cloud computer id in a start result. Anything else, including an
+ * extra computer, is not a default to bind. */
+export function defaultCloudComputerId(started: unknown): string | undefined {
+  if (!started || typeof started !== "object") return undefined;
+  if (!("slot" in started) || !("computerId" in started)) return undefined;
+  const { slot, computerId } = started;
+  if (slot !== "default" || typeof computerId !== "string" || computerId.length === 0)
+    return undefined;
+  return computerId;
+}
+
 /** Starts the account's default cloud computer for a Workspace. A deployment
- * without a cluster does nothing. */
+ * without a cluster does nothing and returns undefined. */
 export async function startDefaultCloudComputer(
   start: (input: { userId: string; workspaceId: string; now: Date }) => Promise<unknown>,
   input: { userId: string; workspaceId: string; now: Date },
-): Promise<void> {
+): Promise<unknown> {
   try {
-    await start(input);
+    return await start(input);
   } catch (error) {
-    if (error instanceof HostDirectoryError && error.status === 503) return;
+    if (error instanceof HostDirectoryError && error.status === 503) return undefined;
     throw error;
   }
 }
@@ -28,6 +39,11 @@ export async function createWorkspaceAndStartCloudComputer(
       workspaceId: string;
       now: Date;
     }) => Promise<unknown>;
+    bindWeeklyReportAssistant?: (input: {
+      userId: string;
+      workspaceId: string;
+      computerId: string;
+    }) => Promise<unknown>;
   },
   input: { userId: string; name: string; slug: string; now: Date },
 ): Promise<WorkspaceRecord> {
@@ -35,10 +51,17 @@ export async function createWorkspaceAndStartCloudComputer(
     name: input.name,
     slug: input.slug,
   });
-  await startDefaultCloudComputer(deps.startCloudComputer, {
+  const started = await startDefaultCloudComputer(deps.startCloudComputer, {
     userId: input.userId,
     workspaceId: workspace.id,
     now: input.now,
   });
+  const computerId = defaultCloudComputerId(started);
+  if (computerId)
+    await deps.bindWeeklyReportAssistant?.({
+      userId: input.userId,
+      workspaceId: workspace.id,
+      computerId,
+    });
   return workspace;
 }

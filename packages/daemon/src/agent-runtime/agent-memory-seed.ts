@@ -29,10 +29,6 @@ const ACTIVE_CONTEXT_SEED = `# Active Context
 Before a long task, replace this line with up to 5 lines: the current task, the next step, and pointers to details, so an interrupted task can resume.
 `;
 
-const GITIGNORE_SEED = `work/
-.pi-sessions/
-`;
-
 /**
  * Builds the content of a freshly seeded MEMORY.md for one Agent: a title, a Role section, a
  * Rules slot, and an Index pointing at notes/active-context.md and notes/work-log.md — the
@@ -92,8 +88,8 @@ export async function memoryIndexReminder(
 
 /**
  * Writes the seeded MEMORY.md and notes/active-context.md into an Agent's workspace on its first
- * launch, and creates the `notes/` / `work/` layout plus notes/work-log.md, a root
- * `.gitignore`, and the migration ignore file that leaves `work/` behind by default. Never overwrites an existing file — once written, an Agent owns each of them and
+ * launch, and creates the `notes/` / `work/` layout plus notes/work-log.md and the migration
+ * ignore file that leaves `work/` behind by default. Never overwrites an existing file — once written, an Agent owns each of them and
  * this seed step never touches it again (`flag: "wx"` fails with `EEXIST`, which is swallowed
  * here). After a Full Reset clears the Agent workspace (the record store's `clearWorkspace`), the
  * files are gone along with every other workspace file, so the next launch's call to this
@@ -120,7 +116,6 @@ export async function seedAgentMemory(
     await mkdir(workDirectory, { recursive: true });
     await writeNewFile(join(notesDirectory, "active-context.md"), ACTIVE_CONTEXT_SEED);
     await writeNewFile(join(notesDirectory, "work-log.md"), WORK_LOG_SEED);
-    await writeNewFile(join(agentWorkspaceDirectory, ".gitignore"), GITIGNORE_SEED);
     await ensureAgentMigrationIgnoreFile(agentWorkspaceDirectory);
   } catch (error) {
     if ((error as { code?: string }).code === "EEXIST") return;

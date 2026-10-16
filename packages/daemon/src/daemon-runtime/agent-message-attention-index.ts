@@ -205,8 +205,8 @@ export class AgentMessageAttentionIndex {
   readonly #workspaceId: string;
   readonly #runtimes: Pick<AgentProcessManager, "session"> &
     Partial<Pick<AgentProcessManager, "runtime">>;
-  readonly #memoryReminders = new Map<string, string>();
   readonly #memoryUpdates: MemoryChannelUpdates;
+  readonly #launchReminders = new Map<string, string>();
 
   constructor(
     workspaceId: string,
@@ -269,9 +269,9 @@ export class AgentMessageAttentionIndex {
     );
   }
 
-  /** Appended once to the next notice; the daemon never edits the Agent's MEMORY.md. */
-  setMemoryReminder(agentId: string, text: string): void {
-    this.#memoryReminders.set(agentId, text);
+  /** Text set at launch and appended once to the Agent's next notice. */
+  setLaunchReminder(agentId: string, text: string): void {
+    this.#launchReminders.set(agentId, text);
   }
 
   async receive(message: AgentMessageDelivery): Promise<void> {
@@ -585,7 +585,7 @@ export class AgentMessageAttentionIndex {
     ];
     const totalCount =
       recoveredMessages.length + summaryOnly.reduce((sum, [, count]) => sum + count, 0);
-    const notice = this.#withMemoryReminder(
+    const notice = this.#withLaunchReminder(
       agentId,
       recoveredMessages.length
         ? inboxNoticeText("restart recovery", totalCount, rows, this.#inboxDrainHint(agentId))
@@ -630,10 +630,10 @@ export class AgentMessageAttentionIndex {
     );
   }
 
-  #withMemoryReminder(agentId: string, notice: string): string {
-    const reminder = this.#memoryReminders.get(agentId);
+  #withLaunchReminder(agentId: string, notice: string): string {
+    const reminder = this.#launchReminders.get(agentId);
     if (!reminder) return notice;
-    this.#memoryReminders.delete(agentId);
+    this.#launchReminders.delete(agentId);
     return `${notice}\n\n${reminder}`;
   }
 
@@ -749,7 +749,7 @@ export class AgentMessageAttentionIndex {
     const view = this.#localViewRows(announced, queued);
     const rows = this.#renderLocalViewRows(view.rows);
     const totalCount = countDistinctMessages([...announced, ...queued]);
-    const notice = this.#withMemoryReminder(
+    const notice = this.#withLaunchReminder(
       message.agentId,
       inboxNoticeText(undefined, totalCount, rows, this.#inboxDrainHint(message.agentId)),
     );
@@ -1338,7 +1338,7 @@ export class AgentMessageAttentionIndex {
     this.#pendingWindow.delete(agentId);
     this.#readContext.delete(agentId);
     this.#readContextCounters.delete(agentId);
-    this.#memoryReminders.delete(agentId);
+    this.#launchReminders.delete(agentId);
   }
 
   /** Forgets the pending attention of these channel targets and every thread under them: the Agent
