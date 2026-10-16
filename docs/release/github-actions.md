@@ -86,6 +86,14 @@ constant timestamp. A layer rebuilt from unchanged inputs then keeps its digest
 when its commands write the same bytes, as the migration toolchain's
 `bun install` does, and deploy hosts do not pull it again.
 
+Deploy and release jobs also restore nothing from the Actions cache:
+`cache: false` on `jdx/mise-action` and `cache-binary: false` on
+`docker/setup-buildx-action`. GitHub does not verify cache contents, and a
+restored mise cache supplies the mise binary itself, which the action runs
+unchecked in a job that holds deploy or publish credentials or builds what a
+publish job uploads. CI jobs hold no deploy or publish credentials and publish
+nothing, so they keep the cache.
+
 The external realtime probe requires a successful WebSocket handshake within
 ten seconds. HTTP error pages, including 404 and 502, fail deployment verification;
 the probe does not claim to validate an authenticated application session.
