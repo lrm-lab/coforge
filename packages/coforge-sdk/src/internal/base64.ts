@@ -114,5 +114,5 @@ export function decodeBase64(value: string): Uint8Array {
     if (padding < 2) bytes[offset++] = (group >> 8) & 0xff;
     if (padding < 1) bytes[offset++] = group & 0xff;
   }
-  return bytes.subarray(0, offset);
+  return offset === bytes.length ? bytes : bytes.subarray(0, offset);
 }
