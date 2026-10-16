@@ -6,7 +6,7 @@ import {
   Play,
   RefreshCcw01 as RotateCcw,
   Stop,
-  Trash01,
+  Archive,
 } from "@untitledui/icons";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AgentAvatarDialog } from "#src/features/agents/agent-avatar-dialog";
@@ -491,7 +491,7 @@ export function AgentProfileTab({
               <Button
                 color="secondary-destructive"
                 className="mt-1 w-full justify-center"
-                iconLeading={Trash01}
+                iconLeading={Archive}
                 onPress={onStartDelete}
               >
                 {m.agent_profile_action_delete()}

@@ -12,7 +12,7 @@ import {
   Monitor01 as Monitor,
   Plus,
   SearchLg as Search,
-  Trash01,
+  Archive,
   Users01 as UsersRound,
   UsersPlus,
 } from "@untitledui/icons";
@@ -644,7 +644,7 @@ function AgentCard({
                   // the official item colours its label and icon grey, so both go in as children.
                   <Dropdown.Item id="delete" textValue={m.member_agent_delete()}>
                     <span className="flex items-center text-error-primary">
-                      <Trash01
+                      <Archive
                         aria-hidden="true"
                         className="mr-2 size-4 shrink-0 stroke-[2.25px]"
                       />

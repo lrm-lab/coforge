@@ -83,8 +83,8 @@ export type MessageView = {
   senderAgentId?: string;
   /** The sender's user id, present only when `senderKind === "user"`; opens their profile panel. */
   senderUserId?: string;
-  /** True when the sending Agent has since been deleted: the sender renders greyed
-   * with a `DELETED` marker, and no longer opens that Agent's profile. */
+  /** True when the sending Agent has since been archived (deleted): the sender renders greyed
+   * with an `ARCHIVED` marker, and opens its read-only profile. */
   senderDeleted?: boolean;
   senderAvatarUrl?: string | null;
   body: string;
@@ -649,7 +649,7 @@ export const MessageRow = memo(function MessageRow({
     : openablePersonId
       ? () => onOpenPersonProfile?.(openablePersonId)
       : undefined;
-  // A deleted sender is visually muted: a grey avatar tone and a `DELETED` badge beside the name.
+  // A deleted sender is visually muted: a grey avatar tone and an `ARCHIVED` badge beside the name.
   // Its profile still opens, read-only.
   // An Agent's avatar in the stream carries the same online/working/thinking/error/offline dot the
   // sidebar, conversation header and @-mention popup use, so you can tell whether the Agent that

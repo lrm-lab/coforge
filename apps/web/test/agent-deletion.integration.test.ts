@@ -198,7 +198,7 @@ test.skipIf(!connectionString)(
       expect((await agents.getById(agent.id))?.deletedAt).not.toBeNull();
 
       // History stays readable through the same seam the browser DM view uses, and the projection
-      // marks the sender deleted so the row renders greyed with the DELETED badge.
+      // marks the sender deleted so the row renders greyed with the ARCHIVED badge.
       const page = await conversations.openForUser(workspace.id, owner.id, agent.id);
       const sent = page.messages.find((message) => message.body === "Hi, I am here.");
       expect(sent).toBeDefined();

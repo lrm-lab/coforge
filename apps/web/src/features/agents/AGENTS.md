@@ -119,9 +119,11 @@ These rules apply to `src/features/agents/`.
   of `agentDisplay()` only adds an un-internationalized `statusDetail` caption
   when the display is already offline; it never changes `isOnline` or the badge
   label.
-- A deleted Agent's profile opens read-only: the Profile tab alone, no runtime
-  control, message, edit, role, visibility, migration or delete.
-- `deleted-agent.tsx` owns deleted-sender rendering (grey avatar and `DELETED`
+- Users see deleting an Agent as archiving it ("Archive", `ARCHIVED`, 已归档);
+  code and data keep `deleted`/`deletedAt`. An archived Agent's profile opens
+  read-only: the Profile tab alone, no runtime control, message, edit, role,
+  visibility, migration or archive.
+- `deleted-agent.tsx` owns archived-sender rendering (grey avatar and `ARCHIVED`
   badge) for every message-history surface. Use it rather than local styling.
 - `agent-avatar-dialog.tsx` is the creator's change-avatar dialog, opened by
   clicking the avatar in the Profile tab: the pool's pictures

@@ -33,7 +33,7 @@ export function TaskPerson({
 }
 
 /** The owner as an avatar alone (its name for assistive tech), as list rows and board cards
- * show it; no owner is a dashed ring. A deleted Agent keeps its greyed avatar and its DELETED
+ * show it; no owner is a dashed ring. A deleted Agent keeps its greyed avatar and its ARCHIVED
  * marker, as everywhere a Task names its holder. No tooltip: its trigger would add a tab stop to
  * every card. */
 export function TaskOwnerAvatar({ owner }: { owner: TaskView["owner"] }) {

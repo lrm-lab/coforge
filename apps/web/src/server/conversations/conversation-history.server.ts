@@ -94,8 +94,8 @@ export function mapBrowserMessage(message: BrowserMessageRow, workspaceId: strin
      * Typed optional so a message the browser cached before it existed still reads
      * (`persisted-queries.ts`); the key itself is always written. */
     ...({ senderUserId: message.sender?.userId ?? undefined } as { senderUserId?: string }),
-    /** True when the sending Agent has since been deleted: the row renders its sender
-     * greyed with a `DELETED` marker, and no longer opens that Agent's profile. */
+    /** True when the sending Agent has since been archived (deleted): the row renders its sender
+     * greyed with an `ARCHIVED` marker, and opens its read-only profile. */
     senderDeleted: Boolean(message.sender?.agent?.deletedAt),
     senderAvatarUrl: browserSenderAvatarUrl(message.sender, workspaceId),
     body: message.body,
