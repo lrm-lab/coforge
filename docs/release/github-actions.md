@@ -78,7 +78,13 @@ build instead of also building a disposable host bundle.
 Package validation caches Bun's download cache by runner OS, architecture,
 toolchain configuration, and lockfile. Every job still runs a frozen install;
 cache hits never skip dependency validation. The image job installs only Bun on
-the host; workspace dependencies are installed inside Docker.
+the host; workspace dependencies are installed inside Docker. The image build
+uses no build cache, since other jobs on `main` could write one and so supply
+the image's layers. It sets `SOURCE_DATE_EPOCH` to `0` and exports with
+`rewrite-timestamp=true` instead, so the files the build writes get that
+constant timestamp. A layer rebuilt from unchanged inputs then keeps its digest
+when its commands write the same bytes, as the migration toolchain's
+`bun install` does, and deploy hosts do not pull it again.
 
 The external realtime probe requires a successful WebSocket handshake within
 ten seconds. HTTP error pages, including 404 and 502, fail deployment verification;

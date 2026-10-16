@@ -65,7 +65,12 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           push: true
-          outputs: type=image,name=ghcr.io/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true
+          outputs: type=image,name=ghcr.io/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,rewrite-timestamp=true
+        # A constant timestamp for the files the build writes: a layer rebuilt from unchanged
+        # inputs, such as the migration toolchain, keeps its digest without a build cache, which
+        # other jobs on main could write.
+        env:
+          SOURCE_DATE_EPOCH: 0
 
       - name: Record image digest
         id: identity

@@ -24,3 +24,5 @@
 - [Docker Compose service image and health configuration](https://docs.docker.com/reference/compose-file/services/)
 - [`docker compose pull`](https://docs.docker.com/reference/cli/docker/compose/pull/)
 - [`docker compose up`](https://docs.docker.com/reference/cli/docker/compose/up/)
+- [Reproducible builds with GitHub Actions (`SOURCE_DATE_EPOCH`)](https://docs.docker.com/build/ci/github-actions/reproducible-builds/)
+- [BuildKit reproducible builds (`rewrite-timestamp`)](https://github.com/moby/buildkit/blob/master/docs/build-repro.md)

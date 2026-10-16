@@ -28,12 +28,11 @@ RUN bun run --cwd packages/coforge-sdk generate \
 
 RUN bun run --cwd apps/web build
 
+# The migration toolchain only: the schema and migrations it applies join it in the final stage.
 FROM oven/bun:1.4.0-alpine@sha256:07235578f79ef8c6f97d94aee7938e76f5cdba5f21ae5dbfdd3d3d38058437eb AS migrate
 WORKDIR /migrate
 COPY scripts/deploy/prisma-migrate/package.json scripts/deploy/prisma-migrate/bun.lock ./
 RUN bun install --frozen-lockfile --production
-COPY apps/web/prisma prisma
-COPY apps/web/prisma.config.ts prisma.config.ts
 
 FROM oven/bun:1.4.0-alpine@sha256:07235578f79ef8c6f97d94aee7938e76f5cdba5f21ae5dbfdd3d3d38058437eb
 
@@ -42,8 +41,15 @@ ENV HOST=0.0.0.0 \
     PORT=3000 \
     NODE_ENV=production
 
-COPY --from=build --chown=bun:bun /app/apps/web/.output .output
+# Least often changed first: the migration toolchain (the largest layer, renewed by its manifest,
+# lockfile, or base image), then the schema and migrations, then the build output (every commit).
+# Docker's classic image store reuses a pulled layer only when every layer before it matches too,
+# and the deploy workflow's fixed file timestamps keep the toolchain's digest, so a deploy pulls
+# only what changed.
 COPY --from=migrate --chown=bun:bun /migrate .migrate
+COPY --chown=bun:bun apps/web/prisma .migrate/prisma
+COPY --chown=bun:bun apps/web/prisma.config.ts .migrate/prisma.config.ts
+COPY --from=build --chown=bun:bun /app/apps/web/.output .output
 
 # Attachment bytes live on a mounted volume, not in the writable container layer.
 # The directory has to exist and be owned by the runtime user in the image: Docker

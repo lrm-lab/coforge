@@ -32,6 +32,19 @@ test("deployment readiness requires a successful WebSocket handshake, rejecting 
   }
 });
 
+test("the staging image build fixes file timestamps and reads no build cache", async () => {
+  const deploy = Bun.YAML.parse(await Bun.file(".github/workflows/deploy-staging.yml").text());
+  const build = deploy.jobs.image.steps.find(
+    (step: { name: string }) => step.name === "Build and push Docker image",
+  );
+  // A constant epoch: the commit time would give every build's files a new timestamp.
+  expect(String(build.env?.SOURCE_DATE_EPOCH)).toBe("0");
+  expect(build.with.outputs.split(",")).toContain("rewrite-timestamp=true");
+  // A build cache is writable from jobs other than this one, which could then supply its layers.
+  expect(build.with["cache-from"]).toBeUndefined();
+  expect(build.with["cache-to"]).toBeUndefined();
+});
+
 test("the aggregate gate executes even after failure and rejects missing, skipped, or cancelled required jobs", () => {
   const gate = ci.jobs["ci-passed"];
   expect(gate?.if).toBe("always()");

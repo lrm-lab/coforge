@@ -1936,6 +1936,32 @@ describe("GitHub validation workflow contract", () => {
   });
 });
 
+// The evidence that the host keeps the toolchain layer is a second consecutive deploy's pull time
+// and inbound bytes; this pins the layout that makes it possible.
+describe("Web image layer reuse", () => {
+  test("the final stage adds the toolchain, then the schema, then the build output", async () => {
+    const dockerfile = await Bun.file(new URL("../../apps/web/Dockerfile", import.meta.url)).text();
+    const finalFrom = dockerfile.lastIndexOf("FROM ");
+    const migrateFrom = dockerfile.indexOf(" AS migrate");
+    expect(migrateFrom).toBeGreaterThanOrEqual(0);
+    expect(finalFrom).toBeGreaterThan(migrateFrom);
+
+    // The schema and migrations change often; in the toolchain's layer they would renew it.
+    expect(dockerfile.slice(migrateFrom, finalFrom)).not.toContain("apps/web/prisma");
+    const finalStage = dockerfile.slice(finalFrom);
+    const positions = [
+      "COPY --from=migrate ",
+      "COPY --chown=bun:bun apps/web/prisma ",
+      "COPY --chown=bun:bun apps/web/prisma.config.ts ",
+      "COPY --from=build ",
+    ].map((line) => finalStage.indexOf(line));
+    expect(positions[0]).toBeGreaterThanOrEqual(0);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    // No layer with contents comes before the toolchain.
+    expect(finalStage.slice(0, positions[0])).not.toMatch(/^(ADD|COPY|RUN) /m);
+  });
+});
+
 describe("parseRemoteOutputs", () => {
   test("parses a healthy report", () => {
     const outputs = parseRemoteOutputs(
