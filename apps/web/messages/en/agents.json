@@ -410,7 +410,7 @@
   "agent_archive_archived_at_by": "{date}, by {name}",
   "agent_archive_workspace": "Workspace",
   "agent_archive_workspace_no_computer": "No Computer was assigned, so there is no workspace.",
-  "agent_archive_workspace_not_owner": "On {computer}. Only that Computer's owner can view or delete it.",
+  "agent_archive_workspace_not_owner": "On {computer}. Only that Computer's owner or a Workspace admin can view or delete it.",
   "agent_archive_workspace_checking": "Checking…",
   "agent_archive_workspace_unavailable": "{computer} is not connected, so this cannot be checked now.",
   "agent_archive_workspace_removed": "Deleted from the Computer",

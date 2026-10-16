@@ -4,9 +4,9 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
 import {
-  deleteAgentWorkspace,
-  scanAgentWorkspaces,
-} from "#src/features/computers/computers.functions";
+  deleteArchivedAgentWorkspace,
+  scanArchivedAgentWorkspace,
+} from "#src/features/agents/agent-workspace-files.functions";
 import {
   DeleteConfirmDialog,
   formatWorkspaceSize,
@@ -17,12 +17,13 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { SECTION_CAPTION_CLASS, SUBFIELD_LABEL_CLASS } from "./inline-edit-field";
 
-type ArchiveComputer = { id: string; label: string; ownedByViewer: boolean };
+type ArchiveComputer = { id: string; label: string };
 
 /**
  * An archived Agent's ARCHIVE section, for those who managed it: when and by whom it was archived,
- * and where its workspace is. Its files stay on the Computer it ran on until someone removes them;
- * only that Computer's owner may look at them or delete them, as on the Computer page.
+ * and where its workspace is. Its files stay on the Computer it ran on until someone removes them:
+ * that Computer's owner or a Workspace owner/admin (`canManageWorkspace`) may look at them and
+ * delete them (`archivedAgentWorkspaceAssignment`).
  */
 export function AgentArchiveSection({
   agentId,
@@ -30,6 +31,7 @@ export function AgentArchiveSection({
   deletedAt,
   deletedBy,
   computer,
+  canManageWorkspace,
   timeZone,
 }: {
   agentId: string;
@@ -38,6 +40,8 @@ export function AgentArchiveSection({
   /** Who archived it, when that was recorded. */
   deletedBy: string | null;
   computer?: ArchiveComputer;
+  /** The viewer owns that Computer or is a Workspace owner/admin. */
+  canManageWorkspace: boolean;
   timeZone: string | null;
 }) {
   const archivedAt = formatDateForDisplay(
@@ -64,8 +68,8 @@ export function AgentArchiveSection({
             <dd className="mt-1 text-sm text-tertiary">
               {m.agent_archive_workspace_no_computer()}
             </dd>
-          ) : computer.ownedByViewer ? (
-            <OwnedWorkspace agentId={agentId} agentName={agentName} computer={computer} />
+          ) : canManageWorkspace ? (
+            <ManagedWorkspace agentId={agentId} agentName={agentName} computer={computer} />
           ) : (
             <dd className="mt-1 text-sm text-tertiary">
               {m.agent_archive_workspace_not_owner({ computer: computer.label })}
@@ -77,8 +81,8 @@ export function AgentArchiveSection({
   );
 }
 
-/** The workspace as its Computer reports it now, with the delete its owner may make. */
-function OwnedWorkspace({
+/** The workspace as its Computer reports it now, with the delete the viewer may make. */
+function ManagedWorkspace({
   agentId,
   agentName,
   computer,
@@ -87,17 +91,14 @@ function OwnedWorkspace({
   agentName: string;
   computer: ArchiveComputer;
 }) {
-  const scan = useServerFn(scanAgentWorkspaces);
-  const remove = useServerFn(deleteAgentWorkspace);
+  const scan = useServerFn(scanArchivedAgentWorkspace);
+  const remove = useServerFn(deleteArchivedAgentWorkspace);
   const queryClient = useQueryClient();
   const queryKey = ["archived-agent-workspace", computer.id, agentId] as const;
   // One Agent's scan reads its directories on the Computer, so it runs once per opening.
   const workspace = useQuery({
     queryKey,
-    queryFn: async () =>
-      (await scan({ data: { computerId: computer.id, agentId } })).find(
-        (entry) => entry.agentId === agentId,
-      ) ?? null,
+    queryFn: () => scan({ data: { agentId } }),
     staleTime: Infinity,
     retry: false,
   });
@@ -143,7 +144,7 @@ function OwnedWorkspace({
         errorMessage={m.computer_agent_workspace_delete_error()}
         onConfirm={async () => {
           // As on the Computer page: done when removed, or when nothing was left to remove.
-          const result = await remove({ data: { computerId: computer.id, agentId } });
+          const result = await remove({ data: { agentId } });
           if (result.status !== "ok" && result.status !== "missing") throw new Error(result.status);
           setConfirming(false);
           await queryClient.invalidateQueries({ queryKey });

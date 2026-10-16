@@ -263,11 +263,7 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
     });
 
     const agents = await db.agent.findMany({
-      where: {
-        workspaceId,
-        computerId: computer.id,
-        ...(data.agentId ? { id: data.agentId } : {}),
-      },
+      where: { workspaceId, computerId: computer.id },
       select: { id: true, name: true, displayName: true, deletedAt: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });

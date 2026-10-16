@@ -13,6 +13,7 @@ import {
   getAgentWorkspaceFilesListResults,
 } from "#src/server/centrifugo/agent-workspace-files-cache.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
+import { isAdminLike, isWorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import {
   createCentrifugoServerApi,
   daemonControlChannel,
@@ -63,9 +64,46 @@ export async function ownedComputerAgentAssignment(
   if (!assignment?.computerId) return undefined;
   return {
     computerId: assignment.computerId,
-    revision: new Bun.CryptoHasher("sha256")
-      .update(JSON.stringify(assignment.runtimeConfig))
-      .digest("hex"),
+    revision: workspaceRevision(assignment.runtimeConfig),
+  };
+}
+
+/** The revision a workspace request is bound to: the Agent's runtime configuration hash. */
+function workspaceRevision(runtimeConfig: unknown) {
+  return new Bun.CryptoHasher("sha256").update(JSON.stringify(runtimeConfig)).digest("hex");
+}
+
+/**
+ * An archived Agent whose workspace the viewer may scan or delete from its profile: the
+ * Computer's owner, as on the Computer page, or a Workspace owner/admin (`role`), so an admin can
+ * clean up after an Agent archived on another member's Computer. Only an archived Agent's
+ * workspace opens up this way; a live Agent's stays its Computer owner's
+ * (`ownedComputerAgentAssignment`).
+ */
+export async function archivedAgentWorkspaceAssignment(
+  db: Pick<Db, "agent">,
+  viewer: WorkspaceFilesViewer & { role: string | undefined },
+  agentId: string,
+): Promise<WorkspaceFilesAssignment | undefined> {
+  const admin = Boolean(
+    viewer.role && isWorkspaceMemberRole(viewer.role) && isAdminLike(viewer.role),
+  );
+  const assignment = await db.agent.findFirst({
+    where: {
+      id: agentId,
+      workspaceId: viewer.workspaceId,
+      deletedAt: { not: null },
+      computer: {
+        ...(admin ? {} : { ownerId: viewer.userId }),
+        workspaces: { some: { workspaceId: viewer.workspaceId } },
+      },
+    },
+    select: { computerId: true, runtimeConfig: true },
+  });
+  if (!assignment?.computerId) return undefined;
+  return {
+    computerId: assignment.computerId,
+    revision: workspaceRevision(assignment.runtimeConfig),
   };
 }
 
@@ -86,8 +124,33 @@ export function computerWorkspaceFilesQuery(
   computerId: string,
   options: { list: boolean },
 ) {
+  return workspaceFilesQuery(
+    (viewer, agentId) => ownedComputerAgentAssignment(db, computerId, viewer, agentId),
+    options,
+  );
+}
+
+/** The same query for an archived Agent's profile (`archivedAgentWorkspaceAssignment`). */
+export function archivedAgentWorkspaceFilesQuery(
+  db: Pick<Db, "agent">,
+  role: string | undefined,
+  options: { list: boolean },
+) {
+  return workspaceFilesQuery(
+    (viewer, agentId) => archivedAgentWorkspaceAssignment(db, { ...viewer, role }, agentId),
+    options,
+  );
+}
+
+function workspaceFilesQuery(
+  findOwned: (
+    viewer: WorkspaceFilesViewer,
+    agentId: string,
+  ) => Promise<WorkspaceFilesAssignment | undefined>,
+  options: { list: boolean },
+) {
   return new AgentWorkspaceFilesQuery({
-    findOwned: (viewer, agentId) => ownedComputerAgentAssignment(db, computerId, viewer, agentId),
+    findOwned,
     online: (scope) => getComputerStatusCache().get(scope),
     publishList: options.list
       ? (request) =>

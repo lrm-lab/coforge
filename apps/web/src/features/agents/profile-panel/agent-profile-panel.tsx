@@ -496,6 +496,9 @@ export function AgentProfilePanel({
                   deletedAt={profile.deletedAt}
                   deletedBy={profile.deletedBy?.label ?? null}
                   computer={profile.computer}
+                  canManageWorkspace={
+                    Boolean(profile.computer?.ownedByViewer) || profile.canManageAgentRole
+                  }
                   timeZone={timeZone}
                 />
               ) : undefined

@@ -61,11 +61,7 @@ export const restartComputerInputSchema = z.object({
 export const readRestartStatusInputSchema = restartComputerInputSchema;
 export const scanUsageInputSchema = runtimeInput;
 export const readUsageInputSchema = runtimeInput;
-/** One Agent's workspace alone when `agentId` is given (an archived Agent's profile), else every
- * Agent's on the Computer. */
-export const scanAgentWorkspacesInputSchema = computerIdInputSchema.extend({
-  agentId: z.string().min(1).optional(),
-});
+export const scanAgentWorkspacesInputSchema = computerIdInputSchema;
 export const deleteAgentWorkspaceInputSchema = computerIdInputSchema.extend({
   agentId: z.string().min(1),
 });
