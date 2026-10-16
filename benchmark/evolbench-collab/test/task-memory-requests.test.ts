@@ -212,3 +212,21 @@ test("a settled Task answer waits for Memory's batched but unread channel update
   expect(result.terminationReason).not.toBe("final_settled");
   expect(result.finalOutput).toBe("Exact Answer: bird");
 });
+
+test("a trailing completion notice cannot overwrite the IR answer", async () => {
+  const now = new Date();
+  const answer = "Explanation: cited evidence.\nExact Answer: bird\nConfidence: 90%";
+  const result = await runEpisode(
+    fixture([
+      { id: "answer", body: answer, createdAt: now, mentions: [] },
+      {
+        id: "notice",
+        body: "The task is complete. Final answer provided.",
+        createdAt: now,
+        mentions: [],
+      },
+    ]),
+  );
+  expect(result.finalOutput).toBe(answer);
+  expect(result.terminationReason).toBe("final_settled");
+});

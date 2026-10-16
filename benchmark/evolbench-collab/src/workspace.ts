@@ -35,7 +35,7 @@ export const TASK_AGENT_DESCRIPTION = [
   "When you need prior experience OR documents/evidence to solve the task, send a channel message",
   "mentioning @memory with a specific query and the constraints you need verified if its initial retrieval",
   "does not already cover your needs. You may ask again",
-  "as new questions arise. Wait for the Memory Agent's reply to that request before using its evidence.",
+  "as new questions arise. Wait for the Memory Agent's reply to that request before using its evidence. End the current model turn while waiting; native message delivery resumes you. Do not poll empty message check/read results.",
   "Both document search and experience retrieval belong to Memory Agent: do not call BM25/search",
   "scripts, skills_list, OpenViking directly, or read raw corpus/index/ledger files yourself.",
   "The harness does not retrieve or inject memory before your turn. For a cited Memory Hint addressed",
