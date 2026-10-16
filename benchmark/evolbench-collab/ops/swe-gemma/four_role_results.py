@@ -20,4 +20,3 @@ def write_final_summary(run, config, jobs, **metrics):
         temporary.write_text(json.dumps(value, indent=2)+'\n')
         temporary.replace(run/name)
     return summary
-

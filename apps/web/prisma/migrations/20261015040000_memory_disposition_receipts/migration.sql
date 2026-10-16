@@ -73,4 +73,3 @@ ALTER TABLE "memory_disposition_events" ADD CONSTRAINT "memory_disposition_event
 
 -- AddForeignKey
 ALTER TABLE "memory_disposition_citations" ADD CONSTRAINT "memory_disposition_citations_disposition_id_fkey" FOREIGN KEY ("disposition_id") REFERENCES "memory_disposition_events"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
