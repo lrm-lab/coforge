@@ -18,7 +18,11 @@ The automated cloud path is:
    Centrifugo are recreated when their service definition or their shipped
    file's SHA-256 changes (Caddy runs with its admin API off and cannot reload
    in place); set the service image to the exact digest, pull it, and recreate
-   the affected service with `--no-build`.
+   the affected service with `--no-build`. The Web image pull runs in at most
+   three attempts; each is sent TERM at 210 seconds and KILL ten seconds
+   later, so the Engine abandons a stalled download. A pull that never
+   completes fails the candidate before migration and puts the last healthy
+   files back.
 6. Use a bounded wait for Compose health, then run the complete verification set
    in [Health verification](health-verification.md#cloud-application).
 7. Record the digest as healthy only after every required check passes.

@@ -89,7 +89,9 @@ jobs:
     needs: image
     runs-on: ubuntu-latest
     environment: staging
-    timeout-minutes: 15
+    # Covers remote-deploy.sh's bounded waits at their worst (about 22 minutes on the host):
+    # three bounded Web image pull attempts, Compose health, public readiness, and a rollback.
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: read

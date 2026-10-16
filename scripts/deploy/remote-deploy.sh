@@ -32,6 +32,14 @@ timeout=120
 # no certificate when Caddy starts: it obtains one after it is up, and until then a TLS handshake
 # fails with an internal-error alert, so one attempt reads as a broken release.
 public_health_timeout=180
+# Each Web image pull attempt ends at a deadline, then a forced kill. On 2026-10-13 and 2026-10-16
+# one layer's connection from the production host to ghcr.io fell to well under 1 Mbps without
+# ever failing, and the unbounded pull outlived the 15-minute job. The Engine abandons a pull when
+# its client's connection drops (https://docs.docker.com/reference/cli/docker/image/pull/), so the
+# next attempt starts on fresh connections. The deadline sits above the slowest healthy pull
+# seen: every layer, cold, in 3m06s on 2026-10-12.
+web_pull_attempts=3
+web_pull_deadline=210
 image=
 compose_file=
 secrets_dir=
@@ -574,7 +582,40 @@ if ! compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfi
 	exit 0
 fi
 
-compose pull --quiet web >/dev/null
+# Pulls the candidate by its digest with `docker pull`, which needs none of the Compose secrets.
+# `--quiet` still prints the reference on stdout, which carries the report. On failure,
+# `web_pull_failure` says how the last attempt ended.
+pull_web_image() {
+	local attempt status started detail
+	for ((attempt = 1; attempt <= web_pull_attempts; attempt++)); do
+		started=$SECONDS
+		status=0
+		timeout --kill-after=10s "${web_pull_deadline}s" docker pull --quiet "$image" >/dev/null || status=$?
+		case "$status" in
+		0) detail="succeeded in $((SECONDS - started))s" ;;
+		# GNU timeout's statuses for a command it timed out, and for one it then had to KILL.
+		124 | 137)
+			web_pull_failure="timed out"
+			detail="timed out after ${web_pull_deadline}s"
+			;;
+		*)
+			web_pull_failure=failed
+			detail="failed with exit status $status"
+			;;
+		esac
+		printf 'Web image pull attempt %d of %d %s\n' "$attempt" "$web_pull_attempts" "$detail" >&2
+		if [ "$status" -eq 0 ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+if ! pull_web_image; then
+	discard_candidate_configuration
+	report "$current_image" "failed: Web image pull $web_pull_failure" "failed" ""
+	exit 0
+fi
 
 if ! compose run --rm --entrypoint sh migrate \
 	-c 'cd .migrate && bun node_modules/prisma/build/index.js migrate deploy' </dev/null 1>&2; then

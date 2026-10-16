@@ -15,7 +15,8 @@ Cloud production promotion is a two-party operation:
    verifies that its digest matches the approved digest and that the same
    digest is still recorded healthy in `staging`.
 4. The workflow deploys the digest with the production Compose project. It
-   does not rebuild the image.
+   does not rebuild the image, and it pulls it with the same bounded attempts
+   as staging ([Main to staging](main-to-staging.md#cloud-application), step 5).
 5. The Agent monitors internal and external health, records the result, and
    reports the final production digest.
 
