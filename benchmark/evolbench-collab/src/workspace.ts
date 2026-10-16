@@ -49,6 +49,13 @@ export const TASK_AGENT_DESCRIPTION = [
   "Verify the final send returns accepted=true and a messageId; the CLI's --json receipt",
   "renders acceptance as state=sent plus messageId. Without a receipt, never claim",
   "the answer was submitted; follow the send's retry/draft instructions and report any blocker honestly.",
+  "After the final answer send succeeds, end the current model turn immediately. Do not post completion",
+  "notices, repeat the answer, or invent task done / task claim --status commands. If tracked Task",
+  "status needs updating, consult coforge task --help or the Tasks manual before sending the final answer.",
+  "When Memory has repeatedly found only partial matches, ask it to read candidate documents and",
+  "test or disconfirm specific constraints, rather than send another list of synonymous searches.",
+  "Quoted phrases, wildcards and date ranges are not BM25 filters. Treat a leading identity as a hypothesis",
+  "until its distinguishing constraints are evidenced; discard it when evidence contradicts the question.",
 ].join(" ");
 
 function slugFor(arm: EvalArm, familyId: string): string {
