@@ -111,3 +111,12 @@ test("exposes a sent message's mention deliveries identically to the Proxy, the 
     );
   }
 });
+
+test("exposes an App's config identically to the Proxy, the local client, and the cloud", () => {
+  for (const surface of [agentApiRoutes.proxy, agentApiRoutes.local, agentApiRoutes.cloud]) {
+    expect(surface.appConfig.get.method).toBe("GET");
+    expect(surface.appConfig.update.method).toBe("PATCH");
+    for (const route of [surface.appConfig.get, surface.appConfig.update])
+      expect(route.path("system.cleaner")).toBe("/api/agent/v1/apps/system.cleaner/config");
+  }
+});

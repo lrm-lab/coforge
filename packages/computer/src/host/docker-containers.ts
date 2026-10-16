@@ -40,6 +40,10 @@ export function dockerServiceRemoveArgs(computerId: string): string[] {
   return ["service", "rm", serviceName(computerId)];
 }
 
+export function dockerVolumeRemoveArgs(computerId: string): string[] {
+  return ["volume", "rm", serviceName(computerId)];
+}
+
 export function dockerTaskFindArgs(computerId: string): string[] {
   return ["ps", "-q", "--filter", `label=com.docker.swarm.service.name=${serviceName(computerId)}`];
 }
@@ -89,8 +93,11 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
     },
     async removeService(computerId) {
       const result = await spawn(dockerServiceRemoveArgs(computerId));
-      if (result.exitCode === 0 || /no such service/i.test(result.stderr)) return;
-      throw new Error(result.stderr || "docker service rm failed");
+      if (result.exitCode !== 0 && !/no such service/i.test(result.stderr))
+        throw new Error(result.stderr || "docker service rm failed");
+      const volume = await spawn(dockerVolumeRemoveArgs(computerId));
+      if (volume.exitCode === 0 || /no such volume/i.test(volume.stderr)) return;
+      throw new Error(volume.stderr || "docker volume rm failed");
     },
     async attachWorkspace(input) {
       const containerId = firstId(

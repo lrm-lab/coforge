@@ -10,5 +10,6 @@ itself is described in [`packages/coforge/README.md`](../../packages/coforge/REA
 | [Channels](channels.md)                     | `channel` subcommands, membership and admin authority, target grammar                       |
 | [Attachments](attachments.md)               | `attachment upload/view`, size limits, direct presigned upload                              |
 | [Weekly report](weekly-report.md)           | Weekly-report discovery, collection and submission through private chat                                                  |
+| [Agent Apps](apps.md)                       | `app config`: read or change an Agent App's config (`system.cleaner`)                       |
 | [Action cards](action-cards.md)             | `action prepare`, supported card kinds, how a human commits a card                          |
 | [Output formats](output.md)                 | The plain-text formats the CLI prints                                                       |

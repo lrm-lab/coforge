@@ -90,7 +90,8 @@ export interface ReminderClock {
 /** Consumed receipts stay this long past their retry deadline as a re-fire fence, then go. */
 const RECEIPT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
-const defaultClock: ReminderClock = {
+/** Wall-clock time and unref'd timers, so a pending timer never keeps the daemon alive. */
+export const defaultClock: ReminderClock = {
   now: Date.now,
   schedule(callback, delayMs) {
     const timer = setTimeout(callback, delayMs);

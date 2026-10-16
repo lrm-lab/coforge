@@ -17,6 +17,9 @@ import type {
   AgentProfileShowResponse,
   AgentProfileUpdateRequest,
   AgentProfileUpdateResponse,
+  AgentAppConfigGetRequest,
+  AgentAppConfigResponse,
+  AgentAppConfigUpdateRequest,
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingResponse,
@@ -145,6 +148,11 @@ import {
   type ReminderFireResponse,
   type ReminderSnapshotRequest,
   type ReminderSync,
+  APP_CONFIG_SNAPSHOT_METHOD,
+  decodeAppConfigSync,
+  encodeAppConfigSnapshotRequest,
+  type AppConfigSnapshotRequest,
+  type AppConfigSync,
   type AgentMigrationCancel,
   type AgentMigrationLease,
   type TaskRequest,
@@ -318,6 +326,14 @@ export interface DaemonConnectionClient {
     request: AgentProfileUpdateRequest,
     agentApiKey: string,
   ): Promise<AgentProfileUpdateResponse>;
+  appConfigGet?(
+    request: AgentAppConfigGetRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse>;
+  appConfigUpdate?(
+    request: AgentAppConfigUpdateRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse>;
   mentionPending?(agentApiKey: string): Promise<AgentMentionPendingResponse>;
   mentionExecute?(
     request: AgentMentionExecuteRequest,
@@ -371,10 +387,12 @@ export interface DaemonConnectionClient {
   onAgentInboxPurge?(callback: (purge: AgentInboxPurge) => void): () => void;
   onAgentMessage?(callback: (message: AgentMessageDelivery) => void): () => void;
   onReminderSync?(callback: (sync: ReminderSync) => void): () => void;
+  onAppConfigSync?(callback: (sync: AppConfigSync) => void): () => void;
   onAgentMigrationLease?(callback: (lease: ReceivedAgentMigrationLease) => void): () => void;
   onAgentMigrationCancel?(callback: (cancel: AgentMigrationCancel) => void): () => void;
   agentMigrationServer?(): AgentMigrationServer;
   requestSnapshot?(request: ReminderSnapshotRequest): Promise<ReminderSync>;
+  requestAppConfigSnapshot?(request: AppConfigSnapshotRequest): Promise<AppConfigSync>;
   fireReminder?(request: ReminderFireRequest): Promise<ReminderFireResponse>;
   agentReminder?(
     request: AgentReminderOperationRequest,
@@ -525,6 +543,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   readonly #agentWorkspaceReset = new ListenerSlot<(request: AgentWorkspaceResetRequest) => void>();
   readonly #agentMessage = new ListenerSlot<(message: AgentMessageDelivery) => void>();
   readonly #reminderSync = new ListenerSlot<(sync: ReminderSync) => void>();
+  readonly #appConfigSync = new ListenerSlot<(sync: AppConfigSync) => void>();
   readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
   readonly #agentMigrationCancel = new ListenerSlot<(cancel: AgentMigrationCancel) => void>();
   readonly #skillsList = new ListenerSlot<(request: AgentSkillsListRequest) => Promise<void>>();
@@ -837,6 +856,10 @@ export class DaemonConnection implements DaemonConnectionClient {
 
   onReminderSync(callback: (sync: ReminderSync) => void): () => void {
     return this.#reminderSync.set(callback);
+  }
+
+  onAppConfigSync(callback: (sync: AppConfigSync) => void): () => void {
+    return this.#appConfigSync.set(callback);
   }
 
   onAgentMigrationLease(callback: (lease: ReceivedAgentMigrationLease) => void): () => void {
@@ -1455,6 +1478,42 @@ export class DaemonConnection implements DaemonConnectionClient {
     });
   }
 
+  async appConfigGet(
+    request: AgentAppConfigGetRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse> {
+    if (!this.#connected || !this.#serverHttpUrl)
+      throw new Error("Agent app config endpoint is not configured");
+    if (!this.agentMessageHttpClient.requestAppConfigGet)
+      throw new Error("Agent app config HTTP client is unavailable");
+    return this.agentMessageHttpClient.requestAppConfigGet({
+      url: this.#serverEndpoint(
+        "Agent app config get",
+        agentApiRoutes.cloud.appConfig.get.path(request.appId),
+      ),
+      ...this.#agentKeys(agentApiKey),
+      request,
+    });
+  }
+
+  async appConfigUpdate(
+    request: AgentAppConfigUpdateRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse> {
+    if (!this.#connected || !this.#serverHttpUrl)
+      throw new Error("Agent app config endpoint is not configured");
+    if (!this.agentMessageHttpClient.requestAppConfigUpdate)
+      throw new Error("Agent app config HTTP client is unavailable");
+    return this.agentMessageHttpClient.requestAppConfigUpdate({
+      url: this.#serverEndpoint(
+        "Agent app config update",
+        agentApiRoutes.cloud.appConfig.update.path(request.appId),
+      ),
+      ...this.#agentKeys(agentApiKey),
+      request,
+    });
+  }
+
   async mentionPending(agentApiKey: string): Promise<AgentMentionPendingResponse> {
     if (!this.#connected || !this.#serverHttpUrl)
       throw new Error("Agent mention actions endpoint is not configured");
@@ -1531,6 +1590,14 @@ export class DaemonConnection implements DaemonConnectionClient {
   async requestSnapshot(request: ReminderSnapshotRequest): Promise<ReminderSync> {
     const reply = await this.#rpc(REMINDER_SNAPSHOT_METHOD, encodeReminderSnapshotRequest(request));
     return decodeReminderSync(rpcData(reply));
+  }
+
+  async requestAppConfigSnapshot(request: AppConfigSnapshotRequest): Promise<AppConfigSync> {
+    const reply = await this.#rpc(
+      APP_CONFIG_SNAPSHOT_METHOD,
+      encodeAppConfigSnapshotRequest(request),
+    );
+    return decodeAppConfigSync(rpcData(reply));
   }
 
   async agentMemoryDisposition(request: unknown, agentApiKey: string): Promise<unknown> {
@@ -1878,6 +1945,12 @@ export class DaemonConnection implements DaemonConnectionClient {
       this.#route(data, decodeReminderSync, (sync) => {
         if (sync.messageType !== REMINDER_SYNC_MESSAGE_TYPE || !ownsDaemon(sync)) return false;
         this.#deliver(this.#reminderSync, sync);
+        return true;
+      }) ||
+      this.#route(data, decodeAppConfigSync, (sync) => {
+        // The decoder already refuses any other message type.
+        if (!ownsDaemon(sync)) return false;
+        this.#deliver(this.#appConfigSync, sync);
         return true;
       }) ||
       this.#route(data, decodeAgentMigrationLease, (lease) => {
@@ -2391,6 +2464,7 @@ export class DaemonConnection implements DaemonConnectionClient {
       this.#agentWorkspaceReset,
       this.#agentMessage,
       this.#reminderSync,
+      this.#appConfigSync,
       this.#agentMigrationLease,
       this.#agentMigrationCancel,
       this.#reconnect,

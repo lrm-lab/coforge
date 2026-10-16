@@ -15,7 +15,7 @@ const daemonKey = `dk_${"b".repeat(43)}`;
 
 class MemoryFleet {
   computers: CloudComputer[] = [];
-  links: Array<{ computerId: string; workspaceId: string }> = [];
+  links: Array<{ computerId: string; workspaceId: string; slug: string }> = [];
   async list(ownerId: string) {
     return this.computers.filter((computer) => computer.ownerId === ownerId);
   }
@@ -38,13 +38,22 @@ class MemoryFleet {
     const computer = this.computers.find((item) => item.id === id);
     if (computer) computer.deletedAt = at;
   }
+  async forgetContainer(id: string) {
+    const computer = this.computers.find((item) => item.id === id);
+    if (computer) computer.containerReady = false;
+  }
+  async linkedWorkspaces(computerId: string) {
+    return this.links
+      .filter((link) => link.computerId === computerId)
+      .map((link) => ({ id: link.workspaceId, slug: link.slug }));
+  }
   async isLinked(computerId: string, workspaceId: string) {
     return this.links.some(
       (link) => link.computerId === computerId && link.workspaceId === workspaceId,
     );
   }
-  async link(computerId: string, workspaceId: string) {
-    this.links.push({ computerId, workspaceId });
+  async link(computerId: string, workspaceId: string, slug: string) {
+    this.links.push({ computerId, workspaceId, slug });
   }
 }
 
@@ -53,6 +62,16 @@ class MemoryJobs implements ClusterJobs {
   async findByIdempotency(ownerId: string, idempotencyKey: string) {
     return this.records.find(
       (job) => job.ownerId === ownerId && job.idempotencyKey === idempotencyKey,
+    );
+  }
+  async findOpenFormat(ownerId: string, computerId: string) {
+    return this.records.find(
+      (job) =>
+        job.ownerId === ownerId &&
+        job.computerId === computerId &&
+        job.operation === "delete" &&
+        job.reportedAt === null &&
+        job.idempotencyKey.startsWith("cloud-format:"),
     );
   }
   async insert(record: HostJobRecord) {
@@ -85,7 +104,11 @@ class MemoryJobs implements ClusterJobs {
   }
 }
 
-function harness(input?: { member?: boolean; accepting?: boolean }) {
+function harness(input?: {
+  member?: boolean;
+  accepting?: boolean;
+  clearDisk?: (computerId: string) => Promise<void>;
+}) {
   const fleet = new MemoryFleet();
   const jobs = new MemoryJobs();
   const issued: string[] = [];
@@ -110,6 +133,7 @@ function harness(input?: { member?: boolean; accepting?: boolean }) {
         return daemonKey;
       },
     },
+    ...(input?.clearDisk ? { disk: { clear: input.clearDisk } } : {}),
   });
   return {
     hosts,
@@ -284,6 +308,78 @@ describe("cloud computer quota", () => {
       now,
     );
     expect((await hosts.addExtra(request)).slot).toBe("extra");
+  });
+
+  test("formatting keeps the same cloud computer after its disk is removed", async () => {
+    const cleared: string[] = [];
+    const { hosts, fleet, jobs } = harness({
+      clearDisk: async (computerId) => {
+        cleared.push(computerId);
+      },
+    });
+    const created = await hosts.ensureDefault(request);
+    const claimed = await hosts.claim({ token: "host-token" });
+    await hosts.report({
+      token: "host-token",
+      jobId: claimed!.jobId,
+      containerId: "service-1",
+      now,
+    });
+    const hostsWithBeta = new HostJobs({
+      workspaces: {
+        findMember: async (workspaceId) =>
+          workspaceId === "workspace-2" ? { id: workspaceId, slug: "beta" } : undefined,
+      },
+      fleet,
+      jobs,
+      cluster: {
+        id: async () => "cluster-1",
+        authenticate: async () => ({ id: "cluster-1", accepting: true }),
+      },
+      keys: { issue: async () => daemonKey },
+    });
+    await hostsWithBeta.ensureDefault({ userId: "user-a", workspaceId: "workspace-2", now });
+
+    await expect(
+      hosts.format({ ...request, computerId: created.computerId, confirmName: "cloud" }),
+    ).rejects.toEqual(new HostJobError(409, "confirmation does not match"));
+    const formatted = await hosts.format({
+      ...request,
+      computerId: created.computerId,
+      confirmName: "Cloud",
+    });
+    const again = await hosts.format({
+      ...request,
+      computerId: created.computerId,
+      confirmName: "Cloud",
+    });
+    expect(again.jobId).toBe(formatted.jobId);
+    expect(fleet.computers).toHaveLength(1);
+    expect(fleet.computers[0]?.deletedAt).toBeNull();
+
+    const removal = await hosts.claim({ token: "host-token" });
+    expect(removal).toMatchObject({ operation: "delete", computerId: created.computerId });
+    await hosts.report({ token: "host-token", jobId: removal!.jobId, now });
+    expect(fleet.computers[0]?.deletedAt).toBeNull();
+    expect(fleet.computers[0]?.containerReady).toBe(false);
+    expect(cleared).toEqual([created.computerId]);
+
+    const placed = await hosts.claim({ token: "host-token" });
+    expect(placed).toMatchObject({ operation: "create", computerId: created.computerId });
+    await hosts.report({
+      token: "host-token",
+      jobId: placed!.jobId,
+      containerId: "service-2",
+      now,
+    });
+    const attach = await hosts.claim({ token: "host-token" });
+    expect(attach).toMatchObject({
+      operation: "attach",
+      computerId: created.computerId,
+      workspaceSlug: "beta",
+    });
+    expect(fleet.computers[0]?.containerReady).toBe(true);
+    expect(fleet.computers[0]?.id).toBe(created.computerId);
   });
 
   test("a create stays queued while the cluster is not accepting placements", async () => {

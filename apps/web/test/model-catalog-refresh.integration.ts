@@ -80,6 +80,7 @@ test("a terminal probe error and a missing reply stay failures and clear pending
       const refresh = new ComputerModelCatalogRefresh(
         {
           results,
+          detection: { begin: async () => {}, end: async () => {} },
           async publish(value) {
             request = value;
             if (outcome === "error")
@@ -197,6 +198,7 @@ test("a refresh waits past another request's report and returns only its own fre
     const refresh = new ComputerModelCatalogRefresh(
       {
         results,
+        detection: { begin: async () => {}, end: async () => {} },
         async publish(value) {
           request = value;
           await reply({

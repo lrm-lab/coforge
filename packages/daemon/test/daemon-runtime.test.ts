@@ -1,4 +1,9 @@
-import { AGENT_MIGRATION_CAPABILITY } from "@lrm/coforge-sdk/internal";
+import {
+  AGENT_MIGRATION_CAPABILITY,
+  APP_CONFIG_CAPABILITY,
+  APP_CONFIG_SYNC_MESSAGE_TYPE,
+  CLEANER_APP_ID,
+} from "@lrm/coforge-sdk/internal";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import type { ReceivedAgentMigrationLease } from "#src/connection/daemon-connection";
 import {
@@ -2916,6 +2921,8 @@ describe("DaemonRuntime", () => {
       "userInfo",
       "profileShow",
       "profileUpdate",
+      "appConfigGet",
+      "appConfigUpdate",
       "agentOpenviking",
       "mentionPending",
       "mentionExecute",
@@ -8335,6 +8342,174 @@ describe("DaemonRuntime", () => {
     }
   });
 
+  test("presents a due System Cleaner hint at turn end and never starts a stopped Agent for it", async () => {
+    const stateDirectory = join(tempRoot, `coforge-cleaner-runtime-${crypto.randomUUID()}`);
+    const credentials = new InMemoryDaemonCredentialStore();
+    await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+    const notices: string[] = [];
+    let listener: ((event: AgentRuntimeEvent) => void) | undefined;
+    const exits = new Set<() => void>();
+    let starts = 0;
+    const timers = new Map<number, { atMs: number; run: () => void }>();
+    let nowMs = 0;
+    let nextTimer = 1;
+    const clock = {
+      now: () => nowMs,
+      schedule: (run: () => void, delayMs: number) => {
+        timers.set(nextTimer, { atMs: nowMs + delayMs, run });
+        return nextTimer++;
+      },
+      cancel: (handle: unknown) => {
+        timers.delete(handle as number);
+      },
+    };
+    const advance = (ms: number) => {
+      nowMs += ms;
+      for (const [id, timer] of timers)
+        if (timer.atMs <= nowMs) {
+          timers.delete(id);
+          timer.run();
+        }
+    };
+    const measuredPaths: string[] = [];
+    let deleteWorkspace:
+      | ((
+          request: import("@lrm/coforge-sdk/internal").AgentWorkspaceDeleteRequest,
+        ) => Promise<void>)
+      | undefined;
+    const runtime = new DaemonRuntime(
+      connection,
+      () => ({
+        provider: "pi",
+        createAgentSession: async () => {
+          starts++;
+          return {
+            ...sessionSpy(),
+            notify: async (notice) => {
+              notices.push(notice);
+            },
+            subscribe(next) {
+              listener = next;
+              return () => {
+                listener = undefined;
+              };
+            },
+            onExit(next) {
+              exits.add(next);
+              return () => exits.delete(next);
+            },
+          };
+        },
+      }),
+      credentials,
+      {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async stop() {},
+          async requestAgentApiKey() {
+            return `sk_agent_${"a".repeat(43)}`;
+          },
+          async revokeAgentApiKey() {},
+          onWorkspaceDelete(handler) {
+            deleteWorkspace = handler;
+            return () => {};
+          },
+        }),
+      },
+      undefined,
+      emptyCodeAgentDiscovery,
+      stateDirectory,
+      {},
+      undefined,
+      {
+        clock,
+        measureMemoryFile: async (path) => {
+          measuredPaths.push(path);
+          return { kind: "measured", bytes: 70 * 1024 };
+        },
+        measureDiskSpace: async () => ({
+          kind: "measured",
+          availableBytes: 200 * 1024 ** 3,
+          totalBytes: 500 * 1024 ** 3,
+        }),
+      },
+    );
+    const cleanerConfig = (revision: number) => ({
+      appId: "system.cleaner",
+      ownerAgentId: "agent-a",
+      enabled: true,
+      thresholdBytes: 64 * 1024,
+      intervalMs: 3_600_000,
+      revision,
+    });
+    try {
+      await runtime.start(connection);
+      await runtime.startAgent("agent-a", config);
+      expect(runtime.systemCleaner.applyConfig(cleanerConfig(1))).toEqual({
+        kind: "applied",
+        activeSchedules: 1,
+      });
+      advance(3_600_000);
+      await runtime.systemCleaner.settled();
+      expect(measuredPaths).toEqual([
+        join(connection.workspaceRoot, connection.workspaceId, "agents", "agent-a", "MEMORY.md"),
+      ]);
+      // Measured, but presented only when a turn ends.
+      expect(notices).toEqual([]);
+
+      listener?.({ type: "completed", status: "completed" });
+      await runtime.systemCleaner.settled();
+      expect(notices).toEqual(["New app item available. Run coforge inbox check."]);
+      const context = runtime.issueAgentContext("agent-a");
+      const snapshot = await runtime.inbox(context, {
+        idempotencyKey: "check",
+        context,
+        operation: "check",
+      });
+      expect(
+        snapshot.entries.map((entry) =>
+          entry.kind === "app" ? [entry.app.itemId, entry.app.retention] : entry.kind,
+        ),
+      ).toEqual([
+        ["cleaner:disk_space:agent-a", "transient"],
+        ["cleaner:memory_size:agent-a", "transient"],
+      ]);
+
+      // A hint due when the Agent's process ends cleanly is kept for its next launch, but does
+      // not start it.
+      runtime.systemCleaner.applyConfig(cleanerConfig(2));
+      advance(3_600_000);
+      await runtime.systemCleaner.settled();
+      for (const exit of exits) exit();
+      await runtime.systemCleaner.settled();
+      // The period's measurement, then the remeasure that presented the hint at the exit.
+      expect(measuredPaths).toHaveLength(4);
+      expect(starts).toBe(1);
+      expect(notices).toHaveLength(1);
+
+      // Deleting the Agent's workspace here forgets its cleaner: any revision applies afresh.
+      expect(runtime.systemCleaner.applyConfig(cleanerConfig(1))).toEqual({
+        kind: "stale",
+        currentRevision: 2,
+      });
+      await deleteWorkspace?.({
+        protocolMajor: 1,
+        requestId: "delete-1",
+        workspaceId: connection.workspaceId,
+        computerId: connection.computerId,
+        agentId: "agent-a",
+      });
+      expect(runtime.systemCleaner.applyConfig(cleanerConfig(1))).toEqual({
+        kind: "applied",
+        activeSchedules: 1,
+      });
+    } finally {
+      await runtime.stop();
+      await rm(stateDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("a reminder-triggered restart waits for the shared notice outcome before becoming terminal", async () => {
     const stateDirectory = join(tempRoot, `coforge-reminder-notice-${crypto.randomUUID()}`);
     const credentials = new InMemoryDaemonCredentialStore();
@@ -11049,6 +11224,116 @@ test("a daemon that can migrate says so in its ready, and starts no Agent a sour
     await expect(runtime.startAgent("moving-agent", config)).rejects.toThrow(
       "moving to another Computer",
     );
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("a daemon advertises App config and asks for each launched Agent's snapshot once per connection", async () => {
+  const credentials = new InMemoryDaemonCredentialStore();
+  await credentials.save(connection.workspaceId, connection.computerId, "token-app-config");
+  let snapshot: (() => import("@lrm/coforge-sdk/internal").DaemonRuntimeReadyRequest) | undefined;
+  let reconnect: (() => void) | undefined;
+  const requested: string[] = [];
+  const answered = Promise.withResolvers<void>();
+  const runtime = new DaemonRuntime(
+    connection,
+    () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
+    credentials,
+    {
+      create: () => ({
+        async start() {},
+        async stop() {},
+        async ready(get) {
+          snapshot = get;
+        },
+        onReconnect(callback) {
+          reconnect = callback;
+          return () => {};
+        },
+        async requestAgentLaunchConfig() {
+          return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+        },
+        async revokeAgentApiKey() {},
+        async requestAppConfigSnapshot(request) {
+          requested.push(request.agentId);
+          if (requested.length === 3) answered.resolve();
+          return {
+            ...request,
+            operation: "snapshot" as const,
+            configs: [],
+            messageType: APP_CONFIG_SYNC_MESSAGE_TYPE,
+          };
+        },
+      }),
+    },
+    undefined,
+    emptyCodeAgentDiscovery,
+  );
+  try {
+    await runtime.start(connection);
+    expect(snapshot!().capabilities).toContain(APP_CONFIG_CAPABILITY);
+    await runtime.startAgent("agent-a", config);
+    await runtime.stopAgent("agent-a");
+    await runtime.startAgent("agent-a", config);
+    expect(requested).toEqual(["agent-a"]);
+    // A new connection asks again for every running Agent.
+    reconnect!();
+    await runtime.startAgent("agent-b", config);
+    await answered.promise;
+    expect(requested.toSorted()).toEqual(["agent-a", "agent-a", "agent-b"]);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("an App config the cloud pushes reaches the System Cleaner", async () => {
+  const credentials = new InMemoryDaemonCredentialStore();
+  await credentials.save(connection.workspaceId, connection.computerId, "token-app-config");
+  let receive: ((sync: import("@lrm/coforge-sdk/internal").AppConfigSync) => void) | undefined;
+  const runtime = new DaemonRuntime(
+    connection,
+    () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
+    credentials,
+    {
+      create: () => ({
+        async start() {},
+        async stop() {},
+        async ready() {},
+        onAppConfigSync(callback) {
+          receive = callback;
+          return () => {};
+        },
+      }),
+    },
+    undefined,
+    emptyCodeAgentDiscovery,
+  );
+  try {
+    const { records } = await captureDaemonLogs(async () => {
+      await runtime.start(connection);
+      receive!({
+        protocolMajor: 1,
+        requestId: "app-config-upsert",
+        workspaceId: connection.workspaceId,
+        computerId: connection.computerId,
+        agentId: "agent-a",
+        operation: "upsert",
+        configs: [
+          {
+            appId: CLEANER_APP_ID,
+            ownerAgentId: "agent-a",
+            revision: 3,
+            effective: { enabled: false, thresholdBytes: 8192, intervalMs: 900_000 },
+          },
+        ],
+        messageType: APP_CONFIG_SYNC_MESSAGE_TYPE,
+      });
+    });
+    expect(
+      records.find((record) => record.properties.event === "system_cleaner:config_applied")
+        ?.properties,
+    ).toMatchObject({ agent_id: "agent-a", revision: 3, enabled: false, threshold_bytes: 8192 });
   } finally {
     await runtime.stop();
   }

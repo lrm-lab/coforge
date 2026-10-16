@@ -42,6 +42,10 @@ import {
   type AgentProfileShowResponse,
   type AgentProfileUpdateRequest,
   type AgentProfileUpdateResponse,
+  type AgentAppConfigGetRequest,
+  type AgentAppConfigResponse,
+  type AgentAppConfigUpdateRequest,
+  decodeAgentAppConfigPatch,
   AGENT_MENTION_ACTION_MAX_IDS,
   isAgentMentionActionKind,
   type AgentMentionExecuteRequest,
@@ -56,6 +60,7 @@ import { AgentPreflightError } from "#src/daemon-runtime/agent-preflight-error";
 import { AgentManualRequestError } from "#src/connection/agent-manual-request-error";
 import { AgentUserInfoRequestError } from "#src/connection/agent-user-info-request-error";
 import { AgentProfileRequestError } from "#src/connection/agent-profile-request-error";
+import { AgentAppConfigRequestError } from "#src/connection/agent-app-config-request-error";
 import { AgentMentionActionRequestError } from "#src/connection/agent-mention-action-request-error";
 import { AgentMentionDeliveryRequestError } from "#src/connection/agent-mention-delivery-request-error";
 import {
@@ -165,6 +170,16 @@ export type AgentProxyRuntime = {
     request: AgentProfileUpdateRequest,
     agentApiKey: string,
   ): Promise<AgentProfileUpdateResponse>;
+  appConfigGet?(
+    context: string,
+    request: AgentAppConfigGetRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse>;
+  appConfigUpdate?(
+    context: string,
+    request: AgentAppConfigUpdateRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse>;
   mentionPending?(
     context: string,
     request: Record<string, never>,
@@ -245,6 +260,11 @@ const MENTION_DELIVERY_SUFFIX = "/mention-deliveries";
 const LOCAL_MENTION_DELIVERY_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.mentionDeliveries
   .path("")
   .slice(0, -MENTION_DELIVERY_SUFFIX.length);
+// An App's config is `<prefix><appId>/config`.
+const APP_CONFIG_SUFFIX = "/config";
+const LOCAL_APP_CONFIG_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.appConfig.get
+  .path("")
+  .slice(0, -APP_CONFIG_SUFFIX.length);
 const MAX_BODY_BYTES = 64 * 1024;
 /** Covers `WEEKLY_REPORT_MARKDOWN_MAX_CHARS` plus JSON framing. A byte budget, so it is not the
  * same number as that character cap — see `internal/weekly-report-limits.ts`. */
@@ -421,6 +441,29 @@ function profileDomainFailure(error: unknown): Response | undefined {
     { ok: false, errorCode: error.errorCode, error: error.message },
     { status: error.status },
   );
+}
+
+/** Same convention as `profileDomainFailure`, for `app config`. */
+function appConfigDomainFailure(error: unknown): Response | undefined {
+  if (!(error instanceof AgentAppConfigRequestError)) return undefined;
+  return Response.json(
+    { ok: false, errorCode: error.errorCode, error: error.message },
+    { status: error.status },
+  );
+}
+
+/** The SDK's patch shape plus the key the CLI names its request with; whether each key and value
+ * belongs to the App is the cloud's answer. */
+function parseAppConfigUpdate(
+  param: string,
+  fields: JsonObject,
+): AgentAppConfigUpdateRequest | Response {
+  const appId = decodePathParam(param);
+  if (appId instanceof Response) return appId;
+  const change = decodeAgentAppConfigPatch(fields);
+  const { idempotencyKey } = fields;
+  if (!change || typeof idempotencyKey !== "string" || !idempotencyKey) return badRequest();
+  return { appId, ...change, idempotencyKey };
 }
 
 /** OpenViking reads answer a sanitized C2 error instead of the generic proxy-failure shape. */
@@ -719,6 +762,27 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     handler: "profileUpdate",
     parse: ({ fields }) => parseProfileUpdateFields(fields),
     domainFailure: profileDomainFailure,
+  }),
+  defineRoute({
+    family: "agent-api/app-config-get",
+    method: LOCAL_PROXY_ROUTES.appConfig.get.method,
+    match: pathParam(LOCAL_APP_CONFIG_ROUTE_PREFIX, APP_CONFIG_SUFFIX),
+    body: "none",
+    handler: "appConfigGet",
+    parse: ({ param }) => {
+      const appId = decodePathParam(param);
+      return appId instanceof Response ? appId : { appId };
+    },
+    domainFailure: appConfigDomainFailure,
+  }),
+  defineRoute({
+    family: "agent-api/app-config-update",
+    method: LOCAL_PROXY_ROUTES.appConfig.update.method,
+    match: pathParam(LOCAL_APP_CONFIG_ROUTE_PREFIX, APP_CONFIG_SUFFIX),
+    body: "json-object",
+    handler: "appConfigUpdate",
+    parse: ({ param, fields }) => parseAppConfigUpdate(param, fields),
+    domainFailure: appConfigDomainFailure,
   }),
   defineRoute({
     family: "agent-api/mention-pending",

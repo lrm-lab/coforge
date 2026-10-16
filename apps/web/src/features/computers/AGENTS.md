@@ -16,4 +16,6 @@ These rules apply to `src/features/computers/`.
   created, and ensured once more when the Computers page opens. That start also
   binds the creator's weekly-report assistant to the default computer. Each
   Workspace can add one extra. The cluster places it. The page does not ask the
-  user to pick a host.
+  user to pick a host. Formatting a cloud computer removes its service and disk,
+  then places the same computer again. The owner must type its name; the server
+  checks that name. Agents, messages, and workspace links stay.

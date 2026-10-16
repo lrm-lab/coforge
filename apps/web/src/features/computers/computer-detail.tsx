@@ -91,6 +91,8 @@ export type ComputerDetailView = ComputerIdentity & {
   ownedByCurrentUser: boolean;
   canManageAgents: boolean;
   online: boolean;
+  /** A rescan of its runtimes is in flight; the runtimes listed are the last confirmed ones. */
+  runtimeDetecting?: boolean;
   connectedAt: Date | string;
   computerVersion?: string | null;
   platform?: string | null;
@@ -162,8 +164,10 @@ export function ComputerDetail({
   onScanAgentWorkspaces,
   onDeleteAgentWorkspace,
   onDeleteComputer,
+  onFormatCloudComputer,
   onCreateAgent,
   onLoadRuntimeCatalog,
+  onRescanRuntimes,
   onSelectAgent,
   onExecuteAgentControl,
 }: {
@@ -181,8 +185,12 @@ export function ComputerDetail({
   onScanAgentWorkspaces?: () => Promise<void>;
   onDeleteAgentWorkspace?: (agentId: string) => Promise<{ status: string }>;
   onDeleteComputer?: () => Promise<void>;
+  /** Queues a disk format. The argument is the name the owner typed. */
+  onFormatCloudComputer?: (confirmName: string) => Promise<void>;
   onCreateAgent?: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
   onLoadRuntimeCatalog?: (computerId: string) => Promise<RuntimeCatalog[]>;
+  /** Asks the Computer which runtimes it has, now; resolves whether it answered. */
+  onRescanRuntimes?: () => Promise<boolean>;
   onSelectAgent?: (agentId: string) => void;
   onExecuteAgentControl?: AgentControlExecute;
   latestComputerVersion?: string | null;
@@ -202,6 +210,21 @@ export function ComputerDetail({
   );
   const [createAgentOpen, setCreateAgentOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [formatOpen, setFormatOpen] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
+  const [rescanFailed, setRescanFailed] = useState(false);
+  const rescan = async () => {
+    if (!onRescanRuntimes || rescanning) return;
+    setRescanning(true);
+    setRescanFailed(false);
+    try {
+      setRescanFailed(!(await onRescanRuntimes()));
+    } catch {
+      setRescanFailed(true);
+    } finally {
+      setRescanning(false);
+    }
+  };
   const [updatingRuntimeIds, setUpdatingRuntimeIds] = useState<ReadonlySet<string>>(new Set());
   const [runtimeVisibilityErrorIds, setRuntimeVisibilityErrorIds] = useState<ReadonlySet<string>>(
     new Set(),
@@ -543,7 +566,29 @@ export function ComputerDetail({
               )}
             </dl>
             <div className="border-t border-secondary py-3">
-              <h3 className="text-sm font-medium text-primary">{m.computer_runtimes()}</h3>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-medium text-primary">{m.computer_runtimes()}</h3>
+                {onRescanRuntimes && computer.online && (
+                  <Button
+                    size="sm"
+                    color="link-color"
+                    isDisabled={rescanning}
+                    onPress={() => void rescan()}
+                  >
+                    {rescanning ? m.computer_runtime_rescanning() : m.computer_runtime_rescan()}
+                  </Button>
+                )}
+              </div>
+              {(rescanning || computer.runtimeDetecting) && (
+                <p className="mt-1 text-sm text-tertiary" role="status">
+                  {m.computer_runtime_detection_pending()}
+                </p>
+              )}
+              {rescanFailed && !rescanning && (
+                <p className="mt-1 text-sm text-error-primary" role="alert">
+                  {m.computer_runtime_rescan_failed()}
+                </p>
+              )}
               {computer.runtimes.length ? (
                 <ul className="mt-2 flex flex-wrap gap-1.5">
                   {computer.runtimes.map((runtime) => (
@@ -652,6 +697,24 @@ export function ComputerDetail({
             </details>
           )}
 
+          {onFormatCloudComputer && (
+            <div className="flex flex-col gap-4 border-t border-secondary pt-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-primary">{m.computer_format_action()}</h2>
+                <p className="mt-1 text-sm text-tertiary">{m.computer_format_description()}</p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                color="secondary-destructive"
+                className="shrink-0 self-start sm:self-auto"
+                onPress={() => setFormatOpen(true)}
+              >
+                {m.computer_format_action()}
+              </Button>
+            </div>
+          )}
+
           {onDeleteComputer && (
             <div className="flex flex-col gap-4 border-t border-secondary pt-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
@@ -672,6 +735,14 @@ export function ComputerDetail({
           )}
         </div>
       </div>
+      {onFormatCloudComputer && (
+        <FormatCloudComputerDialog
+          open={formatOpen}
+          onOpenChange={setFormatOpen}
+          name={label}
+          onConfirm={onFormatCloudComputer}
+        />
+      )}
       {onDeleteComputer && (
         <DeleteConfirmDialog
           open={deleteOpen}
@@ -1226,6 +1297,117 @@ function TerminalCommand({ command }: { command: string }) {
         }}
       />
     </div>
+  );
+}
+
+/** Formats a cloud computer's disk only after the owner types its name. The server checks it again. */
+function FormatCloudComputerDialog({
+  open,
+  onOpenChange,
+  name,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  name: string;
+  onConfirm: (confirmName: string) => Promise<void>;
+}) {
+  const [typed, setTyped] = useState("");
+  const [error, setError] = useState("");
+  const [formatting, guard] = useSubmitGuard();
+  const confirmed = typed.trim() === name;
+
+  function submit() {
+    if (!confirmed || formatting) return;
+    setError("");
+    void guard(async () => {
+      try {
+        await onConfirm(typed.trim());
+        setTyped("");
+        onOpenChange(false);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : "";
+        setError(
+          message === "confirmation does not match"
+            ? m.computer_format_mismatch()
+            : m.computer_format_error(),
+        );
+      }
+    });
+  }
+
+  return (
+    <ModalOverlay
+      isOpen={open}
+      onOpenChange={(nextOpen: boolean) => {
+        if (formatting) return;
+        if (!nextOpen) setTyped("");
+        setError("");
+        onOpenChange(nextOpen);
+      }}
+    >
+      <Modal className="w-[calc(100vw-2rem)] max-w-lg">
+        <Dialog className="overflow-hidden text-left">
+          {({ close }) => (
+            <>
+              <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
+                <Heading
+                  slot="title"
+                  className="min-w-0 text-xl font-semibold text-primary wrap-anywhere sm:text-display-xs"
+                >
+                  {m.computer_format_dialog_title({ name })}
+                </Heading>
+                <ButtonUtility
+                  aria-label={m.controls_close()}
+                  icon={X}
+                  size="sm"
+                  color="tertiary"
+                  isDisabled={formatting}
+                  onClick={close}
+                />
+              </div>
+              <div className="mx-6 mt-4 flex items-start gap-3">
+                <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
+                <Text slot="description" className="text-sm text-secondary">
+                  {m.computer_format_description()}
+                </Text>
+              </div>
+              <label className="grid gap-1 px-6 pt-5 text-sm font-medium">
+                {m.computer_format_confirm({ name })}
+                <Input
+                  autoFocus
+                  value={typed}
+                  onChange={setTyped}
+                  placeholder={m.computer_format_placeholder()}
+                  isDisabled={formatting}
+                  autoComplete="off"
+                  aria-label={m.computer_format_confirm({ name })}
+                />
+              </label>
+              {error && (
+                <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
+                  {error}
+                </p>
+              )}
+              <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
+                <Button color="secondary" isDisabled={formatting} onPress={close}>
+                  {m.controls_cancel()}
+                </Button>
+                <Button
+                  color="primary-destructive"
+                  isDisabled={!confirmed || formatting}
+                  isLoading={formatting}
+                  showTextWhileLoading
+                  onPress={submit}
+                >
+                  {formatting ? m.computer_format_pending() : m.computer_format_submit()}
+                </Button>
+              </div>
+            </>
+          )}
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }
 

@@ -79,6 +79,8 @@ export class AgentMigrationRequests {
         agentId: string,
         computerId: string,
       ): Promise<AgentRuntimeSelectionRefusal | null>;
+      /** Whether the Computer is detecting its runtimes now, from a rescan. */
+      runtimeDetecting(workspaceId: string, computerId: string): Promise<boolean>;
       /** The Computer the Agent is placed on now, or null when it has none. */
       agentComputer(workspaceId: string, agentId: string): Promise<string | null>;
       computerReadiness(workspaceId: string, computerId: string): Promise<AgentMigrationReadiness>;
@@ -145,8 +147,15 @@ export class AgentMigrationRequests {
       input.agentId,
       input.targetComputerId,
     );
-    if (runtimeRefusal)
-      throw new AppError("INVALID_INPUT", { errorId: RUNTIME_REFUSALS[runtimeRefusal] });
+    if (runtimeRefusal) {
+      // A runtime not reported yet may be what a rescan in flight is about to report.
+      const detecting =
+        (runtimeRefusal === "runtime_unconfirmed" || runtimeRefusal === "runtime_missing") &&
+        (await this.deps.runtimeDetecting(principal.workspaceId, input.targetComputerId));
+      throw new AppError("INVALID_INPUT", {
+        errorId: detecting ? "agent-migration-runtime-detecting" : RUNTIME_REFUSALS[runtimeRefusal],
+      });
+    }
     let started: Awaited<ReturnType<AgentMigrationOrchestrator["request"]>>;
     try {
       started = await this.deps.orchestrator().request({

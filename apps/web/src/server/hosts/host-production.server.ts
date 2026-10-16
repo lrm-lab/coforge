@@ -10,7 +10,7 @@ import { HostDirectory } from "./host-directory.server";
 import { createHostHttpHandler } from "./host-http.server";
 import { createHostJobHttpHandler } from "./host-job-http.server";
 import { HostJobs } from "./host-jobs.server";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 
 export function clusterToken(): string | undefined {
   return process.env.COFORGE_CLOUD_CLUSTER_TOKEN;
@@ -35,6 +35,15 @@ export function productionCloudComputers(db: PrismaClient = requireDatabaseClien
     jobs: new PrismaHostJobStore(db),
     cluster: directory,
     keys: new PrismaDaemonKeys(db),
+    disk: {
+      clear: async (computerId) => {
+        await db.agentSession.deleteMany({ where: { computerId } });
+        await db.agent.updateMany({
+          where: { computerId },
+          data: { runtimeSession: Prisma.DbNull },
+        });
+      },
+    },
   });
 }
 

@@ -6,6 +6,7 @@ import {
   dockerServiceCreateArgs,
   dockerServiceFindArgs,
   dockerServiceRemoveArgs,
+  dockerVolumeRemoveArgs,
   swarmAccepting,
 } from "#src/host/docker-containers";
 import { HttpHostCloud } from "#src/host/host-cloud";
@@ -239,6 +240,7 @@ describe("swarm service arguments", () => {
       "coforge-computer:local",
     ]);
     expect(dockerServiceRemoveArgs("computer-1")).toEqual(["service", "rm", "coforge-computer-1"]);
+    expect(dockerVolumeRemoveArgs("computer-1")).toEqual(["volume", "rm", "coforge-computer-1"]);
     expect(dockerAttachExecArgs("task-1", { COFORGE_WORKSPACE_ID: "workspace-2" })).toEqual([
       "exec",
       "--env",
@@ -270,6 +272,19 @@ describe("swarm service arguments", () => {
         "coforge-computer",
         "__attach-workspace",
       ],
+    ]);
+  });
+
+  test("removing a service also removes its disk volume", async () => {
+    const calls: string[][] = [];
+    const containers = createDockerContainers(async (args) => {
+      calls.push(args);
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+    await containers.removeService("computer-1");
+    expect(calls).toEqual([
+      ["service", "rm", "coforge-computer-1"],
+      ["volume", "rm", "coforge-computer-1"],
     ]);
   });
 

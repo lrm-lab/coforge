@@ -1,6 +1,9 @@
 import type {
   AgentActionPrepareRequest,
   AgentActionPrepareResponse,
+  AgentAppConfigGetRequest,
+  AgentAppConfigResponse,
+  AgentAppConfigUpdateRequest,
   AgentManualGetRequest,
   AgentManualGetResponse,
   AgentManualSearchRequest,
@@ -43,6 +46,8 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "userInfo"
     | "profileShow"
     | "profileUpdate"
+    | "appConfigGet"
+    | "appConfigUpdate"
     | "agentMemoryDisposition"
     | "agentOpenviking"
     | "mentionPending"
@@ -189,6 +194,30 @@ export class AgentRequestForwarder {
   ): Promise<AgentProfileUpdateResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
     return this.#transportCall("profileUpdate", "Agent profile endpoint is not configured")(
+      request,
+      agentApiKey,
+    );
+  }
+
+  async appConfigGet(
+    context: string,
+    request: AgentAppConfigGetRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall("appConfigGet", "Agent app config endpoint is not configured")(
+      request,
+      agentApiKey,
+    );
+  }
+
+  async appConfigUpdate(
+    context: string,
+    request: AgentAppConfigUpdateRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall("appConfigUpdate", "Agent app config endpoint is not configured")(
       request,
       agentApiKey,
     );

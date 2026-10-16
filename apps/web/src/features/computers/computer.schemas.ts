@@ -73,3 +73,7 @@ export const updateComputerDisplayNameInputSchema = z.object({
   computerId: z.string().min(1),
   displayName: z.string().trim().min(1).max(200),
 });
+export const formatCloudComputerInputSchema = z.object({
+  computerId: z.string().min(1),
+  confirmName: z.string().trim().min(1).max(200),
+});

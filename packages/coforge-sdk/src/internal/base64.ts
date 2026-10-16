@@ -92,9 +92,10 @@ export function decodeBase64(value: string): Uint8Array {
     const low = DECODE_PAIRS[(third << 7) | fourth]!;
     if ((high | low) < 0) throw new Error("Invalid base64 character");
     const group = (high << 12) | low;
-    bytes[offset++] = (group >> 16) & 0xff;
-    bytes[offset++] = (group >> 8) & 0xff;
-    bytes[offset++] = group & 0xff;
+    bytes[offset] = group >> 16;
+    bytes[offset + 1] = group >> 8;
+    bytes[offset + 2] = group;
+    offset += 3;
   }
   if (index < value.length) {
     const padding = trailingPadding;

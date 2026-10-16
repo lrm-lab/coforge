@@ -1805,3 +1805,45 @@ test("a group session's CLI check defaults to its own target and rejects another
   await expect(client.check("#beta")).rejects.toThrow("this conversation");
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+const appConfig = {
+  ok: true,
+  appId: "system.cleaner",
+  revision: 1,
+  schema: { enabled: { type: "boolean" } },
+  defaults: { enabled: true },
+  overrides: { enabled: false },
+  effective: { enabled: false },
+};
+
+test("reads and changes an App's config through the daemon-local proxy, naming the change once", async () => {
+  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async () =>
+    Response.json(appConfig)) as unknown as typeof fetch);
+  const client = connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages));
+  expect(await client.appConfigGet!("system.cleaner")).toEqual(appConfig as never);
+  const change = { expectedRevision: 0, set: { enabled: false }, unset: [] };
+  expect(await client.appConfigUpdate!("system.cleaner", change)).toEqual(appConfig as never);
+  const endpoint = new URL(proxyUrl(agentApiRoutes.local.appConfig.get.path("system.cleaner")));
+  expect(fetchSpy.mock.calls[0]?.[0]).toEqual(endpoint);
+  expect(fetchSpy.mock.calls[0]?.[1]?.method).toBe("GET");
+  expect(fetchSpy.mock.calls[1]?.[0]).toEqual(endpoint);
+  expect(fetchSpy.mock.calls[1]?.[1]?.method).toBe("PATCH");
+  const body = JSON.parse(String(fetchSpy.mock.calls[1]?.[1]?.body));
+  expect(body).toMatchObject(change);
+  expect(body.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+});
+
+test("an App config refusal fails with the cloud's code and reason", async () => {
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json(
+      { ok: false, errorCode: "revision_conflict", error: "The config is now at revision 2." },
+      { status: 409 },
+    ),
+  );
+  const attempt = connectLocal("", `sfp_${"a".repeat(43)}`, proxyUrl(agentApiRoutes.local.messages))
+    .appConfigUpdate!("system.cleaner", { expectedRevision: 1, set: {}, unset: ["enabled"] });
+  await expect(attempt).rejects.toMatchObject({
+    code: "REVISION_CONFLICT",
+    message: "The config is now at revision 2.",
+  });
+});

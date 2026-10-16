@@ -80,6 +80,7 @@ test.each([
 async function computer(name: string, shared: ReturnType<typeof cloud>, role: "source" | "target") {
   const root = await temp(`agent-migration-${name}-`);
   const stops: string[] = [];
+  const movedAway: string[] = [];
   const running = new Set<string>(role === "source" ? [agentId] : []);
   const runner = new AgentMigrationRunner({
     server: () => shared.serverFor(role),
@@ -90,6 +91,7 @@ async function computer(name: string, shared: ReturnType<typeof cloud>, role: "s
         running.delete(id);
       },
       isRunning: (id) => running.has(id),
+      movedAway: (id) => movedAway.push(id),
     },
     workspaceDirectory: (id) => join(root, "agents", id),
     stateDirectory: join(root, "state"),
@@ -100,6 +102,7 @@ async function computer(name: string, shared: ReturnType<typeof cloud>, role: "s
     root,
     runner,
     stops,
+    movedAway,
     workspace: join(root, "agents", agentId),
     state: join(root, "state"),
   };
@@ -197,6 +200,9 @@ test("a leased source and then a leased target move the Agent's workspace betwee
   );
   expect(await readFile(join(archived, "MEMORY.md"), "utf8")).toBe("what I remember");
   expect(await readFile(join(archived, "code/repo/README.md"), "utf8")).toBe("code stays behind");
+  // Only the Computer the Agent left forgets it.
+  expect(source.movedAway).toEqual([agentId]);
+  expect(target.movedAway).toEqual([]);
 });
 
 test("a source whose migration failed keeps its workspace where it is", async () => {
@@ -554,6 +560,7 @@ test("a source run replacing a canceled run retains its hold", async () => {
         }
       },
       isRunning: () => false,
+      movedAway: () => {},
     },
     workspaceDirectory: () => workspace,
     stateDirectory: join(root, "state"),

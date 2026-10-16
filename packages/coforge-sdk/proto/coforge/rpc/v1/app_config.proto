@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+// The System Cleaner's effective settings for one Agent.
+message CleanerAppConfig {
+  bool enabled = 1;
+  uint32 threshold_bytes = 2;
+  uint32 interval_ms = 3;
+}
+
+// One Agent App's effective configuration for its owner Agent. Each App has its own typed
+// settings; a daemon that does not know an App ignores its row.
+message AppConfig {
+  string app_id = 1;
+  string owner_agent_id = 2;
+  uint32 revision = 3;
+  oneof effective {
+    CleanerAppConfig cleaner = 10;
+  }
+}
+
+// Server to daemon: one App's new configuration (upsert, exactly one config), or every App's
+// configuration for one owner Agent (snapshot; an App without a row is removed).
+message AppConfigSync {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string agent_id = 5;
+  string operation = 6;
+  repeated AppConfig configs = 7;
+  string message_type = 8;
+}
+
+// Daemon to server: asks for an owner Agent's App configuration snapshot.
+message AppConfigSnapshotRequest {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string agent_id = 5;
+}

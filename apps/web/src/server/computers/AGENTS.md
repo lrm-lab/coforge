@@ -27,6 +27,11 @@ These rules apply to `src/server/computers/`.
   workspace-directory observations for the Computer owner's detail inventory.
 - `computer-model-catalog-refresh.server.ts` waits for the terminal reply to
   an explicit model probe; ordinary catalog reads use the stored inventory.
+  The same probe is the Computer page's "Rescan runtimes": the daemon re-runs
+  runtime discovery before it re-reports.
+- `computer-runtime-detection.server.ts` marks a Computer as detecting its
+  runtimes while a rescan waits (Redis, expiring); the Computer page and a
+  move's refusal read it. No daemon state is involved.
 - `computer-workspace-files.server.ts` is the owner scope for that inventory's
   scan and for workspace delete: the owned-Computer lookup, the Agent
   assignment rule, and the Workspace Files query both server functions use.

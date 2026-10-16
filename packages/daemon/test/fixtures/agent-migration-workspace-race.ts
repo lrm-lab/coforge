@@ -60,7 +60,7 @@ async function main() {
   const runner = new AgentMigrationRunner({
     server: () => server,
     bucket: { put: outgoing.bucket.put, get: returning.bucket.get },
-    agents: { stop: async () => {}, isRunning: () => false },
+    agents: { stop: async () => {}, isRunning: () => false, movedAway: () => {} },
     workspaceDirectory: () => workspace,
     stateDirectory: state,
   });

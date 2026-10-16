@@ -20,6 +20,8 @@ import {
   scanAgentWorkspaces,
   deleteAgentWorkspace,
   deleteComputer,
+  refreshComputerRuntimeCatalog,
+  formatCloudComputer,
   setRuntimeVisibility,
   updateComputerDisplayName,
   upgradeComputer,
@@ -78,9 +80,11 @@ function ComputerDetailPage() {
   const scanWorkspaces = useServerFn(scanAgentWorkspaces);
   const deleteWorkspace = useServerFn(deleteAgentWorkspace);
   const removeComputer = useServerFn(deleteComputer);
+  const formatDisk = useServerFn(formatCloudComputer);
   const create = useServerFn(createAgent);
   const executeControl = useServerFn(executeAgentControl);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
+  const rescanRuntimes = useServerFn(refreshComputerRuntimeCatalog);
 
   return (
     <ComputerDetail
@@ -109,6 +113,13 @@ function ComputerDetailPage() {
           ? (agentId) => deleteWorkspace({ data: { computerId, agentId } })
           : undefined
       }
+      onFormatCloudComputer={
+        computer.ownedByCurrentUser && computer.kind === "cloud"
+          ? async (confirmName) => {
+              await formatDisk({ data: { computerId, confirmName } });
+            }
+          : undefined
+      }
       onDeleteComputer={
         computer.ownedByCurrentUser && computer.cloudSlot !== "default"
           ? async () => {
@@ -131,6 +142,16 @@ function ComputerDetailPage() {
       }
       onExecuteAgentControl={(data) => executeControl({ data })}
       onLoadRuntimeCatalog={(id) => loadRuntimeCatalog({ data: { computerId: id } })}
+      onRescanRuntimes={
+        // As the reference Computer: its creator, or whoever manages the Workspace's Computers.
+        computer.ownedByCurrentUser || computer.canManageAgents
+          ? async () => {
+              const { status } = await rescanRuntimes({ data: { computerId } });
+              await router.invalidate({ sync: true });
+              return status === "refreshed";
+            }
+          : undefined
+      }
       onSelectAgent={(agentId) =>
         void router.navigate({
           to: "/w/$workspaceSlug/members",

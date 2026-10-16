@@ -1414,29 +1414,6 @@ test.each([
   expect(acks).toEqual(["delivery-chatter"]);
 });
 
-test("the next notice appends a MEMORY.md over-limit reminder once", async () => {
-  const notices: string[] = [];
-  const index = new AgentMessageAttentionIndex(
-    "workspace-1",
-    { session: () => session((notice) => notices.push(notice)) },
-    async () => {},
-  );
-  index.setLaunchReminder(
-    "agent-1",
-    "Your MEMORY.md is 35KB (limit 3KB). Move details into notes/ and keep MEMORY.md as an index.",
-  );
-
-  await index.receive({ ...delivery("dm", "human", "ada"), target: "@ada" });
-  expect(notices[0]).toContain("Your MEMORY.md is 35KB (limit 3KB)");
-
-  await index.receive({
-    ...delivery("dm-two", "human", "ada"),
-    sequence: 2,
-    target: "@ada",
-  });
-  expect(notices[1]).not.toContain("MEMORY.md");
-});
-
 test("messages shown one by one settle their attention without moving the frontier", async () => {
   const index = new AgentMessageAttentionIndex("workspace-1", runtime, async () => {});
   await index.receive({ ...delivery("three"), sequence: 3 });

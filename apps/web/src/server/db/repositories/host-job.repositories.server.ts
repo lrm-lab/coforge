@@ -37,6 +37,7 @@ export class PrismaCloudFleet implements CloudFleet {
         cloudSlot: true,
         homeWorkspaceId: true,
         name: true,
+        displayName: true,
         deletedAt: true,
         hostJobs: {
           where: { operation: "create", containerId: { not: null }, reportedAt: { not: null } },
@@ -54,6 +55,7 @@ export class PrismaCloudFleet implements CloudFleet {
           slot: row.cloudSlot,
           homeWorkspaceId: row.homeWorkspaceId,
           name: row.name,
+          displayName: row.displayName,
           containerReady: row.hostJobs.length > 0,
           deletedAt: row.deletedAt,
         },
@@ -69,7 +71,7 @@ export class PrismaCloudFleet implements CloudFleet {
           ownerId: computer.ownerId,
           machineId: `cloud-${computer.id}`,
           name: computer.name,
-          displayName: computer.name,
+          displayName: computer.displayName || computer.name,
           kind: "cloud",
           cloudSlot: computer.slot,
           homeWorkspaceId: computer.homeWorkspaceId,
@@ -89,6 +91,21 @@ export class PrismaCloudFleet implements CloudFleet {
     await this.db.computer.update({ where: { id }, data: { deletedAt: at } });
   }
 
+  async forgetContainer(id: string): Promise<void> {
+    await this.db.hostJob.updateMany({
+      where: { computerId: id, operation: "create" },
+      data: { containerId: null },
+    });
+  }
+
+  async linkedWorkspaces(computerId: string) {
+    const rows = await this.db.workspaceComputer.findMany({
+      where: { computerId },
+      select: { workspace: { select: { id: true, slug: true } } },
+    });
+    return rows.map((row) => ({ id: row.workspace.id, slug: row.workspace.slug }));
+  }
+
   async isLinked(computerId: string, workspaceId: string): Promise<boolean> {
     const link = await this.db.workspaceComputer.findUnique({
       where: { workspaceId_computerId: { workspaceId, computerId } },
@@ -97,7 +114,7 @@ export class PrismaCloudFleet implements CloudFleet {
     return link !== null;
   }
 
-  async link(computerId: string, workspaceId: string): Promise<void> {
+  async link(computerId: string, workspaceId: string, _slug: string): Promise<void> {
     await this.db.workspaceComputer.create({ data: { workspaceId, computerId } });
   }
 }
@@ -134,6 +151,19 @@ type JobRow = {
 
 export class PrismaHostJobStore implements ClusterJobs {
   constructor(private readonly db: PrismaClient) {}
+
+  async findOpenFormat(ownerId: string, computerId: string) {
+    const row = await this.db.hostJob.findFirst({
+      where: {
+        requestedByUserId: ownerId,
+        computerId,
+        operation: "delete",
+        reportedAt: null,
+        idempotencyKey: { startsWith: "cloud-format:" },
+      },
+    });
+    return row ? fromRow(row) : undefined;
+  }
 
   async findByIdempotency(ownerId: string, idempotencyKey: string) {
     const row = await this.db.hostJob.findUnique({

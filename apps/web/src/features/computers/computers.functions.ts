@@ -21,6 +21,7 @@ import {
   scanUsageInputSchema,
   setRuntimeVisibilityInputSchema,
   updateComputerDisplayNameInputSchema,
+  formatCloudComputerInputSchema,
 } from "./computer.schemas";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import {
@@ -37,6 +38,7 @@ import { getUsageCache } from "#src/server/centrifugo/usage-cache.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
 import { ComputerModelCatalogRefresh } from "#src/server/computers/computer-model-catalog-refresh.server";
+import { getComputerRuntimeDetection } from "#src/server/computers/computer-runtime-detection.server";
 import { computerCreatorAvatarUrl } from "#src/server/computers/computer-creator-avatar.server";
 import { isWorkspaceMemberComputer } from "#src/server/computers/computer-membership.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
@@ -198,6 +200,12 @@ export const listComputers = createServerFn({ method: "GET" })
       computer.agents.map((agent) => ({ workspaceId, computerId: computer.id, agentId: agent.id })),
     );
     const agentDisplays = await getAgentDisplay().snapshotMany(agentScopes);
+    const runtimeDetection = getComputerRuntimeDetection();
+    const detecting = await Promise.all(
+      connections.map(({ computer }) =>
+        runtimeDetection.detecting({ workspaceId, computerId: computer.id }).catch(() => false),
+      ),
+    );
     const agentDisplayById = new Map(
       agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
     );
@@ -226,6 +234,7 @@ export const listComputers = createServerFn({ method: "GET" })
           ownedByCurrentUser: computer.ownerId === user.id,
           canManageAgents: agentViewer.role === "owner" || agentViewer.role === "admin",
           online: statuses[index] ?? false,
+          runtimeDetecting: detecting[index] ?? false,
           agents: computer.agents.map((agent) => ({
             id: agent.id,
             name: agent.name,
@@ -439,6 +448,7 @@ export const refreshComputerRuntimeCatalog = createServerFn({ method: "POST" })
     const api = createCentrifugoServerApi();
     const refreshed = await new ComputerModelCatalogRefresh({
       results: getModelCatalogRefreshResults(),
+      detection: getComputerRuntimeDetection(),
       publish: (request) =>
         api.publish(
           daemonControlChannel(workspaceId, data.computerId),
@@ -484,6 +494,28 @@ export const updateComputerDisplayName = createServerFn({ method: "POST" })
     });
     if (result.count !== 1) throw new Error("Computer is not available");
     return { displayName: data.displayName };
+  });
+
+/** Queues a disk format for the owner's cloud computer. The typed name is checked again. */
+export const formatCloudComputer = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(formatCloudComputerInputSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    try {
+      await productionCloudComputers(db).format({
+        userId: user.id,
+        workspaceId,
+        computerId: data.computerId,
+        confirmName: data.confirmName,
+        now: new Date(),
+      });
+    } catch (error) {
+      if (error instanceof HostJobError || error instanceof HostDirectoryError) {
+        throw new Error(error.message);
+      }
+      throw error;
+    }
+    return { formatted: true as const };
   });
 
 /** Permanently removes an owner's Computer record after all of its Agents are soft-deleted. */

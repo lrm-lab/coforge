@@ -107,6 +107,10 @@ const REFUSALS: Record<
   "agent-migrating": { message: m.agent_migration_error_already_moving, fixAt: null },
   "agent-migration-unplaced": { message: m.agent_migration_error_unplaced, fixAt: null },
   // Why the target cannot run the Agent, told apart as the reference Computer tells them apart.
+  "agent-migration-runtime-detecting": {
+    message: m.agent_migration_error_runtime_detecting,
+    fixAt: "target",
+  },
   "agent-migration-runtime-unconfirmed": {
     message: m.agent_migration_error_runtime_unconfirmed,
     fixAt: "target",

@@ -1013,6 +1013,7 @@ export * from "./agent-workspace-files";
 export * from "./agent-control";
 export * from "./agent-migration";
 export * from "./reminder";
+export * from "./app-config";
 export * from "./tasks";
 export * from "./task-codec";
 export * from "./channel-command";

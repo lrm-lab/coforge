@@ -18,6 +18,8 @@ export type CloudComputer = {
   /** The Workspace an extra computer is for. The default computer has none. */
   homeWorkspaceId: string | null;
   name: string;
+  /** The name the owner types to confirm formatting. Empty falls back to `name`. */
+  displayName: string;
   containerReady: boolean;
   deletedAt: Date | null;
 };
@@ -69,12 +71,17 @@ export interface CloudFleet {
   insert(computer: CloudComputer): Promise<void>;
   markReady(id: string): Promise<void>;
   markDeleted(id: string, at: Date): Promise<void>;
+  /** The reported container is gone. The computer row stays. */
+  forgetContainer(id: string): Promise<void>;
+  linkedWorkspaces(computerId: string): Promise<Array<{ id: string; slug: string }>>;
   isLinked(computerId: string, workspaceId: string): Promise<boolean>;
-  link(computerId: string, workspaceId: string): Promise<void>;
+  link(computerId: string, workspaceId: string, slug: string): Promise<void>;
 }
 
 export interface ClusterJobs {
   findByIdempotency(ownerId: string, idempotencyKey: string): Promise<HostJobRecord | undefined>;
+  /** An unreported format removal for this computer, if one is already queued. */
+  findOpenFormat(ownerId: string, computerId: string): Promise<HostJobRecord | undefined>;
   insert(record: HostJobRecord): Promise<void>;
   /** Drops open create and attach work once the computer is being removed. */
   abandon(computerId: string, now: Date): Promise<void>;
@@ -102,6 +109,8 @@ export class HostJobs {
       jobs: ClusterJobs;
       cluster: ClusterAuth;
       keys: DaemonKeys;
+      /** Drops provider sessions stored for this computer once its disk is gone. */
+      disk?: { clear(computerId: string): Promise<void> };
     },
   ) {}
 
@@ -182,6 +191,41 @@ export class HostJobs {
     return view(computer, job.id);
   }
 
+  /** Removes this cloud computer's service and disk, then places the same computer again.
+   * The typed name must match the name the owner sees. */
+  async format(input: {
+    userId: string;
+    workspaceId: string;
+    computerId: string;
+    confirmName: string;
+    now: Date;
+  }): Promise<CloudComputerView> {
+    const workspace = await this.#workspace(input.workspaceId, input.userId);
+    const computer = (await this.deps.fleet.list(input.userId)).find(
+      (item) => item.id === input.computerId && item.deletedAt === null,
+    );
+    if (!computer) throw new HostJobError(404, "cloud computer not found");
+    const expected = computer.displayName.trim() || computer.name;
+    if (input.confirmName.trim() !== expected)
+      throw new HostJobError(409, "confirmation does not match");
+    const open = await this.deps.jobs.findOpenFormat(input.userId, computer.id);
+    if (open) return view(computer, open.id);
+    const clusterId = await this.deps.cluster.id();
+    const job = this.#job({
+      clusterId,
+      operation: "delete",
+      workspace,
+      computer,
+      ownerId: input.userId,
+      idempotencyKey: `cloud-format:${computer.id}:${crypto.randomUUID()}`,
+      daemonApiKey: null,
+      now: input.now,
+    });
+    await this.deps.jobs.insert(job);
+    await this.deps.jobs.abandon(computer.id, input.now);
+    return view(computer, job.id);
+  }
+
   async claim(input: { token: string }): Promise<ClaimedHostJob | undefined> {
     const cluster = await this.deps.cluster.authenticate(input.token);
     if (!cluster) throw new HostJobError(401, "invalid host token");
@@ -214,8 +258,15 @@ export class HostJobs {
       const containerId = requireText(input.containerId ?? "", "invalid container id");
       job.containerId = containerId;
       await this.deps.fleet.markReady(job.computerId);
+      await this.#attachLinkedWorkspaces(job, input.now);
     }
-    if (job.operation === "delete") await this.deps.fleet.markDeleted(job.computerId, input.now);
+    if (job.operation === "delete" && job.idempotencyKey.startsWith("cloud-format:")) {
+      await this.deps.fleet.forgetContainer(job.computerId);
+      await this.deps.disk?.clear(job.computerId);
+      await this.#placeAgain(job, input.now);
+    } else if (job.operation === "delete") {
+      await this.deps.fleet.markDeleted(job.computerId, input.now);
+    }
     job.daemonApiKey = null;
     job.reportedAt = input.now;
     await this.deps.jobs.save(job);
@@ -235,6 +286,7 @@ export class HostJobs {
       slot,
       homeWorkspaceId: slot === "extra" ? workspace.id : null,
       name,
+      displayName: name,
       containerReady: false,
       deletedAt: null,
     };
@@ -244,7 +296,7 @@ export class HostJobs {
       workspaceId: workspace.id,
       computerId: computer.id,
     });
-    await this.deps.fleet.link(computer.id, workspace.id);
+    await this.deps.fleet.link(computer.id, workspace.id, workspace.slug);
     const job = this.#job({
       clusterId,
       operation: "create",
@@ -275,7 +327,7 @@ export class HostJobs {
       workspaceId: workspace.id,
       computerId: computer.id,
     });
-    await this.deps.fleet.link(computer.id, workspace.id);
+    await this.deps.fleet.link(computer.id, workspace.id, workspace.slug);
     await this.deps.jobs.insert(
       this.#job({
         clusterId,
@@ -283,6 +335,74 @@ export class HostJobs {
         workspace,
         computer,
         ownerId: userId,
+        idempotencyKey: key,
+        daemonApiKey,
+        now,
+      }),
+    );
+  }
+
+  async #attachLinkedWorkspaces(job: HostJobRecord, now: Date): Promise<void> {
+    const computer = (await this.deps.fleet.list(job.ownerId)).find(
+      (item) => item.id === job.computerId,
+    );
+    if (!computer) return;
+    const ready = { ...computer, containerReady: true };
+    for (const workspace of await this.deps.fleet.linkedWorkspaces(job.computerId)) {
+      if (workspace.id === job.workspaceId) continue;
+      await this.#reattach(ready, workspace, job.ownerId, job.clusterId, job.id, now);
+    }
+  }
+
+  /** Queues an attach for a Workspace that is already linked, after a fresh container exists. */
+  async #reattach(
+    computer: CloudComputer,
+    workspace: { id: string; slug: string },
+    userId: string,
+    clusterId: string,
+    placementId: string,
+    now: Date,
+  ): Promise<void> {
+    const key = `cloud-attach:${computer.id}:${workspace.id}:${placementId}`;
+    if (await this.deps.jobs.findByIdempotency(userId, key)) return;
+    const daemonApiKey = await this.deps.keys.issue({
+      userId,
+      workspaceId: workspace.id,
+      computerId: computer.id,
+    });
+    await this.deps.jobs.insert(
+      this.#job({
+        clusterId,
+        operation: "attach",
+        workspace,
+        computer,
+        ownerId: userId,
+        idempotencyKey: key,
+        daemonApiKey,
+        now,
+      }),
+    );
+  }
+
+  async #placeAgain(job: HostJobRecord, now: Date): Promise<void> {
+    const computer = (await this.deps.fleet.list(job.ownerId)).find(
+      (item) => item.id === job.computerId && item.deletedAt === null,
+    );
+    if (!computer) return;
+    const key = `cloud-format-create:${computer.id}:${job.id}`;
+    if (await this.deps.jobs.findByIdempotency(job.ownerId, key)) return;
+    const daemonApiKey = await this.deps.keys.issue({
+      userId: job.ownerId,
+      workspaceId: job.workspaceId,
+      computerId: computer.id,
+    });
+    await this.deps.jobs.insert(
+      this.#job({
+        clusterId: job.clusterId,
+        operation: "create",
+        workspace: { id: job.workspaceId, slug: job.workspaceSlug },
+        computer,
+        ownerId: job.ownerId,
         idempotencyKey: key,
         daemonApiKey,
         now,

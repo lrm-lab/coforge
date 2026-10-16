@@ -30,6 +30,18 @@ test("resolveManualGet returns a known topic's content, ending in a newline", ()
   expect(outcome.resultSlugs).toEqual(["github"]);
 });
 
+test("resolveManualGet serves the workspace-cleanup topic a System Cleaner item names", () => {
+  // packages/daemon/src/system-cleaner/system-cleaner.ts points Agents at this slug.
+  const outcome = resolveManualGet({
+    topic: "workspace-cleanup",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+  });
+  expect(outcome.status).toBe(200);
+  if (outcome.status !== 200) throw new Error("expected a hit");
+  expect(outcome.body.content).toContain(".coforgemigrateignore");
+});
+
 test("resolveManualGet 404s an unknown but well-formed topic slug", () => {
   const outcome = resolveManualGet({
     topic: "does-not-exist",

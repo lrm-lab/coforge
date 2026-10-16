@@ -169,5 +169,6 @@ test("P3 topics hold the how-to moved out of the standing prompt", () => {
     "profile",
     "reminders",
     "tasks",
+    "workspace-cleanup",
   ]);
 });

@@ -95,6 +95,8 @@ import {
   type UsageScanResponse,
   REMINDER_CAPABILITY,
   AGENT_MIGRATION_CAPABILITY,
+  APP_CONFIG_CAPABILITY,
+  CLEANER_APP_ID,
   type AgentReminderOperationRequest,
   type LocalReminderRequest,
   type ReminderJob,
@@ -115,7 +117,7 @@ import {
   UUID_LIKE_SOURCE,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
-import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
+import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
 import { AgentMigrationBucketClient } from "#src/connection/agent-migration-bucket-client";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
@@ -125,7 +127,6 @@ import {
   agentContextScanResponse,
   type AgentContextScanOutcome,
 } from "./agent-context-scan-response";
-import { WorkspaceCleanupTips } from "#src/agent-runtime/workspace-cleanup-tip";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
@@ -168,6 +169,7 @@ import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store
 import { AgentMessageDraftStore } from "#src/persistence/agent-message-draft-store";
 import { AgentAppInbox, type MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import { reminderDueItemId } from "#src/agent-app-inbox/registry";
+import { SystemCleaner, type SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
@@ -184,6 +186,7 @@ import {
   reminderAppInboxSummary,
 } from "#src/agent-reminder/reminder-scheduler";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
+import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { diagnosticErrorCode, diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
@@ -460,13 +463,16 @@ export class DaemonRuntime {
     flush: (agentId, held) => this.#flushHeldDeliveries(agentId, held),
   });
   readonly #reminders: ReminderScheduler;
+  readonly #appConfigs: AgentAppConfigSync;
   /** This Computer's Agent migration runs; absent when the transport cannot reach the route. */
   readonly #migrations: AgentMigrationRunner | undefined;
   #migrationsClosed: Promise<void> | undefined;
   readonly #agentInboxes = new Map<string, AgentInboxStateMachine>();
   readonly #appInboxes = new Map<string, Promise<AgentAppInbox>>();
-  readonly #workspaceCleanupTips = new WorkspaceCleanupTips();
   readonly #notifiedAppItems = new Map<string, Map<string, Promise<boolean>>>();
+  /** Per-Agent MEMORY.md and disk hints. Inert until a cloud config for an Agent is applied to
+   * it (`applyConfig`/`replaceOwnerSnapshot`). */
+  readonly systemCleaner: SystemCleaner;
   readonly #runtimeInstanceId = generateRuntimeInstanceId();
   readonly #startedAt = Date.now();
   readonly #agentContexts = new Map<string, string>();
@@ -543,6 +549,10 @@ export class DaemonRuntime {
       installerJournalExists?(): boolean;
     } = {},
     private readonly computerVersion?: string,
+    systemCleaner: Pick<
+      SystemCleanerOptions,
+      "clock" | "measureMemoryFile" | "measureDiskSpace"
+    > = {},
   ) {
     const runtime = this;
     this.#activityPublisher = new AgentActivityPublisher<ActivityLaunch>({
@@ -677,6 +687,25 @@ export class DaemonRuntime {
       },
       (job, occurrence) => this.#acceptReminderDue(job, occurrence.late),
     );
+    this.systemCleaner = new SystemCleaner({
+      ...systemCleaner,
+      agentsDirectory: agentsDirectory(connection.workspaceRoot, connection.workspaceId),
+      inbox: {
+        upsert: async (agentId, item) => (await this.#appInbox(agentId)).upsert(item),
+        remove: (agentId, itemId) => this.#removeAppItem(agentId, itemId),
+      },
+      wake: async (agentId, itemId) => {
+        // A busy Agent sees the item at its next idle drain; a stopped one at its next launch.
+        if (this.#isWorking(agentId)) return;
+        await this.#notifyAppItem(agentId, itemId, { startStopped: false });
+      },
+    });
+    this.#appConfigs = new AgentAppConfigSync({
+      // `#requestAppConfigSnapshot` asks only through a transport that has the method.
+      requestSnapshot: (agentId) =>
+        this.#transport.requestAppConfigSnapshot!({ ...this.#envelope(), agentId }),
+      apps: { [CLEANER_APP_ID]: this.systemCleaner },
+    });
     // The transport is replaced on each start, so the runner reaches the route through whichever
     // one is current.
     this.#migrations = this.#transport.agentMigrationServer
@@ -686,6 +715,7 @@ export class DaemonRuntime {
           agents: {
             stop: (agentId) => this.stopAgent(agentId),
             isRunning: (agentId) => this.#agentProcessManager.runningAgentIds().includes(agentId),
+            movedAway: (agentId) => this.#forgetLocalAgent(agentId),
           },
           workspaceDirectory: (agentId) =>
             agentWorkspaceDirectory(connection.workspaceRoot, connection.workspaceId, agentId),
@@ -977,6 +1007,7 @@ export class DaemonRuntime {
             .catch(() => {});
           for (const agentId of this.#readyRunningAgentIds())
             void this.#requestReminderSnapshot(agentId).catch(() => {});
+          this.#resyncAppConfigs();
           void this.#agentControl
             .replay()
             .then(() => this.#agentSessions.replay())
@@ -1163,6 +1194,7 @@ export class DaemonRuntime {
           void this.#reminders.apply(sync).catch(() => {});
         }),
       );
+      this.#subscribe(this.#transport.onAppConfigSync?.((sync) => this.#appConfigs.apply(sync)));
       const migrations = this.#migrations;
       if (migrations) {
         // Before any lease is taken, so nothing it clears can belong to a run.
@@ -1213,6 +1245,7 @@ export class DaemonRuntime {
           recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds ?? [],
           capabilities: [
             REMINDER_CAPABILITY,
+            APP_CONFIG_CAPABILITY,
             ...(this.#migrations ? [AGENT_MIGRATION_CAPABILITY] : []),
           ],
         }),
@@ -1222,6 +1255,7 @@ export class DaemonRuntime {
       await Promise.all(
         this.#readyRunningAgentIds().map((agentId) => this.#requestReminderSnapshot(agentId)),
       );
+      this.#resyncAppConfigs();
       const heldNotices = heldMessages.take();
       if (heldNotices.dropped > 0)
         logger.warn("Delivery notices held during start were dropped; the cloud resends them", {
@@ -1449,6 +1483,7 @@ export class DaemonRuntime {
         this.#agentProcessManager.isStopping(request.agentId)
       )
         await this.stopAgent(request.agentId);
+      this.#forgetLocalAgent(request.agentId);
       return await deleteAgentWorkspaceFiles({
         agentWorkspaceDirectory: agentWorkspaceDirectory(
           connection.workspaceRoot,
@@ -1729,6 +1764,7 @@ export class DaemonRuntime {
     } catch (error) {
       return Promise.reject(error);
     }
+    this.#requestAppConfigSnapshot(agentId);
     const enqueueRecovery = (context: AgentRecoveryContext) =>
       this.#enqueueAgentInput(agentId, (completion) => ({ kind: "recovery", context, completion }));
     const enqueueTurn = (text: string) =>
@@ -2343,12 +2379,6 @@ export class DaemonRuntime {
         parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect")
       )
         this.#collectSkillAgents.add(agentId);
-      if (!isMemoryAgentRuntime(config))
-        void this.#workspaceCleanupTips
-          .launchReminder(agentId, workspaceDirectory)
-          .then((reminder) => {
-            if (reminder && current()) this.#messageAttention.setLaunchReminder(agentId, reminder);
-          });
       if (this.#stoppingAgents.has(agentId)) {
         await this.#agentProcessManager.stop(agentId);
         throw new Error(`Agent runtime is stopping: ${agentId}`);
@@ -2425,6 +2455,8 @@ export class DaemonRuntime {
         });
         unsubscribe();
         if (launch.stopping) return;
+        // A process that ended without a crash has stopped working too.
+        if (!launch.crashDetail) this.systemCleaner.onAgentWorkingToIdle(agentId);
         // A reused launch is tracked by AgentControl exactly like a managed one is —
         // its exit must flip the on-disk record back to "stopped" (via `wake()`'s mirror image,
         // `stopped()`) so a later wake or server Start sees a truthful record.
@@ -3700,10 +3732,7 @@ export class DaemonRuntime {
     // Otherwise the pending trajectory timer could publish it after Idle and rearm Busy.
     launch.trajectory?.flush();
     this.#compactionTracker.dispose(agentId);
-    if (
-      this.#activityPublisher.lastBusy(agentId) !== undefined ||
-      this.#deliveryQueue.isBusy(agentId)
-    ) {
+    if (this.#isWorking(agentId)) {
       this.#activityPublisher.publish(
         agentId,
         launch,
@@ -3714,6 +3743,18 @@ export class DaemonRuntime {
     return true;
   }
 
+  /** The Agent no longer lives on this Computer: its workspace was deleted or moved away. */
+  #forgetLocalAgent(agentId: string): void {
+    this.systemCleaner.replaceOwnerSnapshot(agentId, null);
+  }
+
+  /** Whether the Agent is mid-turn, by its last busy Activity or a notice just written. */
+  #isWorking(agentId: string): boolean {
+    return (
+      this.#activityPublisher.lastBusy(agentId) !== undefined || this.#deliveryQueue.isBusy(agentId)
+    );
+  }
+
   #releaseTurnEndHolds(agentId: string): void {
     const held = this.#deliveryQueue.idle(agentId);
     if (held.length) this.#flushHeldDeliveries(agentId, held);
@@ -3721,6 +3762,7 @@ export class DaemonRuntime {
     // turn rather than racing the notice that just started it.
     this.#releaseHeldAppItems(agentId);
     this.#releaseFallbackNotices(agentId);
+    this.systemCleaner.onAgentWorkingToIdle(agentId);
   }
 
   #sendAgentStatus(agentId: string, status: "active" | "inactive"): void {
@@ -4006,9 +4048,10 @@ export class DaemonRuntime {
         request.reminderId!,
         request.revision!,
       );
-      const removed = await (
-        await this.#appInbox(agentId)
-      ).remove(reminderDueItemId(request.reminderId!, request.revision!));
+      const removed = await this.#removeAppItem(
+        agentId,
+        reminderDueItemId(request.reminderId!, request.revision!),
+      );
       if (!accepted) {
         // Neither the receipt file nor this daemon knows the receipt (the file was lost or is
         // unreadable, and the daemon has restarted since), but the Agent was shown this exact
@@ -4052,6 +4095,26 @@ export class DaemonRuntime {
     return this.#notifyAppItem(job.ownerAgentId, item.itemId);
   }
 
+  /** A new connection: asks again for every running Agent's App config. */
+  #resyncAppConfigs(): void {
+    this.#appConfigs.connected();
+    // A launch in progress asked on the old connection, whose answer is now dropped.
+    for (const agentId of new Set([...this.#readyRunningAgentIds(), ...this.#agentLaunches.keys()]))
+      this.#requestAppConfigSnapshot(agentId);
+  }
+
+  /** Asks once per connection for the Agent's App config; the cloud resends on the next one. */
+  #requestAppConfigSnapshot(agentId: string): void {
+    if (!this.#transport.requestAppConfigSnapshot) return;
+    void this.#appConfigs.request(agentId).catch((error: unknown) =>
+      logger.warn("Asking for an Agent's App config failed; the next connection asks again", {
+        event: "agent_app_config:snapshot_failed",
+        agent_id: agentId,
+        error_code: diagnosticErrorName(error),
+      }),
+    );
+  }
+
   async #requestReminderSnapshot(agentId: string): Promise<void> {
     if (!this.#transport.requestSnapshot) return;
     const sync: ReminderSync = await this.#transport.requestSnapshot({
@@ -4083,6 +4146,14 @@ export class DaemonRuntime {
       await this.#notifyAppItem(agentId, item.itemId);
   }
 
+  /** Removes an App Inbox item and forgets that it was announced, so an item minted again under
+   * the same id is announced again. */
+  async #removeAppItem(agentId: string, itemId: string): Promise<boolean> {
+    const removed = await (await this.#appInbox(agentId)).remove(itemId);
+    this.#notifiedAppItems.get(agentId)?.delete(itemId);
+    return removed;
+  }
+
   #appInbox(agentId: string): Promise<AgentAppInbox> {
     const existing = this.#appInboxes.get(agentId);
     if (existing) return existing;
@@ -4103,7 +4174,11 @@ export class DaemonRuntime {
     return inbox;
   }
 
-  async #notifyAppItem(agentId: string, itemId: string): Promise<boolean> {
+  async #notifyAppItem(
+    agentId: string,
+    itemId: string,
+    { startStopped = true }: { startStopped?: boolean } = {},
+  ): Promise<boolean> {
     const notified = this.#notifiedAppItems.get(agentId) ?? new Map<string, Promise<boolean>>();
     this.#notifiedAppItems.set(agentId, notified);
     const existing = notified.get(itemId);
@@ -4111,6 +4186,7 @@ export class DaemonRuntime {
     const pending = Promise.resolve().then(async () => {
       let session = this.#agentProcessManager.session(agentId);
       if (!session) {
+        if (!startStopped) return false;
         const wakeable = this.#agentProcessManager.restartConfig(agentId);
         if (!wakeable) return false;
         session = (
@@ -4297,6 +4373,7 @@ export class DaemonRuntime {
     // as long as the cloud stays unreachable.
     this.#startAbort?.abort(new DaemonConnectionStoppedError());
     this.#reminders.stop();
+    this.systemCleaner.clear();
     // Each attempt is leased again on the next ready, and its run picks up from the server's state.
     this.#migrationsClosed = this.#migrations?.close();
     for (const token of this.#agentProxyTokens.values()) this.#agentProxy?.revoke(token);

@@ -30,6 +30,10 @@ import {
   decodeAgentManualSearchResponse,
   decodeAgentVersionResponse,
   decodeAgentProfileErrorResponse,
+  decodeAgentAppConfigErrorResponse,
+  decodeAgentAppConfigResponse,
+  type AgentAppConfigPatch,
+  type AgentAppConfigResponse,
   decodeAgentProfileShowResponse,
   decodeAgentProfileUpdateResponse,
   decodeAgentUserInfoErrorResponse,
@@ -304,28 +308,34 @@ async function versionRequest(
 }
 
 /**
- * GETs a route that always answers a domain error as JSON `{ ok: false, errorCode, error }`
- * (same convention as `manualRequest` above, generalized so `user info`/`profile show` do not
- * duplicate it): `errorCode` becomes the `CliError` code directly.
+ * Calls a route that always answers a domain error as JSON `{ ok: false, errorCode, error }`
+ * (same convention as `manualRequest` above, generalized so `user info`, `profile` and `app
+ * config` do not duplicate it): `errorCode` becomes the `CliError` code directly. A GET carries
+ * `query`; a route that takes a JSON body carries `body`.
  */
-async function envelopeGetRequest<T>(
+async function envelopeRequest<T>(
   proxyEndpoint: (path: string) => URL,
   context: string,
   proxyUrl: string,
-  path: string,
-  query: Record<string, string>,
+  request: { method: string; path: string; query?: Record<string, string>; body?: unknown },
   decode: (value: unknown) => T,
   decodeError: (value: unknown) => { errorCode: string; error: string } | undefined,
   operation: string,
 ): Promise<T> {
   requireProxySetup(operation, context, proxyUrl);
-  const endpoint = proxyEndpoint(path);
-  for (const [key, value] of Object.entries(query)) endpoint.searchParams.set(key, value);
+  const endpoint = proxyEndpoint(request.path);
+  for (const [key, value] of Object.entries(request.query ?? {}))
+    endpoint.searchParams.set(key, value);
+  const hasBody = request.body !== undefined;
   let response: Response;
   try {
     response = await fetch(endpoint, {
-      method: "GET",
-      headers: { authorization: `Bearer ${context}` },
+      method: request.method,
+      headers: {
+        authorization: `Bearer ${context}`,
+        ...(hasBody ? { "content-type": "application/json" } : {}),
+      },
+      ...(hasBody ? { body: JSON.stringify(request.body) } : {}),
       signal: AbortSignal.timeout(10_000),
     });
   } catch {
@@ -347,41 +357,6 @@ async function envelopeGetRequest<T>(
     });
   }
   return decode(rawBody);
-}
-
-/** Same envelope convention as `envelopeGetRequest`, for the one POST route (`profile update`). */
-async function callProfileUpdate(
-  proxyEndpoint: (path: string) => URL,
-  context: string,
-  proxyUrl: string,
-  input: AgentProfileUpdateRequest,
-): Promise<AgentProfileUpdateResponse> {
-  requireProxySetup("profile-update", context, proxyUrl);
-  let response: Response;
-  try {
-    response = await fetch(proxyEndpoint(agentApiRoutes.local.profile.update.path), {
-      method: agentApiRoutes.local.profile.update.method,
-      headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
-      body: JSON.stringify(input),
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
-    throw new CliError({
-      code: "PROFILE_UPDATE_FAILED",
-      message: "agent proxy request failed (network or timeout)",
-      retryable: false,
-    });
-  }
-  const rawBody: unknown = await response.json().catch(() => undefined);
-  if (!response.ok) {
-    const errorBody = decodeAgentProfileErrorResponse(rawBody);
-    throw new CliError({
-      code: errorBody?.errorCode ? errorBody.errorCode.toUpperCase() : "PROFILE_UPDATE_FAILED",
-      message: errorBody?.error ?? `HTTP ${response.status}`,
-      retryable: false,
-    });
-  }
-  return decodeAgentProfileUpdateResponse(rawBody);
 }
 
 /**
@@ -696,29 +671,67 @@ export function connectLocal(
       ),
     version: (): Promise<AgentVersionResponse> => versionRequest(proxyEndpoint, context, proxyUrl),
     userInfo: (name: string): Promise<AgentUserInfoResponse> =>
-      envelopeGetRequest(
+      envelopeRequest(
         proxyEndpoint,
         context,
         proxyUrl,
-        agentApiRoutes.local.users.path(name),
-        {},
+        { method: agentApiRoutes.local.users.method, path: agentApiRoutes.local.users.path(name) },
         decodeAgentUserInfoResponse,
         decodeAgentUserInfoErrorResponse,
         "user-info",
       ),
     profileShow: (target?: string): Promise<AgentProfileShowResponse> =>
-      envelopeGetRequest(
+      envelopeRequest(
         proxyEndpoint,
         context,
         proxyUrl,
-        agentApiRoutes.local.profile.get.path,
-        target ? { target } : {},
+        { ...agentApiRoutes.local.profile.get, query: target ? { target } : {} },
         decodeAgentProfileShowResponse,
         decodeAgentProfileErrorResponse,
         "profile-show",
       ),
     profileUpdate: (input: AgentProfileUpdateRequest): Promise<AgentProfileUpdateResponse> =>
-      callProfileUpdate(proxyEndpoint, context, proxyUrl, input),
+      envelopeRequest(
+        proxyEndpoint,
+        context,
+        proxyUrl,
+        { ...agentApiRoutes.local.profile.update, body: input },
+        decodeAgentProfileUpdateResponse,
+        decodeAgentProfileErrorResponse,
+        "profile-update",
+      ),
+    appConfigGet: (appId: string): Promise<AgentAppConfigResponse> =>
+      envelopeRequest(
+        proxyEndpoint,
+        context,
+        proxyUrl,
+        {
+          method: agentApiRoutes.local.appConfig.get.method,
+          path: agentApiRoutes.local.appConfig.get.path(appId),
+        },
+        decodeAgentAppConfigResponse,
+        decodeAgentAppConfigErrorResponse,
+        "app-config",
+      ),
+    // One key per invocation. A repeat cannot apply twice either way: the cloud refuses any
+    // change not made against the current revision.
+    appConfigUpdate: (
+      appId: string,
+      change: AgentAppConfigPatch,
+    ): Promise<AgentAppConfigResponse> =>
+      envelopeRequest(
+        proxyEndpoint,
+        context,
+        proxyUrl,
+        {
+          method: agentApiRoutes.local.appConfig.update.method,
+          path: agentApiRoutes.local.appConfig.update.path(appId),
+          body: { ...change, idempotencyKey: crypto.randomUUID() },
+        },
+        decodeAgentAppConfigResponse,
+        decodeAgentAppConfigErrorResponse,
+        "app-config",
+      ),
     mentionPending: (): Promise<AgentMentionPendingResponse> =>
       mentionActionRequest(
         proxyEndpoint,

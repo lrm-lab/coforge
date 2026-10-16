@@ -42,6 +42,12 @@ import {
   decodeComputerUpgradeResult,
   COMPUTER_UPGRADE_RESULT_METHOD,
   type AgentReminderOperationRequest,
+  APP_CONFIG_SNAPSHOT_METHOD,
+  APP_CONFIG_SYNC_MESSAGE_TYPE,
+  CLEANER_APP_ID,
+  decodeAppConfigSnapshotRequest,
+  encodeAppConfigSync,
+  type AppConfigSync,
 } from "@lrm/coforge-sdk/internal";
 import {
   AGENT_SEND_REQUEST_TIMEOUT_MS,
@@ -52,6 +58,7 @@ import { AgentMessageRequestError } from "#src/connection/agent-message-request-
 import { AgentTransportError } from "#src/connection/agent-transport-error";
 import { AgentMentionActionRequestError } from "#src/connection/agent-mention-action-request-error";
 import { AgentMentionDeliveryRequestError } from "#src/connection/agent-mention-delivery-request-error";
+import { AgentAppConfigRequestError } from "#src/connection/agent-app-config-request-error";
 import { captureDaemonLogs } from "./log-capture";
 
 const TEST_AGENT_API_KEY = `sk_agent_${"a".repeat(43)}`;
@@ -975,6 +982,74 @@ test("mention delivery HTTP transport carries the cloud's not-found error throug
   expect(error).toBeInstanceOf(AgentMentionDeliveryRequestError);
   expect((error as AgentMentionDeliveryRequestError).errorCode).toBe("message_not_found");
   expect((error as AgentMentionDeliveryRequestError).status).toBe(404);
+});
+
+const appConfigBody = {
+  ok: true as const,
+  appId: "system.cleaner",
+  revision: 1,
+  schema: { threshold_bytes: { type: "integer" as const, minimum: 4096, maximum: 1_073_741_824 } },
+  defaults: { threshold_bytes: 65_536 },
+  overrides: { threshold_bytes: 131_072 },
+  effective: { threshold_bytes: 131_072 },
+};
+
+test("app config HTTP transport reads with a GET and changes with a PATCH of the change alone", async () => {
+  const calls: Array<{ url: string; method?: string; body?: unknown }> = [];
+  const client = createAgentMessageHttpClient(async (input, init) => {
+    calls.push({
+      url: String(input),
+      method: init?.method,
+      ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
+    });
+    return Response.json(appConfigBody);
+  });
+  const url = `https://server.example${agentApiRoutes.cloud.appConfig.get.path("system.cleaner")}`;
+  const keys = { agentApiKey: `sk_agent_${"a".repeat(43)}`, daemonApiKey: "daemon-token" };
+  expect(
+    await client.requestAppConfigGet!({ url, ...keys, request: { appId: "system.cleaner" } }),
+  ).toEqual(appConfigBody);
+  const change = {
+    expectedRevision: 0,
+    set: { threshold_bytes: 131_072 },
+    unset: [],
+    idempotencyKey: "66666666-6666-4666-8666-666666666666",
+  };
+  expect(
+    await client.requestAppConfigUpdate!({
+      url,
+      ...keys,
+      request: { appId: "system.cleaner", ...change },
+    }),
+  ).toEqual(appConfigBody);
+  expect(calls).toEqual([
+    { url, method: "GET" },
+    { url, method: "PATCH", body: change },
+  ]);
+});
+
+test("app config HTTP transport carries the cloud's revision conflict through", async () => {
+  const client = createAgentMessageHttpClient(async () =>
+    Response.json(
+      { ok: false, errorCode: "revision_conflict", error: "The config is now at revision 2." },
+      { status: 409 },
+    ),
+  );
+  const error = await client.requestAppConfigUpdate!({
+    url: "https://server.example/api/agent/v1/apps/system.cleaner/config",
+    agentApiKey: `sk_agent_${"a".repeat(43)}`,
+    daemonApiKey: "daemon-token",
+    request: {
+      appId: "system.cleaner",
+      expectedRevision: 1,
+      set: {},
+      unset: ["enabled"],
+      idempotencyKey: "k",
+    },
+  }).catch((thrown: unknown) => thrown);
+  expect(error).toBeInstanceOf(AgentAppConfigRequestError);
+  expect((error as AgentAppConfigRequestError).errorCode).toBe("revision_conflict");
+  expect((error as AgentAppConfigRequestError).status).toBe(409);
 });
 
 test("mention action HTTP transport POSTs the action and its resolution ids", async () => {
@@ -4370,6 +4445,71 @@ test("a migration lease or cancel for another Computer is refused", async () => 
     );
     fake.publish(channel, encodeAgentMigrationCancel({ ...other, switched: true }));
     expect(delivered).toBe(0);
+  } finally {
+    await transport.stop();
+  }
+});
+
+const appConfigSync = (computerId: string = config.computerId) =>
+  encodeAppConfigSync({
+    protocolMajor: 1,
+    requestId: "app-config-1",
+    workspaceId: config.workspaceId,
+    computerId,
+    agentId: "agent-1",
+    operation: "upsert",
+    configs: [
+      {
+        appId: CLEANER_APP_ID,
+        ownerAgentId: "agent-1",
+        revision: 1,
+        effective: { enabled: true, thresholdBytes: 65_536, intervalMs: 3_600_000 },
+      },
+    ],
+    messageType: APP_CONFIG_SYNC_MESSAGE_TYPE,
+  });
+
+test("an App config sync for this Computer reaches its slot and nothing else", async () => {
+  const fake = fakeClient();
+  const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
+  const syncs: AppConfigSync[] = [];
+  let other = 0;
+  transport.onAppConfigSync((sync) => syncs.push(sync));
+  transport.onReminderSync(() => other++);
+  transport.onAgentWorkspaceReset(() => other++);
+  try {
+    await transport.start("secret", config);
+    const channel = `daemon:${config.workspaceId}:${config.computerId}`;
+    fake.publish(channel, appConfigSync());
+    fake.publish(channel, appConfigSync("other-computer"));
+    expect(syncs).toMatchObject([{ agentId: "agent-1", operation: "upsert" }]);
+    expect(other).toBe(0);
+  } finally {
+    await transport.stop();
+  }
+});
+
+test("an App config snapshot is asked for over RPC and its reply decoded", async () => {
+  const fake = fakeClient();
+  const calls: { method: string; data: Uint8Array }[] = [];
+  fake.client.rpc = async (method, data) => {
+    calls.push({ method, data });
+    return { data: appConfigSync() };
+  };
+  const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
+  try {
+    await transport.start("secret", config);
+    const request = {
+      protocolMajor: 1,
+      requestId: "snapshot-1",
+      workspaceId: config.workspaceId,
+      computerId: config.computerId,
+      agentId: "agent-1",
+    };
+    const reply = await transport.requestAppConfigSnapshot(request);
+    expect(reply.configs).toHaveLength(1);
+    const call = calls.find(({ method }) => method === APP_CONFIG_SNAPSHOT_METHOD);
+    expect(decodeAppConfigSnapshotRequest(call!.data)).toEqual(request);
   } finally {
     await transport.stop();
   }
