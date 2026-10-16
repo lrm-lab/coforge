@@ -636,11 +636,7 @@ export const MessageRow = memo(function MessageRow({
   const displayName = own ? m.conversation_you() : message.senderName;
   const deleted = Boolean(message.senderDeleted);
   const openableAgentId =
-    !own &&
-    !deleted &&
-    message.senderKind === "agent" &&
-    message.senderAgentId &&
-    onOpenAgentProfile
+    !own && message.senderKind === "agent" && message.senderAgentId && onOpenAgentProfile
       ? message.senderAgentId
       : undefined;
   const openablePersonId =
@@ -653,8 +649,8 @@ export const MessageRow = memo(function MessageRow({
     : openablePersonId
       ? () => onOpenPersonProfile?.(openablePersonId)
       : undefined;
-  // A deleted sender is inert and visually muted: no profile affordance, a grey avatar tone, and
-  // a `DELETED` badge beside the name.
+  // A deleted sender is visually muted: a grey avatar tone and a `DELETED` badge beside the name.
+  // Its profile still opens, read-only.
   // An Agent's avatar in the stream carries the same online/working/thinking/error/offline dot the
   // sidebar, conversation header and @-mention popup use, so you can tell whether the Agent that
   // wrote a message is around right now without opening its profile. The avatar reads that one

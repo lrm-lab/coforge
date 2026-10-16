@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AgentDeletion } from "#src/server/agents/agent-deletion.server";
+import { AgentDetailQuery } from "#src/server/agents/agent-detail.server";
+import { PrismaAgentDetailSource } from "#src/server/db/repositories/agent-detail.repositories.server";
 import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
@@ -727,6 +729,43 @@ test.skipIf(!connectionString)(
       });
     } finally {
       await teardown(db, workspace.id, [owner.id]);
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "a deleted Agent's profile stays readable, to whoever could see the Agent",
+  async () => {
+    const { db, workspace, owner, member, agent } = await setup();
+    const memberViewer: AgentVisibilityViewer = { kind: "user", userId: member.id, role: "member" };
+    const ownerViewer: AgentVisibilityViewer = { kind: "user", userId: owner.id, role: "owner" };
+    const profileFor = (viewer: AgentVisibilityViewer & { userId: string }) =>
+      new AgentDetailQuery(new PrismaAgentDetailSource(db, viewer)).get(
+        workspace.id,
+        agent.id,
+        viewer.userId,
+      );
+    try {
+      const result = await deletionFor(db, []).delete(
+        {
+          userId: owner.id,
+          workspaceId: workspace.id,
+          role: await workspaceMemberRole(db, workspace.id, owner.id),
+        },
+        agent.id,
+      );
+      expect(result.outcome).toBe("deleted");
+
+      const profile = await profileFor(memberViewer);
+      expect(profile).toMatchObject({ id: agent.id, name: agent.name, displayName: "Doomed" });
+      expect(profile?.deletedAt).toBeInstanceOf(Date);
+
+      // Deleting changes nothing about who may see it: a private Agent stays its creator's.
+      await db.agent.update({ where: { id: agent.id }, data: { visibility: "private" } });
+      await expect(profileFor(memberViewer)).rejects.toMatchObject({ code: "AGENT_NOT_VISIBLE" });
+      expect((await profileFor(ownerViewer))?.deletedAt).toBeInstanceOf(Date);
+    } finally {
+      await teardown(db, workspace.id, [owner.id, member.id]);
     }
   },
 );

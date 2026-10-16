@@ -30,10 +30,11 @@ export function DirectConversationHeader({
 }) {
   const display = useLiveAgent(conversation.agent.id)?.display;
   const status = agentDisplay(display);
-  // A deleted Agent's DM stays readable, but offers no profile and no new messages.
+  // A deleted Agent's DM stays readable, with its read-only profile, but takes no new messages.
   const deleted = Boolean(conversation.agent.deletedAt);
-  const openProfile =
-    onOpenAgentProfile && !deleted ? () => onOpenAgentProfile(conversation.agent.id) : undefined;
+  const openProfile = onOpenAgentProfile
+    ? () => onOpenAgentProfile(conversation.agent.id)
+    : undefined;
   const avatar = (
     <AgentDisplayAvatar
       name={conversation.agent.displayName}

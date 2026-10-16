@@ -40,6 +40,7 @@ import {
 import { ActionCards } from "#src/server/conversations/action-cards.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { AgentDetailQuery } from "#src/server/agents/agent-detail.server";
+import { PrismaAgentDetailSource } from "#src/server/db/repositories/agent-detail.repositories.server";
 import {
   agentVisibilityViewerForUser,
   assertAgentVisible,
@@ -434,7 +435,7 @@ export const previewAgentVisibilityChange = createServerFn({ method: "GET" })
  */
 async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: string) {
   const { user, db, workspaceId } = context;
-  // Fetched once, ahead of `AgentDetailQuery` so `findAuthorized`'s visibility gate
+  // Fetched once, ahead of `AgentDetailQuery` so the source's visibility gate
   // and `canManageAgentRole` below share this single membership lookup.
   const viewerMembership = await db.workspaceMembership.findUnique({
     where: { workspaceId_userId: { workspaceId, userId: user.id } },
@@ -446,58 +447,7 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
     role: viewerMembership?.role,
   };
   const query = new AgentDetailQuery(
-    {
-      findAuthorized: async (workspaceId, id, userId) => {
-        const agent = await db.agent.findFirst({
-          where: {
-            id,
-            workspaceId,
-            workspace: { members: { some: { userId } } },
-            // A deleted Agent has no profile to open; its history stays readable
-            // through the conversation views instead.
-            ...ACTIVE_AGENT_WHERE,
-          },
-          select: {
-            id: true,
-            workspaceId: true,
-            name: true,
-            displayName: true,
-            description: true,
-            role: true,
-            visibility: true,
-            createdAt: true,
-            computerId: true,
-            computer: {
-              select: {
-                id: true,
-                name: true,
-                displayName: true,
-                kind: true,
-                computerVersion: true,
-              },
-            },
-            runtimeConfig: true,
-            stoppedAt: true,
-            weeklyReportAssistant: { select: { id: true } },
-            owner: {
-              select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatarObjectKey: true,
-              },
-            },
-            avatarObjectKey: true,
-          },
-        });
-        if (!agent) return undefined;
-        // An existing-but-invisible Agent answers a stable "not visible" result, never
-        // its details — distinct from the plain absence above so the profile panel can render
-        // the specific "not visible" copy instead of a generic "not found".
-        assertAgentVisible(viewer, { visibility: agent.visibility, ownerId: agent.owner.id });
-        return agent;
-      },
-    },
+    new PrismaAgentDetailSource(db, viewer),
     {
       snapshot: (scope) => getAgentStatusCache().snapshot(scope),
     },
@@ -508,6 +458,8 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
   const result = await query.get(workspaceId, agentId, user.id);
   if (!result) return undefined;
   const ownedByCurrentUser = result.owner.id === user.id;
+  // A deleted Agent's profile is read-only: nothing on it acts on the Agent any more.
+  const live = !result.deletedAt;
   const runtimeCredential = ownedByCurrentUser
     ? await (await runtimeCredentials(db)).summary({ workspaceId, userId: user.id }, agentId)
     : null;
@@ -518,15 +470,15 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
   // reaches this point holds the `controlAgentRuntime` capability (Restart/Reset session);
   // `resetAgentWorkspace` (Full reset) is owner/admin only, same role check as agent-role
   // management. Server-side authorization lives in AgentControl.execute(); this is UI gating.
-  const canFullResetAgent = canManageAgentRole;
+  const canFullResetAgent = canManageAgentRole && live;
   // `deleteAgents` is owner/admin only, the same gate as `createAgents`. The
   // weekly-report assistant is provisioned by Records on demand, so it is never a delete target
   // even for an owner/admin viewer. Server-side authorization lives in `AgentDeletion.delete()`.
-  const canDeleteAgent = canManageAgentRole && !result.isWeeklyReportAssistant;
+  const canDeleteAgent = canManageAgentRole && live && !result.isWeeklyReportAssistant;
   // The creator or a human Workspace owner/admin may change visibility; never an Agent
   // (this seam is always reached by a human viewer) and never a plain member acting on someone
   // else's Agent.
-  const canChangeVisibility = ownedByCurrentUser || canManageAgentRole;
+  const canChangeVisibility = live && (ownedByCurrentUser || canManageAgentRole);
   // Best-effort: the Agent profile panel's Computer meta line ("Connected · v0.1.0-dev.35"). Redis
   // unavailability degrades to "unknown" (`undefined`), never a false "offline".
   const computerOnline = result.computer

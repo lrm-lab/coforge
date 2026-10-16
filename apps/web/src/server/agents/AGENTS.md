@@ -35,7 +35,8 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 - Every live-view Agent query applies `ACTIVE_AGENT_WHERE`
   (`active-agent.server.ts`), and every mutation and control path calls
   `assertAgentLive`, so a deleted Agent answers the same `NOT_FOUND`
-  everywhere.
+  everywhere except its read-only profile (`PrismaAgentDetailSource`), which
+  keeps it with `deletedAt` under the same visibility gate.
 
 ## Visibility
 

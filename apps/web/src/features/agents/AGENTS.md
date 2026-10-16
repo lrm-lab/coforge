@@ -119,6 +119,8 @@ These rules apply to `src/features/agents/`.
   of `agentDisplay()` only adds an un-internationalized `statusDetail` caption
   when the display is already offline; it never changes `isOnline` or the badge
   label.
+- A deleted Agent's profile opens read-only: the Profile tab alone, no runtime
+  control, message, edit, role, visibility, migration or delete.
 - `deleted-agent.tsx` owns deleted-sender rendering (grey avatar and `DELETED`
   badge) for every message-history surface. Use it rather than local styling.
 - `agent-avatar-dialog.tsx` is the creator's change-avatar dialog, opened by

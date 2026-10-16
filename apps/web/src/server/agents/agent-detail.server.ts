@@ -37,6 +37,8 @@ type DetailAgent = {
    * yet still satisfies this type. */
   visibility?: string;
   avatarObjectKey?: string | null;
+  /** Set once the Agent is deleted; its profile stays readable. */
+  deletedAt?: Date | null;
 };
 
 export type AgentDetailSource = {
@@ -100,6 +102,7 @@ export class AgentDetailQuery {
       stopped: Boolean(agent.stoppedAt),
       visibility: agent.visibility,
       avatarObjectKey: agent.avatarObjectKey ?? null,
+      deletedAt: agent.deletedAt ?? null,
       ...(display ? { display } : {}),
       status: {
         value: statusReadFailed ? ("unknown" as const) : (status?.status ?? ("inactive" as const)),

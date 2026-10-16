@@ -9,6 +9,7 @@ import {
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
+import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
@@ -25,6 +26,7 @@ export function AgentProfileHeader({
   display,
   controls,
   canMessage,
+  deleted = false,
   onClose,
   back,
 }: {
@@ -37,6 +39,8 @@ export function AgentProfileHeader({
   controls: AgentRuntimeControls;
   /** The viewer created this Agent: only its creator has a direct message with it. */
   canMessage: boolean;
+  /** The Agent was deleted: its profile is read-only, so the header offers no runtime control. */
+  deleted?: boolean;
   onClose: () => void;
   /** Where the profile was opened from, when it is shown inside another page (a channel's
    * members): a Back button before the avatar returns there. */
@@ -59,12 +63,18 @@ export function AgentProfileHeader({
           onClick={back.onPress}
         />
       )}
-      <AgentDisplayAvatar name={agent.displayName} src={agent.avatarUrl} display={display} />
+      <AgentDisplayAvatar
+        name={agent.displayName}
+        src={agent.avatarUrl}
+        display={display}
+        deleted={deleted}
+      />
       {/* The name alone: the avatar's dot carries the live status
           and the Profile tab the description. */}
       <p className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
         {agent.displayName}
       </p>
+      {deleted && <DeletedAgentBadge />}
       {canMessage && (
         <ButtonUtility
           icon={MessageSquare}
@@ -73,19 +83,23 @@ export function AgentProfileHeader({
           onClick={() => void openDirectConversation({ agentId: agent.id })}
         />
       )}
-      <ButtonUtility
-        icon={controls.isOnline ? Stop : Play}
-        size="sm"
-        isDisabled={controls.startStopBusy}
-        tooltip={controls.isOnline ? m.agent_control_stop() : m.agent_control_start()}
-        onClick={controls.pressStartOrStop}
-      />
-      <ButtonUtility
-        icon={RotateCcw}
-        size="sm"
-        tooltip={m.agent_control_restart_reset_tooltip()}
-        onClick={() => controls.openRestart("restart")}
-      />
+      {!deleted && (
+        <>
+          <ButtonUtility
+            icon={controls.isOnline ? Stop : Play}
+            size="sm"
+            isDisabled={controls.startStopBusy}
+            tooltip={controls.isOnline ? m.agent_control_stop() : m.agent_control_start()}
+            onClick={controls.pressStartOrStop}
+          />
+          <ButtonUtility
+            icon={RotateCcw}
+            size="sm"
+            tooltip={m.agent_control_restart_reset_tooltip()}
+            onClick={() => controls.openRestart("restart")}
+          />
+        </>
+      )}
       <ButtonUtility
         icon={X}
         size="sm"

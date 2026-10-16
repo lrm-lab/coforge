@@ -128,8 +128,11 @@ export function AgentProfilePanel({
   usePrefetchAgentActivityFeed(agentId);
 
   const knownName = profile?.displayName ?? liveAgent?.displayName ?? "";
-  const canManage = profile ? canManageAgent(profile) : false;
-  const canSeeWorkspace = profile ? profile.ownedByCurrentUser : false;
+  // A deleted Agent's profile is read-only: the Profile tab alone, with nothing that acts on it.
+  const deleted = Boolean(profile?.deletedAt);
+  const canManage = profile && !deleted ? canManageAgent(profile) : false;
+  const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
+  const canSeeWorkspace = owned;
   const loadComputers = useServerFn(listComputers);
   // An unbound Agent needs a Computer before its runtime can be saved. A weekly-report
   // assistant keeps the picker after that first bind, so a retired Computer can be replaced.
@@ -187,9 +190,9 @@ export function AgentProfilePanel({
   // Runtime config dialog's Advanced disclosure — one owner-only load, not two.
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId();
-  const envQuery = useQuery(agentEnvironmentQuery(agentId, Boolean(profile?.ownedByCurrentUser)));
+  const envQuery = useQuery(agentEnvironmentQuery(agentId, owned));
   const saveEnvironment = useServerFn(saveAgentEnvironment);
-  const environmentState: AgentEnvironmentState | undefined = profile?.ownedByCurrentUser
+  const environmentState: AgentEnvironmentState | undefined = owned
     ? { loaded: envQuery.isSuccess, values: envQuery.data ?? {} }
     : undefined;
 
@@ -336,7 +339,8 @@ export function AgentProfilePanel({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       <AgentProfileHeader
-        canMessage={Boolean(profile?.ownedByCurrentUser)}
+        canMessage={owned}
+        deleted={deleted}
         agent={{
           id: agentId,
           displayName: knownName,
@@ -442,7 +446,7 @@ export function AgentProfilePanel({
               await invalidate();
             }}
             onAvatarChange={
-              profile.ownedByCurrentUser
+              owned
                 ? async (file) => {
                     const data = new FormData();
                     data.set("agentId", agentId);
@@ -454,7 +458,7 @@ export function AgentProfilePanel({
                 : undefined
             }
             onAvatarChoosePicture={
-              profile.ownedByCurrentUser
+              owned
                 ? async (pictureId) => {
                     await chooseAvatarPicture({ data: { agentId, pictureId } });
                     await invalidate();
@@ -463,7 +467,7 @@ export function AgentProfilePanel({
                 : undefined
             }
             onAvatarRemove={
-              profile.ownedByCurrentUser
+              owned
                 ? async () => {
                     await removeAvatar({ data: { agentId } });
                     await invalidate();
@@ -472,7 +476,7 @@ export function AgentProfilePanel({
                 : undefined
             }
             onSaveRole={
-              profile.canManageAgentRole
+              profile.canManageAgentRole && !deleted
                 ? async (role) => {
                     await updateRole({ data: { agentId, role } });
                     await invalidate();
@@ -480,11 +484,11 @@ export function AgentProfilePanel({
                 : undefined
             }
             onStartRuntimeEdit={onStartRuntimeEdit}
-            onLoadSkills={profile.ownedByCurrentUser ? onLoadSkills : undefined}
-            envVars={profile.ownedByCurrentUser ? (envQuery.data ?? {}) : undefined}
+            onLoadSkills={owned ? onLoadSkills : undefined}
+            envVars={owned ? (envQuery.data ?? {}) : undefined}
             onStartDelete={profile.canDeleteAgent ? () => setDeleteDialogOpen(true) : undefined}
             migration={
-              profile.computer ? (
+              profile.computer && !deleted ? (
                 <AgentMigrationSection
                   agentId={profile.id}
                   agentName={profile.displayName || profile.name}
@@ -499,7 +503,7 @@ export function AgentProfilePanel({
               profile.canChangeVisibility ? (target) => setVisibilityTarget(target) : undefined
             }
             runtimeCredentialDialog={
-              profile.ownedByCurrentUser && profile.runtimeConfig.provider.kind === "coforge" ? (
+              owned && profile.runtimeConfig.provider.kind === "coforge" ? (
                 <>
                   <ButtonUtility
                     aria-label={m.agent_runtime_edit()}

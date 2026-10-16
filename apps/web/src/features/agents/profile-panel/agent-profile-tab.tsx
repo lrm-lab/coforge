@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { DELETED_AGENT_AVATAR_CLASS, DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import {
   Camera01,
   Edit01,
@@ -227,7 +228,9 @@ export function AgentProfileTab({
       src={profile.avatarUrl}
       alt={profile.displayName}
       initials={avatarInitial(profile.displayName)}
-      contentClassName={avatarToneClassName(profile.displayName)}
+      contentClassName={
+        profile.deletedAt ? DELETED_AGENT_AVATAR_CLASS : avatarToneClassName(profile.displayName)
+      }
     />
   );
   const ComputerIcon = profile.computer
@@ -257,6 +260,7 @@ export function AgentProfileTab({
           ) : (
             profileAvatar
           )}
+          {profile.deletedAt && <DeletedAgentBadge />}
           {onAvatarChange && onAvatarChoosePicture && (
             <AgentAvatarDialog
               name={profile.displayName}
@@ -398,7 +402,7 @@ export function AgentProfileTab({
               ) : (
                 <FactBadge icon={runtimeIcon}>{runtimeLabel}</FactBadge>
               )}
-              {contextUsage && (
+              {contextUsage && !profile.deletedAt && (
                 <ContextUsageBadge
                   agentId={profile.id}
                   contextUsage={contextUsage}
@@ -424,11 +428,11 @@ export function AgentProfileTab({
             </p>
           </div>
         </div>
-        {profile.ownedByCurrentUser && (
+        {envVars && (
           <div className="mt-4">
             <p className={SUBFIELD_LABEL_CLASS}>{m.agent_env_title()}</p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {envVars && Object.keys(envVars).length > 0 ? (
+              {Object.keys(envVars).length > 0 ? (
                 Object.entries(envVars).map(([key, value]) => (
                   <Tooltip key={key} title={`${key}=${value}`}>
                     <TooltipTrigger>
