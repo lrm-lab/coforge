@@ -120,6 +120,8 @@
   "computer_runtime_version": "版本 {version}",
   "computer_usage_title": "用量",
   "computer_usage_account": "运行时账号",
+  "computer_usage_notes": "说明",
+  "computer_usage_hide_notes": "收起说明",
   "computer_usage_limit_reached": "已达上限",
   "computer_usage_available": "可用",
   "computer_usage_refresh": "刷新",

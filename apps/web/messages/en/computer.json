@@ -119,6 +119,8 @@
   "computer_runtime_version": "Version {version}",
   "computer_usage_title": "Usage",
   "computer_usage_account": "Runtime account",
+  "computer_usage_notes": "Notes",
+  "computer_usage_hide_notes": "Hide notes",
   "computer_usage_limit_reached": "Limit reached",
   "computer_usage_available": "Available",
   "computer_usage_refresh": "Refresh",

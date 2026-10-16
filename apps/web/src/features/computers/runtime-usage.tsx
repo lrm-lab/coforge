@@ -1,5 +1,5 @@
 import { RefreshCw01 as RefreshCw } from "@untitledui/icons";
-import type { ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useHydrated } from "@tanstack/react-router";
 
 import {
@@ -217,6 +217,8 @@ export function RuntimeUsagePopoverContent({
   footer?: ReactNode;
 }) {
   const hydrated = useHydrated();
+  const notesId = useId();
+  const [notesOpen, setNotesOpen] = useState(false);
   const snapshot = data?.result?.snapshot;
   const badge = data?.result ? usageBadge(data.result) : undefined;
   const reason =
@@ -243,6 +245,9 @@ export function RuntimeUsagePopoverContent({
         return window ? [{ key, window }] : [];
       })
     : [];
+  const hasUsageNotes = Boolean(
+    snapshot?.officialDescription || snapshot?.officialGroups?.some((group) => group.description),
+  );
 
   return (
     <div className="divide-y divide-secondary">
@@ -315,10 +320,10 @@ export function RuntimeUsagePopoverContent({
             <>
               {reason && <p className="mt-2 text-sm text-tertiary">{reason}</p>}
               {snapshot?.officialGroups && snapshot.officialGroups.length > 0 ? (
-                // The popover keeps each group's name and its one-line note (which models share
-                // the bars). The provider's long shared note and the per-bucket sentences stay on
-                // the snapshot: they repeat the bars and the reset already on the row, and they
-                // made this card longer than the official view (task #258).
+                // Default rows are the group name, window, remaining share, and reset. The
+                // provider's notes stay on the snapshot and open from this button: a tooltip
+                // inside the peek would close it (task #258). Per-bucket sentences are not
+                // painted; they repeat the reset already on the row.
                 <div className="mt-3 space-y-4">
                   {snapshot.officialGroups.map((group, index) => (
                     <div key={`${group.name ?? "group"}-${index}`} className="space-y-3">
@@ -326,9 +331,6 @@ export function RuntimeUsagePopoverContent({
                         <h4 className="text-sm font-medium break-words text-primary">
                           {group.name}
                         </h4>
-                      )}
-                      {group.description && (
-                        <p className="text-xs break-words text-tertiary">{group.description}</p>
                       )}
                       {group.buckets.map((bucket, bucketIndex) => (
                         <UsageWindow
@@ -346,6 +348,41 @@ export function RuntimeUsagePopoverContent({
                       ))}
                     </div>
                   ))}
+                  {hasUsageNotes && (
+                    <div>
+                      <Button
+                        size="sm"
+                        color="link-gray"
+                        aria-expanded={notesOpen}
+                        aria-controls={notesId}
+                        onPress={() => setNotesOpen((open) => !open)}
+                      >
+                        {notesOpen ? m.computer_usage_hide_notes() : m.computer_usage_notes()}
+                      </Button>
+                      {notesOpen && (
+                        <div id={notesId} className="mt-2 space-y-2">
+                          {snapshot.officialDescription && (
+                            <p className="text-xs break-words text-tertiary">
+                              {snapshot.officialDescription}
+                            </p>
+                          )}
+                          {snapshot.officialGroups.map((group, index) =>
+                            group.description ? (
+                              <p
+                                key={`${group.name ?? "note"}-${index}`}
+                                className="text-xs break-words text-tertiary"
+                              >
+                                {group.name && (
+                                  <span className="font-medium text-secondary">{group.name}. </span>
+                                )}
+                                {group.description}
+                              </p>
+                            ) : null,
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 windows.length > 0 && (
