@@ -146,7 +146,6 @@ import {
   type ReminderSnapshotRequest,
   type ReminderSync,
   APP_CONFIG_SNAPSHOT_METHOD,
-  APP_CONFIG_SYNC_MESSAGE_TYPE,
   decodeAppConfigSync,
   encodeAppConfigSnapshotRequest,
   type AppConfigSnapshotRequest,
@@ -1902,7 +1901,8 @@ export class DaemonConnection implements DaemonConnectionClient {
         return true;
       }) ||
       this.#route(data, decodeAppConfigSync, (sync) => {
-        if (sync.messageType !== APP_CONFIG_SYNC_MESSAGE_TYPE || !ownsDaemon(sync)) return false;
+        // The decoder already refuses any other message type.
+        if (!ownsDaemon(sync)) return false;
         this.#deliver(this.#appConfigSync, sync);
         return true;
       }) ||

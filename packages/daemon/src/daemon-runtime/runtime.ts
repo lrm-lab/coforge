@@ -700,11 +700,9 @@ export class DaemonRuntime {
       },
     });
     this.#appConfigs = new AgentAppConfigSync({
-      requestSnapshot: (agentId) => {
-        if (!this.#transport.requestAppConfigSnapshot)
-          throw new Error("app config snapshot is unavailable");
-        return this.#transport.requestAppConfigSnapshot({ ...this.#envelope(), agentId });
-      },
+      // `#requestAppConfigSnapshot` asks only through a transport that has the method.
+      requestSnapshot: (agentId) =>
+        this.#transport.requestAppConfigSnapshot!({ ...this.#envelope(), agentId }),
       apps: {},
     });
     // The transport is replaced on each start, so the runner reaches the route through whichever
@@ -1008,9 +1006,7 @@ export class DaemonRuntime {
             .catch(() => {});
           for (const agentId of this.#readyRunningAgentIds())
             void this.#requestReminderSnapshot(agentId).catch(() => {});
-          this.#appConfigs.connected();
-          for (const agentId of this.#readyRunningAgentIds())
-            this.#requestAppConfigSnapshot(agentId);
+          this.#resyncAppConfigs();
           void this.#agentControl
             .replay()
             .then(() => this.#agentSessions.replay())
@@ -1258,8 +1254,7 @@ export class DaemonRuntime {
       await Promise.all(
         this.#readyRunningAgentIds().map((agentId) => this.#requestReminderSnapshot(agentId)),
       );
-      this.#appConfigs.connected();
-      for (const agentId of this.#readyRunningAgentIds()) this.#requestAppConfigSnapshot(agentId);
+      this.#resyncAppConfigs();
       const heldNotices = heldMessages.take();
       if (heldNotices.dropped > 0)
         logger.warn("Delivery notices held during start were dropped; the cloud resends them", {
@@ -4097,6 +4092,12 @@ export class DaemonRuntime {
       summary: reminderAppInboxSummary(job, late),
     });
     return this.#notifyAppItem(job.ownerAgentId, item.itemId);
+  }
+
+  /** A new connection: asks again for every running Agent's App config. */
+  #resyncAppConfigs(): void {
+    this.#appConfigs.connected();
+    for (const agentId of this.#readyRunningAgentIds()) this.#requestAppConfigSnapshot(agentId);
   }
 
   /** Asks once per connection for the Agent's App config; the cloud resends on the next one. */

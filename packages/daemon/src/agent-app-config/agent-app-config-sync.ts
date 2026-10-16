@@ -1,5 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import type { AppConfig, AppConfigAppId, AppConfigSync } from "@lrm/coforge-sdk/internal";
+import { diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 
 const logger = getLogger(["coforge", "daemon", "agent-app-config"]);
 
@@ -50,13 +51,10 @@ export class AgentAppConfigSync {
   async request(agentId: string): Promise<void> {
     if (this.#requested.has(agentId)) return;
     this.#requested.add(agentId);
-    let snapshot: AppConfigSync;
-    try {
-      snapshot = await this.options.requestSnapshot(agentId);
-    } catch (error) {
+    const snapshot = await this.options.requestSnapshot(agentId).catch((error: unknown) => {
       this.#requested.delete(agentId);
       throw error;
-    }
+    });
     this.apply(snapshot);
   }
 
@@ -86,7 +84,7 @@ export class AgentAppConfigSync {
         app_id: appId,
         agent_id: sync.agentId,
         operation: sync.operation,
-        error_code: error instanceof Error ? error.name : "unknown",
+        error_code: diagnosticErrorName(error),
       });
     try {
       void Promise.resolve(run(target)).catch(refused);

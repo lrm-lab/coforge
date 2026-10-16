@@ -9,6 +9,7 @@ import {
   type AppConfigSnapshotRequest,
   type AppConfigSync,
 } from "@lrm/coforge-sdk/internal";
+import { errorType } from "#src/server/errors/error-type.server";
 
 /** One stored row: an App's settings for an Agent, as written. */
 export type StoredAgentAppConfig = { appId: string; revision: number; config: unknown };
@@ -43,6 +44,16 @@ function effectiveConfig(
   };
 }
 
+/** Every App's effective configuration for the Agent: its stored row, or its defaults. */
+const effectiveConfigs = (agentId: string, rows: StoredAgentAppConfig[]): AppConfig[] =>
+  APP_IDS.map((appId) =>
+    effectiveConfig(
+      agentId,
+      appId,
+      rows.find((row) => row.appId === appId),
+    ),
+  );
+
 /**
  * Agent App configuration: each App's settings for one Agent, and their sync to the daemon that
  * runs it. An Agent with no stored row for an App has that App's defaults at revision 0. The
@@ -58,18 +69,14 @@ export class AgentAppConfigs {
 
   /** Every App's effective configuration for the Agent. */
   async configs(agentId: string): Promise<AppConfig[]> {
-    const rows = await this.repository.list(agentId);
-    return APP_IDS.map((appId) =>
-      effectiveConfig(
-        agentId,
-        appId,
-        rows.find((row) => row.appId === appId),
-      ),
-    );
+    return effectiveConfigs(agentId, await this.repository.list(agentId));
   }
 
   async snapshotForDaemon(request: AppConfigSnapshotRequest): Promise<Uint8Array> {
-    const placement = await this.repository.placement(request.agentId);
+    const [placement, rows] = await Promise.all([
+      this.repository.placement(request.agentId),
+      this.repository.list(request.agentId),
+    ]);
     if (
       placement?.workspaceId !== request.workspaceId ||
       placement.computerId !== request.computerId
@@ -78,7 +85,7 @@ export class AgentAppConfigs {
     return encodeAppConfigSync({
       ...request,
       operation: "snapshot",
-      configs: await this.configs(request.agentId),
+      configs: effectiveConfigs(request.agentId, rows),
       messageType: APP_CONFIG_SYNC_MESSAGE_TYPE,
     });
   }
@@ -93,8 +100,11 @@ export class AgentAppConfigs {
     const computerId = placement?.computerId;
     if (!placement || !computerId) return false;
     try {
-      if (!(await this.capabilities.supports(placement.workspaceId, computerId))) return false;
-      const rows = await this.repository.list(agentId);
+      const [supported, configs] = await Promise.all([
+        this.capabilities.supports(placement.workspaceId, computerId),
+        this.configs(agentId),
+      ]);
+      if (!supported) return false;
       await this.publish({
         protocolMajor: APP_CONFIG_PROTOCOL_MAJOR,
         requestId: crypto.randomUUID(),
@@ -102,13 +112,7 @@ export class AgentAppConfigs {
         computerId,
         agentId,
         operation: "upsert",
-        configs: [
-          effectiveConfig(
-            agentId,
-            appId,
-            rows.find((row) => row.appId === appId),
-          ),
-        ],
+        configs: configs.filter((config) => config.appId === appId),
         messageType: APP_CONFIG_SYNC_MESSAGE_TYPE,
       });
       return true;
@@ -120,7 +124,7 @@ export class AgentAppConfigs {
           app_id: appId,
           workspace_id: placement.workspaceId,
           computer_id: computerId,
-          error_code: error instanceof Error ? error.name : "unknown",
+          error_code: errorType(error),
         }),
       );
       return false;

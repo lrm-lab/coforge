@@ -2,6 +2,7 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { RPC_METHODS } from "./rpc-methods";
 import { isScopeId } from "./scope-id";
 import { boundedPayload } from "./codec";
+import { isRecord } from "./json-record";
 import {
   AppConfigSnapshotRequestSchema,
   AppConfigSyncSchema,
@@ -35,10 +36,6 @@ export const CLEANER_CONFIG_BOUNDS = {
   intervalMs: { min: 900_000, max: 604_800_000 },
 } as const;
 
-const CLEANER_KEYS = ["enabled", "thresholdBytes", "intervalMs"] as const;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
 const within = (value: unknown, bounds: { min: number; max: number }) =>
   typeof value === "number" &&
   Number.isSafeInteger(value) &&
@@ -49,8 +46,8 @@ const within = (value: unknown, bounds: { min: number; max: number }) =>
 export function validateCleanerAppConfig(value: unknown): CleanerAppConfig {
   if (
     !isRecord(value) ||
-    Object.keys(value).length !== CLEANER_KEYS.length ||
-    !CLEANER_KEYS.every((key) => key in value) ||
+    // Three keys, each checked below: no extra or missing one.
+    Object.keys(value).length !== 3 ||
     typeof value.enabled !== "boolean" ||
     !within(value.thresholdBytes, CLEANER_CONFIG_BOUNDS.thresholdBytes) ||
     !within(value.intervalMs, CLEANER_CONFIG_BOUNDS.intervalMs)
