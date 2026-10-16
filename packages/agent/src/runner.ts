@@ -333,13 +333,25 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.expand]: openvikingTool(
       OPENVIKING_TOOL_NAMES.expand,
       "Expand memory graph",
-      "Follow an explicit relation from a Fork or AIG node already returned by ov_find or ov_expand. Reuse retrieval.chainRef and choose a node URI and one of its listed relations. Expansion is bounded and uses no embedding.",
+      "Read related experience and recorded evidence from nodes already returned by ov_find or ov_expand. After finding a relevant Fork, inspect its suggested method with branch_steps, then next/previous on returned steps. To verify why the method was proposed, use anchor on the Fork to reach its original recorded AIG block; alternatively use observed_block on a Fork step to read its associated recorded block. From an AIG block, incoming/outgoing returns causal edges; source/target on a returned edge reaches the preceding/following blocks. Use ov_read to inspect returned node text when more detail is needed. Choose the path that resolves the current question; do not load the entire graph. Every hop must use the returned retrieval.chainRef, an already-served node URI and a relation listed for that node. Check remainingHops/exhausted; never invent URIs, relations or chain references. Fork steps are untested counterfactual proposals, while AIG blocks record prior execution; neither replaces documentary evidence for the current factual answer. Expansion is bounded and uses no embedding.",
       "expand",
       {
-        operationId: Type.String(),
-        chainRef: Type.String(),
-        uri: Type.String(),
-        relation: Type.Union(OPENVIKING_GRAPH_RELATIONS.map((value) => Type.Literal(value))),
+        operationId: Type.String({
+          description: "Fresh id for a new logical expansion; identical retries keep the same id.",
+        }),
+        chainRef: Type.String({
+          description: "Copy retrieval.chainRef from the active ov_find/ov_expand result.",
+        }),
+        uri: Type.String({
+          description: "Copy an already-returned retrieval.nodes[].uri from this chain.",
+        }),
+        relation: Type.Union(
+          OPENVIKING_GRAPH_RELATIONS.map((value) => Type.Literal(value)),
+          {
+            description:
+              "Must be listed in that node's relations. Fork: anchor or branch_steps. Fork step: next, previous or observed_block. AIG block: incoming or outgoing (returns edges), or forks. AIG edge: source or target (returns blocks).",
+          },
+        ),
         limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
       },
     ),
