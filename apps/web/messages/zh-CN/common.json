@@ -59,5 +59,12 @@
   "welcome_error_refused": "不能使用这个名字。",
   "welcome_error_save_failed": "保存失败，请重试。",
   "not_found_title": "页面不存在",
-  "not_found_home": "回到首页"
+  "not_found_home": "回到首页",
+  "connection_reconnecting": "正在重新连接…",
+  "connection_offline": "离线",
+  "connection_offline_title": "无法连接 CoForge",
+  "connection_offline_since": "内容停在 {time}。",
+  "connection_offline_body": "重新连接后会显示新消息。",
+  "connection_retry_now": "立即重试",
+  "connection_device_offline_title": "你已离线"
 }

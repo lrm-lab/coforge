@@ -11,6 +11,7 @@ import { useParams, useRouter, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { PageHeader } from "#src/components/layout/page-header";
+import { ConnectionStatusPill } from "#src/features/realtime/connection-status-pill";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { ConversationListContext } from "./conversation-list-button";
 import { ConversationDirectory } from "./conversation-directory";
@@ -240,7 +241,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                 showList ? "flex" : "hidden",
               )}
             >
-              <PageHeader heading={m.navigation_chat()} />
+              <PageHeader heading={m.navigation_chat()} meta={<ConnectionStatusPill />} />
               {/* 0.75rem under the header rule. Saved's icon is centered in the 2.25rem
                   row and the bookmark path is inset another 0.125rem, so the rule
                   sits 1.5rem above the bookmark. Bottom padding stays 1rem. */}

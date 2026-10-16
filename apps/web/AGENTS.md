@@ -119,7 +119,7 @@ responsibility.
 - `features/profiles/` — current-user profile read and update, and the one rule for a person's name (`person-name.ts`).
 - `features/projects/` — Projects directory, project detail, file browser,
   and project settings page.
-- `features/realtime/` — the one browser Centrifuge connection.
+- `features/realtime/` — the one browser Centrifuge connection, and its status as the page shows it (`connection-status.ts`).
 - `features/records/` — Workspace Records (see the last section).
 - `features/settings/` — preference pages and device-local preferences, and what the request says
   about the browser for the server render (phone or desktop).

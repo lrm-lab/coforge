@@ -59,5 +59,12 @@
   "welcome_error_refused": "You can't use this name.",
   "welcome_error_save_failed": "Couldn't save. Try again.",
   "not_found_title": "Page not found",
-  "not_found_home": "Go to home"
+  "not_found_home": "Go to home",
+  "connection_reconnecting": "Reconnecting…",
+  "connection_offline": "Offline",
+  "connection_offline_title": "Can't reach CoForge",
+  "connection_offline_since": "Up to date as of {time}.",
+  "connection_offline_body": "New messages show up once it reconnects.",
+  "connection_retry_now": "Retry now",
+  "connection_device_offline_title": "You're offline"
 }

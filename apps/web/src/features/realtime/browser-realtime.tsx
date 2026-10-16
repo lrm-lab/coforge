@@ -1,6 +1,15 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Centrifuge, type ClientInfo, type Subscription } from "centrifuge/build/protobuf";
 
+import {
+  connectionEvent,
+  connectionStatus,
+  initialConnection,
+  nextStatusChangeAt,
+  type ClientState,
+  type Connection,
+  type ConnectionEvent,
+} from "./connection-status";
 import type { StreamPosition, SubscribedRecovery } from "./subscription-gap";
 
 /** The one realtime subscription type for the shared Workspace connection. */
@@ -47,6 +56,82 @@ export function useBrowserRealtime() {
   if (client === undefined)
     throw new Error("useBrowserRealtime must be called inside BrowserRealtimeProvider");
   return client;
+}
+
+/**
+ * The shared connection's status as the page shows it (`connection-status.ts`), and the person's
+ * Retry: it starts a connect at once, where the client would wait out its backoff. Nothing is
+ * re-read here: each channel catches up in its own `onSubscribed`, as for any reconnect.
+ */
+export function useRealtimeConnection() {
+  const client = useBrowserRealtime();
+  // Kept with the client it describes: on a Workspace switch the old client's disconnect is not
+  // the new one's state, and nothing shows until the new one's is known.
+  const [watched, setWatched] = useState<{ client: Centrifuge; connection: Connection } | null>(
+    null,
+  );
+  const connection = watched && watched.client === client ? watched.connection : null;
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!client) return;
+    const apply = (event: ConnectionEvent) => {
+      const at = Date.now();
+      setNow(at);
+      setWatched((current) =>
+        current?.client === client
+          ? { client, connection: connectionEvent(current.connection, event, at) }
+          : current,
+      );
+    };
+    setWatched({
+      client,
+      connection: initialConnection(client.state as ClientState, Date.now(), navigator.onLine),
+    });
+    const onConnecting = () => apply({ type: "connecting" });
+    const onConnected = () => apply({ type: "connected" });
+    const onDisconnected = () => apply({ type: "disconnected" });
+    const onOnline = () => apply({ type: "browser", online: true });
+    const onOffline = () => apply({ type: "browser", online: false });
+    client.on("connecting", onConnecting);
+    client.on("connected", onConnected);
+    client.on("disconnected", onDisconnected);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      client.removeListener("connecting", onConnecting);
+      client.removeListener("connected", onConnected);
+      client.removeListener("disconnected", onDisconnected);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, [client]);
+
+  // Shows the next threshold when it is crossed with nothing else happening.
+  const nextChange = connection ? nextStatusChangeAt(connection, now) : undefined;
+  useEffect(() => {
+    if (nextChange === undefined) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(0, nextChange - Date.now()));
+    return () => clearTimeout(timer);
+  }, [nextChange]);
+
+  if (!client || !connection) return null;
+  return {
+    status: connectionStatus(connection, now),
+    lostAt: connection.lostAt,
+    browserOnline: connection.browserOnline,
+    retry: () => {
+      client.disconnect();
+      setWatched(
+        (current) =>
+          current && {
+            client: current.client,
+            connection: connectionEvent(current.connection, { type: "retry" }, Date.now()),
+          },
+      );
+      client.connect();
+    },
+  };
 }
 
 export type RealtimePublication = { channel: string; data: unknown };
