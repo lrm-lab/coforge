@@ -838,6 +838,182 @@ describe("CentrifugoRpcHandler", () => {
     ]);
   });
 
+  test("preserves the official quota description and all three groups alongside legacy windows", async () => {
+    const records: unknown[] = [];
+    const method = createDaemonRuntimeUsageScanResultMethod({
+      async putScan() {},
+      async putResult(record) {
+        records.push(record);
+      },
+      async read() {
+        return { state: "missing" };
+      },
+    });
+    const weekly = {
+      id: "weekly",
+      name: "Weekly Limit Remaining",
+      description: "This quota refreshes weekly.",
+      window: "weekly",
+      remainingFraction: 0.97,
+      usedPercent: 3,
+      status: "ok",
+      windowDurationMinutes: 10080,
+      resetsAt: "2026-10-23T02:34:00.000Z",
+    };
+    const fiveHour = {
+      id: "five-hour",
+      name: "Five Hour Limit Remaining",
+      window: "5h",
+      remainingFraction: 0.91,
+      usedPercent: 9,
+      status: "ok",
+      windowDurationMinutes: 300,
+      resetsAt: "2026-10-16T07:34:00.000Z",
+    };
+    const snapshot = {
+      provider: "antigravity",
+      officialDescription: "Models within each group share quota limits.",
+      officialGroups: [
+        {
+          name: "Gemini Models",
+          description: "Gemini Flash and Gemini Pro",
+          buckets: [weekly, fiveHour],
+        },
+        {
+          name: "Claude and GPT models",
+          buckets: [
+            { ...weekly, remainingFraction: 1, usedPercent: 0 },
+            { ...fiveHour, remainingFraction: 1, usedPercent: 0 },
+          ],
+        },
+        {
+          name: "Gemini 4 Argon",
+          buckets: [{ ...weekly, remainingFraction: 0.19, usedPercent: 81 }],
+        },
+      ],
+      secondary: {
+        usedPercent: 81,
+        status: "ok",
+        windowDurationMinutes: 10080,
+        resetsAt: "2026-10-23T02:34:00.000Z",
+      },
+    };
+    const payload = encodeDaemonRuntimeUsageScanResponse({
+      protocolMajor: 1,
+      requestId: "usage-official-groups",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      provider: "antigravity",
+      accepted: true,
+      status: "available",
+      snapshotJson: new TextEncoder().encode(JSON.stringify(snapshot)),
+    });
+
+    expect(await method(payload, { principal: principal() })).toBeInstanceOf(Uint8Array);
+    expect(records).toEqual([
+      {
+        workspaceId: "workspace-1",
+        computerId: "computer-1",
+        provider: "antigravity",
+        scanId: "usage-official-groups",
+        status: "available",
+        message: undefined,
+        snapshot,
+        collectedAt: expect.any(String),
+      },
+    ]);
+  });
+
+  test("preserves an official unknown window without inventing its duration or absent fields", async () => {
+    const records: unknown[] = [];
+    const method = createDaemonRuntimeUsageScanResultMethod({
+      async putScan() {},
+      async putResult(record) {
+        records.push(record);
+      },
+      async read() {
+        return { state: "missing" };
+      },
+    });
+    const snapshot = {
+      provider: "antigravity",
+      officialGroups: [
+        {
+          name: "Future quota group",
+          buckets: [{ id: "daily", window: "daily", remainingFraction: 0.7 }],
+        },
+      ],
+    };
+    const payload = encodeDaemonRuntimeUsageScanResponse({
+      protocolMajor: 1,
+      requestId: "usage-unknown-window",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      provider: "antigravity",
+      accepted: true,
+      status: "available",
+      snapshotJson: new TextEncoder().encode(JSON.stringify(snapshot)),
+    });
+
+    expect(await method(payload, { principal: principal() })).toBeInstanceOf(Uint8Array);
+    expect(records).toEqual([
+      {
+        workspaceId: "workspace-1",
+        computerId: "computer-1",
+        provider: "antigravity",
+        scanId: "usage-unknown-window",
+        status: "available",
+        message: undefined,
+        snapshot,
+        collectedAt: expect.any(String),
+      },
+    ]);
+  });
+
+  test.each([
+    ["percent above 100 without duration", { usedPercent: 101 }],
+    ["unknown status without duration", { status: "bogus" }],
+    ["invalid reset without duration", { resetsAt: "not-a-date" }],
+    ["a string duration", { windowDurationMinutes: "weekly", usedPercent: 30 }],
+  ])("rejects an official bucket with %s without writing the cache", async (_case, fields) => {
+    const records: unknown[] = [];
+    const method = createDaemonRuntimeUsageScanResultMethod({
+      async putScan() {},
+      async putResult(record) {
+        records.push(record);
+      },
+      async read() {
+        return { state: "missing" };
+      },
+    });
+    const payload = encodeDaemonRuntimeUsageScanResponse({
+      protocolMajor: 1,
+      requestId: "usage-invalid-official-bucket",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      provider: "antigravity",
+      accepted: true,
+      status: "available",
+      snapshotJson: new TextEncoder().encode(
+        JSON.stringify({
+          provider: "antigravity",
+          officialGroups: [
+            {
+              name: "Future quota group",
+              buckets: [{ id: "daily", window: "daily", remainingFraction: 0.7, ...fields }],
+            },
+          ],
+        }),
+      ),
+    });
+
+    expect(await method(payload, { principal: principal() })).toEqual({
+      code: 400,
+      message: "invalid usage scan result",
+    });
+    expect(records).toEqual([]);
+  });
+
   test("an un-upgraded Computer's older window vocabulary still ingests, normalized", async () => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
