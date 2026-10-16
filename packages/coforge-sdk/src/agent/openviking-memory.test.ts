@@ -5,7 +5,6 @@ import {
   type OpenVikingFindResponse,
   type OpenVikingRetrieval,
   MEMORY_OFFER_BUDGET_PER_TRIGGER,
-  MEMORY_READ_BUDGET_PER_TRIGGER,
   OPENVIKING_AGENT_ERROR_CODES,
   OPENVIKING_AGENT_OPERATIONS,
   OPENVIKING_AGENT_PROTOCOL,
@@ -51,7 +50,6 @@ test("freezes the OpenViking agent protocol, fence, tools, and turn budget", () 
     "diagnose",
   ]);
 
-  expect(MEMORY_READ_BUDGET_PER_TRIGGER).toBe(3);
   expect(MEMORY_OFFER_BUDGET_PER_TRIGGER).toBe(1);
   expect(OPENVIKING_CANDIDATE_LIMIT_MAX).toBe(10);
 });

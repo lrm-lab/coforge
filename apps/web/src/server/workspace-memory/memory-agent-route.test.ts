@@ -171,9 +171,9 @@ test("openviking answers preserve the citation kind on the Offer record", async 
   ]);
 });
 
-test("the openviking profile executes the shared read and Offer budget", async () => {
+test("the openviking profile allows repeated reads and enforces the Offer budget", async () => {
   const ov = commands();
-  for (const index of [1, 2, 3]) {
+  for (let index = 0; index < 20; index++) {
     const read = await ov.handler.handle({
       workspaceId: "ws-a",
       agentId: "mem-1",
@@ -187,20 +187,7 @@ test("the openviking profile executes the shared read and Offer budget", async (
     });
     expect(read.ok).toBe(true);
   }
-  const fourth = await ov.handler.handle({
-    workspaceId: "ws-a",
-    agentId: "mem-1",
-    triggerMessageId: "msg-ov",
-    command: {
-      protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
-      operationId: "find-4",
-      query: "deploy",
-    },
-  });
-  expect(fourth.ok).toBe(false);
-  if (fourth.ok) throw new Error("expected budget failure");
-  expect(fourth.code).toBe("openviking-budget-exhausted");
+  expect(ov.gatewayCalls).toHaveLength(20);
 
   const offer = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
@@ -373,4 +360,23 @@ test("an offer replay with the same operationId skips the per-trigger budget", a
     command: { ...offerCommand, operationId: "offer-fresh-1" },
   });
   expect(third.ok).toBe(true);
+});
+
+test("the same trigger can retrieve more than three times through the Memory route", async () => {
+  const { handler, gatewayCalls } = commands();
+  for (let index = 0; index < 20; index++) {
+    const result = await handler.handle({
+      workspaceId: "ws-a",
+      agentId: "mem-1",
+      triggerMessageId: "msg-1",
+      command: {
+        protocol: OPENVIKING_AGENT_PROTOCOL,
+        op: "find",
+        operationId: `find-${index}`,
+        query: "deploy",
+      },
+    });
+    expect(result.ok).toBe(true);
+  }
+  expect(gatewayCalls).toHaveLength(20);
 });

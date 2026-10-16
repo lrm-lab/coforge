@@ -111,18 +111,19 @@ test("the openviking-memory fence exposes reads, scoped diagnosis, offers, and c
   expect(MUTATION_TOOL_NAMES.some((name) => names.includes(name))).toBe(false);
 });
 
-test("a fourth memory read is rejected", () => {
+test("native memory tools forward more than three reads in one trigger", async () => {
+  const proxy = fakeProxy();
   const budget = new MemoryAgentTurnBudget();
-  const find = {
-    protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find" as const,
-    operationId: "f1",
-    query: "deploy",
-  };
-  budget.consume(find);
-  budget.consume({ ...find, operationId: "f2" });
-  budget.consume({ ...find, operationId: "f3" });
-  expect(() => budget.consume({ ...find, operationId: "f4" })).toThrow("read budget");
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
+  for (let index = 0; index < 20; index++) {
+    await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+      operationId: `find-${index}`,
+      query: "deploy rollback",
+      limit: 10,
+    });
+  }
+  expect(proxy.calls).toHaveLength(20);
+  expect(budget.snapshot()).toEqual({ reads: 20, offers: 0 });
 });
 
 test("a second Memory Offer is rejected", () => {
@@ -205,7 +206,7 @@ test("ov_* tools post the frozen openviking proxy path and never a mutation verb
   expect(JSON.stringify(proxy.calls[0]?.body)).not.toContain("commit");
 });
 
-test("openviking-memory search_context keeps the 3-read cap", () => {
+test("openviking-memory search_context reads are counted without a per-trigger cap", () => {
   const budget = new MemoryAgentTurnBudget();
   const searchContext = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
@@ -218,7 +219,8 @@ test("openviking-memory search_context keeps the 3-read cap", () => {
   expect(budget.snapshot()).toEqual({ reads: 1, offers: 0 });
   budget.consume({ ...searchContext, operationId: "c2" });
   budget.consume({ ...searchContext, operationId: "c3" });
-  expect(() => budget.consume({ ...searchContext, operationId: "c4" })).toThrow("read budget");
+  expect(() => budget.consume({ ...searchContext, operationId: "c4" })).not.toThrow();
+  expect(budget.snapshot()).toEqual({ reads: 4, offers: 0 });
 });
 
 test("empty ov_find arguments return an example error and do not spend the read budget", async () => {
