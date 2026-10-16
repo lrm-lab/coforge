@@ -81,9 +81,7 @@ These rules apply to `apps/web`, the TanStack Start Web/backend modular monolith
   by the table's domain keys (`createdAt`, `sequence`, …) as elsewhere in the
   repository.
 - Use PostgreSQL for database-semantic tests; do not silently substitute SQLite.
-- Read the database URL and credentials from runtime environment/secret
-  injection. Local development uses the project's Docker PostgreSQL; managed
-  PostgreSQL changes must not leak provider-specific details into domain code.
+- Read the database URL and credentials from runtime environment/secret injection. Local development uses the project's Docker PostgreSQL; managed PostgreSQL changes must not leak provider-specific details into domain code.
 
 ## Module map
 
