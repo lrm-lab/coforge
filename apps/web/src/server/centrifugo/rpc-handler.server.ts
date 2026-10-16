@@ -62,10 +62,12 @@ import type { AgentDisplay } from "#src/server/agents/agent-display.server";
 import {
   decodeReminderFireRequest,
   decodeReminderSnapshotRequest,
+  decodeAppConfigSnapshotRequest,
   encodeAgentReminderOperationResponse,
   decodeAgentReminderOperationRequest,
 } from "@lrm/coforge-sdk/internal";
 import type { Reminders } from "#src/server/reminders/reminders.server";
+import type { AgentAppConfigs } from "#src/server/agent-app-configs/agent-app-configs.server";
 import type { ComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 import {
   getComputerUpgradeStore,
@@ -124,10 +126,10 @@ export const createAgentReminderMethod =
   };
 
 /**
- * A reminder RPC a Workspace daemon sends for its own Computer. A request for another scope, a
- * malformed one, or any refusal from `run` answers 403 with the error's message.
+ * An RPC a Workspace daemon sends for its own Computer (reminders, App config). A request for
+ * another scope, a malformed one, or any refusal from `run` answers 403 with the error's message.
  */
-function daemonReminderMethod<Decoded extends { workspaceId: string; computerId: string }>(
+function daemonOwnScopeMethod<Decoded extends { workspaceId: string; computerId: string }>(
   decode: (payload: Uint8Array) => Decoded,
   run: (request: Decoded) => Promise<Uint8Array>,
   messages: { unauthorized: string; rejected: string },
@@ -151,18 +153,30 @@ function daemonReminderMethod<Decoded extends { workspaceId: string; computerId:
 }
 
 export const createReminderFireMethod = (reminders: Reminders): CentrifugoRpcMethod =>
-  daemonReminderMethod(decodeReminderFireRequest, (request) => reminders.fireFromDaemon(request), {
+  daemonOwnScopeMethod(decodeReminderFireRequest, (request) => reminders.fireFromDaemon(request), {
     unauthorized: "reminder fire is not authorized",
     rejected: "reminder fire rejected",
   });
 
 export const createReminderSnapshotMethod = (reminders: Reminders): CentrifugoRpcMethod =>
-  daemonReminderMethod(
+  daemonOwnScopeMethod(
     decodeReminderSnapshotRequest,
     (request) => reminders.snapshotForDaemon(request),
     {
       unauthorized: "reminder snapshot is not authorized",
       rejected: "reminder snapshot rejected",
+    },
+  );
+
+export const createAppConfigSnapshotMethod = (
+  configs: Pick<AgentAppConfigs, "snapshotForDaemon">,
+): CentrifugoRpcMethod =>
+  daemonOwnScopeMethod(
+    decodeAppConfigSnapshotRequest,
+    (request) => configs.snapshotForDaemon(request),
+    {
+      unauthorized: "app config snapshot is not authorized",
+      rejected: "app config snapshot rejected",
     },
   );
 

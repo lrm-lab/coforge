@@ -10,6 +10,8 @@ import {
   AGENT_CONTROL_RESULT_METHOD,
   REMINDER_FIRE_METHOD,
   REMINDER_SNAPSHOT_METHOD,
+  APP_CONFIG_SNAPSHOT_METHOD,
+  encodeAppConfigSync,
 } from "@lrm/coforge-sdk/internal";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { createAgentSkillsListResultMethod } from "./agent-skills-cache.server";
@@ -43,6 +45,7 @@ import {
   createAgentStatusMethod,
   createReminderFireMethod,
   createReminderSnapshotMethod,
+  createAppConfigSnapshotMethod,
 } from "./rpc-handler.server";
 import {
   DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD,
@@ -110,6 +113,9 @@ import { createAgentContextUsageMethod } from "./agent-context-usage-receiver.se
 import { PrismaReminderRepository } from "#src/server/db/repositories/reminder.repositories.server";
 import { Reminders } from "#src/server/reminders/reminders.server";
 import { getReminderCapabilityLease } from "#src/server/reminders/reminder-capability.server";
+import { AgentAppConfigs } from "#src/server/agent-app-configs/agent-app-configs.server";
+import { getAppConfigCapabilityLease } from "#src/server/agent-app-configs/app-config-capability.server";
+import { PrismaAgentAppConfigRepository } from "#src/server/db/repositories/agent-app-config.repositories.server";
 import { daemonControlChannel } from "./server-api.server";
 import { encodeReminderSync } from "@lrm/coforge-sdk/internal";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
@@ -253,20 +259,25 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
     const reminderRepository = new PrismaReminderRepository(db);
     const reminderLease = getReminderCapabilityLease();
     const migrationLease = getAgentMigrationCapabilityLease();
+    const appConfigLease = getAppConfigCapabilityLease();
+    const leases = [reminderLease, migrationLease, appConfigLease];
     // Each ready records, and each heartbeat keeps alive, every capability the server asks about.
     const capabilityLeases = {
       record: (workspaceId: string, computerId: string, capabilities: readonly string[]) =>
-        Promise.all([
-          reminderLease.record(workspaceId, computerId, capabilities),
-          migrationLease.record(workspaceId, computerId, capabilities),
-        ]),
+        Promise.all(leases.map((lease) => lease.record(workspaceId, computerId, capabilities))),
       refresh: async (workspaceId: string, computerId: string) => {
-        await Promise.all([
-          reminderLease.refresh(workspaceId, computerId),
-          migrationLease.refresh(workspaceId, computerId),
-        ]);
+        await Promise.all(leases.map((lease) => lease.refresh(workspaceId, computerId)));
       },
     };
+    const appConfigs = new AgentAppConfigs(
+      new PrismaAgentAppConfigRepository(db),
+      appConfigLease,
+      (sync) =>
+        centrifugo.publish(
+          daemonControlChannel(sync.workspaceId, sync.computerId),
+          encodeAppConfigSync(sync),
+        ),
+    );
     const reminders = new Reminders(reminderRepository, reminderLease, (sync) =>
       centrifugo.publish(
         daemonControlChannel(sync.workspaceId, sync.computerId),
@@ -350,6 +361,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
           createReminderFireMethod(reminders),
           createReminderSnapshotMethod(reminders),
         ),
+        [APP_CONFIG_SNAPSHOT_METHOD]: createAppConfigSnapshotMethod(appConfigs),
         [DAEMON_CONNECTION_STATUS_METHOD]: createDaemonConnectionStatusMethod(
           undefined,
           capabilityLeases,
@@ -432,6 +444,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
       [AGENT_MENTION_DELIVERY_TRANSITION_METHOD]: unavailableMethod,
       [AGENT_MENTION_DELIVERY_TERMINAL_ERROR_METHOD]: unavailableMethod,
       ...reminderCallbackMethods(unavailableMethod, unavailableMethod),
+      [APP_CONFIG_SNAPSHOT_METHOD]: unavailableMethod,
     },
     authenticateEnvelope: (request, context) =>
       requireAuthenticatedCentrifugoUser(request, context, {

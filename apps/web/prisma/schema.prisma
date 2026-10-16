@@ -307,6 +307,7 @@ model Agent {
   attachmentUploadSessions  AttachmentUploadSession[]
   workspaceMemoryAgent      WorkspaceMemoryAgent?
   migrations                AgentMigration[]
+  appConfigs                AgentAppConfig[]
 
   @@unique([workspaceId, name])
   @@unique([id, workspaceId])
@@ -314,6 +315,23 @@ model Agent {
   @@index([workspaceId, createdAt])
   @@index([computerId])
   @@map("agents")
+}
+
+/// One Agent App's settings for one Agent (`system.cleaner`, ...), validated per App by the SDK's
+/// `APP_CONFIG_DEFINITIONS`. An Agent with no row for an App has that App's defaults at revision 0;
+/// each write raises `revision`, which the daemon's mirror fences on.
+model AgentAppConfig {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  agentId   String   @db.Uuid
+  appId     String
+  revision  Int
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, appId])
+  @@map("agent_app_configs")
 }
 
 /// One User's durable weekly-report Collector Agent on one owned Computer (ADR 0032).
