@@ -2,7 +2,10 @@ import { OPENVIKING_AGENT_PROTOCOL, OPENVIKING_TOOL_NAMES } from "@lrm/coforge-s
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 
 /** Settle idle channel polling normally; queued and later inputs stay resumable. */
-export function installChannelTurnPolicy(session: AgentSession) {
+export function installChannelTurnPolicy(
+  session: AgentSession,
+  options: { settleMessageSends?: boolean } = {},
+) {
   let emptyChecks = 0;
   const unsubscribe = session.subscribe((event) => {
     if (event.type === "message_start" && event.message.role === "user") emptyChecks = 0;
@@ -43,6 +46,37 @@ export function installChannelTurnPolicy(session: AgentSession) {
         .filter((item) => item.type === "toolCall")
         .map((item) => [item.id, item]),
     );
+    if (
+      options.settleMessageSends &&
+      turn.toolResults.some((result) => {
+        const command = calls.get(result.toolCallId)?.arguments.command;
+        if (
+          result.isError ||
+          result.toolName !== "bash" ||
+          typeof command !== "string" ||
+          !/^\s*coforge\s+message\s+send\b/.test(command)
+        )
+          return false;
+        const text = result.content
+          .filter((item) => item.type === "text")
+          .map((item) => item.text)
+          .join("\n")
+          .trim();
+        try {
+          const receipt = JSON.parse(text);
+          return (
+            (receipt?.accepted === true || receipt?.state === "sent") &&
+            typeof receipt.messageId === "string" &&
+            receipt.messageId.length > 0
+          );
+        } catch {
+          return /^Message sent to #[^\r\n]+\. Message ID: [0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(
+            text,
+          );
+        }
+      })
+    )
+      return { action: "end" };
     const idle =
       turn.toolResults.length > 0 &&
       turn.toolResults.every((result) => {

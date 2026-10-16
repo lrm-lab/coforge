@@ -608,3 +608,81 @@ test("new discovery IDs do not hide a search-only loop and a full read clears it
   ).toContain("4 discovery calls without a new document read");
   expect(proxy.calls).toHaveLength(11);
 });
+
+test("document discovery stays compact and repeated snippets do not hide full read access", async () => {
+  const full = "Candidate biography. ".repeat(45) + "Decisive school name: Example Academy.";
+  const citation = {
+    kind: "openviking",
+    citationId: "ov:biography",
+    workspaceId: "ws",
+    accountId: "acct",
+    uri: "viking://resources/evo-ir/documents/biography.md",
+    contentHash: "sha256:biography",
+    matchedLevel: "L2",
+    excerpt: full,
+  };
+  const proxy = fakeProxy((_path, raw) => {
+    const command = raw as { protocol: string; op: string; operationId: string; query?: string };
+    const served =
+      command.query === "method"
+        ? { ...citation, uri: "viking://resources/causal/forks/method.md" }
+        : command.query === "updated"
+          ? { ...citation, contentHash: "sha256:new-version" }
+          : citation;
+    return command.op === "read"
+      ? {
+          protocol: command.protocol,
+          op: "read",
+          operationId: command.operationId,
+          duplicate: false,
+          citation,
+          content: full,
+        }
+      : {
+          ...emptyItemsResponse(command.protocol, command.op, command.operationId),
+          items: [served],
+        };
+  });
+  const budget = new MemoryAgentTurnBudget();
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
+  const first = await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+    operationId: "discover",
+    query: "biography school",
+  });
+  budget.reset();
+  const second = await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+    operationId: "rediscover",
+    query: "school biography",
+  });
+  const decode = (result: typeof first) =>
+    JSON.parse(result.content.find((part) => part.type === "text")!.text);
+  const card = decode(first).items[0];
+  expect(card.uri).toBe(citation.uri);
+  expect(card.contentHash).toBe(citation.contentHash);
+  expect(card.excerpt.length).toBeLessThanOrEqual(480);
+  expect(decode(first).discoveryNotes[0].note).toContain("ov_read");
+  expect(card.excerpt).not.toContain("Decisive school name");
+  expect(decode(second).items[0].excerpt).toBe("");
+  expect(decode(second).discoveryNotes[0].note).toContain("Previously discovered");
+  const read = await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
+    operationId: "verify",
+    uri: card.uri,
+  });
+  expect(decode(read).content).toBe(full);
+  expect(decode(read).content).toContain("Example Academy");
+  const updated = await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+    operationId: "updated",
+    query: "updated",
+  });
+  expect(decode(updated).items[0].excerpt).toBe(full.slice(0, 480));
+  expect(decode(updated).items[0].contentHash).toBe("sha256:new-version");
+  for (const operationId of ["method-first", "method-again"]) {
+    const method = await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+      operationId,
+      query: "method",
+    });
+    expect(decode(method).items[0].excerpt).toBe(full);
+    expect(decode(method).discoveryNotes).toBeUndefined();
+  }
+  expect(proxy.calls).toHaveLength(6);
+});

@@ -245,7 +245,7 @@ export function createMemoryFenceTools(
             await proxy.post(agentApiRoutes.proxy.openviking.path, command),
           );
         }
-        const result = toolResult(decoded);
+        const result = toolResult(budget.discoveryView(decoded));
         const feedback = budget.retrievalFeedback(decoded);
         if (feedback) result.content.push({ type: "text", text: feedback });
         return result;
@@ -385,7 +385,7 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.read]: openvikingTool(
       OPENVIKING_TOOL_NAMES.read,
       "OpenViking read",
-      "Read one cited OpenViking document by URI.",
+      "Read one cited OpenViking document in full by URI. Document find results are compact discovery cards; repeated snippets may be omitted. Read relevant sources to check unresolved constraints, and before concluding a detail is absent. A short or omitted discovery excerpt is not evidence that the full source lacks the answer.",
       "read",
       {
         operationId: Type.String({
@@ -732,7 +732,10 @@ export async function createSession(options: {
         ? { customTools }
         : {}),
   });
-  const removeChannelTurnPolicy = installChannelTurnPolicy(created.session);
+  const removeChannelTurnPolicy = installChannelTurnPolicy(created.session, {
+    settleMessageSends:
+      (environment.COFORGE_EVAL_SETTLE_SENDS ?? Bun.env.COFORGE_EVAL_SETTLE_SENDS) === "1",
+  });
   return {
     ...created,
     services,
