@@ -31,7 +31,8 @@ export class MemoryAgentRuntimeStateStore implements AgentRuntimeStateStore {
   }
 
   async read(agentId: string) {
-    return this.#records.get(agentId) && structuredClone(this.#records.get(agentId)!);
+    const record = this.#records.get(agentId);
+    return record && structuredClone(record);
   }
 
   async write(agentId: string, record: AgentRuntimeRecord) {
