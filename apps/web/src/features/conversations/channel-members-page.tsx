@@ -19,7 +19,9 @@ import { Input } from "#src/components/base/input/input";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import { createAgent } from "#src/features/agents/agents.functions";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
+import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { HoverPopover } from "#src/components/ui/hover-popover";
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import {
@@ -47,6 +49,7 @@ import {
   type ChannelCandidate,
 } from "./channel-member-picker";
 import { useChannelMembers, type ChannelMembers } from "./channel-members-query";
+import { MemberProfileCard } from "./channel-header-people";
 import { channelMembersQueryKey } from "./conversation-query-keys";
 import { mentionKey } from "./mention-text";
 
@@ -324,38 +327,70 @@ const MemberRow = memo(function MemberRow({
   autoFocus: boolean;
 }) {
   const hasActions = canChangeRole || canRemove;
-  const identity = (
-    <>
-      {member.kind === "agent" ? (
-        <AgentDisplayAvatar name={member.displayName} src={member.avatarUrl} display={display} />
-      ) : (
-        <Avatar
-          size="sm"
-          alt=""
-          src={member.avatarUrl ?? undefined}
-          initials={avatarInitial(member.displayName)}
-          contentClassName={avatarToneClassName(member.displayName)}
-        />
-      )}
-      <span className="min-w-0 flex-1 text-left">
-        <span
-          className={cn(
-            "block truncate text-sm text-primary",
-            member.kind === "user" ? "font-semibold" : "font-medium",
-          )}
-        >
-          {member.displayName}
-        </span>
-        {member.kind === "agent" && (
-          <span className="block truncate text-xs text-tertiary">
-            {agentDisplay(display).label}
-          </span>
+  // The same peek the channel header's faces give (task #211): hovering an avatar shows the
+  // profile card; pressing it (or the name) opens the profile. Avatar and name are separate
+  // press targets — a hover-card trigger nested inside the row's button would nest buttons.
+  const avatarTriggerClassName =
+    "shrink-0 rounded-[7px] outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2";
+  const namePress = () => onOpenProfile({ kind: member.kind, id: member.id });
+  const nameBlock = (
+    <span className="min-w-0 text-left">
+      <span
+        className={cn(
+          "block truncate text-sm text-primary",
+          member.kind === "user" ? "font-semibold" : "font-medium",
         )}
+      >
+        {member.displayName}
       </span>
-    </>
+      {member.kind === "agent" && (
+        <span className="block truncate text-xs text-tertiary">{agentDisplay(display).label}</span>
+      )}
+    </span>
   );
   return (
     <li className="group flex items-center gap-3 px-4 py-2 md:px-6">
+      {member.kind === "agent" ? (
+        <AgentHoverCard
+          agentId={member.id}
+          name={member.displayName}
+          handle={"name" in member ? member.name : undefined}
+          src={member.avatarUrl}
+          trigger={
+            <AgentDisplayAvatar
+              name={member.displayName}
+              src={member.avatarUrl}
+              display={display}
+            />
+          }
+          triggerClassName={avatarTriggerClassName}
+          onOpenProfile={(agentId) => onOpenProfile({ kind: "agent", id: agentId })}
+        />
+      ) : (
+        <HoverPopover
+          label={m.member_person_open_profile({ name: member.displayName })}
+          onPress={namePress}
+          triggerClassName={avatarTriggerClassName}
+          trigger={
+            <Avatar
+              size="sm"
+              alt=""
+              src={member.avatarUrl ?? undefined}
+              initials={avatarInitial(member.displayName)}
+              contentClassName={avatarToneClassName(member.displayName)}
+            />
+          }
+        >
+          <MemberProfileCard
+            userId={member.id}
+            name={member.displayName}
+            src={member.avatarUrl}
+            description={member.description}
+            serverRole={member.serverRole}
+            channelRole={member.channelRole}
+          />
+        </HoverPopover>
+      )}
       <AriaButton
         aria-label={
           member.kind === "agent"
@@ -363,10 +398,10 @@ const MemberRow = memo(function MemberRow({
             : m.member_person_open_profile({ name: member.displayName })
         }
         autoFocus={autoFocus}
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md outline-focus-ring focus-visible:outline-2"
-        onPress={() => onOpenProfile({ kind: member.kind, id: member.id })}
+        className="flex min-w-0 cursor-pointer items-center rounded-md outline-focus-ring focus-visible:outline-2"
+        onPress={namePress}
       >
-        {identity}
+        {nameBlock}
       </AriaButton>
       {/* Hidden by opacity, not visibility, so the actions stay in the tab order and a keyboard
           focus reveals them. */}

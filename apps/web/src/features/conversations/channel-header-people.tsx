@@ -44,8 +44,12 @@ function roleLabel(member: { serverRole?: string | null; channelRole?: string })
   return m.channel_members_role_member();
 }
 
-/** The profile card shown on hover for a human member. */
-function MemberProfileCard({
+/**
+ * The profile card shown on hover for a human member. Deliberately no actions on it (the boss's
+ * ruling, task #210): the hover is for a quick look at a face. Shared with the members roster
+ * (channel-members-page), whose avatar rows peek the same card.
+ */
+export function MemberProfileCard({
   userId,
   name,
   src,
