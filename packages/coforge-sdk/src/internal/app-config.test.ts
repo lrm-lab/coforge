@@ -130,10 +130,10 @@ test("a snapshot request round-trips its scope and refuses another protocol", ()
   expect(() => encodeAppConfigSnapshotRequest({ ...scope, protocolMajor: 2 })).toThrow();
 });
 
-test("cleaner settings default and bound as the reference Computer's do", () => {
+test("cleaner settings bound as the reference Computer's do, with an 8 KiB default threshold", () => {
   expect(CLEANER_CONFIG_DEFAULTS).toEqual({
     enabled: true,
-    thresholdBytes: 65_536,
+    thresholdBytes: 8_192,
     intervalMs: 3_600_000,
   });
   expect(
@@ -166,7 +166,7 @@ test("an Agent reads and sets the cleaner by snake_case keys in whole seconds", 
   });
   expect(definition.defaults).toEqual({
     enabled: true,
-    threshold_bytes: 65_536,
+    threshold_bytes: 8_192,
     interval_seconds: 3600,
   });
   expect(

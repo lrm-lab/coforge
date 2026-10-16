@@ -44,7 +44,7 @@ test("an Agent reads its own App's config", async () => {
     appId: CLEANER_APP_ID,
     revision: 0,
     overrides: {},
-    effective: { enabled: true, threshold_bytes: 65_536, interval_seconds: 3600 },
+    effective: { enabled: true, threshold_bytes: 8_192, interval_seconds: 3600 },
   });
 });
 

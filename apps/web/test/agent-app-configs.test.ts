@@ -33,7 +33,7 @@ const cleanerSchema = {
   threshold_bytes: { type: "integer", minimum: 4096, maximum: 1_073_741_824 },
   interval_seconds: { type: "integer", minimum: 900, maximum: 604_800 },
 } as const;
-const cleanerDefaults = { enabled: true, threshold_bytes: 65_536, interval_seconds: 3600 };
+const cleanerDefaults = { enabled: true, threshold_bytes: 8_192, interval_seconds: 3600 };
 
 function harness(
   options: {
@@ -188,9 +188,9 @@ test("an Agent reads an App's schema, defaults, overrides and effective config",
       effective: cleanerDefaults,
     },
   });
-  const partial = { appId: CLEANER_APP_ID, revision: 2, config: { threshold_bytes: 65_536 } };
+  const partial = { appId: CLEANER_APP_ID, revision: 2, config: { threshold_bytes: 8_192 } };
   expect(await harness({ rows: [partial] }).configs.view(agent.id, CLEANER_APP_ID)).toMatchObject({
-    config: { revision: 2, overrides: { threshold_bytes: 65_536 }, effective: cleanerDefaults },
+    config: { revision: 2, overrides: { threshold_bytes: 8_192 }, effective: cleanerDefaults },
   });
   expect(await harness().configs.view(agent.id, "system.unknown")).toEqual({
     state: "app_not_found",

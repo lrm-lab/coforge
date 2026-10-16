@@ -32,7 +32,7 @@ coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [-
 | Key                | Type    | Bounds                   | Default |
 | ------------------ | ------- | ------------------------ | ------- |
 | `enabled`          | boolean |                          | `true`  |
-| `threshold_bytes`  | integer | 4096 to 1073741824       | 65536   |
+| `threshold_bytes`  | integer | 4096 to 1073741824       | 8192    |
 | `interval_seconds` | integer | 900 to 604800            | 3600    |
 
 The `workspace-cleanup` Agent Manual topic says when to raise `threshold_bytes`.

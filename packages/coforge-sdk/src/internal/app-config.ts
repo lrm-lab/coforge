@@ -40,7 +40,9 @@ const CLEANER_FIELDS = {
   threshold_bytes: { type: "integer", minimum: 4_096, maximum: 1_073_741_824 },
   interval_seconds: { type: "integer", minimum: 900, maximum: 604_800 },
 } as const satisfies Record<string, AppConfigField>;
-const CLEANER_DEFAULT_VALUES = { enabled: true, threshold_bytes: 65_536, interval_seconds: 3_600 };
+// 8 KiB, not the reference Computer's 64 KiB: CoForge's earlier MEMORY.md reminder fired there, and it
+// stays well inside the 25KB of MEMORY.md that Claude Code loads into each session.
+const CLEANER_DEFAULT_VALUES = { enabled: true, threshold_bytes: 8_192, interval_seconds: 3_600 };
 const MS_PER_SECOND = 1_000;
 
 /** Cleaner settings from a complete set of its Agent-facing values. */
