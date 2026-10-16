@@ -31,12 +31,19 @@ type ProfileRow = {
   sanitizedFailureMessage: string | null;
 };
 
+export async function readWorkspaceMemoryProfile(
+  db: Pick<PrismaClient, "workspaceMemoryProfile">,
+  workspaceId: string,
+): Promise<WorkspaceMemoryProfile | null> {
+  const row = await db.workspaceMemoryProfile.findUnique({ where: { workspaceId } });
+  return row ? toProfile(row) : null;
+}
+
 export class PrismaWorkspaceMemoryProfileStore implements WorkspaceMemoryProfileStore {
   constructor(private readonly db: PrismaClient) {}
 
   async get(workspaceId: string): Promise<WorkspaceMemoryProfile | null> {
-    const row = await this.db.workspaceMemoryProfile.findUnique({ where: { workspaceId } });
-    return row ? toProfile(row) : null;
+    return readWorkspaceMemoryProfile(this.db, workspaceId);
   }
 
   async compareAndSet(input: {

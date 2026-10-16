@@ -286,9 +286,13 @@ function translateError(command: OpenVikingAgentCommand, error: unknown): Memory
     return failure(403, command.operationId, "unauthorized");
   if (error instanceof MemoryAgentUnauthorizedError)
     return failure(403, command.operationId, "unauthorized");
-  if (error instanceof Error && /^openviking upstream status \d+$/.test(error.message))
-    return failure(400, command.operationId, "invalid", error.message);
-  return failure(400, command.operationId, "invalid");
+  if (error instanceof Error && /^openviking upstream status \d+$/.test(error.message)) {
+    const status = Number(error.message.split(" ").at(-1));
+    return status >= 500
+      ? failure(503, command.operationId, "runtime")
+      : failure(400, command.operationId, "invalid", error.message);
+  }
+  return failure(503, command.operationId, "runtime");
 }
 
 function failure(

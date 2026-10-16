@@ -66,7 +66,7 @@ These rules apply to `src/server/db/`.
   deadlock or serialization failure (Prisma P2034, or a raw query's P2010 with
   the adapter's `TransactionWriteConflict`). Retry only those, a bounded number
   of times, and only a transaction that takes its locks in the writers' order.
-- `memory-disposition.repositories.server.ts` freezes Hint provenance at delivery, serializes receipts per Hint with a PostgreSQL row lock, and appends disposition/citation events atomically.
+- `memory-disposition.repositories.server.ts` freezes Hint provenance at delivery, serializes receipts per Hint with a PostgreSQL row lock, and appends disposition/citation events atomically. Authorization within that callback uses the transaction connection, never a second global pool checkout.
 - `host-directory.repositories.server.ts` persists host-node rows. Enrollment,
   the online window, and token checks stay in `server/hosts/`.
 - `host-job.repositories.server.ts` persists a cloud Computer and its create job.
