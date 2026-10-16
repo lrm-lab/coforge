@@ -290,13 +290,13 @@ export function RuntimeUsagePopoverContent({
 
       {showUsage && (
         <section className="px-4 py-3">
-          {/* The account band leads with what the account is (its plan, then the signed-in
-              account). It is omitted when the runtime names neither and nothing is wrong, so an
-              Antigravity card does not open with an empty "Runtime account" line. The fallback
-              heading only stands beside a badge. The badge speaks only when something needs the
-              reader — reauth, an error, a limit — since "OK" repeats the health dot that opened
-              this popover. */}
-          {(plan || accountLabel || (badge && badge.color !== "success")) && (
+          {/* The account band leads with the plan, then the signed-in account. A credits note
+              counts too: Codex can report credits with no plan and no email, and that note used
+              to show under the fallback heading. The empty "Runtime account" line is omitted
+              only when the runtime names nothing and nothing is wrong. The badge speaks only
+              when something needs the reader — reauth, an error, a limit — since "OK" repeats
+              the health dot that opened this popover. */}
+          {(plan || accountLabel || accountNote || (badge && badge.color !== "success")) && (
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="truncate text-sm font-medium text-primary">
