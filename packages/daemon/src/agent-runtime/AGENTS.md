@@ -101,7 +101,7 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 
 - `agent-memory-seed.ts` seeds a starter `MEMORY.md`, `notes/active-context.md`,
   `notes/work-log.md` and the migration ignore file `.coforgemigrateignore`
-  (which leaves `work/` behind by default) right after the workspace directory
+  (which leaves `code/` behind by default) right after the workspace directory
   is created. It
   only creates files (`flag: "wx"`, `EEXIST` ignored) and never overwrites one
   the Agent already wrote. A seed failure is logged and never fails the launch.

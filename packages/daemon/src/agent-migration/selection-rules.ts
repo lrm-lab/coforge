@@ -1,5 +1,5 @@
 import { isAbsolute, normalize, posix, relative, resolve, sep } from "node:path";
-import { AGENT_MEMORY_FILE, AGENT_WORK_DIRECTORY } from "#src/agent-runtime/agent-workspace-path";
+import { AGENT_CODE_DIRECTORY, AGENT_MEMORY_FILE } from "#src/agent-runtime/agent-workspace-path";
 
 /**
  * The rules deciding which workspace paths an Agent migration carries, apart from the walk that
@@ -17,12 +17,13 @@ export const AGENT_MIGRATION_IGNORE_FILE = ".coforgemigrateignore";
 export const AGENT_MIGRATION_COMMIT_DIRECTORY = ".coforge-migration";
 
 /**
- * What a new workspace's ignore file starts with. The Agent's code in `work/` stays behind by
- * default and is cloned again on the target; the Agent or its owner removes the line to carry it.
+ * What a new workspace's ignore file starts with. The repositories the Agent cloned into `code/`
+ * stay behind by default and are cloned again on the target; everything else moves. The Agent or
+ * its owner removes the line to carry its code too.
  */
 export const AGENT_MIGRATION_IGNORE_SEED = `# Paths an Agent migration leaves on this Computer, one per line, relative to the workspace.
-# Remove "${AGENT_WORK_DIRECTORY}" to carry your code, including uncommitted changes, to the new Computer.
-${AGENT_WORK_DIRECTORY}
+# Remove "${AGENT_CODE_DIRECTORY}" to carry your code, including uncommitted changes, to the new Computer.
+${AGENT_CODE_DIRECTORY}
 `;
 
 export const ALWAYS_MOVED: ReadonlySet<string> = new Set([

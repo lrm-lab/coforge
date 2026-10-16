@@ -193,7 +193,7 @@
   "agent_migration_dialog_target": "目标电脑",
   "agent_migration_dialog_no_targets": "这个工作区没有其他电脑，请先连接一台。",
   "agent_migration_dialog_session": "智能体会在目标电脑上开启新的运行时会话，工作区、记忆和身份会随之迁移。",
-  "agent_migration_dialog_left_behind": "work/ 目录中的代码和密钥类文件（.env、密钥、token、凭据）不会迁移，需要在新电脑上重新获取或复制。可在工作区的 .coforgemigrateignore 中设置还有哪些内容不迁移。",
+  "agent_migration_dialog_left_behind": "密钥类文件（.env、密钥、token、凭据）不会迁移，需要在新电脑上重新复制。可在工作区的 .coforgemigrateignore 中设置还有哪些内容不迁移。",
   "agent_migration_dialog_stops": "迁移期间智能体会在当前电脑上停止，消息会等到它在新电脑上启动后再处理。",
   "agent_migration_submit": "开始迁移",
   "agent_migration_submit_pending": "正在发起迁移…",

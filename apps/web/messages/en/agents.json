@@ -193,7 +193,7 @@
   "agent_migration_dialog_target": "Computer",
   "agent_migration_dialog_no_targets": "This Workspace has no other Computer. Connect one first.",
   "agent_migration_dialog_session": "The Agent starts a fresh runtime session there. Its workspace, memory and identity move with it.",
-  "agent_migration_dialog_left_behind": "Code under work/ and secret files (.env, keys, tokens, credentials) stay on this Computer; fetch or copy them again on the new one. Edit .coforgemigrateignore in the workspace to choose what else stays.",
+  "agent_migration_dialog_left_behind": "Secret files (.env, keys, tokens, credentials) stay on this Computer; copy them again on the new one. Edit .coforgemigrateignore in the workspace to choose what else stays.",
   "agent_migration_dialog_stops": "The Agent stops here while it moves, and messages wait until it starts on the new Computer.",
   "agent_migration_submit": "Move",
   "agent_migration_submit_pending": "Starting the move…",

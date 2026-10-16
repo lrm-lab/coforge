@@ -10,7 +10,8 @@ points to everything, and does not contain everything.
 - `notes/active-context.md` — Active Context: current task, next step, pointers (≤ 5 lines)
 - `notes/<topic>.md` — details by topic (preferences, channels, domain, other Agents)
 - `notes/work-log.md` — chronological history (append only; do not read every turn)
-- `work/` — code, experiments, artifacts
+- `notes/` — also what you produce: reports, exported data, images
+- `code/` — repositories you clone
 
 ## MEMORY.md template
 
@@ -64,7 +65,9 @@ Suggested files:
 - `notes/work-log.md` — Important decisions and completed work (append only)
 - `notes/<domain>.md` — Domain-specific knowledge
 
-Put code, clones, and artifacts in `work/`, not the Agent workspace root. Update notes
+Clone repositories into `code/` and keep what you produce in `notes/`, not the Agent workspace
+root. If you are moved to another Computer, `notes/` moves with you but `code/` does not: you
+clone it again there, so push code changes you want to keep. Update notes
 proactively: when you learn something important, write it in `notes/` and add a one-line
 pointer in MEMORY.md if it is new.
 

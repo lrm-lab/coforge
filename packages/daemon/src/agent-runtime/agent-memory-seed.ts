@@ -1,6 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import { ensureAgentMigrationIgnoreFile } from "#src/agent-migration/ignore-file";
-import { AGENT_MEMORY_FILE, AGENT_WORK_DIRECTORY } from "#src/agent-runtime/agent-workspace-path";
+import { AGENT_CODE_DIRECTORY, AGENT_MEMORY_FILE } from "#src/agent-runtime/agent-workspace-path";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { collapseWhitespace, stripHeadingMarkers } from "#src/code-agent/agent-instructions";
@@ -88,8 +88,8 @@ export async function memoryIndexReminder(
 
 /**
  * Writes the seeded MEMORY.md and notes/active-context.md into an Agent's workspace on its first
- * launch, and creates the `notes/` / `work/` layout plus notes/work-log.md and the migration
- * ignore file that leaves `work/` behind by default. Never overwrites an existing file — once written, an Agent owns each of them and
+ * launch, and creates the `notes/` / `code/` layout plus notes/work-log.md and the migration
+ * ignore file that leaves `code/` behind by default. Never overwrites an existing file — once written, an Agent owns each of them and
  * this seed step never touches it again (`flag: "wx"` fails with `EEXIST`, which is swallowed
  * here). After a Full Reset clears the Agent workspace (the record store's `clearWorkspace`), the
  * files are gone along with every other workspace file, so the next launch's call to this
@@ -107,13 +107,13 @@ export async function seedAgentMemory(
 ): Promise<void> {
   const memoryPath = join(agentWorkspaceDirectory, AGENT_MEMORY_FILE);
   const notesDirectory = join(agentWorkspaceDirectory, "notes");
-  const workDirectory = join(agentWorkspaceDirectory, AGENT_WORK_DIRECTORY);
+
   try {
     // MEMORY.md first: a missing workspace directory fails here with ENOENT and is swallowed,
     // matching the previous seed (it must not mkdir the Agent workspace into existence).
     await writeNewFile(memoryPath, buildInitialMemoryMd(identity));
     await mkdir(notesDirectory, { recursive: true });
-    await mkdir(workDirectory, { recursive: true });
+    await mkdir(join(agentWorkspaceDirectory, AGENT_CODE_DIRECTORY), { recursive: true });
     await writeNewFile(join(notesDirectory, "active-context.md"), ACTIVE_CONTEXT_SEED);
     await writeNewFile(join(notesDirectory, "work-log.md"), WORK_LOG_SEED);
     await ensureAgentMigrationIgnoreFile(agentWorkspaceDirectory);

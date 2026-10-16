@@ -73,10 +73,11 @@ test("seedAgentMemory writes MEMORY.md into the Agent workspace with owner-only 
     expect((await stat(activeContextPath)).mode & 0o777).toBe(0o600);
     // As in the reference Computer, the workspace is not made ready for git: no .gitignore.
     await expect(stat(join(workspace, ".gitignore"))).rejects.toThrow();
-    expect((await stat(join(workspace, "work"))).isDirectory()).toBe(true);
+    expect((await stat(join(workspace, "code"))).isDirectory()).toBe(true);
+    await expect(stat(join(workspace, "work"))).rejects.toThrow();
     const migrateIgnore = await readFile(join(workspace, ".coforgemigrateignore"), "utf8");
     expect(migrateIgnore.split("\n").filter((line) => line && !line.startsWith("#"))).toEqual([
-      "work",
+      "code",
     ]);
   } finally {
     await rm(workspace, { recursive: true, force: true });
@@ -94,14 +95,14 @@ test("seedAgentMemory never overwrites an existing MEMORY.md, byte for byte", as
 
     expect(await readFile(memoryPath, "utf8")).toBe(ownedContent);
     expect((await stat(join(workspace, "notes"))).isDirectory()).toBe(true);
-    expect((await stat(join(workspace, "work"))).isDirectory()).toBe(true);
+    expect((await stat(join(workspace, "code"))).isDirectory()).toBe(true);
     expect(await readFile(join(workspace, "notes", "work-log.md"), "utf8")).toContain(
       "Chronological history",
     );
     expect(await readFile(join(workspace, "notes", "active-context.md"), "utf8")).toContain(
       "# Active Context",
     );
-    expect(await readFile(join(workspace, ".coforgemigrateignore"), "utf8")).toContain("work");
+    expect(await readFile(join(workspace, ".coforgemigrateignore"), "utf8")).toContain("code");
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }
@@ -110,7 +111,7 @@ test("seedAgentMemory never overwrites an existing MEMORY.md, byte for byte", as
 test("seedAgentMemory never overwrites an existing .coforgemigrateignore", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "coforge-agent-memory-seed-migrate-ignore-"));
   try {
-    // The Agent chose to carry its code: it removed `work` from the list.
+    // The Agent chose to carry its code: it removed `code` from the list.
     const ownedContent = "big-data/\n";
     await writeFile(join(workspace, ".coforgemigrateignore"), ownedContent, "utf8");
     await seedAgentMemory(workspace, { name: "scout" });

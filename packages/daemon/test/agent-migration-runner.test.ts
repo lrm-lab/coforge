@@ -155,13 +155,14 @@ test("a leased source and then a leased target move the Agent's workspace betwee
   const { source, run } = await uploaded(shared, {
     "MEMORY.md": "what I remember",
     "notes/plan.md": "step one",
-    "work/repo/README.md": "code stays behind",
+    "code/repo/README.md": "code stays behind",
+    "notes/report.csv": "the report moves",
     ".env": "SECRET=1",
   });
   expect(source.stops).toEqual([agentId]);
-  // The ignore file was seeded before selection, so `work/` stayed on the source.
+  // The ignore file was seeded before selection, so `code/` stayed on the source.
   expect(await readFile(join(source.workspace, AGENT_MIGRATION_IGNORE_FILE), "utf8")).toContain(
-    "work",
+    "code",
   );
   // Until the Agent has switched, the source keeps it stopped.
   expect(source.runner.holds(agentId)).toBe(true);
@@ -179,7 +180,10 @@ test("a leased source and then a leased target move the Agent's workspace betwee
   expect(source.runner.holds(agentId)).toBe(false);
   expect(await readFile(join(target.workspace, "MEMORY.md"), "utf8")).toBe("what I remember");
   expect(await readFile(join(target.workspace, "notes/plan.md"), "utf8")).toBe("step one");
-  expect(await exists(join(target.workspace, "work"))).toBe(false);
+  expect(await exists(join(target.workspace, "code"))).toBe(false);
+  expect(await readFile(join(target.workspace, "notes/report.csv"), "utf8")).toBe(
+    "the report moves",
+  );
   expect(await exists(join(target.workspace, ".env"))).toBe(false);
   // The attempt's chunks are gone once the Agent has switched.
   expect(await exists(join(target.state, "migrations", migrationId, "1"))).toBe(false);
@@ -192,7 +196,7 @@ test("a leased source and then a leased target move the Agent's workspace betwee
     `source-${migrationId}`,
   );
   expect(await readFile(join(archived, "MEMORY.md"), "utf8")).toBe("what I remember");
-  expect(await readFile(join(archived, "work/repo/README.md"), "utf8")).toBe("code stays behind");
+  expect(await readFile(join(archived, "code/repo/README.md"), "utf8")).toBe("code stays behind");
 });
 
 test("a source whose migration failed keeps its workspace where it is", async () => {

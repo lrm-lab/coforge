@@ -121,17 +121,17 @@ test("leaves the runtimes' own storage and Sessions on the source Computer", asy
   ]);
 });
 
-test("an ignored work directory of code is measured, not walked", async () => {
+test("an ignored code directory is measured, not walked", async () => {
   const root = await workspace({
-    [AGENT_MIGRATION_IGNORE_FILE]: "work\n",
+    [AGENT_MIGRATION_IGNORE_FILE]: "code\n",
     "MEMORY.md": "m",
-    "work/repo/src/main.ts": "code",
-    "work/repo/.git/HEAD": "ref",
-    "work/repo/.env": "TOKEN=1",
+    "code/repo/src/main.ts": "code",
+    "code/repo/.git/HEAD": "ref",
+    "code/repo/.env": "TOKEN=1",
   });
   const selection = await selectAgentMigrationWorkspace(root);
   expect(paths(selection)).toEqual([AGENT_MIGRATION_IGNORE_FILE, "MEMORY.md"]);
-  expect(selection.excluded.ignored).toEqual([{ path: "work", fileCount: 3, sizeBytes: 14 }]);
+  expect(selection.excluded.ignored).toEqual([{ path: "code", fileCount: 3, sizeBytes: 14 }]);
   // Nothing inside an ignored path is examined, so its secrets are not listed one by one.
   expect(selection.excluded.secret).toEqual([]);
 });
@@ -287,7 +287,11 @@ asUser("records an unreadable directory under an ignored path and carries on", a
 });
 
 test("before a migration, a workspace without an ignore file gets the default one", async () => {
-  const root = await workspace({ "MEMORY.md": "m", "work/repo/a.ts": "code" });
+  const root = await workspace({
+    "MEMORY.md": "m",
+    "code/repo/a.ts": "code",
+    "notes/report.csv": "r",
+  });
   await ensureAgentMigrationIgnoreFile(root);
   expect(await readFile(join(root, AGENT_MIGRATION_IGNORE_FILE), "utf8")).toBe(
     AGENT_MIGRATION_IGNORE_SEED,
@@ -295,17 +299,18 @@ test("before a migration, a workspace without an ignore file gets the default on
   expect(paths(await selectAgentMigrationWorkspace(root))).toEqual([
     AGENT_MIGRATION_IGNORE_FILE,
     "MEMORY.md",
+    "notes/report.csv",
   ]);
 });
 
 test("before a migration, an existing ignore file is left exactly as the Agent wrote it", async () => {
   const root = await workspace({
     [AGENT_MIGRATION_IGNORE_FILE]: "big-data\n",
-    "work/a.ts": "code",
+    "code/a.ts": "code",
   });
   await ensureAgentMigrationIgnoreFile(root);
   expect(await readFile(join(root, AGENT_MIGRATION_IGNORE_FILE), "utf8")).toBe("big-data\n");
-  expect(paths(await selectAgentMigrationWorkspace(root))).toContain("work/a.ts");
+  expect(paths(await selectAgentMigrationWorkspace(root))).toContain("code/a.ts");
 });
 
 test("never carries a migration's own commit marker from an earlier move", async () => {
