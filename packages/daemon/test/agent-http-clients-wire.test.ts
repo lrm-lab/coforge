@@ -3,8 +3,8 @@ import type { AgentMessageRequest } from "@lrm/coforge-sdk/internal";
 import { createAgentMessageHttpClient } from "../src/connection/agent-http-clients";
 import { AgentTransportError } from "../src/connection/agent-transport-error";
 import { AgentManualRequestError } from "../src/connection/agent-manual-request-error";
-import { AgentMentionActionRequestError } from "../src/connection/agent-mention-action-request-error";
-import { AgentProfileRequestError } from "../src/connection/agent-profile-request-error";
+import { AgentMentionActionRequestError } from "#src/connection/agent-mention-action-request-error";
+import { AgentProfileRequestError } from "#src/connection/agent-profile-request-error";
 
 // Pins what the message client puts on the wire for the routes that share `sendAgentJson` /
 // `getAgentJson`: method, URL, headers, body and whether a deadline is attached.
