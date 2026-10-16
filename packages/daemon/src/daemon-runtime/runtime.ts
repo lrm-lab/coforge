@@ -4097,13 +4097,21 @@ export class DaemonRuntime {
   /** A new connection: asks again for every running Agent's App config. */
   #resyncAppConfigs(): void {
     this.#appConfigs.connected();
-    for (const agentId of this.#readyRunningAgentIds()) this.#requestAppConfigSnapshot(agentId);
+    // A launch in progress asked on the old connection, whose answer is now dropped.
+    for (const agentId of new Set([...this.#readyRunningAgentIds(), ...this.#agentLaunches.keys()]))
+      this.#requestAppConfigSnapshot(agentId);
   }
 
   /** Asks once per connection for the Agent's App config; the cloud resends on the next one. */
   #requestAppConfigSnapshot(agentId: string): void {
     if (!this.#transport.requestAppConfigSnapshot) return;
-    void this.#appConfigs.request(agentId).catch(() => {});
+    void this.#appConfigs.request(agentId).catch((error: unknown) =>
+      logger.warn("Asking for an Agent's App config failed; the next connection asks again", {
+        event: "agent_app_config:snapshot_failed",
+        agent_id: agentId,
+        error_code: diagnosticErrorName(error),
+      }),
+    );
   }
 
   async #requestReminderSnapshot(agentId: string): Promise<void> {

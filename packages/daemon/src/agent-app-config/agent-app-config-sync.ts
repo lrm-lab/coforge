@@ -33,6 +33,9 @@ const flat = ({ appId, ownerAgentId, revision, effective }: AppConfig): FlatAppC
  */
 export class AgentAppConfigSync {
   readonly #requested = new Set<string>();
+  /** Which connection a request belongs to: a later one asks again, so an older answer is
+   * dropped. */
+  #connection = 0;
 
   constructor(
     private readonly options: {
@@ -43,18 +46,22 @@ export class AgentAppConfigSync {
 
   /** A new cloud connection: every owner's snapshot may be asked for again. */
   connected(): void {
+    this.#connection++;
     this.#requested.clear();
   }
 
   /** Asks for and applies the owner's snapshot, unless this connection already asked. A failed
-   * request may be asked again. */
+   * request may be asked again; an answer that arrives after a newer connection is dropped. */
   async request(agentId: string): Promise<void> {
     if (this.#requested.has(agentId)) return;
     this.#requested.add(agentId);
+    const connection = this.#connection;
     const snapshot = await this.options.requestSnapshot(agentId).catch((error: unknown) => {
-      this.#requested.delete(agentId);
+      if (connection === this.#connection) this.#requested.delete(agentId);
       throw error;
     });
+    if (connection !== this.#connection) return;
+    if (snapshot.agentId !== agentId) throw new Error("app config snapshot for another Agent");
     this.apply(snapshot);
   }
 

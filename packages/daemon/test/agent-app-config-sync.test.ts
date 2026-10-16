@@ -155,3 +155,43 @@ test("a failed request may be asked again on the same connection", async () => {
   await mirror.request("agent-1");
   expect(requested).toEqual(["agent-1", "agent-1"]);
 });
+
+test("a snapshot that answers on an older connection, or for another Agent, is not applied", async () => {
+  const { calls, target } = recordingTarget();
+  const replies: Array<PromiseWithResolvers<AppConfigSync>> = [];
+  const mirror = new AgentAppConfigSync({
+    requestSnapshot: () => {
+      const reply = Promise.withResolvers<AppConfigSync>();
+      replies.push(reply);
+      return reply.promise;
+    },
+    apps: { [CLEANER_APP_ID]: target },
+  });
+  const stale = mirror.request("agent-1");
+  mirror.connected();
+  const current = mirror.request("agent-1");
+  replies[0]!.resolve(sync("agent-1", "snapshot", [cleaner("agent-1", 1)]));
+  await stale;
+  replies[1]!.resolve(sync("agent-2", "snapshot", []));
+  await expect(current).rejects.toThrow("another Agent");
+  expect(calls).toEqual([]);
+});
+
+test("an older connection's failed request does not let this one ask twice", async () => {
+  const replies: Array<PromiseWithResolvers<AppConfigSync>> = [];
+  const mirror = new AgentAppConfigSync({
+    requestSnapshot: () => {
+      const reply = Promise.withResolvers<AppConfigSync>();
+      replies.push(reply);
+      return reply.promise;
+    },
+    apps: {},
+  });
+  const stale = mirror.request("agent-1");
+  mirror.connected();
+  void mirror.request("agent-1");
+  replies[0]!.reject(new Error("connection closed"));
+  await expect(stale).rejects.toThrow("connection closed");
+  void mirror.request("agent-1");
+  expect(replies).toHaveLength(2);
+});
