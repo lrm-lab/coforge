@@ -215,6 +215,7 @@ function classifyFailure(
           : "AGENT_WEEKLY_REPORT_VALIDATION_FAILED";
     return build(400, "request_validation", topLevelCode, {
       publicError: error.message,
+      detail: boundedDetail(error.message),
       topLevelCode,
       responseStarted: true,
       responseComplete: true,

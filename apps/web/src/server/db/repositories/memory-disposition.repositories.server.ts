@@ -7,12 +7,18 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import type {
   MemoryDispositionStore,
+  MemoryDispositionAuthorization,
   MemoryDispositionTransaction,
   MemoryHintSource,
 } from "#src/server/workspace-memory/memory-dispositions.server";
 
 export class PrismaMemoryDispositionStore implements MemoryDispositionStore {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(
+    private readonly db: PrismaClient,
+    private readonly authorizationForTransaction?: (
+      tx: Prisma.TransactionClient,
+    ) => MemoryDispositionAuthorization,
+  ) {}
 
   async prepare(input: {
     workspaceId: string;
@@ -99,6 +105,7 @@ export class PrismaMemoryDispositionStore implements MemoryDispositionStore {
             })
           : null;
         return action({
+          authorization: this.authorizationForTransaction?.(tx),
           hint: row
             ? {
                 id: row.id,

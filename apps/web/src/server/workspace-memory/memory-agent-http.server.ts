@@ -5,9 +5,15 @@ import { PrismaMemoryDispositionStore } from "#src/server/db/repositories/memory
 
 import { readFileSync } from "node:fs";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { PrismaOpenVikingBindingStore } from "#src/server/db/repositories/openviking-binding.repositories.server";
+import {
+  PrismaOpenVikingBindingStore,
+  readOpenVikingBinding,
+} from "#src/server/db/repositories/openviking-binding.repositories.server";
 import { PrismaWorkspaceMemoryCitationStore } from "#src/server/db/repositories/workspace-memory-citation.repositories.server";
-import { PrismaWorkspaceMemoryProfileStore } from "#src/server/db/repositories/workspace-memory-profile.repositories.server";
+import {
+  PrismaWorkspaceMemoryProfileStore,
+  readWorkspaceMemoryProfile,
+} from "#src/server/db/repositories/workspace-memory-profile.repositories.server";
 import { createOpenVikingPolicyGateway } from "#src/server/openviking/policy-gateway.server";
 import { createOpenVikingRuntimeClient } from "#src/server/openviking/runtime-client.server";
 import { createMemoryAgentFenceLookup } from "./memory-agent-fence";
@@ -35,7 +41,9 @@ import { createOpenVikingMemoryReads } from "#src/server/openviking/openviking-m
 
 const budgets = createMemoryAgentBudgetLedger();
 
-export function createPrismaMemoryAgentDirectory(db: PrismaClient): MemoryAgentDirectory {
+export function createPrismaMemoryAgentDirectory(
+  db: Pick<PrismaClient, "openVikingMappedIdentity">,
+): MemoryAgentDirectory {
   return {
     async isDesignated(workspaceId, agentId) {
       const mapped = await db.openVikingMappedIdentity.findFirst({
@@ -130,10 +138,12 @@ function accountKeyFor(credentialRef: string): string | undefined {
   return key;
 }
 
-export function createDefaultOpenVikingGateway(db: PrismaClient) {
-  const bindings = new PrismaOpenVikingBindingStore(db);
+export function createDefaultOpenVikingGateway(
+  db: Pick<PrismaClient, "openVikingBinding" | "workspaceMemoryProfile">,
+) {
+  const bindings = { get: (workspaceId: string) => readOpenVikingBinding(db, workspaceId) };
   return createOpenVikingPolicyGateway({
-    profiles: new PrismaWorkspaceMemoryProfileStore(db),
+    profiles: { get: (workspaceId) => readWorkspaceMemoryProfile(db, workspaceId) },
     bindings,
     runtime: createOpenVikingRuntimeClient({
       baseUrl: Bun.env.COFORGE_OPENVIKING_URL ?? "http://127.0.0.1:0",

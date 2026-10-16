@@ -158,8 +158,8 @@ function sanitizeRuntimeResult(result: OpenVikingRuntimeResult): OpenVikingGatew
 }
 
 export function createOpenVikingPolicyGateway(deps: {
-  profiles: WorkspaceMemoryProfileStore;
-  bindings: OpenVikingBindingStore;
+  profiles: Pick<WorkspaceMemoryProfileStore, "get">;
+  bindings: Pick<OpenVikingBindingStore, "get">;
   runtime: OpenVikingRuntimeClient;
   resolveAuthorization: (credentialRef: string) => Promise<string>;
   catalog?: readonly GatewayRoutePolicy[];
