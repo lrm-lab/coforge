@@ -601,7 +601,7 @@ const requiredSecretNames = [
   "worker_jwt_private_jwk",
 ];
 
-async function rejectedWebPull(timedOut = false) {
+async function rejectedWebPull(timedOut = false, consumeBudget = false) {
   const root = await mkdtemp(join(tmpdir(), "coforge-deploy-web-pull-"));
   try {
     for (const directory of ["bin", "secrets", "centrifugo", "caddy", "last-healthy"])
@@ -631,6 +631,7 @@ exec "$@"
 echo "$*" >> "$FIXTURE_ROOT/calls"
 if [[ "$1" = compose ]]; then
   shift 5
+  if [[ "$CONSUME_BUDGET" = true && "$1" = pull && "\${*: -1}" = centrifugo ]]; then sleep 2; fi
   if [[ "$1" = pull && "\${*: -1}" = web ]]; then exit 1; fi
 fi
 exit 0
@@ -661,6 +662,7 @@ exit 0
           PATH: `${join(root, "bin")}:${Bun.env.PATH}`,
           FIXTURE_ROOT: root,
           TIMED_OUT: String(timedOut),
+          CONSUME_BUDGET: String(consumeBudget),
         },
         stdout: "pipe",
         stderr: "pipe",
@@ -695,9 +697,63 @@ test("a failed Web pull restores the healthy configuration without migrating or 
 
 test("a timed-out Web pull restores configuration and cannot reach migration or switching", async () => {
   const { calls, stderr } = await rejectedWebPull(true);
-  expect(calls).toMatch(/timeout --kill-after=5s [1-6][0-9]?s docker compose/);
+  expect(calls).toMatch(/^timeout --kill-after=5s [1-6][0-9]?s docker compose .* pull web$/m);
   expect(stderr).toContain("image pull: web");
 });
+
+test("earlier image pulls consume the Web pull's shared budget", async () => {
+  const { calls } = await rejectedWebPull(true, true);
+  const budget = (service: string) => {
+    const match = calls.match(
+      new RegExp(`^timeout --kill-after=5s (\\d+)s docker compose .* pull ${service}$`, "m"),
+    );
+    expect(match).not.toBeNull();
+    return Number(match?.[1]);
+  };
+  expect(budget("web")).toBeLessThanOrEqual(budget("centrifugo") - 2);
+}, 10_000);
+
+test.each(["0", "1201", "not-seconds"])(
+  "rejects pull budget %s before reading deployment secrets",
+  async (budget) => {
+    const root = await mkdtemp(join(tmpdir(), "coforge-invalid-pull-budget-"));
+    try {
+      const proc = Bun.spawn(
+        [
+          "bash",
+          new URL("./remote-deploy.sh", import.meta.url).pathname,
+          "--image",
+          registryImage,
+          "--compose-file",
+          join(root, "docker-compose.yml"),
+          "--secrets-dir",
+          join(root, "secrets"),
+          "--state-file",
+          join(root, "state.env"),
+          "--web-health-url",
+          "http://127.0.0.1/health",
+          "--public-health-url",
+          "https://example.test/health",
+          "--pull-timeout",
+          budget,
+        ],
+        { stdout: "pipe", stderr: "pipe" },
+      );
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      expect(code).toBe(2);
+      expect(stdout).toBe("");
+      expect(stderr).toStartWith("usage:");
+      expect(await Bun.file(join(root, ".env")).exists()).toBe(false);
+      expect(await Bun.file(join(root, "state.env")).exists()).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test("Web deployment jobs leave room for bounded pulls and the unchanged health checks", async () => {
   for (const environment of ["staging", "production"]) {
