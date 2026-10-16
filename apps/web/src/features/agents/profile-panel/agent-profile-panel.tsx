@@ -490,6 +490,8 @@ export function AgentProfilePanel({
                   agentName={profile.displayName || profile.name}
                   currentComputerId={profile.computer.id}
                   canMove={canManage}
+                  runtime={profile.runtimeConfig.runtime}
+                  model={profile.runtimeConfig.model}
                 />
               ) : undefined
             }

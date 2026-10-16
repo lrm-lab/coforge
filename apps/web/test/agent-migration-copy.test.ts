@@ -110,10 +110,30 @@ test("a move that cannot start says which Computer holds it back, and where to f
     message: m.agent_migration_target_offline(),
     fixAt: "target",
   });
-  expect(refusal("agent-migration-runtime-unavailable", "INVALID_INPUT")).toEqual({
-    message: m.agent_migration_error_runtime_unavailable(),
+  // Why the target cannot run the Agent names the Computer, the runtime and, if it is the model,
+  // the model, as the reference does.
+  const names = { computer: "Studio Mac", runtime: "Claude Code", model: "sonnet" };
+  const runtimeRefusal = (errorId: string) =>
+    agentMigrationRefusal(new AppError("INVALID_INPUT", { errorId }), names);
+  expect(runtimeRefusal("agent-migration-runtime-unconfirmed")).toEqual({
+    message: m.agent_migration_error_runtime_unconfirmed(names),
     fixAt: "target",
   });
+  expect(runtimeRefusal("agent-migration-runtime-missing")).toEqual({
+    message: m.agent_migration_error_runtime_missing(names),
+    fixAt: "target",
+  });
+  expect(runtimeRefusal("agent-migration-runtime-not-shared")).toEqual({
+    message: m.agent_migration_error_runtime_not_shared(names),
+    fixAt: "target",
+  });
+  expect(runtimeRefusal("agent-migration-model-missing")).toEqual({
+    message: m.agent_migration_error_model_missing(names),
+    fixAt: "target",
+  });
+  expect(m.agent_migration_error_runtime_missing(names)).toContain("Studio Mac");
+  expect(m.agent_migration_error_runtime_missing(names)).toContain("Claude Code");
+  expect(m.agent_migration_error_model_missing(names)).toContain("sonnet");
   // A Computer that is gone is fixed on the Computers page, not on its own.
   expect(refusal("agent-migration-target-unavailable", "INVALID_INPUT")).toEqual({
     message: m.agent_migration_error_target_unavailable(),

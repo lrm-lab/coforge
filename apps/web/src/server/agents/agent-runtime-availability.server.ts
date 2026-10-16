@@ -29,6 +29,35 @@ export function agentRuntimeSelectionIsAvailable(
   return inventory.models.some((value) => modelMatches(value, config));
 }
 
+/** Why a Computer cannot run an Agent with this selection, told apart as the reference Computer
+ * tells its refusals apart: not in the Workspace; no runtime reported yet; this runtime not among
+ * those reported; reported but not shared with this person; or offered without the model. */
+export type AgentRuntimeSelectionRefusal =
+  | "not_connected"
+  | "runtime_unconfirmed"
+  | "runtime_missing"
+  | "runtime_not_shared"
+  | "model_missing";
+
+/**
+ * Why `agentRuntimeSelectionIsAvailable` refuses this selection, or null when it does not.
+ * `reported` is every runtime the Computer reported, shared or not; `providers` only those this
+ * person may select there.
+ */
+export function agentRuntimeSelectionRefusal(
+  config: AgentRuntimeSelection,
+  inventory: Parameters<typeof agentRuntimeSelectionIsAvailable>[1] & {
+    reported: ReadonlySet<RuntimeProvider>;
+  },
+): AgentRuntimeSelectionRefusal | null {
+  if (!inventory.connected) return "not_connected";
+  if (agentRuntimeSelectionIsAvailable(config, inventory)) return null;
+  if (inventory.reported.size === 0) return "runtime_unconfirmed";
+  if (!providerIsSelectable(config.provider, inventory.reported)) return "runtime_missing";
+  if (!providerIsSelectable(config.provider, inventory.providers)) return "runtime_not_shared";
+  return "model_missing";
+}
+
 function providerIsSelectable(
   provider: RuntimeProvider,
   providers: ReadonlySet<RuntimeProvider>,

@@ -5,7 +5,7 @@ import {
   type AgentRuntimeConfig,
 } from "#src/server/agents/agent-runtime-config.server";
 import {
-  computerCanRunAgent,
+  computerRuntimeRefusal,
   storedRuntimeSelection,
 } from "#src/server/agents/computer-runtime-availability.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -119,19 +119,20 @@ export function agentMigrationRequests(db: PrismaClient) {
       return computer?.displayName || computer?.name || null;
     },
     // The same check that create and edit place an Agent with, on the Agent's stored selection.
-    canRunAgent: async (workspaceId, agentId, computerId) => {
+    runtimeRefusal: async (workspaceId, agentId, computerId) => {
       const agent = await db.agent.findFirst({
         where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
         select: { ownerId: true, runtimeConfig: true },
       });
-      if (!agent) return false;
+      // No live Agent, or no runtime it could name: nothing the target could run.
+      if (!agent) return "runtime_missing";
       let config: AgentRuntimeConfig;
       try {
         config = parseAgentRuntimeConfig(agent.runtimeConfig);
       } catch {
-        return false;
+        return "runtime_missing";
       }
-      return computerCanRunAgent(
+      return computerRuntimeRefusal(
         db,
         { workspaceId, userId: agent.ownerId },
         computerId,

@@ -95,11 +95,32 @@ export function agentMigrationStatusLine(
 /** Where a refusal can be fixed: one of the two Computers' pages, or the Computers page. */
 export type AgentMigrationFixAt = "source" | "target" | "computers" | null;
 
-const REFUSALS: Record<string, { message: () => string; fixAt: AgentMigrationFixAt }> = {
+/** What a refusal names: the target Computer, and the Agent's runtime and model. */
+export type AgentMigrationRefusalNames = { computer: string; runtime: string; model: string };
+
+const NO_NAMES: AgentMigrationRefusalNames = { computer: "", runtime: "", model: "" };
+
+const REFUSALS: Record<
+  string,
+  { message: (names: AgentMigrationRefusalNames) => string; fixAt: AgentMigrationFixAt }
+> = {
   "agent-migrating": { message: m.agent_migration_error_already_moving, fixAt: null },
   "agent-migration-unplaced": { message: m.agent_migration_error_unplaced, fixAt: null },
-  "agent-migration-runtime-unavailable": {
-    message: m.agent_migration_error_runtime_unavailable,
+  // Why the target cannot run the Agent, told apart as the reference Computer tells them apart.
+  "agent-migration-runtime-unconfirmed": {
+    message: m.agent_migration_error_runtime_unconfirmed,
+    fixAt: "target",
+  },
+  "agent-migration-runtime-missing": {
+    message: m.agent_migration_error_runtime_missing,
+    fixAt: "target",
+  },
+  "agent-migration-runtime-not-shared": {
+    message: m.agent_migration_error_runtime_not_shared,
+    fixAt: "target",
+  },
+  "agent-migration-model-missing": {
+    message: m.agent_migration_error_model_missing,
     fixAt: "target",
   },
   "agent-migration-source-outdated": {
@@ -132,15 +153,21 @@ function knownRefusal(cause: unknown) {
 }
 
 /** Why a move or its cancel was refused. */
-export function agentMigrationErrorMessage(cause: unknown) {
+export function agentMigrationErrorMessage(
+  cause: unknown,
+  names: AgentMigrationRefusalNames = NO_NAMES,
+) {
   if (isAppErrorCode(cause, "ACCESS_DENIED")) return m.agent_form_not_authorized();
-  return knownRefusal(cause)?.message() ?? m.agent_migration_error_generic();
+  return knownRefusal(cause)?.message(names) ?? m.agent_migration_error_generic();
 }
 
 /** Why a move was refused, and which page can fix it, so the dialog can link there. */
-export function agentMigrationRefusal(cause: unknown) {
+export function agentMigrationRefusal(
+  cause: unknown,
+  names: AgentMigrationRefusalNames = NO_NAMES,
+) {
   return {
-    message: agentMigrationErrorMessage(cause),
+    message: agentMigrationErrorMessage(cause, names),
     fixAt: knownRefusal(cause)?.fixAt ?? null,
   };
 }

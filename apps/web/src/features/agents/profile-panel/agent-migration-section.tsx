@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, SwitchHorizontal01 } from "@untitledui/icons";
 
@@ -22,6 +23,7 @@ import {
   isAgentMigrationShown,
   type AgentMigrationFixAt,
 } from "#src/features/agents/agent-migration";
+import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { useInvalidateAgentProfile } from "./agent-profile-queries";
 import {
   cancelAgentMigration,
@@ -209,12 +211,17 @@ export function AgentMigrationSection({
   agentName,
   currentComputerId,
   canMove,
+  runtime,
+  model,
 }: {
   agentId: string;
   agentName: string;
   currentComputerId: string | null;
   /** Whoever manages the Agent moves it: its owner or a Workspace owner/admin (`AgentMigrationRequests`). */
   canMove: boolean;
+  /** The Agent's runtime and model, which a refusal of the target names. */
+  runtime: RuntimeProvider;
+  model: string;
 }) {
   const queryClient = useQueryClient();
   const workspaceSlug = useWorkspaceSlug();
@@ -278,7 +285,15 @@ export function AgentMigrationSection({
         await refresh();
       } catch (cause) {
         // The dialog stays open: it says why, links to where to fix it, and offers to try again.
-        setRefusal({ ...agentMigrationRefusal(cause), targetComputerId });
+        setRefusal({
+          ...agentMigrationRefusal(cause, {
+            computer:
+              targets.find(({ id }) => id === targetComputerId)?.name || m.agent_computer_unnamed(),
+            runtime: runtimeProviderLabel(runtime),
+            model,
+          }),
+          targetComputerId,
+        });
         // A Stop can succeed and the response still fail. Refresh so an active move
         // shows its progress and Cancel instead of the stale idle status.
         await refresh().catch(() => undefined);

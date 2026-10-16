@@ -1,11 +1,12 @@
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import type { AgentRuntimeConfig } from "./agent-runtime-config.server";
 import {
-  agentRuntimeSelectionIsAvailable,
+  agentRuntimeSelectionRefusal,
   type AgentRuntimeSelection,
+  type AgentRuntimeSelectionRefusal,
 } from "./agent-runtime-availability.server";
 
 /**
@@ -15,16 +16,27 @@ import {
  */
 export async function computerCanRunAgent(
   db: PrismaClient,
-  { workspaceId, userId }: { workspaceId: string; userId: string },
+  principal: { workspaceId: string; userId: string },
   computerId: string,
   config: AgentRuntimeSelection,
 ): Promise<boolean> {
+  return (await computerRuntimeRefusal(db, principal, computerId, config)) === null;
+}
+
+/** Why `computerCanRunAgent` refuses, or null when the Computer can run the Agent. */
+export async function computerRuntimeRefusal(
+  db: PrismaClient,
+  { workspaceId, userId }: { workspaceId: string; userId: string },
+  computerId: string,
+  config: AgentRuntimeSelection,
+): Promise<AgentRuntimeSelectionRefusal | null> {
   const runtimeVisibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
   const connection = await db.workspaceComputer.findFirst({
     where: { workspaceId, computerId },
     select: {
       computer: {
         select: {
+          runtimes: { where: { workspaceId }, select: { provider: true } },
           modelCatalogs: {
             where: {
               workspaceId,
@@ -50,8 +62,11 @@ export async function computerCanRunAgent(
   const models = connection?.computer.modelCatalogs.flatMap((catalog) =>
     Array.isArray(catalog.models) ? catalog.models : [],
   );
-  return agentRuntimeSelectionIsAvailable(config, {
+  return agentRuntimeSelectionRefusal(config, {
     connected: Boolean(connection),
+    reported: new Set(
+      connection?.computer.runtimes.map(({ provider }) => provider as RuntimeProvider),
+    ),
     providers,
     models: models ?? [],
   });

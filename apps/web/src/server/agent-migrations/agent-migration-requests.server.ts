@@ -3,6 +3,7 @@ import {
   AgentMigrationSourceStopError,
   type AgentMigrationOrchestrator,
 } from "./agent-migration-orchestrator.server";
+import type { AgentRuntimeSelectionRefusal } from "#src/server/agents/agent-runtime-availability.server";
 import type { AgentMigrationRequestRefusal, AgentMigrations } from "./agent-migrations.server";
 
 /**
@@ -31,6 +32,15 @@ const READINESS_REFUSALS = {
     offline: "agent-migration-target-offline",
   },
 } as const;
+
+/** Why the target cannot run the Agent, as the dialog names it; one Computer page fixes each. */
+const RUNTIME_REFUSALS: Record<AgentRuntimeSelectionRefusal, string> = {
+  not_connected: "agent-migration-target-unavailable",
+  runtime_unconfirmed: "agent-migration-runtime-unconfirmed",
+  runtime_missing: "agent-migration-runtime-missing",
+  runtime_not_shared: "agent-migration-runtime-not-shared",
+  model_missing: "agent-migration-model-missing",
+};
 
 /** The `AppError` each refusal of a request reaches its asker as. */
 function refusalError(code: AgentMigrationRequestRefusal) {
@@ -63,8 +73,12 @@ export class AgentMigrationRequests {
       isWorkspaceAdmin(workspaceId: string, userId: string): Promise<boolean>;
       /** A Computer's name as people see it, or null when it has none. */
       computerName(computerId: string): Promise<string | null>;
-      /** Whether the Computer can run the Agent's runtime for its owner. */
-      canRunAgent(workspaceId: string, agentId: string, computerId: string): Promise<boolean>;
+      /** Why the Computer cannot run the Agent's runtime for its owner, or null when it can. */
+      runtimeRefusal(
+        workspaceId: string,
+        agentId: string,
+        computerId: string,
+      ): Promise<AgentRuntimeSelectionRefusal | null>;
       /** The Computer the Agent is placed on now, or null when it has none. */
       agentComputer(workspaceId: string, agentId: string): Promise<string | null>;
       computerReadiness(workspaceId: string, computerId: string): Promise<AgentMigrationReadiness>;
@@ -126,10 +140,13 @@ export class AgentMigrationRequests {
         errorId: READINESS_REFUSALS.target[target],
       });
     // Before anything stops: an Agent moved where its runtime is missing could not start there.
-    if (
-      !(await this.deps.canRunAgent(principal.workspaceId, input.agentId, input.targetComputerId))
-    )
-      throw new AppError("INVALID_INPUT", { errorId: "agent-migration-runtime-unavailable" });
+    const runtimeRefusal = await this.deps.runtimeRefusal(
+      principal.workspaceId,
+      input.agentId,
+      input.targetComputerId,
+    );
+    if (runtimeRefusal)
+      throw new AppError("INVALID_INPUT", { errorId: RUNTIME_REFUSALS[runtimeRefusal] });
     let started: Awaited<ReturnType<AgentMigrationOrchestrator["request"]>>;
     try {
       started = await this.deps.orchestrator().request({

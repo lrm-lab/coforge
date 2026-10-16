@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { AgentMigrations } from "#src/server/agent-migrations/agent-migrations.server";
 import { AgentMigrationRequests } from "#src/server/agent-migrations/agent-migration-requests.server";
 import { AgentMigrationSourceStopError } from "#src/server/agent-migrations/agent-migration-orchestrator.server";
+import type { AgentRuntimeSelectionRefusal } from "#src/server/agents/agent-runtime-availability.server";
 import { storedRuntimeSelection } from "#src/server/agents/computer-runtime-availability.server";
 import { memoryStore } from "./helpers/agent-migration-memory-store";
 
@@ -15,7 +16,7 @@ function setup(
   options: {
     available?: boolean;
     fails?: "stop" | "lease";
-    runtimeMissing?: boolean;
+    runtimeRefusal?: AgentRuntimeSelectionRefusal;
     readiness?: Record<string, Readiness>;
   } = {},
 ) {
@@ -38,7 +39,7 @@ function setup(
     isWorkspaceAdmin: async (_workspaceId, userId) => userId === "user-3",
     computerName: async (computerId) =>
       ({ "computer-a": "Computer A", "computer-b": "Studio Mac" })[computerId] ?? null,
-    canRunAgent: async () => !options.runtimeMissing,
+    runtimeRefusal: async () => options.runtimeRefusal ?? null,
     agentComputer: async () => "computer-a",
     computerReadiness: async (_workspaceId, computerId) =>
       options.readiness?.[computerId] ?? "ready",
@@ -159,15 +160,21 @@ test("a failure after the source stopped is not reported as a source that never 
   ).rejects.toThrow("centrifugo is unreachable");
 });
 
-test("a Computer that cannot run the Agent's runtime is refused before anything stops", async () => {
-  const { requests, requested } = setup({ runtimeMissing: true });
-  await expect(
-    requests.request(owner, { agentId: "agent-1", targetComputerId: "computer-b" }),
-  ).rejects.toMatchObject({
-    code: "INVALID_INPUT",
-    errorId: "agent-migration-runtime-unavailable",
-  });
-  expect(requested).toEqual([]);
+test("a Computer that cannot run the Agent's runtime is refused before anything stops, saying why", async () => {
+  const cases: [AgentRuntimeSelectionRefusal, string][] = [
+    ["runtime_unconfirmed", "agent-migration-runtime-unconfirmed"],
+    ["runtime_missing", "agent-migration-runtime-missing"],
+    ["runtime_not_shared", "agent-migration-runtime-not-shared"],
+    ["model_missing", "agent-migration-model-missing"],
+    ["not_connected", "agent-migration-target-unavailable"],
+  ];
+  for (const [runtimeRefusal, errorId] of cases) {
+    const { requests, requested } = setup({ runtimeRefusal });
+    await expect(
+      requests.request(owner, { agentId: "agent-1", targetComputerId: "computer-b" }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId });
+    expect(requested).toEqual([]);
+  }
 });
 
 test("a move checks the target against the Agent's stored selection, key included", () => {
@@ -206,7 +213,7 @@ test("reading a move needs nothing it would take to start one", async () => {
     agentOwner: async () => "user-1",
     isWorkspaceAdmin: async () => false,
     computerName: async () => null,
-    canRunAgent: async () => true,
+    runtimeRefusal: async () => null,
     agentComputer: async () => "computer-a",
     computerReadiness: async () => "ready",
     otherComputers: async () => [],
@@ -236,7 +243,7 @@ test("a Computer that is offline or too old to move Agents is refused before any
 test("the dialog lists every other Computer, ready or not; the request says which cannot take part", async () => {
   const { requests } = setup({
     readiness: { "computer-a": "outdated", "computer-c": "offline" },
-    runtimeMissing: true,
+    runtimeRefusal: "runtime_missing",
   });
   expect(await requests.targets(owner, "agent-1")).toEqual([
     { id: "computer-b", name: "Studio Mac" },
