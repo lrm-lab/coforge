@@ -43,12 +43,6 @@ export function extractActionCardJson(raw: string): string {
 
 /** Reads and parses the JSON action body from stdin text; throws a typed `CliError` on failure. */
 export function parseActionCardInput(raw: string): unknown {
-  if (raw.trim().length === 0)
-    throw new CliError({
-      code: "MISSING_ACTION",
-      message: missingActionMessage(),
-      retryable: false,
-    });
   const json = extractActionCardJson(raw);
   if (json.length === 0)
     throw new CliError({
