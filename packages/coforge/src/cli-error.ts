@@ -146,23 +146,13 @@ function discardedDraftContent(details: unknown): string | undefined {
 export function renderCliErrorJson(error: CliError): string {
   const proxy = error.proxy
     ? {
-        ...(error.proxy.failureClass !== undefined
-          ? { failure_class: error.proxy.failureClass }
-          : {}),
-        ...(error.proxy.causeCode !== undefined ? { cause_code: error.proxy.causeCode } : {}),
-        ...(error.proxy.routeFamily !== undefined ? { route_family: error.proxy.routeFamily } : {}),
-        ...(error.proxy.upstreamLayer !== undefined
-          ? { upstream_layer: error.proxy.upstreamLayer }
-          : {}),
-        ...(error.proxy.upstreamStatus !== undefined
-          ? { upstream_status: error.proxy.upstreamStatus }
-          : {}),
-        ...(error.proxy.responseStarted !== undefined
-          ? { response_started: error.proxy.responseStarted }
-          : {}),
-        ...(error.proxy.responseComplete !== undefined
-          ? { response_complete: error.proxy.responseComplete }
-          : {}),
+        failure_class: error.proxy.failureClass,
+        cause_code: error.proxy.causeCode,
+        route_family: error.proxy.routeFamily,
+        upstream_layer: error.proxy.upstreamLayer,
+        upstream_status: error.proxy.upstreamStatus,
+        response_started: error.proxy.responseStarted,
+        response_complete: error.proxy.responseComplete,
       }
     : undefined;
   return JSON.stringify({
@@ -170,15 +160,13 @@ export function renderCliErrorJson(error: CliError): string {
       message: error.message,
       code: error.code,
       retryable: error.retryable ?? null,
-      ...(error.effect !== undefined ? { effect: error.effect } : {}),
-      ...(error.draftSaved !== undefined ? { draft_saved: error.draftSaved } : {}),
-      ...(error.correlationId !== undefined ? { correlation_id: error.correlationId } : {}),
-      ...(proxy ? { proxy } : {}),
-      ...(error.suggestedNextAction !== undefined
-        ? { next_action: error.suggestedNextAction }
-        : {}),
+      effect: error.effect,
+      draft_saved: error.draftSaved,
+      correlation_id: error.correlationId,
+      proxy,
+      next_action: error.suggestedNextAction,
     },
-    ...(error.details !== undefined ? { details: error.details } : {}),
+    details: error.details,
   });
 }
 
