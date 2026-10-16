@@ -131,9 +131,10 @@ export function ChannelSettingsPanel({
     if (info.dirty) setUnsavedPromptOpen(true);
     else close();
   }
-  // Stable, so the memoized roster rows do not re-render with the panel.
-  const openProfile = useCallback((next: RosterProfile) => {
-    setProfileTab(undefined);
+  // Stable, so the memoized roster rows do not re-render with the panel. `tab` comes from the
+  // Agent card's Recent activity link (the roster's peek cards); no tab means the default one.
+  const openProfile = useCallback((next: RosterProfile, tab?: AgentProfileTabId) => {
+    setProfileTab(tab);
     setProfile(next);
   }, []);
   const profileBack = useMemo(

@@ -49,6 +49,7 @@ import {
   type ChannelCandidate,
 } from "./channel-member-picker";
 import { useChannelMembers, type ChannelMembers } from "./channel-members-query";
+import type { AgentProfileTab as AgentProfileTabId } from "#src/features/agents/profile-panel/profile-panel-search";
 import { MemberProfileCard } from "./channel-header-people";
 import { channelMembersQueryKey } from "./conversation-query-keys";
 import { mentionKey } from "./mention-text";
@@ -138,7 +139,9 @@ export type RosterProfile = { kind: "agent" | "user"; id: string };
 export type RosterState = {
   search: string;
   onSearchChange: (search: string) => void;
-  onOpenProfile: (profile: RosterProfile) => void;
+  /** `tab` carries a requested profile tab (e.g. the Agent card's Recent activity link); without
+   * it the panel opens the profile on its default tab. */
+  onOpenProfile: (profile: RosterProfile, tab?: AgentProfileTabId) => void;
   /** The member whose profile was just left: their row takes focus. */
   returnFocus?: RosterProfile;
 };
@@ -323,7 +326,7 @@ const MemberRow = memo(function MemberRow({
   canRemove: boolean;
   onToggleRole: (member: Member) => void;
   onRemove: (member: Member) => void;
-  onOpenProfile: (profile: RosterProfile) => void;
+  onOpenProfile: (profile: RosterProfile, tab?: AgentProfileTabId) => void;
   autoFocus: boolean;
 }) {
   const hasActions = canChangeRole || canRemove;
@@ -331,7 +334,7 @@ const MemberRow = memo(function MemberRow({
   // profile card; pressing it (or the name) opens the profile. Avatar and name are separate
   // press targets — a hover-card trigger nested inside the row's button would nest buttons.
   const avatarTriggerClassName =
-    "shrink-0 rounded-[7px] outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2";
+    "shrink-0 rounded-[0.4375rem] outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2";
   const namePress = () => onOpenProfile({ kind: member.kind, id: member.id });
   const nameBlock = (
     <span className="min-w-0 text-left">
@@ -364,7 +367,7 @@ const MemberRow = memo(function MemberRow({
             />
           }
           triggerClassName={avatarTriggerClassName}
-          onOpenProfile={(agentId) => onOpenProfile({ kind: "agent", id: agentId })}
+          onOpenProfile={(agentId, tab) => onOpenProfile({ kind: "agent", id: agentId }, tab)}
         />
       ) : (
         <HoverPopover
