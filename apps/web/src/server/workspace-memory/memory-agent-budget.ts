@@ -5,7 +5,6 @@
 
 import {
   MEMORY_OFFER_BUDGET_PER_TRIGGER,
-  MEMORY_READ_BUDGET_PER_TRIGGER,
   OPENVIKING_CANDIDATE_LIMIT_MAX,
   type OpenVikingAgentCommand,
 } from "@lrm/coforge-sdk/agent";
@@ -19,17 +18,13 @@ export class MemoryAgentBudgetError extends Error {
   }
 }
 
-/** Per-triggering-message budget. Same limits as A1's MemoryAgentTurnBudget. */
+/** Per-trigger Offer budget and read accounting. Reads have no per-trigger cap. */
 export class MemoryAgentTriggerBudget {
   #reads = 0;
   #offers = 0;
 
   consume(command: OpenVikingAgentCommand): void {
     if (MEMORY_READ_OPS.has(command.op)) {
-      if (this.#reads >= MEMORY_READ_BUDGET_PER_TRIGGER)
-        throw new MemoryAgentBudgetError(
-          "memory read budget exhausted for this triggering message",
-        );
       const limit = "limit" in command ? command.limit : undefined;
       if (limit !== undefined && limit > OPENVIKING_CANDIDATE_LIMIT_MAX)
         throw new MemoryAgentBudgetError("candidate limit exceeded");

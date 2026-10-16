@@ -14,7 +14,6 @@ export const OPENVIKING_AGENT_PROTOCOL = "coforge.openviking.agent.v1" as const;
 /** Fenced runtime tool-profile kind. Distinct from Workspace Memory Profile persistence. */
 export const OPENVIKING_TOOL_PROFILE = "openviking-memory" as const;
 
-export const MEMORY_READ_BUDGET_PER_TRIGGER = 3 as const;
 export const MEMORY_OFFER_BUDGET_PER_TRIGGER = 1 as const;
 export const OPENVIKING_CANDIDATE_LIMIT_MAX = 10 as const;
 

@@ -21,7 +21,6 @@ import {
   isMemoryAgentToolProfile,
   listMissingOpenVikingFields,
   MEMORY_OFFER_BUDGET_PER_TRIGGER,
-  MEMORY_READ_BUDGET_PER_TRIGGER,
   OPENVIKING_AGENT_PROTOCOL,
   OPENVIKING_CANDIDATE_LIMIT_MAX,
   OPENVIKING_TOOL_NAMES,
@@ -52,7 +51,7 @@ export type MemoryAgentProxy = {
   post(path: string, body: unknown): Promise<unknown>;
 };
 
-/** Per-triggering-message budget for the Memory Agent fence. */
+/** Per-trigger Offer budget and read accounting for the Memory Agent fence. */
 export class MemoryAgentTurnBudget {
   #reads = 0;
   #offers = 0;
@@ -64,8 +63,6 @@ export class MemoryAgentTurnBudget {
 
   consume(command: OpenVikingAgentCommand): void {
     if (MEMORY_READ_OPS.has(command.op)) {
-      if (this.#reads >= MEMORY_READ_BUDGET_PER_TRIGGER)
-        throw new Error("memory read budget exhausted for this triggering message");
       const limit = "limit" in command ? command.limit : undefined;
       if (limit !== undefined && limit > OPENVIKING_CANDIDATE_LIMIT_MAX)
         throw new Error("candidate limit exceeded");
