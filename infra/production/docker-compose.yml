@@ -62,6 +62,17 @@ services:
       AUTHING_REDIRECT_URI: https://coforge.cn/auth/callback
       COFORGE_SESSION_SECRET_FILE: /run/secrets/coforge_session_secret
       COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE: /run/secrets/coforge_agent_credential_encryption_key
+      # Production GitHub App (docs/operations/production/github-connection.md). The App id and
+      # client id are public; the slug, bot user id, and the three secrets come from the host's
+      # secrets directory, and an absent client secret leaves the integration unconfigured.
+      COFORGE_GITHUB_APP_ID: "5345306"
+      COFORGE_GITHUB_CLIENT_ID: Iv23licriUAnCqt6MlHg
+      COFORGE_GITHUB_APP_SLUG: ${COFORGE_GITHUB_APP_SLUG:-}
+      COFORGE_GITHUB_APP_BOT_USER_ID: ${COFORGE_GITHUB_APP_BOT_USER_ID:-}
+      COFORGE_GITHUB_CALLBACK_URL: https://coforge.cn/api/integrations/github/callback
+      COFORGE_GITHUB_CLIENT_SECRET_FILE: /run/secrets/coforge_github_client_secret
+      COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY_FILE: /run/secrets/coforge_github_credential_encryption_key
+      COFORGE_GITHUB_WEBHOOK_SECRET_FILE: /run/secrets/coforge_github_webhook_secret
       COFORGE_CENTRIFUGO_API_URL: http://centrifugo:8000/api
       COFORGE_CENTRIFUGO_API_KEY: ${COFORGE_CENTRIFUGO_API_KEY:?deploy script writes .env}
       COFORGE_CENTRIFUGO_PROXY_SECRET: ${COFORGE_CENTRIFUGO_PROXY_SECRET:?deploy script writes .env}
@@ -123,6 +134,18 @@ services:
         gid: "1000"
         mode: 0400
       - source: coforge_agent_credential_encryption_key
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: coforge_github_client_secret
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: coforge_github_credential_encryption_key
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: coforge_github_webhook_secret
         uid: "1000"
         gid: "1000"
         mode: 0400
@@ -231,6 +254,12 @@ secrets:
     environment: COFORGE_SESSION_SECRET
   coforge_agent_credential_encryption_key:
     environment: COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY
+  coforge_github_client_secret:
+    environment: COFORGE_GITHUB_CLIENT_SECRET
+  coforge_github_credential_encryption_key:
+    environment: COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY
+  coforge_github_webhook_secret:
+    environment: COFORGE_GITHUB_WEBHOOK_SECRET
   coforge_web_push_private_key:
     environment: COFORGE_WEB_PUSH_PRIVATE_KEY
   # `environment:` like every other secret the Web container reads: Compose writes the value to

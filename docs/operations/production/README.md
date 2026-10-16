@@ -29,9 +29,10 @@ over the VPC, so the Compose project defines no database or cache containers.
   published by `release-production.yml` and `release-installer-production.yml`
   ([runbook](computer-release.md)).
 
-Not yet enabled in production: GitHub integration (the Web code returns no
-GitHub client when `COFORGE_GITHUB_CLIENT_ID` is unset), OpenTelemetry tracing,
-and Server-Timing.
+- **GitHub App:** `CoForge App` (slug `coforge-app`) in the `lrm-lab` organization
+  ([connection runbook](github-connection.md)).
+
+Not yet enabled in production: OpenTelemetry tracing and Server-Timing.
 
 ## Operator bootstrap
 
@@ -82,6 +83,11 @@ and Server-Timing.
 | `coforge_web_push_public_key` | VAPID public key (P-256). |
 | `coforge_web_push_private_key` | VAPID private key (P-256). |
 | `coforge_file_delivery_key` | CDN URL-auth primary key for `files.coforge.cn`. Not an OSS credential. |
+| `coforge_github_client_secret` | Optional: GitHub App client secret. Absent, the GitHub integration stays unconfigured. Write it together with the next two files ([runbook](github-connection.md)). |
+| `coforge_github_credential_encryption_key` | GitHub credential encryption key, 64 hex characters (`openssl rand -hex 32`). Never replace it. |
+| `coforge_github_app_slug` | GitHub App slug from `https://github.com/apps/<slug>`. |
+| `coforge_github_webhook_secret` | Optional: the GitHub App webhook secret (`openssl rand -hex 32`). |
+| `coforge_github_app_bot_user_id` | Optional: the App's bot user id, for the Agent commit `Co-authored-by` trailer. |
 
 Generate the VAPID pair once in a controlled operator environment and keep it
 in the approved secret store. Do not generate it on each host bootstrap.
