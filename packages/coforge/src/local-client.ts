@@ -223,15 +223,9 @@ function proxyTransportFailure(operation: string, target: string | undefined): C
   });
 }
 
-function manualFailedCode(errorCode: string | undefined): string {
-  return errorCode ? errorCode.toUpperCase() : "MANUAL_FAILED";
-}
-
 /**
- * GETs one of the two Agent Manual routes through the local daemon proxy. Unlike
- * `call` above (the multiplexed `messages` operation), the Manual routes always answer a domain
- * error as JSON `{ ok: false, errorCode, error }`, so that `errorCode` becomes the `CliError`
- * code directly, and a `knowledge_not_found` gets the "browse the index" guidance.
+ * The Manual routes use the shared domain envelope, with "browse the index" guidance when a
+ * topic cannot be found.
  */
 async function manualRequest<T>(
   proxyEndpoint: (path: string) => URL,
@@ -241,35 +235,16 @@ async function manualRequest<T>(
   query: Record<string, string>,
   decode: (value: unknown) => T,
 ): Promise<T> {
-  requireProxySetup("manual", context, proxyUrl);
-  const endpoint = proxyEndpoint(path);
-  for (const [key, value] of Object.entries(query)) endpoint.searchParams.set(key, value);
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      method: "GET",
-      headers: { authorization: `Bearer ${context}` },
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
-    throw new CliError({
-      code: "MANUAL_FAILED",
-      message: "agent proxy request failed (network or timeout)",
-      retryable: false,
-    });
-  }
-  const rawBody: unknown = await response.json().catch(() => undefined);
-  if (!response.ok) {
-    const errorBody = decodeAgentManualErrorResponse(rawBody);
-    throw new CliError({
-      code: manualFailedCode(errorBody?.errorCode),
-      message: errorBody?.error ?? `HTTP ${response.status}`,
-      retryable: false,
-      suggestedNextAction:
-        errorBody?.errorCode === "knowledge_not_found" ? MANUAL_NOT_FOUND_NEXT_ACTION : undefined,
-    });
-  }
-  return decode(rawBody);
+  return envelopeRequest(
+    proxyEndpoint,
+    context,
+    proxyUrl,
+    { method: "GET", path, query },
+    decode,
+    decodeAgentManualErrorResponse,
+    "manual",
+    (code) => (code === "knowledge_not_found" ? MANUAL_NOT_FOUND_NEXT_ACTION : undefined),
+  );
 }
 
 /**
@@ -309,9 +284,9 @@ async function versionRequest(
 
 /**
  * Calls a route that always answers a domain error as JSON `{ ok: false, errorCode, error }`
- * (same convention as `manualRequest` above, generalized so `user info`, `profile` and `app
- * config` do not duplicate it): `errorCode` becomes the `CliError` code directly. A GET carries
- * `query`; a route that takes a JSON body carries `body`.
+ * for Manual, user info, profile and App config: `errorCode` becomes the `CliError` code directly.
+ * A GET carries `query`; a route that takes a JSON body carries `body`. A route may supply
+ * guidance for its decoded error code without duplicating the request or error handling.
  */
 async function envelopeRequest<T>(
   proxyEndpoint: (path: string) => URL,
@@ -321,6 +296,7 @@ async function envelopeRequest<T>(
   decode: (value: unknown) => T,
   decodeError: (value: unknown) => { errorCode: string; error: string } | undefined,
   operation: string,
+  nextAction?: (errorCode: string | undefined) => string | undefined,
 ): Promise<T> {
   requireProxySetup(operation, context, proxyUrl);
   const endpoint = proxyEndpoint(request.path);
@@ -354,6 +330,7 @@ async function envelopeRequest<T>(
         : operationFailedCode(operation),
       message: errorBody?.error ?? `HTTP ${response.status}`,
       retryable: false,
+      suggestedNextAction: nextAction?.(errorBody?.errorCode),
     });
   }
   return decode(rawBody);
