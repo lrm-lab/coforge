@@ -3,6 +3,7 @@ import type { OpenVikingAdmittedSessionMessage } from "#src/server/openviking/ty
 
 export type DiagnosisScope = {
   requestId: string;
+  triggerKind?: "explicit_request" | "task_state";
   conversationId: string;
   targetAgentId: string;
   question: string;
@@ -75,7 +76,7 @@ export function createExplicitMemoryDiagnosis(deps: {
       typeof report.reason !== "string"
     )
       throw new Error("diagnosis_report_invalid");
-    const body = `四角色诊断完成（Builder → Critic/Refiner → Reader）。\n${report.reason}\n\n证据范围：截至求助消息的有界群聊快照；未包含 task 的完整私有工具轨迹。未提供已验证的任务成败，不自动执行修复。\n报告：${result.report_uri}`;
+    const body = `四角色诊断完成（Builder → Critic/Refiner → Reader）。\n${report.reason}\n\n证据范围：截至诊断锚点消息的有界群聊快照；未包含 task 的完整私有工具轨迹。未提供已验证的任务成败，不自动执行修复。\n报告：${result.report_uri}`;
     const published = await deps.publish({
       workspaceId: input.workspaceId,
       agentId: input.agentId,

@@ -176,14 +176,16 @@ test("the fixed transport guidance stays within a 3KB budget", () => {
   expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(3072);
 });
 
-test("the openviking-memory profile requires an @memory query and never mentions tenant tokens", () => {
+test("the openviking-memory profile queries before retrieval Offers and protects tenant secrets", () => {
   const fenced = buildCoforgeAgentInstructions({
     agentWorkspaceDirectory: AGENT_WORKSPACES[0],
     toolProfile: "openviking-memory",
     memoryOfferOnly: false,
   });
   expect(fenced).toContain("## Team memory (Memory Agent)");
-  expect(fenced).toContain("Other explicit @memory questions require a memory query");
+  expect(fenced).toContain(
+    "Retrieval questions require a memory query before an Offer; diagnosis questions use memory_diagnose.",
+  );
   expect(fenced).toContain("Use message_read with the exact target");
   expect(fenced).not.toContain("Use message_check or message_read");
   expect(fenced).not.toContain("Bearer");
@@ -268,7 +270,9 @@ test("the openviking-memory fence names reads and server-owned memory controls",
   expect(listing).not.toContain("ov_search_context");
   expect(section).toContain("memory_diagnose");
   for (const name of CAUSAL_ONLY_TOOLS) expect(listing).not.toContain(name);
-  expect(section).toContain("Other explicit @memory questions require a memory query");
+  expect(section).toContain(
+    "Retrieval questions require a memory query before an Offer; diagnosis questions use memory_diagnose.",
+  );
   expect(section).toContain("cannot write files");
   expect(section).toContain("commit sessions");
   expect(section).toContain("skills or ACLs");

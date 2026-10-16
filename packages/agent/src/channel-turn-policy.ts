@@ -12,14 +12,22 @@ export function installChannelTurnPolicy(session: AgentSession) {
     const decision = await previous?.(turn, signal);
     if (decision?.action === "end") return decision;
     const published = turn.toolResults.some((result) => {
-      if (result.isError || result.toolName !== OPENVIKING_TOOL_NAMES.offer) return false;
+      if (
+        result.isError ||
+        (result.toolName !== OPENVIKING_TOOL_NAMES.offer &&
+          result.toolName !== OPENVIKING_TOOL_NAMES.diagnose)
+      )
+        return false;
       return result.content.some((item) => {
         if (item.type !== "text") return false;
         try {
           const receipt = JSON.parse(item.text);
           return (
             receipt?.protocol === OPENVIKING_AGENT_PROTOCOL &&
-            receipt.op === "offer" &&
+            ((result.toolName === OPENVIKING_TOOL_NAMES.offer && receipt.op === "offer") ||
+              (result.toolName === OPENVIKING_TOOL_NAMES.diagnose &&
+                receipt.op === "diagnose" &&
+                receipt.status === "completed")) &&
             receipt.published === true &&
             typeof receipt.messageId === "string" &&
             receipt.messageId.length > 0

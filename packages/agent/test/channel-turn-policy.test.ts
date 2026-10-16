@@ -284,3 +284,64 @@ test("useful work between empty checks resets idle detection", async () => {
     await rm(root, { recursive: true, force: true });
   }
 }, 10_000);
+
+test("a published autonomous diagnosis settles the native turn without another model request", async () => {
+  const root = await mkdtemp(join(tmpdir(), "coforge-diagnosis-settled-"));
+  let requests = 0;
+  const proxy = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const command = (await request.json()) as { operationId: string; messageId: string };
+      return Response.json({
+        protocol: "coforge.openviking.agent.v1",
+        op: "diagnose",
+        operationId: command.operationId,
+        status: "completed",
+        published: true,
+        duplicate: false,
+        messageId: "diagnosis-report",
+      });
+    },
+  });
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      requests++;
+      return requests === 1
+        ? completion(
+            {
+              role: "assistant",
+              tool_calls: [
+                call(
+                  "memory_diagnose",
+                  {
+                    operationId: "state-diagnosis",
+                    messageId: "11111111-1111-4111-8111-111111111111",
+                  },
+                  "diagnose",
+                ),
+              ],
+            },
+            "tool_calls",
+          )
+        : completion({ role: "assistant", content: "unwanted extra handoff" }, "stop");
+    },
+  });
+  let created: Awaited<ReturnType<typeof createSession>> | undefined;
+  try {
+    created = await fixture(String(server.url), root, "openviking-memory", {
+      COFORGE_AGENT_PROXY_URL: String(proxy.url),
+      COFORGE_AGENT_CONTEXT: "fixture-context",
+    });
+    await created.session.prompt(
+      "The Task has repeated the failed search. Diagnose its saved state.",
+    );
+    expect(requests).toBe(1);
+    expect(created.session.agent.state.messages.at(-1)?.role).toBe("toolResult");
+  } finally {
+    await created?.dispose();
+    server.stop(true);
+    proxy.stop(true);
+    await rm(root, { recursive: true, force: true });
+  }
+}, 10000);

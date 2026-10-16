@@ -77,3 +77,13 @@ OpenViking URL/配置和明确的 `COFORGE_MEMORY_HINT_TTL_SECONDS`；沿用产�
 收到 Hint 却未提交对应原生回执会标记 `missing_disposition`，答案仍可正常判分。判分继续使用原有离线 grader；“有答案”不等于判分正确。
 
 验证：`mise exec -- bun run --cwd benchmark/evolbench-collab test` 和 `check`。
+
+## Memory 自主四角色诊断
+
+Memory 可根据可见 Task 状态判断是否调用 `memory_diagnose`：重复失败、检索无进展、证据冲突、计划受阻或答案有明显未解决项。无需 Task 先发 `@memory diagnose`，显式诊断请求仍支持；简单查询或重复完成通知不应触发诊断，明确的 retrieve-only 指令继续遵守。
+
+`messageId` 必须来自 `message_read` 中同一可见群聊的 Task 消息。后端验证双方仍为该频道成员，拒绝本人消息、人类消息、跨 workspace、私聊、已归档或隐藏频道。它冻结截至该锚点的同线程有界消息快照（最多 64 条、64000 字符），不是完整私有工具轨迹。
+
+同一个锚点消息固定同一诊断请求，轮询不重复追加证据或重建；运行中不应改用另一消息制造新请求。只有 Task 有实质新尝试或结果才考虑再次诊断。成功交付经 Reader 验证的报告后结束 Memory 当前轮次，Task 判断和执行后续行动；失败通知不能当作成功建图。
+
+四角色输入不提供已验证结果，Memory 不得查找或传入评测 ground truth、答案键或评分。评测驱动仍须保证群聊材料不包含这些信息；这不是对任意聊天正文的自动去标注器。已有进程保留启动时提示，新的自主能力需要新会话和更新后的 Web 后端。
