@@ -286,23 +286,26 @@ export function RuntimeUsagePopoverContent({
       {showUsage && (
         <section className="px-4 py-3">
           {/* The account band leads with what the account is (its plan, then the signed-in
-              account) rather than a "Runtime account" heading over it; the heading only stands in
-              when the runtime names neither. The badge speaks only when something needs the
+              account). It is omitted when the runtime names neither and nothing is wrong, so an
+              Antigravity card does not open with an empty "Runtime account" line. The fallback
+              heading only stands beside a badge. The badge speaks only when something needs the
               reader — reauth, an error, a limit — since "OK" repeats the health dot that opened
               this popover. */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="truncate text-sm font-medium text-primary">
-                {plan || accountLabel || m.computer_usage_account()}
-              </h3>
-              {accountNote && <p className="truncate text-xs text-tertiary">{accountNote}</p>}
+          {(plan || accountLabel || (badge && badge.color !== "success")) && (
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-medium text-primary">
+                  {plan || accountLabel || m.computer_usage_account()}
+                </h3>
+                {accountNote && <p className="truncate text-xs text-tertiary">{accountNote}</p>}
+              </div>
+              {badge && badge.color !== "success" && (
+                <Badge color={badge.color} size="sm" className="shrink-0">
+                  {badge.label}
+                </Badge>
+              )}
             </div>
-            {badge && badge.color !== "success" && (
-              <Badge color={badge.color} size="sm" className="shrink-0">
-                {badge.label}
-              </Badge>
-            )}
-          </div>
+          )}
           {reading ? (
             <div aria-label={m.computer_usage_reading()} className="mt-3 space-y-3">
               <Skeleton className="h-3 w-full" />
@@ -312,12 +315,11 @@ export function RuntimeUsagePopoverContent({
             <>
               {reason && <p className="mt-2 text-sm text-tertiary">{reason}</p>}
               {snapshot?.officialGroups && snapshot.officialGroups.length > 0 ? (
+                // The popover keeps each group's name and its one-line note (which models share
+                // the bars). The provider's long shared note and the per-bucket sentences stay on
+                // the snapshot: they repeat the bars and the reset already on the row, and they
+                // made this card longer than the official view (task #258).
                 <div className="mt-3 space-y-4">
-                  {snapshot.officialDescription && (
-                    <p className="text-xs break-words text-tertiary">
-                      {snapshot.officialDescription}
-                    </p>
-                  )}
                   {snapshot.officialGroups.map((group, index) => (
                     <div key={`${group.name ?? "group"}-${index}`} className="space-y-3">
                       {group.name && (
@@ -332,7 +334,6 @@ export function RuntimeUsagePopoverContent({
                         <UsageWindow
                           key={bucket.id ?? `${bucket.window ?? "bucket"}-${bucketIndex}`}
                           label={bucket.name ?? bucket.window ?? m.computer_usage_available()}
-                          detail={bucket.description}
                           window={{
                             // The official name says how much is left, so the meter is
                             // `remainingFraction`, not the derived used share.
@@ -385,13 +386,11 @@ function officialMeter(bucket: { remainingFraction?: number; usedPercent?: numbe
 
 function UsageWindow({
   label,
-  detail,
   window,
   creditUsage,
   timeZone,
 }: {
   label: string;
-  detail?: string;
   window: {
     usedPercent?: number;
     status?: "ok" | "limit_reached" | "parse_unavailable";
@@ -451,7 +450,6 @@ function UsageWindow({
             m.computer_usage_credit_overage({ overage: formatCredits(creditUsage.overage) })}
         </p>
       )}
-      {detail && <p className="mt-1 text-xs break-words text-tertiary">{detail}</p>}
     </div>
   );
 }
