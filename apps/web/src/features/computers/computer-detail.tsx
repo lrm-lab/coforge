@@ -341,7 +341,7 @@ export function ComputerDetail({
     canUpgrade && (upgradeAvailable || upgrading) ? (
       <Button
         type="button"
-        size="sm"
+        size="xs"
         color="secondary"
         iconLeading={ArrowUp}
         isLoading={upgrading}
@@ -570,8 +570,12 @@ export function ComputerDetail({
                 <h3 className="text-sm font-medium text-primary">{m.computer_runtimes()}</h3>
                 {onRescanRuntimes && computer.online && (
                   <Button
-                    size="sm"
-                    color="link-color"
+                    type="button"
+                    size="xs"
+                    color="secondary"
+                    iconLeading={RotateCw}
+                    isLoading={rescanning}
+                    showTextWhileLoading
                     isDisabled={rescanning}
                     onPress={() => void rescan()}
                   >
