@@ -597,7 +597,7 @@ export function ConversationDirectory({
       <ConversationRowMenu
         target={{ kind: "channel", ...channel }}
         sections={groups.sections}
-        sectionsReady={!groups.isPending && !groups.isError}
+        sectionsReady={groups.status === "ready"}
         onSectionError={sectionFailed}
       >
         <ConversationRow
@@ -655,7 +655,7 @@ export function ConversationDirectory({
     <ConversationRowMenu
       target={{ kind: "direct", conversationId, pinned }}
       sections={groups.sections}
-      sectionsReady={!groups.isPending && !groups.isError}
+      sectionsReady={groups.status === "ready"}
       onSectionError={sectionFailed}
     >
       <ConversationRow
@@ -757,7 +757,7 @@ export function ConversationDirectory({
           {m.conversation_saved_nav()}
         </ConversationRow>
       </div>
-      {(groups.isError || groups.orderError) && (
+      {groups.status === "failed" && (
         <div role="alert" className={cx(DIRECTORY_INSET, "py-2 text-sm text-error-primary")}>
           <p>{m.chat_section_load_error()}</p>
           <Button color="link-gray" size="sm" onPress={() => void groups.retry()}>
@@ -993,7 +993,7 @@ export function ConversationDirectory({
       <div className="pb-3" />
       <ChatSectionCreateMenu
         onCreate={newSection}
-        disabled={groups.isPending || groups.isError || drag.dragging}
+        disabled={groups.status !== "ready" || drag.dragging}
       />
       {editingSection && (
         <ChatSectionDialog

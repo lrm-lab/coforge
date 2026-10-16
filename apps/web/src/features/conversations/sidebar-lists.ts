@@ -17,7 +17,7 @@ import {
 import { directListsOf, type DirectRow } from "./sidebar-rows";
 import { sidebarRefreshQueue, type ChatList } from "./conversation-unread";
 import { compareChannelNames, type ChannelSignal } from "./channel-signals";
-import { chatSectionOrderQuery, chatSectionsQuery } from "./chat-sections";
+import { chatSectionOrderQuery, chatSectionsQuery, chatSectionsStatus } from "./chat-sections";
 
 // React access to the Chat sidebar's lists (`sidebar-collections.ts`).
 
@@ -185,9 +185,8 @@ export function useChatSections() {
     /** Sections may be dragged only once their saved order is known: a drag from the default
      * order would overwrite it. */
     orderReady: order.isSuccess,
-    isPending: query.isPending,
-    isError: query.isError,
-    orderError: order.isError,
+    /** A failed order read is not reported: the sections keep the default order. */
+    status: chatSectionsStatus(query),
     retry: () => Promise.all([query.refetch(), order.refetch()]),
   };
 }

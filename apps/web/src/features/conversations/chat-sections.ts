@@ -60,3 +60,14 @@ export const chatSectionOrderQuery = (workspaceId: string, api = serverChatSecti
   refetchOnWindowFocus: "always" as const,
   refetchInterval: 30_000,
 });
+
+/** Whether the sidebar has its sections to show. A re-read that fails keeps the sections already
+ * shown (`ready`): the next scheduled one brings them up to date, so it is not a failure to tell
+ * anyone about. Only a first read that failed is (`failed`). */
+export function chatSectionsStatus(sections: {
+  data: unknown;
+  isLoadingError: boolean;
+}): "loading" | "failed" | "ready" {
+  if (sections.data !== undefined) return "ready";
+  return sections.isLoadingError ? "failed" : "loading";
+}
