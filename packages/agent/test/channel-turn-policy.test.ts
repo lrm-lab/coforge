@@ -345,3 +345,189 @@ test("a published autonomous diagnosis settles the native turn without another m
     await rm(root, { recursive: true, force: true });
   }
 }, 10000);
+
+test("QA send settlement ends a receipted channel send and later inbox input resumes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "coforge-channel-sent-"));
+  let requests = 0;
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      requests++;
+      return requests === 1
+        ? completion(
+            {
+              role: "assistant",
+              tool_calls: [
+                call(
+                  "bash",
+                  { command: "coforge message send --target '#team' --message 'A response'" },
+                  "send",
+                ),
+              ],
+            },
+            "tool_calls",
+          )
+        : completion({ role: "assistant", content: "resumed" }, "stop");
+    },
+  });
+  let created: Awaited<ReturnType<typeof createSession>> | undefined;
+  try {
+    created = await fixture(String(server.url), root, undefined, {
+      COFORGE_EVAL_SETTLE_SENDS: "1",
+    });
+    await Bun.write(
+      join(root, "coforge"),
+      "#!/bin/sh\nprintf 'Message sent to #team. Message ID: 00000000-0000-4000-8000-000000000001\\n'\n",
+    );
+    await created.session.prompt("Send a response, then wait for another input.");
+    expect(requests).toBe(1);
+    await created.session.prompt("A later inbox message arrived.");
+    expect(requests).toBe(2);
+  } finally {
+    await created?.dispose();
+    server.stop(true);
+    await rm(root, { recursive: true, force: true });
+  }
+}, 10_000);
+
+test.each([
+  {
+    name: "JSON accepted send",
+    output: '{"accepted":true,"messageId":"sent-id"}',
+    enabled: "1",
+    exit: 0,
+    requests: 1,
+  },
+  {
+    name: "draft awaiting confirmation",
+    output: '{"state":"draft","messageId":"draft-id"}',
+    enabled: "1",
+    exit: 0,
+    requests: 2,
+  },
+  {
+    name: "missing send receipt id",
+    output: '{"accepted":true}',
+    enabled: "1",
+    exit: 0,
+    requests: 2,
+  },
+  {
+    name: "failed command",
+    output: "Message sent to #team. Message ID: 00000000-0000-4000-8000-000000000001",
+    enabled: "1",
+    exit: 1,
+    requests: 2,
+  },
+  {
+    name: "default product turn",
+    output: "Message sent to #team. Message ID: 00000000-0000-4000-8000-000000000001",
+    enabled: "0",
+    exit: 0,
+    requests: 2,
+  },
+])(
+  "channel send settlement handles $name",
+  async (scenario) => {
+    const root = await mkdtemp(join(tmpdir(), "coforge-send-receipt-"));
+    let requests = 0;
+    const server = Bun.serve({
+      port: 0,
+      fetch() {
+        requests++;
+        return requests === 1
+          ? completion(
+              {
+                role: "assistant",
+                tool_calls: [
+                  call(
+                    "bash",
+                    { command: "coforge message send --target '#team' --message 'A response'" },
+                    "send",
+                  ),
+                ],
+              },
+              "tool_calls",
+            )
+          : completion({ role: "assistant", content: "Handle result normally." }, "stop");
+      },
+    });
+    let created: Awaited<ReturnType<typeof createSession>> | undefined;
+    try {
+      created = await fixture(String(server.url), root, undefined, {
+        COFORGE_EVAL_SETTLE_SENDS: scenario.enabled,
+      });
+      await Bun.write(
+        join(root, "coforge"),
+        `#!/bin/sh\ncat <<'RECEIPT'\n${scenario.output}\nRECEIPT\nexit ${scenario.exit}\n`,
+      );
+      await created.session.prompt("Send the response and handle the receipt.");
+      expect(requests).toBe(scenario.requests);
+    } finally {
+      await created?.dispose();
+      server.stop(true);
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  10_000,
+);
+
+test("a notice queued during a receipted send survives turn settlement", async () => {
+  const root = await mkdtemp(join(tmpdir(), "coforge-send-queued-"));
+  const sending = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let requests = 0;
+  const server = Bun.serve({
+    port: 0,
+    async fetch() {
+      requests++;
+      if (requests === 1) {
+        sending.resolve();
+        await release.promise;
+        return completion(
+          {
+            role: "assistant",
+            tool_calls: [
+              call(
+                "bash",
+                { command: "coforge message send --target '#team' --message 'Request evidence'" },
+                "send",
+              ),
+            ],
+          },
+          "tool_calls",
+        );
+      }
+      return completion({ role: "assistant", content: "handled fresh evidence" }, "stop");
+    },
+  });
+  let created: Awaited<ReturnType<typeof createSession>> | undefined;
+  let pending: Promise<void> | undefined;
+  try {
+    created = await fixture(String(server.url), root, undefined, {
+      COFORGE_EVAL_SETTLE_SENDS: "1",
+    });
+    await Bun.write(
+      join(root, "coforge"),
+      "#!/bin/sh\nprintf 'Message sent to #team. Message ID: 00000000-0000-4000-8000-000000000001\\n'\n",
+    );
+    pending = created.session.prompt("Request evidence from Memory.");
+    await sending.promise;
+    await created.session.steer("Memory has supplied fresh evidence.");
+    release.resolve();
+    await pending;
+    expect(requests).toBe(2);
+    expect(JSON.stringify(created.session.agent.state.messages)).toContain(
+      "Memory has supplied fresh evidence.",
+    );
+    expect(JSON.stringify(created.session.agent.state.messages.at(-1))).toContain(
+      "handled fresh evidence",
+    );
+  } finally {
+    release.resolve();
+    await pending?.catch(() => {});
+    await created?.dispose();
+    server.stop(true);
+    await rm(root, { recursive: true, force: true });
+  }
+}, 10_000);
