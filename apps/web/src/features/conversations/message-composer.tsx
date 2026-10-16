@@ -858,19 +858,16 @@ export function MessageComposer({
         />
         {/* "As task" sits directly left of Send (the boss's ruling, #137), as a labelled checkbox
             that is always shown, as Raft's composer has it: the label says what it does, and one
-            control holds both states. */}
+            control holds both states. No hairline between the checkbox and Send (task #265). */}
         <div className="ml-auto flex items-center gap-3">
           {taskMode && (
-            <>
-              <Checkbox
-                size="sm"
-                label={m.tasks_as_task()}
-                isSelected={asTask}
-                isDisabled={composerDisabled}
-                onChange={setAsTask}
-              />
-              <span aria-hidden="true" className="h-5 w-px bg-border-secondary" />
-            </>
+            <Checkbox
+              size="sm"
+              label={m.tasks_as_task()}
+              isSelected={asTask}
+              isDisabled={composerDisabled}
+              onChange={setAsTask}
+            />
           )}
           <Button
             type="submit"
