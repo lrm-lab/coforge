@@ -3,6 +3,7 @@ import { createStoreContext, useSelector, type Store } from "@tanstack/react-sto
 
 import { useSyncedStore } from "#src/hooks/use-synced-store";
 
+import type { MentionRef } from "./mention-text";
 import type { ThreadSummary } from "./thread-summary-model";
 
 /**
@@ -13,7 +14,7 @@ import type { ThreadSummary } from "./thread-summary-model";
  */
 export type ThreadState = {
   summaries: Readonly<Record<string, ThreadSummary>>;
-  formatBody: (body: string) => string;
+  formatBody: (body: string, mentions?: readonly MentionRef[]) => string;
 };
 
 const { StoreProvider, useStoreContext } = createStoreContext<{ threads: Store<ThreadState> }>();

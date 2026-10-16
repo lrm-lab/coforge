@@ -5,6 +5,7 @@
  * and the unread mark. JSON-compatible values only, so an unchanged summary keeps its object across
  * a re-read (see `features/conversations/AGENTS.md`).
  */
+import type { MentionRef } from "./mention-text";
 
 /** The stream's thread preview lists this many of a thread's newest replies. */
 export const THREAD_PREVIEW_REPLIES = 3;
@@ -21,6 +22,9 @@ export type ThreadPreviewReply = {
   /** True when the replying Agent has since been deleted. */
   senderDeleted: boolean;
   body: string;
+  /** The reply's own mentions, which name a mentioned Agent even once it is deleted. Absent from a
+   * summary the browser kept from before previews carried them. */
+  mentions?: MentionRef[];
   createdAt: string;
 };
 
@@ -58,6 +62,7 @@ export type ThreadReplyInput = {
   senderAvatarUrl?: string | null;
   senderDeleted?: boolean;
   body: string;
+  mentions?: MentionRef[];
   createdAt: Date | string;
 };
 
@@ -85,6 +90,7 @@ export function withReply(
           senderAvatarUrl: reply.senderAvatarUrl ?? null,
           senderDeleted: reply.senderDeleted ?? false,
           body: previewBody(reply.body),
+          mentions: reply.mentions ?? [],
           createdAt,
         },
       ].slice(-THREAD_PREVIEW_REPLIES)

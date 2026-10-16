@@ -4,6 +4,7 @@ import {
   previewBody,
   type ThreadSummary,
 } from "#src/features/conversations/thread-summary-model";
+import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
 import { browserSenderAvatarUrl, browserSenderName } from "./sender-display.server";
 
 /** What a window of roots says about their threads, for the viewer reading it. */
@@ -95,6 +96,7 @@ export async function readWindowThreads(
           threadRootId: true,
           body: true,
           createdAt: true,
+          mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
           sender: {
             select: {
               userId: true,
@@ -124,6 +126,7 @@ export async function readWindowThreads(
       senderAvatarUrl: browserSenderAvatarUrl(message.sender, workspaceId),
       senderDeleted: Boolean(message.sender?.agent?.deletedAt),
       body: previewBody(message.body),
+      mentions: message.mentions.map(browserMessageMention),
       createdAt: message.createdAt.toISOString(),
     });
     latestByRoot.set(message.threadRootId!, list);

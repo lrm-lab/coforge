@@ -48,6 +48,7 @@ describe("withReply", () => {
           senderAvatarUrl: null,
           senderDeleted: false,
           body: "body 4",
+          mentions: [],
           createdAt: "2026-09-29T10:00:04.000Z",
         },
       ],
@@ -96,6 +97,16 @@ describe("withReply", () => {
     expect(withReply(base, reply(7, { senderKind: "agent" }), { countUnread: false }).unread).toBe(
       0,
     );
+  });
+
+  test("a preview keeps the reply's mentions, so it names a mentioned Agent once deleted", () => {
+    const mentions = [{ kind: "agent" as const, actorId: "a-1", handle: "nova", label: "Nova" }];
+    expect(
+      withReply(undefined, reply(3, { mentions }), { countUnread: true }).latestReplies[0]!,
+    ).toMatchObject({ mentions });
+    expect(
+      withReply(undefined, reply(4), { countUnread: true }).latestReplies[0]!.mentions,
+    ).toEqual([]);
   });
 
   test("a preview carries the capped one-line body, and a Date time reads as its ISO string", () => {

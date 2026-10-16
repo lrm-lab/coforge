@@ -24,7 +24,9 @@ export type MentionRef = {
  * jump index, the thread previews) that show the stored body as plain text and would otherwise
  * leak the raw token: a mention token (`<@agent:uuid>` / `<@human:uuid>`) to its `@label` from the
  * given mentionables, a task token to `task #N`, and a channel token to `#name` — the current name
- * from `channelNames` (channel id → name) when listed, the stored one otherwise. An unknown mention
+ * from `channelNames` (channel id → name) when listed, the stored one otherwise. A mention reads by
+ * the message's own `mentions` first, which keep naming an Agent deleted since (it has left the
+ * given mentionables), then by the mentionables. An unknown mention
  * token is left byte-for-byte intact (see `readableBody`), so the caller degrades to the
  * raw token rather than dropping it. This is only display formatting — the stored body and wake
  * rules are unchanged.
@@ -37,13 +39,16 @@ export function makeReferenceBodyFormatter(
     label: string;
   }[],
   channelNames?: ReadonlyMap<string, string>,
-): (body: string) => string {
+): (body: string, mentions?: readonly MentionRef[]) => string {
   const labelById = new Map(
     mentionables.map((mention) => [`${mention.kind}:${mention.id.toLowerCase()}`, mention.label]),
   );
-  return (body: string) =>
+  return (body, mentions) =>
     readableBody(body, {
-      mention: (type, id) => labelById.get(`${type}:${id.toLowerCase()}`),
+      mention: (type, id) =>
+        mentions?.find(
+          (mention) => mention.kind === type && mention.actorId.toLowerCase() === id.toLowerCase(),
+        )?.label ?? labelById.get(`${type}:${id.toLowerCase()}`),
       channelName: (id) => channelNames?.get(id),
     });
 }

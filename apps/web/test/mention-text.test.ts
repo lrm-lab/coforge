@@ -271,6 +271,16 @@ test("makeReferenceBodyFormatter resolves a human label and is case-insensitive 
   expect(format?.(`<@human:${USER_UUID.toUpperCase()}>`)).toBe("@Ada Lovelace");
 });
 
+test("makeReferenceBodyFormatter names a token from the message's own mentions first", () => {
+  // A deleted Agent has left the directory, but the message's mention row still names it.
+  const format = makeReferenceBodyFormatter([]);
+  expect(
+    format(`ask <@agent:${AGENT_UUID}>`, [
+      { kind: "agent", actorId: AGENT_UUID, handle: "kiro", label: "Kiro Reviewer" },
+    ]),
+  ).toBe("ask @Kiro Reviewer");
+});
+
 test("makeReferenceBodyFormatter leaves an unknown token intact rather than dropping it", () => {
   const format = makeReferenceBodyFormatter([
     { kind: "agent", id: AGENT_UUID, handle: "kiro", label: "Kiro Reviewer" },

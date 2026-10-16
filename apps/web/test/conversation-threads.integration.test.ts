@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { THREAD_PREVIEW_BODY_MAX } from "#src/features/conversations/thread-summary-model";
+import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import {
@@ -169,6 +170,45 @@ test.skipIf(!connectionString)(
       expect(JSON.stringify(page)).not.toContain(first.body);
       expect(page.threadReadThrough).toEqual({ [busy.id]: second.sequence });
       expect([...page.followedThreadRootIds].sort()).toEqual([busy.id, quiet.id].sort());
+    } finally {
+      await teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "a preview reply names an Agent it mentions after that Agent is deleted",
+  async () => {
+    const { db, workspace, ada, agent, channels, team, memberOf, post, teardown } = await setup();
+    try {
+      const root = await post(team.id, { userId: ada.id }, "root");
+      const reply = await post(team.id, { userId: ada.id }, `ask <@agent:${agent.id}>`, root.id);
+      const novaMember = await memberOf(team.id, { agentId: agent.id });
+      await db.messageMention.create({
+        data: {
+          messageId: reply.id,
+          memberId: novaMember.id,
+          conversationId: team.id,
+          workspaceId: workspace.id,
+          kind: "agent",
+          actorId: agent.id,
+          handle: agent.name,
+        },
+      });
+      // Deleting an Agent is a soft delete: it leaves the channel, so the directory drops it, while
+      // the mention row keeps its name.
+      await new PrismaAgentDeletionStore(db).delete({
+        agentId: agent.id,
+        workspaceId: workspace.id,
+        deletedAt: new Date(),
+      });
+
+      const page = await channels.open(workspace.id, ada.id, team.id);
+
+      expect(page.mentionables?.some((mention) => mention.id === agent.id)).toBe(false);
+      expect(page.threads[root.id]!.latestReplies[0]!.mentions).toEqual([
+        { kind: "agent", actorId: agent.id, handle: agent.name, label: "Nova" },
+      ]);
     } finally {
       await teardown();
     }

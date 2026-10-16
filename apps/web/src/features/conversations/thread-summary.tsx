@@ -124,7 +124,7 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
               {reply.senderName}
             </span>
             <span className="message-text min-w-0 flex-1 truncate text-md text-secondary">
-              {formatBody(reply.body)}
+              {formatBody(reply.body, reply.mentions)}
             </span>
             <RelativeTime
               value={reply.createdAt}

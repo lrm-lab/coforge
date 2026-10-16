@@ -147,7 +147,8 @@ These rules apply to `src/features/conversations/`.
   `conversationPageSearchShape`, which every host's `validateSearch` spreads.
 - `mentionOutsiders` (the channel's people and public Agents outside it) is for
   @-completion only. Never merge it into `mentionables`, which also resolves
-  plain `@handle` labels and stored mention tokens.
+  plain `@handle` labels and stored mention tokens. `mentionables` lacks a deleted Agent, so a
+  token resolves by its message's own `mentions` first (`makeReferenceBodyFormatter`).
 - The `@` list shows and searches people by the name they are shown by, never by their handle (an
   Agent's handle is its public name, so it is shown and searched). Choosing a member writes `@label`
   and pins them (`mention-pins.ts` owns the mechanism); only `deliver` (`use-message-outbox.ts`)
