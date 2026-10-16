@@ -9,6 +9,8 @@ const MEMORY_READ_OPS = new Set(["find", "search_context", "read", "expand"]);
 
 /** Per-trigger Offer budget and read accounting for the Memory Agent fence. */
 export class MemoryAgentTurnBudget {
+  #offerPayloads = new Map<string, { payload: string; trigger: number }>();
+  #trigger = 0;
   #reads = 0;
   #offers = 0;
   #evidence = new Set<string>();
@@ -16,6 +18,8 @@ export class MemoryAgentTurnBudget {
   #unchangedReads = 0;
 
   reset(): void {
+    // Offer IDs remain reserved across triggers within this live session.
+    this.#trigger++;
     this.#reads = 0;
     this.#offers = 0;
     this.#evidence.clear();
@@ -32,8 +36,19 @@ export class MemoryAgentTurnBudget {
       return;
     }
     if (command.op === "offer") {
+      const payload = JSON.stringify([command.body, [...command.citationRefs].sort()]);
+      const previous = this.#offerPayloads.get(command.operationId);
+      if (previous !== undefined && previous.payload !== payload)
+        throw new Error(
+          "operationId already used for a different Offer; use a new operationId for new findings or a new request. Keep the same id only for an identical retry.",
+        );
+      if (previous !== undefined && previous.trigger !== this.#trigger)
+        throw new Error(
+          "operationId belongs to an earlier triggering request; use a new id to publish an Offer for this request.",
+        );
       if (this.#offers >= MEMORY_OFFER_BUDGET_PER_TRIGGER)
         throw new Error("memory offer budget exhausted for this triggering message");
+      this.#offerPayloads.set(command.operationId, { payload, trigger: this.#trigger });
       this.#offers += 1;
     }
   }
@@ -48,7 +63,7 @@ export class MemoryAgentTurnBudget {
         response.op === "read" ? "read" : "discovery",
         citation.citationId,
         citation.contentHash ?? citation.contentVersion,
-        citation.excerpt,
+        response.op === "read" ? citation.excerpt : undefined,
       ]);
       this.#citationRefs.add(citation.citationId);
       if (!this.#evidence.has(key)) {
@@ -60,7 +75,7 @@ export class MemoryAgentTurnBudget {
     if (this.#unchangedReads < 2) return undefined;
     const next =
       this.#citationRefs.size > 0
-        ? "Publish a partial cited memory_offer with useful findings and explicit unresolved constraints, or use a materially different query. Do not wait to solve the entire Task before replying."
+        ? "Publish a partial cited memory_offer with useful findings and explicit unresolved constraints, or change strategy: use ov_read on promising documents; for a method gap, search viking://resources/causal/forks using an abstract failure or reasoning pattern, then expand served branch_steps/next relations. A changed snippet of an unchanged source is not a new source. Do not wait to solve the entire Task before replying."
         : "Use a materially different query. No citation has been retrieved; do not fabricate evidence or citations.";
     return `No new evidence in ${this.#unchangedReads} consecutive retrievals. ${next} Available citationRefs: ${[...this.#citationRefs].slice(-10).join(", ")}`;
   }

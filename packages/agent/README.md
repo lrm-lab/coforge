@@ -27,4 +27,4 @@ Docker Task relay uses the same pool; see the SWE Gemma ops README.
 Channel turns settle normally after repeated empty CLI polling or a published
 Memory Offer. The Pi finish hook leaves queued and later input resumable.
 Repeated retrieval with no new source evidence prompts a partial cited Offer;
-useful retrieval remains unlimited. See [runtime instructions](AGENTS.md).
+useful retrieval remains unlimited. Discovery tracks stable source identity rather than snippet wording; progress advice recommends document reading and Fork strategy pivots. Changed Offer payloads cannot reuse an operation ID within a live session, including across triggers. See [runtime instructions](AGENTS.md).
