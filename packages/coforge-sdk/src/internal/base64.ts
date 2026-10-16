@@ -34,6 +34,21 @@ export function encodeBase64(bytes: Uint8Array): string {
   let index = 0;
   if (bytes.length >= 3) {
     const words = new DataView(encoded.buffer);
+    for (; index + 5 < bytes.length; index += 6) {
+      const first = bytes[index]!;
+      const second = bytes[index + 1]!;
+      const third = bytes[index + 2]!;
+      const high = ENCODING_PAIRS[(first << 4) | (second >> 4)]!;
+      const low = ENCODING_PAIRS[((second & 0x0f) << 8) | third]!;
+      words.setUint32(offset, (high << 16) | low, false);
+      const fourth = bytes[index + 3]!;
+      const fifth = bytes[index + 4]!;
+      const sixth = bytes[index + 5]!;
+      const nextHigh = ENCODING_PAIRS[(fourth << 4) | (fifth >> 4)]!;
+      const nextLow = ENCODING_PAIRS[((fifth & 0x0f) << 8) | sixth]!;
+      words.setUint32(offset + 4, (nextHigh << 16) | nextLow, false);
+      offset += 8;
+    }
     for (; index + 2 < bytes.length; index += 3) {
       const first = bytes[index]!;
       const second = bytes[index + 1]!;

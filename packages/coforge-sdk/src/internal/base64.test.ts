@@ -29,6 +29,16 @@ test("base64 agrees with Buffer byte for byte over every length modulo three", (
   }
 });
 
+test("base64 encoding preserves short bounded views across every group and tail", () => {
+  const backing = Uint8Array.from({ length: 40 }, (_, index) => (index * 113 + 37) & 255);
+  const original = backing.slice();
+  for (let length = 0; length <= 32; length++) {
+    const bytes = backing.subarray(3, 3 + length);
+    expect(encodeBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
+  }
+  expect(backing).toEqual(original);
+});
+
 test("base64 decoding refuses anything that is not one canonical spelling", () => {
   // Not a whole number of groups.
   expect(() => decodeBase64("Zg=")).toThrow();
