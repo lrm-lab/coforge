@@ -119,7 +119,8 @@ export type ConversationProps = {
    * `newest-unread` open mode, where the cursor advances only through this callback.
    */
   onReadLatest?: (throughSequence: number) => void;
-  onCreateTask?: (title: string, idempotencyKey: string, attachmentId?: string) => Promise<void>;
+  /** Whether a top-level send may go "As task": the message is a Task, with every upload. */
+  canSendAsTask?: boolean;
   /** Toggles the viewer's own emoji reaction on a message; the route refreshes it. */
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => Promise<void>;
   onShowTasks?: () => void;

@@ -18,6 +18,7 @@ import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { storeMessageBody } from "./message-references.server";
+import type { SentMessageHook } from "./sent-message-hook.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
 
 type UserDirectMessageInput = {
@@ -27,6 +28,8 @@ type UserDirectMessageInput = {
   body: string;
   attachmentIds?: readonly string[];
   threadRootId?: string;
+  /** Runs inside the send's transaction once the message and its uploads are written. */
+  withinSend?: SentMessageHook;
 };
 
 /** Opens the viewer's direct conversation with `peerUserId`, starting it on first open. */
@@ -178,6 +181,14 @@ export class UserDirectConversations {
         select: { id: true, body: true, createdAt: true, sequence: true, threadRootId: true },
       });
       await attachToMessage(tx, message.id, attachments);
+      await input.withinSend?.(tx, {
+        id: message.id,
+        conversationId,
+        workspaceId,
+        body: message.body,
+        senderMemberId,
+        threadRootId: message.threadRootId,
+      });
       return {
         ...message,
         workspaceId,

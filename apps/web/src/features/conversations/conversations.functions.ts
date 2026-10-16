@@ -15,6 +15,8 @@ import {
 } from "./conversation.schemas";
 import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { sentMessageBecomesTask } from "#src/server/tasks/sent-as-task.server";
+import { announceSentTask } from "#src/server/tasks/browser-task-board.server";
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { userConversationChannel } from "./conversation-realtime";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
@@ -227,6 +229,7 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
                 body: data.body,
                 attachmentIds: data.attachmentIds,
                 threadRootId: data.threadRootId,
+                withinSend: data.asTask ? sentMessageBecomesTask : undefined,
               },
               {
                 idempotency: getMessageRequestIdempotency(),
@@ -240,6 +243,12 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
             select: { displayName: true, avatarObjectKey: true },
           }),
         ]);
+        if (data.asTask)
+          await announceSentTask(
+            db,
+            { conversationId: data.conversationId, workspaceId },
+            message.id,
+          );
         return {
           id: message.id,
           sequence: message.sequence,

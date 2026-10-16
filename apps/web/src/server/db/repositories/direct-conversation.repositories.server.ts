@@ -1,3 +1,4 @@
+import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import {
   TRACKED_MENTION_STATE_SELECT,
@@ -449,6 +450,7 @@ export type DirectConversationRepository = {
     body: string,
     attachmentIds?: string[],
     threadRootId?: string,
+    withinSend?: SentMessageHook,
   ): Promise<
     {
       id: string;
@@ -1319,6 +1321,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     body: string,
     attachmentIds?: string[],
     threadRootId?: string,
+    withinSend?: SentMessageHook,
   ) {
     const conversation = await this.db.conversation.findUnique({
       where: { id: conversationId },
@@ -1432,6 +1435,14 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           }),
         ),
       );
+      await withinSend?.(tx, {
+        id: created.id,
+        conversationId,
+        workspaceId: conversation.workspaceId,
+        body: created.body,
+        senderMemberId,
+        threadRootId: created.threadRootId,
+      });
       return { ...created, attachments };
     });
     const senderIdentity = agentMessageSender({ agentId: null, agent: null, user: sender.user });

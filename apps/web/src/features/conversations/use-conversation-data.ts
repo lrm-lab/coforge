@@ -79,18 +79,15 @@ export function useChannelConversation(channelId: string) {
     refreshChannelAndSidebar,
     conversationProps: {
       conversation,
-      onCreateTask: async (title: string, idempotencyKey: string, attachmentId?: string) => {
-        await taskView.command({ operation: "create", title, idempotencyKey, attachmentId });
-        await page.invalidate();
-      },
+      canSendAsTask: true,
       onSend: async (
         body: string,
         idempotencyKey: string,
         attachmentIds?: string[],
-        { threadRootId, mentions }: SendOptions = {},
+        { threadRootId, mentions, asTask }: SendOptions = {},
       ) => {
         const message = await send({
-          data: { channelId, idempotencyKey, body, attachmentIds, threadRootId, mentions },
+          data: { channelId, idempotencyKey, body, attachmentIds, threadRootId, mentions, asTask },
         });
         page.mergeUpdates([message]);
         if (threadRootId) page.setThreadFollowed(threadRootId, true);
@@ -155,20 +152,17 @@ export function useDirectConversation(conversationId: string) {
     taskView,
     conversationProps: {
       conversation,
-      onCreateTask: async (title: string, idempotencyKey: string, attachmentId?: string) => {
-        await taskView.command({ operation: "create", title, idempotencyKey, attachmentId });
-        await page.invalidate();
-      },
+      canSendAsTask: true,
       onSend: async (
         body: string,
         idempotencyKey: string,
         attachmentIds?: string[],
         // A direct conversation keeps `@handle` text as written, so the bindings of a send have
-        // nothing to resolve there: only its thread reaches the server.
-        { threadRootId }: SendOptions = {},
+        // nothing to resolve there: only its thread and "As task" reach the server.
+        { threadRootId, asTask }: SendOptions = {},
       ) => {
         const message = await send({
-          data: { conversationId, idempotencyKey, body, attachmentIds, threadRootId },
+          data: { conversationId, idempotencyKey, body, attachmentIds, threadRootId, asTask },
         });
         page.mergeUpdates([message]);
         void page.reconciliation.reconcile().catch(() => {});

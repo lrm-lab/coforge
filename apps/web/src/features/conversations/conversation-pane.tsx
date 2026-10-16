@@ -77,7 +77,7 @@ export function ConversationPane({
   onLoadMessageAround,
   onShowLatest,
   onReadLatest,
-  onCreateTask,
+  canSendAsTask,
   onToggleReaction,
   onOpenAgentProfile,
   onOpenPersonProfile,
@@ -311,7 +311,6 @@ export function ConversationPane({
   const outbox = useMessageOutbox({
     draftKey: outboxDraftKey,
     onSend,
-    onCreateTask,
     onSent: ownIndex.add,
   });
   const outboxEntries = useOutboxEntries(outboxDraftKey);
@@ -1165,7 +1164,7 @@ export function ConversationPane({
             recentHandles={recentHandles}
             channels={channels}
             onSend={onSend}
-            onCreateTask={onCreateTask}
+            canSendAsTask={canSendAsTask}
             onSent={ownIndex.add}
             quotedDraft={quotedDraft}
           />

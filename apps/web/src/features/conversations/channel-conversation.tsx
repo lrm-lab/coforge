@@ -177,7 +177,7 @@ export function ChannelConversation({
   onReadThread,
   onReadLatest,
   onThreadFollowedChange,
-  onCreateTask,
+  canSendAsTask,
   onToggleReaction,
   onShowTasks,
   onShowFiles,
@@ -220,7 +220,8 @@ export function ChannelConversation({
   /** The main pane's own scroll reached the latest message; advances the conversation cursor. */
   onReadLatest?: (throughSequence: number) => void;
   onThreadFollowedChange?: (rootMessageId: string, followed: boolean) => Promise<void>;
-  onCreateTask?: (title: string, idempotencyKey: string, attachmentId?: string) => Promise<void>;
+  /** Whether a top-level send may go "As task": the message is a Task, with every upload. */
+  canSendAsTask?: boolean;
   /** Toggles the viewer's own emoji reaction on a message; the route refreshes it. */
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => Promise<void>;
   onShowTasks?: () => void;
@@ -318,7 +319,7 @@ export function ChannelConversation({
       channels={channels}
       taskPopup={taskPopup}
       jumpMessage={jumpMessage}
-      onCreateTask={conversation.senderMemberId ? onCreateTask : undefined}
+      canSendAsTask={Boolean(conversation.senderMemberId) && canSendAsTask}
       onToggleReaction={conversation.senderMemberId ? onToggleReaction : undefined}
       threadContext={`#${conversation.name}`}
       threadHeaderAction={(rootMessageId) => (

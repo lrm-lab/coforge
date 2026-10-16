@@ -36,6 +36,8 @@ export type OutgoingMessage = {
 export type SendOptions = {
   threadRootId?: string;
   mentions?: MentionSelectorInput[];
+  /** The message is a Task from the moment it exists, carrying every upload. */
+  asTask?: boolean;
 };
 
 /**

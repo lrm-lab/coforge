@@ -301,7 +301,7 @@ export function MessageComposer({
   channels,
   quotedDraft,
   onSend,
-  onCreateTask,
+  canSendAsTask,
   onSent,
 }: {
   conversationId: string;
@@ -332,7 +332,8 @@ export function MessageComposer({
     attachmentIds?: string[],
     options?: SendOptions,
   ) => Promise<SentMessage | void>;
-  onCreateTask?: (title: string, idempotencyKey: string, attachmentId?: string) => Promise<void>;
+  /** Whether a top-level send may go "As task" (thread composers never offer it). */
+  canSendAsTask?: boolean;
   /** A message of the current user's was accepted by the server. */
   onSent?: (message: SentMessage) => void;
 }) {
@@ -422,7 +423,6 @@ export function MessageComposer({
   const outbox = useMessageOutbox({
     draftKey,
     onSend,
-    onCreateTask,
     onSent: (message) => {
       onSent?.(message);
       setUnresolved((current) =>
@@ -548,7 +548,7 @@ export function MessageComposer({
       body: text,
       pins: pinsInText(text, pins),
       idempotencyKey,
-      asTask: asTask && !inThread && Boolean(onCreateTask),
+      asTask: asTask && !inThread && Boolean(canSendAsTask),
       attachments: uploaded.flatMap((item) =>
         item.id ? [{ id: item.id, fileName: item.file.name }] : [],
       ),
@@ -678,7 +678,7 @@ export function MessageComposer({
     if (files.length > 0) void addFiles(files);
   }
 
-  const taskMode = !inThread && Boolean(onCreateTask);
+  const taskMode = !inThread && Boolean(canSendAsTask);
   return (
     <form
       onSubmit={submit}

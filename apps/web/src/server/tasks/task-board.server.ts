@@ -63,6 +63,7 @@ import {
 } from "./task-notices.server";
 import { validateTaskCommand } from "./task-command-validation.server";
 import { creationChanges, historyEventView, historyRows, taskChanges } from "./task-history.server";
+import { createMessageTask } from "./sent-as-task.server";
 import {
   storedTaskStatus,
   taskMember,
@@ -158,8 +159,8 @@ type NoticeSubject = { messageId: string; number: number; title: string };
 type NoticeWriter = {
   /** The Tasks as notices quote them: clean titles, in the given order. */
   quote(tasks: readonly NoticeSubject[]): Promise<QuotedTask[]>;
-  /** A top-level notice in the conversation. */
-  inConversation(body: string): Promise<PostedNotice>;
+  /** A top-level notice in the conversation; `id` fixes it, for a notice written at most once. */
+  inConversation(body: string, id?: string): Promise<PostedNotice>;
   /** A reply in the Task's own thread. */
   inThread(task: NoticeSubject, body: (task: QuotedTask) => string): Promise<PostedNotice>;
   /**
@@ -1172,7 +1173,7 @@ export class TaskBoard {
       };
       return change(tx, {
         quote,
-        inConversation: (body) => postAndSignal({ body }),
+        inConversation: (body, id) => postAndSignal({ body, id }),
         inThread: async (task, body) => {
           const [quoted] = await quote([task]);
           return postAndSignal({ body: body(quoted!), threadRootId: task.messageId });
@@ -1327,6 +1328,24 @@ export class TaskBoard {
     return messages[0]!;
   }
 
+  /**
+   * Announces a Task a person's send made of its message (`sentMessageBecomesTask`): the created
+   * notice and the change to open Tasks pages, as `create` announces one. Its notice has a fixed
+   * id, so announcing again after a retried send writes nothing new.
+   */
+  async announceSentTask(conversation: ConversationRef, messageId: string) {
+    const noticeId = await indexedRequestId(`${messageId}:sent-as-task`, 1);
+    const task = await this.withNotices(conversation, async (tx, notices) => {
+      const task = await tx.task.findUnique({ where: { messageId }, select: taskSelection });
+      if (!task || task.conversationId !== conversation.conversationId)
+        throw new AppError("NOT_FOUND");
+      if (!(await tx.message.findUnique({ where: { id: noticeId }, select: { id: true } })))
+        await notices.inConversation(noticeText.created(await notices.quote([task])), noticeId);
+      return task;
+    });
+    await this.signalTaskChange(task);
+  }
+
   private async convertOrClaim(
     conversation: ConversationRef,
     member: Member,
@@ -1361,27 +1380,7 @@ export class TaskBoard {
           if (claim) throw new ClaimRefused(CLAIM_REFUSAL.taskNotFound);
           throw new AppError("NOT_FOUND");
         }
-        const allocated = await tx.$queryRaw<Array<{ number: number }>>`
-          UPDATE "conversations"
-          SET "nextTaskNumber" = "nextTaskNumber" + 1
-          WHERE "id" = ${conversationId}::uuid
-          RETURNING "nextTaskNumber" - 1 AS "number"
-        `;
-        if (allocated[0]?.number === undefined) throw new AppError("NOT_FOUND");
-        existing = await tx.task.create({
-          data: {
-            messageId: message.id,
-            conversationId,
-            workspaceId,
-            number: allocated[0].number,
-            title: message.body.slice(0, 8_000),
-            creatorMemberId: member.id,
-          },
-          select: taskSelection,
-        });
-        await tx.taskHistoryEvent.createMany({
-          data: historyRows(existing.messageId, member, creationChanges(existing), 0),
-        });
+        existing = await createMessageTask(tx, { ...message, conversationId, workspaceId }, member);
         const [quoted] = await notices.quote([existing]);
         await notices.inConversation(
           noticeText.converted(noticeActor(member).displayName, quoted!),

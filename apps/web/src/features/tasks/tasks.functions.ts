@@ -2,11 +2,9 @@ import { TASK_STATUSES, type TaskCommand } from "@lrm/coforge-sdk/internal";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { refuseUnclaimed, TaskBoard } from "#src/server/tasks/task-board.server";
+import { browserTaskBoard } from "#src/server/tasks/browser-task-board.server";
 import { CONVERSATION_TASK_NUMBERS_MAX } from "./conversation-task-subset";
 
 const taskCommand = z
@@ -141,16 +139,6 @@ export const loadFinishedTasks = createServerFn({ method: "GET" })
     const { conversationId, ...query } = data;
     return new TaskBoard(db).finishedPage({ workspaceId, userId: user.id, conversationId }, query);
   });
-
-/** The board a person's Task writes go through: signalled, pushed and delivered. */
-function browserTaskBoard(db: Parameters<typeof bestEffortMessageNotifier>[0]) {
-  const centrifugo = createCentrifugoServerApi();
-  return new TaskBoard(db, {
-    notifications: bestEffortMessageNotifier(db),
-    realtime: new CentrifugoConversationRealtime(centrifugo),
-    publisher: centrifugo,
-  });
-}
 
 export const executeTask = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

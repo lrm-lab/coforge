@@ -75,6 +75,8 @@ export const sendConversationMessageInputSchema = directConversationInputSchema.
   body: z.string().trim().min(1).max(8_000),
   attachmentIds: attachmentIdsSchema,
   threadRootId: uuid.optional(),
+  /** "As task": the message is a Task from the moment it exists (top-level only). */
+  asTask: z.boolean().optional(),
 });
 
 export const readConversationThreadInputSchema = directConversationInputSchema.extend({

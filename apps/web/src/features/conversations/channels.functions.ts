@@ -24,6 +24,8 @@ import { CentrifugoConversationRealtime } from "#src/server/conversations/conver
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { userConversationChannel, workspaceConversationChannel } from "./conversation-realtime";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { sentMessageBecomesTask } from "#src/server/tasks/sent-as-task.server";
+import { announceSentTask } from "#src/server/tasks/browser-task-board.server";
 import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { browserMessageMention } from "#src/server/conversations/mentions.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
@@ -456,10 +458,13 @@ export const sendPublicChannelMessage = createServerFn({ method: "POST" })
       attachmentIds: attachmentIdsSchema,
       threadRootId: z.uuid().optional(),
       mentions: mentionSelectorsSchema,
+      /** "As task": the message is a Task from the moment it exists (top-level only). */
+      asTask: z.boolean().optional(),
     }),
   )
   .handler(async ({ data, context }) => {
     const { db, workspaceId, userId, username } = channelScope(context);
+    const { asTask, ...input } = data;
     const centrifugo = createCentrifugoServerApi();
     const channels = new PublicChannels(
       db,
@@ -468,7 +473,14 @@ export const sendPublicChannelMessage = createServerFn({ method: "POST" })
       bestEffortMessageNotifier(db),
       new CentrifugoConversationRealtime(centrifugo),
     );
-    const message = await channels.send({ ...data, workspaceId, userId });
+    const message = await channels.send({
+      ...input,
+      workspaceId,
+      userId,
+      withinSend: asTask ? sentMessageBecomesTask : undefined,
+    });
+    if (asTask)
+      await announceSentTask(db, { conversationId: data.channelId, workspaceId }, message.id);
     return {
       id: message.id,
       sequence: message.sequence,

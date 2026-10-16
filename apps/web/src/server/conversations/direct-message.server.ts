@@ -1,3 +1,4 @@
+import type { SentMessageHook } from "./sent-message-hook.server";
 import { isChannelMessageTarget, isPrintableSenderHandle } from "@lrm/coforge-sdk/internal";
 import { AgentDeliveryPublisher } from "./agent-delivery.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -49,6 +50,8 @@ export class SendDirectMessage {
     body: string;
     attachmentIds?: string[];
     threadRootId?: string;
+    /** Runs inside the send's transaction once the message and its uploads are written. */
+    withinSend?: SentMessageHook;
   }) {
     if (!input.idempotencyKey || !input.body) throw new Error("invalid direct message");
     const message = await this.idempotency.execute(
@@ -66,6 +69,7 @@ export class SendDirectMessage {
           input.body,
           input.attachmentIds,
           input.threadRootId,
+          input.withinSend,
         ),
     );
     if (!message.agentId) throw new Error("message is not an Agent direct message");

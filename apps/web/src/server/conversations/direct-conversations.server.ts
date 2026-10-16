@@ -1,3 +1,4 @@
+import type { SentMessageHook } from "./sent-message-hook.server";
 import { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
@@ -322,6 +323,8 @@ export class DirectConversations {
       body: string;
       attachmentIds?: string[];
       threadRootId?: string;
+      /** Runs inside the send's transaction once the message and its uploads are written. */
+      withinSend?: SentMessageHook;
     },
     { idempotency, centrifugo, realtime }: DirectMessageSending,
   ) {

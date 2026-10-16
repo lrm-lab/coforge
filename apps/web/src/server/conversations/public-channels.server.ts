@@ -1,4 +1,5 @@
 import { compareChannelNames } from "#src/features/conversations/channel-signals";
+import type { SentMessageHook } from "./sent-message-hook.server";
 import { lockConversation } from "./conversation-lock.server";
 import { lockMemberPins, setConversationPin } from "./conversation-pins.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -2194,6 +2195,8 @@ export class PublicChannels {
     threadRootId?: string;
     /** Members the sender named by id (the composer's picks), beside the `@handle`s in `body`. */
     mentions?: readonly MentionSelectorInput[];
+    /** Runs inside the send's transaction once the message and its uploads are written. */
+    withinSend?: SentMessageHook;
   }) {
     const { workspaceId, userId, channelId, idempotencyKey, attachmentIds, threadRootId } = input;
     // This key is also the daemon delivery's request_id. A missing one is omitted on the wire
@@ -2328,6 +2331,14 @@ export class PublicChannels {
               }),
             ),
           );
+          await input.withinSend?.(tx, {
+            id: message.id,
+            conversationId: channelId,
+            workspaceId,
+            body: stored.body,
+            senderMemberId: member.id,
+            threadRootId: root?.id ?? null,
+          });
           created = true;
           return {
             ...message,

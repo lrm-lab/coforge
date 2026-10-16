@@ -121,7 +121,6 @@ export function useComposerRequests(
 export function useMessageOutbox({
   draftKey,
   onSend,
-  onCreateTask,
   onSent,
 }: {
   draftKey: string;
@@ -131,18 +130,18 @@ export function useMessageOutbox({
     attachmentIds?: string[],
     options?: SendOptions,
   ) => Promise<SentMessage | void>;
-  onCreateTask?: (title: string, idempotencyKey: string, attachmentId?: string) => Promise<void>;
   onSent?: (message: SentMessage) => void;
 }) {
-  /** Posts one outbox message through this chat's send (or task) operation. The message keeps the
-   * names as the sender wrote them; the request carries the handles they were picked to mean. */
+  /** Posts one outbox message through this chat's send; "As task" is the same send, flagged. The
+   * message keeps the names as the sender wrote them; the request carries the handles they were
+   * picked to mean. */
   function deliver(message: OutgoingMessage) {
     const attachmentIds = message.attachments.map((attachment) => attachment.id);
     const { body, mentions } = rewriteMentionPins(message.body, message.pins);
-    return message.asTask && onCreateTask
-      ? // Task creation stays single-attachment; the first upload (send order) is used.
-        onCreateTask(body, message.idempotencyKey, attachmentIds[0]).then(() => undefined)
-      : onSend(body, message.idempotencyKey, attachmentIds, { mentions });
+    return onSend(body, message.idempotencyKey, attachmentIds, {
+      mentions,
+      ...(message.asTask && { asTask: true }),
+    });
   }
 
   async function settle(localId: string, sending: Promise<SentMessage | void | undefined>) {
