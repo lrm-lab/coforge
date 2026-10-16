@@ -320,13 +320,13 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.diagnose]: openvikingTool(
       OPENVIKING_TOOL_NAMES.diagnose,
       "Diagnose with four roles",
-      "Start or poll four-role AIG diagnosis for a task agent message containing @memory diagnose. Read messages to get messageId. The server binds evidence and recipient and publishes the approved report. Repeat the same messageId while running; stop after published=true or failed. This never dispatches remediation.",
+      "Start or poll four-role AIG construction and diagnosis. You may decide from observed Task progress to diagnose repeated failures, stalled retrieval, conflicting evidence or an answer with unresolved constraints; no explicit @memory diagnose request is required. Use message_read to obtain a relevant saved message authored by that Task in your shared channel. The server freezes bounded conversation evidence through that message, binds the Task recipient, and publishes only a completed approved report. Reuse the same messageId while running; a different operationId does not create a new diagnosis for that message. Do not launch new diagnoses for unchanged task state. Stop after published=true or failed. No private tool trajectory, ground truth or grader score is supplied, and this never dispatches remediation.",
       "diagnose",
       {
         operationId: Type.String(),
         messageId: Type.String({
           description:
-            "Full UUID of the task agent’s saved @memory diagnose message, obtained with message_read.",
+            "Full UUID from message_read of the Task-authored status, answer, failure or explicit diagnosis request that anchors this diagnosis. Use the same messageId for polling; never use your own message or invent an ID.",
         }),
       },
     ),

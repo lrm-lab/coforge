@@ -1,8 +1,6 @@
 # Web application instructions
 
-These rules apply to `apps/web`, the TanStack Start Web/backend modular
-monolith, and refine the repository-level `AGENTS.md`. Directory-specific rules
-live in nested `AGENTS.md` files listed at the end.
+These rules apply to `apps/web`, the TanStack Start Web/backend modular monolith, and refine the repository-level `AGENTS.md`. Directory-specific rules live in nested `AGENTS.md` files listed at the end.
 
 ## Product design
 
@@ -85,9 +83,7 @@ live in nested `AGENTS.md` files listed at the end.
   by the table's domain keys (`createdAt`, `sequence`, …) as elsewhere in the
   repository.
 - Use PostgreSQL for database-semantic tests; do not silently substitute SQLite.
-- Read the database URL and credentials from runtime environment/secret
-  injection. Local development uses the project's Docker PostgreSQL; managed
-  PostgreSQL changes must not leak provider-specific details into domain code.
+- Read the database URL and credentials from runtime environment/secret injection. Local development uses the project's Docker PostgreSQL; managed PostgreSQL changes must not leak provider-specific details into domain code.
 
 ## Module map
 
@@ -153,7 +149,7 @@ responsibility.
 - `server/records/` — Workspace Records (see the last section).
 - `server/reminders/` — cloud Agent Reminders.
 - `server/tasks/` — the message-backed TaskBoard, the shape a Task command must have, the Tasks page's overview reads, its Task view, history records, and notice wording.
-- `server/workspace-memory/` — memory profiles, grounded offers, explicit task-requested four-role diagnosis, target-only Hint receipts and source ACL checks.
+- `server/workspace-memory/` — memory profiles, grounded offers, task-requested or Memory-initiated four-role diagnosis (`memory-diagnosis-scope.server.ts` binds visible Task evidence), target-only Hint receipts and source ACL checks.
 - `server/workspaces/` — Workspace catalog (name, icon and URL, with the former slugs that keep naming a Workspace; their persistence is `db/repositories/workspace-slugs.repositories.server.ts`), selection, enrollment, member roles, member directory, join links, admitting a member (`admitWorkspaceMember`, the one step a join link takes), one submitted server connection per Workspace (`server-connection.server.ts`), deleting a Workspace, removing its memory first and its stored files after, and going out of a Workspace (leaving or deleting it) to the next one.
 - `prisma/` (app root) — schema and migrations; `messages/` — UI translations.
 
