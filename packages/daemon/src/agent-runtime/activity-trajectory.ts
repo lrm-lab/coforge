@@ -82,14 +82,19 @@ export class ActivityTrajectory {
         subagent: event.subagent,
         truncated: false,
       };
-      // Retain a bounded prefix; do not repeatedly emit tails of truncated secrets.
-      const text = pending.text + event.text;
-      // UTF-16 code units bound the code-point count, avoiding two arrays while in budget.
-      if (text.length <= 8000) {
-        pending.text = text;
-      } else {
-        pending.truncated ||= codePointLength(text) > 8000;
-        pending.text = truncateCodePoints(text, 8000);
+      // A truncated prefix cannot grow, except when a later low surrogate completes its
+      // final high surrogate. Keep that boundary behavior, without rescanning a full prefix
+      // for every discarded tail. Deltas still reset the quiet window below.
+      const last = pending.truncated ? pending.text.charCodeAt(pending.text.length - 1) : 0;
+      if (!pending.truncated || (last >= 0xd800 && last <= 0xdbff)) {
+        const text = pending.text + event.text;
+        // UTF-16 code units bound the code-point count, avoiding two arrays while in budget.
+        if (text.length <= 8000) {
+          pending.text = text;
+        } else {
+          pending.truncated ||= codePointLength(text) > 8000;
+          pending.text = truncateCodePoints(text, 8000);
+        }
       }
       this.#pending = pending;
       clearTimeout(this.#timer);

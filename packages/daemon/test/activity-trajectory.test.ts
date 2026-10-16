@@ -4,6 +4,50 @@ import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
 
 afterEach(() => jest.useRealTimers());
 
+test("a truncated prefix still completes a trailing surrogate across later deltas", () => {
+  const prefix = "token=" + "x".repeat(7992) + " ";
+  for (const between of [[], [""], ["ignored tail", ""]]) {
+    const output: AgentRuntimeEvent[] = [];
+    const trajectory = new ActivityTrajectory((event) => output.push(event));
+    try {
+      trajectory.accept({ type: "text-delta", text: prefix + "\ud83dq" });
+      for (const text of between) trajectory.accept({ type: "text-delta", text });
+      trajectory.accept({ type: "text-delta", text: "\ude00" });
+      trajectory.dispose();
+      expect(output).toHaveLength(2);
+      expect(output[1]).toMatchObject({
+        activity: { entries: [{ kind: "text", text: "token=[REDACTED] 😀…" }] },
+      });
+    } finally {
+      trajectory.dispose();
+    }
+  }
+});
+
+test("discarded tails still postpone the idle flush and the next run starts fresh", () => {
+  jest.useFakeTimers();
+  const output: AgentRuntimeEvent[] = [];
+  const trajectory = new ActivityTrajectory((event) => output.push(event));
+  try {
+    trajectory.accept({ type: "text-delta", text: "token=" + "x".repeat(8000) });
+    jest.advanceTimersByTime(300);
+    trajectory.accept({ type: "text-delta", text: " tail that must stay discarded" });
+    jest.advanceTimersByTime(349);
+    expect(output).toHaveLength(1);
+    jest.advanceTimersByTime(1);
+    expect(output).toHaveLength(2);
+    expect(output[1]).toMatchObject({
+      activity: { entries: [{ text: "token=[REDACTED]…" }] },
+    });
+    trajectory.accept({ type: "text-delta", text: "Fresh" });
+    trajectory.dispose();
+    expect(output).toHaveLength(3);
+    expect(output[2]).toMatchObject({ activity: { entries: [{ text: "Fresh" }] } });
+  } finally {
+    trajectory.dispose();
+  }
+});
+
 test("retains the code-point budget across deltas before redacting the assembled prefix", () => {
   const cases = [
     { chunks: ["token=", "x".repeat(7994)], text: "token=[REDACTED]" },
