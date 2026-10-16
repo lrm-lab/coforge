@@ -87,3 +87,15 @@ Memory 可根据可见 Task 状态判断是否调用 `memory_diagnose`：重复�
 同一个锚点消息固定同一诊断请求，轮询不重复追加证据或重建；运行中不应改用另一消息制造新请求。只有 Task 有实质新尝试或结果才考虑再次诊断。成功交付经 Reader 验证的报告后结束 Memory 当前轮次，Task 判断和执行后续行动；失败通知不能当作成功建图。
 
 四角色输入不提供已验证结果，Memory 不得查找或传入评测 ground truth、答案键或评分。评测驱动仍须保证群聊材料不包含这些信息；这不是对任意聊天正文的自动去标注器。已有进程保留启动时提示，新的自主能力需要新会话和更新后的 Web 后端。
+
+主频道和 thread 使用独立读取游标。Memory 有未读 thread 更新却无范围锚点地读取父频道时，daemon 返回 `MEMORY_THREAD_READ_REQUIRED` 和完整 thread target；这次父频道读取不发往后端，也不消费 thread。先按完整 target 调用 `message_read`，再判断 Task 是否需要检索或诊断。其他 Agent、其他频道和显式历史范围读取维持原语义。Fork 检索回执会附上基于实际返回节点和关系的展开示例，仍由 Memory 判断适用性；不会自动采用反事实方法或把它当作事实答案证据。
+
+真实 PostgreSQL 回归在隔离 schema 中验证「误读父频道 → 提醒保留 → 读取 thread 后续 → task_state 诊断锚点」与越权拒绝。标准 `mise run test:integration:web` 自动生成并清理当前分支的 SQL fixture；只跑这两项时，先在 `apps/web` 用已安装 Prisma CLI 生成 fixture：
+
+```bash
+mise exec -- node node_modules/prisma/build/index.js migrate diff --from-empty --to-schema prisma/schema.prisma --script --output /tmp/memory-thread-schema.sql
+MEMORY_THREAD_TEST_SCHEMA_SQL=/tmp/memory-thread-schema.sql \
+  mise exec -- bun test ./test/memory-thread-read.integration.ts ./test/memory-diagnosis.integration.ts
+```
+
+`DATABASE_URL` 必须指向本地 PostgreSQL；测试不迁移共享数据库，结束时删除自己创建的隔离 schema。
