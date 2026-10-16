@@ -277,7 +277,12 @@ export async function runEpisode(input: {
       );
     });
     const requestIds = new Set(requests.map((message) => message.id));
-    const answers = taskMessages.filter((message) => !requestIds.has(message.id));
+    const answers = taskMessages.filter(
+      (message) =>
+        !requestIds.has(message.id) &&
+        (input.episode.domain !== "information_retrieval" ||
+          /(?:^|\n)Exact Answer:[ \t]*[^\s\r\n]/i.test(message.body)),
+    );
     const offerIds = new Set(offers.map((offer) => offer.messageId));
     snapshot = {
       finalOutput: answers.at(-1)?.body ?? null,
@@ -307,7 +312,10 @@ export async function runEpisode(input: {
     };
     const lastTaskAt = taskMessages.at(-1)?.createdAt?.getTime() ?? 0;
     const lastAnswer = answers.at(-1);
-    const answerIsLastTaskMessage = lastAnswer?.id === taskMessages.at(-1)?.id;
+    const answerIndex = taskMessages.findIndex((message) => message.id === lastAnswer?.id);
+    const answerHasNoLaterRequest =
+      answerIndex >= 0 &&
+      !taskMessages.slice(answerIndex + 1).some((message) => requestIds.has(message.id));
     const runtime = input.runtimeDiagnostics?.snapshot();
     const lastMemoryAt = memoryMessages.at(-1)?.createdAt.getTime() ?? 0;
     const lastHintAt = Math.max(0, ...hints.map((hint) => hint.deliveredAt?.getTime() ?? 0));
@@ -319,7 +327,7 @@ export async function runEpisode(input: {
     );
     if (
       lastAnswer &&
-      answerIsLastTaskMessage &&
+      answerHasNoLaterRequest &&
       !runtime?.taskRunning &&
       !runtime?.memoryRunning &&
       Date.now() - lastInteractionAt >= input.settleMs

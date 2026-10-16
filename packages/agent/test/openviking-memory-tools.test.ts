@@ -338,3 +338,55 @@ test("native diagnosis forwards the request without consuming retrieval budget",
   ]);
   expect(budget.snapshot()).toEqual({ reads: 0, offers: 0 });
 });
+
+test("unchanged retrieval nudges a partial Offer without blocking further reads", async () => {
+  const proxy = fakeProxy((_path, raw) => {
+    const command = raw as { protocol: string; op: string; operationId: string; query: string };
+    return {
+      ...emptyItemsResponse(command.protocol, command.op, command.operationId),
+      items: [
+        {
+          kind: "openviking",
+          citationId: command.query === "new evidence" ? "ov:new" : "ov:known",
+          workspaceId: "ws",
+          accountId: "acct",
+          uri: "viking://resources/doc.md",
+          contentHash: "sha256:fixture",
+          matchedLevel: "L2",
+          excerpt: "Source evidence.",
+        },
+      ],
+    };
+  });
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  let result: Awaited<ReturnType<typeof executeTool>>;
+  for (let index = 0; index < 3; index++) {
+    result = await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+      operationId: `find-${index}`,
+      query: "same evidence",
+    });
+  }
+  expect(
+    result!.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n"),
+  ).toContain("partial cited memory_offer");
+  expect(
+    result!.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n"),
+  ).toContain("ov:known");
+  const fresh = await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+    operationId: "find-fresh",
+    query: "new evidence",
+  });
+  expect(
+    fresh.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n"),
+  ).not.toContain("No new evidence");
+  expect(proxy.calls).toHaveLength(4);
+});

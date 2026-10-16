@@ -28,15 +28,8 @@ These instructions apply to the entire repository.
 
 ## Module design and implementation discipline
 
-- Treat `coforge-computer` and `coforge-daemon` as large, long-lived products.
-  Before adding a feature, identify its owning module and its public seam; do
-  not put new business logic in the nearest command, entrypoint, or transport
-  file merely because it is convenient.
-- Keep CLI commands thin. A command may parse arguments, invoke an
-  application use case, and format the result for a human. Workspace lookup,
-  authentication, registration, runtime discovery, persistence, process
-  supervision, and protocol encoding belong to reusable modules below the
-  command layer.
+- Treat `coforge-computer` and `coforge-daemon` as large, long-lived products. Before adding a feature, identify its owning module and its public seam; do not put new business logic in the nearest command, entrypoint, or transport file merely because it is convenient.
+- Keep CLI commands thin. A command may parse arguments, invoke an application use case, and format the result for a human. Workspace lookup, authentication, registration, runtime discovery, persistence, process supervision, and protocol encoding belong to reusable modules below the command layer.
 - Keep the abstraction gradient explicit: upper layers express business
   intent (`setupComputer`, `registerComputer`, `startDaemonRuntime`); middle
   layers coordinate domain operations (`getBySlug`, `buildRegistration`,
@@ -145,7 +138,6 @@ These instructions apply to the entire repository.
 - Give each operation one implementation owner. Keep short task declarations
   in `mise.toml`, substantial procedural logic in checked executable scripts,
   and CI-provider concerns in workflow YAML.
-
 - Do not silently change a runtime or tool version. Update `mise.toml`, affected lockfiles, and CI together.
 - Protobuf schemas under `packages/coforge-sdk/proto` must pass `buf lint` and
   `buf format --diff --exit-code`; do not use TypeScript lint rules as a
@@ -162,6 +154,8 @@ These instructions apply to the entire repository.
 - Bun-specific runtime and compatibility guidance lives in
   `.agents/skills/using-bun-runtime/SKILL.md`; load it before changing Bun
   runtime code or dependencies. The target runtime remains Bun, never Node (the installer crate is Rust).
+
+Agent runtime instructions: [packages/agent/AGENTS.md](packages/agent/AGENTS.md).
 
 ## Shared agent skills
 
