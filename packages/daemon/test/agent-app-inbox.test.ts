@@ -81,6 +81,33 @@ describe("AgentAppInbox", () => {
     expect(restored.list()).toEqual([item]);
   });
 
+  test("keeps a transient System Cleaner item in memory only", async () => {
+    const directory = root();
+    const inbox = await AgentAppInbox.open(directory, "workspace-a", "agent-a");
+    const durable = await inbox.upsert(due());
+    const transient = await inbox.upsert({
+      appId: "system.cleaner",
+      notificationClass: "memory_size",
+      sourceRef: { kind: "memory_size", id: "agent-a", revision: "3" },
+      title: "MEMORY.md is 70.0 KiB, over 64.0 KiB; recheck in 1h",
+      summary: `Keep an index; move details into notes/; remove what is out of date. ${"x".repeat(100)}`,
+    });
+    expect(transient).toMatchObject({
+      itemId: "cleaner:memory_size:agent-a",
+      retention: "transient",
+    });
+    expect(inbox.list().map((item) => item.itemId)).toContain(transient.itemId);
+
+    const path = join(directory, "app-inbox", "workspace-a", "agent-a", "items.json");
+    const persisted = JSON.parse(await Bun.file(path).text()) as { items: { itemId: string }[] };
+    expect(persisted.items.map((item) => item.itemId)).toEqual([durable.itemId]);
+    const restored = await AgentAppInbox.open(directory, "workspace-a", "agent-a");
+    expect(restored.list()).toEqual([durable]);
+
+    expect(await inbox.remove(transient.itemId)).toBe(true);
+    expect(inbox.list()).toEqual([durable]);
+  });
+
   test("fails explicitly for corrupt persistence and unsafe path scopes", async () => {
     const directory = root();
     const path = join(directory, "app-inbox", "workspace-a", "agent-a", "items.json");

@@ -47,6 +47,9 @@ export type LocalInboxRequest = {
   context: string;
   operation: "check";
 };
+/** `until_explicit_ack` items persist until acknowledged; `transient` ones live only in the
+ * running daemon's memory. */
+export type AppInboxRetention = "until_explicit_ack" | "transient";
 export type AppInboxItem = {
   itemId: string;
   appId: string;
@@ -54,7 +57,7 @@ export type AppInboxItem = {
   sourceRef: { kind: string; id: string; revision: string };
   title?: string;
   summary?: string;
-  retention: "until_explicit_ack";
+  retention: AppInboxRetention;
   action: { kind: "run_command"; commandId: string };
   createdAt: string;
 };
@@ -147,7 +150,10 @@ export function decodeInboxResponse(bytes: Uint8Array): InboxResponse {
       }
       if (entry.value.case !== "app") throw new Error("invalid Inbox entry");
       const app = entry.value.value;
-      if (app.retention !== "until_explicit_ack" || app.actionKind !== "run_command")
+      if (
+        (app.retention !== "until_explicit_ack" && app.retention !== "transient") ||
+        app.actionKind !== "run_command"
+      )
         throw new Error("invalid App Inbox entry");
       return {
         kind: "app",
@@ -158,7 +164,7 @@ export function decodeInboxResponse(bytes: Uint8Array): InboxResponse {
           sourceRef: { kind: app.sourceKind, id: app.sourceId, revision: app.sourceRevision },
           ...(app.title === undefined ? {} : { title: app.title }),
           ...(app.summary === undefined ? {} : { summary: app.summary }),
-          retention: app.retention as "until_explicit_ack",
+          retention: app.retention,
           action: { kind: "run_command", commandId: app.actionCommandId },
           createdAt: app.createdAt,
         },

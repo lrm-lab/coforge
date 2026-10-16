@@ -8,6 +8,13 @@ export const AGENT_CODE_DIRECTORY = "code";
 
 const STABLE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
+/** The directory holding every Agent workspace of one Workspace on this Computer. */
+export function agentsDirectory(workspaceRoot: string, workspaceId: string): string {
+  if (!STABLE_ID.test(workspaceId))
+    throw new Error("workspace and Agent IDs must be stable path-safe identifiers");
+  return join(workspaceRoot, workspaceId, "agents");
+}
+
 /** Returns the only permitted durable directory for an Agent runtime. */
 export function agentWorkspaceDirectory(
   workspaceRoot: string,
@@ -17,5 +24,5 @@ export function agentWorkspaceDirectory(
   if (!STABLE_ID.test(workspaceId) || !STABLE_ID.test(agentId)) {
     throw new Error("workspace and Agent IDs must be stable path-safe identifiers");
   }
-  return join(workspaceRoot, workspaceId, "agents", agentId);
+  return join(agentsDirectory(workspaceRoot, workspaceId), agentId);
 }

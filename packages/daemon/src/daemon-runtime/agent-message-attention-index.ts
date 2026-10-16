@@ -206,7 +206,6 @@ export class AgentMessageAttentionIndex {
   readonly #runtimes: Pick<AgentProcessManager, "session"> &
     Partial<Pick<AgentProcessManager, "runtime">>;
   readonly #memoryUpdates: MemoryChannelUpdates;
-  readonly #launchReminders = new Map<string, string>();
 
   constructor(
     workspaceId: string,
@@ -267,11 +266,6 @@ export class AgentMessageAttentionIndex {
           }),
       },
     );
-  }
-
-  /** Text set at launch and appended once to the Agent's next notice. */
-  setLaunchReminder(agentId: string, text: string): void {
-    this.#launchReminders.set(agentId, text);
   }
 
   async receive(message: AgentMessageDelivery): Promise<void> {
@@ -585,16 +579,13 @@ export class AgentMessageAttentionIndex {
     ];
     const totalCount =
       recoveredMessages.length + summaryOnly.reduce((sum, [, count]) => sum + count, 0);
-    const notice = this.#withLaunchReminder(
-      agentId,
-      recoveredMessages.length
-        ? inboxNoticeText("restart recovery", totalCount, rows, this.#inboxDrainHint(agentId))
-        : agentStartupCatchupInput(
-            totalCount,
-            rows,
-            Boolean(this.#runtimes.runtime?.(agentId)?.config.toolProfile),
-          ),
-    );
+    const notice = recoveredMessages.length
+      ? inboxNoticeText("restart recovery", totalCount, rows, this.#inboxDrainHint(agentId))
+      : agentStartupCatchupInput(
+          totalCount,
+          rows,
+          Boolean(this.#runtimes.runtime?.(agentId)?.config.toolProfile),
+        );
     // Same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
     this.hold.busy(agentId);
     try {
@@ -628,13 +619,6 @@ export class AgentMessageAttentionIndex {
       !message.mentionsAgent &&
       !isTrackedMention(message)
     );
-  }
-
-  #withLaunchReminder(agentId: string, notice: string): string {
-    const reminder = this.#launchReminders.get(agentId);
-    if (!reminder) return notice;
-    this.#launchReminders.delete(agentId);
-    return `${notice}\n\n${reminder}`;
   }
 
   #inboxDrainHint(agentId: string): string {
@@ -749,9 +733,11 @@ export class AgentMessageAttentionIndex {
     const view = this.#localViewRows(announced, queued);
     const rows = this.#renderLocalViewRows(view.rows);
     const totalCount = countDistinctMessages([...announced, ...queued]);
-    const notice = this.#withLaunchReminder(
-      message.agentId,
-      inboxNoticeText(undefined, totalCount, rows, this.#inboxDrainHint(message.agentId)),
+    const notice = inboxNoticeText(
+      undefined,
+      totalCount,
+      rows,
+      this.#inboxDrainHint(message.agentId),
     );
     // The session names these back if the notice never reaches the model (`notice-undelivered`).
     const trackedIds = announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId);
@@ -1338,7 +1324,6 @@ export class AgentMessageAttentionIndex {
     this.#pendingWindow.delete(agentId);
     this.#readContext.delete(agentId);
     this.#readContextCounters.delete(agentId);
-    this.#launchReminders.delete(agentId);
   }
 
   /** Forgets the pending attention of these channel targets and every thread under them: the Agent

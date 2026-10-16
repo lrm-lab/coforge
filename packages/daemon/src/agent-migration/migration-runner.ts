@@ -56,6 +56,8 @@ export type AgentMigrationRunnerOptions = {
     /** Stops the Agent's process on this Computer and resolves once it has exited. */
     stop(agentId: string): Promise<void>;
     isRunning(agentId: string): boolean;
+    /** The Agent has moved to another Computer and its workspace here was archived. */
+    movedAway(agentId: string): void;
   };
   workspaceDirectory(agentId: string): string;
   /** The daemon's state directory; migration attempts and workspace backups live under it. */
@@ -362,6 +364,7 @@ export class AgentMigrationRunner {
         );
         await pruneWorkspaceBackups(backupDirectory);
         logger.info("agent_migration:source_archived", { migration_id: lease.migrationId });
+        this.options.agents.movedAway(lease.agentId);
       } catch (error) {
         logger.warn("agent_migration:source_archive_failed", {
           migration_id: lease.migrationId,

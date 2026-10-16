@@ -2,6 +2,7 @@ import {
   APP_INBOX_PREVIEW_MAX_CHARS,
   appInboxDefinition,
   type AppInboxAction,
+  type AppInboxRetention,
   type AppSourceRef,
 } from "./registry";
 import { AgentAppInboxPersistence } from "#src/persistence/agent-app-inbox-store";
@@ -13,7 +14,7 @@ export type AgentAppItem = Readonly<{
   sourceRef: AppSourceRef;
   title?: string;
   summary?: string;
-  retention: "until_explicit_ack";
+  retention: AppInboxRetention;
   action: AppInboxAction;
   createdAt: string;
 }>;
@@ -26,7 +27,8 @@ export type MintAppItem = Readonly<{
   summary?: string;
 }>;
 
-/** Agent-scoped typed App Inbox. Chat fields and executable actions are not part of its interface. */
+/** Agent-scoped typed App Inbox. Chat fields and executable actions are not part of its interface.
+ * Only `until_explicit_ack` items reach disk; a `transient` item ends with this process. */
 export class AgentAppInbox {
   readonly #items = new Map<string, AgentAppItem>();
   #mutations: Promise<unknown> = Promise.resolve();
@@ -62,8 +64,9 @@ export class AgentAppInbox {
       const previous = this.#items.get(itemId);
       if (!previous) return false;
       this.#items.delete(itemId);
+      if (previous.retention === "transient") return true;
       try {
-        await this.persistence.write(this.list());
+        await this.#persist();
       } catch (error) {
         this.#items.set(itemId, previous);
         throw error;
@@ -78,7 +81,7 @@ export class AgentAppInbox {
     const itemId = definition.itemId(sourceRef);
     const previous = this.#items.get(itemId);
     const title = boundedSingleLine(input.title, "title");
-    const summary = boundedSingleLine(input.summary, "summary");
+    const summary = boundedSingleLine(input.summary, "summary", definition.summaryMaxChars);
     const item: AgentAppItem = Object.freeze({
       itemId,
       appId: input.appId,
@@ -91,14 +94,19 @@ export class AgentAppInbox {
       createdAt: previous?.createdAt ?? new Date().toISOString(),
     });
     this.#items.set(itemId, item);
+    if (item.retention === "transient") return item;
     try {
-      await this.persistence.write(this.list());
+      await this.#persist();
     } catch (error) {
       if (previous) this.#items.set(itemId, previous);
       else this.#items.delete(itemId);
       throw error;
     }
     return item;
+  }
+
+  #persist(): Promise<void> {
+    return this.persistence.write(this.list().filter((item) => item.retention !== "transient"));
   }
 
   #mutate<T>(operation: () => Promise<T>): Promise<T> {
@@ -108,11 +116,15 @@ export class AgentAppInbox {
   }
 }
 
-function boundedSingleLine(value: unknown, field: string): string | undefined {
+function boundedSingleLine(
+  value: unknown,
+  field: string,
+  maxChars = APP_INBOX_PREVIEW_MAX_CHARS,
+): string | undefined {
   if (value === undefined || value === "") return undefined;
   if (
     typeof value !== "string" ||
-    value.length > APP_INBOX_PREVIEW_MAX_CHARS ||
+    value.length > maxChars ||
     [...value].some((character) => character.charCodeAt(0) <= 31 || character.charCodeAt(0) === 127)
   )
     throw new Error(`App Inbox ${field} must be bounded single-line text`);
@@ -141,6 +153,7 @@ function restoreItem(raw: unknown): AgentAppItem {
   const definition = appInboxDefinition(value.appId, value.notificationClass);
   const sourceRef = definition.normalizeSourceRef(value.sourceRef);
   if (
+    definition.retention === "transient" ||
     value.itemId !== definition.itemId(sourceRef) ||
     value.retention !== definition.retention ||
     !value.action ||
@@ -153,7 +166,7 @@ function restoreItem(raw: unknown): AgentAppItem {
   )
     throw new Error("App Inbox persisted item is corrupt");
   const title = boundedSingleLine(value.title, "title");
-  const summary = boundedSingleLine(value.summary, "summary");
+  const summary = boundedSingleLine(value.summary, "summary", definition.summaryMaxChars);
   return Object.freeze({
     itemId: value.itemId,
     appId: value.appId,

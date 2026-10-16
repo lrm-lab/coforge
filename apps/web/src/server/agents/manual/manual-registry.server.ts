@@ -13,6 +13,7 @@ import memoryBody from "#src/server/agents/manual/topics/memory.md?raw";
 import profileBody from "#src/server/agents/manual/topics/profile.md?raw";
 import remindersBody from "#src/server/agents/manual/topics/reminders.md?raw";
 import tasksBody from "#src/server/agents/manual/topics/tasks.md?raw";
+import workspaceCleanupBody from "#src/server/agents/manual/topics/workspace-cleanup.md?raw";
 
 /** One Agent Manual topic. `slug`/`title`/`summary` are a small typed registry here
  * rather than markdown frontmatter, to avoid a frontmatter parser for two fields. */
@@ -93,6 +94,13 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     summary:
       "Full task reference: how tasks appear in messages, statuses and the claim/unclaim rules, auditable amendments, the claim-to-done workflow, splitting for parallel work, when coforge task create is and is not appropriate, convert/unclaim/assign/update/delete/receipt, and listing a conversation's board or your own tasks with coforge task list --mine.",
     body: tasksBody,
+  },
+  {
+    slug: "workspace-cleanup",
+    title: "Keeping your workspace small",
+    summary:
+      "What a System Cleaner item means, which workspace files are safe to delete, asking your owner about the rest, keeping .coforgemigrateignore current, and raising the MEMORY.md threshold.",
+    body: workspaceCleanupBody,
   },
 ];
 

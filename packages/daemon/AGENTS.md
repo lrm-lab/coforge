@@ -94,6 +94,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/agent-migration/`     | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit |
 | `src/agent-app-inbox/`     | Typed Agent App items, kept separate from chat Message attention                                |
 | `src/agent-reminder/`      | Cloud reminder schedule mirror, version-fenced timers, and fire receipts                        |
+| `src/system-cleaner/`      | Per-Agent MEMORY.md and disk measurements, and the hints they present at Working→Idle           |
 | `src/credentials/`         | Daemon credential store and Agent API keys                                                      |
 | `src/persistence/`         | Durable local daemon state and configuration validation                                         |
 | `src/platform/`            | OS primitives: process trees, launchd jobs, Job Objects, locks, log files, OS release           |
@@ -115,6 +116,7 @@ Read the matching file before changing code in that directory:
 - [`src/agent-runtime/AGENTS.md`](src/agent-runtime/AGENTS.md)
 - [`src/code-agent/AGENTS.md`](src/code-agent/AGENTS.md)
 - [`src/agent-reminder/AGENTS.md`](src/agent-reminder/AGENTS.md)
+- [`src/system-cleaner/AGENTS.md`](src/system-cleaner/AGENTS.md)
 - [`src/persistence/AGENTS.md`](src/persistence/AGENTS.md)
 - [`src/platform/AGENTS.md`](src/platform/AGENTS.md)
 

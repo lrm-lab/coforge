@@ -2,11 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  buildInitialMemoryMd,
-  memoryIndexReminder,
-  seedAgentMemory,
-} from "#src/agent-runtime/agent-memory-seed";
+import { buildInitialMemoryMd, seedAgentMemory } from "#src/agent-runtime/agent-memory-seed";
 
 test("buildInitialMemoryMd renders the displayName, role, and an index of notes, with no active context", () => {
   const content = buildInitialMemoryMd({
@@ -134,23 +130,6 @@ test("seedAgentMemory never overwrites an existing notes/active-context.md, byte
     expect(await readFile(activeContextPath, "utf8")).toBe(ownedContent);
     expect(await readFile(join(workspace, "MEMORY.md"), "utf8")).toBe(
       buildInitialMemoryMd({ name: "scout" }),
-    );
-  } finally {
-    await rm(workspace, { recursive: true, force: true });
-  }
-});
-
-test("memoryIndexReminder stays quiet at or under 8KB and warns above it", async () => {
-  const workspace = await mkdtemp(join(tmpdir(), "coforge-agent-memory-stat-"));
-  try {
-    await seedAgentMemory(workspace, { name: "scout" });
-    expect(await memoryIndexReminder(workspace)).toBeUndefined();
-
-    await writeFile(join(workspace, "MEMORY.md"), `${"x".repeat(9 * 1024)}\n`, {
-      encoding: "utf8",
-    });
-    expect(await memoryIndexReminder(workspace)).toBe(
-      "Your MEMORY.md is 9KB (limit 3KB). Move details into notes/ and keep MEMORY.md as an index.",
     );
   } finally {
     await rm(workspace, { recursive: true, force: true });

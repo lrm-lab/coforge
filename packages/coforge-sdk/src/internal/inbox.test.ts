@@ -34,3 +34,26 @@ test("round trips the version-compatible unified Inbox protocol", () => {
   };
   expect(decodeInboxResponse(encodeInboxResponse(response))).toEqual(response);
 });
+
+test("round trips a transient System Cleaner item", () => {
+  const response = {
+    idempotencyKey: "r",
+    accepted: true,
+    entries: [
+      {
+        kind: "app" as const,
+        app: {
+          itemId: "cleaner:memory_size:agent-a",
+          appId: "system.cleaner",
+          notificationClass: "memory_size",
+          sourceRef: { kind: "memory_size", id: "agent-a", revision: "0" },
+          title: "MEMORY.md is 70.0 KiB, over 64.0 KiB; recheck in 1h",
+          retention: "transient" as const,
+          action: { kind: "run_command" as const, commandId: "app.config" },
+          createdAt: "2026-10-16T00:00:00.000Z",
+        },
+      },
+    ],
+  };
+  expect(decodeInboxResponse(encodeInboxResponse(response))).toEqual(response);
+});
