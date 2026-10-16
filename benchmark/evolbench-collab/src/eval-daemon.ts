@@ -1,3 +1,4 @@
+import { waitForAgentStart } from "./agent-start-wait";
 import { MentionDeliveryReports } from "../../../apps/web/src/server/conversations/mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "../../../apps/web/src/server/db/repositories/mention-delivery.repositories.server";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -416,16 +417,15 @@ export async function startAgent(
     conversations,
     mentions,
   );
-  const result = await control.execute({
+  // Keep one request ID across observations; AgentControl rejoins an in-flight Start.
+  const request = {
     userId: workspace.evalUserId,
     workspaceId: workspace.workspaceId,
     agentId,
     requestId: crypto.randomUUID(),
-    action: "start",
-  });
-  if (result.phase !== "completed") {
-    throw new Error(
-      `Agent ${agentId} start ${result.phase}${result.error ? `: ${result.error}` : ""}`,
-    );
-  }
+    action: "start" as const,
+  };
+  await waitForAgentStart(agentId, (requestId) =>
+    control.execute({ ...request, requestId: requestId ?? request.requestId }),
+  );
 }
