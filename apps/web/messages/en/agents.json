@@ -396,7 +396,7 @@
   "agent_deleted_badge": "ARCHIVED",
   "agent_profile_action_delete": "Archive agent",
   "agent_delete_dialog_title": "Archive {name}?",
-  "agent_delete_dialog_description": "The Agent stops and leaves Members and Chat. Its profile, messages, tasks and history stay readable, marked as archived.",
+  "agent_delete_dialog_description": "The Agent stops and leaves Members and Chat. Its profile, messages, tasks and history stay readable, marked as archived. Archiving cannot be undone, and its username is released for a new Agent to use.",
   "agent_delete_confirm": "Type the Agent's username to confirm:",
   "agent_delete_placeholder": "Agent username",
   "agent_delete_submit": "Archive agent",

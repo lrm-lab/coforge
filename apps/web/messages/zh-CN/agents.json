@@ -394,7 +394,7 @@
   "agent_deleted_badge": "已归档",
   "agent_profile_action_delete": "归档智能体",
   "agent_delete_dialog_title": "归档 {name}？",
-  "agent_delete_dialog_description": "该智能体将停止运行，并从成员列表和聊天中移除。它的资料页、消息、任务和历史记录仍可只读查看，并标记为已归档。",
+  "agent_delete_dialog_description": "该智能体将停止运行，并从成员列表和聊天中移除。它的资料页、消息、任务和历史记录仍可只读查看，并标记为已归档。归档后无法恢复，它的用户名会释放，新建的智能体可以再使用。",
   "agent_delete_confirm": "输入该智能体的用户名以确认：",
   "agent_delete_placeholder": "智能体用户名",
   "agent_delete_submit": "归档智能体",
