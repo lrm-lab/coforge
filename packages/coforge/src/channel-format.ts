@@ -155,11 +155,8 @@ export function formatChannelMembers(response: {
       const status = `(${agentStatusLabel(agent)})`;
       const role = roleSuffix(agent.serverRole);
       const detail = channelMemberRoleDetail(agent);
-      lines.push(
-        agent.description
-          ? `  - @${agent.name} ${status}${role}${detail} — ${agent.description}`
-          : `  - @${agent.name} ${status}${role}${detail}`,
-      );
+      const description = agent.description ? ` — ${agent.description}` : "";
+      lines.push(`  - @${agent.name} ${status}${role}${detail}${description}`);
     }
   lines.push(
     "",
