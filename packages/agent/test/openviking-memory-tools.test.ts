@@ -524,3 +524,87 @@ test("Fork discovery supplies an executable served-relation example before a met
   expect(guidance).toContain(uri);
   expect(proxy.calls).toHaveLength(1);
 });
+
+test("new discovery IDs do not hide a search-only loop and a full read clears its warning", async () => {
+  const budget = new MemoryAgentTurnBudget();
+  const proxy = fakeProxy((_path, raw) => {
+    const command = raw as { protocol: string; op: string; operationId: string; uri?: string };
+    const citation = {
+      kind: "openviking",
+      citationId: `ov:${command.operationId}`,
+      workspaceId: "ws",
+      accountId: "acct",
+      uri: command.uri ?? `viking://resources/evo-ir/documents/${command.operationId}.md`,
+      contentHash: "sha256:fixture",
+      matchedLevel: "L2",
+      excerpt: "A discovery candidate, not verified support for every constraint.",
+    };
+    return command.op === "read"
+      ? {
+          protocol: command.protocol,
+          op: "read",
+          operationId: command.operationId,
+          duplicate: false,
+          citation,
+          content: "Read document body.",
+        }
+      : {
+          ...emptyItemsResponse(command.protocol, command.op, command.operationId),
+          items: [citation],
+        };
+  });
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
+  let output = "";
+  for (let index = 0; index < 4; index++) {
+    if (index === 2) budget.reset();
+    const result = await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+      operationId: `find-${index}`,
+      query: `different ${index}`,
+    });
+    output = result.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+  }
+  expect(output).toContain("4 discovery calls without a new document read");
+  expect(output).toContain('"uri":"viking://resources/evo-ir/documents/find-3.md"');
+  expect(output).toContain("disconfirm");
+  await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
+    operationId: "read-1",
+    uri: "viking://resources/evo-ir/documents/find-3.md",
+  });
+  const afterRead = await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+    operationId: "find-after-read",
+    query: "next constraint",
+  });
+  expect(
+    afterRead.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n"),
+  ).not.toContain("discovery calls without");
+  for (let index = 0; index < 2; index++)
+    await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+      operationId: `more-${index}`,
+      query: "another keyword",
+    });
+  await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
+    operationId: "read-fork",
+    uri: "viking://resources/causal/forks/method.md",
+  });
+  await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
+    operationId: "read-again",
+    uri: "viking://resources/evo-ir/documents/find-3.md",
+  });
+  const stillStalled = await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+    operationId: "still-stalled",
+    query: "changed again",
+  });
+  expect(
+    stillStalled.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n"),
+  ).toContain("4 discovery calls without a new document read");
+  expect(proxy.calls).toHaveLength(11);
+});
