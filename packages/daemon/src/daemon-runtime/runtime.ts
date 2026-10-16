@@ -96,6 +96,7 @@ import {
   REMINDER_CAPABILITY,
   AGENT_MIGRATION_CAPABILITY,
   APP_CONFIG_CAPABILITY,
+  CLEANER_APP_ID,
   type AgentReminderOperationRequest,
   type LocalReminderRequest,
   type ReminderJob,
@@ -703,7 +704,7 @@ export class DaemonRuntime {
       // `#requestAppConfigSnapshot` asks only through a transport that has the method.
       requestSnapshot: (agentId) =>
         this.#transport.requestAppConfigSnapshot!({ ...this.#envelope(), agentId }),
-      apps: {},
+      apps: { [CLEANER_APP_ID]: this.systemCleaner },
     });
     // The transport is replaced on each start, so the runner reaches the route through whichever
     // one is current.

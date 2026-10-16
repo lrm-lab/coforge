@@ -2,6 +2,7 @@ import {
   AGENT_MIGRATION_CAPABILITY,
   APP_CONFIG_CAPABILITY,
   APP_CONFIG_SYNC_MESSAGE_TYPE,
+  CLEANER_APP_ID,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import type { ReceivedAgentMigrationLease } from "#src/connection/daemon-connection";
@@ -11279,6 +11280,58 @@ test("a daemon advertises App config and asks for each launched Agent's snapshot
     await runtime.startAgent("agent-b", config);
     await answered.promise;
     expect(requested.toSorted()).toEqual(["agent-a", "agent-a", "agent-b"]);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("an App config the cloud pushes reaches the System Cleaner", async () => {
+  const credentials = new InMemoryDaemonCredentialStore();
+  await credentials.save(connection.workspaceId, connection.computerId, "token-app-config");
+  let receive: ((sync: import("@lrm/coforge-sdk/internal").AppConfigSync) => void) | undefined;
+  const runtime = new DaemonRuntime(
+    connection,
+    () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
+    credentials,
+    {
+      create: () => ({
+        async start() {},
+        async stop() {},
+        async ready() {},
+        onAppConfigSync(callback) {
+          receive = callback;
+          return () => {};
+        },
+      }),
+    },
+    undefined,
+    emptyCodeAgentDiscovery,
+  );
+  try {
+    const { records } = await captureDaemonLogs(async () => {
+      await runtime.start(connection);
+      receive!({
+        protocolMajor: 1,
+        requestId: "app-config-upsert",
+        workspaceId: connection.workspaceId,
+        computerId: connection.computerId,
+        agentId: "agent-a",
+        operation: "upsert",
+        configs: [
+          {
+            appId: CLEANER_APP_ID,
+            ownerAgentId: "agent-a",
+            revision: 3,
+            effective: { enabled: false, thresholdBytes: 8192, intervalMs: 900_000 },
+          },
+        ],
+        messageType: APP_CONFIG_SYNC_MESSAGE_TYPE,
+      });
+    });
+    expect(
+      records.find((record) => record.properties.event === "system_cleaner:config_applied")
+        ?.properties,
+    ).toMatchObject({ agent_id: "agent-a", revision: 3, enabled: false, threshold_bytes: 8192 });
   } finally {
     await runtime.stop();
   }
