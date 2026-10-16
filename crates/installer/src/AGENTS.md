@@ -114,9 +114,9 @@ module: its file and single responsibility. Update it before adding or reorganiz
 - `src/request_id.rs`: generates the request id of an `install` (RFC 9562 version 4; unique, not
   secret). Tests in `src/request_id/tests.rs`.
 - `src/recover.rs`: `coforge-computer recover`. Refuses from inside the running service, then
-  restores the version the journal names (or keeps the new one when its success was recorded)
-  through `switch`, records a rolled-back receipt when none exists, and clears the journal. Tests
-  in `src/recover/tests.rs`.
+  settles the journal through `switch`: keeps a recorded success or an already-active new version
+  that settles, otherwise restores the previous version. Writes a receipt only when none exists;
+  clears the journal only after settling. Tests in `src/recover/tests.rs`.
 - `src/test_support.rs`: test-only helpers shared by the modules' tests: a
   scratch directory, a loopback HTTP server, a tiny release tree, and runners
   that repeat a test in a child process, killed after `CHILD_DEADLINE` (30 s).

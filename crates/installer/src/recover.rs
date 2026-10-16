@@ -1,9 +1,11 @@
 //! Recovery: `coforge-computer recover` settles an upgrade that did not finish.
 //!
 //! The journal (`installer-transaction.json`) is the only thing that says a run ended between
-//! recording the transaction and clearing it. Recovery restores the version the journal names, the
-//! same way a rollback does, and then clears the journal. It never starts a candidate: a receipt
-//! that says the upgrade succeeded keeps the new version, and anything else returns to `from`.
+//! recording the transaction and clearing it. A succeeded receipt commits recovery to the new
+//! version. Otherwise, recovery first tries a new version that is already active, keeping it when
+//! it settles; if it is not active or cannot settle, recovery restores `from`. With no previous
+//! version to restore, or if the required switch fails, the journal stays unresolved. A settled
+//! recovery clears the journal and writes a receipt only when none exists.
 
 use std::path::PathBuf;
 
