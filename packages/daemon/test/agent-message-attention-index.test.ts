@@ -1283,7 +1283,7 @@ test("the next notice appends a MEMORY.md over-limit reminder once", async () =>
     { session: () => session((notice) => notices.push(notice)) },
     async () => {},
   );
-  index.setMemoryReminder(
+  index.setLaunchReminder(
     "agent-1",
     "Your MEMORY.md is 35KB (limit 3KB). Move details into notes/ and keep MEMORY.md as an index.",
   );

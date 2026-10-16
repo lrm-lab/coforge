@@ -122,7 +122,7 @@ import {
   agentContextScanResponse,
   type AgentContextScanOutcome,
 } from "./agent-context-scan-response";
-import { memoryIndexReminder } from "#src/agent-runtime/agent-memory-seed";
+import { WorkspaceCleanupTips } from "#src/agent-runtime/workspace-cleanup-tip";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
@@ -460,6 +460,7 @@ export class DaemonRuntime {
   #migrationsClosed: Promise<void> | undefined;
   readonly #agentInboxes = new Map<string, AgentInboxStateMachine>();
   readonly #appInboxes = new Map<string, Promise<AgentAppInbox>>();
+  readonly #workspaceCleanupTips = new WorkspaceCleanupTips();
   readonly #notifiedAppItems = new Map<string, Map<string, Promise<boolean>>>();
   readonly #runtimeInstanceId = generateRuntimeInstanceId();
   readonly #startedAt = Date.now();
@@ -2314,9 +2315,11 @@ export class DaemonRuntime {
         parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect")
       )
         this.#collectSkillAgents.add(agentId);
-      void memoryIndexReminder(workspaceDirectory).then((reminder) => {
-        if (reminder) this.#messageAttention.setMemoryReminder(agentId, reminder);
-      });
+      void this.#workspaceCleanupTips
+        .launchReminder(agentId, workspaceDirectory)
+        .then((reminder) => {
+          if (reminder && current()) this.#messageAttention.setLaunchReminder(agentId, reminder);
+        });
       if (this.#stoppingAgents.has(agentId)) {
         await this.#agentProcessManager.stop(agentId);
         throw new Error(`Agent runtime is stopping: ${agentId}`);

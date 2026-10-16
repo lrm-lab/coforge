@@ -110,3 +110,10 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   an existing `MEMORY.md` is never migrated or rewritten.
 - Seed `MEMORY.md` for on-demand recovery. Do not require per-turn memory
   maintenance in the standing instructions.
+
+## Launch reminders
+
+- `workspace-cleanup-tip.ts` decides the workspace cleanup tip and joins it to
+  the MEMORY.md reminder for the Agent's next notice. The daemon never edits
+  the workspace for either. Tip state is process-local; never persist it or
+  send it to the server.
