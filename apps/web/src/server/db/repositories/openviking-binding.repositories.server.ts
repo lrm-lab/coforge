@@ -7,21 +7,28 @@ import {
   WorkspaceMemoryScopeError,
 } from "./workspace-memory-errors.server";
 
+export async function readOpenVikingBinding(
+  db: Pick<PrismaClient, "openVikingBinding">,
+  workspaceId: string,
+): Promise<OpenVikingBinding | null> {
+  const row = await db.openVikingBinding.findUnique({ where: { workspaceId } });
+  if (!row) return null;
+  const decoded = decodeOpenVikingBinding({
+    workspaceId: row.workspaceId,
+    accountId: row.accountId,
+    serviceIdentityId: row.serviceIdentityId,
+    credentialRef: row.credentialRef,
+    generation: row.generation,
+  });
+  if ("code" in decoded) throw new WorkspaceMemoryBindingError();
+  return decoded;
+}
+
 export class PrismaOpenVikingBindingStore implements OpenVikingBindingStore {
   constructor(private readonly db: PrismaClient) {}
 
   async get(workspaceId: string): Promise<OpenVikingBinding | null> {
-    const row = await this.db.openVikingBinding.findUnique({ where: { workspaceId } });
-    if (!row) return null;
-    const decoded = decodeOpenVikingBinding({
-      workspaceId: row.workspaceId,
-      accountId: row.accountId,
-      serviceIdentityId: row.serviceIdentityId,
-      credentialRef: row.credentialRef,
-      generation: row.generation,
-    });
-    if ("code" in decoded) throw new WorkspaceMemoryBindingError();
-    return decoded;
+    return readOpenVikingBinding(this.db, workspaceId);
   }
 
   /** Removes the binding; the identities mapped under it go with it (`Cascade`). */

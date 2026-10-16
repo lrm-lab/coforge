@@ -26,6 +26,7 @@ const ovHit = {
 
 function commands(
   extras: {
+    backendFailure?: Error;
     offerTargets?: {
       resolve: () => Promise<{ conversationId: string; targetAgentId: string } | null>;
     };
@@ -93,6 +94,7 @@ function commands(
       client: {
         async invoke(request) {
           gatewayCalls.push({ operation: request.operation });
+          if (extras.backendFailure) throw extras.backendFailure;
           return { retrieval_mode: "bm25", results: [ovHit] };
         },
       },
@@ -379,4 +381,21 @@ test("the same trigger can retrieve more than three times through the Memory rou
     expect(result.ok).toBe(true);
   }
   expect(gatewayCalls).toHaveLength(20);
+});
+
+test("a valid retrieval experiencing backend failure is not blamed on model arguments", async () => {
+  const { handler } = commands({ backendFailure: new Error("private runtime credential failed") });
+  const result = await handler.handle({
+    workspaceId: "ws-a",
+    agentId: "mem-1",
+    triggerMessageId: "msg-1",
+    command: {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "find",
+      operationId: "backend-failure",
+      query: "deploy",
+    },
+  });
+  expect(result).toMatchObject({ ok: false, status: 503, code: "openviking-runtime-unavailable" });
+  expect(JSON.stringify(result)).not.toContain("private runtime credential");
 });
