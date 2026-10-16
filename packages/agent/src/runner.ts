@@ -20,9 +20,7 @@ import {
   formatOpenVikingMissingArgumentsError,
   isMemoryAgentToolProfile,
   listMissingOpenVikingFields,
-  MEMORY_OFFER_BUDGET_PER_TRIGGER,
   OPENVIKING_AGENT_PROTOCOL,
-  OPENVIKING_CANDIDATE_LIMIT_MAX,
   OPENVIKING_TOOL_NAMES,
   OPENVIKING_GRAPH_RELATIONS,
   toolsForMemoryFence,
@@ -43,46 +41,16 @@ import {
 import { API_KEY_ENV_BY_PROVIDER, configureRuntimeEnvironment } from "./runtime-provider";
 import { classifyPiLaunchFailure, PI_MODEL_UNAVAILABLE } from "./launch-error";
 
-import { createMemoryDispositionTool } from "./memory-disposition-tool";
+import { MemoryAgentTurnBudget } from "./memory-agent-turn";
+export { MemoryAgentTurnBudget } from "./memory-agent-turn";
 
-const MEMORY_READ_OPS = new Set(["find", "search_context", "read", "expand"]);
+import { installChannelTurnPolicy } from "./channel-turn-policy";
+
+import { createMemoryDispositionTool } from "./memory-disposition-tool";
 
 export type MemoryAgentProxy = {
   post(path: string, body: unknown): Promise<unknown>;
 };
-
-/** Per-trigger Offer budget and read accounting for the Memory Agent fence. */
-export class MemoryAgentTurnBudget {
-  #reads = 0;
-  #offers = 0;
-
-  reset(): void {
-    this.#reads = 0;
-    this.#offers = 0;
-  }
-
-  consume(command: OpenVikingAgentCommand): void {
-    if (MEMORY_READ_OPS.has(command.op)) {
-      const limit = "limit" in command ? command.limit : undefined;
-      if (limit !== undefined && limit > OPENVIKING_CANDIDATE_LIMIT_MAX)
-        throw new Error("candidate limit exceeded");
-      this.#reads += 1;
-      return;
-    }
-    if (command.op === "offer") {
-      if (this.#offers >= MEMORY_OFFER_BUDGET_PER_TRIGGER)
-        throw new Error("memory offer budget exhausted for this triggering message");
-      this.#offers += 1;
-    }
-  }
-
-  snapshot() {
-    return {
-      reads: this.#reads,
-      offers: this.#offers,
-    };
-  }
-}
 
 type ProxyToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -277,7 +245,10 @@ export function createMemoryFenceTools(
             await proxy.post(agentApiRoutes.proxy.openviking.path, command),
           );
         }
-        return toolResult(decoded);
+        const result = toolResult(decoded);
+        const feedback = budget.retrievalFeedback(decoded);
+        if (feedback) result.content.push({ type: "text", text: feedback });
+        return result;
       },
     });
 
@@ -418,7 +389,7 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.offer]: openvikingTool(
       OPENVIKING_TOOL_NAMES.offer,
       "Publish Memory Offer",
-      "Publish one visible, cited Memory Offer. This is the only visible answer to an explicit @memory question. citationRefs are citation ids already returned in this workspace. The server binds the channel and recipient.",
+      "Publish one visible, cited Memory Offer. Partial findings and explicit unresolved constraints are valid; do not wait to solve the whole Task. This is the only visible answer to an explicit @memory question. citationRefs are citation ids already returned in this workspace. The server binds the channel and recipient.",
       "offer",
       {
         operationId: Type.String({
@@ -748,6 +719,7 @@ export async function createSession(options: {
         ? { customTools }
         : {}),
   });
+  const removeChannelTurnPolicy = installChannelTurnPolicy(created.session);
   return {
     ...created,
     services,
@@ -757,6 +729,7 @@ export async function createSession(options: {
       return sessionManager.getSessionId();
     },
     dispose: async () => {
+      removeChannelTurnPolicy();
       created.session.clearQueue();
       await created.session.abort();
       await created.session.waitForIdle();

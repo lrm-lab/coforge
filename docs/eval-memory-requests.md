@@ -11,8 +11,9 @@ Agent HTTPS 接口和 OpenViking 工具运行。经验与证据文档统一由 M
    收到通知后使用不带范围锚点的 `message_read`，从服务端已读位置分页读取正文，`hasNewer=true` 时继续。通知与 custody ACK 不推进已读位置；成功读取才推进。`message_check` 只消费投递集合，不能代替频道增量阅读。读完判断是否需要检索或发言。
 3. Memory 使用 `ov_find` 检索、按需 `ov_read`，用 `memory_offer` 返回带引用的 Hint。`ov_find` 显式发送 `retrieval_mode=bm25`，Memory 不暴露 `ov_search_context`。后端未明确返回 BM25 标识时返回 `bm25_backend_required`，不回退 embedding。已发布的 frozen AIG/Fork 摘要可由 `ov_find` 发现，再使用返回的 chainRef、URI 和关系调用 `ov_expand` 逐跳探索；链绑定用户、已返回节点、权限和预算。Fork 分支标明反事实，不能当作真实执行证据。
    `ov_find`、`ov_read`、`ov_expand` 没有每个触发消息的读取次数上限；客户端和 Web 均只记录读取次数。单次查询最多 10 个候选，每个触发最多发布 1 个 Offer，检索链自身的跳数与权限校验仍生效。
+   Memory 可以及时交付带引用的部分发现并列出未解决约束，无需独自解完整题目；后续检索由 Task 继续请求。成功发布 Offer 后当前模型轮次正常结束。连续空频道轮询也正常结束轮次，后续消息继续使用同一会话。
 4. Task 调用原生 `memory_disposition` 记录 adopt / reject / defer 和原因，再决定如何执行。
-5. 最后一条不包含对 Memory 的结构化 @mention 的 Task 消息是最终答案；IR 的 `Exact Answer:` / `Confidence:` 完整答案允许在解释中提及 Memory。两者结束运行、Memory 没有待消费的观察消息，且最新回复、Hint 和运行进展经过 settle 窗口后才结束该题，避免在 30 秒批通知发出前清理 workspace。仍受 quiet 和总 deadline 预算限制。
+5. 最终答案来自不属于 Memory 检索请求的 Task 消息；IR 只选含非空 `Exact Answer:` 的答案，后续完成通知不会覆盖答案。IR 的 `Exact Answer:` / `Confidence:` 完整答案允许在解释中提及 Memory。两者结束运行、Memory 没有待消费的观察消息，且最新回复、Hint 和运行进展经过 settle 窗口后才结束该题，避免在 30 秒批通知发出前清理 workspace。仍受 quiet 和总 deadline 预算限制。
 
 harness 不做 pre-turn recall，不自动检索、选技能或注入经验，也不向 Task 工作目录复制
 原始语料、技能 ledger 或 `ir_search.py`。Task 保留产品正常执行工具；角色指令要求检索走
