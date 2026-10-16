@@ -1123,9 +1123,8 @@ export const MessageRow = memo(function MessageRow({
         </div>
         {(onOpenThread || onToggleReaction || onToggleSave || copyable) && (
           /* Hidden until revealed: hover/focus in the wide desktop shell (`lg` and up, with
-             a hover-capable fine pointer). An unread-thread badge stays inside this bar, but
-             does not force it open: the thread preview already exposes the unread count, so
-             showing both would duplicate the same signal. Everywhere else the row tap opens
+             a hover-capable fine pointer). The thread icon carries no unread dot: the
+             preview line already shows the count (task #267). Everywhere else the row tap opens
              the action sheet instead. The reveal needs all three conditions: below `lg` the
              mobile shell is in charge even on a mouse-driven narrow window; mobile browsers
              stick `:hover` onto a tapped row (it has a click handler); and some touch devices

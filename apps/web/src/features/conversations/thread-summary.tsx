@@ -20,28 +20,20 @@ import { useThreadBodyFormat, useThreadSummary, useThreadUnread } from "./thread
 
 type ThreadPartProps = { rootId: string; onOpen: (rootId: string) => void };
 
-/** The hover toolbar's thread button, with a dot while Agent replies are unread. */
+/** The hover toolbar's thread button. Unread stays on the preview line and in this
+ * button's accessible name; the icon itself has no dot (task #267). */
 export function ThreadToolbarEntry({ rootId, onOpen }: ThreadPartProps) {
   const unread = useThreadUnread(rootId);
   return (
-    <span className="relative inline-flex">
-      <ButtonUtility
-        icon={MessageSquare}
-        size="xs"
-        color="tertiary"
-        // The dot already shows the count, so it stays out of the tooltip; screen readers still
-        // get it through the accessible name.
-        tooltip={m.conversation_thread_reply()}
-        aria-label={withUnreadCount(m.conversation_thread_reply(), unread)}
-        onClick={() => onOpen(rootId)}
-        className="p-1 *:data-icon:size-3.5"
-      />
-      {unread > 0 && (
-        <span className="absolute -top-1 -right-1">
-          <UnreadDot />
-        </span>
-      )}
-    </span>
+    <ButtonUtility
+      icon={MessageSquare}
+      size="xs"
+      color="tertiary"
+      tooltip={m.conversation_thread_reply()}
+      aria-label={withUnreadCount(m.conversation_thread_reply(), unread)}
+      onClick={() => onOpen(rootId)}
+      className="p-1 *:data-icon:size-3.5"
+    />
   );
 }
 
