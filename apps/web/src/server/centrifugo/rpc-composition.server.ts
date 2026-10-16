@@ -11,7 +11,6 @@ import {
   REMINDER_FIRE_METHOD,
   REMINDER_SNAPSHOT_METHOD,
   APP_CONFIG_SNAPSHOT_METHOD,
-  encodeAppConfigSync,
 } from "@lrm/coforge-sdk/internal";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { createAgentSkillsListResultMethod } from "./agent-skills-cache.server";
@@ -113,9 +112,8 @@ import { createAgentContextUsageMethod } from "./agent-context-usage-receiver.se
 import { PrismaReminderRepository } from "#src/server/db/repositories/reminder.repositories.server";
 import { Reminders } from "#src/server/reminders/reminders.server";
 import { getReminderCapabilityLease } from "#src/server/reminders/reminder-capability.server";
-import { AgentAppConfigs } from "#src/server/agent-app-configs/agent-app-configs.server";
 import { getAppConfigCapabilityLease } from "#src/server/agent-app-configs/app-config-capability.server";
-import { PrismaAgentAppConfigRepository } from "#src/server/db/repositories/agent-app-config.repositories.server";
+import { createAgentAppConfigs } from "#src/server/agent-app-configs/agent-app-configs-composition.server";
 import { daemonControlChannel } from "./server-api.server";
 import { encodeReminderSync } from "@lrm/coforge-sdk/internal";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
@@ -269,15 +267,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         await Promise.all(leases.map((lease) => lease.refresh(workspaceId, computerId)));
       },
     };
-    const appConfigs = new AgentAppConfigs(
-      new PrismaAgentAppConfigRepository(db),
-      appConfigLease,
-      (sync) =>
-        centrifugo.publish(
-          daemonControlChannel(sync.workspaceId, sync.computerId),
-          encodeAppConfigSync(sync),
-        ),
-    );
+    const appConfigs = createAgentAppConfigs(db, centrifugo);
     const reminders = new Reminders(reminderRepository, reminderLease, (sync) =>
       centrifugo.publish(
         daemonControlChannel(sync.workspaceId, sync.computerId),

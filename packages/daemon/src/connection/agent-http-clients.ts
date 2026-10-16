@@ -29,6 +29,10 @@ import type {
   AgentProfileUpdateRequest,
   AgentProfileUpdateResponse,
   AgentProfileErrorCode,
+  AgentAppConfigErrorCode,
+  AgentAppConfigGetRequest,
+  AgentAppConfigResponse,
+  AgentAppConfigUpdateRequest,
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingResponse,
@@ -56,6 +60,7 @@ import { AGENT_SEND_REQUEST_TIMEOUT_MS } from "@lrm/coforge-sdk/internal";
 import { AgentTransportError } from "./agent-transport-error";
 import { AgentUserInfoRequestError } from "./agent-user-info-request-error";
 import { AgentProfileRequestError } from "./agent-profile-request-error";
+import { AgentAppConfigRequestError } from "./agent-app-config-request-error";
 import { AgentMentionDeliveryRequestError } from "./agent-mention-delivery-request-error";
 import { AgentWeeklyReportRequestError } from "./agent-weekly-report-request-error";
 import { AgentUpstreamRefusalError } from "./agent-upstream-refusal-error";
@@ -123,6 +128,12 @@ export interface AgentMessageHttpClient {
   requestProfileUpdate?(
     input: AgentHttpInput<AgentProfileUpdateRequest>,
   ): Promise<AgentProfileUpdateResponse>;
+  requestAppConfigGet?(
+    input: AgentHttpInput<AgentAppConfigGetRequest>,
+  ): Promise<AgentAppConfigResponse>;
+  requestAppConfigUpdate?(
+    input: AgentHttpInput<AgentAppConfigUpdateRequest>,
+  ): Promise<AgentAppConfigResponse>;
   requestMentionPending?(
     input: AgentHttpInput<Record<string, never>>,
   ): Promise<AgentMentionPendingResponse>;
@@ -347,6 +358,9 @@ export interface AgentWeeklyReportMemoryHttpClient {
   ): Promise<import("./weekly-report-memory").WeeklyReportMemoryResult>;
 }
 
+const appConfigError = (errorCode: string, message: string, status: number) =>
+  new AgentAppConfigRequestError(errorCode as AgentAppConfigErrorCode, message, status);
+
 export const createAgentMessageHttpClient = (
   httpClient: HttpFetch = globalThis.fetch,
 ): AgentMessageHttpClient => ({
@@ -502,6 +516,19 @@ export const createAgentMessageHttpClient = (
       { ...keys, what: "agent profile update", body: request },
       (errorCode, message, status) =>
         new AgentProfileRequestError(errorCode as AgentProfileErrorCode, message, status),
+    ),
+  requestAppConfigGet: ({ request: _request, ...keys }) =>
+    getAgentEnvelopeJson<AgentAppConfigResponse>(
+      httpClient,
+      { ...keys, what: "agent app config get", query: {} },
+      appConfigError,
+    ),
+  // The App is the URL's; the body is the change alone.
+  requestAppConfigUpdate: ({ request: { appId: _appId, ...change }, ...keys }) =>
+    postAgentEnvelopeJson<AgentAppConfigResponse>(
+      httpClient,
+      { ...keys, what: "agent app config update", method: "PATCH", body: change },
+      appConfigError,
     ),
   requestMentionPending: ({ request: _request, ...keys }) =>
     getAgentEnvelopeJson<AgentMentionPendingResponse>(

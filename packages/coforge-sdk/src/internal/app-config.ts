@@ -26,21 +26,53 @@ export const CLEANER_APP_ID = "system.cleaner" as const;
  * often it looks. */
 export type CleanerAppConfig = { enabled: boolean; thresholdBytes: number; intervalMs: number };
 
-export const CLEANER_CONFIG_DEFAULTS: CleanerAppConfig = {
-  enabled: true,
-  thresholdBytes: 65_536,
-  intervalMs: 3_600_000,
-};
+/** One config key's type as an Agent sees it (`coforge app config`): a boolean, or an integer
+ * within inclusive bounds. */
+export type AppConfigField =
+  | { type: "boolean" }
+  | { type: "integer"; minimum: number; maximum: number };
+/** One config value as an Agent reads and sets it. */
+export type AppConfigValue = boolean | number;
+export type AppConfigValues = Record<string, AppConfigValue>;
+
+const CLEANER_FIELDS = {
+  enabled: { type: "boolean" },
+  threshold_bytes: { type: "integer", minimum: 4_096, maximum: 1_073_741_824 },
+  interval_seconds: { type: "integer", minimum: 900, maximum: 604_800 },
+} as const satisfies Record<string, AppConfigField>;
+const CLEANER_DEFAULT_VALUES = { enabled: true, threshold_bytes: 65_536, interval_seconds: 3_600 };
+const MS_PER_SECOND = 1_000;
+
+/** Cleaner settings from a complete set of its Agent-facing values. */
+const cleanerSettings = (values: AppConfigValues): CleanerAppConfig => ({
+  enabled: values.enabled as boolean,
+  thresholdBytes: values.threshold_bytes as number,
+  intervalMs: (values.interval_seconds as number) * MS_PER_SECOND,
+});
+
+export const CLEANER_CONFIG_DEFAULTS: CleanerAppConfig = cleanerSettings(CLEANER_DEFAULT_VALUES);
 export const CLEANER_CONFIG_BOUNDS = {
-  thresholdBytes: { min: 4_096, max: 1_073_741_824 },
-  intervalMs: { min: 900_000, max: 604_800_000 },
+  thresholdBytes: {
+    min: CLEANER_FIELDS.threshold_bytes.minimum,
+    max: CLEANER_FIELDS.threshold_bytes.maximum,
+  },
+  intervalMs: {
+    min: CLEANER_FIELDS.interval_seconds.minimum * MS_PER_SECOND,
+    max: CLEANER_FIELDS.interval_seconds.maximum * MS_PER_SECOND,
+  },
 } as const;
 
+/** Whether `value` is one `field` accepts: a boolean, or a safe integer within its bounds. */
+export const fitsAppConfigField = (field: AppConfigField, value: unknown) =>
+  field.type === "boolean"
+    ? typeof value === "boolean"
+    : typeof value === "number" &&
+      Number.isSafeInteger(value) &&
+      value >= field.minimum &&
+      value <= field.maximum;
+
 const within = (value: unknown, bounds: { min: number; max: number }) =>
-  typeof value === "number" &&
-  Number.isSafeInteger(value) &&
-  value >= bounds.min &&
-  value <= bounds.max;
+  fitsAppConfigField({ type: "integer", minimum: bounds.min, maximum: bounds.max }, value);
 
 /** Cleaner settings exactly as stored or sent: the three keys, each within its bounds. */
 export function validateCleanerAppConfig(value: unknown): CleanerAppConfig {
@@ -66,8 +98,13 @@ export type AppConfigSettings = { [CLEANER_APP_ID]: CleanerAppConfig };
 export type AppConfigAppId = keyof AppConfigSettings;
 
 type AppConfigDefinition<Settings> = {
-  /** What an Agent with no stored row has. */
-  defaults: Settings;
+  /** The App's config keys as an Agent reads and sets them, each with its type and bounds. */
+  fields: Record<string, AppConfigField>;
+  /** Each key's value while the Agent has not overridden it. */
+  defaults: AppConfigValues;
+  /** The settings a complete, valid set of values stands for: the one place an Agent-facing key
+   * becomes a settings field. */
+  settings(values: AppConfigValues): Settings;
   /** Settings as stored or received, or a thrown error naming the App. */
   validate(value: unknown): Settings;
   /** The settings' case in the wire `AppConfig.effective` oneof. */
@@ -78,7 +115,9 @@ export const APP_CONFIG_DEFINITIONS: {
   [Id in AppConfigAppId]: AppConfigDefinition<AppConfigSettings[Id]>;
 } = {
   [CLEANER_APP_ID]: {
-    defaults: CLEANER_CONFIG_DEFAULTS,
+    fields: CLEANER_FIELDS,
+    defaults: CLEANER_DEFAULT_VALUES,
+    settings: cleanerSettings,
     validate: validateCleanerAppConfig,
     wireCase: "cleaner",
   },
@@ -218,4 +257,20 @@ export function decodeAppConfigSnapshotRequest(bytes: Uint8Array): AppConfigSnap
     bounded(bytes),
   );
   return scope({ protocolMajor, requestId, workspaceId, computerId, agentId });
+}
+
+/** Why `values` is not a valid set of an App's Agent-facing values (a key outside its schema, or
+ * a value its field does not accept), or `undefined` when it is. */
+export function appConfigValuesProblem(appId: AppConfigAppId, values: unknown): string | undefined {
+  if (!isRecord(values)) return "config is not an object";
+  const { fields } = APP_CONFIG_DEFINITIONS[appId];
+  for (const [key, value] of Object.entries(values)) {
+    const field = Object.hasOwn(fields, key) ? fields[key] : undefined;
+    if (!field) return `${appId} has no config key ${key}`;
+    if (!fitsAppConfigField(field, value))
+      return field.type === "boolean"
+        ? `${key} must be true or false`
+        : `${key} must be an integer from ${field.minimum} to ${field.maximum}`;
+  }
+  return undefined;
 }

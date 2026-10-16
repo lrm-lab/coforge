@@ -4,7 +4,8 @@ Rules for `src/system-cleaner/`. They extend `packages/daemon/AGENTS.md`.
 
 - The cloud owns each Agent's config (`system.cleaner`: enabled, threshold, interval,
   revision). An Agent with no applied config has no cleaner; never invent a local default.
-  `SYSTEM_CLEANER_CONFIG_BOUNDS` and the envelope check are the one validation of a config.
+  The SDK's `CLEANER_CONFIG_BOUNDS` (from `APP_CONFIG_DEFINITIONS`) and the envelope check are
+  the one validation of a config; never restate the bounds here.
 - Apply configs by revision only: a lower one is stale, the same revision with other values is
   a conflict, and a newer one cancels the timer and drops the Agent's items before re-arming.
 - A period only measures and marks a hint due. Present it only from

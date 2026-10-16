@@ -2921,6 +2921,8 @@ describe("DaemonRuntime", () => {
       "userInfo",
       "profileShow",
       "profileUpdate",
+      "appConfigGet",
+      "appConfigUpdate",
       "agentOpenviking",
       "mentionPending",
       "mentionExecute",

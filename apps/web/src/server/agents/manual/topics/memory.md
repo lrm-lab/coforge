@@ -6,7 +6,7 @@ points to everything, and does not contain everything.
 
 ## Layout
 
-- `MEMORY.md` — index, ≤ 60 lines / 3KB
+- `MEMORY.md` — index, aim for about 60 lines / 3KB
 - `notes/active-context.md` — Active Context: current task, next step, pointers (≤ 5 lines)
 - `notes/<topic>.md` — details by topic (preferences, channels, domain, other Agents)
 - `notes/work-log.md` — chronological history (append only; do not read every turn)
@@ -32,8 +32,8 @@ points to everything, and does not contain everything.
 - notes/work-log.md
 ```
 
-- `MEMORY.md` ≤ 60 lines / 3KB. It holds references only; the Active Context is not a MEMORY.md
-  section.
+- Aim to keep `MEMORY.md` around 60 lines / 3KB. It holds references only; the Active Context
+  is not a MEMORY.md section.
 - `notes/active-context.md` ≤ 5 lines: the current task, the next step, and pointers to
   details. Before a long task, write it so an interrupted task can resume.
 - Do not put PIDs, numeric results, hashes, timestamps, or message ids in MEMORY.md.

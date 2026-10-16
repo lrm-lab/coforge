@@ -44,6 +44,8 @@ import {
   type AgentProfileShowResponse,
   type AgentProfileUpdateRequest,
   type AgentProfileUpdateResponse,
+  type AgentAppConfigPatch,
+  type AgentAppConfigResponse,
   type AgentUserInfoResponse,
   type AgentMentionActionKind,
   type AgentMentionExecuteRequest,
@@ -56,6 +58,7 @@ import {
 import { COFORGE_CLI_VERSION } from "#src/version";
 import { formatManualGet, formatManualSearchResults } from "#src/manual-format";
 import { formatProfile, formatUserInfo } from "#src/user-format";
+import { formatAppConfig, parseAppConfigArgs, type AppConfigInvocation } from "#src/app-config";
 import {
   formatMentionActionResults,
   formatMentionDeliveries,
@@ -337,6 +340,10 @@ export type MessageTransport = {
   userInfo?(name: string): Promise<AgentUserInfoResponse>;
   profileShow?(target?: string): Promise<AgentProfileShowResponse>;
   profileUpdate?(input: AgentProfileUpdateRequest): Promise<AgentProfileUpdateResponse>;
+  /** One of the calling Agent's own Apps' config (`coforge app config`). */
+  appConfigGet?(appId: string): Promise<AgentAppConfigResponse>;
+  /** A change to it, refused unless the config is still at `change.expectedRevision`. */
+  appConfigUpdate?(appId: string, change: AgentAppConfigPatch): Promise<AgentAppConfigResponse>;
   /** The calling Agent's mentions that reached no one (`coforge mention pending`). */
   mentionPending?(): Promise<AgentMentionPendingResponse>;
   /** Acts on pending mentions by resolution id (`coforge mention notify|add`). */
@@ -379,6 +386,7 @@ export function parseArgs(
   | UserInfoInvocation
   | ProfileShowInvocation
   | ProfileUpdateInvocation
+  | AppConfigInvocation
   | MentionInvocation {
   if (args[0] === "whoami") return parseWhoamiArgs(args.slice(1));
   if (args[0] === "version") return parseVersionArgs(args.slice(1));
@@ -388,6 +396,7 @@ export function parseArgs(
   if (args[0] === "profile" && args[1] === "show") return parseProfileShowArgs(args.slice(2));
   if (args[0] === "profile" && args[1] === "update") return parseProfileUpdateArgs(args.slice(2));
   if (args[0] === "workspace" && args[1] === "info") return parseWorkspaceInfoArgs(args.slice(2));
+  if (args[0] === "app" && args[1] === "config") return parseAppConfigArgs(args.slice(2));
   if (args[0] === "mention") return parseMentionArgs(args.slice(1));
   if (args[0] === "reminder") return parseReminderArgs(args.slice(1));
   if (args[0] === "task") return parseTaskArgs(args.slice(1));
@@ -694,7 +703,7 @@ export function parseArgs(
     }
   }
   throw new Error(
-    "Usage: coforge channel mute|unmute --target '#channel' | coforge channel info <target> | coforge channel members <target> | coforge channel join --target '#channel' | coforge channel leave --target '#channel' | coforge channel create --name <name> [--description <text>] [--json] | coforge channel update --target '#channel' [--name <name>] [--description <text>] [--json] | coforge channel lifecycle archive|unarchive --target '#channel' [--json] | coforge channel add-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge channel remove-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge thread unfollow --target '#channel:message-id' | coforge inbox check | coforge message check [--target @user|#channel] | coforge message search --query <text> [--target <target>] [--sender <handle>] [--sort relevance|recent] [--before <iso>] [--after <iso>] [--limit <n>] [--offset <n>] | coforge message read --target @user | coforge message send --target @user [--send-draft [--expected-draft-key <key>]] [--anyway] [--reviewer-isolation] [--json] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--target-confirmed] | coforge message resolve <message-id> | coforge message react --message-id <id> --emoji <emoji> [--remove] | coforge task list (--target <target> | --mine) [--status all|todo|in_progress|in_review|done|closed] | coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] | coforge task claim --target <target> (--number <n> | --message-id <id>)... [--reviewer-isolation] | coforge task convert|unclaim|assign|unassign|update|amend|history|delete|receipt ... | coforge attachment view [--id] <id> --output <path> [--json] | coforge attachment upload --path <file> (--target <target>|--channel <target>) [--mime-type <type>] [--json] | coforge weekly-report templates|inbox|members | coforge weekly-report workflow --input <json-file> | coforge weekly-report context --subject-type report|cycle --subject-id <uuid> | coforge weekly-report list [--cycle-id <uuid>] [--cursor <uuid>] [--limit <n>] | coforge weekly-report read --report-id <uuid> --section <name> [--max-characters <n>] | coforge weekly-report-collect submit-pack|submit-empty|submit-failure --run-id <uuid> --idempotency-key <uuid> [--markdown <path>] [--reason <text>] | coforge action prepare --target <target> | coforge manual get <topic> [--intent <text>] [--reason <text>] | coforge manual search \"<keywords>\" [--intent <text>] [--reason <text>] | coforge whoami [--json] | coforge version [--json] | coforge user info <name> [--json] | coforge profile show [<target>] [--json] | coforge profile update [--display-name <text>] [--description <text>] [--json] | coforge mention pending [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json]",
+    "Usage: coforge channel mute|unmute --target '#channel' | coforge channel info <target> | coforge channel members <target> | coforge channel join --target '#channel' | coforge channel leave --target '#channel' | coforge channel create --name <name> [--description <text>] [--json] | coforge channel update --target '#channel' [--name <name>] [--description <text>] [--json] | coforge channel lifecycle archive|unarchive --target '#channel' [--json] | coforge channel add-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge channel remove-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge thread unfollow --target '#channel:message-id' | coforge inbox check | coforge message check [--target @user|#channel] | coforge message search --query <text> [--target <target>] [--sender <handle>] [--sort relevance|recent] [--before <iso>] [--after <iso>] [--limit <n>] [--offset <n>] | coforge message read --target @user | coforge message send --target @user [--send-draft [--expected-draft-key <key>]] [--anyway] [--reviewer-isolation] [--json] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--target-confirmed] | coforge message resolve <message-id> | coforge message react --message-id <id> --emoji <emoji> [--remove] | coforge task list (--target <target> | --mine) [--status all|todo|in_progress|in_review|done|closed] | coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] | coforge task claim --target <target> (--number <n> | --message-id <id>)... [--reviewer-isolation] | coforge task convert|unclaim|assign|unassign|update|amend|history|delete|receipt ... | coforge attachment view [--id] <id> --output <path> [--json] | coforge attachment upload --path <file> (--target <target>|--channel <target>) [--mime-type <type>] [--json] | coforge weekly-report templates|inbox|members | coforge weekly-report workflow --input <json-file> | coforge weekly-report context --subject-type report|cycle --subject-id <uuid> | coforge weekly-report list [--cycle-id <uuid>] [--cursor <uuid>] [--limit <n>] | coforge weekly-report read --report-id <uuid> --section <name> [--max-characters <n>] | coforge weekly-report-collect submit-pack|submit-empty|submit-failure --run-id <uuid> --idempotency-key <uuid> [--markdown <path>] [--reason <text>] | coforge action prepare --target <target> | coforge manual get <topic> [--intent <text>] [--reason <text>] | coforge manual search \"<keywords>\" [--intent <text>] [--reason <text>] | coforge whoami [--json] | coforge version [--json] | coforge user info <name> [--json] | coforge profile show [<target>] [--json] | coforge profile update [--display-name <text>] [--description <text>] [--json] | coforge mention pending [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json] | coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [--json]",
   );
 }
 
@@ -1234,6 +1243,24 @@ export async function run(args: readonly string[], transport: MessageTransport):
       description: invocation.description,
     });
     return invocation.json ? result : formatProfile(result);
+  }
+  if (invocation.command === "app-config") {
+    if (!transport.appConfigGet || !transport.appConfigUpdate)
+      throw new Error("App config transport is unavailable");
+    const { appId, set, unset } = invocation;
+    const current = await transport.appConfigGet(appId);
+    let result = current;
+    if (Object.keys(set).length > 0 || unset.length > 0)
+      result = await transport
+        .appConfigUpdate(appId, { expectedRevision: current.revision, set, unset })
+        .catch((error: unknown) => {
+          if (!(error instanceof CliError) || error.code !== "REVISION_CONFLICT") throw error;
+          throw withOutputMode(error, invocation.json ? "json" : "text", {
+            suggestedNextAction:
+              "Rerun the same command: it reads the current revision and applies your change to it.",
+          });
+        });
+    return invocation.json ? result : formatAppConfig(result);
   }
   if (invocation.command === "mention-pending") {
     if (!transport.mentionPending) throw new Error("Mention transport is unavailable");

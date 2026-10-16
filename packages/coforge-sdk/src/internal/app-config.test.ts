@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AppConfigSyncSchema } from "#src/internal/gen/coforge/rpc/v1/app_config_pb";
 import {
+  APP_CONFIG_DEFINITIONS,
   APP_CONFIG_SYNC_MESSAGE_TYPE,
   CLEANER_APP_ID,
   CLEANER_CONFIG_DEFAULTS,
@@ -154,6 +155,23 @@ test("cleaner settings default and bound as the reference Computer's do", () => 
     { enabled: true, thresholdBytes: 65_536, intervalMs: 3_600_000, extra: 1 },
   ])
     expect(() => validateCleanerAppConfig(value)).toThrow("cleaner");
+});
+
+test("an Agent reads and sets the cleaner by snake_case keys in whole seconds", () => {
+  const definition = APP_CONFIG_DEFINITIONS[CLEANER_APP_ID];
+  expect(definition.fields).toEqual({
+    enabled: { type: "boolean" },
+    threshold_bytes: { type: "integer", minimum: 4096, maximum: 1_073_741_824 },
+    interval_seconds: { type: "integer", minimum: 900, maximum: 604_800 },
+  });
+  expect(definition.defaults).toEqual({
+    enabled: true,
+    threshold_bytes: 65_536,
+    interval_seconds: 3600,
+  });
+  expect(
+    definition.settings({ enabled: false, threshold_bytes: 8192, interval_seconds: 1800 }),
+  ).toEqual({ enabled: false, thresholdBytes: 8192, intervalMs: 1_800_000 });
 });
 
 test("a revision must be a non-negative integer", () => {

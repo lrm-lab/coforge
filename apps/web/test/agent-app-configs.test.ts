@@ -22,11 +22,18 @@ const request = {
   agentId: agent.id,
 };
 const cleanerSettings = { enabled: false, thresholdBytes: 8192, intervalMs: 1_800_000 };
+// A row holds only the keys the Agent overrode, as it set them.
 const stored: StoredAgentAppConfig = {
   appId: CLEANER_APP_ID,
   revision: 4,
-  config: cleanerSettings,
+  config: { enabled: false, threshold_bytes: 8192, interval_seconds: 1800 },
 };
+const cleanerSchema = {
+  enabled: { type: "boolean" },
+  threshold_bytes: { type: "integer", minimum: 4096, maximum: 1_073_741_824 },
+  interval_seconds: { type: "integer", minimum: 900, maximum: 604_800 },
+} as const;
+const cleanerDefaults = { enabled: true, threshold_bytes: 65_536, interval_seconds: 3600 };
 
 function harness(
   options: {
@@ -37,6 +44,7 @@ function harness(
   } = {},
 ) {
   const published: AppConfigSync[] = [];
+  const rows = [...(options.rows ?? [])];
   const repository: AgentAppConfigRepository = {
     async placement(agentId) {
       if (agentId !== agent.id) return undefined;
@@ -46,7 +54,20 @@ function harness(
       };
     },
     async list(agentId) {
-      return agentId === agent.id ? (options.rows ?? []) : [];
+      return agentId === agent.id ? rows.map((row) => ({ ...row })) : [];
+    },
+    async get(agentId, appId) {
+      const row = agentId === agent.id ? rows.find((item) => item.appId === appId) : undefined;
+      return row && { ...row };
+    },
+    async write(agentId, appId, expectedRevision, config) {
+      if (agentId !== agent.id) return false;
+      const index = rows.findIndex((row) => row.appId === appId);
+      if ((rows[index]?.revision ?? 0) !== expectedRevision) return false;
+      const row = { appId, revision: expectedRevision + 1, config };
+      if (index < 0) rows.push(row);
+      else rows[index] = row;
+      return true;
     },
   };
   const configs = new AgentAppConfigs(
@@ -57,7 +78,7 @@ function harness(
         published.push(sync);
       }),
   );
-  return { configs, published };
+  return { configs, published, rows };
 }
 
 test("an Agent with no stored row has every App's defaults at revision 0", async () => {
@@ -153,4 +174,118 @@ test("the snapshot RPC answers the requesting daemon and refuses another scope",
       principal: { ...principal, computerId: "computer-2" },
     }),
   ).toMatchObject({ code: 403 });
+});
+
+test("an Agent reads an App's schema, defaults, overrides and effective config", async () => {
+  expect(await harness().configs.view(agent.id, CLEANER_APP_ID)).toEqual({
+    state: "found",
+    config: {
+      appId: CLEANER_APP_ID,
+      revision: 0,
+      schema: cleanerSchema,
+      defaults: cleanerDefaults,
+      overrides: {},
+      effective: cleanerDefaults,
+    },
+  });
+  const partial = { appId: CLEANER_APP_ID, revision: 2, config: { threshold_bytes: 65_536 } };
+  expect(await harness({ rows: [partial] }).configs.view(agent.id, CLEANER_APP_ID)).toMatchObject({
+    config: { revision: 2, overrides: { threshold_bytes: 65_536 }, effective: cleanerDefaults },
+  });
+  expect(await harness().configs.view(agent.id, "system.unknown")).toEqual({
+    state: "app_not_found",
+  });
+});
+
+test("a change at the current revision is stored, raises the revision and reaches the daemon", async () => {
+  const { configs, published, rows } = harness();
+  const outcome = await configs.update(agent.id, CLEANER_APP_ID, {
+    expectedRevision: 0,
+    set: { threshold_bytes: 131_072, enabled: false },
+    unset: [],
+  });
+  expect(outcome).toMatchObject({
+    state: "updated",
+    config: {
+      revision: 1,
+      overrides: { threshold_bytes: 131_072, enabled: false },
+      effective: { enabled: false, threshold_bytes: 131_072, interval_seconds: 3600 },
+    },
+  });
+  expect(rows).toEqual([
+    { appId: CLEANER_APP_ID, revision: 1, config: { threshold_bytes: 131_072, enabled: false } },
+  ]);
+  expect(published).toMatchObject([
+    {
+      operation: "upsert",
+      configs: [
+        {
+          revision: 1,
+          effective: { enabled: false, thresholdBytes: 131_072, intervalMs: 3_600_000 },
+        },
+      ],
+    },
+  ]);
+});
+
+test("unsetting a key returns it to its default and keeps the row at the next revision", async () => {
+  const { configs, rows } = harness({ rows: [stored] });
+  const outcome = await configs.update(agent.id, CLEANER_APP_ID, {
+    expectedRevision: 4,
+    set: {},
+    unset: ["enabled", "threshold_bytes", "interval_seconds"],
+  });
+  expect(outcome).toMatchObject({
+    state: "updated",
+    config: { revision: 5, overrides: {}, effective: cleanerDefaults },
+  });
+  expect(rows).toEqual([{ appId: CLEANER_APP_ID, revision: 5, config: {} }]);
+});
+
+test("a change made against an older revision is refused and changes nothing", async () => {
+  const { configs, published, rows } = harness({ rows: [stored] });
+  expect(
+    await configs.update(agent.id, CLEANER_APP_ID, {
+      expectedRevision: 3,
+      set: { enabled: true },
+      unset: [],
+    }),
+  ).toEqual({ state: "revision_conflict", revision: 4 });
+  expect(rows).toEqual([stored]);
+  expect(published).toEqual([]);
+});
+
+test("a change outside an App's schema is refused and changes nothing", async () => {
+  for (const patch of [
+    { set: { unknown_key: 1 }, unset: [] },
+    { set: {}, unset: ["unknown_key"] },
+    { set: { enabled: 1 }, unset: [] },
+    { set: { threshold_bytes: true }, unset: [] },
+    { set: { threshold_bytes: 4095 }, unset: [] },
+    { set: { interval_seconds: 604_801 }, unset: [] },
+    { set: { threshold_bytes: 8192.5 }, unset: [] },
+    { set: { enabled: false }, unset: ["enabled"] },
+  ]) {
+    const { configs, rows } = harness();
+    const outcome = await configs.update(agent.id, CLEANER_APP_ID, {
+      expectedRevision: 0,
+      ...patch,
+    } as Parameters<typeof configs.update>[2]);
+    expect(outcome.state).toBe("config_invalid");
+    expect(rows).toEqual([]);
+  }
+  const { configs } = harness();
+  expect(
+    await configs.update(agent.id, "system.unknown", { expectedRevision: 0, set: {}, unset: [] }),
+  ).toEqual({ state: "app_not_found" });
+});
+
+test("a stored row that no longer validates is read as the defaults at its revision", async () => {
+  const broken = { appId: CLEANER_APP_ID, revision: 7, config: { threshold_bytes: 1 } };
+  const { configs } = harness({ rows: [broken] });
+  const sync = decodeAppConfigSync(await configs.snapshotForDaemon(request));
+  expect(sync.configs).toMatchObject([{ revision: 7, effective: CLEANER_CONFIG_DEFAULTS }]);
+  expect(await configs.view(agent.id, CLEANER_APP_ID)).toMatchObject({
+    config: { revision: 7, overrides: {}, effective: cleanerDefaults },
+  });
 });

@@ -1,6 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import { lstat, statfs } from "node:fs/promises";
 import { join } from "node:path";
+import { CLEANER_CONFIG_BOUNDS } from "@lrm/coforge-sdk/internal";
 import type { AgentAppItem, MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import {
   SYSTEM_CLEANER_APP_ID,
@@ -13,19 +14,6 @@ import { AGENT_MEMORY_FILE } from "#src/agent-runtime/agent-workspace-path";
 import { isSafePathScope } from "#src/persistence/path-scope";
 
 const logger = getLogger(["coforge", "daemon", "system-cleaner"]);
-
-/** The config bounds an owner's System Cleaner config must respect. */
-export const SYSTEM_CLEANER_CONFIG_BOUNDS = {
-  thresholdBytes: { min: 4096, max: 1024 ** 3 },
-  intervalMs: { min: 900_000, max: 604_800_000 },
-} as const;
-
-/** What the cloud sends when an owner has not changed anything. */
-export const SYSTEM_CLEANER_CONFIG_DEFAULTS = {
-  enabled: true,
-  thresholdBytes: 65_536,
-  intervalMs: 3_600_000,
-} as const;
 
 const { memory: MEMORY_HINT, disk: DISK_HINT } = SYSTEM_CLEANER_CLASSES;
 const CONFIG_KEYS = new Set([
@@ -449,7 +437,7 @@ function parseCleanerConfig(raw: unknown): CleanerConfig | string {
   if (typeof row.ownerAgentId !== "string" || !isSafePathScope(row.ownerAgentId))
     return "owner_agent_id_invalid";
   if (typeof row.enabled !== "boolean") return "enabled_invalid";
-  const { thresholdBytes, intervalMs } = SYSTEM_CLEANER_CONFIG_BOUNDS;
+  const { thresholdBytes, intervalMs } = CLEANER_CONFIG_BOUNDS;
   if (!withinBounds(row.thresholdBytes, thresholdBytes)) return "threshold_bytes_invalid";
   if (!withinBounds(row.intervalMs, intervalMs)) return "interval_ms_invalid";
   if (!Number.isSafeInteger(row.revision) || (row.revision as number) < 0)
@@ -482,7 +470,7 @@ function sameConfig(left: CleanerConfig, right: CleanerConfig): boolean {
 
 /** What the memory hint's action does to the threshold: doubles it, capped at the maximum. */
 function memoryAction(thresholdBytes: number): string {
-  const maximum = SYSTEM_CLEANER_CONFIG_BOUNDS.thresholdBytes.max;
+  const maximum = CLEANER_CONFIG_BOUNDS.thresholdBytes.max;
   if (thresholdBytes >= maximum)
     return `The limit is at its maximum; view or lower it with ${CONFIG_COMMAND}`;
   const doubled = thresholdBytes * 2;

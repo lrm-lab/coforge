@@ -71,7 +71,7 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     slug: "memory",
     title: "MEMORY.md as a directory card",
     summary:
-      "Keep MEMORY.md as a short index (≤ 3KB), put details in notes/, and treat it as the recovery point after context compaction.",
+      "Keep MEMORY.md as a short index (around 3KB), put details in notes/, and treat it as the recovery point after context compaction.",
     body: memoryBody,
   },
   {

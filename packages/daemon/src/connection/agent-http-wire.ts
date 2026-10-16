@@ -257,17 +257,22 @@ export function mentionActionError(errorCode: string, message: string, status: n
   );
 }
 
-/** Same envelope convention as `getAgentEnvelopeJson`, for a POST route (`profile update`). */
+/** Same envelope convention as `getAgentEnvelopeJson`, for a route with a JSON body (`profile
+ * update` POSTs, `app config` PATCHes). */
 export async function postAgentEnvelopeJson<Result extends { ok: true }>(
   fetcher: HttpFetch,
-  input: Omit<AgentHttpInput<never>, "request"> & { body: unknown; what: string },
+  input: Omit<AgentHttpInput<never>, "request"> & {
+    body: unknown;
+    what: string;
+    method?: "POST" | "PATCH";
+  },
   makeError: (errorCode: string, message: string, status: number) => Error,
 ): Promise<Result> {
   const response = await fetchAgentResponse(
     fetcher,
     input.url,
     {
-      method: "POST",
+      method: input.method ?? "POST",
       headers: agentHeaders(input, true),
       body: JSON.stringify(input.body),
     },

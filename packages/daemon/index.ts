@@ -327,6 +327,8 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
           userInfo: async (...input) => agentRequests().userInfo(...input),
           profileShow: async (...input) => agentRequests().profileShow(...input),
           profileUpdate: async (...input) => agentRequests().profileUpdate(...input),
+          appConfigGet: async (...input) => agentRequests().appConfigGet(...input),
+          appConfigUpdate: async (...input) => agentRequests().appConfigUpdate(...input),
           mentionPending: async (...input) => agentRequests().mentionPending(...input),
           mentionExecute: async (...input) => agentRequests().mentionExecute(...input),
           mentionDelivery: async (...input) => agentRequests().mentionDelivery(...input),

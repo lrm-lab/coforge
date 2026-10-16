@@ -4559,3 +4559,137 @@ test("mention notify fails unless every requested target was queued", async () =
     `Mention notify did not complete for every requested target: ${PENDING_ROW.resolutionId}: expired`,
   );
 });
+
+const cleanerConfig = (revision: number, overrides: Record<string, boolean | number>) => ({
+  ok: true as const,
+  appId: "system.cleaner",
+  revision,
+  schema: {
+    enabled: { type: "boolean" as const },
+    interval_seconds: { type: "integer" as const, minimum: 900, maximum: 604_800 },
+    threshold_bytes: { type: "integer" as const, minimum: 4096, maximum: 1_073_741_824 },
+  },
+  defaults: { enabled: true, interval_seconds: 3600, threshold_bytes: 65_536 },
+  overrides,
+  effective: { enabled: true, interval_seconds: 3600, threshold_bytes: 65_536, ...overrides },
+});
+
+test("app config reads with no change and parses each --set and --unset", () => {
+  expect(parseArgs(["app", "config", "--app", " system.cleaner "])).toEqual({
+    command: "app-config",
+    appId: "system.cleaner",
+    set: {},
+    unset: [],
+  });
+  expect(
+    parseArgs([
+      "app",
+      "config",
+      "--app",
+      "system.cleaner",
+      "--set",
+      "threshold_bytes=131072",
+      "--set",
+      "enabled=false",
+      "--unset",
+      "interval_seconds",
+      "--set",
+      "offset=-5",
+      "--json",
+    ]),
+  ).toEqual({
+    command: "app-config",
+    appId: "system.cleaner",
+    set: { threshold_bytes: 131_072, enabled: false, offset: -5 },
+    unset: ["interval_seconds"],
+    json: true,
+  });
+});
+
+test("app config refuses a change it cannot send as written", () => {
+  for (const args of [
+    [],
+    ["--app", " "],
+    ["--app", "system.cleaner", "--set"],
+    ["--app", "system.cleaner", "--set", "=1"],
+    ["--app", "system.cleaner", "--set", "enabled="],
+    ["--app", "system.cleaner", "--set", "enabled"],
+    ["--app", "system.cleaner", "--set", "Enabled=true"],
+    ["--app", "system.cleaner", "--set", "1key=1"],
+    ["--app", "system.cleaner", "--set", "enabled=yes"],
+    ["--app", "system.cleaner", "--set", "threshold_bytes=1.5"],
+    ["--app", "system.cleaner", "--set", "threshold_bytes=01"],
+    ["--app", "system.cleaner", "--set", "threshold_bytes=+5"],
+    ["--app", "system.cleaner", "--set", "threshold_bytes=9007199254740993"],
+    ["--app", "system.cleaner", "--set", "enabled=true", "--set", "enabled=false"],
+    ["--app", "system.cleaner", "--unset", "enabled", "--unset", "enabled"],
+    ["--app", "system.cleaner", "--set", "enabled=true", "--unset", "enabled"],
+    ["--app", "system.cleaner", "--unset", "enabled", "--set", "enabled=true"],
+    ["--app", "system.cleaner", "--unset", "bad-key"],
+    ["--app", "system.cleaner", "--verbose"],
+  ])
+    expect(() => parseArgs(["app", "config", ...args])).toThrow();
+});
+
+test("app config with no change reads the App's config once and shows where each value comes from", async () => {
+  const calls: unknown[] = [];
+  const output = await run(["app", "config", "--app", "system.cleaner"], {
+    ...MINIMAL_TRANSPORT,
+    appConfigGet: async (appId) => {
+      calls.push(["get", appId]);
+      return cleanerConfig(4, { threshold_bytes: 131_072 });
+    },
+    appConfigUpdate: async () => {
+      throw new Error("should not be called");
+    },
+  });
+  expect(calls).toEqual([["get", "system.cleaner"]]);
+  expect(output).toBe(
+    [
+      "App system.cleaner, config revision 4",
+      "  enabled = true (default; boolean)",
+      "  interval_seconds = 3600 (default; integer 900..604800)",
+      "  threshold_bytes = 131072 (set; default 65536; integer 4096..1073741824)",
+      "Change it with: coforge app config --app system.cleaner --set <key>=<value> --unset <key>",
+    ].join("\n"),
+  );
+});
+
+test("app config sends a change against the revision it just read", async () => {
+  const calls: unknown[] = [];
+  const output = await run(
+    ["app", "config", "--app", "system.cleaner", "--set", "enabled=false", "--unset", "x"],
+    {
+      ...MINIMAL_TRANSPORT,
+      appConfigGet: async () => cleanerConfig(4, { x: 1 }),
+      appConfigUpdate: async (appId, change) => {
+        calls.push([appId, change]);
+        return cleanerConfig(5, { enabled: false });
+      },
+    },
+  );
+  expect(calls).toEqual([
+    ["system.cleaner", { expectedRevision: 4, set: { enabled: false }, unset: ["x"] }],
+  ]);
+  expect(output).toContain("App system.cleaner, config revision 5");
+  expect(output).toContain("  enabled = false (set; default true; boolean)");
+});
+
+test("app config tells the Agent to rerun the same command when the config changed meanwhile", async () => {
+  const failure = await run(
+    ["app", "config", "--app", "system.cleaner", "--set", "enabled=false"],
+    {
+      ...MINIMAL_TRANSPORT,
+      appConfigGet: async () => cleanerConfig(4, {}),
+      appConfigUpdate: async () => {
+        throw new CliError({
+          code: "REVISION_CONFLICT",
+          message: "The config is now at revision 5, not 4.",
+        });
+      },
+    },
+  ).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(CliError);
+  expect((failure as CliError).code).toBe("REVISION_CONFLICT");
+  expect((failure as CliError).suggestedNextAction).toContain("Rerun the same command");
+});

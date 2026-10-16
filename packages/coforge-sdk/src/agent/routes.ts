@@ -24,6 +24,14 @@ const PROFILE_ROUTES = {
   update: { method: "POST", path: "/api/agent/v1/profile" },
 } as const;
 
+/** `coforge app config`: read, or change at a known revision, one of the Agent's own Apps'
+ * config. Same routes under `proxy`, `local` and `cloud`. */
+const appConfigPath = (appId: string) => `/api/agent/v1/apps/${encodeURIComponent(appId)}/config`;
+const APP_CONFIG_ROUTES = {
+  get: { method: "GET", path: appConfigPath },
+  update: { method: "PATCH", path: appConfigPath },
+} as const;
+
 /** Resumable attachment uploads. Same routes under `local` and `cloud`. */
 const ATTACHMENT_UPLOAD_SESSION_ROUTES = {
   create: { method: "POST", path: "/api/agent/v1/attachment-upload-sessions" },
@@ -76,6 +84,7 @@ export const agentApiRoutes = {
     mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     profile: PROFILE_ROUTES,
+    appConfig: APP_CONFIG_ROUTES,
   },
   local: {
     messages: {
@@ -111,6 +120,7 @@ export const agentApiRoutes = {
     mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     profile: PROFILE_ROUTES,
+    appConfig: APP_CONFIG_ROUTES,
   },
   cloud: {
     workspace: { info: { method: "GET", path: "/api/agent/v1/workspace" } },
@@ -221,6 +231,7 @@ export const agentApiRoutes = {
     mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     profile: PROFILE_ROUTES,
+    appConfig: APP_CONFIG_ROUTES,
   },
   workspace: {
     info: {

@@ -58,6 +58,7 @@ import { AgentMessageRequestError } from "#src/connection/agent-message-request-
 import { AgentTransportError } from "#src/connection/agent-transport-error";
 import { AgentMentionActionRequestError } from "#src/connection/agent-mention-action-request-error";
 import { AgentMentionDeliveryRequestError } from "#src/connection/agent-mention-delivery-request-error";
+import { AgentAppConfigRequestError } from "#src/connection/agent-app-config-request-error";
 import { captureDaemonLogs } from "./log-capture";
 
 const TEST_AGENT_API_KEY = `sk_agent_${"a".repeat(43)}`;
@@ -981,6 +982,74 @@ test("mention delivery HTTP transport carries the cloud's not-found error throug
   expect(error).toBeInstanceOf(AgentMentionDeliveryRequestError);
   expect((error as AgentMentionDeliveryRequestError).errorCode).toBe("message_not_found");
   expect((error as AgentMentionDeliveryRequestError).status).toBe(404);
+});
+
+const appConfigBody = {
+  ok: true as const,
+  appId: "system.cleaner",
+  revision: 1,
+  schema: { threshold_bytes: { type: "integer" as const, minimum: 4096, maximum: 1_073_741_824 } },
+  defaults: { threshold_bytes: 65_536 },
+  overrides: { threshold_bytes: 131_072 },
+  effective: { threshold_bytes: 131_072 },
+};
+
+test("app config HTTP transport reads with a GET and changes with a PATCH of the change alone", async () => {
+  const calls: Array<{ url: string; method?: string; body?: unknown }> = [];
+  const client = createAgentMessageHttpClient(async (input, init) => {
+    calls.push({
+      url: String(input),
+      method: init?.method,
+      ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
+    });
+    return Response.json(appConfigBody);
+  });
+  const url = `https://server.example${agentApiRoutes.cloud.appConfig.get.path("system.cleaner")}`;
+  const keys = { agentApiKey: `sk_agent_${"a".repeat(43)}`, daemonApiKey: "daemon-token" };
+  expect(
+    await client.requestAppConfigGet!({ url, ...keys, request: { appId: "system.cleaner" } }),
+  ).toEqual(appConfigBody);
+  const change = {
+    expectedRevision: 0,
+    set: { threshold_bytes: 131_072 },
+    unset: [],
+    idempotencyKey: "66666666-6666-4666-8666-666666666666",
+  };
+  expect(
+    await client.requestAppConfigUpdate!({
+      url,
+      ...keys,
+      request: { appId: "system.cleaner", ...change },
+    }),
+  ).toEqual(appConfigBody);
+  expect(calls).toEqual([
+    { url, method: "GET" },
+    { url, method: "PATCH", body: change },
+  ]);
+});
+
+test("app config HTTP transport carries the cloud's revision conflict through", async () => {
+  const client = createAgentMessageHttpClient(async () =>
+    Response.json(
+      { ok: false, errorCode: "revision_conflict", error: "The config is now at revision 2." },
+      { status: 409 },
+    ),
+  );
+  const error = await client.requestAppConfigUpdate!({
+    url: "https://server.example/api/agent/v1/apps/system.cleaner/config",
+    agentApiKey: `sk_agent_${"a".repeat(43)}`,
+    daemonApiKey: "daemon-token",
+    request: {
+      appId: "system.cleaner",
+      expectedRevision: 1,
+      set: {},
+      unset: ["enabled"],
+      idempotencyKey: "k",
+    },
+  }).catch((thrown: unknown) => thrown);
+  expect(error).toBeInstanceOf(AgentAppConfigRequestError);
+  expect((error as AgentAppConfigRequestError).errorCode).toBe("revision_conflict");
+  expect((error as AgentAppConfigRequestError).status).toBe(409);
 });
 
 test("mention action HTTP transport POSTs the action and its resolution ids", async () => {

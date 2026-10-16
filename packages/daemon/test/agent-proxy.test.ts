@@ -10,6 +10,7 @@ import { AgentManualRequestError } from "#src/connection/agent-manual-request-er
 import { AgentUserInfoRequestError } from "#src/connection/agent-user-info-request-error";
 import { AgentMentionActionRequestError } from "#src/connection/agent-mention-action-request-error";
 import { AgentMentionDeliveryRequestError } from "#src/connection/agent-mention-delivery-request-error";
+import { AgentAppConfigRequestError } from "#src/connection/agent-app-config-request-error";
 import type { AgentProxyFailureBody } from "#src/agent-proxy-failure";
 
 const proxies: Array<{ close(): void }> = [];
@@ -708,6 +709,110 @@ test("proxy rejects a profile update whose displayName is not a string", async (
     body: JSON.stringify({ displayName: 42 }),
   });
   expect(response.status).toBe(400);
+});
+
+const cleanerConfig = {
+  ok: true as const,
+  appId: "system.cleaner",
+  revision: 2,
+  schema: { enabled: { type: "boolean" as const } },
+  defaults: { enabled: true },
+  overrides: { enabled: false },
+  effective: { enabled: false },
+};
+
+function appConfigEndpoint(proxy: { url: string }, appId: string) {
+  return new URL(
+    proxy.url.replace(
+      agentApiRoutes.proxy.messages.path,
+      agentApiRoutes.proxy.appConfig.get.path(appId),
+    ),
+  );
+}
+
+test("proxy forwards an App config read for the calling Agent", async () => {
+  const calls: unknown[] = [];
+  const proxy = startAgentProxy({
+    runtime: {
+      agentMessage: async () => ({}),
+      issueAgentContext: (agentId: string) => agentId,
+      appConfigGet: async (context, request) => {
+        calls.push({ context, request });
+        return cleanerConfig;
+      },
+    },
+  });
+  proxies.push(proxy);
+  const token = proxy.issue("agent-a", `sk_agent_${"a".repeat(43)}`);
+  const response = await fetch(appConfigEndpoint(proxy, "system.cleaner"), {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(cleanerConfig);
+  expect(calls).toEqual([{ context: "agent-a", request: { appId: "system.cleaner" } }]);
+});
+
+test("proxy forwards an App config change as a PATCH and carries its refusal through", async () => {
+  const calls: unknown[] = [];
+  const proxy = startAgentProxy({
+    runtime: {
+      agentMessage: async () => ({}),
+      issueAgentContext: (agentId: string) => agentId,
+      appConfigUpdate: async (context, request) => {
+        calls.push({ context, request });
+        throw new AgentAppConfigRequestError(
+          "revision_conflict",
+          "The config is now at revision 3, not 2.",
+          409,
+        );
+      },
+    },
+  });
+  proxies.push(proxy);
+  const token = proxy.issue("agent-a", `sk_agent_${"a".repeat(43)}`);
+  const change = {
+    expectedRevision: 2,
+    set: { threshold_bytes: 131_072 },
+    unset: ["enabled"],
+    idempotencyKey: "66666666-6666-4666-8666-666666666666",
+  };
+  const response = await fetch(appConfigEndpoint(proxy, "system.cleaner"), {
+    method: "PATCH",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(change),
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    ok: false,
+    errorCode: "revision_conflict",
+    error: "The config is now at revision 3, not 2.",
+  });
+  expect(calls).toEqual([{ context: "agent-a", request: { appId: "system.cleaner", ...change } }]);
+});
+
+test("proxy refuses an App config change without a revision or idempotency key", async () => {
+  const proxy = startAgentProxy({
+    runtime: {
+      agentMessage: async () => ({}),
+      appConfigUpdate: async () => {
+        throw new Error("should not be called");
+      },
+    },
+  });
+  proxies.push(proxy);
+  const token = proxy.issue("agent-a", `sk_agent_${"a".repeat(43)}`);
+  for (const body of [
+    { set: {}, unset: [], idempotencyKey: "k" },
+    { expectedRevision: 0, set: {}, unset: [] },
+    { expectedRevision: 0, set: [], unset: [], idempotencyKey: "k" },
+  ]) {
+    const response = await fetch(appConfigEndpoint(proxy, "system.cleaner"), {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(400);
+  }
 });
 
 const RESOLUTION_ID = "22222222-2222-4222-8222-222222222222";

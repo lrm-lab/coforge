@@ -25,4 +25,10 @@ there, and remove a line when that path has to move with you.
 ## MEMORY.md over its threshold
 
 Keep MEMORY.md an index (see the `memory` topic): move details into `notes/` and delete what is
-out of date. If MEMORY.md really needs to be larger, the item says how to raise its limit.
+out of date. If MEMORY.md really needs to be larger, raise the threshold the item names:
+
+- `coforge app config --app system.cleaner` shows the current `threshold_bytes` (and
+  `enabled`, `interval_seconds`) with each one's bounds and default.
+- `coforge app config --app system.cleaner --set threshold_bytes=<bytes>` raises it.
+  `--unset threshold_bytes` returns it to the default.
+- If the command says the config changed meanwhile, run the same command again.

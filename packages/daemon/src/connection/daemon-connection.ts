@@ -17,6 +17,9 @@ import type {
   AgentProfileShowResponse,
   AgentProfileUpdateRequest,
   AgentProfileUpdateResponse,
+  AgentAppConfigGetRequest,
+  AgentAppConfigResponse,
+  AgentAppConfigUpdateRequest,
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingResponse,
@@ -323,6 +326,14 @@ export interface DaemonConnectionClient {
     request: AgentProfileUpdateRequest,
     agentApiKey: string,
   ): Promise<AgentProfileUpdateResponse>;
+  appConfigGet?(
+    request: AgentAppConfigGetRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse>;
+  appConfigUpdate?(
+    request: AgentAppConfigUpdateRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse>;
   mentionPending?(agentApiKey: string): Promise<AgentMentionPendingResponse>;
   mentionExecute?(
     request: AgentMentionExecuteRequest,
@@ -1462,6 +1473,42 @@ export class DaemonConnection implements DaemonConnectionClient {
       throw new Error("Agent profile HTTP client is unavailable");
     return this.agentMessageHttpClient.requestProfileUpdate({
       url: this.#serverEndpoint("Agent profile update", agentApiRoutes.cloud.profile.update.path),
+      ...this.#agentKeys(agentApiKey),
+      request,
+    });
+  }
+
+  async appConfigGet(
+    request: AgentAppConfigGetRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse> {
+    if (!this.#connected || !this.#serverHttpUrl)
+      throw new Error("Agent app config endpoint is not configured");
+    if (!this.agentMessageHttpClient.requestAppConfigGet)
+      throw new Error("Agent app config HTTP client is unavailable");
+    return this.agentMessageHttpClient.requestAppConfigGet({
+      url: this.#serverEndpoint(
+        "Agent app config get",
+        agentApiRoutes.cloud.appConfig.get.path(request.appId),
+      ),
+      ...this.#agentKeys(agentApiKey),
+      request,
+    });
+  }
+
+  async appConfigUpdate(
+    request: AgentAppConfigUpdateRequest,
+    agentApiKey: string,
+  ): Promise<AgentAppConfigResponse> {
+    if (!this.#connected || !this.#serverHttpUrl)
+      throw new Error("Agent app config endpoint is not configured");
+    if (!this.agentMessageHttpClient.requestAppConfigUpdate)
+      throw new Error("Agent app config HTTP client is unavailable");
+    return this.agentMessageHttpClient.requestAppConfigUpdate({
+      url: this.#serverEndpoint(
+        "Agent app config update",
+        agentApiRoutes.cloud.appConfig.update.path(request.appId),
+      ),
       ...this.#agentKeys(agentApiKey),
       request,
     });

@@ -103,6 +103,7 @@ import { Route as WWorkspaceSlugChatChannelChannelIdRouteImport } from './routes
 import { Route as WWorkspaceSlugChatDmDmIdRouteImport } from './routes/w.$workspaceSlug/_chat.dm.$dmId'
 import { Route as WWorkspaceSlugComputersComputerComputerIdRouteImport } from './routes/w.$workspaceSlug/_computers.computer.$computerId'
 import { Route as WWorkspaceSlugProjectsProjectSlugSettingsRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug_.settings'
+import { Route as ApiAgentV1AppsAppIdConfigRouteImport } from './routes/api/agent/v1/apps/$appId/config'
 import { Route as ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRouteImport } from './routes/api/agent/v1/attachment-upload-sessions/$uploadId.complete'
 import { Route as ApiAgentV1ChannelsChannelArchiveRouteImport } from './routes/api/agent/v1/channels_.$channel.archive'
 import { Route as ApiAgentV1ChannelsChannelJoinRouteImport } from './routes/api/agent/v1/channels_.$channel.join'
@@ -632,6 +633,12 @@ const WWorkspaceSlugProjectsProjectSlugSettingsRoute =
     path: '/projects/$projectSlug/settings',
     getParentRoute: () => WWorkspaceSlugRoute,
   } as any)
+const ApiAgentV1AppsAppIdConfigRoute =
+  ApiAgentV1AppsAppIdConfigRouteImport.update({
+    id: '/api/agent/v1/apps/$appId/config',
+    path: '/api/agent/v1/apps/$appId/config',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute =
   ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRouteImport.update({
     id: '/complete',
@@ -836,6 +843,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/projects/$projectSlug/settings': typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
   '/api/agent/v1/attachment-upload-sessions/': typeof ApiAgentV1AttachmentUploadSessionsIndexRoute
   '/api/agent/v1/attachments/': typeof ApiAgentV1AttachmentsIndexRoute
+  '/api/agent/v1/apps/$appId/config': typeof ApiAgentV1AppsAppIdConfigRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
   '/api/agent/v1/channels/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
   '/api/agent/v1/channels/$channel/join': typeof ApiAgentV1ChannelsChannelJoinRoute
@@ -946,6 +954,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/projects/$projectSlug/settings': typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
   '/api/agent/v1/attachment-upload-sessions': typeof ApiAgentV1AttachmentUploadSessionsIndexRoute
   '/api/agent/v1/attachments': typeof ApiAgentV1AttachmentsIndexRoute
+  '/api/agent/v1/apps/$appId/config': typeof ApiAgentV1AppsAppIdConfigRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
   '/api/agent/v1/channels/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
   '/api/agent/v1/channels/$channel/join': typeof ApiAgentV1ChannelsChannelJoinRoute
@@ -1061,6 +1070,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/projects/$projectSlug_/settings': typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
   '/api/agent/v1/attachment-upload-sessions/': typeof ApiAgentV1AttachmentUploadSessionsIndexRoute
   '/api/agent/v1/attachments/': typeof ApiAgentV1AttachmentsIndexRoute
+  '/api/agent/v1/apps/$appId/config': typeof ApiAgentV1AppsAppIdConfigRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
   '/api/agent/v1/channels_/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
   '/api/agent/v1/channels_/$channel/join': typeof ApiAgentV1ChannelsChannelJoinRoute
@@ -1175,6 +1185,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects/$projectSlug/settings'
     | '/api/agent/v1/attachment-upload-sessions/'
     | '/api/agent/v1/attachments/'
+    | '/api/agent/v1/apps/$appId/config'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
     | '/api/agent/v1/channels/$channel/archive'
     | '/api/agent/v1/channels/$channel/join'
@@ -1285,6 +1296,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects/$projectSlug/settings'
     | '/api/agent/v1/attachment-upload-sessions'
     | '/api/agent/v1/attachments'
+    | '/api/agent/v1/apps/$appId/config'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
     | '/api/agent/v1/channels/$channel/archive'
     | '/api/agent/v1/channels/$channel/join'
@@ -1399,6 +1411,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects/$projectSlug_/settings'
     | '/api/agent/v1/attachment-upload-sessions/'
     | '/api/agent/v1/attachments/'
+    | '/api/agent/v1/apps/$appId/config'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
     | '/api/agent/v1/channels_/$channel/archive'
     | '/api/agent/v1/channels_/$channel/join'
@@ -1489,6 +1502,7 @@ export interface RootRouteChildren {
   ApiProjectsProjectIdRawSplatRoute: typeof ApiProjectsProjectIdRawSplatRoute
   ApiAgentV1AttachmentUploadSessionsIndexRoute: typeof ApiAgentV1AttachmentUploadSessionsIndexRoute
   ApiAgentV1AttachmentsIndexRoute: typeof ApiAgentV1AttachmentsIndexRoute
+  ApiAgentV1AppsAppIdConfigRoute: typeof ApiAgentV1AppsAppIdConfigRoute
   ApiAgentV1MessagesMessageIdMentionDeliveriesRoute: typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   ApiAgentV1MessagesMessageIdReactionsRoute: typeof ApiAgentV1MessagesMessageIdReactionsRoute
   ApiAgentV1MessagesMessageIdResolveRoute: typeof ApiAgentV1MessagesMessageIdResolveRoute
@@ -2159,6 +2173,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WWorkspaceSlugProjectsProjectSlugSettingsRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
     }
+    '/api/agent/v1/apps/$appId/config': {
+      id: '/api/agent/v1/apps/$appId/config'
+      path: '/api/agent/v1/apps/$appId/config'
+      fullPath: '/api/agent/v1/apps/$appId/config'
+      preLoaderRoute: typeof ApiAgentV1AppsAppIdConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': {
       id: '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
       path: '/complete'
@@ -2530,6 +2551,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1AttachmentUploadSessionsIndexRoute:
     ApiAgentV1AttachmentUploadSessionsIndexRoute,
   ApiAgentV1AttachmentsIndexRoute: ApiAgentV1AttachmentsIndexRoute,
+  ApiAgentV1AppsAppIdConfigRoute: ApiAgentV1AppsAppIdConfigRoute,
   ApiAgentV1MessagesMessageIdMentionDeliveriesRoute:
     ApiAgentV1MessagesMessageIdMentionDeliveriesRoute,
   ApiAgentV1MessagesMessageIdReactionsRoute:
