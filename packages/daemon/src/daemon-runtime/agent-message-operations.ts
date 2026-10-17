@@ -11,6 +11,7 @@ import {
 import type { AgentMessageTransportResponse } from "#src/connection/agent-http-clients";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
 import { AGENT_MESSAGE_DRAFT_TTL_MS } from "#src/persistence/agent-message-draft-store";
+import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
 import type { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import {
   locallyHeldSend,
@@ -201,11 +202,12 @@ export class AgentMessageOperations {
    * `--expected-draft-key` refuses a draft that now belongs to a different logical send.
    */
   async #draftToResend(
+    agentId: string,
     inbox: AgentInboxStateMachine,
     target: string,
     request: LocalAgentMessageRequest,
   ) {
-    const lookup = await inbox.lookup(target);
+    const lookup = await this.#prepareDraft(agentId, () => inbox.lookup(target));
     if (lookup.status === "expired")
       throw expiredDraftError(target, lookup.content, lookup.savedAt);
     if (lookup.status === "missing")
@@ -225,6 +227,31 @@ export class AgentMessageOperations {
     return draft;
   }
 
+  /** Draft storage before this invocation issues a send. Never use for a held refresh or cleanup
+   * after transport: those failures cannot establish that nothing was sent. */
+  async #prepareDraft<T>(agentId: string, operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      logger.warn("Agent send could not prepare its local draft", {
+        event: "agent.message.draft_prepare_failed",
+        agent_id: agentId,
+        error_code: diagnosticErrorCode(error),
+      });
+      throw new AgentPreflightError(
+        "Local message draft storage is unavailable. This command made no send request.",
+        "SEND_DRAFT_STORAGE_FAILED",
+        {
+          draftSaved: false,
+          retryable: false,
+          suggestedNextAction:
+            "Repair local draft storage (disk space, permissions, or corrupt data). This error does not " +
+            "settle any earlier send; do not resend an earlier UNKNOWN message on this evidence.",
+        },
+      );
+    }
+  }
+
   /** Sends a body or a held draft, honouring the server's freshness hold decision. */
   async #send(
     agentId: string,
@@ -237,14 +264,20 @@ export class AgentMessageOperations {
     // The daemon owns the per-target draft, and the draft names its own send by key: every local
     // request carries a key the CLI minted for that invocation, so the draft's key alone decides
     // which accepted send may clear it (`clearIfIdempotencyKeyMatches` below, task #70).
-    const draft = request.sendDraft ? await this.#draftToResend(inbox, target, request) : undefined;
+    const draft = request.sendDraft
+      ? await this.#draftToResend(agentId, inbox, target, request)
+      : undefined;
     // One logical send keeps one idempotency key. A fresh send's key is this invocation's;
     // `--send-draft` re-sends under the key the draft was saved with, so a resend after an
     // unknown outcome can never commit the same message twice.
     const idempotencyKey = draft?.idempotencyKey ?? request.idempotencyKey;
     // A normal send replaces whatever draft was there; the send reports that (and the hold count
     // the draft had reached) so the server can compute `continueAnywaySuggested`.
-    const priorDraft = draft ?? (request.sendDraft ? undefined : await inbox.draft(target));
+    const priorDraft =
+      draft ??
+      (request.sendDraft
+        ? undefined
+        : await this.#prepareDraft(agentId, () => inbox.draft(target)));
     const draftReholdCount = priorDraft?.reholdCount ?? 0;
     const content = draft?.content ?? agentMessageBody(request.content, request.message);
     if (content === undefined)
@@ -302,13 +335,15 @@ export class AgentMessageOperations {
         if (parentOrder === undefined || parentOrder < latestThread.order) {
           // The outgoing content is saved as the local draft before refusing, so the documented
           // recovery is resending that exact draft, not retyping it.
-          await inbox.save(target, {
-            content,
-            attachmentIds,
-            mentions,
-            seenUpToSeq,
-            idempotencyKey,
-          });
+          await this.#prepareDraft(agentId, () =>
+            inbox.save(target, {
+              content,
+              attachmentIds,
+              mentions,
+              seenUpToSeq,
+              idempotencyKey,
+            }),
+          );
           throw new AgentPreflightError(
             targetConfirmationRequiredMessage(target, latestThread.target),
             "THREAD_CONTEXT_TARGET_CONFIRMATION_REQUIRED",
@@ -317,11 +352,12 @@ export class AgentMessageOperations {
         }
       }
     }
-    // `inbox.save` persists the draft locally BEFORE the request is issued to the transport below;
-    // any failure past this point leaves delivery state unknown, never "not sent" (see
-    // `agent-preflight-error.ts` / `agent-proxy-failure.ts` and `message send`'s CLI renderer).
+    // Persist the draft before transport; a failed save is a local precondition. Keep that
+    // classification separate from failures after transport, whose delivery may be unknown.
     if (!request.sendDraft)
-      await inbox.save(target, { content, attachmentIds, mentions, seenUpToSeq, idempotencyKey });
+      await this.#prepareDraft(agentId, () =>
+        inbox.save(target, { content, attachmentIds, mentions, seenUpToSeq, idempotencyKey }),
+      );
     // The daemon's own freshness decision, taken BEFORE any transport call: a send it holds must
     // never be issued, because a re-issue of the same request would re-decide it (observed: the
     // same idempotencyKey held at 00:18:30 and forwarded at 00:19:30 delivered a message the Agent had

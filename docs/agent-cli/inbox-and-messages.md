@@ -38,6 +38,13 @@ fails with `SEND_DRAFT_EXPIRED`, removes it, and prints its body as the last
 copy (`details.discarded_draft` with `--json`); the original may already have
 been delivered, so read the target before resending.
 
+If local draft lookup or saving fails before transport (for example, a full disk,
+unwritable storage, or corrupt draft data), the command fails with
+`SEND_DRAFT_STORAGE_FAILED`, `Draft saved: no`, and `Retryable: no`. This
+invocation made no send request and could not confirm its draft. Repair the
+local storage first; this result does not settle any earlier UNKNOWN send.
+Storage failures after transport retain the conservative unknown-delivery result.
+
 When a send's outcome is ambiguous (the connection failed before any
 response, or the server answered 5xx, readable body or not), the daemon does
 not retry blind. It
