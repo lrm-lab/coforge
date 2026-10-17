@@ -232,7 +232,7 @@ class ClaudeCodeAgentSession implements AgentSession {
     process.onFailure((error) => {
       failure = error;
       if (error.message !== "code agent process exited unexpectedly") {
-        this.#rejectPendingInterrupt(error);
+        this.#interrupt.fail(error);
         this.#rejectWaitingNotices(error);
         this.#emit({ type: "error", message: error.message });
       }
@@ -270,9 +270,7 @@ class ClaudeCodeAgentSession implements AgentSession {
         // actually exits (agent-runtime/runtime-error-activity.ts).
         this.#emit({ type: "error", message: failure.message });
       }
-      this.#rejectPendingInterrupt(
-        failure ?? new Error("code agent process closed during interrupt"),
-      );
+      this.#interrupt.fail(failure ?? new Error("code agent process closed during interrupt"));
       this.#rejectWaitingNotices(new Error("code agent process closed before writing input"));
       // Fire and forget: the close path has nothing to do with a cleanup failure, and `dispose`
       // awaits the same removal and reports it.
@@ -692,10 +690,6 @@ class ClaudeCodeAgentSession implements AgentSession {
   #rejectWaitingNotices(error: Error): void {
     this.#inputFailure ??= error;
     for (const notice of this.#waitingNotices.splice(0)) notice.reject(error);
-  }
-
-  #rejectPendingInterrupt(error: Error): void {
-    this.#interrupt.fail(error);
   }
 }
 
