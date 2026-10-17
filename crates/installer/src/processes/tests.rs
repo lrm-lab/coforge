@@ -497,6 +497,14 @@ mod on_this_machine {
 
     #[test]
     fn a_real_child_whose_executable_is_deleted_is_still_found_dead_after_it_is_ended() {
+        // Another test's child can inherit the copy's writable descriptor before exec,
+        // making our spawn fail with ETXTBSY even after fs::copy closes it. Create the
+        // executable in an isolated test process, beyond those concurrent forks.
+        let name = "processes::tests::on_this_machine::a_real_child_whose_executable_is_deleted_is_still_found_dead_after_it_is_ended";
+        if !crate::test_support::in_child(name, ":") {
+            return;
+        }
+
         let scratch = crate::test_support::Scratch::new("deleted-image");
         let copy = scratch.path().join("sleep");
         fs::copy("/bin/sleep", &copy).unwrap();
