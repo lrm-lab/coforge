@@ -674,6 +674,7 @@ test.skipIf(!connectionString)(
       expect(workspaceProfileToToolFence("openviking")).toBeDefined();
       expect(toolsForMemoryFence(workspaceProfileToToolFence("openviking")!)).toEqual([
         OPENVIKING_TOOL_NAMES.forkFind,
+        OPENVIKING_TOOL_NAMES.searchContext,
         OPENVIKING_TOOL_NAMES.expand,
         OPENVIKING_TOOL_NAMES.read,
         OPENVIKING_TOOL_NAMES.offer,
@@ -689,7 +690,7 @@ test.skipIf(!connectionString)(
           triggerMessageId: "msg-ov",
           command: {
             protocol: OPENVIKING_AGENT_PROTOCOL,
-            op: "find",
+            op: index % 2 === 0 ? "search_context" : "fork_find",
             operationId: `find-${index}`,
             query: "deploy",
           },
