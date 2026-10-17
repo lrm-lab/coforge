@@ -1,4 +1,9 @@
-import type { UsageSnapshot, UsageWindow } from "#src/code-agent/contract";
+import type {
+  UsageOfficialBucket,
+  UsageOfficialGroup,
+  UsageSnapshot,
+  UsageWindow,
+} from "#src/code-agent/contract";
 import { UsageUnavailableError, UsageUnsupportedError } from "#src/code-agent/contract";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { asRecord } from "#src/code-agent/json-record";
@@ -105,7 +110,14 @@ function toSnapshot(
   const credits = asRecord(limits.credits);
   const hasCredits =
     credits && typeof credits.hasCredits === "boolean" && typeof credits.unlimited === "boolean";
-  if (!primary && !secondary) {
+  const balance =
+    typeof credits?.balance === "string" &&
+    credits.balance.trim().length > 0 &&
+    credits.balance.trim().length <= 40
+      ? credits.balance.trim()
+      : undefined;
+  const officialGroups = officialLimits(limits);
+  if (!primary && !secondary && officialGroups.length === 0) {
     // A signed-in subscription account that yields no usable window is an error; without an
     // account (an app-server predating `account/read`) keep the old `null` answer unless the
     // reading still carries plan or credits information.
@@ -126,11 +138,13 @@ function toSnapshot(
     ...(typeof limits.planType === "string" ? { planType: limits.planType } : {}),
     ...(primary ? { primary } : {}),
     ...(secondary ? { secondary } : {}),
+    ...(officialGroups.length > 0 ? { officialGroups } : {}),
     ...(hasCredits
       ? {
           credits: {
             hasCredits: credits!.hasCredits as boolean,
             unlimited: credits!.unlimited as boolean,
+            ...(balance ? { balance } : {}),
           },
         }
       : {}),
@@ -174,6 +188,101 @@ function durationLabel(mins: number): string {
 /** `w<index>_<first 12 hex of sha256(label)>`, stable for a stable label. */
 function windowId(label: string, index: number): string {
   return `w${index}_${new Bun.CryptoHasher("sha256").update(label).digest("hex").slice(0, 12)}`;
+}
+
+/** `rateLimits` is the single historical bucket. `rateLimitsByLimitId` is every extra limit
+ * in this schema. A limit id that appears in both is kept once, from the map. */
+function officialLimits(limits: Record<string, unknown>): UsageOfficialGroup[] {
+  const map = asRecord(limits.rateLimitsByLimitId);
+  const entries: { id?: string; limits: Record<string, unknown> }[] = [];
+  if (map) {
+    for (const [key, value] of Object.entries(map)) {
+      const item = asRecord(value);
+      if (item) entries.push({ id: key, limits: item });
+    }
+  }
+  const covered = new Set(entries.map((entry) => label(entry.limits.limitId) ?? entry.id));
+  const singleId = label(limits.limitId);
+  if (entries.length === 0 || !singleId || !covered.has(singleId))
+    entries.unshift({ ...(singleId ? { id: singleId } : {}), limits });
+  return entries.flatMap((entry) => {
+    const group = officialLimit(entry.limits, entry.id);
+    return group ? [group] : [];
+  });
+}
+
+function officialLimit(
+  limits: Record<string, unknown>,
+  fallbackId: string | undefined,
+): UsageOfficialGroup | undefined {
+  const buckets = [
+    officialWindow(limits, "primary"),
+    officialWindow(limits, "secondary"),
+    officialIndividual(limits.individualLimit),
+  ].filter((bucket): bucket is UsageOfficialBucket => bucket !== undefined);
+  if (buckets.length === 0) return undefined;
+  const name = label(limits.limitName) ?? label(limits.limitId) ?? label(fallbackId);
+  return { ...(name ? { name } : {}), buckets };
+}
+
+function officialWindow(
+  limits: Record<string, unknown>,
+  kind: "primary" | "secondary",
+): UsageOfficialBucket | undefined {
+  const item = asRecord(limits[kind]);
+  if (!item) return undefined;
+  const minutes =
+    typeof item.windowDurationMins === "number" && item.windowDurationMins > 0
+      ? item.windowDurationMins
+      : undefined;
+  const used =
+    typeof item.usedPercent === "number" &&
+    Number.isFinite(item.usedPercent) &&
+    item.usedPercent >= 0 &&
+    item.usedPercent <= 100
+      ? item.usedPercent
+      : undefined;
+  if (used === undefined && minutes === undefined) return undefined;
+  const resetsAt = toResetsAt(item.resetsAt);
+  return {
+    window: kind,
+    ...(minutes !== undefined ? { windowDurationMinutes: minutes } : {}),
+    ...(used !== undefined
+      ? { usedPercent: used, status: used >= 100 ? "limit_reached" : "ok" }
+      : { status: "parse_unavailable" as const }),
+    ...(resetsAt ? { resetsAt } : {}),
+  };
+}
+
+/** Spend control, when the schema includes `individualLimit`. `remainingPercent` is the share
+ * left, so the bucket keeps `remainingFraction` and does not pretend it is used. */
+function officialIndividual(value: unknown): UsageOfficialBucket | undefined {
+  const item = asRecord(value);
+  if (!item) return undefined;
+  const remaining = item.remainingPercent;
+  const used = typeof item.used === "string" ? item.used.trim() : "";
+  const limit = typeof item.limit === "string" ? item.limit.trim() : "";
+  if (
+    typeof remaining !== "number" ||
+    !Number.isFinite(remaining) ||
+    remaining < 0 ||
+    remaining > 100 ||
+    used.length === 0 ||
+    used.length > 40 ||
+    limit.length === 0 ||
+    limit.length > 40
+  )
+    return undefined;
+  const resetsAt = toResetsAt(item.resetsAt);
+  if (!resetsAt) return undefined;
+  return {
+    window: "individualLimit",
+    remainingFraction: remaining / 100,
+    usedPercent: Math.round((100 - remaining) * 100) / 100,
+    status: remaining <= 0 ? "limit_reached" : "ok",
+    resetsAt,
+    description: `${used} / ${limit}`,
+  };
 }
 
 function toWindow(

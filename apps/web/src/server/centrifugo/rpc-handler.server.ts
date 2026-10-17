@@ -942,11 +942,17 @@ function decodeUsageSnapshot(
   )
     return undefined;
   const credits = record(snapshot.credits);
+  const balance = credits ? creditBalance(credits.balance) : undefined;
   const parsedCredits =
     credits && typeof credits.hasCredits === "boolean" && typeof credits.unlimited === "boolean"
-      ? { hasCredits: credits.hasCredits, unlimited: credits.unlimited }
+      ? {
+          hasCredits: credits.hasCredits,
+          unlimited: credits.unlimited,
+          ...(balance ? { balance } : {}),
+        }
       : undefined;
   if (snapshot.credits !== undefined && !parsedCredits) return undefined;
+  if (balance === null) return undefined;
   const amounts = record(snapshot.creditUsage);
   const creditUsage =
     amounts &&
@@ -995,6 +1001,16 @@ function decodeUsageSnapshot(
     ...(typeof accountLabel === "string" ? { accountLabel } : {}),
     ...(typeof health === "string" ? { health } : {}),
   };
+}
+
+/** Codex `credits.balance` when this schema version sends it. `undefined` when absent or null.
+ * `null` when present but not a short string, so the snapshot is rejected instead of dropping it. */
+function creditBalance(value: unknown): string | undefined | null {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") return null;
+  const balance = value.trim();
+  if (balance.length === 0 || balance.length > 40) return null;
+  return balance;
 }
 
 /** A masked account email: at most 80 characters, no control characters, and containing at

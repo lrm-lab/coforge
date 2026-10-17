@@ -79,6 +79,20 @@ test("reads the current Kiro account without modifying credentials and excludes 
       windowDurationMinutes: 43200,
       resetsAt: "2026-10-01T00:00:00.000Z",
     },
+    officialGroups: [
+      {
+        buckets: [
+          {
+            name: "CREDIT",
+            window: "credit",
+            usedPercent: 30,
+            status: "ok",
+            windowDurationMinutes: 43200,
+            resetsAt: "2026-10-01T00:00:00.000Z",
+          },
+        ],
+      },
+    ],
   });
   expect(await Bun.file(fixture.path).arrayBuffer()).toEqual(before);
   expect(JSON.stringify(result)).not.toContain("fixture-");
@@ -149,11 +163,44 @@ test("never sends credentials for expired tokens or unsupported profile identiti
   }
 });
 
-test("does not invent quota from bonuses, trials, invalid numbers or millisecond resets", async () => {
+test("keeps bonuses and an active free trial without turning them into a plan-only percent", async () => {
+  const fixture = await credentials();
+  const withBonus = await readKiroUsage({
+    environment: { KIRO_DATA_DIR: fixture.directory },
+    fetch: async () =>
+      Response.json({
+        ...payload,
+        usageBreakdownList: [{ ...payload.usageBreakdownList[0], bonuses: [{}] }],
+      }),
+  });
+  expect(withBonus?.primary).toBeUndefined();
+  expect(withBonus?.creditUsage).toBeUndefined();
+  expect(withBonus?.officialGroups?.[0]?.name).toBe("CREDIT");
+  expect(withBonus?.officialGroups?.[0]?.buckets).toEqual([
+    { name: "CREDIT", description: "75 / 200 + 15" },
+    { window: "bonus", status: "parse_unavailable" },
+  ]);
+  const withTrial = await readKiroUsage({
+    environment: { KIRO_DATA_DIR: fixture.directory },
+    fetch: async () =>
+      Response.json({
+        ...payload,
+        usageBreakdownList: [
+          { ...payload.usageBreakdownList[0], freeTrialInfo: { freeTrialStatus: "ACTIVE" } },
+        ],
+      }),
+  });
+  expect(withTrial?.primary).toBeUndefined();
+  expect(withTrial?.officialGroups?.[0]?.buckets[1]).toEqual({
+    window: "freeTrial",
+    name: "freeTrial",
+    description: "ACTIVE",
+  });
+});
+
+test("does not invent quota from invalid numbers or millisecond resets", async () => {
   const fixture = await credentials();
   for (const changes of [
-    { bonuses: [{}] },
-    { freeTrialInfo: { freeTrialStatus: "ACTIVE" } },
     { currentUsageWithPrecision: -1 },
     { usageLimitWithPrecision: 0 },
     { currentUsageWithPrecision: 10, currentOveragesWithPrecision: 15 },

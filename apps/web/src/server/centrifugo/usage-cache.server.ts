@@ -51,7 +51,8 @@ export type UsageSnapshot = {
   }[];
   /** The provider's own note above `officialGroups`. Older Computers omit this. */
   officialDescription?: string;
-  credits?: { hasCredits: boolean; unlimited: boolean };
+  /** Codex booleans, plus `balance` when that version's schema includes the string. */
+  credits?: { hasCredits: boolean; unlimited: boolean; balance?: string };
   creditUsage?: { used: number; limit: number; overage: number };
   /** ISO instant the Computer actually observed this snapshot at. Older Computers omit it. */
   collectedAt?: string;

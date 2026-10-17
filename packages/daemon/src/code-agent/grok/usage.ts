@@ -1,5 +1,5 @@
 import { client, RequestError, type AnyMessage } from "@agentclientprotocol/sdk";
-import type { UsageSnapshot, UsageWindow } from "#src/code-agent/contract";
+import type { UsageOfficialBucket, UsageSnapshot, UsageWindow } from "#src/code-agent/contract";
 import { UsageUnavailableError, UsageUnsupportedError } from "#src/code-agent/contract";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { JsonlProcess, JsonlRequestError } from "#src/code-agent/jsonl-process";
@@ -103,18 +103,28 @@ function projectBilling(value: unknown, accountLabel?: string): UsageSnapshot {
   const percent =
     explicit ??
     (used !== undefined && limit !== undefined && limit > 0 ? (used / limit) * 100 : undefined);
-  if (percent === undefined || percent < 0) {
-    // Grok 1.0.41 answers a unified-billing account with no usage figure at all: no
-    // `creditUsagePercent`, no `used`/`monthlyLimit`, a weekly period, and the only numbers present
-    // are the on-demand cap and the prepaid balance, both zero. Retrying cannot produce a
-    // percentage, so this is "this account has no metered usage to report" — a state the popup can
-    // name — rather than the failed scan it showed.
-    if (config.isUnifiedBillingUser === true) throw new UsageUnsupportedError();
-    throw new Error("Grok returned no usable account usage percentage");
-  }
   const period = asRecord(config.currentPeriod);
   const reset = instant(period?.end ?? config.billingPeriodEnd);
   const minutes = periodMinutes(period?.type);
+  const officialGroups = billingGroups(config, percent, reset, minutes);
+  if (percent === undefined || percent < 0) {
+    // A unified-billing account may omit the percent. Keep the period, the `{ val }` cap and
+    // used, and the prepaid balance. Do not invent a percent. With none of those fields,
+    // retrying still cannot produce a reading.
+    if (config.isUnifiedBillingUser === true && officialGroups.length > 0) {
+      return {
+        provider: RUNTIME_PROVIDER.GROK,
+        officialGroups,
+        ...(typeof root?.subscription_tier === "string"
+          ? { planType: root.subscription_tier }
+          : {}),
+        ...(accountLabel ? { accountLabel } : {}),
+        health: "ok",
+      };
+    }
+    if (config.isUnifiedBillingUser === true) throw new UsageUnsupportedError();
+    throw new Error("Grok returned no usable account usage percentage");
+  }
   const primary = window(periodLabel(period?.type), percent, reset, minutes);
   const cap = quotaNumber(config.onDemandCap);
   const over =
@@ -130,10 +140,71 @@ function projectBilling(value: unknown, accountLabel?: string): UsageSnapshot {
     provider: RUNTIME_PROVIDER.GROK,
     primary,
     ...(secondary ? { secondary } : {}),
+    ...(officialGroups.length > 0 ? { officialGroups } : {}),
     ...(typeof root?.subscription_tier === "string" ? { planType: root.subscription_tier } : {}),
     ...(accountLabel ? { accountLabel } : {}),
     health: rateLimited ? "rate_limited" : "ok",
   };
+}
+
+/** Official billing fields. The percent is used, so a bucket that has one does not set
+ * `remainingFraction`. Wrapped `{ val }` numbers are the only cap, used, and balance read. */
+function billingGroups(
+  config: Record<string, unknown>,
+  percent: number | undefined,
+  reset: string | undefined,
+  minutes: number,
+): NonNullable<UsageSnapshot["officialGroups"]> {
+  const period = asRecord(config.currentPeriod);
+  const periodType = typeof period?.type === "string" ? period.type.trim() : "";
+  const buckets: UsageOfficialBucket[] = [];
+  if (percent !== undefined && percent >= 0) {
+    const shown = Math.min(100, percent);
+    buckets.push({
+      ...(periodType ? { window: periodType } : { window: "currentPeriod" }),
+      usedPercent: shown,
+      status: shown >= 100 ? "limit_reached" : "ok",
+      windowDurationMinutes: minutes,
+      ...(reset ? { resetsAt: reset } : {}),
+    });
+  } else if (periodType || reset) {
+    // No percent was returned. A week is the only length this response names; a month or an
+    // unknown type stays a period row without an invented duration.
+    const knownMinutes = /week/iu.test(periodType) ? WEEK_MINUTES : undefined;
+    buckets.push({
+      ...(periodType ? { window: periodType } : { window: "currentPeriod" }),
+      status: "parse_unavailable",
+      ...(knownMinutes ? { windowDurationMinutes: knownMinutes } : {}),
+      ...(reset ? { resetsAt: reset } : {}),
+    });
+  }
+  const cap = quotaNumber(config.onDemandCap);
+  const onDemandUsed = quotaNumber(config.onDemandUsed);
+  if (cap !== undefined || onDemandUsed !== undefined) {
+    const metered = cap !== undefined && cap > 0 && onDemandUsed !== undefined;
+    const shown = metered ? Math.min(100, (onDemandUsed / cap) * 100) : undefined;
+    const description =
+      !metered && cap !== undefined && onDemandUsed !== undefined
+        ? `${onDemandUsed} / ${cap}`
+        : undefined;
+    // One side alone is not a figure. Omitting it keeps the row from reading as "Available".
+    if (shown !== undefined || description !== undefined) {
+      buckets.push({
+        window: "onDemand",
+        ...(shown !== undefined
+          ? { usedPercent: shown, status: shown >= 100 ? "limit_reached" : "ok" }
+          : {}),
+        ...(metered ? { windowDurationMinutes: minutes } : {}),
+        ...(reset ? { resetsAt: reset } : {}),
+        ...(description ? { description } : {}),
+      });
+    }
+  }
+  const prepaid = quotaNumber(config.prepaidBalance);
+  if (prepaid !== undefined) {
+    buckets.push({ window: "prepaidBalance", description: String(prepaid) });
+  }
+  return buckets.length > 0 ? [{ buckets }] : [];
 }
 
 function window(

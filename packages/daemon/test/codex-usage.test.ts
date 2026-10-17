@@ -52,6 +52,27 @@ test("reads Codex account usage and converts rate-limit windows", async () => {
     },
     accountLabel: "cod****er@example.com",
     health: "ok",
+    officialGroups: [
+      {
+        name: "codex",
+        buckets: [
+          {
+            window: "primary",
+            usedPercent: 25,
+            status: "ok",
+            windowDurationMinutes: 300,
+            resetsAt: "2025-01-02T01:20:00.000Z",
+          },
+          {
+            window: "secondary",
+            usedPercent: 75,
+            status: "ok",
+            windowDurationMinutes: 10_080,
+            resetsAt: "2026-01-09T00:00:00.000Z",
+          },
+        ],
+      },
+    ],
   });
   expect(JSON.stringify(result)).not.toContain("codexuser");
 });
@@ -98,6 +119,33 @@ test("errors clearly when a signed-in account yields no usable window", async ()
   await expect(
     readCodexUsage(directory, { command: [process.execPath, fixture, "usage-empty"] }),
   ).rejects.toThrow(UsageUnavailableError);
+});
+
+test("keeps every limit name, an extra limit, and the schema balance, not credit amounts", async () => {
+  const result = await readCodexUsage(await scratchDirectory(), {
+    command: [process.execPath, fixture, "usage-extra"],
+  });
+  expect(result?.creditUsage).toBeUndefined();
+  expect(result?.credits).toEqual({ hasCredits: true, unlimited: false, balance: "12.50" });
+  expect(result?.officialGroups?.map((group) => group.name)).toEqual(["Codex", "GPT-5"]);
+  expect(result?.officialGroups?.[1]?.buckets).toEqual([
+    {
+      window: "primary",
+      usedPercent: 10,
+      status: "ok",
+      windowDurationMinutes: 300,
+      resetsAt: "2025-01-02T01:20:00.000Z",
+    },
+  ]);
+  expect(result?.officialGroups?.[0]?.buckets.map((bucket) => bucket.window)).toEqual([
+    "primary",
+    "secondary",
+    "individualLimit",
+  ]);
+  expect(result?.officialGroups?.[0]?.buckets[2]).toMatchObject({
+    remainingFraction: 0.4,
+    description: "3 / 10",
+  });
 });
 
 test("fails clearly when the Codex usage request times out", async () => {

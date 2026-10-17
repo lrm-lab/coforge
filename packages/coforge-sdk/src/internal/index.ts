@@ -362,8 +362,9 @@ export const RUNTIME_PROVIDER_USES_EXTERNAL_CLI: Record<RuntimeProvider, boolean
   [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
 };
 
-/** Whether the shipped adapter implements `readUsage`. External CLI execution alone does not
- * imply a usage reader. A reader may still return unsupported for a particular account.
+/** Whether the shipped adapter implements `readUsage`. Cursor, OpenCode, Pi, and CoForge
+ * are not connected yet — this table does not say the official product has no quota endpoint.
+ * A connected reader may still return unsupported for a particular account.
  * The daemon registry test checks this table against the actual adapters. */
 export const RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN: Record<RuntimeProvider, boolean> = {
   [RUNTIME_PROVIDER.COFORGE]: false,

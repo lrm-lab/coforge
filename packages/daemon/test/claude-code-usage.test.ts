@@ -91,6 +91,15 @@ test("keeps session, all-model week, and model-specific limits separate", async 
   });
   expect(result?.primary).toBeUndefined();
   expect(result?.secondary?.usedPercent).toBe(20);
+  expect(
+    result?.officialGroups?.[0]?.buckets.map((bucket) => [bucket.name, bucket.usedPercent]),
+  ).toEqual([
+    ["Current session", 6],
+    ["Current week (Fable)", 1],
+    ["Current week (all models)", 20],
+  ]);
+  expect(result?.officialGroups?.[0]?.buckets[0]?.resetsAt).toBeUndefined();
+  expect(result?.officialGroups?.[0]?.buckets[1]?.resetsAt).toBe("2026-09-16T04:59:00.000Z");
 });
 
 test("distinguishes missing Claude authentication from unreadable signed-in usage", async () => {

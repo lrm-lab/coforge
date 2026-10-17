@@ -828,10 +828,13 @@ export class DaemonRuntime {
   async scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse> {
     this.#assertRunning();
     const now = () => new Date();
+    // Cursor, OpenCode, Pi, and CoForge have no reader yet. Say that the reader is not
+    // connected. Do not claim the official product has no quota endpoint.
     if (!RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider])
-      return usageScanResult("unsupported", undefined, "Pi usage scanning is unsupported");
+      return usageScanResult("unsupported", undefined, "Usage reader is not connected yet");
     const codeAgentProvider = this.#createProvider(provider);
-    if (!codeAgentProvider.readUsage) return usageScanResult("unsupported");
+    if (!codeAgentProvider.readUsage)
+      return usageScanResult("unsupported", undefined, "Usage reader is not connected yet");
     try {
       // An observed snapshot (`#rememberUsage` stamps when it was observed) is the fallback for a
       // provider with no reading of its own.
