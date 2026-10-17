@@ -35,9 +35,13 @@ useful retrieval remains unlimited. Discovery tracks stable source identity rath
 New discovery IDs do not clear the separate search-without-reading warning, which persists across
 Task follow-ups until a new factual document body is read. Progress advice includes a returned
 document URI, constraint verification and counterevidence; it does not force the first hit or cap reads.
-Factual `ov_find` discovery excerpts are presented at up to 480 characters; repeated identical
+Documentary `ov_search_context` discovery excerpts are presented at up to 480 characters; repeated identical
 snippets are omitted with a separate discovery note. Citation identity, version and graph metadata
 stay intact, Fork discovery is unchanged, and `ov_read` still returns the full document. Missing
 details in a discovery card must not be treated as absent from its source. Later progress reminders
 are compact rather than repeating the full strategy instructions on every search.
 Changed Offer payloads cannot reuse an operation ID within a live session, including across triggers. See [runtime instructions](AGENTS.md).
+
+Documentary queries use `ov_search_context` (embedding recall and native context assembly).
+Method/experience queries use `ov_fork_find`, fixed to the causal Fork namespace; follow
+served relations with `ov_expand`. `ov_find` is not exposed to fenced agents.

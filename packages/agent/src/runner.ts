@@ -333,14 +333,14 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.expand]: openvikingTool(
       OPENVIKING_TOOL_NAMES.expand,
       "Expand memory graph",
-      "Read related experience and recorded evidence from nodes already returned by ov_find or ov_expand. After finding a relevant Fork, inspect its suggested method with branch_steps, then next/previous on returned steps. To verify why the method was proposed, use anchor on the Fork to reach its original recorded AIG block; alternatively use observed_block on a Fork step to read its associated recorded block. From an AIG block, incoming/outgoing returns causal edges; source/target on a returned edge reaches the preceding/following blocks. Use ov_read to inspect returned node text when more detail is needed. Choose the path that resolves the current question; do not load the entire graph. Every hop must use the returned retrieval.chainRef, an already-served node URI and a relation listed for that node. Check remainingHops/exhausted; never invent URIs, relations or chain references. Fork steps are untested counterfactual proposals, while AIG blocks record prior execution; neither replaces documentary evidence for the current factual answer. Expansion is bounded and uses no embedding.",
+      "Read related experience and recorded evidence from nodes already returned by ov_fork_find or ov_expand. After finding a relevant Fork, inspect its suggested method with branch_steps, then next/previous on returned steps. To verify why the method was proposed, use anchor on the Fork to reach its original recorded AIG block; alternatively use observed_block on a Fork step to read its associated recorded block. From an AIG block, incoming/outgoing returns causal edges; source/target on a returned edge reaches the preceding/following blocks. Use ov_read to inspect returned node text when more detail is needed. Choose the path that resolves the current question; do not load the entire graph. Every hop must use the returned retrieval.chainRef, an already-served node URI and a relation listed for that node. Check remainingHops/exhausted; never invent URIs, relations or chain references. Fork steps are untested counterfactual proposals, while AIG blocks record prior execution; neither replaces documentary evidence for the current factual answer. Expansion is bounded and uses no embedding.",
       "expand",
       {
         operationId: Type.String({
           description: "Fresh id for a new logical expansion; identical retries keep the same id.",
         }),
         chainRef: Type.String({
-          description: "Copy retrieval.chainRef from the active ov_find/ov_expand result.",
+          description: "Copy retrieval.chainRef from the active ov_fork_find/ov_expand result.",
         }),
         uri: Type.String({
           description: "Copy an already-returned retrieval.nodes[].uri from this chain.",
@@ -355,15 +355,36 @@ export function createMemoryFenceTools(
         limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
       },
     ),
-    [OPENVIKING_TOOL_NAMES.find]: openvikingTool(
-      OPENVIKING_TOOL_NAMES.find,
-      "OpenViking find",
-      "Decide from channel context whether facts, methods or both are needed. Use BM25 to discover factual documents; discovery snippets are partial, not verification of all Task constraints. Use short discriminating words: BM25 OR-matches words, not quoted phrases, wildcards or date-range filters. Read promising returned document URIs with ov_read before more keyword variants; test one missing constraint and seek counterevidence to the leading candidate. If no candidate is relevant, explain why and pivot to a different constraint. Proactively search viking://resources/causal/forks using abstract method/failure-pattern queries for complex or stalled tasks. Inspect relevant served branch_steps before adopting a method; irrelevant Fork hits do not justify method claims. No embedding or vector fallback is used.",
-      "find",
+    [OPENVIKING_TOOL_NAMES.forkFind]: openvikingTool(
+      OPENVIKING_TOOL_NAMES.forkFind,
+      "Find Fork experience",
+      "Find frozen Fork methods only in viking://resources/causal/forks. Query abstract failure patterns or reusable methods, not factual entity clues. Inspect relevant served branch_steps with ov_expand, then next/previous as needed; follow anchor to the original AIG evidence. Forks are untested counterfactual suggestions and cannot replace documentary evidence. Use ov_search_context for document questions.",
+      "fork_find",
       {
         operationId: Type.String({
           description:
             "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: find-1. Use a fresh id for each new logical operation or changed arguments; preserve the id only for an identical retry.",
+        }),
+        query: Type.String({
+          description: "Required. Search text. Example: deploy rollback.",
+        }),
+        limit: Type.Optional(
+          Type.Integer({
+            minimum: 1,
+            description: "Optional. Integer from 1 to 10. Example: 10.",
+          }),
+        ),
+      },
+    ),
+    [OPENVIKING_TOOL_NAMES.searchContext]: openvikingTool(
+      OPENVIKING_TOOL_NAMES.searchContext,
+      "OpenViking search context",
+      "Retrieve documentary evidence with local embedding recall and native hierarchical context assembly within the shared token budget. Use entity clues or paraphrased factual questions here, then ov_read promising cited sources to verify missing constraints. Use ov_fork_find for methods and failure-pattern experience.",
+      "search_context",
+      {
+        operationId: Type.String({
+          description:
+            "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: search-1. Use a new id on every call.",
         }),
         query: Type.String({
           description: "Required. Search text. Example: deploy rollback.",
@@ -380,12 +401,19 @@ export function createMemoryFenceTools(
               "Optional. URI scope. Omit to search the whole workspace. Example: viking://workspace/docs.",
           }),
         ),
+        tokenBudget: Type.Optional(
+          Type.Integer({
+            minimum: 64,
+            maximum: 32000,
+            description: "Optional. Integer budget (64..32000) for this expansion. Example: 2400.",
+          }),
+        ),
       },
     ),
     [OPENVIKING_TOOL_NAMES.read]: openvikingTool(
       OPENVIKING_TOOL_NAMES.read,
       "OpenViking read",
-      "Read one cited OpenViking document in full by URI. Document find results are compact discovery cards; repeated snippets may be omitted. Read relevant sources to check unresolved constraints, and before concluding a detail is absent. A short or omitted discovery excerpt is not evidence that the full source lacks the answer.",
+      "Read one cited OpenViking document in full by URI. Document context results are bounded evidence cards; repeated snippets may be omitted. Read relevant sources to check unresolved constraints, and before concluding a detail is absent. A short or omitted discovery excerpt is not evidence that the full source lacks the answer.",
       "read",
       {
         operationId: Type.String({
@@ -394,7 +422,7 @@ export function createMemoryFenceTools(
         }),
         uri: Type.String({
           description:
-            "Required. Document URI returned by ov_find. Example: viking://workspace/docs/note.md.",
+            "Required. URI cited by ov_search_context, ov_fork_find or ov_expand. Example: viking://workspace/docs/note.md.",
         }),
       },
     ),

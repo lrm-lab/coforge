@@ -32,7 +32,7 @@ afterEach(() => {
 const AGENT_API_KEY = `sk_agent_${"a".repeat(43)}`;
 const FIND_COMMAND = {
   protocol: OPENVIKING_AGENT_PROTOCOL,
-  op: "find" as const,
+  op: "fork_find" as const,
   operationId: "deploy-runbook",
   query: "deploy rollback",
 };
@@ -99,7 +99,7 @@ test("admitOpenVikingRead accepts a fenced find and rejects malformed, mutation,
   ).toBe(true);
 
   const malformed = admitOpenVikingRead({
-    body: { op: "find" },
+    body: { op: "fork_find" },
     fence: OPENVIKING_TOOL_PROFILE,
   });
   expect(malformed).toMatchObject({
@@ -151,7 +151,7 @@ test("admitOpenVikingRead accepts a fenced find and rejects malformed, mutation,
 test("the OpenViking read proxy fail-closed matrix: malformed, wrong path/method, token, profile, mutation", async () => {
   const { proxy, calls, token } = startOpenVikingProxy({ fence: OPENVIKING_TOOL_PROFILE });
 
-  const malformed = await postOpenViking(proxy.url, token, { op: "find" });
+  const malformed = await postOpenViking(proxy.url, token, { op: "fork_find" });
   expect(malformed.status).toBe(400);
   const malformedBody = (await malformed.json()) as OpenVikingAgentError;
   expect(isOpenVikingAgentError(malformedBody)).toBe(true);
@@ -251,7 +251,7 @@ test("a valid OpenViking read preserves the stable operation ID and token-bound 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: "deploy-runbook",
     duplicate: false,
     items: [{ kind: "openviking", citationId: "ov:wiki/deploy" }],
@@ -289,7 +289,7 @@ test("forwardOpenVikingRead posts the command to the injected URL without OV cre
       });
       return Response.json({
         protocol: OPENVIKING_AGENT_PROTOCOL,
-        op: "find",
+        op: "fork_find",
         operationId: "deploy-runbook",
         duplicate: false,
         items: [{ kind: "not-decoded", excerpt: "daemon must not interpret citations" }],
@@ -307,7 +307,7 @@ test("forwardOpenVikingRead posts the command to the injected URL without OV cre
 
   expect(body).toEqual({
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: "deploy-runbook",
     duplicate: false,
     items: [{ kind: "not-decoded", excerpt: "daemon must not interpret citations" }],
@@ -332,7 +332,7 @@ test("forwardOpenVikingRead fail-closes a credential leak and an operationId rew
       fetch: async () =>
         Response.json({
           protocol: OPENVIKING_AGENT_PROTOCOL,
-          op: "find",
+          op: "fork_find",
           operationId: "deploy-runbook",
           duplicate: false,
           apiKey: "ov-runtime-secret",
@@ -354,7 +354,7 @@ test("forwardOpenVikingRead fail-closes a credential leak and an operationId rew
       fetch: async () =>
         Response.json({
           protocol: OPENVIKING_AGENT_PROTOCOL,
-          op: "find",
+          op: "fork_find",
           operationId: "rewritten-id",
           duplicate: false,
           items: [],
@@ -417,7 +417,7 @@ test("the runtime forward posts to the configured web OpenViking route", async (
   const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
     Response.json({
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "deploy-runbook",
       duplicate: false,
       items: [],
@@ -431,7 +431,7 @@ test("the runtime forward posts to the configured web OpenViking route", async (
   });
   await expect(transport.agentOpenviking(FIND_COMMAND, AGENT_API_KEY)).resolves.toEqual({
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: "deploy-runbook",
     duplicate: false,
     items: [],
@@ -508,7 +508,7 @@ test("the outer read deadline allows a healthy backend response beyond ten secon
   let respond!: () => void;
   const expected = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: FIND_COMMAND.operationId,
     duplicate: false,
     items: [],
@@ -547,7 +547,7 @@ test("the production connection preserves the enclosing OpenViking deadline", as
   let respond!: () => void;
   const expected = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: FIND_COMMAND.operationId,
     duplicate: false,
     items: [],

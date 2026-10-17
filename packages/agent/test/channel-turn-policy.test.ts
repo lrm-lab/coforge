@@ -140,7 +140,9 @@ test("a published Memory Offer settles without an extra model request", async ()
         return completion(
           {
             role: "assistant",
-            tool_calls: [call("ov_find", { operationId: "find-1", query: "evidence" }, "find")],
+            tool_calls: [
+              call("ov_fork_find", { operationId: "find-1", query: "evidence" }, "fork_find"),
+            ],
           },
           "tool_calls",
         );
