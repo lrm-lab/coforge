@@ -26,3 +26,6 @@
 - [`docker compose up`](https://docs.docker.com/reference/cli/docker/compose/up/)
 - [Reproducible builds with GitHub Actions (`SOURCE_DATE_EPOCH`)](https://docs.docker.com/build/ci/github-actions/reproducible-builds/)
 - [BuildKit reproducible builds (`rewrite-timestamp`)](https://github.com/moby/buildkit/blob/master/docs/build-repro.md)
+- GitHub dependency caching: [which triggers write the default branch's cache](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#cache-access-for-low-trust-workflow-triggers) and [unverified cache contents](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#best-practices-for-using-caches-securely)
+- [`jdx/mise-action` v4.3.0 inputs (`cache`)](https://github.com/jdx/mise-action/blob/c2a87611a18de5b3828c5652fe268e992400cb5c/action.yml) and [source (cache restore before `setupMise`, which skips the download when a mise binary exists)](https://github.com/jdx/mise-action/blob/c2a87611a18de5b3828c5652fe268e992400cb5c/src/index.ts)
+- [`docker/setup-buildx-action` v3.12.0 inputs (`cache-binary`)](https://github.com/docker/setup-buildx-action/blob/8d2750c68a42422c14e847fe6c8ac0403b4cbd6f/action.yml)

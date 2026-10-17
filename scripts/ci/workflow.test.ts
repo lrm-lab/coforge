@@ -45,6 +45,32 @@ test("the staging image build fixes file timestamps and reads no build cache", a
   expect(build.with["cache-to"]).toBeUndefined();
 });
 
+test("deploy and release jobs restore nothing from the Actions cache", async () => {
+  // Each setup action's input that turns its cache off; docs/release/github-actions.md.
+  const cacheInputs: Record<string, string> = {
+    "jdx/mise-action": "cache",
+    "docker/setup-buildx-action": "cache-binary",
+  };
+  let checked = 0;
+  for (const file of new Bun.Glob("*.{yml,yaml}").scanSync(".github/workflows")) {
+    // CI holds no deploy or publish credentials and publishes nothing, so it keeps the cache.
+    if (file === "ci.yml") continue;
+    const { jobs } = Bun.YAML.parse(await Bun.file(`.github/workflows/${file}`).text()) as {
+      jobs: Record<string, Job>;
+    };
+    for (const [name, job] of Object.entries(jobs)) {
+      for (const step of job.steps ?? []) {
+        const action = step.uses?.split("@")[0] ?? "";
+        expect(action, `${file} ${name}`).not.toStartWith("actions/cache");
+        if (!(action in cacheInputs)) continue;
+        checked += 1;
+        expect(step.with?.[cacheInputs[action]], `${file} ${name}`).toBe(false);
+      }
+    }
+  }
+  expect(checked).toBe(16);
+});
+
 test("the aggregate gate executes even after failure and rejects missing, skipped, or cancelled required jobs", () => {
   const gate = ci.jobs["ci-passed"];
   expect(gate?.if).toBe("always()");
