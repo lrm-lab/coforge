@@ -126,6 +126,8 @@ function classifyFailure(
       /** Log only: the upstream body's own `code`, which explains a refusal that the caller is
        * deliberately not shown the internals of. Never enters `body`. */
       upstreamCode?: string;
+      /** Log only: the native fetch/stream code, without changing public cause_code. */
+      transportCode?: string;
     } = {},
   ): AgentProxyClassifiedFailure => {
     const body: AgentProxyFailureBody = {
@@ -159,6 +161,7 @@ function classifyFailure(
         ...(options.detail !== undefined ? { detail: options.detail } : {}),
         upstream_status: body.proxy.upstream_status,
         ...(options.upstreamCode !== undefined ? { upstream_code: options.upstreamCode } : {}),
+        ...(options.transportCode !== undefined ? { transport_code: options.transportCode } : {}),
         response_started: body.proxy.response_started,
         response_complete: body.proxy.response_complete,
         method: context.method,
@@ -195,6 +198,7 @@ function classifyFailure(
       upstreamStatus: error.upstreamStatus,
       responseStarted: error.responseStarted,
       responseComplete: error.responseComplete,
+      transportCode: error.transportCode,
     });
   }
 

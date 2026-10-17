@@ -18,6 +18,47 @@ const context = {
   agentId: "agent-a",
 };
 
+test.each(["ECONNREFUSED", "ECONNRESET"])(
+  "logs native transport code %s without changing the caller's failure or verdict",
+  (code) => {
+    const cause = Object.assign(new TypeError("private endpoint and credential"), { code });
+    for (const failure of [
+      AgentTransportError.preResponseTransport("agent search", cause),
+      AgentTransportError.midResponseTransport("agent search", 200, cause),
+    ]) {
+      const error = new AgentSendVerdictError("unconfirmed", failure, {
+        retryable: false,
+        draftSaved: true,
+        suggestedNextAction: "do not resend",
+      });
+      const classified = classifyAgentProxyFailure(error, context);
+      expect(classified.logFields.transport_code).toBe(code);
+      expect(classified.body.proxy.cause_code).toBe("TypeError");
+      expect(classified.body.proxy.failure_class).toBe(failure.failureClass);
+      expect(classified.body.retryable).toBe(false);
+      expect(classified.body.proxy.draft_saved).toBe(true);
+      expect(JSON.stringify(classified.body)).not.toContain(code);
+      expect(JSON.stringify(classified)).not.toContain(cause.message);
+
+      const redacted = classifyAgentProxyFailure(error, { ...context, redact: true });
+      expect(redacted.logFields.transport_code).toBeUndefined();
+      expect(JSON.stringify(redacted)).not.toContain(code);
+    }
+  },
+);
+
+test("transport diagnostics omit absent, numeric and arbitrary text codes", () => {
+  for (const code of [undefined, 23, "private endpoint / credentials", "X".repeat(65), {}]) {
+    const cause = Object.assign(new TypeError("private text"), { code });
+    const classified = classifyAgentProxyFailure(
+      AgentTransportError.preResponseTransport("agent search", cause),
+      context,
+    );
+    expect(classified.logFields).not.toHaveProperty("transport_code");
+    expect(classified.body.proxy.cause_code).toBe("TypeError");
+  }
+});
+
 test("classifies each AgentTransportError failure class with its own status and fields", () => {
   const cases: Array<{
     error: AgentTransportError;

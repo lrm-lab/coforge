@@ -22,6 +22,8 @@ export type AgentTransportUpstreamLayer =
 export interface AgentTransportErrorDetails {
   failureClass: AgentTransportFailureClass;
   causeCode: string;
+  /** Log-only native transport code; never part of the Agent response or send verdict. */
+  transportCode?: string;
   upstreamLayer?: AgentTransportUpstreamLayer;
   upstreamStatus?: number;
   responseStarted: boolean;
@@ -31,6 +33,7 @@ export interface AgentTransportErrorDetails {
 export class AgentTransportError extends Error implements AgentTransportErrorDetails {
   readonly failureClass: AgentTransportFailureClass;
   readonly causeCode: string;
+  readonly transportCode?: string;
   readonly upstreamLayer?: AgentTransportUpstreamLayer;
   readonly upstreamStatus?: number;
   readonly responseStarted: boolean;
@@ -41,6 +44,7 @@ export class AgentTransportError extends Error implements AgentTransportErrorDet
     this.name = "AgentTransportError";
     this.failureClass = details.failureClass;
     this.causeCode = details.causeCode;
+    this.transportCode = details.transportCode;
     this.upstreamLayer = details.upstreamLayer;
     this.upstreamStatus = details.upstreamStatus;
     this.responseStarted = details.responseStarted;
@@ -52,6 +56,7 @@ export class AgentTransportError extends Error implements AgentTransportErrorDet
     return new AgentTransportError(`${what} failed before a response was received`, {
       failureClass: "pre_response_transport",
       causeCode: causeCode(cause),
+      transportCode: transportCode(cause),
       responseStarted: false,
       responseComplete: false,
     });
@@ -74,6 +79,7 @@ export class AgentTransportError extends Error implements AgentTransportErrorDet
     return new AgentTransportError(`${what} response body failed while streaming`, {
       failureClass: "mid_response_transport",
       causeCode: causeCode(cause),
+      transportCode: transportCode(cause),
       upstreamLayer: "body_stream",
       upstreamStatus: status,
       responseStarted: true,
@@ -92,6 +98,14 @@ export class AgentTransportError extends Error implements AgentTransportErrorDet
       responseComplete: true,
     });
   }
+}
+
+/** Bun's fetch errors carry codes such as ECONNREFUSED beside the generic TypeError name.
+ * Keep only a bounded symbolic code, never the message, endpoint, or other error properties. */
+function transportCode(cause: unknown): string | undefined {
+  if (!cause || typeof cause !== "object" || !("code" in cause)) return undefined;
+  const code = cause.code;
+  return typeof code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(code) ? code : undefined;
 }
 
 function causeCode(cause: unknown): string {
