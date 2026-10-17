@@ -7,6 +7,8 @@ Rules for durable local state in `src/persistence/`. They extend
   recovery. The entrypoint uses it; it does not validate environment itself.
 - This directory owns atomic record writes, atomic App Inbox storage, and
   guarded Agent workspace clearing.
+- `private-json-record.ts` owns permission-restricted atomic JSON replacement
+  for App Inbox and reminder receipts; callers own their record validation.
 - Persisted Agent runtime records stay outside the Agent workspace, so clearing
   a workspace can never delete them.
 - A connection outbox is not durable storage, and nothing here is a jobs queue

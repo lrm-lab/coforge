@@ -1,5 +1,4 @@
-import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { encodeReminderFireRequest, encodeReminderSync } from "@lrm/coforge-sdk/internal";
 import {
   RETRY_EXHAUSTED_CODE,
@@ -7,6 +6,7 @@ import {
   type ReminderReceiptStore,
 } from "#src/agent-reminder/reminder-scheduler";
 import { isSafePathScope } from "./path-scope";
+import { writePrivateJsonRecord } from "./private-json-record";
 
 const KEYS = new Set([
   "workspaceId",
@@ -158,13 +158,6 @@ export class FileReminderReceiptStore implements ReminderReceiptStore {
   async write(agentId: string, receipts: readonly ReminderReceipt[]): Promise<void> {
     const path = this.#path(agentId);
     const validated = this.#validateReceipts(agentId, receipts);
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await chmod(dirname(path), 0o700);
-    const temporary = `${path}.${crypto.randomUUID()}.tmp`;
-    await writeFile(temporary, JSON.stringify({ version: 1, receipts: validated }) + "\n", {
-      mode: 0o600,
-    });
-    await rename(temporary, path);
-    await chmod(path, 0o600);
+    await writePrivateJsonRecord(path, { version: 1, receipts: validated });
   }
 }

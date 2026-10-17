@@ -1,6 +1,6 @@
-import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { isSafePathScope } from "./path-scope";
+import { writePrivateJsonRecord } from "./private-json-record";
 
 export class AgentAppInboxPersistence {
   readonly #path: string;
@@ -29,11 +29,6 @@ export class AgentAppInboxPersistence {
   }
 
   async write(items: readonly unknown[]): Promise<void> {
-    await mkdir(dirname(this.#path), { recursive: true, mode: 0o700 });
-    await chmod(dirname(this.#path), 0o700);
-    const temporary = `${this.#path}.${crypto.randomUUID()}.tmp`;
-    await writeFile(temporary, JSON.stringify({ version: 1, items }) + "\n", { mode: 0o600 });
-    await rename(temporary, this.#path);
-    await chmod(this.#path, 0o600);
+    await writePrivateJsonRecord(this.#path, { version: 1, items });
   }
 }
