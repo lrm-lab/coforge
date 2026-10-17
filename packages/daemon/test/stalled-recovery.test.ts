@@ -80,6 +80,7 @@ async function harness(
     disposeGate?: Promise<void>;
     disposeFails?: boolean;
     relaunchFails?: boolean;
+    holdFirstSessionNotices?: boolean;
   } = {},
 ) {
   setSystemTime(START);
@@ -99,6 +100,8 @@ async function harness(
   const terminals: Array<{ deliveryId: string; code: string }> = [];
   /** What the daemon told the cloud, in order. */
   const cloud: string[] = [];
+  const noticeEntered = Promise.withResolvers<void>();
+  const noticeAccepted = Promise.withResolvers<void>();
   const runtime = new DaemonRuntime(
     connection,
     () => ({
@@ -126,6 +129,10 @@ async function harness(
           },
           async notify(notice: string) {
             record.notices.push(notice);
+            if (first && options.holdFirstSessionNotices) {
+              noticeEntered.resolve();
+              await noticeAccepted.promise;
+            }
             record.inputs.push(notice);
           },
           get hasLiveTurn() {
@@ -142,6 +149,8 @@ async function harness(
             return () => exitListeners.delete(listener);
           },
           async dispose() {
+            if (first && options.holdFirstSessionNotices)
+              noticeAccepted.reject(new Error("code agent session was disposed"));
             if (first && options.disposeGate) await options.disposeGate;
             if (first && options.disposeFails) throw new Error("the process would not exit");
             record.disposed = true;
@@ -221,6 +230,7 @@ async function harness(
     acks,
     terminals,
     cloud,
+    noticeEntered: noticeEntered.promise,
     deliver,
     mention,
   };
@@ -293,6 +303,38 @@ test("a tracked @mention pending in the stalled turn is handed back as unknown b
     await h.runtime.stop();
   }
 });
+
+test.each([false, true])(
+  "a pending provider notice stays unknown during stalled recovery (slow disposal: %s)",
+  async (slowDisposal) => {
+    const disposeGate = Promise.withResolvers<void>();
+    const h = await harness({
+      holdFirstSessionNotices: true,
+      ...(slowDisposal ? { disposeGate: disposeGate.promise } : {}),
+    });
+    try {
+      h.sessions[0]!.emit({ type: "progress" });
+      const pending = h.deliver(1, h.mention(1)).catch(() => undefined);
+      await h.noticeEntered;
+      setSystemTime(minutes(20));
+      h.cloud.length = 0;
+      const recovery = h.deliver(2);
+      if (slowDisposal) {
+        await pending;
+        disposeGate.resolve();
+      }
+      await recovery;
+      await pending;
+
+      expect(h.sessions).toHaveLength(2);
+      expect(h.terminals).toEqual([{ deliveryId: "delivery-1", code: "IDENTITY_UNKNOWN" }]);
+      expect(h.cloud).toEqual(["terminal delivery-1 IDENTITY_UNKNOWN", "session launch-1"]);
+    } finally {
+      disposeGate.resolve();
+      await h.runtime.stop();
+    }
+  },
+);
 
 test("a second message during the restart waits for the new session instead of the stalled one", async () => {
   const h = await harness();

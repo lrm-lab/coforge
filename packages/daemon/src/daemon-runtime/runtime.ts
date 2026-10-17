@@ -3280,8 +3280,6 @@ export class DaemonRuntime {
     this.#stalledRecoveries.add(agentId);
     try {
       if (!(await this.#endStalledRuntime(agentId, stalled))) return;
-      // Before the relaunch reports its session, which is what makes the server issue them again.
-      await this.#mentionDeliveries.handBackForRelaunch(agentId);
       // A Stop that arrived meanwhile wins: the Agent is not woken again.
       if (this.#stoppingAgents.has(agentId) || !this.#agentProcessManager.restartConfig(agentId))
         return;
@@ -3326,6 +3324,9 @@ export class DaemonRuntime {
     });
     launch.stopping = true;
     try {
+      // Dispose can reject notices still waiting for provider acceptance. Hand their mentions
+      // back first, before those rejections can settle them as lost.
+      await this.#mentionDeliveries.handBackForRelaunch(agentId);
       await this.#agentProcessManager.release(agentId, STALLED_RECOVERY_EXIT_TIMEOUT_MS);
       return true;
     } catch (error) {

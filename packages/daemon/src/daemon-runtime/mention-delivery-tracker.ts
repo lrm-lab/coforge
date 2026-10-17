@@ -150,14 +150,16 @@ export class MentionDeliveryTracker {
     if (blocked) return this.refuse(message, BLOCKED_CODES[blocked]);
     // Read before the notice: writing it marks the Agent busy.
     const busy = this.ports.busy(message.agentId, message.conversationId);
+    const receiving = this.#tracked.get(message.deliveryId);
     let outcome: "told" | "gone";
     try {
       outcome = await this.ports.announce(message);
     } catch (error) {
-      await this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+      if (this.#tracked.get(message.deliveryId) === receiving)
+        await this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
       throw error;
     }
-    if (!this.#receiving(message)) return;
+    if (this.#tracked.get(message.deliveryId) !== receiving) return;
     if (outcome === "gone") {
       const now = this.ports.running(message.agentId);
       return this.refuse(
@@ -241,7 +243,7 @@ export class MentionDeliveryTracker {
   }
 
   /**
-   * The Agent's process was ended for a restart, and nothing settles a mention on exit: each one
+   * The Agent's process is being ended for a restart: each mention
    * still received or pending for it is refused as unknown, so the server keeps it pending and
    * issues it again for the relaunch's session report. Settles once every refusal was sent.
    */
@@ -261,11 +263,6 @@ export class MentionDeliveryTracker {
     return this.ports.busy(message.agentId, message.conversationId)
       ? this.#markPending(message)
       : this.#drain(message);
-  }
-
-  /** Whether the mention is still between acceptance and its outcome: not settled meanwhile. */
-  #receiving(message: TrackedMentionDelivery): boolean {
-    return this.#tracked.get(message.deliveryId)?.state === "received";
   }
 
   async #markPending(message: TrackedMentionDelivery): Promise<void> {
