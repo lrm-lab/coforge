@@ -39,7 +39,7 @@ export function usageWindowLabel(
   }
 }
 
-function byDuration({ windowDurationMinutes }: UsageWindowShape): string {
+export function byDuration({ windowDurationMinutes }: UsageWindowShape): string {
   if (windowDurationMinutes <= DAY_MINUTES) return m.computer_usage_session();
   if (windowDurationMinutes <= WEEK_MINUTES) return m.computer_usage_weekly();
   return m.computer_usage_monthly();

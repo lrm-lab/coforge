@@ -20,6 +20,7 @@ const usageLegacyAccount = process.argv.includes("usage-legacy");
 const usageAuthRequired = process.argv.includes("usage-auth");
 const usageRatelimited = process.argv.includes("usage-ratelimited");
 const usageEmpty = process.argv.includes("usage-empty");
+const usageExtra = process.argv.includes("usage-extra");
 const usageClient = process.argv.some((argument) => argument.startsWith("usage"));
 const skillsDirectory = join(process.cwd(), ".agents", "skills");
 let skills: string[] = [];
@@ -124,23 +125,48 @@ function handle(request: Request): void {
       });
       return;
     }
+    const primary = {
+      usedPercent: usageRatelimited ? 100 : 25,
+      windowDurationMins: 300,
+      resetsAt: 1_735_780_800,
+    };
+    const secondary = {
+      usedPercent: 75,
+      windowDurationMins: 10_080,
+      resetsAt: "2026-01-09T00:00:00.000Z",
+    };
+    const codexLimit = usageExtra
+      ? {
+          limitId: "codex",
+          limitName: "Codex",
+          primary,
+          secondary,
+          credits: { hasCredits: true, unlimited: false, balance: "12.50" },
+          individualLimit: {
+            limit: "10",
+            used: "3",
+            remainingPercent: 40,
+            resetsAt: 1_735_780_800,
+          },
+        }
+      : { limitId: "codex", primary, secondary };
     write({
       id: request.id,
       result: {
         planType: "plus",
-        rateLimits: {
-          limitId: "codex",
-          primary: {
-            usedPercent: usageRatelimited ? 100 : 25,
-            windowDurationMins: 300,
-            resetsAt: 1_735_780_800,
-          },
-          secondary: {
-            usedPercent: 75,
-            windowDurationMins: 10_080,
-            resetsAt: "2026-01-09T00:00:00.000Z",
-          },
-        },
+        rateLimits: codexLimit,
+        ...(usageExtra
+          ? {
+              rateLimitsByLimitId: {
+                codex: codexLimit,
+                "gpt-5": {
+                  limitId: "gpt-5",
+                  limitName: "GPT-5",
+                  primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: 1_735_780_800 },
+                },
+              },
+            }
+          : {}),
       },
     });
     return;

@@ -81,7 +81,9 @@ export type UsageSnapshot = Readonly<{
   /** The provider's own note above those groups, such as Antigravity's `command.data.description`.
    * Omitted when the provider sent none. */
   officialDescription?: string;
-  credits?: Readonly<{ hasCredits: boolean; unlimited: boolean }>;
+  /** Codex reports booleans, plus `balance` only when that version's schema sends the string.
+   * This is not Kiro's `creditUsage` amounts. */
+  credits?: Readonly<{ hasCredits: boolean; unlimited: boolean; balance?: string }>;
   /** Included credits consumed, included limit, and separately billed overage. */
   creditUsage?: Readonly<{ used: number; limit: number; overage: number }>;
   /** When this snapshot was actually observed (ISO instant) — stamped centrally by

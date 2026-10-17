@@ -1,5 +1,6 @@
 import {
   UsageUnavailableError,
+  type UsageOfficialBucket,
   type UsageSnapshot,
   type UsageWindow,
 } from "#src/code-agent/contract";
@@ -93,12 +94,73 @@ function parseUsage(output: string): UsageSnapshot | null {
     text,
     /^Current week(?: \(all models\))?:?\s+([\d.]+)%[^\r\n]{0,100}?(?:reset|resets)[^\r\n]{0,40}?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?:,\s+(\d{4}),|\s+at)\s+(\d{1,2}):(\d{2})\s*(am|pm)\s*\(UTC\)/im,
   );
-  if (!primary && !secondary) return null;
+  // Every printed line stays, including a model-specific week beside "all models". The two
+  // slots above stay the session and the all-models week so an older Web still has them.
+  const buckets = usageLines(text);
+  if (!primary && !secondary && buckets.length === 0) return null;
   return {
     provider: RUNTIME_PROVIDER.CLAUDE_CODE,
     ...(primary ? { primary } : {}),
     ...(secondary ? { secondary } : {}),
+    ...(buckets.length > 0 ? { officialGroups: [{ buckets }] } : {}),
   };
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** One `/usage` line. The percent is used, not remaining, so the bucket does not set
+ * `remainingFraction`. A line whose reset cannot be read is still kept. */
+function usageLines(text: string): UsageOfficialBucket[] {
+  const buckets: UsageOfficialBucket[] = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const match = /^(.*?)\s+(\d+(?:\.\d+)?)%\s+used\b/i.exec(line);
+    if (!match) continue;
+    const name = match[1]?.replace(/:\s*$/, "").trim();
+    const usedPercent = Number(match[2]);
+    if (
+      !name ||
+      name.length > 200 ||
+      !Number.isFinite(usedPercent) ||
+      usedPercent < 0 ||
+      usedPercent > 100
+    )
+      continue;
+    const resetsAt = resetInstant(line);
+    const minutes = resetsAt
+      ? Math.max(0, Math.round((Date.parse(resetsAt) - Date.now()) / 60_000))
+      : 0;
+    buckets.push({
+      name,
+      usedPercent,
+      status: usedPercent >= 100 ? "limit_reached" : "ok",
+      ...(minutes > 0 ? { windowDurationMinutes: minutes } : {}),
+      ...(resetsAt ? { resetsAt } : {}),
+    });
+  }
+  return buckets;
+}
+
+function resetInstant(line: string): string | undefined {
+  const match = line.match(
+    /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?:,\s+(\d{4}),|\s+at)\s+(\d{1,2}):(\d{2})\s*(am|pm)\s*\(UTC\)/i,
+  );
+  if (!match) return undefined;
+  const month = MONTHS.indexOf(
+    (match[1] ?? "").slice(0, 1).toUpperCase() + (match[1] ?? "").slice(1, 3).toLowerCase(),
+  );
+  let hour = Number(match[4]);
+  if ((match[6] ?? "").toLowerCase() === "pm" && hour !== 12) hour += 12;
+  if ((match[6] ?? "").toLowerCase() === "am" && hour === 12) hour = 0;
+  const now = new Date();
+  let year = match[3] ? Number(match[3]) : now.getUTCFullYear();
+  if (!match[3]) {
+    if (month - now.getUTCMonth() < -6) year += 1;
+    if (month - now.getUTCMonth() > 6) year -= 1;
+  }
+  const reset = new Date(Date.UTC(year, month, Number(match[2]), hour, Number(match[5])));
+  if (month < 0 || Number.isNaN(reset.getTime())) return undefined;
+  return reset.toISOString();
 }
 
 function window(text: string, pattern: RegExp): UsageWindow | undefined {

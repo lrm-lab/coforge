@@ -64,26 +64,57 @@ test.each([
   expect(snapshot?.secondary?.windowDurationMinutes).toBe(minutes);
 });
 
-test("an account with no metered usage is unsupported, not a failed scan", async () => {
-  // The billing response Grok 1.0.41 actually sends for a unified-billing account: no
+test("a unified-billing account may omit the percent and still keeps the wrapped fields", async () => {
+  // The billing response Grok 1.0.41 sends for a unified-billing account: no
   // `creditUsagePercent`, no `used`/`monthlyLimit`, a weekly period, and every number wrapped.
-  await expect(
-    read({
-      subscription_tier: "X Premium",
-      config: {
-        currentPeriod: {
-          type: "USAGE_PERIOD_TYPE_WEEKLY",
-          start: "2026-09-27T14:19:56.652919+00:00",
-          end: "2026-10-04T14:19:56.652919+00:00",
-        },
-        onDemandCap: { val: 0 },
-        onDemandUsed: { val: 0 },
-        prepaidBalance: { val: 0 },
-        isUnifiedBillingUser: true,
-        billingPeriodEnd: "2026-10-04T14:19:56.652919+00:00",
+  const snapshot = await read({
+    subscription_tier: "X Premium",
+    config: {
+      currentPeriod: {
+        type: "USAGE_PERIOD_TYPE_WEEKLY",
+        start: "2026-09-27T14:19:56.652919+00:00",
+        end: "2026-10-04T14:19:56.652919+00:00",
       },
-    }),
-  ).rejects.toBeInstanceOf(UsageUnsupportedError);
+      onDemandCap: { val: 0 },
+      onDemandUsed: { val: 0 },
+      prepaidBalance: { val: 0 },
+      isUnifiedBillingUser: true,
+      billingPeriodEnd: "2026-10-04T14:19:56.652919+00:00",
+    },
+  });
+  expect(snapshot?.primary).toBeUndefined();
+  expect(snapshot?.planType).toBe("X Premium");
+  expect(snapshot?.officialGroups?.[0]?.buckets).toEqual([
+    {
+      window: "USAGE_PERIOD_TYPE_WEEKLY",
+      status: "parse_unavailable",
+      windowDurationMinutes: 10_080,
+      resetsAt: "2026-10-04T14:19:56.652Z",
+    },
+    { window: "onDemand", description: "0 / 0", resetsAt: "2026-10-04T14:19:56.652Z" },
+    { window: "prepaidBalance", description: "0" },
+  ]);
+});
+
+test("a unified-billing account does not invent a month length or a one-sided on-demand figure", async () => {
+  const snapshot = await read({
+    config: {
+      currentPeriod: {
+        type: "USAGE_PERIOD_TYPE_MONTHLY",
+        end: "2026-10-04T14:19:56.652919+00:00",
+      },
+      onDemandCap: { val: 5 },
+      isUnifiedBillingUser: true,
+    },
+  });
+  expect(snapshot?.primary).toBeUndefined();
+  expect(snapshot?.officialGroups?.[0]?.buckets).toEqual([
+    {
+      window: "USAGE_PERIOD_TYPE_MONTHLY",
+      status: "parse_unavailable",
+      resetsAt: "2026-10-04T14:19:56.652Z",
+    },
+  ]);
 });
 
 test("marks exhausted account as rate limited and clamps percentages", async () => {

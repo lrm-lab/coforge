@@ -17,7 +17,7 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { useRuntimeUsage } from "./use-runtime-usage";
-import { usageWindowLabel } from "./runtime-usage-windows";
+import { byDuration, usageWindowLabel } from "./runtime-usage-windows";
 import type { UsageReadResult, UsageResultRecord } from "#src/server/centrifugo/usage-cache.server";
 
 export type Runtime = {
@@ -156,6 +156,8 @@ function usageHealth(data: UsageReadResult | undefined): UsageHealth | undefined
   return badge.color === "success" && data.state === "fresh" ? "ok" : "attention";
 }
 
+const USAGE_READER_NOT_CONNECTED = "Usage reader is not connected yet";
+
 function usageBadge(
   result: UsageResultRecord,
 ): { color: "success" | "warning" | "error"; label: string } | undefined {
@@ -165,7 +167,13 @@ function usageBadge(
     return { color: "warning", label: m.computer_usage_badge_unavailable() };
   if (result.status === "error") return { color: "error", label: m.computer_usage_badge_error() };
   if (result.status === "unsupported")
-    return { color: "warning", label: m.computer_usage_badge_unsupported() };
+    return {
+      color: "warning",
+      label:
+        result.message === USAGE_READER_NOT_CONNECTED
+          ? m.computer_usage_not_connected()
+          : m.computer_usage_badge_unsupported(),
+    };
   const rateLimited =
     result.snapshot?.health === "rate_limited" ||
     result.snapshot?.primary?.status === "limit_reached" ||
@@ -178,12 +186,55 @@ function usageBadge(
     : { color: "success", label: m.computer_usage_badge_ok() };
 }
 
-function usageFailureDescription(status: UsageResultRecord["status"] | undefined) {
+function usageFailureDescription(result: UsageResultRecord | undefined) {
+  const status = result?.status;
   if (status === "reauth") return m.computer_usage_reauth();
   if (status === "unavailable") return m.computer_usage_unavailable_description();
   if (status === "error") return m.computer_usage_error();
-  if (status === "unsupported") return m.computer_usage_status_unsupported();
+  if (status === "unsupported")
+    return result?.message === USAGE_READER_NOT_CONNECTED
+      ? m.computer_usage_not_connected()
+      : m.computer_usage_status_unsupported();
   return undefined;
+}
+
+/** Window keys we store when the provider has no display name. They are not official copy. */
+const RAW_WINDOW_LABELS: Record<string, () => string> = {
+  onDemand: () => m.computer_usage_pay_as_you_go(),
+  prepaidBalance: () => m.computer_usage_prepaid_balance(),
+  individualLimit: () => m.computer_usage_spend_limit_remaining(),
+  bonus: () => m.computer_usage_bonus(),
+  freeTrial: () => m.computer_usage_free_trial(),
+  currentPeriod: () => m.computer_usage_current_period(),
+};
+
+/** The row label for one official bucket. A provider name wins. A stored window key is
+ * localized, then a real window length, then a week or month named by the official type. */
+function officialBucketLabel(bucket: {
+  name?: string;
+  window?: string;
+  windowDurationMinutes?: number;
+}): string {
+  if (bucket.name && !RAW_WINDOW_LABELS[bucket.name]) return bucket.name;
+  const key = bucket.window ?? bucket.name;
+  const known = key ? RAW_WINDOW_LABELS[key] : undefined;
+  if (known) return known();
+  if (bucket.windowDurationMinutes)
+    return byDuration({ windowDurationMinutes: bucket.windowDurationMinutes });
+  if (key && /week/iu.test(key)) return m.computer_usage_weekly();
+  if (key && /month/iu.test(key)) return m.computer_usage_monthly();
+  return key ?? m.computer_usage_available();
+}
+
+/** A figure that is not a percent, such as a wrapped balance. Omitted when the row already
+ * has a meter, so a bucket note does not replace the official percent. */
+function officialBucketDetail(bucket: {
+  description?: string;
+  remainingFraction?: number;
+  usedPercent?: number;
+}): string | undefined {
+  if (bucket.remainingFraction !== undefined || bucket.usedPercent !== undefined) return undefined;
+  return bucket.description;
 }
 
 /**
@@ -226,19 +277,21 @@ export function RuntimeUsagePopoverContent({
       ? m.computer_usage_offline()
       : scanFailed
         ? m.computer_usage_no_response()
-        : usageFailureDescription(data?.result?.status);
+        : usageFailureDescription(data?.result);
   const reading =
     !reason && (!data || (data.state === "missing" && (scanning || data.pendingScanId)));
   const plan = snapshot?.planType ? formatPlan(snapshot.planType) : undefined;
   const accountLabel = snapshot?.accountLabel;
-  // Codex reports only whether the account has credits and whether they are unlimited, no
-  // amounts, so that is a note on the account line rather than a bar. No credits says nothing.
+  // Codex reports whether credits exist and whether they are unlimited, and a balance string
+  // only when that version's schema sends one. No amounts, so this stays a note, not a bar.
   const credits = snapshot?.credits?.unlimited
     ? m.computer_usage_credits_unlimited()
     : snapshot?.credits?.hasCredits
       ? m.computer_usage_credits_available()
       : undefined;
-  const accountNote = [plan && accountLabel, credits].filter(Boolean).join(" · ");
+  const accountNote = [plan && accountLabel, credits, snapshot?.credits?.balance]
+    .filter(Boolean)
+    .join(" · ");
   const windows = snapshot
     ? (["primary", "secondary"] as const).flatMap((key) => {
         const window = snapshot[key];
@@ -332,20 +385,28 @@ export function RuntimeUsagePopoverContent({
                           {group.name}
                         </h4>
                       )}
-                      {group.buckets.map((bucket, bucketIndex) => (
-                        <UsageWindow
-                          key={bucket.id ?? `${bucket.window ?? "bucket"}-${bucketIndex}`}
-                          label={bucket.name ?? bucket.window ?? m.computer_usage_available()}
-                          window={{
-                            // The official name says how much is left, so the meter is
-                            // `remainingFraction`, not the derived used share.
-                            ...officialMeter(bucket),
-                            ...(bucket.status ? { status: bucket.status } : {}),
-                            ...(bucket.resetsAt ? { resetsAt: bucket.resetsAt } : {}),
-                          }}
-                          timeZone={timeZone}
-                        />
-                      ))}
+                      {group.buckets.map((bucket, bucketIndex) => {
+                        const detail = officialBucketDetail(bucket);
+                        return (
+                          <UsageWindow
+                            key={bucket.id ?? `${bucket.window ?? "bucket"}-${bucketIndex}`}
+                            label={officialBucketLabel(bucket)}
+                            window={{
+                              // A remaining fraction wins, because that bucket's official number
+                              // is the share left. A used percent stays a used percent.
+                              ...officialMeter(bucket),
+                              ...(bucket.status ? { status: bucket.status } : {}),
+                              ...(bucket.resetsAt ? { resetsAt: bucket.resetsAt } : {}),
+                            }}
+                            detail={detail}
+                            note={detail ? undefined : bucket.description}
+                            creditUsage={
+                              bucket.window === "credit" ? snapshot.creditUsage : undefined
+                            }
+                            timeZone={timeZone}
+                          />
+                        );
+                      })}
                     </div>
                   ))}
                   {hasUsageNotes && (
@@ -425,6 +486,8 @@ function UsageWindow({
   label,
   window,
   creditUsage,
+  detail,
+  note,
   timeZone,
 }: {
   label: string;
@@ -434,6 +497,10 @@ function UsageWindow({
     resetsAt?: string;
   };
   creditUsage?: NonNullable<UsageResultRecord["snapshot"]>["creditUsage"];
+  /** Official figure that is not a percent, shown in place of a meter. */
+  detail?: string;
+  /** Official amount kept beside a meter, such as a spend limit's used and limit strings. */
+  note?: string;
   timeZone: string | null;
 }) {
   // The header line is label + a short value + reset, kept on one line: a credit plan's amounts
@@ -445,11 +512,13 @@ function UsageWindow({
       ? formatPercent(window.usedPercent)
       : creditUsage
         ? creditAmounts(creditUsage)
-        : window.status === "parse_unavailable"
-          ? m.computer_usage_badge_unavailable()
-          : window.status === "limit_reached"
-            ? m.computer_usage_limit_reached()
-            : m.computer_usage_available();
+        : detail
+          ? detail
+          : window.status === "parse_unavailable"
+            ? m.computer_usage_badge_unavailable()
+            : window.status === "limit_reached"
+              ? m.computer_usage_limit_reached()
+              : m.computer_usage_available();
 
   return (
     <div>
@@ -487,6 +556,7 @@ function UsageWindow({
             m.computer_usage_credit_overage({ overage: formatCredits(creditUsage.overage) })}
         </p>
       )}
+      {note && <p className="mt-1 text-xs break-words tabular-nums text-tertiary">{note}</p>}
     </div>
   );
 }
