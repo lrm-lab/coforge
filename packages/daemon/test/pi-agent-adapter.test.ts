@@ -1015,7 +1015,7 @@ test("Pi forwards all retrieval reads before and after a notification", async ()
       };
       return Response.json({
         protocol: "coforge.openviking.agent.v1",
-        op: "find",
+        op: "fork_find",
         operationId: body.operationId ?? "memory",
         duplicate: false,
         items: [
@@ -1041,7 +1041,7 @@ test("Pi forwards all retrieval reads before and after a notification", async ()
       id,
       type: "function",
       function: {
-        name: "ov_find",
+        name: "ov_fork_find",
         arguments: JSON.stringify({
           operationId: `${opBase}${index}`,
           query: "caroline group",

@@ -9,7 +9,7 @@ import {
   type OpenVikingAgentCommand,
 } from "@lrm/coforge-sdk/agent";
 
-const MEMORY_READ_OPS = new Set(["find", "search_context", "read", "expand"]);
+const MEMORY_READ_OPS = new Set(["fork_find", "search_context", "read", "expand"]);
 
 export class MemoryAgentBudgetError extends Error {
   constructor(message: string) {

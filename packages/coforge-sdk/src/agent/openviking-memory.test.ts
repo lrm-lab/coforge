@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { OPENVIKING_CITATION_KIND, type OpenVikingCitation } from "./memory-citations";
 import {
   type OpenVikingExpandCommand,
-  type OpenVikingFindResponse,
+  type OpenVikingForkFindResponse,
   type OpenVikingRetrieval,
   MEMORY_OFFER_BUDGET_PER_TRIGGER,
   OPENVIKING_AGENT_ERROR_CODES,
@@ -34,7 +34,7 @@ test("freezes the OpenViking agent protocol, fence, tools, and turn budget", () 
   expect(OPENVIKING_AGENT_PROTOCOL).toBe("coforge.openviking.agent.v1");
   expect(OPENVIKING_TOOL_PROFILE).toBe("openviking-memory");
   expect(OPENVIKING_TOOL_NAMES).toEqual({
-    find: "ov_find",
+    forkFind: "ov_fork_find",
     searchContext: "ov_search_context",
     read: "ov_read",
     expand: "ov_expand",
@@ -42,7 +42,7 @@ test("freezes the OpenViking agent protocol, fence, tools, and turn budget", () 
     diagnose: "memory_diagnose",
   });
   expect(OPENVIKING_AGENT_OPERATIONS).toEqual([
-    "find",
+    "fork_find",
     "search_context",
     "read",
     "expand",
@@ -65,19 +65,17 @@ test("accepts a stable operation id and rejects questions or spaces", () => {
 test("decodes read-only OpenViking commands without tenant credentials", () => {
   const find = decodeOpenVikingAgentCommand({
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: "deploy-runbook",
     query: "deploy rollback",
     limit: 5,
-    targetUri: "viking://workspace-1/docs",
   });
   expect(find).toEqual({
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: "deploy-runbook",
     query: "deploy rollback",
     limit: 5,
-    targetUri: "viking://workspace-1/docs",
   });
   expect(
     decodeOpenVikingAgentCommand({
@@ -105,33 +103,33 @@ test("accepts a numeric string limit inside the candidate cap", () => {
   expect(
     decodeOpenVikingAgentCommand({
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "string-limit",
       query: "deploy",
       limit: "5",
     }),
-  ).toMatchObject({ op: "find", limit: 5 });
+  ).toMatchObject({ op: "fork_find", limit: 5 });
   expect(() =>
     decodeOpenVikingAgentCommand({
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "string-limit",
       query: "deploy",
       limit: "11",
     }),
-  ).toThrow("invalid openviking find limit");
+  ).toThrow("invalid openviking fork_find limit");
 });
 
 test("rejects credential fields and candidate limits above ten", () => {
   expect(() =>
     decodeOpenVikingAgentCommand({
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "too-many",
       query: "deploy",
       limit: 11,
     }),
-  ).toThrow("invalid openviking find limit");
+  ).toThrow("invalid openviking fork_find limit");
   expect(() =>
     decodeOpenVikingAgentCommand({
       protocol: OPENVIKING_AGENT_PROTOCOL,
@@ -143,7 +141,7 @@ test("rejects credential fields and candidate limits above ten", () => {
   ).toThrow("invalid openviking search_context tokenBudget");
   const decoded = decodeOpenVikingAgentCommand({
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: "ok-1",
     query: "deploy",
     tenantToken: "secret",
@@ -186,12 +184,12 @@ test("an offer may omit the channel and recipient for the server to bind", () =>
 test("empty arguments name the missing fields, a copyable example, and the operationId rule", () => {
   let message = "";
   try {
-    decodeOpenVikingAgentCommand({ protocol: OPENVIKING_AGENT_PROTOCOL, op: "find" });
+    decodeOpenVikingAgentCommand({ protocol: OPENVIKING_AGENT_PROTOCOL, op: "fork_find" });
   } catch (error) {
     message = error instanceof Error ? error.message : "";
   }
   expect(message).toContain("missing operationId, query");
-  expect(message).toContain(OPENVIKING_ARGUMENT_EXAMPLES.find);
+  expect(message).toContain(OPENVIKING_ARGUMENT_EXAMPLES.fork_find);
   expect(message).toContain(OPENVIKING_OPERATION_ID_RULE);
   expect(message).toContain("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$");
 });
@@ -219,7 +217,7 @@ test("rejects a malformed command before it can cross the proxy", () => {
   expect(() =>
     decodeOpenVikingAgentCommand({
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "not a key",
       query: "x",
     }),
@@ -227,7 +225,7 @@ test("rejects a malformed command before it can cross the proxy", () => {
   expect(() =>
     decodeOpenVikingAgentCommand({
       protocol: "other",
-      op: "find",
+      op: "fork_find",
       operationId: "ok-1",
       query: "x",
     }),
@@ -244,16 +242,16 @@ test("rejects a malformed command before it can cross the proxy", () => {
 
 test("decodes cited find, context, read, and offer responses", () => {
   expect(
-    decodeOpenVikingAgentResponse("find", {
+    decodeOpenVikingAgentResponse("fork_find", {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "deploy-runbook",
       duplicate: false,
       items: [citation],
     }),
   ).toEqual({
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: "deploy-runbook",
     duplicate: false,
     items: [citation],
@@ -284,9 +282,9 @@ test("decodes cited find, context, read, and offer responses", () => {
 
 test("fail-closes mixed or unversioned citations on an OpenViking response", () => {
   expect(() =>
-    decodeOpenVikingAgentResponse("find", {
+    decodeOpenVikingAgentResponse("fork_find", {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "ok-1",
       duplicate: false,
       items: [
@@ -303,9 +301,9 @@ test("fail-closes mixed or unversioned citations on an OpenViking response", () 
     }),
   ).toThrow("invalid memory citation kind");
   expect(() =>
-    decodeOpenVikingAgentResponse("find", {
+    decodeOpenVikingAgentResponse("fork_find", {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "ok-1",
       duplicate: false,
       items: [
@@ -322,9 +320,9 @@ test("fail-closes mixed or unversioned citations on an OpenViking response", () 
     }),
   ).toThrow("unversioned openviking citation");
   expect(() =>
-    decodeOpenVikingAgentResponse("find", {
+    decodeOpenVikingAgentResponse("fork_find", {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "ok-1",
       duplicate: false,
       items: Array.from({ length: 11 }, (_, index) => ({
@@ -410,15 +408,15 @@ test("BM25 discovery preserves the chain and typed graph navigation", () => {
       },
     ],
   };
-  const response: OpenVikingFindResponse = {
+  const response: OpenVikingForkFindResponse = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: "find-graph",
     duplicate: false,
     items: [citation],
     retrieval,
   };
-  expect(decodeOpenVikingAgentResponse("find", response)).toEqual(response);
+  expect(decodeOpenVikingAgentResponse("fork_find", response)).toEqual(response);
 });
 
 // An Offer may cite the union of several successful, individually bounded reads.
@@ -443,4 +441,55 @@ test("decodes published offers containing citations from three full reads", () =
       citations: [...citations, { ...citation, kind: "untrusted" }],
     }),
   ).toThrow("invalid memory citation kind");
+});
+
+test("fork lookup has no caller-controlled namespace and legacy document find is refused", () => {
+  expect(
+    decodeOpenVikingAgentCommand({
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "fork_find",
+      operationId: "fork-new-1",
+      query: "constraint verification",
+    }),
+  ).toMatchObject({ op: "fork_find" });
+  expect(() =>
+    decodeOpenVikingAgentCommand({
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "fork_find",
+      operationId: "fork-escape",
+      query: "facts",
+      targetUri: "viking://resources/docs",
+    }),
+  ).toThrow();
+  expect(() =>
+    decodeOpenVikingAgentCommand({
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "find",
+      operationId: "legacy-find",
+      query: "facts",
+    }),
+  ).toThrow();
+});
+
+test("context budget matches native bounds", () => {
+  for (const tokenBudget of [64, 32000])
+    expect(
+      decodeOpenVikingAgentCommand({
+        protocol: OPENVIKING_AGENT_PROTOCOL,
+        op: "search_context",
+        operationId: "context-bounds",
+        query: "facts",
+        tokenBudget,
+      }),
+    ).toMatchObject({ tokenBudget });
+  for (const tokenBudget of [63, 32001])
+    expect(() =>
+      decodeOpenVikingAgentCommand({
+        protocol: OPENVIKING_AGENT_PROTOCOL,
+        op: "search_context",
+        operationId: "context-bounds",
+        query: "facts",
+        tokenBudget,
+      }),
+    ).toThrow("tokenBudget");
 });

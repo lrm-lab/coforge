@@ -5,7 +5,7 @@ import {
   type OpenVikingAgentResponse,
 } from "@lrm/coforge-sdk/agent";
 
-const MEMORY_READ_OPS = new Set(["find", "search_context", "read", "expand"]);
+const MEMORY_READ_OPS = new Set(["fork_find", "search_context", "read", "expand"]);
 
 /** Per-trigger Offer budget and read accounting for the Memory Agent fence. */
 export class MemoryAgentTurnBudget {
@@ -22,7 +22,7 @@ export class MemoryAgentTurnBudget {
 
   /** Compact model presentation only; backend citations and full reads stay intact. */
   discoveryView(response: OpenVikingAgentResponse) {
-    if (response.op !== "find") return response;
+    if (response.op !== "search_context") return response;
     const discoveryNotes: Array<{ citationRef: string; note: string }> = [];
     const items = response.items.map((citation) => {
       if (citation.uri.startsWith("viking://resources/causal/") || !citation.excerpt)
@@ -103,7 +103,8 @@ export class MemoryAgentTurnBudget {
     this.#unchangedReads = newEvidence > 0 ? 0 : this.#unchangedReads + 1;
     // A new search hit is discovery, not verification. Keep this progress across
     // Task follow-ups so rephrasing a request cannot hide a search-only loop.
-    if (response.op === "find" || response.op === "search_context") this.#discoveriesWithoutRead++;
+    if (response.op === "fork_find" || response.op === "search_context")
+      this.#discoveriesWithoutRead++;
     if (response.op === "read" && !response.citation.uri.startsWith("viking://resources/causal/")) {
       const key = JSON.stringify([
         response.citation.uri,
@@ -135,11 +136,11 @@ export class MemoryAgentTurnBudget {
                   readExample +
                   ". Choose by relevance; the first hit is not automatically correct. "
                 : "If no returned document is relevant, explain that mismatch and pivot to a different constraint. ") +
-              "Quotes, wildcards and date ranges are not BM25 filters. Use short discriminating words. If reading cannot resolve the gap, publish a partial cited memory_offer with supported findings and explicit unknowns rather than another list of near-identical queries. Repeated Task failures may warrant memory_diagnose anchored to an actual Task message. Retrieval remains unlimited.",
+              "Use ov_search_context for factual documentary clues; use ov_fork_find for abstract method gaps. Quotation marks and date ranges are not strict filters. If reading cannot resolve the gap, publish a partial cited memory_offer with supported findings and explicit unknowns rather than another list of near-identical queries. Repeated Task failures may warrant memory_diagnose anchored to an actual Task message. Retrieval remains unlimited.",
       );
     }
     if (
-      response.op === "find" &&
+      response.op === "fork_find" &&
       response.retrieval &&
       !response.retrieval.exhausted &&
       response.retrieval.remainingHops > 0
@@ -164,7 +165,7 @@ export class MemoryAgentTurnBudget {
       return feedback.length ? feedback.join("\n") : undefined;
     const next =
       this.#citationRefs.size > 0
-        ? "Publish a partial cited memory_offer with useful findings and explicit unresolved constraints, or change strategy: use ov_read on promising documents; for a method gap, search viking://resources/causal/forks using an abstract failure or reasoning pattern, then expand served branch_steps/next relations. If Task's observed state shows repeated failures or unresolved constraints, read its exact channel/thread update and decide whether memory_diagnose would help; do not diagnose your own Offer or routine progress. A changed snippet of an unchanged source is not a new source. Do not wait to solve the entire Task before replying."
+        ? "Publish a partial cited memory_offer with useful findings and explicit unresolved constraints, or change strategy: use ov_read on promising documents; for a method gap, use ov_fork_find with an abstract failure or reasoning pattern, then expand served branch_steps/next relations. If Task's observed state shows repeated failures or unresolved constraints, read its exact channel/thread update and decide whether memory_diagnose would help; do not diagnose your own Offer or routine progress. A changed snippet of an unchanged source is not a new source. Do not wait to solve the entire Task before replying."
         : "Use a materially different query. No citation has been retrieved; do not fabricate evidence or citations.";
     feedback.push(
       `No new evidence in ${this.#unchangedReads} consecutive retrievals. ${next} Available citationRefs: ${[...this.#citationRefs].slice(-10).join(", ")}`,

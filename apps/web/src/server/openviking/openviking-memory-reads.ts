@@ -29,6 +29,7 @@ export class MemoryReadCapabilityError extends Error {}
 export type OpenVikingMemoryQueryResult = {
   items: OpenVikingCitation[];
   retrieval?: OpenVikingRetrieval;
+  retrievalWarning?: "partial_document_context";
 };
 
 export type OpenVikingMemoryReads = {
@@ -41,13 +42,12 @@ export type OpenVikingMemoryReads = {
     relation: OpenVikingGraphRelation;
     limit?: number;
   }): Promise<OpenVikingMemoryQueryResult>;
-  find(input: {
+  forkFind(input: {
     workspaceId: string;
     agentId: string;
     operationId: string;
     query: string;
     limit?: number;
-    targetUri?: string;
   }): Promise<OpenVikingMemoryQueryResult>;
   searchContext(input: {
     workspaceId: string;
@@ -57,7 +57,7 @@ export type OpenVikingMemoryReads = {
     limit?: number;
     targetUri?: string;
     tokenBudget?: number;
-  }): Promise<OpenVikingCitation[]>;
+  }): Promise<OpenVikingMemoryQueryResult>;
   read(input: {
     workspaceId: string;
     agentId: string;
@@ -71,16 +71,16 @@ export function createOpenVikingMemoryReads(deps: {
   citations: MemoryCitationBindings;
 }): OpenVikingMemoryReads {
   return {
-    async find(input) {
+    async forkFind(input) {
       const payload = await deps.client.invoke({
         workspaceId: input.workspaceId,
         agentId: input.agentId,
-        operation: "find",
+        operation: "fork_find",
         body: {
           query: input.query,
           retrieval_mode: "bm25",
           limit: input.limit ?? OPENVIKING_CANDIDATE_LIMIT_MAX,
-          ...(input.targetUri === undefined ? {} : { target_uri: input.targetUri }),
+          target_uri: "viking://resources/causal/forks",
         },
       });
       const envelope =
@@ -135,17 +135,38 @@ export function createOpenVikingMemoryReads(deps: {
         operation: "search_context",
         body: {
           query: input.query,
-          limit: input.limit ?? OPENVIKING_CANDIDATE_LIMIT_MAX,
+          mode: "context",
+          quotas: { resources: input.limit ?? OPENVIKING_CANDIDATE_LIMIT_MAX },
           query_expansion: "off",
-          ...(input.targetUri === undefined ? {} : { target_uri: input.targetUri }),
-          ...(input.tokenBudget === undefined ? {} : { token_budget: input.tokenBudget }),
+          ...(input.targetUri === undefined
+            ? {}
+            : { filter: { op: "prefix", field: "uri", prefix: input.targetUri } }),
+          max_tokens: input.tokenBudget ?? 1600,
         },
       });
-      return deps.citations.bindOpenVikingHits(
+      const envelope =
+        payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const result =
+        envelope.result && typeof envelope.result === "object"
+          ? (envelope.result as Record<string, unknown>)
+          : envelope;
+      const stats =
+        result.stats && typeof result.stats === "object"
+          ? (result.stats as Record<string, unknown>)
+          : {};
+      const degraded = Array.isArray(stats.retrieval_errors) && stats.retrieval_errors.length > 0;
+      const hits = publicHits(payload, input.workspaceId);
+      if (degraded && hits.length === 0)
+        throw new MemoryReadCapabilityError("document_context_retrieval_failed");
+      const items = await deps.citations.bindOpenVikingHits(
         input.workspaceId,
         input.operationId,
-        publicHits(payload, input.workspaceId),
+        hits,
       );
+      return {
+        items,
+        ...(degraded ? { retrievalWarning: "partial_document_context" as const } : {}),
+      };
     },
 
     async read(input) {
@@ -194,6 +215,16 @@ function hitList(payload: unknown): unknown[] {
   const nested = record.result;
   if (nested && typeof nested === "object" && !Array.isArray(nested)) {
     const inner = nested as Record<string, unknown>;
+    if (Array.isArray(inner.entries)) {
+      return inner.entries.map((entry) => {
+        const row = entry as Record<string, unknown>;
+        return {
+          ...row,
+          excerpt: row.text,
+          matchedLevel: row.detail === "full" ? "L2" : row.detail === "overview" ? "L1" : "L0",
+        };
+      });
+    }
     const grouped = ["resources", "memories", "skills", "results", "items"].flatMap((key) =>
       Array.isArray(inner[key]) ? inner[key] : [],
     );
@@ -287,9 +318,9 @@ function navigation(
     ? (result.resources as { uri: string; metadata?: Record<string, unknown> }[])
     : [];
   const allowed = new Set(items.map((item) => item.uri));
-  const response = decodeOpenVikingAgentResponse("find", {
+  const response = decodeOpenVikingAgentResponse("fork_find", {
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find",
+    op: "fork_find",
     operationId: "navigation",
     duplicate: false,
     items,
@@ -310,6 +341,6 @@ function navigation(
         })),
     },
   });
-  if (response.op !== "find") throw new Error("invalid navigation response");
+  if (response.op !== "fork_find") throw new Error("invalid navigation response");
   return { retrieval: response.retrieval };
 }

@@ -1,6 +1,6 @@
 # OpenViking 频道记忆
 
-写线把已关闭的公共频道分段交进 OpenViking typed session。读线仍是 Memory Agent fence（`ov_find` / `ov_read` / `ov_search_context` / `memory_offer`，预算 3 次读 + 1 次 offer）。本文件只描述写线。
+写线把已关闭的公共频道分段交进 OpenViking typed session。读线仍是 Memory Agent fence（`ov_search_context` 文档 / `ov_fork_find` 方法 / `ov_expand` 图关系 / `ov_read` 正文 / `memory_offer`，读取仅计数、不设每触发次数上限，每触发最多1次Offer）。本文件只描述写线。
 
 ## 两层 session 模型
 

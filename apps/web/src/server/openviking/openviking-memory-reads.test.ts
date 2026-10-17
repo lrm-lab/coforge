@@ -46,7 +46,7 @@ test("find and read bind OpenViking citations through the injected client", asyn
       },
     ],
   });
-  const found = await reads.find({
+  const found = await reads.forkFind({
     workspaceId: "ws-a",
     agentId: "mem-1",
     operationId: "find-1",
@@ -60,8 +60,13 @@ test("find and read bind OpenViking citations through the injected client", asyn
   expect(calls[0]).toEqual({
     workspaceId: "ws-a",
     agentId: "mem-1",
-    operation: "find",
-    body: { query: "deploy", limit: 10, retrieval_mode: "bm25" },
+    operation: "fork_find",
+    body: {
+      query: "deploy",
+      limit: 10,
+      retrieval_mode: "bm25",
+      target_uri: "viking://resources/causal/forks",
+    },
   });
   expect(ovRows.get("ws-a:ov:viking://resources/docs/deploy.md")?.boundOperationId).toBe("find-1");
 
@@ -104,7 +109,7 @@ test("binds catalog find hits that use abstract, numeric level, and no content h
       skills: [],
     },
   });
-  const found = await reads.find({
+  const found = await reads.forkFind({
     workspaceId: "ws-a",
     agentId: "mem-1",
     operationId: "find-env",
@@ -132,11 +137,17 @@ test("search_context disables query expansion and never issues an OpenViking wri
     workspaceId: "ws-a",
     agentId: "mem-1",
     operation: "search_context",
-    body: { query: "deploy", limit: 10, query_expansion: "off", token_budget: 1600 },
+    body: {
+      query: "deploy",
+      mode: "context",
+      quotas: { resources: 10 },
+      query_expansion: "off",
+      max_tokens: 1600,
+    },
   });
   expect(JSON.stringify(calls[0])).not.toContain("write");
   await expect(
-    reads.find({
+    reads.forkFind({
       workspaceId: "ws-a",
       agentId: "mem-1",
       operationId: "write-1",
@@ -176,7 +187,7 @@ test("find keeps a skill revision and drops episode, insight, and episodeInsight
       },
     ],
   });
-  const found = await reads.find({
+  const found = await reads.forkFind({
     workspaceId: "ws-a",
     agentId: "mem-1",
     operationId: "find-q160",
@@ -219,7 +230,7 @@ test("read binds the real OpenViking content response envelope", async () => {
 test("BM25-only find refuses an older backend response without lexical provenance", async () => {
   const { reads, ovRows } = harness({ results: [] });
   await expect(
-    reads.find({
+    reads.forkFind({
       workspaceId: "ws",
       agentId: "memory",
       operationId: "bm25-check",
@@ -252,7 +263,7 @@ test("find exposes served graph navigation and expand forwards the explicit hop"
       },
     ],
   });
-  const found = await reads.find({
+  const found = await reads.forkFind({
     workspaceId: "ws-a",
     agentId: "memory",
     operationId: "find-graph",
@@ -289,4 +300,74 @@ test("find exposes served graph navigation and expand forwards the explicit hop"
     }),
   ).rejects.toThrow();
   expect(calls).toHaveLength(2);
+});
+
+test("document context uses native assembly entries, binds real text, and never calls lexical find", async () => {
+  const { reads, calls } = harness({
+    status: "ok",
+    accountId: "acct-a",
+    result: {
+      entries: [
+        {
+          uri: "viking://resources/docs/wife/part1.md",
+          category: "resources",
+          detail: "overview",
+          text: "Madhumalti Kapoor",
+          score: 0.8,
+        },
+      ],
+      rendered: "context",
+      digest: "",
+      stats: { tokens: 12 },
+    },
+  });
+  const items = await reads.searchContext({
+    workspaceId: "ws-a",
+    agentId: "mem-1",
+    operationId: "native-context-1",
+    query: "first wife",
+    tokenBudget: 800,
+  });
+  expect(items.items[0]).toMatchObject({
+    uri: "viking://resources/docs/wife/part1.md",
+    excerpt: "Madhumalti Kapoor",
+    matchedLevel: "L1",
+  });
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({
+    operation: "search_context",
+    body: { mode: "context", max_tokens: 800, quotas: { resources: 10 }, query_expansion: "off" },
+  });
+});
+
+test("context retrieval faults are not confused with no hits; partial evidence is marked", async () => {
+  const failed = harness({
+    status: "ok",
+    result: { entries: [], stats: { retrieval_errors: ["RuntimeError: embedder unavailable"] } },
+  });
+  await expect(
+    failed.reads.searchContext({
+      workspaceId: "ws-a",
+      agentId: "memory",
+      operationId: "broken",
+      query: "facts",
+    }),
+  ).rejects.toThrow("document_context_retrieval_failed");
+  const partial = harness({
+    status: "ok",
+    accountId: "acct-a",
+    result: {
+      entries: [{ uri: "viking://resources/docs/a.md", text: "evidence", detail: "abstract" }],
+      stats: { retrieval_errors: ["internal diagnostic"] },
+    },
+  });
+  const result = await partial.reads.searchContext({
+    workspaceId: "ws-a",
+    agentId: "memory",
+    operationId: "partial",
+    query: "facts",
+  });
+  expect(result.items).toHaveLength(1);
+  expect(result.retrievalWarning).toBe("partial_document_context");
+  expect(JSON.stringify(result)).not.toContain("internal diagnostic");
 });
