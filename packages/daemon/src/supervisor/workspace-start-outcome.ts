@@ -42,13 +42,6 @@ export function readWorkspaceCloudConnection(
   }).cloudConnection(CLOUD_CONNECTION_PROBE_MS);
 }
 
-function connectionReport(
-  state: WorkspaceCloudConnection,
-  error: string | undefined,
-): WorkspaceCloudConnectionReport {
-  return { state, ...(error ? { error } : {}) };
-}
-
 /** Where one started Workspace's first cloud connect stood when the command answered. */
 export type WorkspaceStartOutcome = {
   workspaceId: string;
@@ -108,7 +101,7 @@ export async function awaitCloudConnections(
       if (reason) return new WorkspaceParkedError(workspaceId, reason);
       // Still connecting: with why its latest attempt failed, when it is retrying.
       if (now() >= deadline)
-        return startOutcome(workspaceId, connectionReport("connecting", connection?.error));
+        return startOutcome(workspaceId, { state: "connecting", error: connection?.error });
       await sleep(POLL_MS);
     }
   };
