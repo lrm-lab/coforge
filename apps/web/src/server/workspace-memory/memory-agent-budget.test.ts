@@ -8,7 +8,7 @@ import {
 
 const ovFind = {
   protocol: OPENVIKING_AGENT_PROTOCOL,
-  op: "find" as const,
+  op: "fork_find" as const,
   operationId: "f1",
   query: "deploy",
 };

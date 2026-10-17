@@ -167,25 +167,24 @@ async function handleOpenViking(
   input: { workspaceId: string; agentId: string },
   command: OpenVikingAgentCommand,
 ): Promise<OpenVikingAgentResponse> {
-  if (command.op === "find") {
-    const result = await deps.openviking.find({
+  if (command.op === "fork_find") {
+    const result = await deps.openviking.forkFind({
       workspaceId: input.workspaceId,
       agentId: input.agentId,
       operationId: command.operationId,
       query: command.query,
       ...(command.limit === undefined ? {} : { limit: command.limit }),
-      ...(command.targetUri === undefined ? {} : { targetUri: command.targetUri }),
     });
     return {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: command.operationId,
       duplicate: false,
       ...result,
     };
   }
   if (command.op === "search_context") {
-    const items = await deps.openviking.searchContext({
+    const result = await deps.openviking.searchContext({
       workspaceId: input.workspaceId,
       agentId: input.agentId,
       operationId: command.operationId,
@@ -199,7 +198,7 @@ async function handleOpenViking(
       op: "search_context",
       operationId: command.operationId,
       duplicate: false,
-      items,
+      ...result,
     };
   }
   if (command.op === "read") {

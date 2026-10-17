@@ -135,7 +135,7 @@ test("openviking answers preserve the citation kind on the Offer record", async 
     triggerMessageId: "msg-1",
     command: {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "find-1",
       query: "deploy",
     },
@@ -182,7 +182,7 @@ test("the openviking profile allows repeated reads and enforces the Offer budget
       triggerMessageId: "msg-ov",
       command: {
         protocol: OPENVIKING_AGENT_PROTOCOL,
-        op: "find",
+        op: "fork_find",
         operationId: `find-${index}`,
         query: "deploy",
       },
@@ -226,12 +226,12 @@ test("Memory Agent citation paths never write OpenViking", async () => {
     triggerMessageId: "msg-1",
     command: {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "find-1",
       query: "deploy",
     },
   });
-  expect(gatewayCalls.every((call) => call.operation === "find")).toBe(true);
+  expect(gatewayCalls.every((call) => call.operation === "fork_find")).toBe(true);
 });
 
 test("foreign protocol commands are rejected as invalid", async () => {
@@ -266,7 +266,7 @@ test("an offer omits channel ids and the server binds the unanswered @memory tar
     triggerMessageId: "msg-1",
     command: {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "find-1",
       query: "deploy",
     },
@@ -318,7 +318,7 @@ test("an offer replay with the same operationId skips the per-trigger budget", a
     triggerMessageId: "msg-1",
     command: {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "find-r",
       query: "deploy",
     },
@@ -373,7 +373,7 @@ test("the same trigger can retrieve more than three times through the Memory rou
       triggerMessageId: "msg-1",
       command: {
         protocol: OPENVIKING_AGENT_PROTOCOL,
-        op: "find",
+        op: "fork_find",
         operationId: `find-${index}`,
         query: "deploy",
       },
@@ -391,7 +391,7 @@ test("a valid retrieval experiencing backend failure is not blamed on model argu
     triggerMessageId: "msg-1",
     command: {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: "backend-failure",
       query: "deploy",
     },

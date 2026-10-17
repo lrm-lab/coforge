@@ -673,7 +673,7 @@ test.skipIf(!connectionString)(
     try {
       expect(workspaceProfileToToolFence("openviking")).toBeDefined();
       expect(toolsForMemoryFence(workspaceProfileToToolFence("openviking")!)).toEqual([
-        OPENVIKING_TOOL_NAMES.find,
+        OPENVIKING_TOOL_NAMES.forkFind,
         OPENVIKING_TOOL_NAMES.expand,
         OPENVIKING_TOOL_NAMES.read,
         OPENVIKING_TOOL_NAMES.offer,

@@ -18,7 +18,7 @@ export const MEMORY_OFFER_BUDGET_PER_TRIGGER = 1 as const;
 export const OPENVIKING_CANDIDATE_LIMIT_MAX = 10 as const;
 
 export const OPENVIKING_AGENT_OPERATIONS = [
-  "find",
+  "fork_find",
   "search_context",
   "read",
   "expand",
@@ -29,7 +29,7 @@ export const OPENVIKING_AGENT_OPERATIONS = [
 export type OpenVikingAgentOperation = (typeof OPENVIKING_AGENT_OPERATIONS)[number];
 
 export const OPENVIKING_AGENT_READ_OPERATIONS = [
-  "find",
+  "fork_find",
   "search_context",
   "read",
   "expand",
@@ -38,7 +38,7 @@ export type OpenVikingAgentReadOperation = (typeof OPENVIKING_AGENT_READ_OPERATI
 
 /** Native tool names on the fenced OpenViking Memory Agent profile (plus channel message I/O). */
 export const OPENVIKING_TOOL_NAMES = {
-  find: "ov_find",
+  forkFind: "ov_fork_find",
   searchContext: "ov_search_context",
   read: "ov_read",
   expand: "ov_expand",
@@ -56,13 +56,12 @@ export const OPENVIKING_AGENT_ERROR_CODES = [
 ] as const;
 export type OpenVikingAgentErrorCode = (typeof OPENVIKING_AGENT_ERROR_CODES)[number];
 
-export type OpenVikingFindCommand = {
+export type OpenVikingForkFindCommand = {
   protocol: typeof OPENVIKING_AGENT_PROTOCOL;
-  op: "find";
+  op: "fork_find";
   operationId: string;
   query: string;
   limit?: number;
-  targetUri?: string;
 };
 
 export type OpenVikingSearchContextCommand = {
@@ -135,7 +134,7 @@ export type OpenVikingDiagnoseResponse = {
 };
 
 export type OpenVikingAgentCommand =
-  | OpenVikingFindCommand
+  | OpenVikingForkFindCommand
   | OpenVikingSearchContextCommand
   | OpenVikingReadCommand
   | OpenVikingExpandCommand
@@ -157,9 +156,9 @@ export type OpenVikingRetrieval = {
   }>;
 };
 
-export type OpenVikingFindResponse = {
+export type OpenVikingForkFindResponse = {
   protocol: typeof OPENVIKING_AGENT_PROTOCOL;
-  op: "find";
+  op: "fork_find";
   operationId: string;
   duplicate: boolean;
   items: OpenVikingCitation[];
@@ -172,6 +171,7 @@ export type OpenVikingSearchContextResponse = {
   operationId: string;
   duplicate: boolean;
   items: OpenVikingCitation[];
+  retrievalWarning?: "partial_document_context";
 };
 
 export type OpenVikingReadResponse = {
@@ -213,7 +213,7 @@ export type OpenVikingAgentError = {
 };
 
 export type OpenVikingAgentResponse =
-  | OpenVikingFindResponse
+  | OpenVikingForkFindResponse
   | OpenVikingSearchContextResponse
   | OpenVikingReadResponse
   | OpenVikingExpandResponse
@@ -230,13 +230,13 @@ export const OPENVIKING_OPERATION_ID_RULE =
 /** One complete arguments object per operation. Placeholders are meant to be copied. */
 export const OPENVIKING_ARGUMENT_EXAMPLES: Record<OpenVikingAgentOperation, string> = {
   diagnose: '{"operationId":"diagnose-1","messageId":"<求助消息 id>"}',
-  find: '{"operationId": "find-1", "query": "<检索词>", "limit": 10}',
+  fork_find: '{"operationId": "find-1", "query": "<检索词>", "limit": 10}',
   search_context: '{"operationId": "search-1", "query": "<检索词>", "limit": 10}',
   read: '{"operationId": "read-1", "uri": "<document uri>"}',
   expand:
-    '{"operationId": "hop-1", "chainRef": "<ov_find chainRef>", "uri": "<served node uri>", "relation": "anchor", "limit": 5}',
+    '{"operationId": "hop-1", "chainRef": "<ov_fork_find chainRef>", "uri": "<served node uri>", "relation": "anchor", "limit": 5}',
   offer:
-    '{"operationId": "offer-1", "citationRefs": ["<ov_find 返回的 citation id>"], "body": "<给 @task 的正文>"}',
+    '{"operationId": "offer-1", "citationRefs": ["<ov_search_context/ov_fork_find/ov_expand 返回的 citation id>"], "body": "<给 @task 的正文>"}',
 };
 
 /** Channel fence tools. Not OpenViking commands; kept beside the examples models copy. */
@@ -247,7 +247,7 @@ export const CHANNEL_ARGUMENT_EXAMPLES = {
 
 export const OPENVIKING_REQUIRED_FIELDS: Record<OpenVikingAgentOperation, readonly string[]> = {
   diagnose: ["operationId", "messageId"],
-  find: ["operationId", "query"],
+  fork_find: ["operationId", "query"],
   search_context: ["operationId", "query"],
   read: ["operationId", "uri"],
   expand: ["operationId", "chainRef", "uri", "relation"],
@@ -315,7 +315,7 @@ function optionalTargetUri(value: unknown, label: string): string | undefined {
 function optionalTokenBudget(value: unknown, label: string): number | undefined {
   if (value === undefined) return undefined;
   const numeric = coerceInteger(value);
-  if (!Number.isInteger(numeric) || (numeric as number) < 1)
+  if (!Number.isInteger(numeric) || (numeric as number) < 64 || (numeric as number) > 32000)
     throw new Error(`invalid ${label} tokenBudget`);
   return numeric as number;
 }
@@ -396,18 +396,17 @@ export function decodeOpenVikingAgentCommand(value: unknown): OpenVikingAgentCom
     throw new Error(`invalid openviking operationId. ${OPENVIKING_OPERATION_ID_RULE}`);
   const operationId = command.operationId;
 
-  if (command.op === "find") {
+  if (command.op === "fork_find") {
     if (typeof command.query !== "string" || command.query.trim() === "")
-      throw new Error("invalid openviking find query");
-    const limit = optionalCandidateLimit(command.limit, "openviking find");
-    const targetUri = optionalTargetUri(command.targetUri, "openviking find");
+      throw new Error("invalid openviking fork_find query");
+    const limit = optionalCandidateLimit(command.limit, "openviking fork_find");
+    if ("targetUri" in command) throw new Error("fork_find has a fixed namespace");
     return {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId,
       query: command.query,
       ...(limit === undefined ? {} : { limit }),
-      ...(targetUri === undefined ? {} : { targetUri }),
     };
   }
 
@@ -589,13 +588,13 @@ export function decodeOpenVikingAgentResponse(
     throw new Error("invalid openviking operationId");
   if (typeof response.duplicate !== "boolean") throw new Error("invalid openviking duplicate flag");
 
-  if (response.op === "find") {
+  if (response.op === "fork_find") {
     return {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: response.operationId,
       duplicate: response.duplicate,
-      items: decodeOpenVikingCitationList(response.items, "openviking find"),
+      items: decodeOpenVikingCitationList(response.items, "openviking fork_find"),
       ...(response.retrieval === undefined
         ? {}
         : { retrieval: decodeRetrieval(response.retrieval) }),
@@ -603,12 +602,20 @@ export function decodeOpenVikingAgentResponse(
   }
 
   if (response.op === "search_context") {
+    if (
+      response.retrievalWarning !== undefined &&
+      response.retrievalWarning !== "partial_document_context"
+    )
+      throw new Error("invalid context retrieval warning");
     return {
       protocol: OPENVIKING_AGENT_PROTOCOL,
       op: "search_context",
       operationId: response.operationId,
       duplicate: response.duplicate,
       items: decodeOpenVikingCitationList(response.items, "openviking search_context"),
+      ...(response.retrievalWarning === undefined
+        ? {}
+        : { retrievalWarning: response.retrievalWarning }),
     };
   }
 

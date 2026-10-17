@@ -25,7 +25,7 @@ describe("exportAgentTrainingTrajectory", () => {
     session.appendMessage({ role: "user", content: "部署用蓝绿", timestamp: now });
     session.appendMessage({
       role: "assistant",
-      content: [{ type: "toolCall", id: "c1", name: "ov_find", arguments: { query: "蓝绿" } }],
+      content: [{ type: "toolCall", id: "c1", name: "ov_fork_find", arguments: { query: "蓝绿" } }],
       api: "openai-completions",
       provider: "openai",
       model: "test",
@@ -36,7 +36,7 @@ describe("exportAgentTrainingTrajectory", () => {
     session.appendMessage({
       role: "toolResult",
       toolCallId: "c1",
-      toolName: "ov_find",
+      toolName: "ov_fork_find",
       content: [{ type: "text", text: "发布必须蓝绿" }],
       isError: false,
       timestamp: now + 2,
@@ -68,7 +68,7 @@ describe("exportAgentTrainingTrajectory", () => {
       {
         kind: "tool",
         toolCallId: "c1",
-        toolName: "ov_find",
+        toolName: "ov_fork_find",
         input: { query: "蓝绿" },
         output: "发布必须蓝绿",
         isError: false,
