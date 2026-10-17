@@ -363,11 +363,7 @@ function validHandshakeResponse(response: DaemonHandshakeResponse, requestId: st
   return response.protocolMajor === 1 && response.requestId === requestId && response.accepted;
 }
 
-function connectToLocalDaemon(socketPath: string): Promise<LocalDaemonConnection> {
-  return connectWithBun(socketPath);
-}
-
-async function connectWithBun(socketPath: string): Promise<LocalDaemonConnection> {
+async function connectToLocalDaemon(socketPath: string): Promise<LocalDaemonConnection> {
   let buffer = new Uint8Array();
   let resolveResponse: ((payload: Uint8Array) => void) | undefined;
   let rejectResponse: ((error: Error) => void) | undefined;
