@@ -63,7 +63,7 @@ export function resolveLaunchIdentity({
     sessionId: request.sessionId ?? (continuing ? previous.sessionId : undefined),
     sessionMode: request.sessionMode ?? (continuing ? previous.sessionMode : undefined),
     launchId: request.previousLaunchId ?? (continuing ? previous.launchId : undefined),
-    controlEpoch: request.control?.controlEpoch,
+    controlEpoch: control?.controlEpoch ?? serverLaunch?.controlEpoch,
   };
   // A hand-over is meaningless when the reused launch's identity did not change; omit it so
   // the server never sees a spurious previousLaunchId equal to the report's own launchId.

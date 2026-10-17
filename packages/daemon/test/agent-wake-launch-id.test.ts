@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
-import type { AgentRuntimeConfig, AgentSession } from "#src/code-agent/contract";
+import type {
+  AgentRuntimeConfig,
+  AgentSession,
+  AgentSessionOptions,
+} from "#src/code-agent/contract";
 import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 
@@ -59,6 +63,7 @@ async function harness() {
   // a real provider session supports multiple independent listeners, so this mock must too.
   let exitListeners = new Set<() => void>();
   let sessions = 0;
+  let onSessionId: AgentSessionOptions["onSessionId"];
   const sessionReports: Array<{
     startRequestId: string;
     controlEpoch?: number;
@@ -76,8 +81,9 @@ async function harness() {
     connection,
     () => ({
       provider: "pi",
-      async createAgentSession() {
+      async createAgentSession(options) {
         sessions++;
+        onSessionId = options.onSessionId;
         exitListeners = new Set();
         return {
           ...sessionSpy(),
@@ -136,6 +142,10 @@ async function harness() {
     runtime,
     stateDirectory,
     sessionCount: () => sessions,
+    reportSessionIdentity: async () => {
+      if (!onSessionId) throw new Error("no session identity callback");
+      await onSessionId("session-a");
+    },
     exitProcess: () => {
       if (exitListeners.size === 0) throw new Error("no process to exit");
       const listeners = Array.from(exitListeners);
@@ -201,6 +211,38 @@ test("a wake reuses the remembered launchId and sends no previousLaunchId", asyn
     const woken = h.sessionReports.at(-1);
     expect(woken?.launchId).toBe("launch-1");
     expect(woken?.previousLaunchId).toBeUndefined();
+  } finally {
+    await h.runtime.stop();
+    await rm(h.stateDirectory, { recursive: true, force: true });
+  }
+});
+
+test("a provider identity report after a wake keeps the server's request and control epoch", async () => {
+  const h = await harness();
+  try {
+    await h.runtime.start(connection);
+    await h.runtime.handleAgentStart(
+      managedStart("wake-identity", "start-identity", 17, "launch-identity"),
+    );
+    await h.reportSessionIdentity();
+    expect(h.sessionReports.at(-1)).toMatchObject({
+      startRequestId: "start-identity",
+      controlEpoch: 17,
+      launchId: "launch-identity",
+    });
+
+    h.exitProcess();
+    await deliverMessage(h.runtime, "wake-identity", "delivery-identity");
+    h.sessionReports.length = 0;
+    await h.reportSessionIdentity();
+    expect(h.sessionReports).toEqual([
+      {
+        startRequestId: "start-identity",
+        controlEpoch: 17,
+        launchId: "launch-identity",
+        previousLaunchId: undefined,
+      },
+    ]);
   } finally {
     await h.runtime.stop();
     await rm(h.stateDirectory, { recursive: true, force: true });
