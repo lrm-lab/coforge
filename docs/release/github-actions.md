@@ -118,7 +118,9 @@ version input and may name a different staging evidence version with
 release-candidate stage is required. Previously published
 versions, including historical `rc` versions, remain immutable and available
 by exact version; the next successful publication moves `latest` without
-renaming or deleting them.
+renaming or deleting them. Explicitly authorized deletion of a mistaken staging
+publication uses the separate [withdrawal mode](rollback.md#withdraw-a-mistakenly-published-staging-version),
+which restores an existing complete version before deleting the selected one.
 
 The production workflows take no `Validate` job: staging published that exact
 commit only after its gates, and the `candidate` job requires that evidence.

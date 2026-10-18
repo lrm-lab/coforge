@@ -24,6 +24,8 @@ export function stopFakeOssServers(): void {
  * that distinction is publish.ts's own behavior. */
 export interface FakeOssOptions {
   failUploadKeys?: Set<string>;
+  failDeleteKeys?: Set<string>;
+  retainDeleteKeys?: Set<string>;
   tamperReadbackKeys?: Set<string>;
   publicOriginKeys?: Set<string>;
   previousLatest?: string;
@@ -82,7 +84,9 @@ export function startFakeOssServer(options: FakeOssOptions = {}): FakeOss {
       }
 
       if (method === "DELETE") {
-        store.delete(objectKey);
+        if (options.failDeleteKeys?.has(objectKey))
+          return new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 });
+        if (!options.retainDeleteKeys?.has(objectKey)) store.delete(objectKey);
         return new Response(null, { status: 204 });
       }
       if (method === "PUT") {

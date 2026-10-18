@@ -497,7 +497,10 @@ async function verifyUploadedBytes(
  * Phase 3: the public origin must refuse an anonymous GET — the bytes are reachable only through the
  * signed CDN URL. `redirect: "manual"` separates a real refusal from a redirect to a public copy.
  */
-async function verifyPrivateOrigin(context: FeedContext, key: string): Promise<void> {
+export async function verifyPrivateOrigin(
+  context: Pick<FeedContext, "connection" | "fetchImpl" | "log">,
+  key: string,
+): Promise<void> {
   try {
     const response = await context.fetchImpl(objectOrigin(context.connection, key), {
       method: "GET",

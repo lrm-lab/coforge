@@ -52,6 +52,12 @@ the storage publication result. The user authorized this release-gate change on
 2026-09-09; routine publications and their automatic rollback do not require a
 new human approval merely because CDN read-back is omitted.
 
+Explicitly authorized staging withdrawal is implemented by the same workflow's
+`withdraw_version` mode and `scripts/release/withdraw.ts`: verify the pinned
+previous release, restore `latest`, then delete the erroneous version's 14
+objects with authenticated absence checks. See [Rollback](rollback.md#withdraw-a-mistakenly-published-staging-version).
+This operation does not replace published versions or evict CDN caches.
+
 Platform coverage and remaining acceptance gaps are explicit:
 
 - **Platform matrix**: `publish.ts --targets` defaults to all six targets:

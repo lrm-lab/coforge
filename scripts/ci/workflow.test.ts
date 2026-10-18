@@ -388,3 +388,50 @@ esac
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("Computer withdrawal shares the publication lock and cannot publish a replacement", async () => {
+  const release = Bun.YAML.parse(await Bun.file(".github/workflows/release-staging.yml").text());
+  expect(release.on.workflow_dispatch.inputs.withdraw_version.type).toBe("string");
+  expect(release.concurrency).toEqual({ group: "release-staging", "cancel-in-progress": false });
+  const steps = release.jobs.publish.steps;
+  const publish = steps.find((step: Step) => step.name?.startsWith("Build six platforms"));
+  const summary = steps.find((step: Step) => step.name === "Summarize published release");
+  const withdraw = steps.find((step: Step) => step.run?.includes("scripts/release/withdraw.ts"));
+  expect(publish.if).toBe("inputs.withdraw_version == ''");
+  expect(summary.if).toBe("inputs.withdraw_version == ''");
+  expect(withdraw.if).toBe("inputs.withdraw_version != ''");
+  expect(withdraw.env.INPUT_WITHDRAW_VERSION).toBe("${{ inputs.withdraw_version }}");
+  expect(withdraw.env.INPUT_RESTORE_VERSION).toBe("${{ inputs.restore_version }}");
+  expect(withdraw.env.INPUT_MANIFEST_SHA256).toBe("${{ inputs.manifest_sha256 }}");
+  expect(withdraw.env.INPUT_RESTORE_MANIFEST_SHA256).toBe("${{ inputs.restore_manifest_sha256 }}");
+  expect(withdraw.env.ALIBABA_CLOUD_ROLE_ARN).toBe(publish.env.ALIBABA_CLOUD_ROLE_ARN);
+  expect(withdraw.run).not.toContain("${{ inputs.");
+  expect(withdraw.run).not.toContain("publish.ts");
+});
+
+test("withdrawal inputs cannot accidentally fall through to a publication", async () => {
+  const release = Bun.YAML.parse(await Bun.file(".github/workflows/release-staging.yml").text());
+  const guard = release.jobs.publish.steps.find(
+    (step: Step) => step.name === "Validate withdrawal inputs",
+  );
+  expect(guard).toBeDefined();
+  for (const [inputs, allowed] of [
+    [{}, true],
+    [{ INPUT_RESTORE_VERSION: "0.1.3-dev.2" }, false],
+    [{ INPUT_WITHDRAW_VERSION: "0.1.4-dev.1" }, false],
+    [
+      {
+        INPUT_WITHDRAW_VERSION: "0.1.4-dev.1",
+        INPUT_MANIFEST_SHA256: "a".repeat(64),
+        INPUT_RESTORE_VERSION: "0.1.3-dev.2",
+        INPUT_RESTORE_MANIFEST_SHA256: "b".repeat(64),
+      },
+      true,
+    ],
+  ] as const) {
+    const child = Bun.spawnSync(["bash", "-e", "-c", guard.run], {
+      env: { PATH: process.env.PATH, ...inputs },
+    });
+    expect(child.exitCode).toBe(allowed ? 0 : 1);
+  }
+});

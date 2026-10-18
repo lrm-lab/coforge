@@ -1,5 +1,5 @@
 name: Publish Computer (staging)
-run-name: Publish Computer ${{ inputs.version || 'the next dev build' }} to staging
+run-name: ${{ inputs.withdraw_version && format('Withdraw Computer {0} from staging', inputs.withdraw_version) || format('Publish Computer {0} to staging', inputs.version || 'the next dev build') }}
 
 # Publishing a local Computer distribution is manual, never automatic on a push to main - see
 # docs/release/github-actions.md: a client release leaves a persistent
@@ -12,6 +12,23 @@ on:
         description: >-
           Numbered development version to publish (e.g. 0.1.3-dev.1). Leave empty to publish the release
           line's next dev build (DEV_LINE below): the smallest unused <line>-dev.<N>.
+        required: false
+        type: string
+
+      withdraw_version:
+        description: "Withdraw this numbered dev version instead of publishing (requires both manifest hashes and restore_version)"
+        required: false
+        type: string
+      manifest_sha256:
+        description: "Expected SHA-256 of the withdrawn version's manifest"
+        required: false
+        type: string
+      restore_version:
+        description: "Previously published complete dev version to restore as latest"
+        required: false
+        type: string
+      restore_manifest_sha256:
+        description: "Expected SHA-256 of the restored version's manifest"
         required: false
         type: string
 
@@ -61,6 +78,23 @@ jobs:
             exit 1
           fi
 
+      - name: Validate withdrawal inputs
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_WITHDRAW_VERSION: ${{ inputs.withdraw_version }}
+          INPUT_MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          INPUT_RESTORE_VERSION: ${{ inputs.restore_version }}
+          INPUT_RESTORE_MANIFEST_SHA256: ${{ inputs.restore_manifest_sha256 }}
+        run: |
+          if [ -n "$INPUT_WITHDRAW_VERSION$INPUT_MANIFEST_SHA256$INPUT_RESTORE_VERSION$INPUT_RESTORE_MANIFEST_SHA256" ]; then
+            if [ -n "$INPUT_VERSION" ] || [ -z "$INPUT_WITHDRAW_VERSION" ] || [ -z "$INPUT_RESTORE_VERSION" ] ||
+               ! [[ "$INPUT_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]] ||
+               ! [[ "$INPUT_RESTORE_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "withdrawal requires both versions and manifest hashes, without a publish version" >&2
+              exit 1
+            fi
+          fi
+
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -102,6 +136,7 @@ jobs:
       # and it expires with the run.
       - name: Build six platforms, upload, and verify release
         id: publish
+        if: inputs.withdraw_version == ''
         # inputs.version is passed through an env var, not substituted into the script body: a
         # workflow_dispatch string input is caller-controlled, and substituting it inline would let
         # its literal text be interpreted as shell syntax before publish.ts ever validates it. With
@@ -134,7 +169,33 @@ jobs:
             --endpoint oss-accelerate.aliyuncs.com \
             --region oss-cn-beijing
 
+      - name: Withdraw selected staging release
+        if: inputs.withdraw_version != ''
+        env:
+          ALIBABA_CLOUD_ROLE_ARN: acs:ram::1085194890307801:role/coforge-release-publisher
+          ALIBABA_CLOUD_OIDC_PROVIDER_ARN: acs:ram::1085194890307801:oidc-provider/github-actions
+          ALIBABA_CLOUD_ROLE_SESSION_NAME: github-actions-${{ github.run_id }}
+          ALIBABA_CLOUD_ECS_METADATA_DISABLED: "true"
+          INPUT_WITHDRAW_VERSION: ${{ inputs.withdraw_version }}
+          INPUT_MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          INPUT_RESTORE_VERSION: ${{ inputs.restore_version }}
+          INPUT_RESTORE_MANIFEST_SHA256: ${{ inputs.restore_manifest_sha256 }}
+        run: |
+          bun scripts/release/withdraw.ts \
+            --version "$INPUT_WITHDRAW_VERSION" \
+            --manifest-sha256 "$INPUT_MANIFEST_SHA256" \
+            --restore-version "$INPUT_RESTORE_VERSION" \
+            --restore-manifest-sha256 "$INPUT_RESTORE_MANIFEST_SHA256"
+          {
+            echo "## Computer withdrawn from staging"
+            echo "- Withdrawn: $INPUT_WITHDRAW_VERSION ($INPUT_MANIFEST_SHA256)"
+            echo "- Restored: $INPUT_RESTORE_VERSION ($INPUT_RESTORE_MANIFEST_SHA256)"
+            echo "- Verified: restored objects and latest, private origin, and absence of all 14 withdrawn objects."
+            echo "- CDN caches and installed copies are separate; this operation does not purge or reinstall them."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Summarize published release
+        if: inputs.withdraw_version == ''
         env:
           RELEASE_VERSION: ${{ steps.publish.outputs.version }}
           RELEASE_COMMIT: ${{ github.sha }}
