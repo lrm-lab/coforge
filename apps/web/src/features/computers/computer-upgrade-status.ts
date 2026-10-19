@@ -1,28 +1,18 @@
 import { queryOptions, skipToken, type QueryClient } from "@tanstack/react-query";
 
 import { m } from "#src/paraglide/messages";
+import {
+  UPGRADE_DEADLINE_MARGIN_MS,
+  settledUpgradeFollow,
+  upgradeRunning,
+} from "./computer-upgrade-follow";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 import { readComputerUpgradeStatus } from "./computers.functions";
 
+export { UPGRADE_DEADLINE_MARGIN_MS, settledUpgradeFollow, upgradeRunning };
+export type { UpgradeFollowObservation } from "./computer-upgrade-follow";
+
 const UPGRADE_POLL_INTERVAL_MS = 2_000;
-
-/**
- * How long past the server's deadline an `accepted` status is still taken at its word. The server
- * times a request out at `expiresAt` itself; this is only a safety net for a status that never
- * moves on.
- */
-export const UPGRADE_DEADLINE_MARGIN_MS = 90_000;
-
-/** Whether an upgrade still reads as running: accepted, and not long past its deadline. */
-export function upgradeRunning(
-  status: ComputerUpgradeStatus | null | undefined,
-  now = Date.now(),
-): boolean {
-  return (
-    status?.status === "accepted" &&
-    Date.parse(status.expiresAt) + UPGRADE_DEADLINE_MARGIN_MS >= now
-  );
-}
 
 /** A status is read for the last time once it has settled, or failed to read. */
 function upgradeStatusSettled({
@@ -45,7 +35,8 @@ export function computerUpgradeStatusQuery(computerId: string, requestId: string
     queryFn: () => readComputerUpgradeStatus({ data: { computerId, requestId } }),
     refetchInterval: (query) =>
       upgradeStatusSettled(query.state) ? false : UPGRADE_POLL_INTERVAL_MS,
-    // Once settled it is not read again, so the watcher settles each upgrade once.
+    // An error stops the timer. The query stays invalidated, so opening Computers fetches
+    // once more; the watcher keeps that in-flight read followed (`settledUpgradeFollow`).
     staleTime: (query) => (upgradeStatusSettled(query.state) ? Infinity : 0),
   });
 }

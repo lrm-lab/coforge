@@ -250,9 +250,11 @@ export function ComputerDetail({
     })),
   });
   const storedOutcome = storedUpgrade ? upgradeOutcome(storedUpgrade) : undefined;
+  // A recovery fetch keeps the last error until it returns. The status it already holds is
+  // what the slot shows while that read is in flight.
   const liveUpgrade: ComputerUpgradeOutcome | undefined = !liveStatus
     ? undefined
-    : liveStatus.isError
+    : liveStatus.isError && !liveStatus.isFetching
       ? { state: "failed", failure: describeUpgradeRequestError(liveStatus.error) }
       : liveStatus.data
         ? upgradeOutcome(liveStatus.data)

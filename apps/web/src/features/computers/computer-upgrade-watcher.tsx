@@ -7,8 +7,8 @@ import {
   computerUpgradeStatusQuery,
   describeComputerUpgradeSuccess,
   followedComputerUpgradesQuery,
+  settledUpgradeFollow,
   unfollowComputerUpgrade,
-  upgradeRunning,
   type FollowedComputerUpgrade,
 } from "./computer-upgrade-status";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
@@ -29,15 +29,15 @@ export function ComputerUpgradeWatcher() {
       computerUpgradeStatusQuery(computerId, requestId),
     ),
   });
-  // A status that could not be read settles too, with nothing changed on the server.
+  // A finished read that failed settles too, with nothing changed on the server. A recovery
+  // fetch still reports that error while it is in flight, and that must not drop the follow.
   const settled = followed.flatMap(
     (
       upgrade,
       index,
     ): { upgrade: FollowedComputerUpgrade; status: ComputerUpgradeStatus | undefined }[] => {
-      const status = statuses[index];
-      if (status?.isError) return [{ upgrade, status: undefined }];
-      return status?.data && !upgradeRunning(status.data) ? [{ upgrade, status: status.data }] : [];
+      const decision = settledUpgradeFollow(statuses[index]);
+      return decision ? [{ upgrade, status: decision.status }] : [];
     },
   );
   const settledIds = settled.map(({ upgrade }) => upgrade.requestId).join(",");
