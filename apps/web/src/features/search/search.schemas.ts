@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { conversationPageSearchShape } from "#src/features/conversations/conversation-page-search";
+import {
+  conversationPageSearchShape,
+  hostedConversationSearchShape,
+} from "#src/features/conversations/conversation-page-search";
 import { SEARCH_RANGES } from "./search-filters";
 
 /** Longest query the search box sends; longer text is cut, never rejected. */
@@ -46,13 +49,8 @@ export const searchPageSearchSchema = z.object({
   sort: z.literal("recent").optional().catch(undefined),
   // Set by "Search this channel": the filters wait for a query before searching.
   defer: z.literal("1").optional().catch(undefined),
-  // The result previewed beside the list: `channel:<id>` or `dm:<id>`, at message `msg`.
-  open: z
-    .string()
-    .regex(/^(channel|dm):[0-9a-f-]{36}$/)
-    .optional()
-    .catch(undefined),
-  msg: z.uuid().optional().catch(undefined),
+  // The result previewed beside the list.
+  ...hostedConversationSearchShape,
   // The previewed conversation's tab, Task board view and what it has open, as Chat keeps them.
   ...conversationPageSearchShape,
 });

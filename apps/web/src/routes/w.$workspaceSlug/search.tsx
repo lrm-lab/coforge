@@ -3,16 +3,17 @@ import { createFileRoute, getRouteApi, useNavigate } from "@tanstack/react-route
 
 import {
   conversationPageLoaderDeps,
-  loadConversationPage,
+  loadHostedConversation,
 } from "#src/features/conversations/conversation-page-loader";
+import {
+  hostedConversationOpenParam,
+  messageHash,
+  parseHostedConversation,
+  type HostedConversationTarget,
+} from "#src/features/conversations/conversation-page-search";
 import { parseScope, type SearchFilters } from "#src/features/search/search-filters";
 import { writeLastSearch } from "#src/features/search/search-memory";
 import { SearchPage } from "#src/features/search/search-page";
-import type { SearchPreviewTarget } from "#src/features/search/search-preview";
-import {
-  searchPreviewOpenParam,
-  searchPreviewTarget,
-} from "#src/features/search/search-preview-context";
 import { searchPageSearchSchema, searchQuerySchema } from "#src/features/search/search.schemas";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
@@ -26,14 +27,14 @@ export const Route = createFileRoute("/w/$workspaceSlug/search")({
     ...conversationPageLoaderDeps({ ...search, message: search.msg }),
   }),
   loader: async ({ context: { queryClient }, parentMatchPromise, deps, cause }) => {
-    const target = searchPreviewTarget(deps.open);
+    const target = parseHostedConversation(deps.open);
     if (!target) return;
-    // The previewed conversation opens as Chat opens it: its window and Tasks counts are read
-    // first on arrival, in the browser (`loadConversationPage` reads nothing on the server, so a
-    // first load's document holds no message: the preview reads it once it renders). Switching the
-    // preview while on search only starts the reads, so the preview shows its loading state at
-    // once. A failed read is left to the preview, which says so.
-    const page = loadConversationPage(queryClient, target, deps, {
+    // The previewed conversation opens as Chat opens it: its window, Tasks counts, the channel
+    // names and Saved are read first on arrival, in the browser (`loadHostedConversation` reads
+    // nothing on the server, so a first load's document holds no message: the preview reads it
+    // once it renders). Switching the preview while on search only starts the reads, so the
+    // preview shows its loading state at once. A failed read is left to the preview, which says so.
+    const page = loadHostedConversation(queryClient, target, deps, {
       cause,
       workspaceId: () =>
         parentMatchPromise.then((parent) => parent.loaderData?.currentWorkspace?.id ?? ""),
@@ -85,17 +86,17 @@ function SearchRoute() {
   // the entry rather than stacking history. Only the search's own fields carry over: the previous
   // conversation's tab, board view, thread, Task popup and Agent profile close with it, and a
   // thread reply opens its thread, as Chat opens one.
-  const preview = useMemo(() => searchPreviewTarget(open, msg), [open, msg]);
+  const preview = useMemo(() => parseHostedConversation(open, msg), [open, msg]);
   const onPreviewChange = useCallback(
-    (next: SearchPreviewTarget | undefined) =>
+    (next: HostedConversationTarget | undefined) =>
       void navigate({
         search: (previous) => ({
           ...searchQuerySchema.parse(previous),
-          open: next ? searchPreviewOpenParam(next) : undefined,
+          open: next ? hostedConversationOpenParam(next) : undefined,
           msg: next?.messageId,
           threadRootId: next?.threadRootId,
         }),
-        hash: next?.threadReplyId ? `message-${next.threadReplyId}` : undefined,
+        hash: next?.threadReplyId ? messageHash(next.threadReplyId) : undefined,
         replace: true,
       }),
     [navigate],

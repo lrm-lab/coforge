@@ -2,12 +2,18 @@ import { useCallback, useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { channelNamesQuery } from "#src/features/conversations/conversation-queries";
 import {
   conversationPageLoaderDeps,
-  loadConversationPage,
+  loadHostedConversation,
 } from "#src/features/conversations/conversation-page-loader";
-import { conversationPageSearchShape } from "#src/features/conversations/conversation-page-search";
+import {
+  conversationPageSearchShape,
+  hostedConversationOpenParam,
+  hostedConversationSearchShape,
+  messageHash,
+  parseHostedConversation,
+  type HostedConversationTarget,
+} from "#src/features/conversations/conversation-page-search";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { ActivityInboxPending } from "#src/features/inbox/activity-inbox-pending";
 import { ActivityInboxView } from "#src/features/inbox/activity-inbox-view";
@@ -16,24 +22,14 @@ import {
   ACTIVITY_INBOX_FILTERS,
   type ActivityInboxFilter,
 } from "#src/features/inbox/activity-inbox.schemas";
-import {
-  activityOpenParam,
-  parseActivityOpenParam,
-  type ActivityOpenTarget,
-} from "#src/features/inbox/activity-open-target";
 
 export const Route = createFileRoute("/w/$workspaceSlug/activity")({
   // Each field falls back to absent when malformed, so a stale or hand-edited address never
   // breaks the page.
   validateSearch: z.object({
     filter: z.enum(ACTIVITY_INBOX_FILTERS).optional().catch(undefined),
-    // The conversation open beside the list: `channel:<id>` or `dm:<id>`, at message `msg`.
-    open: z
-      .string()
-      .regex(/^(channel|dm):[0-9a-f-]{36}$/)
-      .optional()
-      .catch(undefined),
-    msg: z.uuid().optional().catch(undefined),
+    // The conversation open beside the list.
+    ...hostedConversationSearchShape,
     // The open conversation's tab, Task board view and what it has open, as Chat keeps them.
     ...conversationPageSearchShape,
   }),
@@ -50,20 +46,16 @@ export const Route = createFileRoute("/w/$workspaceSlug/activity")({
     const workspaceId = parent.loaderData?.currentWorkspace?.id;
     if (!workspaceId) return;
     const ready = queryClient.ensureInfiniteQueryData(activityInboxQuery(workspaceId, deps.filter));
-    // The open conversation is read as Chat reads it (`loadConversationPage` reads only in the
-    // browser), with the Workspace's channel names that Chat's layout would have read. Opening
-    // another card while on Activity only starts the reads, so the pane shows its loading state
-    // at once. A failed read is left to the pane, which says so.
-    const target = parseActivityOpenParam(deps.open);
+    // The open conversation is read as Chat reads it (`loadHostedConversation` reads only in the
+    // browser). Opening another card while on Activity only starts the reads, so the pane shows
+    // its loading state at once. A failed read is left to the pane, which says so.
+    const target = parseHostedConversation(deps.open);
     const conversation =
       target &&
-      Promise.all([
-        loadConversationPage(queryClient, target, deps, {
-          cause,
-          workspaceId: async () => workspaceId,
-        }),
-        queryClient.ensureQueryData(channelNamesQuery(workspaceId)),
-      ]).catch(() => undefined);
+      loadHostedConversation(queryClient, target, deps, {
+        cause,
+        workspaceId: async () => workspaceId,
+      }).catch(() => undefined);
     // A failed list shows inline in the view, which reads the same query.
     if (cause === "stay") void ready.catch(() => undefined);
     else await Promise.all([ready, conversation]);
@@ -74,7 +66,12 @@ export const Route = createFileRoute("/w/$workspaceSlug/activity")({
 });
 
 function ActivityPage() {
-  const { filter, open, msg, threadRootId } = Route.useSearch();
+  // Only what the list and the pane's target read: the pane's own address state is read where it
+  // is rendered, so a tab or Task popup change there does not re-render the list.
+  const { filter, open, msg, threadRootId } = Route.useSearch({
+    select: ({ filter, open, msg, threadRootId }) => ({ filter, open, msg, threadRootId }),
+    structuralSharing: true,
+  });
   const navigate = useNavigate({ from: Route.fullPath });
   // Switching views keeps the open conversation.
   const onFilterChange = useCallback(
@@ -90,22 +87,23 @@ function ActivityPage() {
   // the previous conversation's tab, board view, thread, Task popup and Agent profile close with
   // it, and a thread card opens its thread, as Chat opens one.
   const onOpen = useCallback(
-    (next: ActivityOpenTarget) =>
+    (next: HostedConversationTarget) =>
       void navigate({
         search: (previous) => ({
           filter: previous.filter,
-          open: activityOpenParam(next),
+          open: hostedConversationOpenParam(next),
           msg: next.messageId,
           threadRootId: next.threadRootId,
         }),
-        hash: next.threadReplyId ? `message-${next.threadReplyId}` : undefined,
+        hash: next.threadReplyId ? messageHash(next.threadReplyId) : undefined,
         replace: true,
       }),
     [navigate],
   );
+  // Kept by its fields, so the pane keeps its target while the list's view changes.
   const opened = useMemo(() => {
-    const target = parseActivityOpenParam(open);
-    return target && { ...target, messageId: msg, threadRootId };
+    const target = parseHostedConversation(open, msg);
+    return target && { ...target, threadRootId };
   }, [open, msg, threadRootId]);
   return (
     <ActivityInboxView

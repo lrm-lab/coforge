@@ -18,6 +18,7 @@ import {
 } from "#src/components/ui/empty";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { Skeleton } from "#src/components/ui/skeleton";
+import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { conversationSearchWithThread } from "#src/features/conversations/conversation-thread-search";
 import { savedJumpTarget } from "#src/features/conversations/saved-messages-model";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -32,7 +33,7 @@ import { matchSearchEntities, type SearchEntity } from "./search-entities";
 import { SearchEntityList } from "./search-entity-list";
 import { useResultClick } from "./search-click";
 import { searchExcerpt } from "./search-excerpt";
-import { SearchPreview, type SearchPreviewTarget } from "./search-preview";
+import { SearchPreview } from "./search-preview";
 import {
   isPreviewed,
   messagePreviewTarget,
@@ -84,8 +85,8 @@ export function SearchPage({
   filters: SearchFilters;
   onQueryChange: (query: string) => void;
   onFiltersChange: (filters: SearchFilters) => void;
-  preview: SearchPreviewTarget | undefined;
-  onPreviewChange: (preview: SearchPreviewTarget | undefined) => void;
+  preview: HostedConversationTarget | undefined;
+  onPreviewChange: (preview: HostedConversationTarget | undefined) => void;
 }) {
   const memory = useSearchMemory(workspaceId, viewerId);
   const router = useRouter();

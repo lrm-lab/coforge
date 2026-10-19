@@ -74,8 +74,8 @@ export function useOpenAgentProfile() {
 
 /**
  * The Agent profile panel's props for a conversation, from its host's `profile` / `agentTab`
- * search params. Every conversation host (both conversation routes, the search preview) spreads
- * them into the conversation.
+ * search params. Every conversation host (Chat's routes, the hosted pane) spreads them into the
+ * conversation.
  */
 export function useConversationAgentProfile({
   profile,

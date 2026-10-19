@@ -32,16 +32,14 @@ import { useConversationView, useShownConversationTab } from "./use-conversation
 
 type ConversationPageProps = {
   search: ConversationPageSearch;
-  /** The message the stream lands on, for a host that keeps it itself (the search preview, the
-   * Activity pane). */
+  /** The message the stream lands on, for a host that keeps it itself (the hosted pane). */
   jumpMessage?: string;
 };
 
 /**
  * A conversation as Chat opens it: its header with the Chat / Tasks / Files tabs, the stream (jumped
  * to `jumpMessage` when a host keeps the target itself), its Task board and files, and reading it.
- * The Chat routes, the search preview and the Activity pane all render it, so they are the same
- * page.
+ * Chat's routes and the hosted pane both render it, so every host shows the same page.
  */
 export function ConversationPage({
   target,

@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-import type { SearchPreviewTarget } from "./search-preview";
+import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 
 /**
  * How the result rows reach the page's preview: the previewed target (to mark its row) and a way
@@ -8,8 +8,8 @@ import type { SearchPreviewTarget } from "./search-preview";
  * their conversation instead.
  */
 export const SearchPreviewContext = createContext<{
-  previewed?: SearchPreviewTarget;
-  preview?: (target: SearchPreviewTarget) => void;
+  previewed?: HostedConversationTarget;
+  preview?: (target: HostedConversationTarget) => void;
 }>({});
 
 export function useSearchPreview() {
@@ -18,28 +18,14 @@ export function useSearchPreview() {
 
 /** Whether `target` is the one being previewed, message included. */
 export function isPreviewed(
-  previewed: SearchPreviewTarget | undefined,
-  target: SearchPreviewTarget,
+  previewed: HostedConversationTarget | undefined,
+  target: HostedConversationTarget,
 ) {
   return (
     previewed?.kind === target.kind &&
     previewed.id === target.id &&
     previewed.messageId === target.messageId
   );
-}
-
-/** A preview's `open` search param: `channel:<id>` or `dm:<id>` (read by `searchPreviewTarget`). */
-export function searchPreviewOpenParam(target: SearchPreviewTarget): string {
-  return `${target.kind}:${target.id}`;
-}
-
-/** The preview the search URL names: `open` (`channel:<id>` or `dm:<id>`) at message `msg`. */
-export function searchPreviewTarget(
-  open: string | undefined,
-  msg?: string,
-): SearchPreviewTarget | undefined {
-  const [kind, id] = open?.split(":") ?? [];
-  return (kind === "channel" || kind === "dm") && id ? { kind, id, messageId: msg } : undefined;
 }
 
 /**
@@ -51,7 +37,7 @@ export function searchPreviewTarget(
 export function messagePreviewTarget(
   conversation: { id: string; channelName: string | null; directKey: string | null },
   message: { id: string; threadRootId?: string },
-): SearchPreviewTarget | undefined {
+): HostedConversationTarget | undefined {
   const messageId = message.threadRootId ?? message.id;
   const thread = message.threadRootId
     ? { threadRootId: message.threadRootId, threadReplyId: message.id }

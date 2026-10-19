@@ -54,7 +54,7 @@ import { cn } from "#src/lib/utils";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import type { ConversationPageTarget } from "#src/features/conversations/conversation-page-loader";
+import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
@@ -72,12 +72,7 @@ import {
 } from "./activity-inbox-queries";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { ActivityConversationEmpty, ActivityConversationPane } from "./activity-conversation-pane";
-import {
-  activityChatLink,
-  activityOpenTarget,
-  openedItemKey,
-  type ActivityOpenTarget,
-} from "./activity-open-target";
+import { activityChatLink, activityOpenTarget, openedItemKey } from "./activity-open-target";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -97,8 +92,8 @@ export function ActivityInboxView({
   filter: ActivityInboxFilter;
   onFilterChange: (filter: ActivityInboxFilter) => void;
   /** The conversation the URL has open beside the list, at its jump message and open thread. */
-  opened: (ConversationPageTarget & { messageId?: string; threadRootId?: string }) | undefined;
-  onOpen: (target: ActivityOpenTarget) => void;
+  opened: HostedConversationTarget | undefined;
+  onOpen: (target: HostedConversationTarget) => void;
 }) {
   const { user, currentWorkspace } = appRoute.useLoaderData();
   const workspaceId = currentWorkspace?.id ?? "";
@@ -234,11 +229,7 @@ export function ActivityInboxView({
       {list}
       {wide &&
         (opened ? (
-          <ActivityConversationPane
-            key={`${opened.kind}:${opened.id}`}
-            target={opened}
-            jumpMessage={opened.messageId}
-          />
+          <ActivityConversationPane key={`${opened.kind}:${opened.id}`} target={opened} />
         ) : (
           <ActivityConversationEmpty />
         ))}
@@ -524,7 +515,7 @@ const ActivityInboxCard = memo(function ActivityInboxCard({
   /** This card stands for the conversation open beside the list. */
   current: boolean;
   /** Opens the card beside the list; undefined when there is no room, so the card opens Chat. */
-  onOpen: ((target: ActivityOpenTarget) => void) | undefined;
+  onOpen: ((target: HostedConversationTarget) => void) | undefined;
 }) {
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
@@ -559,9 +550,7 @@ const ActivityInboxCard = memo(function ActivityInboxCard({
     >
       {/* The card is a React Aria link so the context menu (`MenuTrigger trigger="contextMenu"`)
           can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
-          navigation. With room beside the list a plain click (or Enter) opens the card there
-          instead; the link still points at Chat, so a modified or middle click opens it in a new
-          tab. Opening a card reads it, like opening the conversation does. */}
+          navigation. Opening a card reads it, like opening the conversation does. */}
       <Dropdown.Root trigger="contextMenu">
         <AriaLink
           href={href}
@@ -575,9 +564,10 @@ const ActivityInboxCard = memo(function ActivityInboxCard({
                 {...props}
                 {...link}
                 onClick={(event) => {
+                  // With room beside the list a plain click (or Enter) opens the card there, so
+                  // neither `Link` nor React Aria navigates; a modified or middle click still
+                  // opens Chat. React Aria's handler still runs: it ends a keyboard press.
                   const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-                  // Prevented first, so neither React Aria nor TanStack's `Link` navigates; React
-                  // Aria's own handler still runs, which ends a keyboard press.
                   if (onOpen && event.button === 0 && !modified) {
                     event.preventDefault();
                     onOpen(target);
