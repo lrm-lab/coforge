@@ -13,7 +13,6 @@ import {
 import { useHydrated } from "@tanstack/react-router";
 
 import { useAppToast } from "#src/components/ui/toast";
-import { FileIcon as FileTypeIcon } from "@untitledui/file-icons";
 import { AlertCircle, Download01, Plus, Send01, Trash01, XClose } from "@untitledui/icons";
 import { Popover as AriaPopover } from "react-aria-components";
 
@@ -27,6 +26,8 @@ import {
   ProgressBarBase,
 } from "#src/components/base/progress-indicators/progress-indicators";
 import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
+import { FileTypeIcon } from "#src/features/files/file-type-icon";
+import { fileTypeLabel } from "#src/features/files/file-meta";
 import {
   dragCarriesFiles,
   filesFromDrop,
@@ -60,7 +61,6 @@ import { useReferenceCompletion } from "./use-reference-completion";
 import { ReferenceSuggestionList } from "./reference-suggestions";
 import { PendingMentionStrip, type PendingMention } from "./pending-mention-strip";
 import { UnpinnedMentionHint } from "./unpinned-mention-hint";
-import { fileIconType } from "./message-row";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
@@ -150,20 +150,13 @@ function AttachmentTile({
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
-  const iconType = fileIconType(file.name, file.type);
-  const extension = file.name.split(".").pop()?.toUpperCase();
-  const kind = extension && extension !== file.name.toUpperCase() ? extension : file.type;
-  const icon = (size: string) => (
-    <>
-      <FileTypeIcon className={`${size} dark:hidden`} type={iconType} theme="light" />
-      <FileTypeIcon className={`${size} not-dark:hidden`} type={iconType} theme="dark" />
-    </>
-  );
+  const typeLabel = fileTypeLabel(file.name, file.type);
+  const typeAndSize = `${typeLabel ? `${typeLabel} · ` : ""}${getReadableFileSize(file.size)}`;
   const status = attachment.failed
     ? m.conversation_attachment_failed()
     : uploading
       ? m.conversation_attachment_uploading({ progress: attachment.progress })
-      : `${kind} · ${getReadableFileSize(file.size)}`;
+      : typeAndSize;
   return (
     <li className="relative">
       <DialogTrigger>
@@ -187,13 +180,13 @@ function AttachmentTile({
               />
             ) : (
               <span className="flex size-full items-center justify-center bg-secondary">
-                {icon("size-8")}
+                <FileTypeIcon fileName={file.name} contentType={file.type} className="size-8" />
               </span>
             )
           ) : (
             <span className="flex min-w-0 items-center gap-2.5 text-left">
               <span className="flex size-9 shrink-0 items-center justify-center">
-                {icon("size-9")}
+                <FileTypeIcon fileName={file.name} contentType={file.type} className="size-9" />
               </span>
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-sm font-medium text-secondary">{file.name}</span>
@@ -229,7 +222,11 @@ function AttachmentTile({
                 <div className="flex items-center gap-3 p-3">
                   {!isImage && (
                     <span className="flex size-10 shrink-0 items-center justify-center">
-                      {icon("size-10")}
+                      <FileTypeIcon
+                        fileName={file.name}
+                        contentType={file.type}
+                        className="size-10"
+                      />
                     </span>
                   )}
                   <div className="min-w-0 flex-1">
@@ -237,7 +234,7 @@ function AttachmentTile({
                     <p className="truncate text-sm text-tertiary">
                       {uploading
                         ? `${attachment.progress}% · ${getReadableFileSize(file.size)}`
-                        : `${kind} · ${getReadableFileSize(file.size)}`}
+                        : typeAndSize}
                     </p>
                     {uploading && <ProgressBar value={attachment.progress} className="mt-1.5" />}
                     {attachment.failed && (

@@ -1,16 +1,14 @@
 /**
- * file-meta — pure helpers for the attachment file-tile UI.
+ * file-meta — pure helpers for how a file is described: its extension, size, kind and type label.
  *
- * Dependency-free (no React, no i18n) so `AttachmentCard` and its unit tests
- * can import the extension / size / type-category logic directly. The
- * type-category token maps to an i18n label under editor `attachment.file_type.*`
- * and to the extension handed to react-file-icon's `<FileIcon>`.
+ * Dependency-free (no React, no i18n) so components and unit tests can import the extension /
+ * size / type-category logic directly. The type-category token picks a file's glyph in
+ * `file-icon-type.ts`.
  */
 
 import { extensionToLanguage, getPreviewKind } from "./preview";
 
-// File-type category token. One label per token lives under
-// editor `attachment.file_type.<token>`; keep the two in sync.
+// File-type category token. `file-icon-type.ts` maps each one to a glyph.
 export type FileTypeCategory =
   | "image"
   | "video"
@@ -38,6 +36,25 @@ export function getFileExtension(filename: string): string {
 }
 
 /**
+ * The short kind shown before a file's size: its extension, or the media type when the name has no
+ * usable one (`LICENSE`, `Dockerfile`, a dotfile) so such a file still says what it is rather than
+ * showing a bare size. `application/octet-stream` is the upload default for "unknown", so it names
+ * nothing, and a dotted phrase ("notes.final version") is not an extension.
+ *
+ * Not unit-tested: this is display text, and `docs/agents/testing.md` reserves UI verification for
+ * a browser.
+ */
+export function fileTypeLabel(fileName: string, contentType: string): string | undefined {
+  const suffix = getFileExtension(fileName);
+  // A long tail is part of the name rather than an extension ("notes.final version").
+  if (suffix && suffix.length <= 8 && !suffix.includes(" ")) return suffix.toUpperCase();
+  const subtype = contentType.split(";")[0]?.split("/")[1]?.trim() ?? "";
+  const named = subtype.replace(/^(x-|vnd\.)/, "");
+  if (!named || named === "octet-stream") return undefined;
+  return named.slice(0, 12).toUpperCase();
+}
+
+/**
  * Human-readable byte size (`1536` → `"1.5 KB"`). One decimal below 100,
  * whole numbers at/above 100 and for raw bytes. Empty string for
  * non-finite / negative input so callers can drop it from the meta line.
@@ -57,7 +74,7 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
- * Coarse file-type bucket for the tile label + icon. Leans on the existing
+ * Coarse file-type bucket for a file's icon. Leans on the existing
  * preview-kind / language detection, then adds document/archive buckets that
  * preview doesn't distinguish. Falls back to `"file"` for unknown types.
  */

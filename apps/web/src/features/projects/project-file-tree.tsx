@@ -25,7 +25,7 @@ import { copyText } from "#src/features/records/report-editor/lib/clipboard";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { TreeFileIcon } from "#src/features/files/tree-file-icon";
+import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { projectFileDownloadUrl } from "./project-file-urls";
 import { projectObjectQuery } from "./project-tree-queries";
 import {
@@ -128,7 +128,7 @@ export function ProjectFileTree({
                 {isDirectory ? (
                   <Folder aria-hidden="true" className="size-4 shrink-0 text-quaternary" />
                 ) : (
-                  <TreeFileIcon name={entry.name} className="size-4" />
+                  <FileTypeIcon fileName={entry.name} className="size-4" />
                 )}
                 <span className="truncate">{entry.name}</span>
               </AriaLink>

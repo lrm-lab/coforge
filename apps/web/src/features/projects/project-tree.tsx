@@ -13,7 +13,7 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { TreeFileIcon } from "#src/features/files/tree-file-icon";
+import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { ProjectFileTree } from "./project-file-tree";
 import { githubUrl as buildGithubUrl, projectFileDownloadUrl } from "./project-file-urls";
 import { ProjectFileView } from "./project-file-view";
@@ -510,7 +510,7 @@ function DirectoryBody({
                 {entry.type === "dir" ? (
                   <Folder aria-hidden="true" className="size-5 shrink-0 text-tertiary" />
                 ) : (
-                  <TreeFileIcon name={entry.name} className="size-5" size={20} />
+                  <FileTypeIcon fileName={entry.name} className="size-5" />
                 )}
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span

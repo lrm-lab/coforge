@@ -33,11 +33,8 @@ import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { ContentEditor } from "#src/features/records/report-editor/content-editor";
 import { copyText } from "#src/features/records/report-editor/lib/clipboard";
 import { sharedLowlight } from "#src/features/records/report-editor/lowlight";
-import {
-  formatFileSize,
-  getFileExtension,
-} from "#src/features/records/report-editor/utils/file-meta";
-import { extensionToLanguage } from "#src/features/records/report-editor/utils/preview";
+import { formatFileSize, getFileExtension } from "#src/features/files/file-meta";
+import { extensionToLanguage } from "#src/features/files/preview";
 import "#src/features/records/report-editor/styles/code.css";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";

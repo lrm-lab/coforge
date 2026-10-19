@@ -10,7 +10,7 @@ live in nested `AGENTS.md` files listed at the end.
 - For list/detail pages and empty states apply sections 2.1–2.2 and 5.1, and run the checklist and acceptance checks in section 6. State why a different user task requires an exception before implementing one. Do not treat existing pages as automatic exceptions; adapt the affected flow when changing it, without expanding into unrelated page redesigns.
 - Hard rules that apply to every UI change (details in `docs/design/`):
   - Mockups: when a design mockup is provided, it wins over the defaults in `docs/design/`; implement it with the components and units below and update the conflicting rule in the same change. Ask before inventing data or concepts the mockup shows but the product lacks (§1).
-  - Components (product UI; `features/landing` keeps its Spell / Magic UI motion components): only official Untitled UI components, unmodified, and the primitives listed in `components/ui/README.md`, per §7 including its listed exceptions. Icons only from `@untitledui/icons`; vendor logos from `@lobehub/icons-static-svg`.
+  - Components (product UI; `features/landing` keeps its Spell / Magic UI motion components): only official Untitled UI components, unmodified, and the primitives listed in `components/ui/README.md`, per §7 including its listed exceptions. Icons only from `@untitledui/icons`; a file's type glyph from `@untitledui/file-icons`, which product code reaches only through `features/files/file-type-icon.tsx`; vendor logos from `@lobehub/icons-static-svg`.
   - Sizes: anything that affects layout or reading (font size, spacing, width, height, radius, icon/avatar size, offsets) uses rem — the Tailwind scale, or a rem arbitrary value such as `w-[18rem]`; never `w-[280px]`, `text-[10px]`, or numeric inline `style` sizes. px is only for hairlines (border, ring, outline, divider), stroke widths, shadows/blur, and positions and sizes measured from the DOM (§12).
   - Colors: semantic tokens only, no hex or `dark:` color overrides (§11).
   - People: show a person by `humanLabel` (`src/lib/human-label.ts`), never as `@username`, and do not search by username (`docs/database-schema/identity-models.md`); an Agent keeps its `@handle`.
@@ -110,6 +110,7 @@ responsibility.
 - `features/conversations/` — channels, direct messages, threads, composer, message rendering, action cards, saved messages, and the sidebar lists.
 - `features/device-auth/` — device-code verification page.
 - `features/errors/` — page-level load-error view and the router's 404 page.
+- `features/files/` — what a file is, from its name and media type: extension, size text, kind, preview kind and language, type label, and the icon it is drawn with (`FileTypeIcon`).
 - `features/inbox/` — the Activity page: conversations and threads not yet marked Done.
 - `features/install/` — Computer install command text.
 - `features/integrations/` — Settings → Integrations GitHub view and functions.

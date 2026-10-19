@@ -3,7 +3,6 @@ import {
   WeeklyReportMessageCard,
   type WeeklyReportMessageSuggestion,
 } from "#src/features/records/weekly-report-message-card";
-import { FileIcon as FileTypeIcon } from "@untitledui/file-icons";
 import {
   Bookmark,
   BookmarkCheck,
@@ -37,6 +36,8 @@ import type {
 } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
 import { AgentModelLabel } from "#src/features/agents/agent-model-label";
+import { fileTypeLabel } from "#src/features/files/file-meta";
+import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { DELETED_AGENT_AVATAR_CLASS, DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -174,86 +175,11 @@ export function groupsWithPrevious(
   return { dayChanged, grouped };
 }
 
-// The file-type icons the icon set ships, by extension.
-const FILE_ICON_TYPES = new Set([
-  "aep",
-  "ai",
-  "avi",
-  "css",
-  "csv",
-  "dmg",
-  "doc",
-  "docx",
-  "eps",
-  "exe",
-  "fig",
-  "gif",
-  "html",
-  "indd",
-  "java",
-  "jpeg",
-  "jpg",
-  "js",
-  "json",
-  "mkv",
-  "mp3",
-  "mp4",
-  "mpeg",
-  "pdf",
-  "png",
-  "ppt",
-  "pptx",
-  "psd",
-  "rar",
-  "rss",
-  "sql",
-  "svg",
-  "tiff",
-  "txt",
-  "wav",
-  "webp",
-  "xls",
-  "xlsx",
-  "xml",
-  "zip",
-]);
-
-/** The icon-set type for a file: its extension when there is a dedicated icon, else its media kind. */
-export function fileIconType(fileName: string, contentType: string) {
-  const extension = fileName.includes(".") ? fileName.split(".").pop()!.toLowerCase() : "";
-  if (FILE_ICON_TYPES.has(extension)) return extension;
-  if (contentType.startsWith("image/")) return "image";
-  if (contentType.startsWith("video/")) return "video";
-  if (contentType.startsWith("audio/")) return "audio";
-  if (contentType.startsWith("text/")) return "txt";
-  return "empty";
-}
-
 /** The authenticated backend fallback: forced downloads, and inline images once their signed
  * CDN preview URL has expired or fails to load (the route then redirects to a fresh one, or
  * streams the bytes when CDN delivery is not configured). */
 export function attachmentUrl(attachment: { id: string }) {
   return `/api/attachments/${attachment.id}`;
-}
-
-/**
- * The short kind shown before a file's size: its extension, or the media type when the name has no
- * usable one (`LICENSE`, `Dockerfile`, a dotfile) so such a file still says what it is rather than
- * showing a bare size. `application/octet-stream` is the upload default for "unknown", so it names
- * nothing, and a dotted phrase ("notes.final version") is not an extension.
- *
- * Not exported and not unit-tested: this is display text, and `docs/agents/testing.md` reserves UI
- * verification for a browser. The cases above are in this PR's verification Todo list instead.
- */
-function attachmentTypeLabel(fileName: string, contentType: string): string | undefined {
-  const dot = fileName.lastIndexOf(".");
-  const suffix = dot > 0 ? fileName.slice(dot + 1) : "";
-  // A long tail is part of the name rather than an extension ("notes.final version").
-  if (suffix && suffix.length <= 8 && !suffix.includes(" ")) return suffix.toUpperCase();
-  const subtype = contentType.split(";")[0]?.split("/")[1]?.trim() ?? "";
-  const named = subtype.replace(/^(x-|vnd\.)/, "");
-  if (!named || named === "octet-stream") return undefined;
-  return named.slice(0, 12).toUpperCase();
 }
 
 /** An uploaded file on a message: images preview inline, other files show as a file card. */
@@ -375,8 +301,7 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
         </DialogTrigger>
       </div>
     );
-  const typeLabel = attachmentTypeLabel(attachment.fileName, attachment.contentType);
-  const iconType = fileIconType(attachment.fileName, attachment.contentType);
+  const typeLabel = fileTypeLabel(attachment.fileName, attachment.contentType);
   const previewKind = attachmentPreviewKind(
     attachment.fileName,
     attachment.contentType,
@@ -386,8 +311,11 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
   // icon and a text block handed to it directly stack vertically instead of sitting side by side.
   const card = (
     <span className="flex min-w-0 items-center gap-3">
-      <FileTypeIcon className="size-10 shrink-0 dark:hidden" type={iconType} theme="light" />
-      <FileTypeIcon className="size-10 shrink-0 not-dark:hidden" type={iconType} theme="dark" />
+      <FileTypeIcon
+        fileName={attachment.fileName}
+        contentType={attachment.contentType}
+        className="size-10"
+      />
       <span className="min-w-0 text-left">
         <span className="block truncate text-sm font-medium text-secondary">
           {attachment.fileName}

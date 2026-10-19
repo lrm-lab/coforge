@@ -1,3 +1,5 @@
+import { getFileExtension } from "#src/features/files/file-meta";
+
 /**
  * Which preview an attachment supports. Pure decision, kept out of the component so the rule that
  * governs it — above all the cross-origin requirement for a PDF — is testable on its own.
@@ -26,13 +28,9 @@ export const MEDIA_TYPES = new Map<string, { kind: "video" | "audio"; mimeType: 
   ["ogg", { kind: "audio", mimeType: "audio/ogg" }],
 ]);
 
-function extensionOf(fileName: string): string {
-  return fileName.includes(".") ? fileName.split(".").pop()!.toLowerCase() : "";
-}
-
 /** The MIME type a previewable media attachment is played as, from our own allowlist. */
 export function mediaMimeType(fileName: string): string | null {
-  return MEDIA_TYPES.get(extensionOf(fileName))?.mimeType ?? null;
+  return MEDIA_TYPES.get(getFileExtension(fileName))?.mimeType ?? null;
 }
 
 /**
@@ -83,7 +81,7 @@ export function attachmentPreviewKind(
   /** The page's own origin; absent during server rendering. */
   applicationOrigin: string | undefined = globalThis.location?.origin,
 ): AttachmentPreviewKind | null {
-  const extension = extensionOf(fileName);
+  const extension = getFileExtension(fileName);
   if (extension === "pdf" || contentType === "application/pdf")
     return isFrameableDocumentUrl(previewUrl, applicationOrigin) ? "pdf" : null;
   if (MARKDOWN_EXTENSIONS.has(extension)) return "markdown";

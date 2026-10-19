@@ -1,7 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { FileIcon as FileTypeIcon } from "@untitledui/file-icons";
-import { Download01, File01, MarkerPin01, XClose } from "@untitledui/icons";
+import { Download01, MarkerPin01, XClose } from "@untitledui/icons";
 
 import { m } from "#src/paraglide/messages";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
@@ -14,6 +13,7 @@ import {
   ModalOverlay,
 } from "#src/components/application/modals/modal";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { useState } from "react";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
@@ -21,7 +21,7 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { AttachmentPreview } from "./attachment-preview";
 import { attachmentPreviewKind } from "./attachment-preview-kind";
 import { loadConversationFiles, type ConversationFile } from "./conversation-files.functions";
-import { attachmentUrl, fileIconType } from "./message-row";
+import { attachmentUrl } from "./message-row";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -75,7 +75,6 @@ export function FileRow({
   const previewLabel = isImage
     ? file.fileName
     : m.conversation_attachment_preview_open({ name: file.fileName });
-  const iconType = fileIconType(file.fileName, file.contentType);
   // `Button` wraps children in one `display: block` span. The row owns its own flex so the
   // thumbnail and name sit side by side instead of stacking, then centering in the leftover
   // `flex-1` space (`justify-center` is the Button default).
@@ -83,9 +82,11 @@ export function FileRow({
     <span className="flex w-full min-w-0 items-center gap-3">
       {isImage ? (
         imgBroken ? (
-          <span className="grid size-10 shrink-0 place-items-center rounded-lg ring-1 ring-secondary ring-inset">
-            <File01 aria-hidden="true" className="size-5 text-fg-quaternary" />
-          </span>
+          <FileTypeIcon
+            fileName={file.fileName}
+            contentType={file.contentType}
+            className="size-10"
+          />
         ) : (
           <img
             src={previewSrc}
@@ -96,10 +97,7 @@ export function FileRow({
           />
         )
       ) : (
-        <>
-          <FileTypeIcon className="size-10 shrink-0 dark:hidden" type={iconType} theme="light" />
-          <FileTypeIcon className="size-10 shrink-0 not-dark:hidden" type={iconType} theme="dark" />
-        </>
+        <FileTypeIcon fileName={file.fileName} contentType={file.contentType} className="size-10" />
       )}
       <span className="min-w-0 flex-1 text-left">
         <span className="block truncate text-sm font-medium text-primary">{file.fileName}</span>

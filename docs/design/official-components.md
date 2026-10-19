@@ -15,7 +15,7 @@
 - 升级用 `npx untitledui@latest upgrade`，升级后跑 `bun run check` 和 `bun run test`。
 - 允许自写的只有官方没有对应物的原语，放在 `src/components/ui/`：Empty、Skeleton、Toast 包装、RelativeTime、InputOTP、HoverPopover，以及官方只在 PRO 版提供的 Alert 和 ProgressSteps（CLI 添加 `alerts`、`progress-steps` 需要 PRO 授权）。自写原语只能组合 React Aria 和官方组件，不能复制官方文件再改。
 - `src/components/ui/README.md` 维护"偏离官方组件清单"：每个自写文件一行，写明为什么官方没有。清单之外不允许出现非官方组件。
-- 图标只用 `@untitledui/icons`。厂商 logo（Claude Code、Codex 等）用 `@lobehub/icons-static-svg`。
+- 图标只用 `@untitledui/icons`。文件类型图标用 `@untitledui/file-icons`，产品代码只通过 `src/features/files/file-type-icon.tsx`（`FileTypeIcon`）使用。厂商 logo（Claude Code、Codex 等）用 `@lobehub/icons-static-svg`。
 - `.oxlintrc.json` / `scripts/oxlint-plugin.js` 不得新增或扩大豁免，除非事先获得用户明确同意，
   官方组件也不例外。申请时写明具体文件、规则、原因和失去的检查；历史豁免不构成授权。
   产品代码（`src/features/**`、`src/components/ui/**`、`src/components/layout/**`、路由、测试）
