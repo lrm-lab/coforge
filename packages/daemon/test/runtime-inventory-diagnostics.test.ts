@@ -1,18 +1,26 @@
 import { expect, test } from "bun:test";
-import { discoverCodexCatalog } from "#src/code-agent/runtime-inventory";
-import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
+import {
+  CATALOG_DISCOVERY_TIMEOUT_MS,
+  discoverCodexCatalog,
+} from "#src/code-agent/runtime-inventory";
+import {
+  CATALOG_DISCOVERY_BUDGET_MS,
+  SHORT_CATALOG_DISCOVERY_TIMEOUT_MS,
+  spawnedCatalogDiscoveryBudgetMs,
+} from "./catalog-discovery-budget";
 import { captureDaemonLogs } from "./log-capture";
 
 /** These tests cover the Codex catalog's diagnostics, so they call its discovery directly. The
  * whole-inventory pass would add Pi's in-process catalog discovery, which is not under test and,
  * against a developer's real HOME, runs for seconds: it was most of each test's time. The
  * inventory's use of the Codex catalog is covered in runtime-inventory.test.ts. */
-async function captureDiscovery(mode: string) {
+async function captureDiscovery(mode: string, timeoutMs = CATALOG_DISCOVERY_TIMEOUT_MS) {
   const { records } = await captureDaemonLogs(async () => {
     const catalog = await discoverCodexCatalog(
       [process.execPath, new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname, mode],
       process.cwd(),
       { PATH: Bun.env.PATH },
+      timeoutMs,
     );
     expect(catalog).toBeUndefined();
   });
@@ -58,20 +66,24 @@ test(
 test(
   "catalog timeout records its stage, duration, and cleanup completion",
   async () => {
-    const records = await captureDiscovery("catalog-timeout");
+    // Production's catalog discovery waits this long.
+    expect(CATALOG_DISCOVERY_TIMEOUT_MS).toBe(5_000);
+    const records = await captureDiscovery("catalog-timeout", SHORT_CATALOG_DISCOVERY_TIMEOUT_MS);
     const failure = records.find(
       (record) => record.properties.event === "code_agent_catalog:discovery_failed",
     );
     expect(failure?.properties).toMatchObject({
       stage: "model/list",
-      error_message: "model catalog discovery timed out after 5000 ms",
+      error_message: `model catalog discovery timed out after ${SHORT_CATALOG_DISCOVERY_TIMEOUT_MS} ms`,
     });
-    expect(failure?.properties.elapsed_ms).toBeGreaterThanOrEqual(5000);
+    expect(failure?.properties.elapsed_ms).toBeGreaterThanOrEqual(
+      SHORT_CATALOG_DISCOVERY_TIMEOUT_MS,
+    );
     expect(
       records.some((record) => record.properties.event === "code_agent_catalog:cleanup_completed"),
     ).toBe(true);
   },
-  CATALOG_DISCOVERY_BUDGET_MS,
+  spawnedCatalogDiscoveryBudgetMs(SHORT_CATALOG_DISCOVERY_TIMEOUT_MS),
 );
 
 test(

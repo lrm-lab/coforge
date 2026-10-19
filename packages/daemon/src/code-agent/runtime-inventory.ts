@@ -74,7 +74,7 @@ export const hostCodeAgentProbe: ExternalCodeAgentProbe = {
       agentEnvironment(undefined, env ?? Bun.env),
     );
     try {
-      await initializeCodex(child);
+      await initializeCodex(child, CATALOG_DISCOVERY_TIMEOUT_MS);
     } finally {
       await child.dispose().catch(() => undefined);
     }
@@ -115,6 +115,7 @@ async function probeRuntimeVersion(
   /** The discovery environment: discovery already augmented its PATH the way an eventual
    * Agent process would get it, so version probing sees the same launchers. */
   environment: Readonly<Record<string, string | undefined>>,
+  versionProbeTimeoutMs: number,
 ): Promise<RuntimeMetadata | undefined> {
   const probeEnvironment = agentEnvironment(undefined, environment);
   const providerProbe =
@@ -131,7 +132,10 @@ async function probeRuntimeVersion(
     );
     return version ? { provider, version, displayName: "Claude Code" } : undefined;
   }
-  const { output, exitCode } = await versionProbeOutput(probe.spawn(executable, probeEnvironment));
+  const { output, exitCode } = await versionProbeOutput(
+    probe.spawn(executable, probeEnvironment),
+    versionProbeTimeoutMs,
+  );
   if (exitCode !== 0) {
     logger.warning("Code Agent version probe exited unsuccessfully", {
       event: "code_agent_runtime:probe_failed",
@@ -177,6 +181,7 @@ export async function discoverExternalCodeAgents(
   platform: NodeJS.Platform = process.platform,
   requestedProvider?: RuntimeMetadata["provider"],
   cacheDirectory?: string,
+  versionProbeTimeoutMs: number = VERSION_PROBE_TIMEOUT_MS,
 ): Promise<RuntimeMetadata[]> {
   const runtimes: RuntimeMetadata[] = [];
   const searchPath = codeAgentExecutableSearchPath(environment, platform);
@@ -220,7 +225,14 @@ export async function discoverExternalCodeAgents(
             });
             return { runtime: cached.runtime, cacheKey: undefined };
           }
-          const runtime = await probeRuntimeVersion(provider, name, executable, probe, environment);
+          const runtime = await probeRuntimeVersion(
+            provider,
+            name,
+            executable,
+            probe,
+            environment,
+            versionProbeTimeoutMs,
+          );
           if (runtime) return { runtime, cacheKey };
           // A transient version/app-server failure must not make an installed runtime vanish
           // from the Computer inventory. Keep the last successful result when the executable
@@ -310,6 +322,14 @@ export type CodeAgentDiscoveryOptions = {
   platform?: NodeJS.Platform;
   /** The daemon state directory; when set, probe results are cached there across restarts. */
   cacheDirectory?: string;
+  /** The wait for each external runtime's generic `--version` probe (`versionProbeOutput`);
+   * `VERSION_PROBE_TIMEOUT_MS` when unset. Provider-specific probes keep their own bounds. */
+  versionProbeTimeoutMs?: number;
+  /** Each bounded wait of Codex's model catalog discovery; `CATALOG_DISCOVERY_TIMEOUT_MS` when
+   * unset. The runtime probe's own `initialize` wait is not affected. */
+  catalogDiscoveryTimeoutMs?: number;
+  /** Pi's in-process catalog discovery; `PI_CATALOG_DISCOVERY_TIMEOUT_MS` when unset. */
+  piCatalogDiscoveryTimeoutMs?: number;
 };
 
 /** A provider whose model catalog is expensive enough (spawns a CLI) to be worth caching. */
@@ -365,6 +385,7 @@ export async function discoverCodeAgentRuntimes(
       options.platform,
       undefined,
       options.cacheDirectory,
+      options.versionProbeTimeoutMs,
     )),
   ];
 }
@@ -428,7 +449,13 @@ export async function discoverCodeAgentCatalogs(
   const discoveries: Array<Promise<Discovered>> = [];
   discoveries.push(Promise.resolve({ catalog: discoverCoforgeCatalog() }));
   discoveries.push(
-    discoverPiCatalog(cwd, environment, options.piModels, options.force).then((catalog) => ({
+    discoverPiCatalog(
+      cwd,
+      environment,
+      options.piModels,
+      options.piCatalogDiscoveryTimeoutMs ?? PI_CATALOG_DISCOVERY_TIMEOUT_MS,
+      options.force,
+    ).then((catalog) => ({
       provider: RUNTIME_PROVIDER.PI,
       keyPaths: piCacheKeyPaths(environment),
       catalog,
@@ -442,6 +469,7 @@ export async function discoverCodeAgentCatalogs(
           commands.codex ?? [executable, "app-server"],
           cwd,
           environment,
+          options.catalogDiscoveryTimeoutMs ?? CATALOG_DISCOVERY_TIMEOUT_MS,
           options.force,
         ).then((catalog) => ({
           provider: RUNTIME_PROVIDER.CODEX,
@@ -577,9 +605,11 @@ export async function discoverCodexCatalog(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  /** Each bounded wait: the `initialize` reply, then each `model/list` page. */
+  timeoutMs: number,
   force = false,
 ): Promise<CodeAgentModelCatalog | undefined> {
-  const live = await discoverCodexCatalogFromProcess(command, cwd, environment).catch(
+  const live = await discoverCodexCatalogFromProcess(command, cwd, environment, timeoutMs).catch(
     () => undefined,
   );
   if (live) return live;
@@ -626,13 +656,14 @@ async function discoverCodexCatalogFromProcess(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  timeoutMs: number,
 ): Promise<CodeAgentModelCatalog | undefined> {
   return withJsonlProcess(
     RUNTIME_PROVIDER.CODEX,
     command,
     cwd,
     async (process, progress) => {
-      await initializeCodex(process, progress);
+      await initializeCodex(process, timeoutMs, progress);
       const models: CodeAgentModelMetadata[] = [];
       let cursor: string | undefined;
       do {
@@ -642,6 +673,7 @@ async function discoverCodexCatalogFromProcess(
             method: "model/list",
             params: { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) },
           }),
+          timeoutMs,
         );
         const result = asRecord(response.result);
         progress.stage = "decode_catalog";
@@ -657,7 +689,11 @@ async function discoverCodexCatalogFromProcess(
 }
 
 /** Completes the Codex app-server handshake; a bounded wait guards the initialize reply. */
-async function initializeCodex(process: JsonlProcess, progress?: CatalogProgress): Promise<void> {
+async function initializeCodex(
+  process: JsonlProcess,
+  timeoutMs: number,
+  progress?: CatalogProgress,
+): Promise<void> {
   if (progress) progress.stage = "initialize";
   await within(
     process.request({
@@ -671,6 +707,7 @@ async function initializeCodex(process: JsonlProcess, progress?: CatalogProgress
         capabilities: { experimentalApi: false },
       },
     }),
+    timeoutMs,
   );
   if (progress) progress.stage = "initialized";
   await process.send({ method: "initialized", params: {} });
@@ -791,8 +828,8 @@ function catalogErrorMessage(error: unknown): string {
 
 /**
  * Pi's catalog comes from the embedded SDK, in this process, and is bounded by `within` like every
- * spawned provider's, for `PI_CATALOG_DISCOVERY_TIMEOUT_MS`. A discovery that fails or outlives the
- * deadline leaves Pi out of this pass
+ * spawned provider's, for `timeoutMs` (production's is `PI_CATALOG_DISCOVERY_TIMEOUT_MS`). A
+ * discovery that fails or outlives the deadline leaves Pi out of this pass
  * (so nothing is cached for it) and is logged with the vocabulary of `withJsonlProcess`.
  *
  * The deadline abandons the SDK call; it cannot stop it. `discoverPiModels` takes no AbortSignal,
@@ -803,6 +840,7 @@ export async function discoverPiCatalog(
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
   discover: PiModelDiscovery,
+  timeoutMs: number,
   force = false,
 ): Promise<CodeAgentModelCatalog | undefined> {
   const startedAt = performance.now();
@@ -814,7 +852,7 @@ export async function discoverPiCatalog(
         environment: definedEnvironment(environment),
         ...(force ? { force: true } : {}),
       }),
-      PI_CATALOG_DISCOVERY_TIMEOUT_MS,
+      timeoutMs,
     );
     return {
       provider: RUNTIME_PROVIDER.PI,
@@ -873,12 +911,13 @@ function within<T>(
 /** Collects a `--version` child's output, killing it if it outlives the probe budget. */
 export async function versionProbeOutput(
   process: ReturnType<CodeAgentProbe["spawn"]>,
+  timeoutMs: number = VERSION_PROBE_TIMEOUT_MS,
 ): Promise<{ output: string; exitCode: number }> {
   return withDeadline(
     Promise.all([new Response(process.stdout).text(), process.exited]).then(
       ([output, exitCode]) => ({ output, exitCode }),
     ),
-    VERSION_PROBE_TIMEOUT_MS,
+    timeoutMs,
     () => {
       process.kill?.();
       return new Error("runtime version probe timed out");

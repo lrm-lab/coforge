@@ -10,13 +10,16 @@ import { inventoryCachePath } from "#src/code-agent/runtime-inventory-cache";
 import { captureDaemonLogs } from "./log-capture";
 
 /** Pi's model discovery runs in this process, so a test forces a hung one through `piModels`.
- * The test waits out the real deadline, so it needs a runner timeout above it; the margin covers
- * a loaded machine, not the product's bound. */
-const PI_DEADLINE_TEST_TIMEOUT_MS = PI_CATALOG_DISCOVERY_TIMEOUT_MS + 5_000;
+ * The test waits out a short injected deadline instead of production's, so it needs a runner
+ * timeout above that one; the margin covers a loaded machine, not the product's bound. */
+const PI_DEADLINE_MS = 100;
+const PI_DEADLINE_TEST_TIMEOUT_MS = PI_DEADLINE_MS + 5_000;
 
 test(
   "a Pi discovery that never settles ends at the catalog deadline, is not cached, and its late failure is observed",
   async () => {
+    // Production's Pi discovery waits this long: the SDK's refresh cap plus one catalog wait.
+    expect(PI_CATALOG_DISCOVERY_TIMEOUT_MS).toBe(10_000);
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-pi-deadline-state-"));
     const home = await mkdtemp(join(tmpdir(), "coforge-pi-deadline-home-"));
     // Both key files exist, so a catalog that came back would be cached rather than skipped.
@@ -37,6 +40,7 @@ test(
             cwd: home,
             environment: { HOME: home, PATH: "" },
             piModels: () => hungDiscovery,
+            piCatalogDiscoveryTimeoutMs: PI_DEADLINE_MS,
             probe: {
               which: () => undefined,
               spawn: () => ({ stdout: new Blob([]).stream(), exited: Promise.resolve(0) }),
@@ -48,7 +52,7 @@ test(
       });
 
       // The inventory is not held past the deadline, and Pi is simply absent from this pass.
-      expect(result.elapsedMs).toBeLessThan(PI_CATALOG_DISCOVERY_TIMEOUT_MS + 2_000);
+      expect(result.elapsedMs).toBeLessThan(PI_DEADLINE_MS + 2_000);
       expect(result.catalogs.map((catalog) => catalog.provider)).toEqual(["coforge"]);
       expect(await Bun.file(inventoryCachePath(stateDirectory)).exists()).toBe(false);
 
@@ -58,13 +62,11 @@ test(
       expect(failure?.properties).toMatchObject({
         provider: "pi",
         stage: "get_available_models",
-        error_message: `model catalog discovery timed out after ${PI_CATALOG_DISCOVERY_TIMEOUT_MS} ms`,
+        error_message: `model catalog discovery timed out after ${PI_DEADLINE_MS} ms`,
         outcome: "unavailable",
         discovery_id: expect.any(String),
       });
-      expect(failure?.properties.elapsed_ms).toBeGreaterThanOrEqual(
-        PI_CATALOG_DISCOVERY_TIMEOUT_MS,
-      );
+      expect(failure?.properties.elapsed_ms).toBeGreaterThanOrEqual(PI_DEADLINE_MS);
 
       // The abandoned discovery still runs in-process. When it fails, nothing awaits it any more.
       // The runner fails a test on an unhandled rejection, so reaching the end proves the failure

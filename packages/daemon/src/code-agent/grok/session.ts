@@ -13,14 +13,13 @@ import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { GrokConnection } from "./connection";
 import { GrokTurnEvents } from "./update-events";
 
+/** How long a production session waits for each ACP answer. */
 export const ACP_TIMEOUT_MS = 30_000;
 class GrokAcpTimeoutError extends Error {
   constructor() {
     super("Grok ACP operation timed out");
   }
 }
-const bounded = <T>(work: Promise<T>) =>
-  withDeadline(work, ACP_TIMEOUT_MS, () => new GrokAcpTimeoutError());
 // Stop reasons that end a turn normally; `cancelled` is an interruption and any other one failed.
 const COMPLETED_STOP_REASONS = new Set<unknown>([
   "end_turn",
@@ -47,8 +46,9 @@ type Turn = {
 export async function createGrokSession(
   options: AgentSessionOptions,
   command: readonly string[],
+  acpTimeoutMs: number,
 ): Promise<AgentSession> {
-  const session = new GrokSession(options, command);
+  const session = new GrokSession(options, command, acpTimeoutMs);
   try {
     await session.open();
     return session;
@@ -80,6 +80,7 @@ class GrokSession implements AgentSession {
   constructor(
     private readonly options: AgentSessionOptions,
     command: readonly string[],
+    private readonly acpTimeoutMs: number,
   ) {
     const argv = [
       ...command,
@@ -120,9 +121,13 @@ class GrokSession implements AgentSession {
     });
   }
 
+  #bounded<T>(work: Promise<T>) {
+    return withDeadline(work, this.acpTimeoutMs, () => new GrokAcpTimeoutError());
+  }
+
   async open() {
     const agent = this.#transport.connection.agent;
-    const initialized = await bounded(
+    const initialized = await this.#bounded(
       agent.request("initialize", {
         protocolVersion: 1,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
@@ -140,7 +145,7 @@ class GrokSession implements AgentSession {
       methods.find((m) => m.id === "cached_token") ??
       methods.find((m) => m.id === "xai.api_key");
     if (!method) throw new Error("Grok noninteractive authentication is unavailable");
-    await bounded(
+    await this.#bounded(
       agent.request("authenticate", { methodId: method.id, _meta: { headless: true } }),
     );
     const params = { cwd: this.options.agentWorkspaceDirectory, mcpServers: [] };
@@ -155,7 +160,7 @@ class GrokSession implements AgentSession {
     let resuming = !!this.options.sessionId && this.options.sessionMode !== "create";
     let replaced: string | undefined;
     const create = () =>
-      bounded(
+      this.#bounded(
         agent.request("session/new", {
           ...params,
           _meta: {
@@ -167,7 +172,7 @@ class GrokSession implements AgentSession {
     const load = async () => {
       if (!canLoad) throw new Error("Grok cannot resume sessions: ACP loadSession is unavailable");
       try {
-        return await bounded(
+        return await this.#bounded(
           agent.request("session/load", {
             ...params,
             sessionId: this.options.sessionId!,
@@ -201,7 +206,7 @@ class GrokSession implements AgentSession {
         : nonEmptyString(asRecord(asRecord(state)?.models)?.currentModelId);
     if ((selected && selected !== "default") || this.options.runtime?.reasoning) {
       if (!modelId) throw new Error("Grok current model is unavailable");
-      await bounded(
+      await this.#bounded(
         agent.request("session/set_model", {
           sessionId,
           modelId,
@@ -309,7 +314,7 @@ class GrokSession implements AgentSession {
   async #waitForAdmission<T>(admitted: ReturnType<typeof Promise.withResolvers<T>>) {
     this.#pendingAdmissions.add(admitted);
     try {
-      return await bounded(admitted.promise);
+      return await this.#bounded(admitted.promise);
     } catch (error) {
       // An unanswered admission has an unknown delivery outcome. Close its native request
       // before rejecting, so neither a late acceptance nor queued retries can escape the fence.
@@ -456,7 +461,7 @@ class GrokSession implements AgentSession {
         sessionId: this.#identity.sessionId,
       });
       check();
-      await bounded(stopped.promise);
+      await this.#bounded(stopped.promise);
     } finally {
       this.#turnChanged.delete(check);
       this.#interrupting = false;
