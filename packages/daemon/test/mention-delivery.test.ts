@@ -315,6 +315,51 @@ test("a mention for an Agent whose process exited is refused as unknown and wake
   }
 });
 
+test("stop settles a mention pending in a busy turn as rejected, never as drained", async () => {
+  const h = await harness();
+  try {
+    h.emit({ type: "progress" });
+    await h.deliver(1, h.envelope(1));
+    await h.runtime.stopAgent("agent-a");
+    expect(h.frames.at(-1)).toEqual({
+      kind: "terminal",
+      deliveryId: "delivery-1",
+      code: "DELIVERY_REJECTED",
+    });
+    h.emit({ type: "completed", status: "interrupted" });
+    expect(h.frames.some((frame) => frame.kind === "ack")).toBe(false);
+  } finally {
+    await h.runtime.stop();
+  }
+});
+
+test("stop rejects tracked mentions still queued behind a blocked notice", async () => {
+  const pending = Promise.withResolvers<void>();
+  const h = await harness({ noticeGate: pending.promise });
+  const first = h.deliver(1, h.envelope(1));
+  void first.catch(() => {});
+  await h.noticeWritten;
+  const queued = h.deliver(2, h.envelope(2));
+  void queued.catch(() => {});
+  try {
+    await h.runtime.stopAgent("agent-a");
+    await Promise.allSettled([first, queued]);
+    expect(h.frames.filter((frame) => frame.kind === "terminal")).toEqual([
+      { kind: "terminal", deliveryId: "delivery-2", code: "DELIVERY_REJECTED" },
+      { kind: "terminal", deliveryId: "delivery-1", code: "DELIVERY_REJECTED" },
+    ]);
+    expect(h.frames.some((frame) => frame.kind === "ack")).toBe(false);
+    await h.runtime.startAgent("agent-a", config);
+    pending.resolve();
+    h.emit({ type: "completed", status: "completed" });
+    expect(h.frames.some((frame) => frame.kind === "ack")).toBe(false);
+  } finally {
+    pending.resolve();
+    await Promise.allSettled([first, queued]);
+    await h.runtime.stop();
+  }
+});
+
 test("a mention for a stopped Agent is refused as unknown, not handed back as no_process", async () => {
   const { runtime, frames, envelope, deliver } = await harness();
   try {

@@ -157,6 +157,47 @@ test("startup spawn failure permits the manager to retry", async () => {
   expect(starts).toBe(2);
 });
 
+test("dispose allows five seconds for graceful exit before force terminating the tree", async () => {
+  const exited = Promise.withResolvers<number>();
+  const signals: boolean[] = [];
+  const waits: number[] = [];
+  let force = false;
+  const tree = {
+    child: {
+      pid: 1,
+      exited: exited.promise,
+      exitCode: null,
+      stdin: { write: () => true, end: () => undefined, flush: async () => undefined },
+      stdout: {
+        async *[Symbol.asyncIterator]() {
+          await exited.promise;
+          yield* [];
+        },
+      },
+      stderr: {
+        async *[Symbol.asyncIterator]() {
+          await exited.promise;
+          yield* [];
+        },
+      },
+      kill: () => undefined,
+    },
+    async terminate(forced: boolean) {
+      signals.push(forced);
+      force = forced;
+      if (forced) exited.resolve(137);
+    },
+    async waitForExit(timeoutMs: number) {
+      waits.push(timeoutMs);
+      return force;
+    },
+  } satisfies OwnedProcessTree;
+  const process = new JsonlProcess(["unused"], tmpdir(), {}, { spawn: () => tree });
+  await process.dispose();
+  expect(signals).toEqual([false, true]);
+  expect(waits[0]).toBe(5_000);
+});
+
 test("startup cleanup probe failure blocks a replacement", async () => {
   const tree = {
     child: {

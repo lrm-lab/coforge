@@ -68,6 +68,7 @@ export class AgentProcessManager {
   readonly #restartConfigs = new Map<string, AgentRestartConfig>();
   readonly #states = new Map<string, AgentStateMachine>();
   readonly #stopping = new Set<string>();
+  readonly #stops = new Map<string, Promise<void>>();
   /** Releases in flight (`release`), which a `stop` waits out before stopping. */
   readonly #releases = new Map<string, Promise<void>>();
   /** The Activity `clientSeq` last sent for this Agent. Kept in its own map,
@@ -223,7 +224,15 @@ export class AgentProcessManager {
     }
   }
 
-  async stop(agentId: string): Promise<void> {
+  stop(agentId: string): Promise<void> {
+    const existing = this.#stops.get(agentId);
+    if (existing) return existing;
+    const stopping = this.#stop(agentId).finally(() => this.#stops.delete(agentId));
+    this.#stops.set(agentId, stopping);
+    return stopping;
+  }
+
+  async #stop(agentId: string): Promise<void> {
     // A stop overrides a release in flight: it waits that out, then forgets the Agent as usual.
     const releasing = this.#releases.get(agentId);
     if (releasing) await releasing.catch(() => {});

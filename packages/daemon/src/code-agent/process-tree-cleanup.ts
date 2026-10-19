@@ -2,7 +2,7 @@ import type { OwnedChildProcess, OwnedProcessTree } from "#src/platform/process-
 import { AgentProcessCleanupError } from "./contract";
 
 /** How long each rung of the cleanup ladder waits for the tree to exit. */
-export const PROCESS_TREE_EXIT_GRACE_MS = 1_000;
+export const PROCESS_TREE_EXIT_GRACE_MS = 5_000;
 
 /**
  * The one cleanup ladder a code-agent process runs over the tree it owns: ask politely, wait a

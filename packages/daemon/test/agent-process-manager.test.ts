@@ -438,6 +438,28 @@ describe("AgentProcessManager", () => {
     expect(starts).toBe(1);
   });
 
+  test("concurrent stops wait for the same cleanup instead of rejecting each other", async () => {
+    const exited = Promise.withResolvers<void>();
+    const session = sessionSpy();
+    session.dispose = async () => {
+      session.disposeCalls++;
+      await exited.promise;
+    };
+    const manager = new AgentProcessManager(() => ({
+      provider: "pi",
+      createAgentSession: async () => session,
+    }));
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "concurrent-stop"),
+    });
+    const first = manager.stop("agent-1");
+    const second = manager.stop("agent-1");
+    void second.catch(() => {});
+    exited.resolve();
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+    expect(session.disposeCalls).toBe(1);
+  });
+
   test("rejects a replacement start until stop confirms the old session exited", async () => {
     let release!: () => void;
     const exited = new Promise<void>((resolve) => (release = resolve));

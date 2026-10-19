@@ -157,6 +157,7 @@ export class AgentMessageAttentionIndex {
       seenMessageIds: Set<string>;
       notified: Set<string>;
       notificationAttempts: Map<string, Promise<void>>;
+      cancellation: AbortController;
     }
   >();
   readonly #attention = new Map<string, Map<string, MessageAttention>>();
@@ -589,7 +590,9 @@ export class AgentMessageAttentionIndex {
     // Same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
     this.hold.busy(agentId);
     try {
-      await session.notify(notice, conversation ? { conversation } : undefined);
+      await this.#acceptNotice(generation.cancellation.signal, () =>
+        session.notify!(notice, conversation ? { conversation } : undefined),
+      );
     } finally {
       if (this.#runtimes.session(agentId) === session) this.hold.noticeSettled?.(agentId);
     }
@@ -745,14 +748,18 @@ export class AgentMessageAttentionIndex {
       ? { conversationId: message.conversationId, target: message.target }
       : undefined;
     const notification = Promise.resolve()
-      .then(() =>
-        conversation || trackedIds.length
-          ? session.notify!(notice, {
-              ...(trackedIds.length ? { deliveryIds: trackedIds } : {}),
-              ...(conversation ? { conversation } : {}),
-            })
-          : session.notify!(notice),
-      )
+      .then(() => {
+        if (this.#generations.get(message.agentId) !== generation)
+          throw new Error("Agent notice was cancelled");
+        return this.#acceptNotice(generation.cancellation.signal, () =>
+          conversation || trackedIds.length
+            ? session.notify!(notice, {
+                ...(trackedIds.length ? { deliveryIds: trackedIds } : {}),
+                ...(conversation ? { conversation } : {}),
+              })
+            : session.notify!(notice),
+        );
+      })
       .then(() => {
         if (this.#generations.get(message.agentId) === generation) {
           generation.notified.add(message.deliveryId);
@@ -816,10 +823,24 @@ export class AgentMessageAttentionIndex {
     generation.seenMessageIds.add(messageId);
   }
 
+  /** Each notice removes its own listener at settlement, even in a long-lived generation. */
+  async #acceptNotice(signal: AbortSignal, send: () => Promise<void>): Promise<void> {
+    signal.throwIfAborted();
+    const cancelled = Promise.withResolvers<never>();
+    const abort = () => cancelled.reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+      await Promise.race([send(), cancelled.promise]);
+    } finally {
+      signal.removeEventListener("abort", abort);
+    }
+  }
+
   #generation(agentId: string) {
     const existing = this.#generations.get(agentId);
     if (existing) return existing;
     const generation = {
+      cancellation: new AbortController(),
       seenDeliveryIds: new Set<string>(),
       seenMessageIds: new Set<string>(),
       notified: new Set<string>(),
@@ -1308,9 +1329,11 @@ export class AgentMessageAttentionIndex {
     this.#readContextCounters.set(agentId, state.nextReadOrder - 1);
   }
 
-  clearAgent(agentId: string): void {
+  clearAgent(agentId: string, { cancelNotices = false }: { cancelNotices?: boolean } = {}): void {
     this.#memoryUpdates.clearAgent(agentId);
     this.#hydrated.delete(agentId);
+    if (cancelNotices)
+      this.#generations.get(agentId)?.cancellation.abort(new Error("Agent notice was cancelled"));
     this.#generations.delete(agentId);
     this.#attention.delete(agentId);
     this.#modelSeen.delete(agentId);

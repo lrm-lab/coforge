@@ -232,6 +232,8 @@ export interface AgentSession {
   subscribe(listener: (event: AgentRuntimeEvent) => void): () => void;
   interrupt(): Promise<void>;
   onExit(listener: () => void): () => void;
+  /** Terminal stop: reject undelivered input and begin runtime cleanup without waiting for a
+   * natural turn end. Resolve only after cleanup; reject if process exit cannot be confirmed. */
   dispose(): Promise<void>;
 }
 

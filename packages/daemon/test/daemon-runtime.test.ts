@@ -6105,14 +6105,15 @@ describe("DaemonRuntime", () => {
     try {
       await harness.runtime.startAgent("agent-a", config);
       const delivery = harness.delivery(1);
+      void delivery.catch(() => {});
       await entered.promise;
       const stopping = harness.runtime.stopAgent("agent-a");
       gate.resolve();
-      await delivery;
+      await expect(delivery).rejects.toThrow("cancelled");
       await stopping;
       await harness.runtime.startAgent("agent-a", config);
       expect(activities).toEqual(["starting", "stopped", "starting"]);
-      expect(harness.acknowledgements).toEqual(["delivery-1"]);
+      expect(harness.acknowledgements).toEqual([]);
     } finally {
       gate.resolve();
       await harness.runtime.stop();
@@ -6562,7 +6563,7 @@ describe("DaemonRuntime", () => {
     );
     const stopping = harness.runtime.stopAgent("agent-a");
     rejectRecovery(new Error("recovery rejected"));
-    await expect(launching).rejects.toThrow("recovery rejected");
+    await expect(launching).rejects.toThrow("cancelled");
     await disposed;
 
     expect(await startDuringStop).toContain("stopping");
@@ -6639,22 +6640,196 @@ describe("DaemonRuntime", () => {
     await harness.runtime.stop();
   });
 
-  test("stop lets current input finish without continuing queued items", async () => {
+  test.each(["agent", "daemon"])(
+    "%s stop waits for creation even after queued recovery is cancelled",
+    async (ending) => {
+      const creating = Promise.withResolvers<void>();
+      const created = Promise.withResolvers<void>();
+      const harness = await queueHarness({
+        launch() {
+          creating.resolve();
+          return created.promise;
+        },
+      });
+      const launching = harness.runtime.startAgent("agent-a", config);
+      void launching.catch(() => {});
+      await creating.promise;
+      const extended = harness.runtime.startAgent(
+        "agent-a",
+        config,
+        undefined,
+        "extra-recovery",
+        recovery,
+      );
+      void extended.catch(() => {});
+      let stopped = false;
+      const stopping = (
+        ending === "agent" ? harness.runtime.stopAgent("agent-a") : harness.runtime.stop()
+      ).then(() => {
+        stopped = true;
+      });
+      try {
+        await Bun.sleep(0);
+        expect(stopped).toBe(false);
+        created.resolve();
+        await stopping;
+        expect(harness.runtime.agentProcessManager.size).toBe(0);
+        await expect(launching).rejects.toThrow("stopping");
+        await expect(extended).rejects.toThrow();
+      } finally {
+        created.resolve();
+        await Promise.allSettled([launching, extended, stopping]);
+        await harness.runtime.stop();
+      }
+    },
+  );
+
+  test("stop reports cleanup failure from a session whose creation was still pending", async () => {
+    const creating = Promise.withResolvers<void>();
+    const created = Promise.withResolvers<void>();
+    const activities: string[] = [];
+    const harness = await queueHarness({
+      launch() {
+        creating.resolve();
+        return created.promise;
+      },
+      dispose() {
+        throw new AgentProcessCleanupError();
+      },
+      activity(activity) {
+        activities.push(activity.detailKind);
+      },
+    });
+    const launching = harness.runtime.startAgent("agent-a", config);
+    void launching.catch(() => {});
+    await creating.promise;
+    const stopping = harness.runtime.stopAgent("agent-a");
+    created.resolve();
+    try {
+      await expect(stopping).rejects.toThrow();
+      await expect(launching).rejects.toThrow("process tree did not exit");
+      expect(activities).toContain("runtime_error");
+      await expect(harness.runtime.startAgent("agent-a", config)).rejects.toThrow("stopping");
+    } finally {
+      await harness.runtime.stop().catch(() => {});
+    }
+  });
+
+  test("daemon shutdown disposes a session before awaiting its launch recovery notice", async () => {
+    const entered = Promise.withResolvers<void>();
+    const pending = Promise.withResolvers<void>();
+    const harness = await queueHarness({
+      notify() {
+        entered.resolve();
+        return pending.promise;
+      },
+      dispose() {
+        pending.reject(new Error("disposed"));
+      },
+    });
+    const launching = harness.runtime.startAgent(
+      "agent-a",
+      config,
+      undefined,
+      "recovery",
+      recovery,
+    );
+    void launching.catch(() => {});
+    await entered.promise;
+    const stopping = harness.runtime.stop();
+    try {
+      expect(
+        await Promise.race([stopping.then(() => "stopped"), Bun.sleep(100).then(() => "blocked")]),
+      ).toBe("stopped");
+      await expect(launching).rejects.toThrow();
+      expect(harness.acknowledgements).toEqual([]);
+    } finally {
+      pending.reject(new Error("test cleanup"));
+      await Promise.allSettled([launching, stopping]);
+    }
+  });
+
+  test("stop disposes a session before waiting for its queued notice to settle", async () => {
+    const entered = Promise.withResolvers<void>();
+    const pending = Promise.withResolvers<void>();
+    const harness = await queueHarness({
+      notify() {
+        entered.resolve();
+        return pending.promise;
+      },
+      dispose() {
+        pending.reject(new Error("notice cancelled by disposal"));
+      },
+    });
+    await harness.runtime.startAgent("agent-a", config);
+    const delivery = harness.delivery(1);
+    void delivery.catch(() => {});
+    await entered.promise;
+    const stopping = harness.runtime.stopAgent("agent-a");
+    try {
+      expect(
+        await Promise.race([stopping.then(() => "stopped"), Bun.sleep(100).then(() => "blocked")]),
+      ).toBe("stopped");
+      await expect(delivery).rejects.toThrow("cancelled");
+      expect(harness.acknowledgements).toEqual([]);
+      await harness.runtime.startAgent("agent-a", config);
+      expect(harness.sessions()).toBe(2);
+    } finally {
+      pending.reject(new Error("test cleanup"));
+      await Promise.allSettled([delivery, stopping]);
+      await harness.runtime.stop();
+    }
+  });
+
+  test("stop cancels a notice even if the provider reports acceptance only after replacement", async () => {
+    const entered = Promise.withResolvers<void>();
+    const pending = Promise.withResolvers<void>();
+    const harness = await queueHarness({
+      notify() {
+        entered.resolve();
+        return pending.promise;
+      },
+    });
+    await harness.runtime.startAgent("agent-a", config);
+    const delivery = harness.delivery(1);
+    void delivery.catch(() => {});
+    await entered.promise;
+    const stopping = harness.runtime.stopAgent("agent-a");
+    try {
+      expect(
+        await Promise.race([stopping.then(() => "stopped"), Bun.sleep(100).then(() => "blocked")]),
+      ).toBe("stopped");
+      await expect(delivery).rejects.toThrow("cancelled");
+      await harness.runtime.startAgent("agent-a", config);
+      pending.resolve();
+      await Bun.sleep(0);
+      expect(harness.acknowledgements).toEqual([]);
+      expect(harness.runningAgentIds()).toEqual(["agent-a"]);
+    } finally {
+      pending.resolve();
+      await Promise.allSettled([delivery, stopping]);
+      await harness.runtime.stop();
+    }
+  });
+
+  test("stop cancels current and queued input without acknowledging either", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     const harness = await queueHarness({ notify: () => gate });
     await harness.runtime.startAgent("agent-a", config);
     const current = harness.delivery(1);
+    void current.catch(() => {});
     const queued = harness.delivery(2);
     void queued.catch(() => {});
     await Bun.sleep(0);
     const stop = harness.runtime.stopAgent("agent-a");
     release();
 
-    await Promise.all([current, stop]);
+    await expect(current).rejects.toThrow("cancelled");
+    await stop;
     await expect(queued).rejects.toThrow("stopping");
     expect(harness.notices).toHaveLength(1);
-    expect(harness.acknowledgements).toEqual(["delivery-1"]);
+    expect(harness.acknowledgements).toEqual([]);
     await harness.runtime.stop();
   });
 

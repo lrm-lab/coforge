@@ -1790,8 +1790,15 @@ export class DaemonRuntime {
         ...(resumePrompt !== undefined ? [enqueueTurn(resumePrompt)] : []),
       ];
       if (!inputs.length) return existingLaunch;
-      const extendedLaunch = Promise.all([existingLaunch, ...inputs])
-        .then(([runtime]) => runtime as AgentRuntime)
+      const inputCompletion = Promise.all(inputs);
+      // Input can be cancelled before provider creation finishes. Keep the creation promise as
+      // the launch fence, while observing an early input rejection until creation settles.
+      void inputCompletion.catch(() => {});
+      const extendedLaunch = existingLaunch
+        .then(async (runtime) => {
+          await inputCompletion;
+          return runtime;
+        })
         .finally(() => {
           if (this.#agentLaunches.get(agentId) === extendedLaunch)
             this.#agentLaunches.delete(agentId);
@@ -2176,6 +2183,11 @@ export class DaemonRuntime {
     if (!queue) return;
     queue.closed = true;
     for (const item of queue.items.splice(0)) {
+      if (item.kind === "delivery")
+        this.#mentionDeliveries.drop(
+          item.message,
+          MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
+        );
       item.completion.reject(error);
     }
     if (!queue.drain) this.#agentInputQueues.delete(agentId);
@@ -2529,7 +2541,8 @@ export class DaemonRuntime {
       if (this.#currentActivityLaunches.get(agentId) === launch) {
         this.#activityPublisher.forgetBusy(agentId);
         this.#disposeLaunchObservations(agentId);
-        this.#currentActivityLaunches.delete(agentId);
+        // An explicit Stop still needs this identity to report its final outcome.
+        if (!this.#agentStops.has(agentId)) this.#currentActivityLaunches.delete(agentId);
       }
       throw error;
     }
@@ -3530,6 +3543,10 @@ export class DaemonRuntime {
     this.#stoppingAgents.add(agentId);
     this.#sessionReferences.delete(agentId);
     this.#closeAgentInputQueue(agentId, new Error(`Agent runtime is stopping: ${agentId}`));
+    // Invalidate acceptance before disposal: a late native reply cannot acknowledge a cancelled
+    // delivery or attach its attention to the replacement session.
+    this.#messageAttention.clearAgent(agentId, { cancelNotices: true });
+    void this.#mentionDeliveries.cancelAgent(agentId);
     this.#agentProcessManager.session(agentId)?.cancelPendingNotices?.();
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
     activityLaunch?.startup?.dispose();
@@ -3558,10 +3575,19 @@ export class DaemonRuntime {
 
   async #stopAgent(agentId: string): Promise<void> {
     const launch = this.#agentLaunches.get(agentId);
-    if (launch) await Promise.allSettled([launch]);
+    const activityLaunch = this.#currentActivityLaunches.get(agentId);
     const inputDrain = this.#agentInputQueues.get(agentId)?.drain;
+    // Disposal rejects input waiting for a native turn boundary. Waiting for that input (or
+    // launch recovery using it) first would prevent the very disposal that releases it.
+    await this.#releaseAgentRuntime(agentId, { retainLaunch: true });
+    if (launch) await Promise.allSettled([launch]);
+    // A provider still creating its session at Stop may register and fail cleanup afterwards.
+    if (this.#agentProcessManager.isStopping(agentId)) throw new AgentProcessCleanupError();
+    await this.#agentProcessManager.stop(agentId);
     if (inputDrain) await Promise.allSettled([inputDrain]);
-    await this.#releaseAgentRuntime(agentId, true);
+    if (activityLaunch)
+      this.#activityPublisher.publish(agentId, activityLaunch, this.#stoppedActivity(agentId));
+    this.#currentActivityLaunches.delete(agentId);
   }
 
   /**
@@ -3569,7 +3595,10 @@ export class DaemonRuntime {
    * Agent API key is fire-and-forget alongside it, so a failed or slow revoke never fails or
    * delays the Stop. A failed revoke is logged and not retried.
    */
-  async #releaseAgentRuntime(agentId: string, publishStopped = false): Promise<void> {
+  async #releaseAgentRuntime(
+    agentId: string,
+    { retainLaunch = false }: { retainLaunch?: boolean } = {},
+  ): Promise<void> {
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
     activityLaunch?.startup?.dispose();
     void this.#revokeAgentApiKey(agentId, this.#agentApiKeys.get(agentId)).catch((error) => {
@@ -3583,10 +3612,8 @@ export class DaemonRuntime {
     // fresh start should not inherit a backoff/fence from a process that no longer exists.
     this.#runtimeErrorHold.forget(agentId);
     this.#sendAgentStatus(agentId, "inactive");
-    if (publishStopped && activityLaunch)
-      this.#activityPublisher.publish(agentId, activityLaunch, this.#stoppedActivity(agentId));
     this.#activityPublisher.forgetBusy(agentId);
-    this.#currentActivityLaunches.delete(agentId);
+    if (!retainLaunch) this.#currentActivityLaunches.delete(agentId);
   }
 
   /** Forgets one ended launch's observation state without affecting another Agent. */
@@ -4364,8 +4391,17 @@ export class DaemonRuntime {
     this.#compactionTracker.disposeAll();
     this.#runtimeErrorHold.disposeAll();
     this.#lastContextUsage.clear();
-    for (const agentId of this.#agentInputQueues.keys())
+    for (const agentId of new Set([
+      ...this.#agentInputQueues.keys(),
+      ...this.#agentLaunches.keys(),
+      ...this.#agentProcessManager.activeAgentIds(),
+    ])) {
+      this.#stoppingAgents.add(agentId);
       this.#closeAgentInputQueue(agentId, new Error("daemon runtime is stopping"));
+      this.#messageAttention.clearAgent(agentId, { cancelNotices: true });
+      void this.#mentionDeliveries.cancelAgent(agentId);
+      this.#agentProcessManager.session(agentId)?.cancelPendingNotices?.();
+    }
     this.#unsubscribeAll();
     // A start still waiting for its first cloud connection would otherwise hold this stop up for
     // as long as the cloud stays unreachable.
@@ -4443,14 +4479,6 @@ export class DaemonRuntime {
   }
 
   async #stop(shutdownReason: DaemonShutdownReason): Promise<void> {
-    if (this.#startPromise) {
-      try {
-        await this.#startPromise;
-      } catch {
-        // Startup cleanup below still needs to run after a failed start.
-      }
-    }
-    await Promise.allSettled(this.#agentLaunches.values());
     // No retry timer may outlive this daemon instance: a launch that was mid-cooldown left a
     // "starting" record behind, which the next instance repairs and recovers (`recover()`).
     this.#agentControl.dispose();
@@ -4461,15 +4489,30 @@ export class DaemonRuntime {
       launchId: this.#currentActivityLaunches.get(id)?.launchId,
     }));
     let shutdownError: unknown;
+    // Start cleanup before awaiting any launch or input that cleanup itself must release.
     try {
       await this.#agentProcessManager.shutdown();
+    } catch (error) {
+      shutdownError = error;
+    }
+    if (this.#startPromise) await Promise.allSettled([this.#startPromise]);
+    await Promise.allSettled(this.#agentLaunches.values());
+    await Promise.allSettled(
+      [...this.#agentInputQueues.values()].flatMap((queue) => (queue.drain ? [queue.drain] : [])),
+    );
+    try {
+      // Reconcile sessions whose creation finished during shutdown, including failed cleanup.
+      for (const agentId of this.#stoppingAgents)
+        if (this.#agentProcessManager.isStopping(agentId)) throw new AgentProcessCleanupError();
+      await this.#agentProcessManager.shutdown();
+      this.#stoppingAgents.clear();
       for (const { id, session, launchId } of sessions) {
         if (launchId)
           await this.#agentControl.stopped(id, launchId, await session?.readSessionIdentity?.());
         await this.#agentSessions.replay(id);
       }
     } catch (error) {
-      shutdownError = error;
+      shutdownError ??= error;
     }
     for (const agentId of activeAgentIds) this.#sendAgentStatus(agentId, "inactive");
     this.#currentActivityLaunches.clear();

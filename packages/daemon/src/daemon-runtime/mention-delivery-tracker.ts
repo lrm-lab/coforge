@@ -242,6 +242,18 @@ export class MentionDeliveryTracker {
     );
   }
 
+  /** Explicit Stop cancels received and pending notices; cancellation is never a drain. */
+  async cancelAgent(agentId: string): Promise<void> {
+    const unsettled = [...this.#tracked.values()].filter(
+      (tracked) => tracked.message.agentId === agentId && tracked.state !== "drained",
+    );
+    await Promise.all(
+      unsettled.map(({ message }) =>
+        this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
+      ),
+    );
+  }
+
   /**
    * The Agent's process is being ended for a restart: each mention
    * still received or pending for it is refused as unknown, so the server keeps it pending and
