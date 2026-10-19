@@ -21,7 +21,7 @@ import { ChangeAgentVisibility } from "#src/server/agents/change-agent-visibilit
 import { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-purge.server";
 import { PrismaChangeAgentVisibilityStore } from "#src/server/db/repositories/agent-visibility-change.repositories.server";
 import { setAgentRole } from "#src/server/agents/agent-role.server";
-import { AppError } from "#src/lib/app-error";
+import { AppError, isAppErrorCode } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { listVisibleAgentModels } from "#src/server/agents/agent-models.server";
 import { AgentAvatars, agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
@@ -30,6 +30,7 @@ import { requireDatabaseClient } from "#src/server/db/client.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { ManageAgents } from "#src/server/agents/manage-agents.server";
 import { AgentDeletion } from "#src/server/agents/agent-deletion.server";
+import { listArchivedAgents } from "#src/server/agents/archived-agents.server";
 import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
 import { userAgentRuntimeControl } from "#src/server/agents/user-agent-control.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -611,6 +612,19 @@ export const getAgentProfile = createServerFn({ method: "GET" })
     if (!result) throw new Error("Agent not found");
     setResponseHeader("cache-control", "no-store");
     return result;
+  });
+
+/** The Workspace's archived Agents for Settings → Workspace profile, newest archive first;
+ * `null` for anyone but a Workspace owner or admin. */
+export const loadArchivedAgents = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context: { user, db, workspaceId } }) => {
+    try {
+      return await listArchivedAgents(db, workspaceId, user.id);
+    } catch (error) {
+      if (isAppErrorCode(error, "ACCESS_DENIED")) return null;
+      throw error;
+    }
   });
 
 export const saveAgentRuntimeCredential = createServerFn({ method: "POST" })

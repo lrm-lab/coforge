@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useHydrated, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Archive, Hash01, RefreshCcw01 } from "@untitledui/icons";
+import { Archive, Hash01 } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -168,7 +168,6 @@ function ArchivedChannelRow({
       <Button
         color="secondary"
         size="sm"
-        iconLeading={RefreshCcw01}
         className="w-full sm:w-auto"
         // While it runs, the visible "Unarchiving…" is the button's name.
         aria-label={

@@ -47,6 +47,8 @@ import {
   setGeneralChannelHidden,
 } from "#src/features/conversations/channels.functions";
 import { ArchivedChannelsGroup } from "#src/features/conversations/archived-channels-group";
+import { ArchivedAgentsGroup } from "#src/features/agents/archived-agents-group";
+import { loadArchivedAgents } from "#src/features/agents/agents.functions";
 import { useRefreshSidebarChannels } from "#src/features/conversations/sidebar-lists";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { WorkspaceDangerZone } from "#src/features/workspaces/workspace-danger-zone";
@@ -82,12 +84,13 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
     avatar: z.literal("choose").optional().catch(undefined),
   }),
   loader: async () => {
-    const [preferences, members, generalChannel, archivedChannels, createdAgents] =
+    const [preferences, members, generalChannel, archivedChannels, archivedAgents, createdAgents] =
       await Promise.all([
         getUserPreferences(),
         loadWorkspaceMembers(),
         loadGeneralChannelHidden(),
         loadArchivedChannels(),
+        loadArchivedAgents(),
         loadMemberAgentPage({ data: { owner: "mine", query: "", limit: MEMBER_PAGE_SIZE } }),
       ]);
     return {
@@ -99,6 +102,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
       })),
       generalChannelHidden: generalChannel?.hidden ?? null,
       archivedChannels,
+      archivedAgents,
       members: {
         actorUserId: members.actorUserId,
         actorRole: members.actorRole,
@@ -126,6 +130,7 @@ function SettingsPage() {
     createdAgents,
     generalChannelHidden,
     archivedChannels,
+    archivedAgents,
   } = Route.useLoaderData();
   const { user: profile, notifications, currentWorkspace } = appRoute.useLoaderData();
   const [notificationPermission, setNotificationPermission] = useState<
@@ -394,8 +399,11 @@ function SettingsPage() {
       onWorkspaceRename={changeWorkspaceName}
       onWorkspaceSlugChange={changeWorkspaceUrl}
       onWorkspaceIconUpload={changeWorkspaceIcon}
-      archivedChannelsGroup={
-        <ArchivedChannelsGroup channels={archivedChannels} timeZone={savedTimeZone} />
+      archivedGroups={
+        <>
+          <ArchivedChannelsGroup channels={archivedChannels} timeZone={savedTimeZone} />
+          <ArchivedAgentsGroup agents={archivedAgents} timeZone={savedTimeZone} />
+        </>
       }
       dangerZone={
         <WorkspaceDangerZone

@@ -128,6 +128,10 @@ These rules apply to `src/features/agents/`.
   and delete (`archivedAgentWorkspaceAssignment`). Admins reach another member's
   Computer only for an archived Agent's workspace; a live Agent's stays its
   Computer owner's.
+- Settings → Workspace profile lists every archived Agent to a Workspace
+  owner/admin (`archived-agents-group.tsx`), each opening its read-only
+  profile. There is no unarchive: archiving revoked its keys, memberships and
+  reminders, and a new Agent may already hold its name.
 - `deleted-agent.tsx` owns archived-sender rendering (grey avatar and `ARCHIVED`
   badge) for every message-history surface. Use it rather than local styling.
 - `agent-avatar-dialog.tsx` is the creator's change-avatar dialog, opened by

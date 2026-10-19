@@ -160,8 +160,8 @@ interface SettingsContentProps {
   /** Changes the Workspace URL; resolves once the page has moved to the new URL. */
   onWorkspaceSlugChange: (slug: string) => Promise<void>;
   onWorkspaceIconUpload: (file: File) => Promise<void>;
-  /** The Archived channels group Settings → Workspace profile shows under the profile. */
-  archivedChannelsGroup?: React.ReactNode;
+  /** The archived channels and Agents groups Settings → Workspace profile shows under the profile. */
+  archivedGroups?: React.ReactNode;
   /** The Danger zone Settings → Workspace profile ends with. */
   dangerZone?: React.ReactNode;
 }
@@ -328,7 +328,7 @@ export function SettingsContent(props: SettingsContentProps) {
                 canChangeSlug={canChangeWorkspaceSlug(props.members.actorRole)}
                 onSlugChange={props.onWorkspaceSlugChange}
                 onIconUpload={props.onWorkspaceIconUpload}
-                archivedChannelsGroup={props.archivedChannelsGroup}
+                archivedGroups={props.archivedGroups}
                 dangerZone={props.dangerZone}
               />
             ) : section === "members" ? (
@@ -1207,7 +1207,7 @@ function WorkspaceProfileSettings({
   canChangeSlug,
   onSlugChange,
   onIconUpload,
-  archivedChannelsGroup,
+  archivedGroups,
   dangerZone,
 }: {
   workspace: SettingsContentProps["workspace"];
@@ -1216,8 +1216,8 @@ function WorkspaceProfileSettings({
   canChangeSlug: boolean;
   onSlugChange: (slug: string) => Promise<void>;
   onIconUpload: (file: File) => Promise<void>;
-  /** The Archived channels group under the profile, when the viewer has one. */
-  archivedChannelsGroup: React.ReactNode;
+  /** The archived channels and Agents groups under the profile, when the viewer has them. */
+  archivedGroups: React.ReactNode;
   /** The Danger zone last on the page, when the viewer has one. */
   dangerZone: React.ReactNode;
 }) {
@@ -1404,7 +1404,7 @@ function WorkspaceProfileSettings({
           </div>
         </SettingsCard>
       </SettingsGroup>
-      {archivedChannelsGroup}
+      {archivedGroups}
       {dangerZone}
     </SettingsPage>
   );
