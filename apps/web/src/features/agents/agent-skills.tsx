@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Folder, Globe01 } from "@untitledui/icons";
+import { ChevronRight, Folder, Globe01 } from "@untitledui/icons";
+import { Button as AriaButton, Disclosure, DisclosurePanel } from "react-aria-components";
 import type { AgentSkillsListResult, AgentSkillsScope } from "@lrm/coforge-sdk/internal";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
 export type AgentSkillsLoadResult =
@@ -19,8 +21,9 @@ type LoadState =
 /**
  * The Profile tab's Skills section: a `Skills (N)` heading, a
  * single loading line, a reason line plus Retry on any non-ready state, and two source-grouped
- * card lists (Global/Workspace) with no directory list, no per-entry source column, and no
- * "loaded" claim. Owner-only, same gate as before (`agent-profile-tab.tsx`).
+ * lists (Global/Workspace) of one-line, expandable skill rows with no directory list, no
+ * per-entry source column, and no "loaded" claim. Owner-only, same gate as before
+ * (`agent-profile-tab.tsx`).
  */
 export function AgentSkills({
   resetKey,
@@ -130,24 +133,7 @@ function SkillGroup({
               </p>
               <div className="mt-2 grid gap-2">
                 {entries.map((entry) => (
-                  <div
-                    key={`${sourcePath}:${entry.name}`}
-                    className="min-w-0 rounded-lg border border-secondary px-3 py-2.5"
-                  >
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <p className="truncate font-medium text-primary">{entry.displayName}</p>
-                      {entry.userInvocable && (
-                        <Badge color="gray" size="sm" className="font-mono">
-                          /{entry.name}
-                        </Badge>
-                      )}
-                    </div>
-                    {entry.description && (
-                      <p className="mt-0.5 line-clamp-2 text-sm text-tertiary">
-                        {entry.description}
-                      </p>
-                    )}
-                  </div>
+                  <SkillRow key={`${sourcePath}:${entry.name}`} entry={entry} />
                 ))}
               </div>
             </div>
@@ -155,6 +141,67 @@ function SkillGroup({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * One skill: a single line (name, `/name` badge, then the description cut off with an ellipsis).
+ * A skill with a description is a disclosure, collapsed by default and never persisted; pressing
+ * the row shows the whole description wrapped below it.
+ */
+function SkillRow({ entry }: { entry: AgentSkillsScope["entries"][number] }) {
+  const name = (
+    <>
+      <span className="max-w-3/5 shrink-0 truncate font-medium text-primary">
+        {entry.displayName}
+      </span>
+      {entry.userInvocable && (
+        <Badge color="gray" size="sm" className="shrink-0 font-mono">
+          /{entry.name}
+        </Badge>
+      )}
+    </>
+  );
+  if (!entry.description) {
+    return (
+      <div className="flex min-w-0 items-center gap-1.5 rounded-lg border border-secondary px-3 py-2 text-sm">
+        <span aria-hidden="true" className="size-4 shrink-0" />
+        {name}
+      </div>
+    );
+  }
+  return (
+    <Disclosure className="min-w-0 rounded-lg border border-secondary">
+      {({ isExpanded }) => (
+        <>
+          <AriaButton
+            slot="trigger"
+            className="flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-left text-sm outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2"
+          >
+            <ChevronRight
+              aria-hidden="true"
+              className={cn(
+                "size-4 shrink-0 text-fg-quaternary transition-transform motion-reduce:transition-none",
+                isExpanded && "rotate-90",
+              )}
+            />
+            {name}
+            {!isExpanded && (
+              <span className="min-w-0 flex-1 truncate text-tertiary">{entry.description}</span>
+            )}
+          </AriaButton>
+          <DisclosurePanel
+            // A collapsed panel is `hidden="until-found"`, which Tailwind's preflight leaves displayed: hide it outright.
+            className={cn(
+              "pr-3 pb-2.5 pl-8.5 text-sm break-words whitespace-pre-line text-tertiary",
+              !isExpanded && "hidden",
+            )}
+          >
+            {entry.description}
+          </DisclosurePanel>
+        </>
+      )}
+    </Disclosure>
   );
 }
 
