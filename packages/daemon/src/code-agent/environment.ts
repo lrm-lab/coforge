@@ -13,15 +13,17 @@ const CLI_BIN_DIRECTORIES = [
   new URL("../../node_modules/.bin/", import.meta.url).pathname,
 ] as const;
 
-/** Env var names the Daemon authors itself: the Agent process capability sockets the launch site
- * (`runtime.ts`) sets directly, and the runtime-context variables `agentRuntimeContextEnvironment`
- * below maps from the same server-authored identity the standing prompt's "Current Runtime
- * Context" section renders. A same-named value from the host environment or an Agent's
- * user-configured `envVars`/adapter `extraEnv` must never reach the Agent process: an Agent's own
- * tools must not be able to spoof the Agent's identity to itself. Cleared here unconditionally, so
- * a call site that omits one of these keys from `declared` (because the value is unknown) still
- * cannot let a same-named inherited or user-supplied value through. */
-const PROTECTED_COFORGE_ENV_KEYS = [
+/** Env var names a Daemon sets on the processes it launches. A same-named value from the host
+ * environment or an Agent's user-configured `envVars`/adapter `extraEnv` must never reach an Agent
+ * process, so `agentEnvironment` clears them unconditionally: a call site that omits one of these
+ * keys from `declared` (because the value is unknown) still cannot let an inherited or
+ * user-supplied value through. */
+export const DAEMON_LAUNCH_ENV_KEYS = [
+  // An Agent's own identity and capabilities: the capability sockets the launch site
+  // (`runtime.ts`) sets directly, and the runtime-context variables that
+  // `agentRuntimeContextEnvironment` below maps from the same server-authored identity the
+  // standing prompt's "Current Runtime Context" section renders. An Agent's own tools must not be
+  // able to spoof the Agent's identity to itself, nor reuse another Agent's capability.
   "COFORGE_AGENT_CONTEXT",
   "COFORGE_AGENT_CONVERSATION_TARGET",
   "COFORGE_AGENT_PROXY_URL",
@@ -38,13 +40,10 @@ const PROTECTED_COFORGE_ENV_KEYS = [
   "COFORGE_CURRENT_COMPUTER_VERSION",
   "COFORGE_CURRENT_AGENT_WORKSPACE_PATH",
   "COFORGE_GIT_CONFIG_BASE_COUNT",
-] as const;
-
-/** Env var names set on a Workspace Daemon's own process (`supervisor/`, and `daemon-host/` for the
- * connection endpoint). Nothing inside an Agent reads them; an Agent's tools that inherited them
- * would act on that Workspace (a Daemon test run from an Agent's checkout booted out every Agent
- * job of its host Workspace). */
-export const WORKSPACE_DAEMON_ENV_KEYS = [
+  // A Workspace Daemon's own scope (`supervisor/`, and `daemon-host/` for the connection
+  // endpoint). Nothing inside an Agent reads them; an Agent's tools that inherited them would act
+  // on that Workspace (a Daemon test run from an Agent's checkout booted out every Agent job of
+  // its host Workspace).
   "COFORGE_DAEMON_HOME",
   "COFORGE_WORKSPACE_AGENT_PREFIX",
   "COFORGE_WORKSPACE_JOB_DIRECTORY",
@@ -68,8 +67,9 @@ function singleLineOrUndefined(value: string | undefined): string | undefined {
  * source value is a known, non-empty string after newline/NUL stripping; `displayName` and
  * `description` are deliberately not exported here (free text written by users, not needed by
  * tools — see `agent-instructions.ts`). The caller merges the result into `agentEnvironment`'s
- * `declared` argument, which `PROTECTED_COFORGE_ENV_KEYS` above always favors over inherited host
- * variables and the Agent's user-configured `envVars`/adapter `extraEnv`.
+ * `declared` argument; `agentEnvironment` first clears every `DAEMON_LAUNCH_ENV_KEYS` name from the
+ * inherited host variables and the Agent's user-configured `envVars`/adapter `extraEnv`, so these
+ * values always win.
  */
 export function agentRuntimeContextEnvironment(
   context: CoforgeAgentPromptContext,
@@ -120,8 +120,7 @@ export function agentEnvironment(
   // Never reuse another Agent's local capability, a spoofed runtime-identity value, or the
   // Workspace Daemon's own scope. Ordinary host variables (including provider credentials and
   // proxies) remain inherited.
-  for (const key of PROTECTED_COFORGE_ENV_KEYS) delete environment[key];
-  for (const key of WORKSPACE_DAEMON_ENV_KEYS) delete environment[key];
+  for (const key of DAEMON_LAUNCH_ENV_KEYS) delete environment[key];
   Object.assign(environment, declared);
   const seen = new Set<string>();
   const noProxy = [

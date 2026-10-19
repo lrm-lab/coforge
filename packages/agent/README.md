@@ -11,7 +11,7 @@ The package can be packed and installed independently:
 
 ```bash
 bun run check
-bun test
+mise run test:file
 bun run pack:check
 ```
 

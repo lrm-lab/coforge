@@ -37,7 +37,7 @@ systemctl --user is-system-running
 export NODE_EXTRA_CA_CERTS=/path/to/local-caddy-root.crt
 export COFORGE_E2E_WEB_URL=https://localhost:8791
 export COFORGE_E2E_WORKSPACE_SLUG=dev-user
-COFORGE_E2E_ALLOW_INSTALL=1 scripts/e2e/run-computer-setup.sh
+COFORGE_E2E_ALLOW_INSTALL=1 bun scripts/test/isolated-test-run.ts scripts/e2e/run-computer-setup.sh
 ```
 
 The script builds a unique fixture version, packages it, installs it with

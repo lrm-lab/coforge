@@ -192,6 +192,6 @@ client, or command-specific copy of an existing domain operation.
 - Run `mise run test:computer`, `mise run check:computer`, and
   `mise run build:computer` before review. `test/installer-scripts.test.ts` runs
   `install.ps1` under PowerShell 7. `mise run test` and `mise run test:computer`
-  install the version `mise.toml` pins (task tools, on first use); a bare
-  `bun test` needs your own `pwsh` on PATH. Those tests fail without it and are
+  install the version `mise.toml` pins (task tools, on first use);
+  `mise run test:file` needs your own `pwsh` on PATH. Those tests fail without it and are
   never skipped.

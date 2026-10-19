@@ -72,7 +72,7 @@ Check the repository runtime before relying on an API:
 ```sh
 bun --version
 bun run check
-bun test
+mise run test:file  # bun test, started through the isolation wrapper (root AGENTS.md, Testing)
 ```
 
 For a new API, consult the official Bun documentation rather than assuming a

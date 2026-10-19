@@ -25,7 +25,7 @@ CoForge 群聊记忆评测：LoCoMo 会话写成 **PublicChannel** Message，经
 
 ```bash
 # 不碰 OV / Agent 的装载与判分自测
-bun test benchmark/public-channel-memory/test
+mise run test:file -- benchmark/public-channel-memory/test
 
 COFORGE_PUBLIC_CHANNEL_MEMORY_EVAL=1 \
 DATABASE_URL=... \

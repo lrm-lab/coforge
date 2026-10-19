@@ -59,11 +59,11 @@ no partial write on an ACL outage and receipt rights after leaving the channel;
 five repetitions passed (30/30).
 
 Run repository gates with `mise run test`, `mise run check`, and `mise run build`.
-Run the database cases explicitly after migrations against a disposable database:
+Run the database cases explicitly after migrations against a disposable database, from `apps/web`:
 
 ```sh
 MEMORY_DISPOSITION_TEST_DATABASE_URL=postgresql://USER@127.0.0.1:PORT/DATABASE \
-  mise exec -- bun test ./apps/web/test/memory-disposition.integration.ts --rerun-each 5
+  mise run test:file -- ./test/memory-disposition.integration.ts --rerun-each 5
 ```
 
 Design source: `skill-node-design-grill/cycles/002-memory-disposition-receipt.md`

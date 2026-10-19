@@ -70,6 +70,6 @@ Manual acceptance after configuration and approved migration/deployment:
 - [ ] Uninstall the App on GitHub; Settings shows "pending installation" without
   a manual Refresh.
 
-Local database regression command (disposable migrated PostgreSQL only):
-`GITHUB_TEST_DATABASE_URL=<local-url> mise exec -- bun test ./apps/web/test/github-connection.integration.ts`.
+Local database regression command (disposable migrated PostgreSQL only), from `apps/web`:
+`GITHUB_TEST_DATABASE_URL=<local-url> mise run test:file -- ./test/github-connection.integration.ts`.
 Tests substitute GitHub HTTP responses; they do not prove a live OAuth exchange.

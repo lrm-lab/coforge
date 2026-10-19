@@ -89,10 +89,10 @@ cannot edit another member's drafts or another owner's configuration.
 
 ## Verification
 
-Against an isolated PostgreSQL database with current migrations:
+Against an isolated PostgreSQL database with current migrations, from `apps/web`:
 
 ```sh
-WEEKLY_REPORT_TEST_DATABASE_URL=<local-test-url> mise exec -- bun test ./apps/web/test/weekly-report-workflow.integration.ts
+WEEKLY_REPORT_TEST_DATABASE_URL=<local-test-url> mise run test:file -- ./test/weekly-report-workflow.integration.ts
 ```
 
 The integration test verifies creation retries, concurrent sending, private DM

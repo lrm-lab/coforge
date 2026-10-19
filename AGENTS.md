@@ -121,6 +121,7 @@ These instructions apply to the entire repository.
 - NEVER write unit tests after you write code.
 - Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work. At the end of E2E tests, produce a verifiable and repeatable artifact.
 - When writing or modifying tests, investigating test failures, or reviewing test changes, read and follow [the testing guidance](docs/agents/testing.md). Unrelated tasks do not require loading this document.
+- Inside a CoForge Agent, start every test run through the isolation wrapper `scripts/test/isolated-test-run.ts`, which runs it without the Agent's and the Workspace's CoForge credentials and identity. The mise `test` tasks (`mise run test`, `test:*`, `mise run test:file -- <path> [flags]` from the package directory) and the root `test:*` scripts already do; run any other test command or script (`scripts/e2e/*.sh`, say) as `bun scripts/test/isolated-test-run.ts <command>`.
 
 ## Toolchain
 

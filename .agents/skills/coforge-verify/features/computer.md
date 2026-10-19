@@ -43,7 +43,7 @@ Attach this machine to a Workspace and start its Daemon.
     directory), which the example in the native setup doc omits.
   - Computer requires HTTPS locally: trust a local Caddy CA with
     `NODE_EXTRA_CA_CERTS`, never disable TLS checks.
-- **Covered by**: `scripts/e2e/run-computer-setup.sh` (needs
+- **Covered by**: `bun scripts/test/isolated-test-run.ts scripts/e2e/run-computer-setup.sh` (needs
   `COFORGE_E2E_WEB_URL`, `COFORGE_E2E_WORKSPACE_SLUG`, `COFORGE_E2E_HOME`,
   `OPENROUTER_API_KEY`, `COFORGE_E2E_ALLOW_INSTALL=1`; Linux/systemd only;
   writes `.amp/e2e/native-setup-result.json`, then runs

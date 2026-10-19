@@ -479,7 +479,7 @@ export OPENVIKING_PROTOTYPE_CONF=infra/secrets/openviking_prototype_ov_conf
 # Optional citation persist (P3). Without a URL the citation step skipIfs.
 # export MIGRATION_TEST_DATABASE_URL=...
 
-bun test ./apps/web/test/openviking-prototype.smoke.ts
+mise run test:file -- ./apps/web/test/openviking-prototype.smoke.ts
 ```
 
 The file loads `server.root_api_key` from the secret path **in-process**. Do

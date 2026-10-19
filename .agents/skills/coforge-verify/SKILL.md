@@ -78,7 +78,8 @@ end to end: a message to an Agent on that runtime, its reply in the
 conversation, and its Activity. Fixture and adapter unit tests do not count.
 The native Computer harnesses are Linux/systemd only.
 
-**Computer CLI and installation.** Use `scripts/e2e/run-computer-setup.sh` and
+**Computer CLI and installation.** Use `scripts/e2e/run-computer-setup.sh`
+(through `bun scripts/test/isolated-test-run.ts`) and
 `scripts/e2e/installer-linux.sh` in a disposable OS user or the `coforge-linux`
 orb, never on a machine whose Computer someone relies on.
 

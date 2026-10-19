@@ -24,7 +24,12 @@ run = "bun install --frozen-lockfile"
 [tasks.test]
 description = "Run repository tests"
 tools = { powershell = "{{vars.powershell_version}}" }
-run = "bun run test"
+run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" bun run test'
+
+[tasks."test:file"]
+description = "Run the test files named, from the directory you call it in (mise run test:file ./test/x.test.ts; bun test flags after --)"
+dir = "{{cwd}}"
+run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" bun test'
 
 [tasks.check]
 description = "Run repository format, lint, and type checks"
@@ -37,11 +42,11 @@ run = "bun run build"
 [tasks."test:computer"]
 description = "Run Computer package tests"
 tools = { powershell = "{{vars.powershell_version}}" }
-run = "bun run --cwd packages/coforge-sdk generate && cd packages/computer && bun test"
+run = 'bun run --cwd packages/coforge-sdk generate && cd packages/computer && bun "{{config_root}}/scripts/test/isolated-test-run.ts" bun test'
 
 [tasks."test:daemon"]
 description = "Run Daemon package tests"
-run = "bun run --cwd packages/coforge-sdk generate && cd packages/daemon && bun run test"
+run = 'bun run --cwd packages/coforge-sdk generate && cd packages/daemon && bun "{{config_root}}/scripts/test/isolated-test-run.ts" bun run test'
 
 [tasks."check:daemon"]
 description = "Run Daemon package checks"
@@ -65,27 +70,27 @@ run = "bash scripts/reload-local-computer.sh"
 
 [tasks."test:web"]
 description = "Run Web package tests"
-run = "bun run --cwd packages/coforge-sdk generate && cd apps/web && bun run test"
+run = 'bun run --cwd packages/coforge-sdk generate && cd apps/web && bun "{{config_root}}/scripts/test/isolated-test-run.ts" bun run test'
 
 [tasks."test:centrifugo"]
 description = "Run the Daemon's connection, and Workspace deletion's daemon reconnect, against the Centrifugo image staging uses (Docker required)"
-run = "bun run --cwd packages/coforge-sdk generate && bun run --cwd apps/web db:generate && bun test ./packages/daemon/test/daemon-connection-refusal.integration.ts ./apps/web/test/centrifugo-daemon-reconnect.integration.ts"
+run = 'bun run --cwd packages/coforge-sdk generate && bun run --cwd apps/web db:generate && bun "{{config_root}}/scripts/test/isolated-test-run.ts" bun test ./packages/daemon/test/daemon-connection-refusal.integration.ts ./apps/web/test/centrifugo-daemon-reconnect.integration.ts'
 
 [tasks."test:thread"]
 description = "Run thread isolation against local PostgreSQL (THREAD_TEST_DATABASE_URL required)"
-run = "bun run --cwd packages/coforge-sdk generate && bun run --cwd apps/web db:generate && bun test {{vars.thread_integration_files}}"
+run = 'bun run --cwd packages/coforge-sdk generate && bun run --cwd apps/web db:generate && bun "{{config_root}}/scripts/test/isolated-test-run.ts" bun test {{vars.thread_integration_files}}'
 
 [tasks."test:events"]
 description = "Run the Agent events drain against local PostgreSQL (EVENTS_TEST_DATABASE_URL required)"
-run = "bun run --cwd packages/coforge-sdk generate && bun run --cwd apps/web db:generate && bun test ./apps/web/test/agent-events.integration.ts"
+run = 'bun run --cwd packages/coforge-sdk generate && bun run --cwd apps/web db:generate && bun "{{config_root}}/scripts/test/isolated-test-run.ts" bun test ./apps/web/test/agent-events.integration.ts'
 
 [tasks."test:channel"]
 description = "Run public channels, Workspace members and deletion, and daemon credential revocations against local PostgreSQL and Redis (CHANNEL_TEST_DATABASE_URL and CHANNEL_TEST_REDIS_URL required)"
-run = "bun run --cwd packages/coforge-sdk generate && bun run --cwd apps/web db:generate && bun test {{vars.thread_integration_files}} ./apps/web/test/daemon-credential-revocations.integration.test.ts ./apps/web/test/workspace-catalog.integration.ts ./apps/web/test/conversation-threads.integration.test.ts ./apps/web/test/workspace-join-links.integration.test.ts ./apps/web/test/workspace-delete.integration.test.ts ./apps/web/test/channel-delete.integration.test.ts ./apps/web/test/user-identity.integration.test.ts ./apps/web/prisma/drop-user-full-name-migration.integration.test.ts"
+run = 'bun run --cwd packages/coforge-sdk generate && bun run --cwd apps/web db:generate && bun "{{config_root}}/scripts/test/isolated-test-run.ts" bun test {{vars.thread_integration_files}} ./apps/web/test/daemon-credential-revocations.integration.test.ts ./apps/web/test/workspace-catalog.integration.ts ./apps/web/test/conversation-threads.integration.test.ts ./apps/web/test/workspace-join-links.integration.test.ts ./apps/web/test/workspace-delete.integration.test.ts ./apps/web/test/channel-delete.integration.test.ts ./apps/web/test/user-identity.integration.test.ts ./apps/web/prisma/drop-user-full-name-migration.integration.test.ts'
 
 [tasks."test:integration:web"]
 description = "Run the Web integration suites CI cannot, against a scratch PostgreSQL/Redis (INTEGRATION_DATABASE_URL and INTEGRATION_REDIS_URL override the defaults)"
-run = "./scripts/test/run-web-integration.sh"
+run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/test/run-web-integration.sh'
 
 [tasks."test:e2e:agent-direct-message"]
 description = "Run the managed Agent direct-message end-to-end slice"
@@ -94,16 +99,16 @@ amp orb services ensure >/dev/null || {
   curl --fail --silent http://127.0.0.1:8000/health >/dev/null
   curl --fail --silent http://127.0.0.1:8789/health >/dev/null
 }
-./scripts/e2e/run-agent-direct-message.sh
+bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/e2e/run-agent-direct-message.sh
 """
 
 [tasks."test:e2e:mention-delivery"]
 description = "Run the tracked @mention delivery end-to-end slice"
-run = "./scripts/e2e/run-mention-delivery.sh"
+run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/e2e/run-mention-delivery.sh'
 
 [tasks."test:e2e:web"]
 description = "Run one browser e2e from apps/web/test against a local stack (no file lists them)"
-run = './scripts/e2e/run-web-e2e.sh {{arg(name="file", var=true, default="")}}'
+run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/e2e/run-web-e2e.sh {{arg(name="file", var=true, default="")}}'
 
 [tasks."check:web"]
 description = "Run Web package checks"

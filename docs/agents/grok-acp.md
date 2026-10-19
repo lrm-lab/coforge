@@ -90,7 +90,7 @@ tasks.
 Run from `packages/daemon`, with an official Grok executable:
 
 ```sh
-COFORGE_GROK_E2E_COMMAND=/path/to/grok mise exec -- bun test ./test/grok-native.e2e.ts
+COFORGE_GROK_E2E_COMMAND=/path/to/grok mise run test:file -- ./test/grok-native.e2e.ts
 ```
 
 The tests isolate `GROK_HOME`, use a local model endpoint and placeholder test

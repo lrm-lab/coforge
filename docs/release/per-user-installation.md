@@ -115,7 +115,7 @@ For the running local E2E stack, execute:
 COFORGE_E2E_ALLOW_DEVICE_AUTH=1 \
 COFORGE_E2E_WEB_URL=http://localhost:8789 \
 COFORGE_E2E_WORKSPACE_SLUG=dev-user \
-mise exec -- bun test ./scripts/e2e/computer-environment.e2e.ts
+mise run test:file -- ./scripts/e2e/computer-environment.e2e.ts
 ```
 
 This compiles private local fixtures and the production Daemon, exercises setup

@@ -67,7 +67,7 @@ proof for any Daemon or runtime change.
 ## grok-native
 
 - **Reach**: from `packages/daemon`,
-  `COFORGE_GROK_E2E_COMMAND=/path/to/grok mise exec -- bun test ./test/grok-native.e2e.ts`.
+  `COFORGE_GROK_E2E_COMMAND=/path/to/grok mise run test:file -- ./test/grok-native.e2e.ts`.
 - **What it proves**: the real Grok CLI over ACP against a local model endpoint
   with an isolated `GROK_HOME`; no provider credits. Standing instructions, tool
   mapping, compaction, cancellation, live interjection, background follow-up,
@@ -79,7 +79,7 @@ proof for any Daemon or runtime change.
 
 ## kiro-native
 
-- **Reach**: `mise exec -- bun test ./packages/daemon/test/kiro-native.integration.ts`;
+- **Reach**: from `packages/daemon`, `mise run test:file -- ./test/kiro-native.integration.ts`;
   the browser variant `apps/web/test/kiro-native.e2e.ts` runs after the managed
   E2E setup and requires `COFORGE_E2E_ALLOW_RESET=1` (disposable environment).
 - **Traps**: needs a user-installed, authenticated Kiro and consumes usage. On
@@ -88,7 +88,7 @@ proof for any Daemon or runtime change.
 
 ## openrouter-live
 
-- **Reach**: `scripts/e2e/run-openrouter-live.sh` with a real
+- **Reach**: `bun scripts/test/isolated-test-run.ts scripts/e2e/run-openrouter-live.sh` with a real
   `OPENROUTER_API_KEY` from the environment, in an Amp orb with the E2E services
   (`amp orb services ensure`). Runs `apps/web/test/e2e-openrouter-live.e2e.ts`.
 - **What it proves**: canonical Agent replies in PostgreSQL for ordinary channel

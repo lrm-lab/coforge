@@ -23,7 +23,12 @@ const REQUIRED_ENV = [
   "COFORGE_SERVER_URL",
 ] as const;
 
-const PRESENT_ENV = [...REQUIRED_ENV, "COFORGE_WORKSPACE_SLUG", "COFORGE_COMPUTER_NAME"] as const;
+/** Every variable a cloud Computer container is started with (`containerEnv` in run-host.ts). */
+export const CONTAINER_BINDING_ENV_KEYS = [
+  ...REQUIRED_ENV,
+  "COFORGE_WORKSPACE_SLUG",
+  "COFORGE_COMPUTER_NAME",
+] as const;
 
 /**
  * Write the Daemon credential and one enabled workspace binding, keeping any
@@ -36,7 +41,7 @@ export async function prepareContainerBinding(
   stateDirectory: string,
   expectedServerUrl?: string,
 ): Promise<boolean> {
-  const present = PRESENT_ENV.some((key) => text(env[key]) !== undefined);
+  const present = CONTAINER_BINDING_ENV_KEYS.some((key) => text(env[key]) !== undefined);
   if (!present) return false;
   const daemonApiKey = text(env.COFORGE_DAEMON_API_KEY);
   const workspaceId = text(env.COFORGE_WORKSPACE_ID);
