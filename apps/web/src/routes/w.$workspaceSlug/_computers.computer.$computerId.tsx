@@ -164,11 +164,18 @@ function ComputerDetailPage() {
         })
       }
       latestComputerVersion={latestComputerVersion}
-      onUpgrade={(requestId) => requestUpgrade({ data: { computerId, requestId } })}
+      onUpgrade={async (requestId) => {
+        const status = await requestUpgrade({ data: { computerId, requestId } });
+        // The list's upgrading badge reads the operation the server now holds. Not awaited, so the
+        // panel starts following it at once.
+        if (status.status === "accepted") void router.invalidate();
+        return status;
+      }}
       onReadUpgradeStatus={async (requestId) => {
         const status = await readUpgrade({ data: { computerId, requestId } });
-        // A completed upgrade changes the version the list and the meta line show.
-        if (status.status === "completed") await router.invalidate({ sync: true });
+        // A settled upgrade clears the list's badge; a completed one also changes the version the
+        // list and the meta line show.
+        if (status.status !== "accepted") void router.invalidate();
         return status;
       }}
       onUpdateDisplayName={async (displayName) => {

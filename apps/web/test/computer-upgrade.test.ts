@@ -4,9 +4,12 @@ import { RedisComputerUpgradeStore } from "#src/server/computers/computer-upgrad
 function memoryRedis(seed?: Record<string, string>) {
   const values = new Map<string, string>(Object.entries(seed ?? {}));
   const sends: string[][] = [];
+  const sets: string[][] = [];
   return {
     get: async (key: string) => values.get(key) ?? null,
+    mget: async (...keys: string[]) => keys.map((key) => values.get(key) ?? null),
     set: async (...args: string[]) => {
+      sets.push(args);
       const [key, value, , , mode] = args;
       if (mode === "NX" && values.has(key!)) return null;
       values.set(key!, value!);
@@ -35,6 +38,7 @@ function memoryRedis(seed?: Record<string, string>) {
     },
     values,
     sends,
+    sets,
   };
 }
 
@@ -109,6 +113,96 @@ test("a reported failure is authoritative and carries its sanitized reason", asy
   expect(failure.error).toContain("<path>");
   expect(failure.error).toContain("<redacted>");
   expect(failure.error).not.toContain("/Users/");
+});
+
+test("a newer upgrade replaces the latest, and an expired record leaves none", async () => {
+  const redis = memoryRedis();
+  const store = new RedisComputerUpgradeStore(redis, () => 1000);
+  const scope = { workspaceId: "w", computerId: "c" };
+  expect((await store.latestMany([scope]))[0]).toBeUndefined();
+  await store.ready(scope, identity("old", "1.0.0", 1), []);
+  await store.begin(scope, "first", "2.0.0");
+  await store.reported(scope, { requestId: "first", status: "failed", completedAtMs: 1000 });
+  await store.begin(scope, "second", "2.0.0");
+
+  expect((await store.latestMany([scope]))[0]).toMatchObject({
+    requestId: "second",
+    status: "accepted",
+  });
+
+  // Redis expires the request record; the Computer then has no latest upgrade to show.
+  for (const key of redis.values.keys()) if (key.includes(":request:")) redis.values.delete(key);
+  expect((await store.latestMany([scope]))[0]).toBeUndefined();
+});
+
+test("many Computers' latest upgrades read in their order, with none where a Computer has none", async () => {
+  let now = 1000;
+  const store = new RedisComputerUpgradeStore(memoryRedis(), () => now);
+  const running = { workspaceId: "w", computerId: "running" };
+  const idle = { workspaceId: "w", computerId: "idle" };
+  const failed = { workspaceId: "w", computerId: "failed" };
+  for (const scope of [running, idle, failed])
+    await store.ready(scope, identity("old", "1.0.0", 1), []);
+  await store.begin(running, "running-request", "2.0.0");
+  await store.begin(failed, "failed-request", "2.0.0");
+  await store.reported(failed, {
+    requestId: "failed-request",
+    status: "failed",
+    errorCode: "rolled_back",
+    completedAtMs: 1000,
+  });
+
+  expect(await store.latestMany([])).toEqual([]);
+  const [first, second, third] = await store.latestMany([running, idle, failed]);
+  expect(first).toMatchObject({
+    requestId: "running-request",
+    status: "accepted",
+    expectedVersion: "2.0.0",
+  });
+  expect(second).toBeUndefined();
+  expect(third).toMatchObject({
+    requestId: "failed-request",
+    status: "failed",
+    reason: "reported",
+    errorCode: "rolled_back",
+  });
+
+  // Past its deadline a running upgrade reads as timed out, as a status read by request id does.
+  now += 10 * 60 * 1000;
+  expect((await store.latestMany([running]))[0]).toMatchObject({
+    requestId: "running-request",
+    status: "failed",
+    reason: "timeout",
+  });
+});
+
+test("a read at the deadline still finds the record and reports the timeout", async () => {
+  let now = 1000;
+  const redis = memoryRedis();
+  const store = new RedisComputerUpgradeStore(redis, () => now);
+  const scope = { workspaceId: "w", computerId: "c" };
+  await store.ready(scope, identity("old", "1.0.0", 1), []);
+  const { status } = await store.begin(scope, "request", "2.0.0");
+  if (status.status !== "accepted")
+    throw new Error(`expected an accepted request, got ${status.status}`);
+  const deadlineSeconds = (Date.parse(status.expiresAt) - 1000) / 1000;
+
+  // Redis must keep both keys past the deadline, or the read there finds nothing to time out.
+  const written = redis.sets.filter(
+    ([key]) => key!.endsWith(":latest") || key!.includes(":request:"),
+  );
+  expect(written).toHaveLength(2);
+  for (const [, , ex, seconds] of written) {
+    expect(ex).toBe("EX");
+    expect(Number(seconds)).toBeGreaterThan(deadlineSeconds);
+  }
+
+  now += deadlineSeconds * 1000;
+  expect(await store.status(scope, "request")).toEqual({
+    requestId: "request",
+    status: "failed",
+    reason: "timeout",
+  });
 });
 
 test("a reported success alone never completes an upgrade without identity evidence", async () => {
@@ -239,6 +333,7 @@ test("a stale touchIdentity never clobbers a newer identity a concurrent ready()
   ]);
   const redis = {
     get: async (key: string) => (key === identityKey ? staleRaw : (values.get(key) ?? null)),
+    mget: async (...keys: string[]) => keys.map((key) => values.get(key) ?? null),
     set: async () => "OK",
     send: async (_command: "EVAL", args: string[]) => {
       const [, , key, candidateRaw] = args;

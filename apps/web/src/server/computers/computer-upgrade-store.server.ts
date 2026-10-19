@@ -26,8 +26,14 @@ type Stored = ComputerUpgradeStatus & {
   /** Cloud image replace: the daemon reconnects without recovering this request. */
   completeOnIdentity?: true;
 };
-/** How long an upgrade request record survives - long enough to poll a Computer to completion. */
+/** An upgrade request's deadline, long enough to poll a Computer to completion, and how long a
+ * settled record survives. */
 const REQUEST_TTL = 10 * 60;
+/** Keeps a new request's keys past its deadline: a read there must find the record to report the
+ * timeout, not that the request is unknown. */
+const REQUEST_GRACE = 60;
+/** How long a new request's record and the Computer's latest pointer live. */
+const REQUEST_KEY_TTL = String(REQUEST_TTL + REQUEST_GRACE);
 const REPLACE = `if redis.call("GET", KEYS[1]) == ARGV[1] then redis.call("SET", KEYS[1], ARGV[2], "EX", ARGV[3]); return 1 end return 0`;
 /**
  * Identity is a durable snapshot, not a liveness signal - it is overwritten monotonically on
@@ -68,6 +74,7 @@ export class RedisComputerUpgradeStore {
   constructor(
     private readonly redis: {
       get(key: string): Promise<string | null>;
+      mget(...keys: string[]): Promise<Array<string | null>>;
       set(...args: string[]): Promise<unknown>;
       send(command: "EVAL", args: string[]): Promise<unknown>;
     },
@@ -99,7 +106,7 @@ export class RedisComputerUpgradeStore {
       this.requestKey(scope, requestId),
       JSON.stringify(record),
       "EX",
-      String(REQUEST_TTL),
+      REQUEST_KEY_TTL,
       "NX",
     );
     if (result === null) {
@@ -108,7 +115,31 @@ export class RedisComputerUpgradeStore {
       if (raced) return { status: this.public(raced), created: false };
       throw new Error("upgrade request could not be registered");
     }
+    // The browser that started the upgrade is not the only reader: a reload, another tab or
+    // another member finds the operation through the Computer, for as long as its record lives.
+    await this.redis.set(this.latestKey(scope), requestId, "EX", REQUEST_KEY_TTL);
     return { status: this.public(record), created: true };
+  }
+  /**
+   * The upgrade most recently begun on each Computer, while its record lives, in the scopes'
+   * order: two round trips for the list page however many Computers it shows.
+   */
+  async latestMany(scopes: readonly Scope[]): Promise<Array<ComputerUpgradeStatus | undefined>> {
+    if (scopes.length === 0) return [];
+    const requestIds = await this.redis.mget(...scopes.map((scope) => this.latestKey(scope)));
+    const requestKeys = scopes.flatMap((scope, index) => {
+      const requestId = requestIds[index];
+      return requestId ? [this.requestKey(scope, requestId)] : [];
+    });
+    const raws = requestKeys.length ? await this.redis.mget(...requestKeys) : [];
+    // The second read holds a record only for the Computers that had a pointer, in their order.
+    let next = 0;
+    return Promise.all(
+      scopes.map((scope, index) => {
+        const requestId = requestIds[index];
+        return requestId ? this.statusOf(scope, requestId, raws[next++] ?? null) : undefined;
+      }),
+    );
   }
   async publicationFailed(scope: Scope, requestId: string) {
     await this.replaceAccepted(scope, requestId, {
@@ -157,7 +188,15 @@ export class RedisComputerUpgradeStore {
     });
   }
   async status(scope: Scope, requestId: string): Promise<ComputerUpgradeStatus | undefined> {
-    const raw = await this.redis.get(this.requestKey(scope, requestId));
+    return this.statusOf(scope, requestId, await this.redis.get(this.requestKey(scope, requestId)));
+  }
+  /** A stored record as it reads now: past its deadline it has timed out, and a cloud image
+   * replace completes once the Computer's identity shows the new image. */
+  private async statusOf(
+    scope: Scope,
+    requestId: string,
+    raw: string | null,
+  ): Promise<ComputerUpgradeStatus | undefined> {
     if (!raw) return undefined;
     const current = this.parse(raw);
     if (!current) return { requestId, status: "unknown", reason: "corrupt" };
@@ -364,6 +403,9 @@ export class RedisComputerUpgradeStore {
   }
   private identityKey(scope: Scope) {
     return `${this.scope(scope)}:identity`;
+  }
+  private latestKey(scope: Scope) {
+    return `${this.scope(scope)}:latest`;
   }
   private requestKey(scope: Scope, requestId: string) {
     return `${this.scope(scope)}:request:${encodeURIComponent(requestId)}`;

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Dataflow03 as Cable, Laptop01 as LaptopMinimal, Plus } from "@untitledui/icons";
 
@@ -28,6 +28,8 @@ import { Button } from "#src/components/base/buttons/button";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
 import { computerVersionLabel, isComputerUpdateAvailable } from "./computer-identity";
+import type { ComputerUpgradeStatus } from "./computer.schemas";
+import { upgradeOutcome } from "./upgrade-failure";
 
 export type ComputerListItem = ComputerIdentity &
   ComputerPlatformInfo & {
@@ -35,6 +37,8 @@ export type ComputerListItem = ComputerIdentity &
     online: boolean;
     computerVersion?: string | null;
     imageUpdate?: { version: string } | null;
+    /** This Computer's latest upgrade while the server keeps its record; `null` when none. */
+    upgrade?: ComputerUpgradeStatus | null;
     ownedByCurrentUser: boolean;
     creator?: {
       username: string;
@@ -42,35 +46,6 @@ export type ComputerListItem = ComputerIdentity &
       avatarUrl: string | null;
     } | null;
   };
-
-/**
- * Which Computers have an upgrade operation in flight. The control that starts one lives on the
- * detail panel, behind the router outlet, while the badge that reflects it lives in the list; this
- * is the seam between the two. A set, not a single slot: each Computer's upgrade is serialized on
- * its own machine, so two may run at once and one finishing must not clear another's indicator.
- */
-const UpgradingComputerContext = createContext<{
-  upgradingComputerIds: ReadonlySet<string>;
-  setUpgradingComputer: (computerId: string, upgrading: boolean) => void;
-}>({ upgradingComputerIds: new Set<string>(), setUpgradingComputer: () => {} });
-
-export function UpgradingComputerProvider({
-  value,
-  children,
-}: {
-  value: {
-    upgradingComputerIds: ReadonlySet<string>;
-    setUpgradingComputer: (computerId: string, upgrading: boolean) => void;
-  };
-  children: ReactNode;
-}) {
-  return <UpgradingComputerContext value={value}>{children}</UpgradingComputerContext>;
-}
-
-/** The upgrade operation in flight, for the panel that starts one and the list that shows it. */
-export function useUpgradingComputer() {
-  return useContext(UpgradingComputerContext);
-}
 
 /**
  * Two panels on the app's ground: the Computer list and the selected
@@ -91,7 +66,6 @@ export function ComputerLayout({
   latestComputerVersion?: string | null;
   children: ReactNode;
 }) {
-  const { upgradingComputerIds } = useUpgradingComputer();
   const workspaceSlug = useWorkspaceSlug();
   const [showMobileList, setShowMobileList] = useState(!selectedComputerId);
   const listHidden = Boolean(selectedComputerId) && !showMobileList;
@@ -149,7 +123,11 @@ export function ComputerLayout({
                           ? latestComputerVersion
                           : undefined)
                       }
-                      upgrading={upgradingComputerIds.has(computer.id)}
+                      upgrading={
+                        computer.upgrade
+                          ? upgradeOutcome(computer.upgrade).state === "running"
+                          : false
+                      }
                     />
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="truncate text-sm font-semibold">

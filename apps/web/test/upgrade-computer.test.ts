@@ -12,6 +12,7 @@ function memoryRedis() {
   return {
     values,
     get: async (key: string) => values.get(key) ?? null,
+    mget: async (...keys: string[]) => keys.map((key) => values.get(key) ?? null),
     set: async (...args: string[]) => {
       const [key, value, , , mode] = args;
       if (mode === "NX" && values.has(key!)) return null;

@@ -193,31 +193,39 @@ export const listComputers = createServerFn({ method: "GET" })
       }),
       visibility.list({ workspaceId, userId: user.id }),
     ]);
-    // One round trip for every Computer's online lease, not one per Computer.
-    const statuses = await computerStatus.getMany(
-      connections.map(({ computer }) => ({ workspaceId, computerId: computer.id })),
-    );
+    const computerScopes = connections.map(({ computer }) => ({
+      workspaceId,
+      computerId: computer.id,
+    }));
     const agentScopes = connections.flatMap(({ computer }) =>
       computer.agents.map((agent) => ({ workspaceId, computerId: computer.id, agentId: agent.id })),
-    );
-    const agentDisplays = await getAgentDisplay().snapshotMany(agentScopes);
-    const runtimeDetection = getComputerRuntimeDetection();
-    const detecting = await Promise.all(
-      connections.map(({ computer }) =>
-        runtimeDetection.detecting({ workspaceId, computerId: computer.id }).catch(() => false),
-      ),
-    );
-    const agentDisplayById = new Map(
-      agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
     );
     const cloudIds = connections
       .filter(({ computer }) => computer.kind === "cloud")
       .map(({ computer }) => computer.id);
-    const imageUpdates = cloudIds.length
-      ? await getCloudImageInventory()
-          .availableMany(cloudIds)
-          .catch(() => new Map())
-      : new Map();
+    const runtimeDetection = getComputerRuntimeDetection();
+    // Each read needs only the connections, so they run side by side.
+    const [statuses, agentDisplays, detecting, upgrades, imageUpdates] = await Promise.all([
+      // One round trip for every Computer's online lease, not one per Computer.
+      computerStatus.getMany(computerScopes),
+      getAgentDisplay().snapshotMany(agentScopes),
+      Promise.all(
+        computerScopes.map((scope) => runtimeDetection.detecting(scope).catch(() => false)),
+      ),
+      // Each Computer's latest upgrade, so a reload resumes one still running, and keeps the
+      // reason one failed, instead of offering Upgrade again.
+      getComputerUpgradeStore()
+        .latestMany(computerScopes)
+        .catch(() => []),
+      cloudIds.length
+        ? getCloudImageInventory()
+            .availableMany(cloudIds)
+            .catch(() => new Map())
+        : new Map(),
+    ]);
+    const agentDisplayById = new Map(
+      agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
+    );
     return Promise.all(
       connections.map(async ({ computer, createdAt }, index) => {
         const computerRuntimes = runtimes.filter((runtime) => runtime.computerId === computer.id);
@@ -228,6 +236,7 @@ export const listComputers = createServerFn({ method: "GET" })
           kind: computer.kind,
           cloudSlot: computer.cloudSlot,
           imageUpdate: imageUpdates.get(computer.id) ?? null,
+          upgrade: upgrades[index] ?? null,
           computerVersion: computer.computerVersion,
           platform: computer.platform,
           osVersion: computer.osVersion,

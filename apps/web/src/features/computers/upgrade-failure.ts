@@ -5,6 +5,7 @@ import {
   parseUpgradeErrorCode,
   type UpgradeErrorCode,
 } from "@lrm/coforge-sdk/internal";
+import type { ComputerUpgradeStatus } from "./computer.schemas";
 
 /** Why an upgrade request ended without a verified new Computer version. */
 export type ComputerUpgradeFailure = {
@@ -32,19 +33,6 @@ const COMMAND = {
   upgrade: "coforge-computer upgrade",
   restartSupervisor: "coforge-computer restart --supervisor",
 } as const;
-
-/**
- * Carries a fully-composed view through the same throw/catch `computer-detail.tsx`'s `runUpgrade`
- * already uses for a terminal polled failure, instead of collapsing the view into an `Error`'s
- * message string (which cannot carry a steps list). `describeUpgradeRequestError` recognizes this
- * type and returns its view unchanged.
- */
-export class ComputerUpgradeFailureView extends Error {
-  constructor(readonly view: UpgradeFailureView) {
-    super(view.headline);
-    this.name = "ComputerUpgradeFailureView";
-  }
-}
 
 /**
  * Every reason the server itself can report, independent of anything the Computer said. Steps
@@ -236,6 +224,39 @@ export function describeComputerUpgradeSuccess(version: string): string {
   return m.computer_upgrade_succeeded_toast({ version });
 }
 
+/**
+ * How long past the server's deadline the panel still takes an `accepted` status at its word. The
+ * server times a request out at `expiresAt` itself; this is only a safety net for a status that
+ * never moves on.
+ */
+const UPGRADE_DEADLINE_MARGIN_MS = 90_000;
+
+/** What one upgrade status means for the panel: still running, done at a version, or failed. */
+export type ComputerUpgradeOutcome =
+  | { state: "running" }
+  | { state: "succeeded"; version: string }
+  | { state: "failed"; failure: UpgradeRequestErrorCopy };
+
+/**
+ * The one reading of an upgrade status, for a status polled now and one a reload found alike. A
+ * completion without a version, or a record that cannot be read, proves nothing, so both read as
+ * missing evidence.
+ */
+export function upgradeOutcome(
+  status: ComputerUpgradeStatus,
+  now = Date.now(),
+): ComputerUpgradeOutcome {
+  if (status.status === "accepted")
+    return Date.parse(status.expiresAt) + UPGRADE_DEADLINE_MARGIN_MS < now
+      ? { state: "failed", failure: describeComputerUpgradeFailure({ reason: "timeout" }) }
+      : { state: "running" };
+  if (status.status === "completed" && status.computerVersion)
+    return { state: "succeeded", version: status.computerVersion };
+  if (status.status === "failed")
+    return { state: "failed", failure: describeComputerUpgradeFailure(status) };
+  return { state: "failed", failure: describeComputerUpgradeFailure({ reason: "evidence" }) };
+}
+
 /** An `UpgradeFailureView` plus an optional quiet error reference id, never the raw
  * `COFORGE_APP_ERROR:` wire encoding. */
 export type UpgradeRequestErrorCopy = UpgradeFailureView & { errorId?: string };
@@ -243,13 +264,11 @@ export type UpgradeRequestErrorCopy = UpgradeFailureView & { errorId?: string };
 /**
  * Why the upgrade request itself never got off the ground - the Computer was unreachable, the
  * release feed failed, or something else broke before an operation could even be registered - or
- * why a terminal poll gave up (`ComputerUpgradeFailureView`, from `describeComputerUpgradeFailure`
- * above). A decoded `AppError` maps to a sentence and steps a Workspace member can act on, with
+ * why reading its status failed. A decoded `AppError` maps to a sentence and steps a Workspace member can act on, with
  * its `errorId` kept as a quiet reference; anything else is rendered from its own message with no
  * steps.
  */
 export function describeUpgradeRequestError(error: unknown): UpgradeRequestErrorCopy {
-  if (error instanceof ComputerUpgradeFailureView) return error.view;
   if (isAppError(error)) {
     if (error.code === "COMPUTER_OFFLINE")
       return {
