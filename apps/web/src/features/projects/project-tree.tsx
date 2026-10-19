@@ -1,7 +1,7 @@
 import { Fragment, useMemo } from "react";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, ArrowUpRight, ChevronRight, File02, Folder } from "@untitledui/icons";
+import { ArrowLeft, ArrowUpRight, ChevronRight, Folder } from "@untitledui/icons";
 import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "react-aria-components";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
 import { Avatar } from "#src/components/base/avatar/avatar";
@@ -13,6 +13,7 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { TreeFileIcon } from "#src/features/files/tree-file-icon";
 import { ProjectFileTree } from "./project-file-tree";
 import { githubUrl as buildGithubUrl, projectFileDownloadUrl } from "./project-file-urls";
 import { ProjectFileView } from "./project-file-view";
@@ -509,7 +510,7 @@ function DirectoryBody({
                 {entry.type === "dir" ? (
                   <Folder aria-hidden="true" className="size-5 shrink-0 text-tertiary" />
                 ) : (
-                  <File02 aria-hidden="true" className="size-5 shrink-0 text-tertiary" />
+                  <TreeFileIcon name={entry.name} className="size-5" size={20} />
                 )}
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span

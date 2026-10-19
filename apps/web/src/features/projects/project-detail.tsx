@@ -6,7 +6,6 @@ import {
   ArrowUpRight,
   CheckCircle,
   Circle,
-  File02,
   Folder,
   GitBranch01,
   Plus,
@@ -20,6 +19,7 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { PageHeader } from "#src/components/layout/page-header";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { TreeFileIcon } from "#src/features/files/tree-file-icon";
 import { CreateChannelDialog } from "#src/features/conversations/create-channel-dialog";
 import { createPublicChannel } from "#src/features/conversations/channels.functions";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -356,10 +356,7 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
                                 className="size-5 shrink-0 text-tertiary"
                               />
                             ) : (
-                              <File02
-                                aria-hidden="true"
-                                className="size-5 shrink-0 text-tertiary"
-                              />
+                              <TreeFileIcon name={file.name} className="size-5" size={20} />
                             )}
                             <span className="min-w-0 truncate text-sm text-primary">
                               {file.name}
@@ -373,7 +370,7 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
                             rel="noreferrer"
                             className={nameLinkClassName}
                           >
-                            <File02 aria-hidden="true" className="size-5 shrink-0 text-tertiary" />
+                            <TreeFileIcon name={file.name} className="size-5" size={20} />
                             <span className="min-w-0 truncate text-sm text-primary">
                               {file.name}
                             </span>

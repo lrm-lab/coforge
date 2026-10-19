@@ -5,7 +5,6 @@ import {
   Copy01,
   Eye,
   EyeOff,
-  File02,
   Folder,
   RefreshCw01,
 } from "@untitledui/icons";
@@ -29,6 +28,7 @@ import { useResizeObserver } from "#src/hooks/use-resize-observer";
 import { copyText } from "#src/features/records/report-editor/lib/clipboard";
 import { ProjectFileViewSkeleton } from "#src/features/projects/project-file-view-pending";
 import { Attachment } from "#src/features/records/report-editor/attachment";
+import { TreeFileIcon } from "#src/features/files/tree-file-icon";
 import { workspaceImageSource } from "./agent-workspace-image";
 import { m } from "#src/paraglide/messages";
 import { cn } from "#src/lib/utils";
@@ -547,7 +547,7 @@ function WorkspaceTree({
               {isDir ? (
                 <Folder aria-hidden="true" className="size-4 shrink-0 text-quaternary" />
               ) : (
-                <File02 aria-hidden="true" className="size-4 shrink-0 text-quaternary" />
+                <TreeFileIcon name={entry.name} className="size-4" />
               )}
               <span
                 className={cn(
