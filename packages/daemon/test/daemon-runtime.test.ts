@@ -4880,6 +4880,91 @@ describe("DaemonRuntime", () => {
     await runtime.stop();
   });
 
+  test("a reconnect re-reports Code Agent runtimes, then refreshes stale catalogs", async () => {
+    const credentials = new InMemoryDaemonCredentialStore();
+    await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+    const runtimes = [{ provider: "codex" as const, version: "0.151.0", displayName: "Codex" }];
+    const model = {
+      displayName: "Model",
+      description: "",
+      modelProvider: "openai",
+      reasoningEfforts: [],
+      defaultReasoning: "",
+      recommended: false,
+    };
+    const cachedCatalogs = [{ provider: "codex" as const, models: [{ ...model, id: "cached" }] }];
+    const liveCatalogs = [{ provider: "codex" as const, models: [{ ...model, id: "live" }] }];
+    const updates: Array<{ requestId: string; [field: string]: unknown }> = [];
+    const startupReported = Promise.withResolvers<void>();
+    const reconnectReported = Promise.withResolvers<void>();
+    let reconnect: (() => void) | undefined;
+    const catalogDiscoveryRuntimes: unknown[] = [];
+    const runtime = new DaemonRuntime(
+      connection,
+      () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
+      credentials,
+      {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async updateCodeAgents(request) {
+            updates.push(request);
+            if (updates.length === 2) startupReported.resolve();
+            if (updates.length === 4) reconnectReported.resolve();
+          },
+          onReconnect(callback) {
+            reconnect = callback;
+            return () => {};
+          },
+          async stop() {},
+        }),
+      },
+      undefined,
+      {
+        runtimes: async () => runtimes,
+        cachedCatalogs: async () => ({ catalogs: cachedCatalogs, needsRefresh: true }),
+        catalogs: async (discovered) => {
+          catalogDiscoveryRuntimes.push(discovered);
+          return liveCatalogs;
+        },
+      },
+    );
+    try {
+      await runtime.start(connection);
+      // Startup reports the same pair (cached, then live); let it settle before reconnecting.
+      await startupReported.promise;
+      expect(reconnect).toBeDefined();
+      catalogDiscoveryRuntimes.length = 0;
+
+      reconnect!();
+      await reconnectReported.promise;
+
+      const reconnectUpdates = updates.slice(2);
+      expect(reconnectUpdates).toEqual([
+        {
+          protocolMajor: expect.any(Number),
+          requestId: expect.any(String),
+          workspaceId: connection.workspaceId,
+          computerId: connection.computerId,
+          runtimes,
+          catalogs: cachedCatalogs,
+        },
+        {
+          protocolMajor: expect.any(Number),
+          requestId: expect.any(String),
+          workspaceId: connection.workspaceId,
+          computerId: connection.computerId,
+          runtimes,
+          catalogs: liveCatalogs,
+        },
+      ]);
+      expect(catalogDiscoveryRuntimes).toEqual([runtimes]);
+      expect(new Set(updates.map(({ requestId }) => requestId)).size).toBe(4);
+    } finally {
+      await runtime.stop();
+    }
+  });
+
   test("re-discovers and re-reports catalogs on a model refresh request, then answers it", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
