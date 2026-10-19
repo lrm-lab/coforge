@@ -517,6 +517,7 @@
   "activity_inbox_filter_all": "All",
   "activity_inbox_filter_unread": "Unread",
   "activity_inbox_filter_mentions": "Mentions",
+  "activity_inbox_all_conversations": "All conversations",
   "activity_inbox_mark_all_read": "Mark all read",
   "activity_inbox_mark_read": "Mark as Read",
   "activity_inbox_done": "Mark as Done",

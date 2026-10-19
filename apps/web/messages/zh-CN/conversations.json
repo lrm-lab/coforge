@@ -501,6 +501,7 @@
   "activity_inbox_filter_all": "全部",
   "activity_inbox_filter_unread": "未读",
   "activity_inbox_filter_mentions": "提及",
+  "activity_inbox_all_conversations": "全部会话",
   "activity_inbox_mark_all_read": "全部已读",
   "activity_inbox_mark_read": "标为已读",
   "activity_inbox_done": "标记为完成",

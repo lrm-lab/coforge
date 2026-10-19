@@ -44,6 +44,8 @@ import { requireWorkspaceMember } from "#src/server/workspaces/workspace-members
  * message arrives. It also lists each message whose sender had them notified of a mention from
  * outside that channel, until they mark it Done. A message between members stores no mentions and
  * notifies nobody outside the DM, so a DM between members only ever lists as itself or a thread.
+ * The All view lists the viewer's pinned conversations (the Chat sidebar's Pinned) apart, in pin
+ * order and whatever their Done, and leaves their conversation items out of its list.
  *
  * Unread is the Chat sidebar's rule (`HUMAN_UNREAD_MESSAGE_SQL`), so the two surfaces agree. A
  * conversation item covers top-level messages only; a thread item covers its replies and keeps its
@@ -87,6 +89,8 @@ export class ActivityInbox {
     private readonly realtime?: Pick<ConversationRealtime, "viewerChanged">,
   ) {}
 
+  /** One page of a view, newest activity first, with the Unread and Mentions counts and, on the
+   * All view's first page, the viewer's pinned conversations. */
   async list(
     workspaceId: string,
     userId: string,
@@ -98,13 +102,20 @@ export class ActivityInbox {
     const loadedAt = new Date();
     // Every candidate carries its unread and mention state: the filters select on them and the
     // Unread and Mentions counts cover every item, whichever filter is showing.
-    const all = await this.candidates(workspaceId, userId);
+    // The All view lists the viewer's pinned conversations apart, so it reads them on every page:
+    // a later page must leave them out of its items as the first did.
+    const [all, pins] = await Promise.all([
+      this.candidates(workspaceId, userId),
+      options.filter === "all" ? this.pinnedCandidates(workspaceId, userId) : [],
+    ]);
+    const pinnedIds = new Set(pins.map((pin) => pin.conversationId));
     const candidates = all.filter((candidate) =>
       options.filter === "unread"
         ? candidate.unreadCount > 0
         : options.filter === "mentions"
           ? candidate.firstMentionMessageId !== null
-          : true,
+          : // A pinned conversation's own item is under Pinned; its threads and mentions stay here.
+            !isConversationItem(candidate) || !pinnedIds.has(candidate.conversationId),
     );
     candidates.sort(
       (left, right) =>
@@ -114,8 +125,18 @@ export class ActivityInbox {
     const offset = Math.max(0, options.offset ?? 0);
     const limit = clampPageLimit(options.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
     const end = offset + limit;
+    const page = candidates.slice(offset, end);
+    const pinned = offset === 0 ? pins : [];
+    // One hydration for both lists; their keys never overlap, since `page` leaves pins out.
+    const hydrated = await this.hydrate(workspaceId, userId, [...pinned, ...page]);
+    const pinnedKeys = new Set(pinned.map((pin) => `conversation:${pin.conversationId}`));
     return {
-      items: await this.hydrate(workspaceId, userId, candidates.slice(offset, end)),
+      items: hydrated.filter((item) => !pinnedKeys.has(item.key)),
+      /**
+       * The viewer's pinned conversations in their pin order, on the All view's first page only
+       * (empty otherwise): listed whatever their Done boundary, with the item's usual fields.
+       */
+      pinned: hydrated.filter((item) => pinnedKeys.has(item.key)),
       /** How many items have something unread, whatever the filter: the Unread tab's count. */
       unreadItemCount: all.filter((candidate) => candidate.unreadCount > 0).length,
       /** How many items have an unread mention, whatever the filter: the Mentions tab's count. */
@@ -351,6 +372,36 @@ export class ActivityInbox {
       this.mentionCandidates(workspaceId, userId),
     ]);
     return [...conversations, ...threads, ...mentions];
+  }
+
+  /**
+   * The viewer's pinned conversations (the Chat sidebar's Pinned section), in pin order, as
+   * conversation candidates. Listed like a conversation item, except that Done does not hide one.
+   */
+  private pinnedCandidates(workspaceId: string, userId: string) {
+    return this.db.$queryRaw<ActivityCandidate[]>`
+      SELECT
+        CASE WHEN c."channelName" IS NOT NULL THEN 'channel' ELSE 'direct' END AS "kind",
+        cm."id" AS "memberId",
+        cm."conversationId" AS "conversationId",
+        NULL::uuid AS "rootMessageId",
+        c."channelName" AS "channelName",
+        c."directKey" AS "directKey",
+        peer."agentId" AS "agentId",
+        latest."id" AS "latestMessageId",
+        latest."sequence" AS "latestSequence",
+        latest."createdAt" AS "latestAt",
+        unread."count" AS "unreadCount",
+        unread."firstId" AS "firstUnreadMessageId",
+        mention."unread" AS "unreadMention",
+        mention."firstId" AS "firstMentionMessageId"
+      FROM ${conversationItemsSql(workspaceId, userId)}
+      JOIN "conversation_pins" pin
+        ON pin."memberId" = cm."id" AND pin."conversationId" = cm."conversationId"
+      ${conversationUnreadLateral}
+      ${conversationMentionLateral}
+      WHERE ${conversationItemVisibleSql(userId)}
+      ORDER BY pin."sortOrder", pin."createdAt"`;
   }
 
   /**
@@ -614,13 +665,21 @@ function conversationItemsSql(workspaceId: string, userId: string) {
     ) latest`;
 }
 
-/**
- * A joined conversation is listed when it is a channel or one of the viewer's own DMs (the ones
- * their Direct messages list holds), with activity past Done.
- */
+/** A joined conversation the inbox can list: a channel, or one of the viewer's own DMs (the ones
+ * their Direct messages list holds). */
+function conversationItemVisibleSql(userId: string) {
+  return Prisma.sql`(c."channelName" IS NOT NULL OR ${viewerDirectConversationSql(userId)})`;
+}
+
+/** A joined conversation is listed when the inbox can list it and it has activity past Done. */
 function conversationItemListedSql(userId: string) {
-  return Prisma.sql`(c."channelName" IS NOT NULL OR ${viewerDirectConversationSql(userId)})
+  return Prisma.sql`${conversationItemVisibleSql(userId)}
     AND latest."sequence" > COALESCE(cm."doneThroughSequence", 0)`;
+}
+
+/** A conversation's own item: not a thread, and not a mention notified from outside it. */
+function isConversationItem(candidate: ActivityCandidate) {
+  return candidate.rootMessageId === null && !candidate.mentionAction;
 }
 
 /**

@@ -90,7 +90,18 @@ async function seed(db: PrismaClient, suffix: string) {
       });
     return message;
   }
-  return { alice: alice!, bob: bob!, workspace, channel, post, sequences };
+  /** Pins the member's conversation in their sidebar, at `sortOrder` among their pins. */
+  function pin(member: { id: string; conversationId: string }, sortOrder: number) {
+    return db.conversationPin.create({
+      data: {
+        conversationId: member.conversationId,
+        memberId: member.id,
+        workspaceId: workspace.id,
+        sortOrder,
+      },
+    });
+  }
+  return { alice: alice!, bob: bob!, workspace, channel, post, pin, sequences };
 }
 
 async function cleanup(db: PrismaClient, suffix: string) {
@@ -371,6 +382,119 @@ test("Done removes an item until newer activity arrives, and reads it", async ()
   }
 });
 
+test("a pinned conversation is listed under Pinned even when Done, and not again among the items", async () => {
+  const db = database();
+  const suffix = crypto.randomUUID();
+  try {
+    const { alice, workspace, channel, post, pin } = await seed(db, suffix);
+    const general = await channel("general");
+    const quiet = await channel("quiet");
+    await post(general.conversation.id, general.bobMember.id, "hello");
+    const latest = await post(quiet.conversation.id, quiet.bobMember.id, "newest");
+    await pin(quiet.aliceMember, 0);
+
+    const inbox = new ActivityInbox(db);
+    await inbox.markDone(workspace.id, alice.id, {
+      kind: "conversation",
+      conversationId: quiet.conversation.id,
+      throughSequence: latest.sequence,
+    });
+    const page = await inbox.list(workspace.id, alice.id, { filter: "all" });
+    expect(page.pinned.map((item) => [item.key, item.latest.id, item.unreadCount])).toEqual([
+      [`conversation:${quiet.conversation.id}`, latest.id, 0],
+    ]);
+    expect(page.pinned[0]!.place).toMatchObject({
+      kind: "channel",
+      conversationId: quiet.conversation.id,
+    });
+    expect(page.items.map((item) => item.place.conversationId)).toEqual([general.conversation.id]);
+  } finally {
+    await cleanup(db, suffix);
+  }
+});
+
+test("Pinned follows the pin order and leaves a pinned channel's threads and the counts as they were", async () => {
+  const db = database();
+  const suffix = crypto.randomUUID();
+  try {
+    const { alice, workspace, channel, post, pin } = await seed(db, suffix);
+    const general = await channel("general");
+    const quiet = await channel("quiet");
+    const calm = await channel("calm");
+    const left = await channel("left");
+    const silent = await channel("silent");
+    const root = await post(general.conversation.id, general.aliceMember.id, "a question");
+    await db.threadFollow.create({
+      data: {
+        memberId: general.aliceMember.id,
+        rootMessageId: root.id,
+        conversationId: general.conversation.id,
+        workspaceId: workspace.id,
+      },
+    });
+    await post(general.conversation.id, general.bobMember.id, "@alice an answer", {
+      threadRootId: root.id,
+      mentionMemberIds: [general.aliceMember.id],
+    });
+    await post(general.conversation.id, general.bobMember.id, "@alice news", {
+      mentionMemberIds: [general.aliceMember.id],
+    });
+    await post(quiet.conversation.id, quiet.bobMember.id, "quiet news");
+    await post(calm.conversation.id, calm.bobMember.id, "calm news");
+    await db.conversationMember.update({
+      where: { id: left.aliceMember.id },
+      data: { leftAt: new Date() },
+    });
+    await post(left.conversation.id, left.bobMember.id, "said after alice left");
+
+    const inbox = new ActivityInbox(db);
+    const before = await inbox.list(workspace.id, alice.id, { filter: "all" });
+
+    await pin(general.aliceMember, 2);
+    await pin(quiet.aliceMember, 1);
+    // A pin outlives leaving (the row stays), and a channel can be pinned before anyone has posted
+    // in it: neither is a conversation the inbox lists.
+    await pin(left.aliceMember, 0);
+    await pin(silent.aliceMember, 3);
+
+    const all = await inbox.list(workspace.id, alice.id, { filter: "all" });
+    expect(all.pinned.map((item) => item.place.conversationId)).toEqual([
+      quiet.conversation.id,
+      general.conversation.id,
+    ]);
+    expect(all.pinned[1]).toMatchObject({ unreadCount: 1, unreadMention: true });
+    // The pinned channel's followed thread is an item of its own and stays in the list.
+    expect(all.items.map((item) => item.key)).toEqual([
+      `conversation:${calm.conversation.id}`,
+      `thread:${root.id}`,
+    ]);
+    // Pinning moves no count: every item still counts, wherever it is listed.
+    expect([all.unreadItemCount, all.unreadMentionItemCount]).toEqual([
+      before.unreadItemCount,
+      before.unreadMentionItemCount,
+    ]);
+    expect([all.unreadItemCount, all.unreadMentionItemCount]).toEqual([4, 2]);
+
+    // A later page lists no pins, and none of the pinned conversations either.
+    const second = await inbox.list(workspace.id, alice.id, { filter: "all", limit: 1, offset: 1 });
+    expect(second.pinned).toEqual([]);
+    expect(second.items.map((item) => item.key)).toEqual([`thread:${root.id}`]);
+    expect(second.nextOffset).toBe(null);
+
+    // Unread and Mentions have no Pinned section: a pinned conversation lists among their items.
+    const unread = await inbox.list(workspace.id, alice.id, { filter: "unread" });
+    expect(unread.pinned).toEqual([]);
+    expect(unread.items.map((item) => item.place.conversationId)).toContain(quiet.conversation.id);
+    const mentions = await inbox.list(workspace.id, alice.id, { filter: "mentions" });
+    expect(mentions.pinned).toEqual([]);
+    expect(mentions.items.map((item) => item.key).sort()).toEqual(
+      [`conversation:${general.conversation.id}`, `thread:${root.id}`].sort(),
+    );
+  } finally {
+    await cleanup(db, suffix);
+  }
+});
+
 test("Mark all read clears unread and keeps every item listed", async () => {
   const db = database();
   const suffix = crypto.randomUUID();
@@ -640,7 +764,7 @@ test("direct messages and their threads are listed with the Agent they belong to
   const db = database();
   const suffix = crypto.randomUUID();
   try {
-    const { alice, workspace } = await seed(db, suffix);
+    const { alice, workspace, pin } = await seed(db, suffix);
     const agent = await db.agent.create({
       data: {
         workspaceId: workspace.id,
@@ -682,6 +806,13 @@ test("direct messages and their threads are listed with the Agent they belong to
     ]);
     const direct = page.items[1]!.place;
     expect(direct.kind === "direct" && direct.peer.displayName).toBe("Helper");
+
+    // Pinned, the DM lists under Pinned with its Agent, and its thread stays among the items.
+    await pin({ id: opened.senderMemberId, conversationId: opened.conversationId }, 0);
+    page = await inbox.list(workspace.id, alice.id, { filter: "all" });
+    expect(page.pinned.map((item) => item.place)).toEqual([direct]);
+    expect(page.items.map(kindOf)).toEqual(["thread"]);
+    await db.conversationPin.deleteMany({ where: { conversationId: opened.conversationId } });
 
     // A deleted Agent's conversation stays readable in Chat but leaves the inbox.
     await db.agent.update({ where: { id: agent.id }, data: { deletedAt: new Date() } });

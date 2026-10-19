@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   decodeActivityChangedEvent,
   decodeMessageAvailableEvent,
+  decodeViewerEvent,
   userConversationChannel,
   workspaceConversationChannel,
 } from "#src/features/conversations/conversation-realtime";
@@ -18,8 +19,9 @@ const REFRESH_DELAY_MS = 300;
 
 /**
  * Listens to the viewer's workspace and user conversation channels and calls `onActivity` (once
- * per burst) when a message arrives. The Activity page refreshes its list with it; the nav rail's
- * Activity dot re-reads its attention count with it.
+ * per burst) when a message arrives or the viewer's pins change (Activity lists them under
+ * Pinned). The Activity page refreshes its list with it; the nav rail's Activity dot re-reads its
+ * attention count with it.
  */
 export function useActivityInboxRealtime({
   workspaceId,
@@ -46,8 +48,9 @@ export function useActivityInboxRealtime({
       try {
         decodeActivityChangedEvent(publication.data);
       } catch {
-        // Neither a message nor an Activity signal (the channels also carry other events).
-        return;
+        const event = decodeViewerEvent(publication.data);
+        // Neither a message, an Activity signal nor a pin change (the channels carry other events).
+        if (event?.type !== "pref.changed.v1" || event.name !== "pins") return;
       }
     }
     clearTimeout(timer.current);
