@@ -9,6 +9,7 @@ import {
 import type { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
+import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import {
   BROWSER_MESSAGE_MENTIONS_SELECT,
   agentReadableBody,
@@ -29,7 +30,7 @@ export const TASK_MEMBER_SELECT = {
   agentId: true,
   leftAt: true,
   user: { select: { username: true, displayName: true, avatarObjectKey: true } },
-  agent: { select: { name: true, displayName: true, deletedAt: true } },
+  agent: { select: { name: true, displayName: true, deletedAt: true, avatarObjectKey: true } },
 } satisfies Prisma.ConversationMemberSelect;
 
 export const taskSelection = {
@@ -112,6 +113,7 @@ export function taskMember(
       // rather than letting the card read as if the holder were still live.
       deleted: member.agent.deletedAt !== null,
       ...(member.leftAt !== null && { left: true }),
+      avatarUrl: agentAvatarUrl(workspaceId, member.agentId!, member.agent.avatarObjectKey),
     };
   const user = member.user!;
   return {

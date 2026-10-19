@@ -17,7 +17,7 @@ export type TaskMember = {
   deleted?: boolean;
   /** Set when the member has left the conversation; the Task still names them. */
   left?: boolean;
-  /** Where the browser reads a human's avatar; absent for an Agent. */
+  /** Where the browser reads the member's avatar, a person's or an Agent's; null without one. */
   avatarUrl?: string | null;
 };
 

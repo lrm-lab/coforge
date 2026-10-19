@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import { taskMember } from "#src/server/tasks/task-view.server";
 
 type Member = Parameters<typeof taskMember>[1];
@@ -28,16 +29,33 @@ describe("taskMember", () => {
     });
   });
 
+  const agent = (fields: { avatarObjectKey: string | null; deletedAt?: Date | null }): Member => ({
+    id: "member-2",
+    userId: null,
+    agentId: "agent-1",
+    leftAt: null,
+    user: null,
+    agent: { name: "atlas", displayName: "Atlas Bot", deletedAt: null, ...fields },
+  });
+
   test("an Agent is still its display name, with its @handle as the handle", () => {
+    expect(taskMember("workspace-1", agent({ avatarObjectKey: null }))).toMatchObject({
+      kind: "agent",
+      name: "Atlas Bot",
+      handle: "atlas",
+    });
+  });
+
+  // Task #11: the Task popup, cards and rows showed an Agent's initial although it has an avatar.
+  test("an Agent carries its avatar, as its messages and member rows show it", () => {
+    const key = "workspaces/workspace-1/agents/agent-1/avatars/v1/original";
+    expect(taskMember("workspace-1", agent({ avatarObjectKey: key })).avatarUrl).toBe(
+      agentAvatarUrl("workspace-1", "agent-1", key),
+    );
+    // A deleted Agent keeps its avatar URL, as its messages do; the popup greys it beside its marker.
     expect(
-      taskMember("workspace-1", {
-        id: "member-2",
-        userId: null,
-        agentId: "agent-1",
-        leftAt: null,
-        user: null,
-        agent: { name: "atlas", displayName: "Atlas Bot", deletedAt: null },
-      }),
-    ).toMatchObject({ kind: "agent", name: "Atlas Bot", handle: "atlas" });
+      taskMember("workspace-1", agent({ avatarObjectKey: key, deletedAt: new Date() })),
+    ).toMatchObject({ deleted: true, avatarUrl: agentAvatarUrl("workspace-1", "agent-1", key) });
+    expect(taskMember("workspace-1", agent({ avatarObjectKey: null })).avatarUrl).toBeNull();
   });
 });
