@@ -19,6 +19,15 @@ const logger = getLogger(["coforge", "daemon", "agent-control"]);
 /** Live phases a repair may rewrite: the record still claims the process is up or mid-transition. */
 const LIVE_PHASES = new Set<AgentRuntimeRecord["phase"]>(["running", "starting", "stopping"]);
 
+/** A Start's prompt turns (resume, introduction): only the Start that carries them delivers them. */
+function carriesStartPrompt(intent: AgentStartIntent): boolean {
+  return intent.resumePrompt !== undefined || intent.introductionPrompt !== undefined;
+}
+
+function withoutStartPrompts(intent: AgentStartIntent): AgentStartIntent {
+  return { ...intent, resumePrompt: undefined, introductionPrompt: undefined };
+}
+
 type Runtime = {
   running(agentId: string): boolean;
   stop(agentId: string): Promise<SessionIdentity | undefined>;
@@ -350,8 +359,8 @@ export class AgentControl {
           this.runtime.running(intent.agentId) &&
           intent.wakeMessage
         )
-          // A replay of the same Start: its resume prompt was already delivered.
-          await this.runtime.wake?.({ ...intent, resumePrompt: undefined });
+          // A replay of the same Start: its prompts were already delivered.
+          await this.runtime.wake?.(withoutStartPrompts(intent));
         await this.runtime.result(record.startResult).catch(() => {});
         return;
       }
@@ -686,8 +695,8 @@ export class AgentControl {
     this.sessions.capture(record, record.identity);
     await this.store.write(scope.agentId, record);
     // Reuses the same hook the equal-epoch replay branch already uses to deliver a Start's wake
-    // message (and resume prompt) to a running process — never spawns anything.
-    if (intent.wakeMessage || intent.resumePrompt !== undefined) await this.runtime.wake?.(intent);
+    // message (and prompts) to a running process — never spawns anything.
+    if (intent.wakeMessage || carriesStartPrompt(intent)) await this.runtime.wake?.(intent);
     await this.runtime.result(record.lastResult).catch(() => {});
     logger.info("Agent Start rebound to an already-running process", {
       event: "agent_control:start_rebound",

@@ -10,6 +10,7 @@ import { getAgentRuntimeLock } from "./agent-runtime-lock.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
+import { createAgentIntroduction } from "#src/server/db/repositories/agent-introduction.repositories.server";
 import { createAgentSessions } from "#src/server/db/repositories/agent-session.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
@@ -32,6 +33,7 @@ export function userAgentControl(db: PrismaClient) {
     getAgentControlSignal(),
     conversations,
     mentions,
+    createAgentIntroduction(db),
   );
 }
 
@@ -57,6 +59,9 @@ export function userAgentRuntimeControl(db: PrismaClient, agents: PrismaAgentRep
       undefined,
       sessions,
       getAgentControlSignal(),
+      undefined,
+      undefined,
+      createAgentIntroduction(db),
     ),
   );
 }

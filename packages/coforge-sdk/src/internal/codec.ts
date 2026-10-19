@@ -692,18 +692,27 @@ function validateAgentContextUsage(value: {
     throw new Error("invalid context usage clientSeq");
 }
 
-/** The longest resume prompt a start intent carries, in UTF-16 code units. */
-export const AGENT_RESUME_PROMPT_MAX_LENGTH = 8192;
+/** The longest resume or introduction prompt a start intent carries, in UTF-16 code units. */
+export const AGENT_START_PROMPT_MAX_LENGTH = 8192;
+
+function assertStartPrompt(
+  name: "resume" | "introduction",
+  prompt: string | undefined,
+  error: (reason: string) => Error,
+) {
+  if (prompt === undefined) return;
+  if (!prompt.trim()) throw error(`blank ${name} prompt`);
+  if (prompt.length > AGENT_START_PROMPT_MAX_LENGTH) throw error(`${name} prompt is too long`);
+}
 
 function assertResumePrompt(
   prompt: string | undefined,
   hasRecovery: boolean,
   error: (reason: string) => Error,
 ) {
-  if (prompt === undefined) return;
-  if (!prompt.trim()) throw error("blank resume prompt");
-  if (prompt.length > AGENT_RESUME_PROMPT_MAX_LENGTH) throw error("resume prompt is too long");
-  if (hasRecovery) throw error("resume prompt cannot carry message recovery");
+  assertStartPrompt("resume", prompt, error);
+  if (prompt !== undefined && hasRecovery)
+    throw error("resume prompt cannot carry message recovery");
 }
 
 export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
@@ -714,6 +723,11 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
       value.resumeMessages?.length ||
       Object.keys(value.unreadSummary ?? {}).length,
     ),
+    (reason) => new Error(`invalid Agent start ${reason}`),
+  );
+  assertStartPrompt(
+    "introduction",
+    value.introductionPrompt,
     (reason) => new Error(`invalid Agent start ${reason}`),
   );
   if (value.controlEpoch !== undefined)
@@ -845,6 +859,11 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     recoveryMessages.length > 0 || v.unreadSummary.length > 0,
     (reason) => new Error(`invalid agent start intent: ${reason}`),
   );
+  assertStartPrompt(
+    "introduction",
+    v.introductionPrompt,
+    (reason) => new Error(`invalid agent start intent: ${reason}`),
+  );
   const recoveryMessage = (message: (typeof recoveryMessages)[number]) => ({
     messageId: message.messageId,
     deliveryId: message.deliveryId,
@@ -882,6 +901,7 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     ...(v.toolProfile ? { toolProfile: v.toolProfile as AgentStartIntent["toolProfile"] } : {}),
     ...(v.memoryAgent === true ? { memoryAgent: true } : {}),
     ...(v.resumePrompt !== undefined ? { resumePrompt: v.resumePrompt } : {}),
+    ...(v.introductionPrompt !== undefined ? { introductionPrompt: v.introductionPrompt } : {}),
     ...(v.wakeMessage ? { wakeMessage: recoveryMessage(v.wakeMessage) } : {}),
     ...(v.resumeMessages.length ? { resumeMessages: v.resumeMessages.map(recoveryMessage) } : {}),
     ...(v.unreadSummary.some((entry) => entry.conversationId)

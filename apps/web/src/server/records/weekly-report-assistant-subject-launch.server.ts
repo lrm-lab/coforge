@@ -7,6 +7,7 @@ import { PrismaDirectConversationRepository } from "#src/server/db/repositories/
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
+import { createAgentIntroduction } from "#src/server/db/repositories/agent-introduction.repositories.server";
 import { createAgentSessions } from "#src/server/db/repositories/agent-session.repositories.server";
 
 export type WeeklyReportAssistantLaunchPlan =
@@ -108,6 +109,8 @@ export function createWeeklyReportAssistantSubjectRuntime(
     createAgentSessions(db, mentions),
     getAgentControlSignal(),
     conversations,
+    undefined,
+    createAgentIntroduction(db),
   );
   return {
     presence: (input) => control.readLaunchPresence(input),

@@ -18,6 +18,7 @@ import { AppError } from "#src/lib/app-error";
 import { canSeeAgent } from "./agent-visibility.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
 import type { AcceptedSessionMentions, AgentSessions } from "./agent-sessions.server";
+import type { AgentIntroduction, AgentIntroductionFacts } from "./agent-introduction.server";
 import { LocalAgentControlSignal, type AgentControlSignal } from "./agent-control-signal.server";
 import {
   assertHasAgentControlCapability,
@@ -130,7 +131,9 @@ export type AgentControlAgent = {
    * The internal paths (`recover`, `publishStop`) still operate on a deleted Agent so a Stop can
    * reconcile one the Daemon still runs; the user-initiated `execute()` refuses it outright. */
   deletedAt?: Date | null;
-};
+  // And, from `AgentIntroductionFacts`, the introduction it owes its creator: read model only,
+  // not part of the CAS fence.
+} & AgentIntroductionFacts;
 /** The tracked @mentions a control change affects: a person's Stop settles them as not launched,
  * and a launch that started with its session issues them again for it. */
 export type AgentControlMentions = AcceptedSessionMentions & {
@@ -276,9 +279,9 @@ export class AgentControl {
     private readonly timing: {
       timeoutMs: number;
       fallbackMs?: number;
-      /** Injected so `execute()`'s `stoppedAt` timestamp is deterministic in tests;
-       * defaults to the real clock. No longer drives any abandonment/pending decision —
-       * that concept was removed entirely. */
+      /** Injected so `execute()`'s `stoppedAt` timestamp and a Start's introduction window are
+       * deterministic in tests; defaults to the real clock. No longer drives any
+       * abandonment/pending decision — that concept was removed entirely. */
       now?: () => number;
     } = { timeoutMs: 7_000 },
     private readonly sessions?: AgentSessions,
@@ -289,6 +292,8 @@ export class AgentControl {
     /** Settles the tracked mentions a person's Stop leaves undelivered, and issues them again for
      * a launch that started with its session. */
     private readonly mentions?: AgentControlMentions,
+    /** The introduction prompt a Start carries while the Agent owes its creator one. */
+    private readonly introductions?: Pick<AgentIntroduction, "promptFor">,
   ) {}
 
   /** WeeklyReportAssistant subject launches override the global current session for one start. */
@@ -854,6 +859,7 @@ export class AgentControl {
       state.phase !== "completed" &&
       (state.action === "reset-session" || state.action === "full-reset");
     const { recovery, resumePrompt } = first;
+    const introductionPrompt = await this.introductions?.promptFor(agent, new Date(this.clock()));
     const intent: AgentStartIntent = {
       protocolMajor: 1,
       requestId,
@@ -879,6 +885,7 @@ export class AgentControl {
           }
         : {}),
       ...(resumePrompt !== undefined ? { resumePrompt } : {}),
+      ...(introductionPrompt !== undefined ? { introductionPrompt } : {}),
     };
     const selected = this.sessions ? await this.sessions.prepare(intent) : intent;
     await this.api.publish(

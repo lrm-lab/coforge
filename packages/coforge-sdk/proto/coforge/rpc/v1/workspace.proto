@@ -170,6 +170,12 @@ message AgentStartIntent {
   // guidance a user gives when resuming Agents they stopped.
   // Never carried together with wake_message, resume_messages or unread_summary.
   optional string resume_prompt = 20;
+  // Server-written text for an Agent that has not yet introduced itself to its
+  // creator: the launch's first turn, in place of the empty-launch starter.
+  // Unlike resume_prompt it is carried on every start, ready recovery included,
+  // until the server records the introduction, and it may be carried together
+  // with wake_message, resume_messages, unread_summary and resume_prompt.
+  optional string introduction_prompt = 23;
 }
 
 // Versioned server-to-daemon stop intent. A replacement is expressed as a

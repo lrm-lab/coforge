@@ -1304,6 +1304,52 @@ test("a Start that meets an already-running process under an older, terminal ope
   });
 });
 
+test("a replay of the same Start never delivers its introduction prompt again", async () => {
+  let record: AgentRuntimeRecord | undefined;
+  let active = false;
+  const wakes: AgentStartIntent[] = [];
+  const state = new AgentRuntimeState({
+    listAgentIds: async () => [],
+    read: async () => record && structuredClone(record),
+    write: async (_id, value) => {
+      record = structuredClone(value);
+    },
+    clearWorkspace: async () => {},
+  });
+  const control = new AgentControl("daemon", state, new AgentSessions(state, async () => {}), {
+    running: () => active,
+    stop: async () => undefined,
+    async launch() {
+      active = true;
+      return { sessionId: "native-1", state: "resumable" };
+    },
+    async wake(intent) {
+      wakes.push(intent);
+    },
+    rebind: async () => undefined,
+    result: async () => {},
+  });
+  const intent = rebindScope({
+    introductionPrompt: "Introduce yourself to Ada in your direct conversation.",
+    wakeMessage: {
+      messageId: "m",
+      deliveryId: "d",
+      conversationId: "conversation",
+      sequence: 1,
+      target: "@ada",
+      latestSenderKind: "human" as const,
+      latestSenderHandle: "ada",
+      latestSenderDescription: "",
+      body: "wake",
+    },
+  });
+  await control.start(intent);
+  await control.start(intent);
+  expect(wakes).toHaveLength(1);
+  expect(wakes[0]?.wakeMessage).toEqual(intent.wakeMessage);
+  expect(wakes[0]?.introductionPrompt).toBeUndefined();
+});
+
 test("a Start for a different native session stops the running process instead of rebinding", async () => {
   let record: AgentRuntimeRecord | undefined;
   let active = false;

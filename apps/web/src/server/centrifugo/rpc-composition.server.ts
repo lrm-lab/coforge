@@ -105,6 +105,7 @@ import {
 import { PrismaAgentApiKeyRepository } from "#src/server/db/repositories/agent-api-key.repositories.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";
+import { createAgentIntroduction } from "#src/server/db/repositories/agent-introduction.repositories.server";
 import { createAgentSessions } from "#src/server/db/repositories/agent-session.repositories.server";
 import { AgentSessionReceiver } from "#src/server/agents/agent-session.server";
 import { createAgentControlResultMethod } from "./agent-control-receiver.server";
@@ -247,6 +248,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
       getAgentControlSignal(),
       directConversations,
       mentionReports,
+      createAgentIntroduction(db),
     );
     const sessionReceiver = new AgentSessionReceiver(
       controlStore,

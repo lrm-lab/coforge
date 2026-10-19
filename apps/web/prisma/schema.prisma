@@ -287,6 +287,10 @@ model Agent {
   /// Who deleted (archived) the Agent; null for one deleted before this was recorded, or whose
   /// deleting User is gone.
   deletedByUserId           String?                    @db.Uuid
+  /// Set when a person creates the Agent: it owes its creator an introduction by DM
+  /// (`AgentIntroduction`), counted from this time. Null once settled, and for every Agent that
+  /// owes none.
+  introductionDueAt         DateTime?
   currentSessionId          String?                    @db.Uuid
   currentSession            AgentSession?              @relation("CurrentAgentSession", fields: [currentSessionId], references: [id], onDelete: SetNull)
   sessions                  AgentSession[]             @relation("AgentSessions")

@@ -92,6 +92,11 @@ function mapAgent(agent: {
   };
 }
 
+export type AgentCreateInput = Omit<AgentRecord, "id" | "createdAt"> & {
+  id?: string;
+  introductionDueAt?: Date;
+};
+
 export interface AgentRepository {
   getById(id: string): Promise<AgentRecord | undefined>;
   listInWorkspace(workspaceId: string): Promise<AgentRecord[]>;
@@ -102,7 +107,8 @@ export interface AgentRepository {
   /** Whether a migration that has not finished is moving the Agent between Computers. */
   hasActiveMigration(agentId: string): Promise<boolean>;
   listOwnedInWorkspace(workspaceId: string, ownerId: string): Promise<AgentRecord[]>;
-  create(input: Omit<AgentRecord, "id" | "createdAt"> & { id?: string }): Promise<AgentRecord>;
+  /** `introductionDueAt` is set only by a person's create (`ManageAgents.create`). */
+  create(input: AgentCreateInput): Promise<AgentRecord>;
   /** `name` (the @mention username) is fixed at creation and is never part of an update. */
   update(
     id: string,
@@ -179,7 +185,7 @@ export class PrismaAgentRepository implements AgentRepository {
     return agents.map(mapAgent);
   }
 
-  async create(input: Omit<AgentRecord, "id" | "createdAt"> & { id?: string }) {
+  async create(input: AgentCreateInput) {
     return this.db.$transaction(async (tx) => {
       // A username is global and an Agent name is per Workspace, so no constraint keeps them
       // apart: refuse a name a current member of this Workspace already has, or `@name` would

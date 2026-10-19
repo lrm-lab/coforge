@@ -277,7 +277,7 @@ type AgentInput =
   | { kind: "recovery"; context: AgentRecoveryContext; completion: AgentInputCompletion }
   | { kind: "delivery"; message: AgentMessageDelivery; completion: AgentInputCompletion }
   | { kind: "startup"; text: string; completion: AgentInputCompletion }
-  | { kind: "prompt"; text: string; completion: AgentInputCompletion };
+  | { kind: "prompt"; text: string; introduction?: true; completion: AgentInputCompletion };
 
 type AgentInputQueue = {
   items: AgentInput[];
@@ -327,6 +327,9 @@ type LaunchRequest = {
   sessionId?: string;
   /** The launch's first turn, in place of message recovery (see `AgentStartIntent`). */
   resumePrompt?: string;
+  /** Server-written text for an Agent that has not introduced itself to its creator; it opens
+   * the launch ahead of recovery and `resumePrompt` (see `AgentStartIntent`). */
+  introductionPrompt?: string;
   requestId?: string;
   previousLaunchId?: string;
   sessionMode?: SessionMode;
@@ -467,6 +470,12 @@ export class DaemonRuntime {
   readonly #agentLaunches = new Map<string, Promise<AgentRuntime>>();
   readonly #sessionReferences = new Map<string, SessionReference>();
   readonly #agentInputQueues = new Map<string, AgentInputQueue>();
+  /** Agents whose current process was already handed its introduction turn: one per process,
+   * however many Starts carry `introductionPrompt`. Set only when a live session takes the turn;
+   * a Start also queues none while one waits unsent, so one a crashed process left queued goes to
+   * its relaunch. Forgotten when the Agent's input queue closes or its process exits, so a later
+   * launch introduces again while the server still asks. */
+  readonly #introducedAgents = new Set<string>();
   readonly #stoppingAgents = new Set<string>();
   readonly #agentStops = new Map<string, Promise<void>>();
   readonly #currentActivityLaunches = new Map<string, ActivityLaunch>();
@@ -744,6 +753,7 @@ export class DaemonRuntime {
             previousLaunchId: intent.previousLaunchId,
             sessionMode: intent.sessionMode,
             resumePrompt: intent.resumePrompt,
+            introductionPrompt: intent.introductionPrompt,
             control: { controlEpoch: intent.controlEpoch, launchId },
             replacedSessionId,
             invalidateReason,
@@ -756,7 +766,11 @@ export class DaemonRuntime {
           intent.agentId,
           runtimeConfigOf(intent),
           { wakeMessage: intent.wakeMessage },
-          { requestId: intent.requestId, resumePrompt: intent.resumePrompt },
+          {
+            requestId: intent.requestId,
+            resumePrompt: intent.resumePrompt,
+            introductionPrompt: intent.introductionPrompt,
+          },
         );
       },
       rebind: (intent, launchId) => this.#rebindAgent(intent, launchId),
@@ -1563,12 +1577,39 @@ export class DaemonRuntime {
     this.#requestAppConfigSnapshot(agentId);
     const enqueueRecovery = (context: AgentRecoveryContext) =>
       this.#enqueueAgentInput(agentId, (completion) => ({ kind: "recovery", context, completion }));
-    const enqueueTurn = (text: string) =>
-      this.#enqueueAgentInput(agentId, (completion) => ({ kind: "prompt", text, completion }));
-    const { resumePrompt } = request;
+    const enqueueTurn = (text: string, introduction?: true) =>
+      this.#enqueueAgentInput(agentId, (completion) => ({
+        kind: "prompt",
+        text,
+        introduction,
+        completion,
+      }));
+    const { resumePrompt, introductionPrompt } = request;
+    const carriesPrompt = introductionPrompt !== undefined || resumePrompt !== undefined;
+    const introduction =
+      introductionPrompt !== undefined &&
+      !this.#introducedAgents.has(agentId) &&
+      !this.#agentInputQueues
+        .get(agentId)
+        ?.items.some((item) => item.kind === "prompt" && item.introduction)
+        ? introductionPrompt
+        : undefined;
+    // This Start's input in order: its introduction, the recovery handed over, its resume prompt.
+    const enqueueStartInput = (context: AgentRecoveryContext | undefined) => {
+      const introductionCompletion =
+        introduction === undefined ? undefined : enqueueTurn(introduction, true);
+      const recoveryCompletion = context ? enqueueRecovery(context) : undefined;
+      const promptCompletion = resumePrompt === undefined ? undefined : enqueueTurn(resumePrompt);
+      return {
+        recoveryCompletion,
+        inputs: [introductionCompletion, recoveryCompletion, promptCompletion].filter(
+          (input) => input !== undefined,
+        ),
+      };
+    };
     const existingLaunch = this.#agentLaunches.get(agentId);
     if (existingLaunch) {
-      if (recoveryHasContent(recovery) || resumePrompt !== undefined) {
+      if (carriesPrompt || recoveryHasContent(recovery)) {
         const queue = this.#agentInputQueues.get(agentId);
         if (queue)
           queue.items = queue.items.filter((item) => {
@@ -1577,11 +1618,8 @@ export class DaemonRuntime {
             return false;
           });
       }
-      // A launch in progress presents this start's recovery and resume prompt too.
-      const inputs = [
-        ...(recovery ? [enqueueRecovery(recovery)] : []),
-        ...(resumePrompt !== undefined ? [enqueueTurn(resumePrompt)] : []),
-      ];
+      // A launch in progress presents this start's input too.
+      const { inputs } = enqueueStartInput(recovery);
       if (!inputs.length) return existingLaunch;
       const inputCompletion = Promise.all(inputs);
       // Input can be cancelled before provider creation finishes. Keep the creation promise as
@@ -1601,14 +1639,13 @@ export class DaemonRuntime {
     }
     const activeRuntime = this.#agentProcessManager.runtime(agentId);
     if (activeRuntime) {
-      if (!recovery && resumePrompt === undefined)
+      if (!recovery && !carriesPrompt)
         return Promise.reject(new Error(`Agent runtime is already active: ${agentId}`));
-      // A running Agent keeps its process and session: it is handed only this start's wake
-      // message and resume prompt, never its resume messages or unread summary.
-      const inputs = [
-        ...(recovery?.wakeMessage ? [enqueueRecovery({ wakeMessage: recovery.wakeMessage })] : []),
-        ...(resumePrompt !== undefined ? [enqueueTurn(resumePrompt)] : []),
-      ];
+      // A running Agent keeps its process and session: it is handed only this start's
+      // introduction, wake message and resume prompt, never its resume messages or unread summary.
+      const { inputs } = enqueueStartInput(
+        recovery?.wakeMessage ? { wakeMessage: recovery.wakeMessage } : undefined,
+      );
       if (!inputs.length) return Promise.resolve(activeRuntime);
       this.#ensureAgentInputDrain(agentId);
       return Promise.all(inputs).then(() => activeRuntime);
@@ -1622,17 +1659,16 @@ export class DaemonRuntime {
 
     this.#messageAttention.clearAgent(agentId);
 
-    const recoveryCompletion = recovery ? enqueueRecovery(recovery) : undefined;
     // Register the launch before its first await so concurrent starts cannot mint twice.
     // Launch failure is surfaced by `launch`; the item completion is also rejected when cleared.
-    void recoveryCompletion?.catch(() => {});
-    // A resume prompt (a user's guidance when resuming a stopped Agent, sent with no recovery) is
-    // the launch's first turn, queued before the launch so any message that arrives while the
-    // process is still starting queues behind it.
-    const promptCompletion = resumePrompt === undefined ? undefined : enqueueTurn(resumePrompt);
-    void promptCompletion?.catch(() => {});
+    // The Start's input (a resume prompt is a user's guidance when resuming a stopped Agent, sent
+    // with no recovery) is queued before the launch, so any message that arrives while the process
+    // is still starting queues behind it.
+    const { recoveryCompletion, inputs } = enqueueStartInput(recovery);
+    for (const input of inputs) void input.catch(() => {});
+    // A Start carrying a prompt never gets the starter, even when it queued none of its own.
     const startupCompletion =
-      resumePrompt === undefined && !recoveryHasContent(recovery)
+      !carriesPrompt && !recoveryHasContent(recovery)
         ? this.#enqueueAgentInput(agentId, (completion) => ({
             kind: "startup",
             text: agentStartupInput(
@@ -1751,7 +1787,7 @@ export class DaemonRuntime {
           // the queue at real readiness if this provider awaits the whole turn.
           if (session && launch) await launch.startup?.run(session.sendMessage(item.text));
         } else if (item.kind === "prompt") {
-          await this.#runPromptTurn(agentId, item.text);
+          await this.#runPromptTurn(agentId, item.text, item.introduction);
         } else await this.#recoverAttention(agentId, item.context);
       } catch (error) {
         if (
@@ -1909,8 +1945,9 @@ export class DaemonRuntime {
     });
   }
 
-  /** Opens a turn with `text`: the resume prompt a user's Start sent. */
-  async #runPromptTurn(agentId: string, text: string): Promise<void> {
+  /** Opens a turn with `text`: the resume prompt a user's Start sent, or the introduction the
+   * server asks for. */
+  async #runPromptTurn(agentId: string, text: string, introduction?: true): Promise<void> {
     const session = this.#agentProcessManager.session(agentId);
     if (!session?.notify) {
       logger.debug("Agent prompt turn skipped: the session accepts no input", {
@@ -1919,6 +1956,7 @@ export class DaemonRuntime {
       });
       return;
     }
+    if (introduction) this.#introducedAgents.add(agentId);
     await session.notify(text);
   }
 
@@ -1972,6 +2010,7 @@ export class DaemonRuntime {
   }
 
   #closeAgentInputQueue(agentId: string, error: unknown): void {
+    this.#introducedAgents.delete(agentId);
     const queue = this.#agentInputQueues.get(agentId);
     if (!queue) return;
     queue.closed = true;
@@ -2259,6 +2298,7 @@ export class DaemonRuntime {
         for (const key of this.#contextHandoffs.keys())
           if (key === agentId || key.startsWith(`${agentId}:`)) this.#contextHandoffs.delete(key);
         this.#collectSkillAgents.delete(agentId);
+        this.#introducedAgents.delete(agentId);
         this.#messageAttention.clearAgent(agentId);
         // An unexpected exit only clears busy — whatever a queue_until_idle provider
         // was still holding stays queued for the next launch; only explicit Stop discards it
@@ -2918,6 +2958,7 @@ export class DaemonRuntime {
       previousLaunchId: intent.previousLaunchId,
       sessionMode: intent.sessionMode,
       resumePrompt: intent.resumePrompt,
+      introductionPrompt: intent.introductionPrompt,
     });
   }
 

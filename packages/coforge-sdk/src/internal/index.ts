@@ -673,6 +673,10 @@ export type AgentStartIntent = {
    * gives when resuming Agents they stopped. Never carried together with `wakeMessage`,
    * `resumeMessages` or `unreadSummary`. */
   resumePrompt?: string;
+  /** Server-written text for an Agent that has not yet introduced itself to its creator: the
+   * launch's first turn, in place of the empty-launch starter. Carried on every start until the
+   * server records the introduction, and may accompany recovery and `resumePrompt`. */
+  introductionPrompt?: string;
 };
 export type AgentStopIntent = {
   protocolMajor: number;
@@ -998,7 +1002,7 @@ export {
   decodeAgentSessionInvalidate,
   encodeAgentContextUsage,
   decodeAgentContextUsage,
-  AGENT_RESUME_PROMPT_MAX_LENGTH,
+  AGENT_START_PROMPT_MAX_LENGTH,
   encodeAgentStartIntent,
   decodeAgentStartIntent,
   encodeAgentStopIntent,

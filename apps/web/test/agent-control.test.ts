@@ -17,6 +17,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { isAppError } from "#src/lib/app-error";
 import type { WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
+import { pendingOpStore } from "./helpers/agent-control-store";
 
 function observationRace() {
   const runtimeConfig = {
@@ -1377,22 +1378,6 @@ const pendingRuntimeConfig = {
   modelProvider: "",
   reasoning: "",
 };
-
-/** A CAS-fenced store identical in spirit to the other hand-rolled stores in this file, factored
- * out because every supersede test below starts from a hand-built `AgentControlState`. */
-function pendingOpStore(initial: AgentControlAgent) {
-  let agent = initial;
-  const store: AgentControlStore = {
-    memberRole: async () => "owner",
-    get: async () => structuredClone(agent),
-    replace: async (before, state) => {
-      if (JSON.stringify(before.state) !== JSON.stringify(agent.state)) return false;
-      agent = { ...agent, state };
-      return true;
-    },
-  };
-  return { store, current: () => agent };
-}
 
 /** `agent_control:operation_superseded` is normal behaviour, logged at info. */
 function captureInfo() {

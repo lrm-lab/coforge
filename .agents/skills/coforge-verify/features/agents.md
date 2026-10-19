@@ -46,7 +46,10 @@ For what happens inside a turn see [Agent runtimes](agent-runtimes.md).
 - **Covered by**: `apps/web/test/e2e-channel-create-agent-entry.e2e.ts`
   (screenshots `.amp/e2e/channel-create-agent-entry/`; its
   `button[aria-label^="Visibility"]` check may be stale, unverified).
-  `native-browser.e2e.ts` creates one on a real Computer.
+  `native-browser.e2e.ts` creates one on a real Computer. A new Agent DMs its
+  creator an introduction on its first start, once:
+  `apps/web/test/e2e-agent-introduction.e2e.ts`
+  (`scripts/e2e/run-agent-introduction.sh`; report `.amp/e2e/agent-introduction/`).
 
 ## agent-configure
 

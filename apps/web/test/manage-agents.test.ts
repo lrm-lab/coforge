@@ -118,6 +118,14 @@ describe("ManageAgents", () => {
     });
   });
 
+  test("an Agent a person creates owes them an introduction", async () => {
+    const { agentManagement, records } = fixture();
+
+    await agentManagement.create(principal, input);
+
+    expect(records[0]).toMatchObject({ introductionDueAt: expect.any(Date) });
+  });
+
   test("an Agent whose picture could not be stored is still created, without an avatar", async () => {
     const { agentManagement, records } = fixture({ noInitialAvatar: true });
 

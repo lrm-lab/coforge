@@ -803,6 +803,7 @@ async function queueHarness(
   const notices: string[] = [];
   const acknowledgements: string[] = [];
   const startupNotices: string[] = [];
+  const exitListeners: (() => void)[] = [];
   let sessions = 0;
   let mints = 0;
   let readyFactory: (() => { runningAgentIds: string[] }) | undefined;
@@ -817,6 +818,10 @@ async function queueHarness(
           ...sessionSpy(),
           async sendMessage(text: string) {
             startupNotices.push(text);
+          },
+          onExit(listener: () => void) {
+            exitListeners.push(listener);
+            return () => undefined;
           },
           subscribe(listener: (event: AgentRuntimeEvent) => void) {
             options.subscribe?.(listener);
@@ -869,6 +874,10 @@ async function queueHarness(
     acknowledgements,
     sessions: () => sessions,
     mints: () => mints,
+    /** The Agent's process exits unexpectedly. */
+    exit: () => {
+      for (const listener of exitListeners.splice(0)) listener();
+    },
     runningAgentIds: () => readyFactory!().runningAgentIds,
     delivery: (sequence: number) =>
       runtime.handleAgentMessage({
@@ -6352,6 +6361,172 @@ describe("DaemonRuntime", () => {
     await harness.runtime.handleAgentStart(resumeIntent);
     expect(await first.notice).toBe(resumePrompt);
     await harness.runtime.stop();
+  });
+
+  const introductionPrompt = "Introduce yourself to Ada in your direct conversation.";
+  const introductionIntent = {
+    ...resumeIntent,
+    requestId: "introduction-request",
+    resumePrompt: undefined,
+    introductionPrompt,
+  };
+
+  test("an introduction prompt opens a fresh launch's first turn in place of Start.", async () => {
+    const harness = await queueHarness();
+    try {
+      await harness.runtime.handleAgentStart({
+        ...introductionIntent,
+        sessionMode: "create",
+        controlEpoch: 1,
+        launchId: "launch-introduction-1",
+      });
+      // A delivery arriving after the launch queues behind the introduction.
+      await harness.delivery(1);
+      expect(harness.notices[0]).toBe(introductionPrompt);
+      expect(harness.notices).toHaveLength(2);
+      expect(harness.startupNotices).toEqual([]);
+    } finally {
+      await harness.runtime.stop();
+    }
+  });
+
+  test("an introduction runs before the launch's message recovery, which still runs", async () => {
+    const harness = await queueHarness();
+    try {
+      await harness.runtime.handleAgentStart({
+        ...introductionIntent,
+        unreadSummary: { "#team": 3 },
+      });
+      expect(harness.notices).toHaveLength(2);
+      expect(harness.notices[0]).toBe(introductionPrompt);
+      expect(harness.notices[1]).toContain("restart recovery");
+      expect(harness.startupNotices).toEqual([]);
+    } finally {
+      await harness.runtime.stop();
+    }
+  });
+
+  test("a running process is handed one introduction however many Starts carry it", async () => {
+    const entered = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
+    const harness = await queueHarness({
+      notify: async () => {
+        entered.resolve();
+        await gate.promise;
+      },
+    });
+    try {
+      await harness.runtime.startAgent("agent-a", config);
+      const first = harness.runtime.handleAgentStart(introductionIntent);
+      await entered.promise;
+      // A second Start (a config change) arrives while the introduction turn is still pending.
+      await harness.runtime.handleAgentStart({ ...introductionIntent, requestId: "second-start" });
+      gate.resolve();
+      await first;
+      await harness.runtime.handleAgentStart({ ...introductionIntent, requestId: "third-start" });
+      expect(harness.notices).toEqual([introductionPrompt]);
+    } finally {
+      gate.resolve();
+      await harness.runtime.stop();
+    }
+  });
+
+  test("a Start that joins a launch in progress replaces its Start. with the introduction", async () => {
+    const gate = Promise.withResolvers<void>();
+    const harness = await queueHarness({ launch: () => gate.promise });
+    try {
+      const waking = harness.runtime.startAgent("agent-a", config);
+      const joining = harness.runtime.handleAgentStart(introductionIntent);
+      gate.resolve();
+      await Promise.all([waking, joining]);
+      expect(harness.notices).toEqual([introductionPrompt]);
+      expect(harness.startupNotices).toEqual([]);
+      expect(harness.sessions()).toBe(1);
+    } finally {
+      gate.resolve();
+      await harness.runtime.stop();
+    }
+  });
+
+  test("a managed Start that rebinds a running process hands it the introduction", async () => {
+    const first = firstNotice();
+    const harness = await queueHarness({ notify: first.notify });
+    try {
+      const managed = { ...introductionIntent, introductionPrompt: undefined, controlEpoch: 1 };
+      await harness.runtime.handleAgentStart({ ...managed, launchId: "launch-rebind-1" });
+      await harness.runtime.handleAgentStart({
+        ...managed,
+        requestId: "rebind-introduction",
+        controlEpoch: 2,
+        launchId: "launch-rebind-2",
+        introductionPrompt,
+      });
+      expect(await first.notice).toBe(introductionPrompt);
+      expect(harness.sessions()).toBe(1);
+    } finally {
+      await harness.runtime.stop();
+    }
+  });
+
+  test("a launch after the process exited or stopped introduces again", async () => {
+    const harness = await queueHarness();
+    try {
+      await harness.runtime.handleAgentStart(introductionIntent);
+      await harness.delivery(1);
+      harness.exit();
+      await harness.runtime.handleAgentStart(introductionIntent);
+      await harness.delivery(2);
+      await harness.runtime.stopAgent("agent-a");
+      await harness.runtime.handleAgentStart(introductionIntent);
+      await harness.delivery(3);
+      expect(harness.sessions()).toBe(3);
+      expect(harness.notices.filter((notice) => notice === introductionPrompt)).toHaveLength(3);
+      expect(harness.startupNotices).toEqual([]);
+    } finally {
+      await harness.runtime.stop();
+    }
+  });
+
+  test("an introduction still queued when the process exits is the next launch's only one", async () => {
+    const entered = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
+    const relaunched = Promise.withResolvers<void>();
+    let notifications = 0;
+    let activations = 0;
+    const harness = await queueHarness({
+      notify: async () => {
+        if (++notifications > 1) return;
+        entered.resolve();
+        await gate.promise;
+      },
+      lifecycle: (event) => {
+        if (event === "status:active" && ++activations === 2) relaunched.resolve();
+      },
+    });
+    try {
+      await harness.runtime.startAgent("agent-a", config);
+      // A delivery holds the queue, so the introduction waits behind it, unsent.
+      const delivery = harness.delivery(1);
+      void delivery.catch(() => {});
+      await entered.promise;
+      const introducing = harness.runtime.handleAgentStart(introductionIntent);
+      void introducing.catch(() => {});
+      harness.exit();
+      // The relaunch's own input queues behind the held delivery too.
+      const relaunch = harness.runtime.handleAgentStart(introductionIntent);
+      await relaunched.promise;
+      gate.resolve();
+      await relaunch;
+      await harness.delivery(2);
+      await harness.runtime.handleAgentStart({ ...introductionIntent, requestId: "later-start" });
+      await harness.delivery(3);
+      expect(harness.sessions()).toBe(2);
+      expect(harness.notices.filter((notice) => notice === introductionPrompt)).toHaveLength(1);
+      expect(harness.startupNotices).toEqual(["Start."]);
+    } finally {
+      gate.resolve();
+      await harness.runtime.stop();
+    }
   });
 
   test("a resume launch opens one no-work startup turn", async () => {

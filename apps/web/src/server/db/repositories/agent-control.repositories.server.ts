@@ -78,6 +78,8 @@ export class PrismaAgentControlStore implements AgentControlStore {
         controlState: true,
         stoppedAt: true,
         deletedAt: true,
+        introductionDueAt: true,
+        description: true,
         currentSessionId: true,
         currentSession: true,
         migrations: {
@@ -86,7 +88,7 @@ export class PrismaAgentControlStore implements AgentControlStore {
           select: { id: true },
           take: 1,
         },
-        owner: { select: { memberships: { select: { workspaceId: true } } } },
+        owner: { select: { username: true, memberships: { select: { workspaceId: true } } } },
         computer: { select: { workspaces: { select: { workspaceId: true } } } },
       },
     });
@@ -133,6 +135,9 @@ export class PrismaAgentControlStore implements AgentControlStore {
       currentSessionId: agent.currentSessionId,
       stoppedAt: agent.stoppedAt,
       deletedAt: agent.deletedAt,
+      introductionDueAt: agent.introductionDueAt,
+      description: agent.description,
+      ownerUsername: agent.owner.username,
       ...(agent.migrations.length > 0 ? { migrating: true } : {}),
       state,
       ...(identity ? { identity } : {}),

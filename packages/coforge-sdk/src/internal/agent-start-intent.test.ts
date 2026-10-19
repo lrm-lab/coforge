@@ -167,3 +167,47 @@ test("round-trips the server-authored Memory identity without changing its tool 
     decodeAgentStartIntent(encodeAgentStartIntent({ ...base, memoryAgent: true })).memoryAgent,
   ).toBe(true);
 });
+
+test("round-trips an introduction prompt, alongside message recovery and a resume prompt", () => {
+  const introducing = {
+    ...base,
+    introductionPrompt: "Introduce yourself to Ada in your direct conversation.",
+  };
+  expect(decodeAgentStartIntent(encodeAgentStartIntent(introducing))).toEqual({
+    ...introducing,
+    modelProvider: "",
+    providerConfig: undefined,
+  });
+  expect(
+    decodeAgentStartIntent(
+      encodeAgentStartIntent({ ...introducing, unreadSummary: { "#general": 1 } }),
+    ).introductionPrompt,
+  ).toBe(introducing.introductionPrompt);
+  expect(
+    decodeAgentStartIntent(encodeAgentStartIntent({ ...introducing, resumePrompt: "Go on." }))
+      .introductionPrompt,
+  ).toBe(introducing.introductionPrompt);
+  expect(decodeAgentStartIntent(encodeAgentStartIntent(base))).not.toHaveProperty(
+    "introductionPrompt",
+  );
+});
+
+test("rejects a blank or oversized introduction prompt on encode and decode", () => {
+  expect(() => encodeAgentStartIntent({ ...base, introductionPrompt: "  " })).toThrow(
+    "introduction prompt",
+  );
+  expect(() => encodeAgentStartIntent({ ...base, introductionPrompt: "x".repeat(8193) })).toThrow(
+    "introduction prompt",
+  );
+  for (const introductionPrompt of ["", " ", "x".repeat(8193)]) {
+    const encoded = toBinary(
+      AgentStartIntentSchema,
+      create(AgentStartIntentSchema, {
+        ...base,
+        messageType: AGENT_START_MESSAGE_TYPE,
+        introductionPrompt,
+      }),
+    );
+    expect(() => decodeAgentStartIntent(encoded)).toThrow("introduction prompt");
+  }
+});

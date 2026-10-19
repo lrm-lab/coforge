@@ -78,14 +78,13 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   `publishStart`, `publishStop` (still checked against Agent ownership), and
   `authorizeLaunch` (Workspace/Computer scope only) skip this capability
   check.
-- The latest command wins: `begin()` supersedes any non-terminal operation
-  with a different `requestId`. Do not add a pending-operation rejection or an
-  abandonment/age concept.
+- The latest command wins: `begin()` supersedes any non-terminal operation with
+  a different `requestId`, and `recover()` (Daemon `ready` reconciliation)
+  never supersedes, only republishes. Do not add a pending-operation rejection
+  or an abandonment/age concept.
 - A superseded caller's `drive()` resolves `phase: "superseded"` instead of
   throwing; `executeAgentControl` throws only on `failed`. `publishStop()`
   throws on supersede because its callers need a confirmed stop.
-- `recover()` (Daemon `ready` reconciliation) never supersedes; it only
-  republishes the current operation.
 - Control clears the Session binding at the local chain step.
 
 ## Send freshness
@@ -129,9 +128,11 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   Start without it, so the Agent never reads the guidance twice.
 - A user `start` carries the same recovery context
   (`conversations.readAgentRecoveryContext`) as a Daemon-ready recovery start.
-- Ready recovery skips a stopped Agent; if the Daemon still reports it running,
-  reconcile with a Stop through `AgentControl.publishStop` without blocking
-  the rest of recovery.
+- Starts carry `introductionPrompt` up to 7 days after `introductionDueAt`,
+  which only a person's create sets and the next Start settles once the Agent
+  has a message in its creator's DM.
+- Ready recovery reconciles a stopped Agent the Daemon still runs with a Stop
+  through `AgentControl.publishStop`, without blocking the rest of recovery.
 - `agent-delivery-rejection.server.ts` answers a Daemon's `no_process`
   delivery rejection. It never starts a stopped or deleted Agent, one with an
   operation in flight (for any configuration), or one whose latest operation
@@ -153,8 +154,7 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   `Agent.runtimeSession` stores only the upstream fence fields and is hydrated
   from that table.
 - Acknowledged `agent:session` WSS reports never travel as Activity.
-- Ready recovery selects Agents in the cloud; no local transcript scan starts
-  Agents.
+- Ready recovery selects Agents in the cloud, never by a local transcript scan.
 - Session snapshot acceptance (`agent-session.server.ts`) shares the control
   authorization guard but never advances control operations. Sequenced
   snapshots validate the upstream launch fence first. Control-result dispatch

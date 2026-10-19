@@ -40,10 +40,10 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   business operations coordinate updates and snapshot persistence inside this module.
   Callers use its message operations and queries, never a separate mutable state dependency.
 - `memory-channel-updates.ts` coalesces ordinary Memory Agent channel deliveries per target: five updates or 30 seconds trigger a notice, whose body is read through `message_read`. Personal mentions remain immediate.
-- A create or resume launch opens one startup turn. Real recovery input or an explicit
-  `resumePrompt` takes precedence; an empty fresh launch gets `Start.`, an empty resume gets a
-  no-work turn, and summary-only recovery reads each listed target once and acts only on work
-  directed to the Agent. Never add a starter to a provider's already-running bootstrap turn.
+- A create or resume launch opens one startup turn. An `introductionPrompt` (first), real recovery
+  input or an explicit `resumePrompt` takes precedence; an empty fresh launch gets `Start.`, an empty
+  resume gets a no-work turn, and summary-only recovery reads each listed target once and acts only on
+  work directed to the Agent. Never add a starter to a provider's already-running bootstrap turn.
 - `agent-runtime/agent-startup.ts` owns startup input and the launch-local 120-second readiness
   deadline. Session/usage bookkeeping and transport progress do not establish readiness.
   Real turn Activity or an outcome closes the deadline; timeout reports an error and tears
