@@ -110,7 +110,8 @@ describe("npm-installed Codex discovery through the public seam", () => {
       expect(build.success).toBe(true);
       copyFileSync(launcher, hostJoin(bin, "codex-fake-node.exe"));
     } else {
-      writeFileSync(hostJoin(bin, "codex"), "#!/usr/bin/env codex-fake-node", { mode: 0o755 });
+      // macOS execve refuses a shebang line without its newline (ENOEXEC); npm's launchers end it.
+      writeFileSync(hostJoin(bin, "codex"), "#!/usr/bin/env codex-fake-node\n", { mode: 0o755 });
       writeFileSync(
         hostJoin(bin, "codex-fake-node"),
         await Bun.file(path.join(import.meta.dir, "fixtures", "codex-fake-node")).text(),

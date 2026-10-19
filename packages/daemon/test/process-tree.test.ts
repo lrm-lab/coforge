@@ -1,8 +1,27 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 
 import { ProcessTreeOwner } from "#src/platform/process-tree";
 import { RuntimeExecutableNotFoundError } from "#src/platform/runtime-executable-not-found";
+
+// Inside a CoForge Workspace on macOS these route spawn through launchd; the host must not decide.
+const workspaceAgentVariables = [
+  "COFORGE_WORKSPACE_AGENT_PREFIX",
+  "COFORGE_WORKSPACE_JOB_DIRECTORY",
+] as const;
+const hostWorkspaceAgentValues = workspaceAgentVariables.map((name) => process.env[name]);
+
+beforeEach(() => {
+  for (const name of workspaceAgentVariables) delete process.env[name];
+});
+
+afterEach(() => {
+  workspaceAgentVariables.forEach((name, index) => {
+    const value = hostWorkspaceAgentValues[index];
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  });
+});
 
 test("spawn errors without an OS process fail synchronously", () => {
   const owner = new ProcessTreeOwner();
@@ -127,7 +146,14 @@ function fakeJobObject() {
 
 /** Each call is a fresh owner, and on the Windows path a fresh Job Object to inspect. */
 const childAdapterOwners = [
-  { platform: "unix", create: () => ({ owner: new ProcessTreeOwner("linux"), job: undefined }) },
+  {
+    platform: "unix",
+    // The host's Unix branch (Linux scans /proc, macOS probes with kill); Windows keeps Linux.
+    create: () => ({
+      owner: new ProcessTreeOwner(process.platform === "win32" ? "linux" : process.platform),
+      job: undefined,
+    }),
+  },
   {
     platform: "win32 (fake Job Object)",
     create: () => {
