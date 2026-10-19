@@ -9,17 +9,17 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
  * The Activity page in a real browser: a followed thread with an unread reply that mentions the
- * viewer and a channel with an unread message appear as cards with their badges and Markdown
- * previews; the Mentions view
- * keeps only the thread; the card menu offers read, Done and unfollow; Done removes a card for
- * good. On a wide screen a card opens its conversation beside the list, without leaving Activity,
- * and is marked as the open one, through a change of view and a reload: the thread card opens its
- * thread pane at the first unread reply,
- * and a thread read to the end opens at its newest reply. On a phone a card opens the conversation
- * in Chat. A direct message with a member, and the viewer's with themself, list under that member's
- * name and face, and opening one beside the list reads it. A pinned channel lists under Pinned,
- * before All conversations and not again below it, while its followed thread stays below; it stays
- * under Pinned after Done, and Mentions has no Pinned section.
+ * viewer and a channel with an unread message appear as rows with their badges and Markdown
+ * previews, under a header that counts what the All view lists ("N active"); the Mentions view
+ * keeps only the thread; the row menu offers read, Done and unfollow; Done removes a row for
+ * good. On a wide screen the list fills the page until a row is opened: then it narrows to a
+ * 35rem column and the conversation opens beside it, without leaving Activity, with the row marked
+ * as the open one, through a change of view and a reload; the thread row opens its thread pane at
+ * the first unread reply, and a thread read to the end opens at its newest reply. On a phone a row
+ * opens the conversation in Chat. A direct message with a member, and the viewer's with themself,
+ * list under that member's name and face, and opening one beside the list reads it. A pinned
+ * channel lists under Pinned, before All conversations and not again below it, while its followed
+ * thread stays below; it stays under Pinned after Done, and Mentions has no Pinned section.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
  * its messages are seeded deterministically and reset on every run. Screenshots of the wide
@@ -60,6 +60,15 @@ const pinnedItems = JSON.stringify('ol[aria-label="Pinned"] > li');
 
 /** The pane beside the list that shows the conversation a card opened. */
 const pane = `document.querySelector('section[aria-label="Selected conversation"]')`;
+
+/** The list's column (its rows' scroller's parent): its width says whether a pane is beside it. */
+const listColumnWidth = `document.querySelector('ol[aria-label="Activity"]').parentElement.parentElement.getBoundingClientRect().width`;
+
+/** 35rem in px: the list column's width while a conversation is open beside it. */
+const columnRem35 = `35 * parseFloat(getComputedStyle(document.documentElement).fontSize)`;
+
+/** The header's "N active" beside the title, as its number, or null when it is not shown. */
+const activeCount = `(() => { const text = [...document.querySelectorAll("h1")].find((h) => h.textContent.trim() === "Activity")?.nextElementSibling?.textContent.trim() ?? ""; const match = /^(\\d+) active$/.exec(text); return match ? Number(match[1]) : null; })()`;
 
 /** Whether message `id` is rendered inside the conversation pane (one line: a wait argument). */
 function inPane(id: string) {
@@ -274,14 +283,23 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser("open", `${origin}${workspacePath}/activity`);
     await browser("wait", "--fn", `${seededCards}.length === 2 && ${hydrated}`);
     const cards = await evaluate<string[]>(seededCards);
-    // Newest activity first: the channel's unread message was posted after the thread reply.
-    expect(cards[0]).toContain("#e2e-activity-inbox");
-    expect(cards[0]).toContain("Activity Peer: E2E activity unread");
+    // Newest activity first: the channel's unread message was posted after the thread reply. A
+    // channel's row goes by its bare name (the # is its icon); a thread's names its channel
+    // before the latest reply.
+    expect(cards[0]).toContain("e2e-activity-inbox");
+    expect(cards[0]).not.toContain("#e2e-activity-inbox");
     expect(cards[0]).toContain("1 new");
+    expect(cards[0]).toContain("Activity Peer: E2E activity unread");
     expect(cards[1]).toContain("E2E activity root");
-    expect(cards[1]).toContain("1 reply");
     expect(cards[1]).toContain("@you");
     expect(cards[1]).toContain("1 new");
+    expect(cards[1]).toContain("#e2e-activity-inbox · Activity Peer: ");
+    // Nothing is open, so there is no conversation area: the list spans the page.
+    expect(await evaluate<boolean>(`${pane} === null`)).toBe(true);
+    expect(await evaluate<number>(`${listColumnWidth} / innerWidth`)).toBeGreaterThan(0.6);
+    // The header counts every row the All view lists, these two among them.
+    const active = await evaluate<number | null>(activeCount);
+    expect(active).toBeGreaterThanOrEqual(2);
     // The preview renders Markdown inline: the mention as a chip, emphasis and code as markup.
     const preview = await evaluate<{ strong: string | null; code: string | null }>(`(() => {
       const card = [...document.querySelectorAll(${cardItems})].find((item) =>
@@ -373,8 +391,9 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       return true;
     })()`);
     await browser("wait", "--fn", `${seededCards}.length === 1`);
-    // Done took an unread card away, and the Unread count with it.
+    // Done took an unread row away, and the Unread and active counts with it.
     await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread - 1}`);
+    await browser("wait", "--fn", `${activeCount} === ${active! - 1}`);
     await browser("reload");
     await browser("wait", "--fn", `${seededCards}.length === 1 && ${hydrated}`);
     expect((await evaluate<string[]>(seededCards))[0]).toContain("E2E activity root");
@@ -390,6 +409,11 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(await evaluate<string>("location.pathname")).toBe(`${workspacePath}/activity`);
     expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
     expect(await evaluate<string | null>(currentCard)).toContain("E2E activity root");
+    // Opening a row narrows the list to its 35rem column beside the conversation.
+    expect(await evaluate<boolean>(`${pane} !== null`)).toBe(true);
+    expect(
+      await evaluate<number>(`Math.abs(${listColumnWidth} - ${columnRem35})`),
+    ).toBeLessThanOrEqual(1);
     await browser("screenshot", join(artifacts, "wide-open.png"));
     // Switching the list's view keeps the conversation open. Clicked through Activity's own
     // tablist: the open conversation has tabs too.
@@ -410,13 +434,15 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser("wait", "--fn", `(${currentCard})?.includes("E2E activity root") === true`);
     expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
 
-    // A thread read to the end with no mention opens at its newest reply.
+    // A thread read to the end with no mention opens at its newest reply. Activity without an
+    // open conversation (where its nav item leads) is the full-width list again.
     await browser("open", `${origin}${workspacePath}/activity`);
     await browser(
       "wait",
       "--fn",
       `document.body.textContent.includes("E2E quiet root") && ${hydrated}`,
     );
+    expect(await evaluate<boolean>(`${pane} === null`)).toBe(true);
     await browser("find", "text", "E2E quiet root", "click");
     await browser("wait", "--fn", `location.search.includes("threadRootId=${quietRootId}")`);
     // The newest reply sits inside the visible part of the scrolled thread pane.
@@ -563,17 +589,19 @@ test("a direct message with a member, and the one with themself, list with the m
       `${card("E2E activity DM hello")} !== null && ${card("E2E activity note to self")} !== null && ${hydrated}`,
     );
     // The member's DM goes by their name and face, unread; the viewer's own by theirs, "(you)".
+    // The title is the bare name, without an @.
     const dm = await evaluate<{ text: string; avatar: string | null }>(
       card("E2E activity DM hello"),
     );
-    expect(dm.text).toContain("@Activity DM Peer");
-    expect(dm.text).toContain("Activity DM Peer: E2E activity DM hello");
+    expect(dm.text).not.toContain("@Activity DM Peer");
     expect(dm.text).toContain("1 new");
+    expect(dm.text).toContain("Activity DM Peer: E2E activity DM hello");
     expect(dm.avatar).toBe("A");
     const self = await evaluate<{ text: string; avatar: string | null }>(
       card("E2E activity note to self"),
     );
-    expect(self.text).toContain(`@${viewerName} (you)`);
+    expect(self.text).toContain(`${viewerName} (you)`);
+    expect(self.text).not.toContain(`@${viewerName}`);
     expect(self.text).not.toMatch(/\d+ new/);
     expect(self.avatar).not.toBeNull();
     await browser("screenshot", join(artifacts, "member-dm.png"));
@@ -639,12 +667,16 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     );
     // The channel's own card is under Pinned, and only there; its followed thread is below.
     const [pinnedCard] = await evaluate<string[]>(cardsIn(pinnedItems));
-    expect(pinnedCard).toContain("#e2e-activity-pinned");
+    // The bare channel name, with the mention and new-message badges.
+    expect(pinnedCard).toContain("e2e-activity-pinned");
+    expect(pinnedCard).not.toContain("#e2e-activity-pinned");
+    expect(pinnedCard).toContain("@you");
     expect(pinnedCard).toContain("Activity Peer: ");
     expect(pinnedCard).toContain("E2E pinned hello");
     expect(pinnedCard).toContain("1 new");
     const [threadCard] = await evaluate<string[]>(cardsIn(cardItems));
     expect(threadCard).toContain("E2E pinned root");
+    expect(threadCard).toContain("#e2e-activity-pinned · ");
     expect(threadCard).not.toContain("E2E pinned hello");
     // Pinned, its cards, then All conversations and the rest of the list.
     expect(

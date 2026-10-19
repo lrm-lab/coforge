@@ -18,6 +18,7 @@ import {
   Mail01,
   MessageTextSquare01,
   Pin01,
+  User01,
 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
 
@@ -72,19 +73,22 @@ import {
   type ActivityInboxPage,
 } from "./activity-inbox-queries";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
-import { ActivityConversationEmpty, ActivityConversationPane } from "./activity-conversation-pane";
+import { ActivityConversationPane } from "./activity-conversation-pane";
 import { activityChatLink, activityOpenTarget, openedItemKey } from "./activity-open-target";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
 /**
  * The Activity page: the viewer's channels, direct messages and followed threads with activity
- * they have not marked Done, newest first. The All view puts the viewer's pinned conversations
- * (Chat's Pinned) first under a Pinned heading, then the rest under All conversations; with nothing
- * pinned it shows no headings. A card opens its conversation or thread and reads it:
- * from `lg` up, beside the list, which stays on screen with the card marked as the open one (kept
- * in the URL); below it, in Chat. Nothing opens on its own, since opening reads. The check on a
- * card marks it Done, which keeps it away until a newer message arrives; the pane stays open.
+ * they have not marked Done, newest first, as flat rows under a header that says how many the All
+ * view lists ("N active"). The All view puts the viewer's pinned conversations (Chat's Pinned)
+ * first under a Pinned heading, then the rest under All conversations; with nothing pinned it
+ * shows no headings. Until a row is opened the list fills the page and no conversation area is
+ * shown. A row opens its conversation or thread and reads it: from `lg` up, beside the list, which
+ * narrows to a column and keeps the row marked as the open one (kept in the URL); below it, in
+ * Chat. Nothing opens on its own, since opening reads; the Activity nav item, which drops the URL's
+ * `open`, is the way back to the full-width list. The check on a row marks it Done, which keeps it
+ * away until a newer message arrives; the pane stays open.
  */
 export function ActivityInboxView({
   filter,
@@ -103,7 +107,7 @@ export function ActivityInboxView({
   const queryClient = useQueryClient();
   const markAllRead = useServerFn(markActivityInboxRead);
 
-  // Switching views keeps the current cards on screen until the next view has loaded.
+  // Switching views keeps the current rows on screen until the next view has loaded.
   const query = useInfiniteQuery({
     ...activityInboxQuery(workspaceId, filter),
     placeholderData: keepPreviousData,
@@ -120,7 +124,7 @@ export function ActivityInboxView({
       .filter((item) => !seen.has(item.key) && seen.add(item.key));
   }, [query.data, pinned]);
 
-  // List and conversation side by side need the width Chat pins them at (`lg`); narrower, a card
+  // List and conversation side by side need the width Chat pins them at (`lg`); narrower, a row
   // opens Chat instead.
   const wide = useBreakpoint("lg");
   const currentKey = useMemo(
@@ -178,7 +182,7 @@ export function ActivityInboxView({
       heading: pinned.length > 0 && (
         <ActivityInboxSectionHeading
           label={m.activity_inbox_all_conversations()}
-          className="mt-5"
+          className="pt-4"
         />
       ),
       label: m.navigation_activity(),
@@ -186,8 +190,8 @@ export function ActivityInboxView({
     },
   ].filter((section) => section.items.length > 0);
 
-  const card = (item: ActivityInboxItem) => (
-    <ActivityInboxCard
+  const row = (item: ActivityInboxItem) => (
+    <ActivityInboxRow
       key={item.key}
       item={item}
       filter={filter}
@@ -198,10 +202,26 @@ export function ActivityInboxView({
     />
   );
 
+  // The conversation area exists only once a row is open; until then the list fills the page.
+  const paneOpen = wide && opened !== undefined;
+  const activeCount = firstPage?.activeItemCount;
   const list = (
-    <div className={cn("flex min-h-0 flex-col", wide ? "w-96 shrink-0" : "min-w-0 flex-1")}>
+    <div
+      className={cn(
+        "flex min-h-0 flex-col",
+        // Raft's 35rem column, at most half the page so the conversation keeps room at `lg`.
+        paneOpen ? "w-[min(35rem,50%)] shrink-0" : "min-w-0 flex-1",
+      )}
+    >
       <PageHeader
         heading={m.navigation_activity()}
+        meta={
+          activeCount !== undefined && (
+            <span className="shrink-0 text-sm text-tertiary tabular-nums">
+              {m.activity_inbox_active_count({ count: activeCount })}
+            </span>
+          )
+        }
         tabs={
           <ActivityInboxTabs
             filter={filter}
@@ -235,7 +255,7 @@ export function ActivityInboxView({
           </Button>
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {query.isError && empty ? (
           <ActivityInboxLoadError onRetry={() => void query.refetch()} />
         ) : empty ? (
@@ -244,8 +264,8 @@ export function ActivityInboxView({
           sections.map((section) => (
             <Fragment key={section.label}>
               {section.heading}
-              <ol aria-label={section.label} className="flex flex-col gap-2">
-                {section.items.map(card)}
+              <ol aria-label={section.label} className="flex flex-col">
+                {section.items.map(row)}
               </ol>
             </Fragment>
           ))
@@ -263,12 +283,7 @@ export function ActivityInboxView({
   return (
     <div className="flex h-full min-h-0 min-w-0">
       {list}
-      {wide &&
-        (opened ? (
-          <ActivityConversationPane key={`${opened.kind}:${opened.id}`} target={opened} />
-        ) : (
-          <ActivityConversationEmpty />
-        ))}
+      {paneOpen && <ActivityConversationPane key={`${opened.kind}:${opened.id}`} target={opened} />}
     </div>
   );
 }
@@ -285,7 +300,7 @@ const FILTER_TABS: ReadonlyArray<{
 
 /**
  * All / Unread / Mentions as the Chat header's icon + label underline tabs. Unread and Mentions
- * carry how many cards have something unread and an unread mention; the numbers are the same
+ * carry how many rows have something unread and an unread mention; the numbers are the same
  * whichever tab is showing, and a zero shows nothing.
  */
 function ActivityInboxTabs({
@@ -335,8 +350,8 @@ function ActivityInboxTabs({
   );
 }
 
-/** A list section's label (Pinned, All conversations): a tertiary subheading, with the section's
- * mark when it has one. */
+/** A list section's label (Pinned, All conversations): a tertiary subheading on the rows' inset,
+ * with the section's mark when it has one. */
 function ActivityInboxSectionHeading({
   icon: Icon,
   label,
@@ -348,9 +363,12 @@ function ActivityInboxSectionHeading({
 }) {
   return (
     <h2
-      className={cn("mb-2 flex items-center gap-1.5 text-sm font-medium text-tertiary", className)}
+      className={cn(
+        "flex items-center gap-1.5 px-4 pt-2 pb-1 text-sm font-semibold text-tertiary sm:px-6",
+        className,
+      )}
     >
-      {Icon && <Icon aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />}
+      {Icon && <Icon aria-hidden="true" className="size-3 shrink-0 text-fg-quaternary" />}
       {label}
     </h2>
   );
@@ -402,9 +420,9 @@ function ActivityInboxLoadMore({
 type ActivityItemActions = ReturnType<typeof useActivityItemActions>;
 
 /**
- * What a card can do. Reading, marking unread and following reuse the conversation's own
- * functions, so the Chat sidebar and the inbox move the same cursors. Done hides the card at once
- * and the refetch puts it back if the server refused. The returned object is stable, so cards
+ * What a row can do. Reading, marking unread and following reuse the conversation's own
+ * functions, so the Chat sidebar and the inbox move the same cursors. Done hides the row at once
+ * and the refetch puts it back if the server refused. The returned object is stable, so rows
  * re-render only when their own item changes.
  */
 function useActivityItemActions({
@@ -487,10 +505,17 @@ function useActivityItemActions({
         );
       },
       done: (item: ActivityInboxItem) => {
+        // Every view of this Workspace: the counts cover them all.
+        const views = { queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId] };
+        // Only the All view lists pins, so it is the one that knows a Done item stays listed.
+        const pinned = queryClient
+          .getQueriesData<InfiniteData<ActivityInboxPage>>(views)
+          .some(([, data]) =>
+            data?.pages.some((page) => page.pinned.some((entry) => entry.key === item.key)),
+          );
         queryClient.setQueriesData<InfiniteData<ActivityInboxPage>>(
-          // Every view of this Workspace: the counts cover them all.
-          { queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId] },
-          (data) => data && withoutItem(data, item),
+          views,
+          (data) => data && withoutItem(data, item, pinned),
         );
         run(() =>
           markDone({
@@ -531,12 +556,14 @@ function useActivityItemActions({
 
 /**
  * A cached view of the item's Workspace without the item, until the refetch lands. The tab counts
- * cover every view, so each view drops the item from them, whether or not it lists the item. A
- * pinned conversation stays under Pinned after Done, so `pinned` keeps it.
+ * and the active count cover every view, so each view drops the item from them, whether or not it
+ * lists the item. A pinned conversation stays under Pinned after Done, so `pinned` keeps it, and
+ * it still counts as active.
  */
 function withoutItem(
   data: InfiniteData<ActivityInboxPage>,
   item: ActivityInboxItem,
+  pinned: boolean,
 ): InfiniteData<ActivityInboxPage> {
   return {
     ...data,
@@ -548,6 +575,7 @@ function withoutItem(
         0,
         page.unreadMentionItemCount - (item.unreadMention ? 1 : 0),
       ),
+      activeItemCount: Math.max(0, page.activeItemCount - (pinned ? 0 : 1)),
     })),
   };
 }
@@ -558,7 +586,7 @@ function Preview({ message }: { message: ActivityInboxItem["latest"] }) {
   return <>{message.attachments[0]?.fileName ?? ""}</>;
 }
 
-const ActivityInboxCard = memo(function ActivityInboxCard({
+const ActivityInboxRow = memo(function ActivityInboxRow({
   item,
   filter,
   actions,
@@ -570,9 +598,9 @@ const ActivityInboxCard = memo(function ActivityInboxCard({
   filter: ActivityInboxFilter;
   actions: ActivityItemActions;
   viewerId: string;
-  /** This card stands for the conversation open beside the list. */
+  /** This row stands for the conversation open beside the list. */
   current: boolean;
-  /** Opens the card beside the list; undefined when there is no room, so the card opens Chat. */
+  /** Opens the row beside the list; undefined when there is no room, so the row opens Chat. */
   onOpen: ((target: HostedConversationTarget) => void) | undefined;
 }) {
   const router = useRouter();
@@ -583,12 +611,13 @@ const ActivityInboxCard = memo(function ActivityInboxCard({
   const unread = item.unreadCount > 0;
   const { place, thread } = item;
   // A DM, and a thread in one, goes by who is on the other side, whether an Agent or a member.
-  const placeName =
-    place.kind === "channel"
-      ? `#${place.channelName}`
-      : place.peer.kind === "people" && place.peer.userId === viewerId
-        ? `@${m.conversation_dm_self_name({ name: place.peer.displayName })}`
-        : `@${place.peer.displayName}`;
+  const peerName =
+    place.kind === "direct" &&
+    (place.peer.kind === "people" && place.peer.userId === viewerId
+      ? m.conversation_dm_self_name({ name: place.peer.displayName })
+      : place.peer.displayName);
+  // Where a thread is, before its latest reply.
+  const placeLabel = place.kind === "channel" ? `#${place.channelName}` : `@${peerName}`;
   const sender =
     item.latest.senderKind === "system" ? m.activity_inbox_system_sender() : item.latest.senderName;
 
@@ -600,15 +629,11 @@ const ActivityInboxCard = memo(function ActivityInboxCard({
   }
 
   return (
-    <li
-      className={cn(
-        "group relative flex items-start gap-2 rounded-xl border p-3 transition-colors select-none [-webkit-touch-callout:none] hover:bg-secondary",
-        current ? "border-brand bg-secondary" : "border-secondary bg-primary",
-      )}
-    >
-      {/* The card is a React Aria link so the context menu (`MenuTrigger trigger="contextMenu"`)
+    // A hairline divides a row from the one above it, from the text column on (past the icon).
+    <li className="group relative select-none [-webkit-touch-callout:none] before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-16 before:border-t before:border-secondary first:before:hidden sm:before:left-18">
+      {/* The row is a React Aria link so the context menu (`MenuTrigger trigger="contextMenu"`)
           can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
-          navigation. Opening a card reads it, like opening the conversation does. */}
+          navigation. Opening a row reads it, like opening the conversation does. */}
       <Dropdown.Root trigger="contextMenu">
         <AriaLink
           href={href}
@@ -622,7 +647,7 @@ const ActivityInboxCard = memo(function ActivityInboxCard({
                 {...props}
                 {...link}
                 onClick={(event) => {
-                  // With room beside the list a plain click (or Enter) opens the card there, so
+                  // With room beside the list a plain click (or Enter) opens the row there, so
                   // neither `Link` nor React Aria navigates; a modified or middle click still
                   // opens Chat. React Aria's handler still runs: it ends a keyboard press.
                   const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
@@ -637,37 +662,47 @@ const ActivityInboxCard = memo(function ActivityInboxCard({
               <span {...props} />
             )
           }
-          className="min-w-0 flex-1 rounded-lg outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
-        >
-          {thread && (
-            <p className="mb-0.5 truncate text-xs font-medium text-tertiary">{placeName}</p>
+          className={cn(
+            "flex items-center gap-3 px-4 py-3 outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 sm:px-6",
+            // The row's own hover, kept while the pointer is on its Done check (a sibling).
+            current ? "bg-brand-primary_alt" : "group-hover:bg-primary_hover",
           )}
-          <div className="flex min-w-0 items-start gap-2">
-            <ActivityItemIcon item={item} />
-            <p
-              className={cn(
-                "line-clamp-2 min-w-0 flex-1 text-sm break-words",
-                unread ? "font-semibold text-primary" : "font-medium text-secondary",
-              )}
-            >
-              {thread ? <Preview message={thread.root} /> : placeName}
-            </p>
-            <RelativeTime
-              value={item.latest.createdAt}
-              plain
-              className="shrink-0 text-xs text-quaternary"
-            />
-          </div>
-          <p
-            className={cn(
-              "mt-1 line-clamp-2 text-sm break-words",
-              unread ? "text-secondary" : "text-tertiary",
-            )}
-          >
-            <span className="font-medium">{sender}: </span>
-            <Preview message={item.latest} />
-          </p>
-          <ActivityItemBadges item={item} filter={filter} />
+        >
+          <ActivityItemIcon item={item} />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className={cn(
+                  "min-w-0 truncate text-md font-semibold",
+                  unread ? "text-primary" : "text-secondary",
+                )}
+              >
+                {thread ? (
+                  <Preview message={thread.root} />
+                ) : place.kind === "channel" ? (
+                  place.channelName
+                ) : (
+                  peerName
+                )}
+              </span>
+              <ActivityItemBadges item={item} filter={filter} />
+              {/* Gives way to the Done check wherever the check shows (hover, focus, the open
+                  row); a touch screen has no check, so the time stays. */}
+              <RelativeTime
+                value={item.latest.createdAt}
+                plain
+                className={cn(
+                  "ml-auto shrink-0 pl-2 font-mono text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-0",
+                  current && "[@media(hover:hover)]:opacity-0",
+                )}
+              />
+            </span>
+            <span className="truncate text-sm text-tertiary">
+              {thread && `${placeLabel} · `}
+              <span className="font-semibold text-secondary">{sender}: </span>
+              <Preview message={item.latest} />
+            </span>
+          </span>
         </AriaLink>
         <Dropdown.Popover placement="bottom start">
           <Dropdown.Menu aria-label={m.activity_inbox_menu_label()} onAction={handleAction}>
@@ -714,30 +749,47 @@ const ActivityInboxCard = memo(function ActivityInboxCard({
         tooltip={m.activity_inbox_done()}
         aria-label={m.activity_inbox_done()}
         onClick={() => actions.done(item)}
-        className="shrink-0 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+        className={cn(
+          "absolute top-1/2 right-3 -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:right-5 [@media(hover:none)]:hidden",
+          current ? "opacity-100" : "opacity-0",
+        )}
       />
     </li>
   );
 });
 
+/**
+ * A row's 2.25rem mark: the peer's face for a DM, otherwise a muted square with the place's
+ * glyph (`#` for a channel, a person for a DM), which a thread badges at its corner.
+ */
 function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
-  const { place } = item;
-  if (!item.thread && place.kind === "direct")
+  const { place, thread } = item;
+  if (!thread && place.kind === "direct")
     return place.peer.kind === "agent" ? (
-      <Avatar size="xs" src={place.peer.avatarUrl} alt="" className="mt-0.5 size-4 shrink-0" />
+      <Avatar size="sm" src={place.peer.avatarUrl} alt="" className="shrink-0" />
     ) : (
       <MemberAvatar
-        size="xs"
+        size="sm"
         userId={place.peer.userId}
         name={place.peer.displayName}
         src={place.peer.avatarUrl}
-        className="mt-0.5 size-4 shrink-0"
+        className="shrink-0"
       />
     );
-  const Icon = item.thread ? MessageTextSquare01 : Hash02;
-  return <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-fg-quaternary" />;
+  const Glyph = place.kind === "channel" ? Hash02 : User01;
+  return (
+    <span className="relative flex size-9 shrink-0 items-center justify-center rounded-md bg-tertiary">
+      <Glyph aria-hidden="true" className="size-4.5 text-fg-quaternary" />
+      {thread && (
+        <span className="absolute -right-1 -bottom-1 flex size-4.5 items-center justify-center rounded-full bg-primary ring-1 ring-secondary">
+          <MessageTextSquare01 aria-hidden="true" className="size-3 text-fg-tertiary" />
+        </span>
+      )}
+    </span>
+  );
 }
 
+/** The marks after a row's title: its Task, an unread mention, and how many messages are new. */
 function ActivityItemBadges({
   item,
   filter,
@@ -745,23 +797,18 @@ function ActivityItemBadges({
   item: ActivityInboxItem;
   filter: ActivityInboxFilter;
 }) {
-  const { thread } = item;
+  const task = item.thread?.task;
   const showMention = filter !== "mentions" && item.unreadMention;
-  if (!thread && !showMention && item.unreadCount === 0) return null;
+  if (!task && !showMention && item.unreadCount === 0) return null;
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      {thread?.task && (
-        <Badge type="color" size="sm" color={TASK_STATUS_COLOR[thread.task.status].badge}>
-          #{thread.task.number}
-          {thread.task.ownerName ? ` @${thread.task.ownerName}` : ""}
+    <span className="flex shrink-0 items-center gap-1.5">
+      {task && (
+        <Badge type="color" size="sm" color={TASK_STATUS_COLOR[task.status].badge}>
+          #{task.number}
+          {task.ownerName ? ` @${task.ownerName}` : ""}
         </Badge>
       )}
-      {thread?.task?.ownerDeleted && <DeletedAgentBadge />}
-      {thread && (
-        <Badge type="modern" size="sm" color="gray">
-          {m.activity_inbox_replies({ count: thread.replyCount })}
-        </Badge>
-      )}
+      {task?.ownerDeleted && <DeletedAgentBadge />}
       {showMention && (
         <Badge type="color" size="sm" color="brand">
           @{m.activity_inbox_mention_badge()}
@@ -772,7 +819,7 @@ function ActivityItemBadges({
           {m.activity_inbox_new({ count: item.unreadCount })}
         </Badge>
       )}
-    </div>
+    </span>
   );
 }
 

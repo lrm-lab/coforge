@@ -357,6 +357,7 @@ test("Done removes an item until newer activity arrives, and reads it", async ()
     });
     page = await inbox.list(workspace.id, alice.id, { filter: "all" });
     expect(page.items).toEqual([]);
+    expect(page.activeItemCount).toBe(0);
     const member = await db.conversationMember.findUniqueOrThrow({
       where: { id: general.aliceMember.id },
     });
@@ -408,6 +409,8 @@ test("a pinned conversation is listed under Pinned even when Done, and not again
       conversationId: quiet.conversation.id,
     });
     expect(page.items.map((item) => item.place.conversationId)).toEqual([general.conversation.id]);
+    // The header's "N active" counts what the All view lists: the pin, and the item below it.
+    expect(page.activeItemCount).toBe(2);
   } finally {
     await cleanup(db, suffix);
   }
@@ -474,6 +477,9 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
       before.unreadMentionItemCount,
     ]);
     expect([all.unreadItemCount, all.unreadMentionItemCount]).toEqual([4, 2]);
+    // The All view lists two pins and two items; a pin the inbox does not list counts for nothing.
+    expect(before.activeItemCount).toBe(4);
+    expect(all.activeItemCount).toBe(4);
 
     // A later page lists no pins, and none of the pinned conversations either.
     const second = await inbox.list(workspace.id, alice.id, { filter: "all", limit: 1, offset: 1 });
@@ -487,6 +493,10 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
     expect(unread.items.map((item) => item.place.conversationId)).toContain(quiet.conversation.id);
     const mentions = await inbox.list(workspace.id, alice.id, { filter: "mentions" });
     expect(mentions.pinned).toEqual([]);
+    // The All view's count, whichever view is showing and on every page.
+    expect([unread.activeItemCount, mentions.activeItemCount, second.activeItemCount]).toEqual([
+      4, 4, 4,
+    ]);
     expect(mentions.items.map((item) => item.key).sort()).toEqual(
       [`conversation:${general.conversation.id}`, `thread:${root.id}`].sort(),
     );

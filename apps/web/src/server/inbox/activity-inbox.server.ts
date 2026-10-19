@@ -154,6 +154,12 @@ export class ActivityInbox {
       unreadItemCount: inboxCandidates.filter((candidate) => candidate.unreadCount > 0).length,
       /** How many items have an unread mention, whatever the filter: the Mentions tab's count. */
       unreadMentionItemCount: inboxCandidates.filter((candidate) => candidate.unreadMention).length,
+      /**
+       * How many items the All view lists, pinned conversations included, whatever the filter:
+       * the header's "N active".
+       */
+      activeItemCount: all.filter((candidate) => candidate.pin !== null || candidate.pastDone)
+        .length,
       /** Where the next page starts in the list, or null on the last page. */
       nextOffset: end < candidates.length ? end : null,
       /** When this list was read: Mark all read reads through it, and no further. */

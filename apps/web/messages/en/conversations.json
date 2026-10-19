@@ -524,13 +524,13 @@
   "activity_inbox_menu_done": "Done",
   "activity_inbox_menu_label": "Activity item actions",
   "activity_inbox_action_error": "That change could not be saved. Try again.",
-  "activity_inbox_replies": [
+  "activity_inbox_active_count": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],
       "selectors": ["countPlural"],
       "match": {
-        "countPlural=one": "{count} reply",
-        "countPlural=other": "{count} replies"
+        "countPlural=one": "{count} active",
+        "countPlural=other": "{count} active"
       }
     }
   ],
@@ -596,8 +596,6 @@
   "activity_conversation_pane": "Selected conversation",
   "activity_conversation_loading": "Loading the conversation…",
   "activity_conversation_failed": "This conversation could not be loaded.",
-  "activity_conversation_empty_title": "No conversation open",
-  "activity_conversation_empty_description": "Select an item to read its conversation or thread here.",
   "search_filters": "Search filters",
   "search_from": "From",
   "search_from_named": "From: {name}",

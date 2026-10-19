@@ -508,12 +508,12 @@
   "activity_inbox_menu_done": "完成",
   "activity_inbox_menu_label": "动态条目操作",
   "activity_inbox_action_error": "操作没有保存，请重试。",
-  "activity_inbox_replies": [
+  "activity_inbox_active_count": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],
       "selectors": ["countPlural"],
       "match": {
-        "countPlural=other": "{count} 条回复"
+        "countPlural=other": "{count} 个活跃"
       }
     }
   ],
@@ -576,8 +576,6 @@
   "activity_conversation_pane": "选中的会话",
   "activity_conversation_loading": "正在加载会话…",
   "activity_conversation_failed": "无法加载这个会话。",
-  "activity_conversation_empty_title": "未打开会话",
-  "activity_conversation_empty_description": "选择一个条目，在这里阅读它的会话或讨论。",
   "search_filters": "搜索筛选",
   "search_from": "发送者",
   "search_from_named": "发送者：{name}",

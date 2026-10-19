@@ -11,8 +11,8 @@ import { channelNamesQuery, savedMessagesQuery } from "./conversation-queries";
 import { NO_SAVED } from "./saved-messages-collection";
 import { listSavedMessages } from "./saved-messages.functions";
 
-/** The pane's column beside its host's content; a host's own empty pane takes it too. */
-export const HOSTED_CONVERSATION_PANE_CLASS =
+/** The pane's column beside its host's content. */
+const HOSTED_CONVERSATION_PANE_CLASS =
   "flex min-h-0 min-w-0 flex-1 flex-col border-l border-secondary bg-primary";
 
 /**
