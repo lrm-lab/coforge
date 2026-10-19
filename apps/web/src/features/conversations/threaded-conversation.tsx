@@ -16,6 +16,7 @@ import { ConversationPane } from "./conversation-pane";
 import { useConversationDetailVisible } from "./conversation-navigation";
 import { useConversationHostChannels } from "./conversation-host";
 import { useConversationSync } from "./use-conversation-sync";
+import { useStandaloneThread } from "./standalone-thread";
 import {
   useConversationPositionJump,
   useOpenConversationTask,
@@ -74,6 +75,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     ...conversationProps
   } = props;
   const detailVisible = useConversationDetailVisible();
+  const standaloneThread = useStandaloneThread();
   const { searchThreadRootId, openThread, openThreadFromHash, closeThread, showThreadRoot } =
     useOpenConversationThread();
   // The Saved view's `?message=` position jump reads its search state here, next to the
@@ -172,19 +174,23 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   // composers on one thread would share and overwrite its draft), and a task message outside the
   // loaded window is fetched the way a thread link is.
   const openTaskMessageId = openTask?.messageId;
+  const profileAgentId = agentProfile?.agentId;
+  const profilePersonId = agentProfile?.personId;
+  const profileOpen = Boolean(profileAgentId || profilePersonId);
+  // A thread shown alone (Activity) is the host's, open whatever `threadRootId` says: a profile
+  // opened from it covers it, and closing the profile returns to it.
+  const standaloneRootId = standaloneThread && !profileOpen ? standaloneThread.rootId : undefined;
   const selected = resolveConversationThreadRoot({
-    searchThreadRootId,
+    searchThreadRootId: searchThreadRootId ?? standaloneRootId,
     messages: conversation.messages,
   });
 
   // The conversation's shared right-hand slot: Thread (`threadRootId` search) and the Agent
   // profile panel (`profile` search) are mutually exclusive. Their open hooks clear the other
   // search param; the resolver remains defensive for legacy URLs containing both.
-  const profileAgentId = agentProfile?.agentId;
-  const profilePersonId = agentProfile?.personId;
   const visibleSlot = resolveVisibleConversationSlot({
     threadOpen: Boolean(selected),
-    profileOpen: Boolean(profileAgentId || profilePersonId),
+    profileOpen,
   });
   const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
   // The thread/profile pane's share of the width is the user's to set; remembered across visits,
@@ -256,6 +262,11 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       if (root) roots.set(rootId, root);
     }
   }, [visited, conversation.messages]);
+  // A host showing the thread alone (Activity) closes its own pane with the thread, and swaps the
+  // thread for the conversation on "View in channel".
+  const threadAlone = standaloneThread !== null;
+  const threadClose = standaloneThread?.onClose ?? closeThread;
+  const viewInConversation = standaloneThread?.onViewInConversation ?? showThreadRoot;
   // Outside the conversation's page only its Task popup shows; the panes stay unmounted.
   if (taskPopup) return taskLayer;
   const conversationMainPane = (
@@ -310,9 +321,9 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           >
             <ThreadPane
               {...threadPaneProps(root)}
-              onClose={closeThread}
+              onClose={threadClose}
               threadContext={threadContext}
-              onViewInConversation={() => showThreadRoot(rootId)}
+              onViewInConversation={() => viewInConversation(rootId)}
               threadFollow={threadFollow?.(rootId)}
               emptyState={{
                 title: m.conversation_thread_empty_title(),
@@ -336,22 +347,26 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           <ThreadRootState
             load={selectedRootLoad}
             context={threadContext}
-            onClose={closeThread}
+            onClose={threadClose}
             onRetry={() => void loadThreadRoot(selected)}
           />
         </section>
       )}
     </>
   );
-  if (!wideViewport) {
+  if (!wideViewport || threadAlone) {
     // Small screens have no room for a resizable split: the slot pane covers the main pane,
-    // which stays mounted (hidden) so returning keeps its scroll, drafts and read state.
+    // which stays mounted (hidden) so returning keeps its scroll, drafts and read state. A thread
+    // shown alone fills the pane at every width without the conversation, which mounts afresh at
+    // its jump message once it is shown.
     return (
       <>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", visibleSlot && "hidden")}>
-            {tasksPane ?? conversationMainPane}
-          </div>
+          {!threadAlone && (
+            <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", visibleSlot && "hidden")}>
+              {tasksPane ?? conversationMainPane}
+            </div>
+          )}
           {conversationSidePane && (
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">{conversationSidePane}</div>
           )}

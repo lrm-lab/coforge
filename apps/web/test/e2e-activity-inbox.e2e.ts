@@ -10,8 +10,10 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 /**
  * The Activity page in a real browser: listing, the "N active" count, the views, the row menu and
  * Done; on a wide screen, opening a row beside a narrowed list (kept through a change of view and a
- * reload) and at the right message; on a phone, opening Chat from a row, and a link naming a
- * conversation opening it full-screen with a back arrow to the list; member DMs; and the Pinned
+ * reload) and at the right message, a thread's row showing only the thread and leaving its channel
+ * unread until "View in channel" (a profile opened from it covering it and returning to it), and
+ * the thread's close returning to the list; on a phone, opening Chat from a row, and a link naming
+ * a conversation opening it full-screen with a back arrow to the list; member DMs; and the Pinned
  * section.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
@@ -69,10 +71,31 @@ function inPane(id: string) {
   return `(() => { const pane = ${pane}; const row = document.getElementById("message-${id}"); return Boolean(pane && row && pane.contains(row)); })()`;
 }
 
+/**
+ * Whether message `id` is laid out inside the conversation pane. A thread pane stays mounted but
+ * hidden once the conversation shows, and a thread's root is a row of both.
+ */
+function shownInPane(id: string) {
+  return `(() => { const pane = ${pane}; return Boolean(pane) && [...pane.querySelectorAll('[id="message-${id}"]')].some((row) => row.getClientRects().length > 0); })()`;
+}
+
+/** Whether the pane lays out a conversation's Chat / Tasks / Files tabs (its header). */
+const paneTabsShown = `(() => { const pane = ${pane}; return Boolean(pane) && [...pane.querySelectorAll('[role="tablist"]')].some((tabs) => tabs.getClientRects().length > 0); })()`;
+
+/** Resolves once `observe` holds, polling what the test cannot be told about (a database row). */
+async function waitFor(observe: () => Promise<boolean>) {
+  const deadline = Date.now() + 15_000;
+  while (!(await observe())) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for the database to change");
+    await Bun.sleep(50);
+  }
+}
+
 /** The text of the row marked as the one open in the pane, or null when none is. */
 const currentRow = `[...document.querySelectorAll(${rowItems})].find((item) => item.querySelector("a")?.getAttribute("aria-current") === "true")?.textContent ?? null`;
 
-/** The open conversation as the Activity URL names it (`channel:<id>` or `dm:<id>`). */
+/** The open conversation as the Activity URL names it (`channel:<id>` or `dm:<id>`, prefixed
+ * `thread:` for a thread shown alone). */
 const openParam = `new URLSearchParams(location.search).get("open")`;
 
 /** One agent-browser session: its commands, and a page expression read back as JSON. */
@@ -196,7 +219,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       include: { workspace: { select: { slug: true } } },
     });
     const workspacePath = `/en/w/${workspace.slug}`;
-    const { channelId, rootId, replyId } = await seedChannel(db, {
+    const { channelId, viewer, rootId, replyId, newestId } = await seedChannel(db, {
       workspaceId,
       key: "e2e-activity-inbox:",
       channelName: "e2e-activity-inbox",
@@ -396,18 +419,42 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     // Nothing is open until a row is clicked: opening one reads it.
     expect(await evaluate<string | null>(openParam)).toBeNull();
     expect(await evaluate<string | null>(currentRow)).toBeNull();
+    // A thread opens alone and leaves its channel unread. The steps above read the channel (Mark
+    // as Read, Done), so its cursor goes back to the start, and the thread's to never read; the
+    // channel stays Done, so its row stays off the list.
+    await db.conversationMember.update({
+      where: { id: viewer.id },
+      data: { readThroughSequence: 0, unreadFromSequence: null },
+    });
+    await db.threadRead.deleteMany({ where: { memberId: viewer.id, rootMessageId: rootId } });
     await browser("find", "text", "E2E activity root", "click");
     await browser("wait", "--fn", `location.search.includes("threadRootId=${rootId}")`);
-    // The thread opens beside the list, which stays on Activity; its pane scrolls to the first
-    // unread reply.
+    // The thread opens alone beside the list, which stays on Activity; its pane scrolls to the
+    // first unread reply.
     await browser("wait", "--fn", inPane(replyId));
     expect(await evaluate<string>("location.pathname")).toBe(`${workspacePath}/activity`);
-    expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
+    expect(await evaluate<string | null>(openParam)).toBe(`thread:channel:${channelId}`);
     expect(await evaluate<string | null>(currentRow)).toContain("E2E activity root");
+    // Only the thread: its root and reply, without the channel's header and tabs or its newer
+    // top-level message.
+    expect(await evaluate<boolean>(shownInPane(rootId))).toBe(true);
+    expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
+    expect(await evaluate<boolean>(paneTabsShown)).toBe(false);
     // Opening a row narrows the list beside the conversation.
     expect(await evaluate<boolean>(`${pane} !== null`)).toBe(true);
     expect(await evaluate<number>(listColumnWidth)).toBeLessThan(fullWidth);
     await browser("screenshot", join(artifacts, "wide-open.png"));
+    // The thread is read; the channel is not.
+    await waitFor(async () => {
+      const read = await db.threadRead.findUnique({
+        where: { memberId_rootMessageId: { memberId: viewer.id, rootMessageId: rootId } },
+      });
+      return (read?.readThroughSequence ?? 0) >= 2;
+    });
+    expect(
+      (await db.conversationMember.findUniqueOrThrow({ where: { id: viewer.id } }))
+        .readThroughSequence,
+    ).toBe(0);
     // Switching the list's view keeps the conversation open. Clicked through Activity's own
     // tablist: the open conversation has tabs too.
     const filterTab = (name: string) =>
@@ -416,16 +463,65 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
         .click() ?? true`);
     await filterTab("Mentions");
     await browser("wait", "--fn", `location.search.includes("filter=mentions")`);
-    expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
+    expect(await evaluate<string | null>(openParam)).toBe(`thread:channel:${channelId}`);
     expect(await evaluate<boolean>(inPane(replyId))).toBe(true);
     await filterTab("All");
     await browser("wait", "--fn", `!location.search.includes("filter=")`);
-    expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
-    // The open conversation lives in the URL: a reload reopens it beside the list.
+    expect(await evaluate<string | null>(openParam)).toBe(`thread:channel:${channelId}`);
+    // The open thread lives in the URL: a reload reopens it alone beside the list.
     await browser("reload");
     await browser("wait", "--fn", `${inPane(replyId)} && ${hydrated}`);
     await browser("wait", "--fn", `(${currentRow})?.includes("E2E activity root") === true`);
-    expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
+    expect(await evaluate<string | null>(openParam)).toBe(`thread:channel:${channelId}`);
+    expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
+    // Still unread after a change of view and a reload, each showing the thread alone again.
+    expect(
+      (await db.conversationMember.findUniqueOrThrow({ where: { id: viewer.id } }))
+        .readThroughSequence,
+    ).toBe(0);
+    // A profile opened from the thread covers it, still without the conversation, and its close
+    // returns to the thread.
+    const profilePanel = `${pane}?.querySelector('aside[aria-label="Activity Peer"]')`;
+    await browser("find", "role", "button", "click", "--name", "Open Activity Peer's profile");
+    await browser("wait", "--fn", `(${profilePanel})?.getClientRects().length > 0`);
+    expect(await evaluate<string | null>(openParam)).toBe(`thread:channel:${channelId}`);
+    expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
+    expect(await evaluate<boolean>(paneTabsShown)).toBe(false);
+    expect(
+      (await db.conversationMember.findUniqueOrThrow({ where: { id: viewer.id } }))
+        .readThroughSequence,
+    ).toBe(0);
+    await browser(
+      "click",
+      'section[aria-label="Selected conversation"] aside [aria-label="Close"]',
+    );
+    await browser("wait", "--fn", `${shownInPane(rootId)} && !(${profilePanel})`);
+    expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
+    // "View in channel" shows the channel in the pane in place of the thread, and reads it.
+    await browser("click", '[aria-label="Thread actions"]');
+    await browser("find", "role", "menuitem", "click", "--name", "View in channel");
+    await browser("wait", "--fn", `${openParam} === ${JSON.stringify(`channel:${channelId}`)}`);
+    expect(await evaluate<boolean>(`location.search.includes("threadRootId")`)).toBe(false);
+    expect(await evaluate<string>("location.hash")).toBe("");
+    await browser("wait", "--fn", `${shownInPane(newestId)} && ${paneTabsShown}`);
+    await waitFor(
+      async () =>
+        (await db.conversationMember.findUniqueOrThrow({ where: { id: viewer.id } }))
+          .readThroughSequence === 3,
+    );
+    // The thread's close closes the pane, back to the list alone.
+    await evaluate(`[...document.querySelectorAll(${rowItems})]
+      .find((item) => item.textContent.includes("E2E activity root"))
+      .querySelector("a")
+      .click() ?? true`);
+    await browser(
+      "wait",
+      "--fn",
+      `${openParam} === ${JSON.stringify(`thread:channel:${channelId}`)}`,
+    );
+    await browser("wait", "--fn", inPane(replyId));
+    await browser("click", '[aria-label="Close thread"]');
+    await browser("wait", "--fn", `${pane} === null && ${openParam} === null`);
 
     // A thread read to the end with no mention opens at its newest reply. Activity without an
     // open conversation (where its nav item leads) is the full-width list again.

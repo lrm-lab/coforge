@@ -139,14 +139,14 @@ These rules apply to `src/features/conversations/`.
   conversation pages and the Tasks page popup. Change a send or read path
   there, not in a route.
 - `conversation-page.tsx` (`ConversationPage`) is a conversation as Chat opens it (tabs, Task
-  board, files, reading), one page for channels and direct messages: each kind supplies only its
-  data, header, conversation and read cursor, and both kinds of DM share one read cursor
-  (`dm:<conversationId>`), so a DM kind supplies only its name, header and conversation. Chat's
-  routes and `HostedConversationPane` (`hosted-conversation-pane.tsx`: Search's preview beside its
-  results; Activity's pane beside the list from `lg`, filling the page below it with Chat's back
-  header) render it, so they never differ. A host loads through `conversation-page-loader.ts` (a
-  pane's, `loadHostedConversation`, with channel names and Saved) and its `validateSearch` spreads
-  `conversationPageSearchShape` (a pane's host also `hostedConversationSearchShape`: `open`, `msg`).
+  board, files, reading), one page for channels and DMs: each kind supplies its data, header,
+  conversation and read cursor (both kinds of DM share `dm:<conversationId>`). Chat's routes and
+  `HostedConversationPane` (Search's preview; Activity's pane beside the list from `lg`, full-page
+  below it with Chat's back header) render it, so they never differ. Activity opens a thread alone
+  (`open=thread:<kind>:<id>`, `standalone-thread.ts`): the conversation is never shown or read until
+  "View in channel"; a profile covers the thread and its close returns to it. A host loads through
+  `conversation-page-loader.ts` (a pane's, `loadHostedConversation`, with channel names and Saved);
+  its `validateSearch` spreads `conversationPageSearchShape` (a pane's also `hostedConversationSearchShape`).
 - `mentionOutsiders` (the channel's people and public Agents outside it) is for
   @-completion only. Never merge it into `mentionables`, which also resolves
   plain `@handle` labels and stored mention tokens. `mentionables` lacks a deleted Agent, so a

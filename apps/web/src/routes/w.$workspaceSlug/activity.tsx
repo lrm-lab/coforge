@@ -85,7 +85,7 @@ function ActivityPage() {
   // The open conversation lives in the URL, so a reload or a shared link reopens it; opening
   // another replaces the entry rather than stacking history. Only the list's view carries over:
   // the previous conversation's tab, board view, thread, Task popup and Agent profile close with
-  // it, and a thread card opens its thread, as Chat opens one.
+  // it, and a thread card opens its thread alone (`thread:` in `open`), without the conversation.
   const onOpen = useCallback(
     (next: HostedConversationTarget) =>
       void navigate({
@@ -106,10 +106,14 @@ function ActivityPage() {
     () => void navigate({ search: (previous) => ({ filter: previous.filter }), replace: true }),
     [navigate],
   );
-  // Kept by its fields, so the pane keeps its target while the list's view changes.
+  // Kept by its fields, so the pane keeps its target while the list's view changes. A `thread:`
+  // address shows the thread rooted at `msg` alone for as long as `open` says so, whatever else
+  // the pane opens over it (a profile, a Task popup); with no root it shows the conversation.
   const opened = useMemo(() => {
     const target = parseHostedConversation(open, msg);
-    return target && { ...target, threadRootId };
+    if (!target) return undefined;
+    const threadAlone = target.threadAlone && msg !== undefined;
+    return { ...target, threadRootId, threadAlone: threadAlone || undefined };
   }, [open, msg, threadRootId]);
   return (
     <ActivityInboxView

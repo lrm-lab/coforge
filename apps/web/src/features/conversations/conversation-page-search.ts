@@ -54,13 +54,14 @@ export function pickConversationPageSearch({
 
 /**
  * Which conversation a page hosts beside its own content (`HostedConversationPane`): `open` names
- * it (`channel:<id>` or `dm:<id>`) and `msg` the message its stream lands on. Each field falls back
- * to absent when malformed, so a stale or hand-edited address never breaks the page.
+ * it (`channel:<id>` or `dm:<id>`, or `thread:channel:<id>` / `thread:dm:<id>` for a pane that
+ * shows only its open thread) and `msg` the message its stream lands on. Each field falls back to
+ * absent when malformed, so a stale or hand-edited address never breaks the page.
  */
 export const hostedConversationSearchShape = {
   open: z
     .string()
-    .regex(/^(channel|dm):[0-9a-f-]{36}$/)
+    .regex(/^(thread:)?(channel|dm):[0-9a-f-]{36}$/)
     .optional()
     .catch(undefined),
   msg: z.uuid().optional().catch(undefined),
@@ -75,11 +76,18 @@ export type HostedConversationTarget = ConversationPageTarget & {
   threadRootId?: string;
   /** The reply the open thread scrolls to. */
   threadReplyId?: string;
+  /** The pane shows only the thread rooted at `messageId`, without the conversation around it. */
+  threadAlone?: boolean;
 };
 
-/** A hosted conversation's `open` param: `channel:<id>` or `dm:<id>`. */
-export function hostedConversationOpenParam(target: ConversationPageTarget): string {
-  return `${target.kind}:${target.id}`;
+/**
+ * A hosted conversation's `open` param: `channel:<id>` or `dm:<id>`, prefixed `thread:` when the
+ * pane shows only its thread.
+ */
+export function hostedConversationOpenParam(
+  target: ConversationPageTarget & Pick<HostedConversationTarget, "threadAlone">,
+): string {
+  return `${target.threadAlone ? "thread:" : ""}${target.kind}:${target.id}`;
 }
 
 /** The hosted conversation an address names: `open` at message `msg`. */
@@ -87,8 +95,10 @@ export function parseHostedConversation(
   open: string | undefined,
   msg?: string,
 ): HostedConversationTarget | undefined {
-  const [kind, id] = open?.split(":") ?? [];
-  return (kind === "channel" || kind === "dm") && id ? { kind, id, messageId: msg } : undefined;
+  const threadAlone = open?.startsWith("thread:") || undefined;
+  const [kind, id] = open?.replace(/^thread:/, "").split(":") ?? [];
+  if ((kind !== "channel" && kind !== "dm") || !id) return undefined;
+  return { kind, id, messageId: msg, threadAlone };
 }
 
 /** The URL hash that names a message: its row's element id, `message-<id>`. */

@@ -82,9 +82,10 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
 /**
  * The Activity page: the viewer's items with activity past Done, newest first, the All view's
  * pinned conversations first. The list fills the page until a row is opened; from `lg` up the row's
- * conversation then opens beside a narrowed list (kept in the URL), and below `lg` a row opens it
- * in Chat. Below `lg` a URL that names a conversation (a reload, a shared link, a window narrowed
- * with one open) shows it full-screen in place of the list, with a back arrow to the list.
+ * conversation (for a thread or a reply, its thread alone) then opens beside a narrowed list (kept
+ * in the URL), and below `lg` a row opens it in Chat. Below `lg` a URL that names a conversation (a
+ * reload, a shared link, a window narrowed with one open) shows it full-screen in place of the
+ * list, with a back arrow to the list.
  */
 export function ActivityInboxView({
   filter,
@@ -288,6 +289,7 @@ export function ActivityInboxView({
         <ActivityConversationPane
           key={`${opened.kind}:${opened.id}`}
           target={opened}
+          onOpen={onOpen}
           onClose={onClose}
         />
       )}

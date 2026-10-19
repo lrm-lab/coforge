@@ -6,13 +6,14 @@ import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server"
 
 /**
  * Where a card opens: its channel or direct conversation, at the message the stream lands on, and
- * for a thread its thread open, scrolled to the reply it opens at. The same place opens beside the
- * list on a wide screen and in Chat on a narrow one.
+ * for a thread its thread open, scrolled to the reply it opens at. Beside the list on a wide screen
+ * a thread opens alone (`threadAlone`), without the conversation around it; on a narrow screen the
+ * same place opens in Chat, the thread beside its root.
  *
  * A mention the viewer was notified of opens at that message, in its thread when it is a reply.
  * Any other item that mentions the viewer opens at its first mention, read or not; otherwise a
- * thread opens in its pane beside its root, scrolled to the first unread reply, and a conversation
- * opens at its first unread message, or its newest one when everything is read.
+ * thread opens scrolled to its first unread reply, and a conversation opens at its first unread
+ * message, or its newest one when everything is read.
  */
 export function activityOpenTarget({
   place,
@@ -34,6 +35,7 @@ export function activityOpenTarget({
         messageId: rootId,
         threadRootId: rootId,
         threadReplyId: anchor ?? undefined,
+        threadAlone: true,
       }
     : { kind, id: place.conversationId, messageId: anchor ?? latest.id };
 }

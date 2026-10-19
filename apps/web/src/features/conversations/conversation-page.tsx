@@ -27,6 +27,7 @@ import {
   PeopleDirectConversationHeader,
   type PeopleDirectConversationView,
 } from "./people-direct-conversation";
+import { useStandaloneThread } from "./standalone-thread";
 import { useChannelConversation, useDirectConversation } from "./use-conversation-data";
 import { useConversationView, useShownConversationTab } from "./use-conversation-view";
 
@@ -298,22 +299,25 @@ function ConversationPageBody({
 
   // Opening the conversation is reading it — except in the `newest-unread` preference, which
   // keeps unseen messages unread until the latest is actually viewed: the badge clears
-  // immediately, but the server-side cursor only advances through `onReadLatest` below.
+  // immediately, but the server-side cursor only advances through `onReadLatest` below. A thread
+  // shown alone leaves the conversation out of view, so it stays unread until it is shown.
   const markSeen = useMarkConversationSeen();
   const readRequiresScroll = useConversationReadRequiresScroll();
+  const threadAlone = useStandaloneThread() !== null;
   const topLevelEnd = latestTopLevelSequence(conversation.messages);
   useEffect(() => {
+    if (threadAlone) return;
     markSeen(unreadKey, topLevelEnd);
-  }, [markSeen, unreadKey, topLevelEnd]);
+  }, [markSeen, unreadKey, topLevelEnd, threadAlone]);
   // The cursor's write is rebuilt each render around the same conversation; the effect reruns only
   // when what it reads changes.
   const readThrough = useEffectEvent((throughSequence: number) => {
     void persistReadCursor(() => readCursor.advance(throughSequence), readCursor.key);
   });
   useEffect(() => {
-    if (!topLevelEnd || !isMember || readRequiresScroll) return;
+    if (!topLevelEnd || !isMember || readRequiresScroll || threadAlone) return;
     readThrough(topLevelEnd);
-  }, [readCursor.key, topLevelEnd, isMember, readRequiresScroll]);
+  }, [readCursor.key, topLevelEnd, isMember, readRequiresScroll, threadAlone]);
   const readLatest = (throughSequence: number) => {
     if (!isMember) return;
     void persistReadCursor(() => readCursor.advance(throughSequence), `${readCursor.key}:latest`);

@@ -20,7 +20,8 @@ const HOSTED_CONVERSATION_PANE_CLASS =
 /**
  * A conversation beside a page's own content, exactly as Chat opens it: the same page
  * (`ConversationPage`) with its tabs, stream positioned at the target's message, composer, threads,
- * Task board and files, and reading it as Chat does. The host reads its address state
+ * Task board and files, and reading it as Chat does; or only its open thread, under a host's
+ * `StandaloneThreadContext` (Activity's thread cards). The host reads its address state
  * (`pickConversationPageSearch`, shared structurally) and keys the pane by conversation, so another
  * conversation starts fresh. Memoized: a re-render of the host's content leaves the conversation be.
  */

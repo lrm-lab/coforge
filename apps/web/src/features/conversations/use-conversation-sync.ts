@@ -113,11 +113,12 @@ export function useConversationSync({
   }, [openTaskMessageId, conversation.messages, loadWindowAround]);
 
   // Keep the selected thread mounted while the reader moves between threads. The task popup owns
-  // its own pane, so it removes its root from this retained set below.
+  // its own pane, so it removes its root from this retained set below; a thread that stays
+  // selected under the popup (one a host shows alone) comes back once the popup closes.
   useEffect(() => {
-    if (!selected) return;
+    if (!selected || selected === openTaskMessageId) return;
     setVisited((previous) => (previous.includes(selected) ? previous : [...previous, selected]));
-  }, [selected]);
+  }, [selected, openTaskMessageId]);
   useEffect(() => {
     if (!openTaskMessageId) return;
     setVisited((previous) =>
