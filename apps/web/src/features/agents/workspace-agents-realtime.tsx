@@ -307,6 +307,13 @@ export function useAgentActivityFeed(agentId: string) {
   return useQuery(agentActivityFeedQuery(agentId));
 }
 
+/** Reads an Agent's cached Activity feed when asked (a copy button's click) without observing it,
+ * so the caller neither re-renders on each frame nor keeps the feed refetching. */
+export function useReadAgentActivityFeed(agentId: string) {
+  const queryClient = useQueryClient();
+  return () => queryClient.getQueryData(agentActivityFeedQuery(agentId).queryKey);
+}
+
 /** Starts loading an Agent's Activity feed without re-rendering the caller on each frame, so the
  * Activity tab is usually ready by the time it is selected. */
 export function usePrefetchAgentActivityFeed(agentId: string) {

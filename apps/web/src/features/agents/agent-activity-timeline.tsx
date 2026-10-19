@@ -19,6 +19,12 @@ import { m } from "#src/paraglide/messages";
 import type { ActivityEntry } from "./agent-activity";
 import { presentActivityRows, type PresentedActivityRow } from "./agent-activity-presentation";
 
+/** A log row's clock column and status dot. The error banner over the Activity tab lines its own
+ * dot up with them (`agent-error-banner.tsx`), so the two cannot drift apart. */
+export const ACTIVITY_CLOCK_CLASS =
+  "mt-0.5 shrink-0 font-mono text-xs whitespace-nowrap tabular-nums";
+export const ACTIVITY_DOT_CLASS = "mt-1.5 size-1.5 shrink-0";
+
 /** The profile panel's Activity log: one dense line per row, oldest at the top, newest at the
  * bottom, the list kept scrolled to the newest row. */
 export function AgentActivityTimeline({
@@ -128,9 +134,9 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
       <ClockTime
         value={new Date(row.observedAtMs)}
         timeZone={timeZone}
-        className="mt-0.5 shrink-0 font-mono text-xs whitespace-nowrap text-quaternary tabular-nums"
+        className={cn(ACTIVITY_CLOCK_CLASS, "text-quaternary")}
       />
-      <StatusDot tone={row.tone} pulse={row.pulse} className="mt-1.5 size-1.5 shrink-0" />
+      <StatusDot tone={row.tone} pulse={row.pulse} className={ACTIVITY_DOT_CLASS} />
       <div className="min-w-0 flex-1 text-sm">
         <div className="flex flex-wrap items-baseline gap-x-1.5">
           {label}

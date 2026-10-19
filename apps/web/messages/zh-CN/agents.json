@@ -414,5 +414,6 @@
   "agent_archive_workspace_removed": "已从 Computer 删除",
   "agent_archive_workspace_on_computer": "在 {computer} 上",
   "agent_archive_delete_workspace": "从 Computer 删除工作区",
-  "agent_archive_delete_workspace_description": "会删除 {computer} 上该智能体工作区里的全部文件，无法恢复。资料页和消息仍然保留。"
+  "agent_archive_delete_workspace_description": "会删除 {computer} 上该智能体工作区里的全部文件，无法恢复。资料页和消息仍然保留。",
+  "agent_error_banner_view_logs": "查看日志"
 }

@@ -276,9 +276,9 @@ export function AgentProfileTab({
             />
           )}
         </div>
-        {/* No error snapshot here: the Agent's current state belongs under its name in the panel
-            header, and the Activity tab is where the record lives. A raw request id next to a
-            transient "model at capacity" is developer debris in a profile — Frank, 2026-09-21. */}
+        {/* No error snapshot here: the Agent's current error is the banner under the panel header
+            (`agent-error-banner.tsx`), on every tab, and the Activity tab is where the record
+            lives. */}
         <InlineEditField
           label={m.agent_profile_display_name()}
           value={profile.displayName}

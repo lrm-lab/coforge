@@ -71,6 +71,7 @@ import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs"
 import { AgentProfileTab } from "./agent-profile-tab";
 import { AgentWorkspaceTab } from "./agent-workspace-tab";
 import { AgentActivityTab } from "./agent-activity-tab";
+import { AgentErrorBanner } from "./agent-error-banner";
 import {
   resolveAgentProfileTab,
   type AgentProfileTab as ProfileTabId,
@@ -337,6 +338,24 @@ export function AgentProfilePanel({
     );
   }
 
+  // `liveAgent` (the shared realtime roster) is blank for an Agent outside the viewer's own
+  // `listAgents` roster until its first live publication arrives — e.g. an owner/admin's
+  // placeholder for another member's private Agent. `getAgentProfile` (`profile`, this panel's own
+  // authorized fetch) already computes an initial status/display snapshot for any Agent the viewer
+  // can see; prefer the live one once a publication lands, but seed from the authorized fetch
+  // instead of showing nothing.
+  const display = liveAgent?.display ?? profile?.display;
+  const diagnosticFacts = profile && {
+    id: profile.id,
+    workspaceId: profile.workspaceId,
+    computerId: profile.computerId ?? null,
+    computerVersion: profile.computer?.computerVersion ?? null,
+    runtime: profile.runtimeConfig.runtime,
+    model: profile.runtimeConfig.model,
+    stopped: profile.stopped,
+    status: profile.status.value,
+  };
+
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       <AgentProfileHeader
@@ -347,17 +366,21 @@ export function AgentProfilePanel({
           displayName: knownName,
           avatarUrl: profile?.avatarUrl,
         }}
-        // `liveAgent` (the shared realtime roster) is blank for an Agent outside the
-        // viewer's own `listAgents` roster until its first live publication arrives — e.g. an
-        // owner/admin's placeholder for another member's private Agent. `getAgentProfile`
-        // (`profile`, this panel's own authorized fetch) already computes an initial
-        // status/display snapshot for any Agent the viewer can see; prefer the live one once a
-        // publication lands, but seed from the authorized fetch instead of showing nothing.
-        display={liveAgent?.display ?? profile?.display}
+        display={display}
         controls={controls}
         onClose={onClose}
         back={back}
       />
+      {diagnosticFacts && !deleted && display?.activityKind === "error" && (
+        <AgentErrorBanner
+          agent={diagnosticFacts}
+          display={display}
+          onActivityTab={tab === "activity"}
+          onViewLogs={
+            tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined
+          }
+        />
+      )}
       {/* Underline tabs on the band's bottom rule: the rule is the band's
           own hairline, drawn under the strip, so the active tab's underline stands in for it. The strip
           scrolls sideways on a narrow phone instead of pushing the panel wider; the rule stays put. */}
@@ -381,7 +404,7 @@ export function AgentProfilePanel({
             : "min-h-0 flex-1 overflow-y-auto"
         }
       >
-        {!profile ? (
+        {!profile || !diagnosticFacts ? (
           <div className="flex flex-col gap-4 px-5 py-5">
             <div className="flex items-center gap-4">
               <Skeleton className="size-16 shrink-0 rounded-full" />
@@ -394,20 +417,7 @@ export function AgentProfilePanel({
             <Skeleton className="h-24 w-full" />
           </div>
         ) : tab === "activity" ? (
-          <AgentActivityTab
-            agent={{
-              id: profile.id,
-              workspaceId: profile.workspaceId,
-              computerId: profile.computerId ?? null,
-              computerVersion: profile.computer?.computerVersion ?? null,
-              runtime: profile.runtimeConfig.runtime,
-              model: profile.runtimeConfig.model,
-              stopped: profile.stopped,
-              status: profile.status.value,
-            }}
-            display={liveAgent?.display ?? profile.display}
-            timeZone={timeZone}
-          />
+          <AgentActivityTab agent={diagnosticFacts} display={display} timeZone={timeZone} />
         ) : tab === "reminders" ? (
           <div className="px-5 pb-5">
             <AgentReminders

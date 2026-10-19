@@ -416,5 +416,6 @@
   "agent_archive_workspace_removed": "Deleted from the Computer",
   "agent_archive_workspace_on_computer": "On {computer}",
   "agent_archive_delete_workspace": "Delete workspace from Computer",
-  "agent_archive_delete_workspace_description": "Deletes every file in this Agent's workspace on {computer}. This cannot be undone. The profile and messages stay."
+  "agent_archive_delete_workspace_description": "Deletes every file in this Agent's workspace on {computer}. This cannot be undone. The profile and messages stay.",
+  "agent_error_banner_view_logs": "View logs"
 }

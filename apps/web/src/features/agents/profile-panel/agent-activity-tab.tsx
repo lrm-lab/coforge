@@ -1,17 +1,11 @@
-import { useState } from "react";
-import { Check, Copy01 as Copy } from "@untitledui/icons";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Skeleton } from "#src/components/ui/skeleton";
-import {
-  agentDiagnosticInfo,
-  type AgentDiagnosticFacts,
-} from "#src/features/agents/agent-diagnostics";
+import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { AgentActivityTimeline } from "#src/features/agents/agent-activity-timeline";
 import { useAgentActivityFeed } from "#src/features/agents/workspace-agents-realtime";
-import { copyText } from "#src/features/records/report-editor/lib/clipboard";
 import { m } from "#src/paraglide/messages";
+import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
 import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
 import { PanelMessage } from "./panel-message";
 
@@ -30,16 +24,7 @@ export function AgentActivityTab({
     <>
       <div className="flex shrink-0 items-center justify-between border-b border-secondary py-1 pr-3.5 pl-5">
         <p className={SECTION_CAPTION_CLASS}>{m.agent_activity_diagnostics()}</p>
-        <CopyDiagnosticsButton
-          text={() =>
-            agentDiagnosticInfo({
-              agent,
-              display,
-              // The feed is newest first.
-              lastActivityAtMs: feed.data?.[0]?.observedAtMs,
-            })
-          }
-        />
+        <CopyDiagnosticsButton agent={agent} display={display} />
       </div>
       <div className="min-h-0 flex-1">
         {feed.data ? (
@@ -61,26 +46,5 @@ export function AgentActivityTab({
         )}
       </div>
     </>
-  );
-}
-
-/** Copies the diagnostic block; the icon turns into a check for a moment to confirm it. */
-function CopyDiagnosticsButton({ text }: { text: () => string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <ButtonUtility
-      icon={copied ? Check : Copy}
-      size="sm"
-      color="tertiary"
-      tooltip={copied ? m.agent_activity_diagnostics_copied() : m.agent_activity_copy_diagnostics()}
-      aria-label={m.agent_activity_copy_diagnostics()}
-      onClick={() => {
-        void copyText(text()).then((ok) => {
-          if (!ok) return;
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 2000);
-        });
-      }}
-    />
   );
 }

@@ -12,7 +12,8 @@ These rules apply to `src/features/agents/`.
   shell's one Agent status subscription and one Activity subscription.
   Avatars, pages, and panels read through its hooks (`useLiveAgents`,
   `useLiveAgent`, `useLiveAgentDisplay`, `useAgentRecentActivity`,
-  `useAgentActivityFeed`, `usePrefetchAgentActivityFeed`) and never
+  `useAgentActivityFeed`, `usePrefetchAgentActivityFeed`,
+  `useReadAgentActivityFeed`) and never
   open connections or subscribe themselves. The conversations feature does not
   own Agent state. The live Agents are a TanStack Store: a reader of one Agent
   (`useLiveAgent`, `useLiveAgentDisplay`) re-renders only when that Agent
@@ -132,6 +133,10 @@ These rules apply to `src/features/agents/`.
   owner/admin (`archived-agents-group.tsx`), each opening its read-only
   profile. There is no unarchive: archiving revoked its keys, memberships and
   reminders, and a new Agent may already hold its name.
+- While the display says `error`, the profile panel shows the provider's
+  original error text (not translated or summarized) in a banner under its
+  header on every tab (`agent-error-banner.tsx`), with the Activity tab's
+  diagnostics copy and a way to that tab. Nothing else in the panel repeats it.
 - `deleted-agent.tsx` owns archived-sender rendering (grey avatar and `ARCHIVED`
   badge) for every message-history surface. Use it rather than local styling.
 - `agent-avatar-dialog.tsx` is the creator's change-avatar dialog, opened by
