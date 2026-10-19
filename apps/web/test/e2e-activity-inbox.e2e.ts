@@ -13,7 +13,8 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * previews; the Mentions view
  * keeps only the thread; the card menu offers read, Done and unfollow; Done removes a card for
  * good. On a wide screen a card opens its conversation beside the list, without leaving Activity,
- * and is marked as the open one: the thread card opens its thread pane at the first unread reply,
+ * and is marked as the open one, through a change of view and a reload: the thread card opens its
+ * thread pane at the first unread reply,
  * and a thread read to the end opens at its newest reply. On a phone a card opens the conversation
  * in Chat. A direct message with a member, and the viewer's with themself, list under that member's
  * name and face, and opening one beside the list reads it.
@@ -362,6 +363,24 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
     expect(await evaluate<string | null>(currentCard)).toContain("E2E activity root");
     await browser("screenshot", join(artifacts, "wide-open.png"));
+    // Switching the list's view keeps the conversation open. Clicked through Activity's own
+    // tablist: the open conversation has tabs too.
+    const filterTab = (name: string) =>
+      evaluate(`[...document.querySelectorAll('[role="tablist"][aria-label="Filter Activity"] [role="tab"]')]
+        .find((tab) => tab.textContent.replace(/[\\d+]/g, "").trim() === ${JSON.stringify(name)})
+        .click() ?? true`);
+    await filterTab("Mentions");
+    await browser("wait", "--fn", `location.search.includes("filter=mentions")`);
+    expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
+    expect(await evaluate<boolean>(inPane(replyId))).toBe(true);
+    await filterTab("All");
+    await browser("wait", "--fn", `!location.search.includes("filter=")`);
+    expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
+    // The open conversation lives in the URL: a reload reopens it beside the list.
+    await browser("reload");
+    await browser("wait", "--fn", `${inPane(replyId)} && ${hydrated}`);
+    await browser("wait", "--fn", `(${currentCard})?.includes("E2E activity root") === true`);
+    expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
 
     // A thread read to the end with no mention opens at its newest reply.
     await browser("open", `${origin}${workspacePath}/activity`);
