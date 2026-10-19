@@ -12,13 +12,16 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * viewer and a channel with an unread message appear as cards with their badges and Markdown
  * previews; the Mentions view
  * keeps only the thread; the card menu offers read, Done and unfollow; Done removes a card for
- * good; opening the thread card lands in its thread pane at the first unread reply, and a thread
- * read to the end opens at its newest reply. A direct message with a member, and the viewer's with
- * themself, list under that member's name and face, and opening one reads it.
+ * good. On a wide screen a card opens its conversation beside the list, without leaving Activity,
+ * and is marked as the open one: the thread card opens its thread pane at the first unread reply,
+ * and a thread read to the end opens at its newest reply. On a phone a card opens the conversation
+ * in Chat. A direct message with a member, and the viewer's with themself, list under that member's
+ * name and face, and opening one beside the list reads it.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
- * its messages are seeded deterministically and reset on every run. Screenshots of the wide and
- * phone layouts are written under `.amp/e2e/activity-inbox/`.
+ * its messages are seeded deterministically and reset on every run. Screenshots of the wide
+ * layout, with and without a conversation open, and of the phone layout are written under
+ * `.amp/e2e/activity-inbox/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -42,6 +45,26 @@ function seededUuid(key: string): string {
  * and a click before hydration lands on inert HTML.
  */
 const hydrated = `(!window.$_TSR || window.$_TSR.hydrated === true)`;
+
+/**
+ * The Activity list's cards, as a selector literal for page expressions. Scoped to the list: a
+ * conversation open beside it renders its messages, with the same seeded text, as list items too.
+ */
+const cardItems = JSON.stringify('ol[aria-label="Activity"] > li');
+
+/** The pane beside the list that shows the conversation a card opened. */
+const pane = `document.querySelector('section[aria-label="Selected conversation"]')`;
+
+/** Whether message `id` is rendered inside the conversation pane (one line: a wait argument). */
+function inPane(id: string) {
+  return `(() => { const pane = ${pane}; const row = document.getElementById("message-${id}"); return Boolean(pane && row && pane.contains(row)); })()`;
+}
+
+/** The text of the card marked as the one open in the pane, or null when none is. */
+const currentCard = `[...document.querySelectorAll(${cardItems})].find((item) => item.querySelector("a")?.getAttribute("aria-current") === "true")?.textContent ?? null`;
+
+/** The open conversation as the Activity URL names it (`channel:<id>` or `dm:<id>`). */
+const openParam = `new URLSearchParams(location.search).get("open")`;
 
 /** One agent-browser session: its commands, and a page expression read back as JSON. */
 function browserSession(session: string) {
@@ -69,7 +92,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
   const session = `activity-inbox-${process.pid}`;
   const { browser, evaluate } = browserSession(session);
   /** The text of every card this test seeded, in page order. */
-  const seededCards = `[...document.querySelectorAll("ol > li")]
+  const seededCards = `[...document.querySelectorAll(${cardItems})]
     .map((card) => card.textContent)
     .filter((text) => text.includes("E2E activity"))`;
   try {
@@ -232,7 +255,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(cards[1]).toContain("1 new");
     // The preview renders Markdown inline: the mention as a chip, emphasis and code as markup.
     const preview = await evaluate<{ strong: string | null; code: string | null }>(`(() => {
-      const card = [...document.querySelectorAll("ol > li")].find((item) =>
+      const card = [...document.querySelectorAll(${cardItems})].find((item) =>
         item.textContent.includes("E2E activity root"));
       return {
         strong: card.querySelector("strong")?.textContent ?? null,
@@ -242,7 +265,8 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(preview).toEqual({ strong: "reply", code: "code" });
     // The Unread and Mentions tabs count cards: both seeded cards are unread, and the thread's
     // reply is an unread mention. Other rows of the dev user's inbox may add to both.
-    const tabCounts = `Object.fromEntries([...document.querySelectorAll('[role="tab"]')].map((tab) => [tab.textContent.replace(/[\\d+]/g, "").trim(), Number(tab.textContent.replace(/\\D/g, "")) || 0]))`;
+    // Activity's own tabs: an open conversation beside the list has tabs of its own.
+    const tabCounts = `Object.fromEntries([...document.querySelectorAll('[role="tablist"][aria-label="Filter Activity"] [role="tab"]')].map((tab) => [tab.textContent.replace(/[\\d+]/g, "").trim(), Number(tab.textContent.replace(/\\D/g, "")) || 0]))`;
     const counts = await evaluate<Record<string, number>>(tabCounts);
     expect(Object.keys(counts)).toEqual(["All", "Unread", "Mentions"]);
     expect(counts.All).toBe(0);
@@ -261,7 +285,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
 
     // The card menu opens on a right click (a long press on touch).
     await evaluate(`(() => {
-      const card = [...document.querySelectorAll("ol > li")].find((item) =>
+      const card = [...document.querySelectorAll(${cardItems})].find((item) =>
         item.textContent.includes("E2E activity root"));
       const link = card.querySelector("a");
       const box = link.getBoundingClientRect();
@@ -281,7 +305,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     // Read and unread from the card menu move the badge both ways.
     const channelMenu = (label: string) =>
       evaluate(`(() => {
-        const card = [...document.querySelectorAll("ol > li")].find((item) =>
+        const card = [...document.querySelectorAll(${cardItems})].find((item) =>
           item.textContent.includes("E2E activity unread"));
         const link = card.querySelector("a");
         const box = link.getBoundingClientRect();
@@ -304,7 +328,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
             .click() ?? true`),
         );
     // One line: a wait expression is passed to the browser CLI as a single argument.
-    const channelCard = `[...document.querySelectorAll("ol > li")].find((item) => item.textContent.includes("E2E activity unread")).textContent`;
+    const channelCard = `[...document.querySelectorAll(${cardItems})].find((item) => item.textContent.includes("E2E activity unread")).textContent`;
     await channelMenu("Mark as Read");
     await browser("wait", "--fn", `!${channelCard}.includes("1 new")`);
     await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread - 1}`);
@@ -314,7 +338,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(await evaluate<boolean>(`!document.querySelector('[role="alert"]')`)).toBe(true);
 
     await evaluate(`(() => {
-      const card = [...document.querySelectorAll("ol > li")].find((item) =>
+      const card = [...document.querySelectorAll(${cardItems})].find((item) =>
         item.textContent.includes("E2E activity unread"));
       card.querySelector('[aria-label="Mark as Done"]').click();
       return true;
@@ -326,13 +350,18 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser("wait", "--fn", `${seededCards}.length === 1 && ${hydrated}`);
     expect((await evaluate<string[]>(seededCards))[0]).toContain("E2E activity root");
 
+    // Nothing is open until a card is clicked: opening one reads it.
+    expect(await evaluate<string | null>(openParam)).toBeNull();
+    expect(await evaluate<string | null>(currentCard)).toBeNull();
     await browser("find", "text", "E2E activity root", "click");
     await browser("wait", "--fn", `location.search.includes("threadRootId=${rootId}")`);
-    // The pane scrolls to the first unread reply.
-    await browser("wait", "--fn", `document.getElementById("message-${replyId}") !== null`);
-    expect(await evaluate<string>("location.pathname")).toBe(
-      `${workspacePath}/channel/${channelId}`,
-    );
+    // The thread opens beside the list, which stays on Activity; its pane scrolls to the first
+    // unread reply.
+    await browser("wait", "--fn", inPane(replyId));
+    expect(await evaluate<string>("location.pathname")).toBe(`${workspacePath}/activity`);
+    expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
+    expect(await evaluate<string | null>(currentCard)).toContain("E2E activity root");
+    await browser("screenshot", join(artifacts, "wide-open.png"));
 
     // A thread read to the end with no mention opens at its newest reply.
     await browser("open", `${origin}${workspacePath}/activity`);
@@ -371,6 +400,16 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       ),
     ).toBe(true);
     await browser("screenshot", join(artifacts, "phone.png"));
+    // No room beside the list on a phone: a card opens its conversation in Chat. The server
+    // renders a desktop's layout for this browser, so wait for the phone's, without the pane.
+    await browser("wait", "--fn", `${pane} === null`);
+    await browser("find", "text", "E2E activity root", "click");
+    await browser(
+      "wait",
+      "--fn",
+      `location.pathname === ${JSON.stringify(`${workspacePath}/channel/${channelId}`)}`,
+    );
+    expect(await evaluate<string>("location.search")).toContain(`threadRootId=${rootId}`);
   } finally {
     await browser("close").catch(() => undefined);
     await db.$disconnect();
@@ -383,7 +422,7 @@ test("a direct message with a member, and the one with themself, list with the m
   const { browser, evaluate } = browserSession(session);
   /** One seeded card's text and avatar initial, found by a message it previews. */
   const card = (text: string) =>
-    `(() => { const card = [...document.querySelectorAll("ol > li")].find((item) => item.textContent.includes(${JSON.stringify(text)})); return card ? { text: card.textContent, avatar: card.querySelector("[data-avatar]")?.textContent ?? null } : null; })()`;
+    `(() => { const card = [...document.querySelectorAll(${cardItems})].find((item) => item.textContent.includes(${JSON.stringify(text)})); return card ? { text: card.textContent, avatar: card.querySelector("[data-avatar]")?.textContent ?? null } : null; })()`;
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
@@ -492,14 +531,16 @@ test("a direct message with a member, and the one with themself, list with the m
     expect(self.avatar).not.toBeNull();
     await browser("screenshot", join(artifacts, "member-dm.png"));
 
-    // Opening the card lands in the DM at the unread message and reads it.
+    // Opening the card shows the DM beside the list, at the unread message, and reads it.
     await browser("find", "text", "E2E activity DM hello", "click");
     await browser(
       "wait",
       "--fn",
-      `location.pathname === ${JSON.stringify(`${workspacePath}/dm/${withPeer.conversationId}`)}`,
+      `${openParam} === ${JSON.stringify(`dm:${withPeer.conversationId}`)}`,
     );
-    await browser("wait", "--fn", `document.getElementById("message-${helloId}") !== null`);
+    await browser("wait", "--fn", inPane(helloId));
+    expect(await evaluate<string>("location.pathname")).toBe(`${workspacePath}/activity`);
+    expect(await evaluate<string | null>(currentCard)).toContain("E2E activity DM hello");
     await browser("open", `${origin}${workspacePath}/activity`);
     await browser("wait", "--fn", `${card("E2E activity DM hello")} !== null && ${hydrated}`);
     expect((await evaluate<{ text: string }>(card("E2E activity DM hello"))).text).not.toContain(

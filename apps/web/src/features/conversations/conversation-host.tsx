@@ -36,10 +36,10 @@ const SavedMessagesContext = createContext<SavedMessagesState | null>(null);
 const ChannelsContext = createContext<readonly ChannelSuggestion[] | undefined>(undefined);
 
 /**
- * What a conversation reads from the page hosting it (Chat, the search preview): the viewer's
- * "When I view a conversation" open mode and Saved list, and the Workspace's channels (every
- * channel by id, closed ones included: the authority a body's channel links check), read by the
- * hosting page's loader. The sidebar's unread badges stay Chat's own.
+ * What a conversation reads from the page hosting it (Chat, the search preview, the Activity
+ * pane): the viewer's "When I view a conversation" open mode and Saved list, and the Workspace's
+ * channels (every channel by id, closed ones included: the authority a body's channel links
+ * check), read by the hosting page's loader. The sidebar's unread badges stay Chat's own.
  */
 export function ConversationHostProvider({
   channels,

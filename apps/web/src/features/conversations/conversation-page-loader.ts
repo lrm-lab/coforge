@@ -31,12 +31,12 @@ export function conversationPageLoaderDeps(search: {
 }
 
 /**
- * Reads what a conversation page shows first, as every host (Chat's routes, the search preview)
- * opens it: the window around the anchor, then the Tasks tab's finished-work counts. It reads in the
- * browser only: a conversation's messages are never read while the server renders a page, so none
- * of them is in the document the server sends. The page itself is rendered in the browser too (Chat's
- * routes are `ssr: false`; the search preview is under `ClientOnly`) and reads the same Query
- * on its own when a host's loader has not.
+ * Reads what a conversation page shows first, as every host (Chat's routes, the search preview,
+ * the Activity pane) opens it: the window around the anchor, then the Tasks tab's finished-work
+ * counts. It reads in the browser only: a conversation's messages are never read while the server
+ * renders a page, so none of them is in the document the server sends. The page itself is rendered
+ * in the browser too (Chat's routes are `ssr: false`; the search preview and the Activity pane are
+ * under `ClientOnly`) and reads the same Query on its own when a host's loader has not.
  * https://tanstack.com/start/latest/docs/framework/react/guide/execution-model
  */
 export const loadConversationPage = createIsomorphicFn()

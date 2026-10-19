@@ -40,8 +40,9 @@ const NO_MESSAGES: DirectConversationView["messages"] = [];
 
 /**
  * A conversation is rendered in the browser only, and this does not check it: Chat's routes are
- * `ssr: false`, and the search preview and the Tasks page's Task popup (`OverviewTaskPopup`) mount
- * it under `ClientOnly`. Its collections fail if it is ever reached on the server.
+ * `ssr: false`, and the search preview, the Activity pane and the Tasks page's Task popup
+ * (`OverviewTaskPopup`) mount it under `ClientOnly`. Its collections fail if it is ever reached on
+ * the server.
  */
 export function ThreadedConversation(props: ThreadedConversationProps) {
   return (

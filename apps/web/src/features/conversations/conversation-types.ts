@@ -172,7 +172,8 @@ export type ThreadedConversationProps = Omit<ConversationProps, "conversation" |
    * instead of the conversation's `task` search param. */
   taskPopup?: TaskPopupControls;
   /** The message the stream lands on, for a host that keeps it itself (the search preview's
-   * previewed result) instead of the conversation's one-shot `message` search param. */
+   * previewed result, the Activity pane's opened card) instead of the conversation's one-shot
+   * `message` search param. */
   jumpMessage?: string;
 };
 

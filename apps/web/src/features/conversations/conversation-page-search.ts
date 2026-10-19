@@ -9,8 +9,9 @@ import { CONVERSATION_TABS } from "./conversation-tabs";
 import { openTaskParamSchema } from "./conversation-thread-search";
 
 /**
- * A conversation page's address state wherever the page is shown (Chat, the search preview): the
- * tab, the Task board's view, and what it has open (a thread, a Task popup, an Agent's or a person's profile).
+ * A conversation page's address state wherever the page is shown (Chat, the search preview, the
+ * Activity pane): the tab, the Task board's view, and what it has open (a thread, a Task popup,
+ * an Agent's or a person's profile).
  * Every host's `validateSearch` spreads it; Chat's routes add `message`, the one-shot jump.
  */
 export const conversationPageSearchShape = {
