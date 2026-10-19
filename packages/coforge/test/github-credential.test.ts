@@ -2,6 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import type { GitHubCredentialResponse } from "@lrm/coforge-sdk/agent";
+import { CliError } from "#src/cli-error";
 import { runGitHubCli, runGitHubCredentialHelper } from "#src/github-credential";
 
 const scratchRoots: string[] = [];
@@ -124,4 +126,103 @@ test("does not request a token when the host GitHub CLI is unavailable", async (
     ),
   ).rejects.toThrow("GitHub CLI is not installed");
   expect(lookups).toBe(0);
+});
+
+const GET_REPO = "protocol=https\nhost=github.com\npath=org/repo.git\n\n";
+const CREDENTIAL: GitHubCredentialResponse = {
+  username: "x-access-token",
+  password: "short-lived-token",
+  expiresAt: "2026-09-16T21:00:00Z",
+};
+/** What the CLI receives for the cloud's retryable 503: the daemon relays its status with a public
+ * line, the CLI names any upstream 5xx `SERVER_5XX` and marks this idempotent lookup's retryable. */
+const unavailable = () =>
+  new CliError({
+    code: "SERVER_5XX",
+    message: "the server is temporarily unavailable; retry",
+    retryable: true,
+    correlationId: "corr-unavailable",
+    proxy: { failureClass: "upstream_http_response", upstreamStatus: 503 },
+  });
+
+test("a credential the cloud cannot issue right now is asked for again after a short wait", async () => {
+  const waits: number[] = [];
+  let lookups = 0;
+  const output = await runGitHubCredentialHelper(
+    "get",
+    GET_REPO,
+    async () => {
+      lookups++;
+      if (lookups < 3) throw unavailable();
+      return CREDENTIAL;
+    },
+    { sleep: async (ms) => void waits.push(ms) },
+  );
+
+  expect(output).toBe("username=x-access-token\npassword=short-lived-token\n\n");
+  expect(lookups).toBe(3);
+  expect(waits).toEqual([500, 1500]);
+});
+
+test("a refused credential is not asked for again", async () => {
+  const refusal = new CliError({
+    code: "GITHUB_RECONNECT_REQUIRED",
+    message:
+      "GitHub is not connected for this Agent's owner, or its authorization expired; " +
+      "the owner must reconnect GitHub in Settings → Integrations",
+    retryable: false,
+    proxy: { failureClass: "upstream_refusal", upstreamStatus: 403 },
+  });
+  let lookups = 0;
+  const failure = await runGitHubCredentialHelper(
+    "get",
+    GET_REPO,
+    async () => {
+      lookups++;
+      throw refusal;
+    },
+    { sleep: async () => {} },
+  ).catch((error: unknown) => error);
+
+  expect(failure).toBe(refusal);
+  expect(lookups).toBe(1);
+});
+
+test("a credential that stays unavailable fails with the last answer after three tries", async () => {
+  let lookups = 0;
+  const failure = await runGitHubCredentialHelper(
+    "get",
+    GET_REPO,
+    async () => {
+      lookups++;
+      throw unavailable();
+    },
+    { sleep: async () => {} },
+  ).catch((error: unknown) => error);
+
+  expect(failure).toBeInstanceOf(CliError);
+  expect(failure).toMatchObject({ code: "SERVER_5XX", retryable: true });
+  expect(lookups).toBe(3);
+});
+
+test("a credential lookup that never reached the proxy is asked for again", async () => {
+  let lookups = 0;
+  const output = await runGitHubCredentialHelper(
+    "get",
+    GET_REPO,
+    async () => {
+      lookups++;
+      if (lookups < 2)
+        throw new CliError({
+          code: "GITHUB_CREDENTIAL_FAILED",
+          message: "agent proxy request failed (network or timeout)",
+          retryable: true,
+        });
+      return CREDENTIAL;
+    },
+    { sleep: async () => {} },
+  );
+
+  expect(output).toBe("username=x-access-token\npassword=short-lived-token\n\n");
+  expect(lookups).toBe(2);
 });

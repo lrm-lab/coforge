@@ -58,7 +58,8 @@ Rules for the Workspace cloud connection in `src/connection/`. They extend
   to the Agent with its reason and code. Decode that shape; do not add
   another text allowlist (`AGENT_MESSAGE_VALIDATION_MESSAGES` covers only
   bare-text 400 bodies). A 5xx is never a refusal: a send must still be
-  reconciled.
+  reconciled. A read (the GitHub credential lookup) may relay a 5xx whose
+  body names a `code` as an `AgentUpstreamRefusalError`.
 
 ## Fire-and-forget messages
 

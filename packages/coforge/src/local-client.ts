@@ -93,6 +93,10 @@ function operationFailedCode(operation: string): string {
 /** The deadline of every local proxy call but a message send (`AGENT_SEND_LOCAL_DEADLINE_MS`). */
 const OPERATION_DEADLINE_MS = 10_000;
 
+/** Past the daemon's own 10-second upstream deadline (`AGENT_RPC_TIMEOUT_MS`, started later), so
+ * the daemon's classified failure, with its correlation id, arrives before this one gives up. */
+const GITHUB_CREDENTIAL_DEADLINE_MS = 12_000;
+
 /** The agent-context token grammar the proxy checks before issuing any request. */
 const PROXY_CONTEXT_PATTERN = /^sfp_[A-Za-z0-9_-]{43}$/;
 
@@ -116,6 +120,10 @@ function requireProxySetup(operation: string, context: string, proxyUrl: string)
   if (!proxyUrl) throw preIssuanceError(operation, "coforge agent proxy is not configured");
 }
 
+/** `idempotent`: asking again changes nothing (a read), so an upstream 5xx or a transport failure
+ * is worth retrying. Off by default: most proxied operations have effects. */
+type ProxyFailureOptions = { idempotent?: boolean };
+
 /**
  * Classifies a non-ok proxy response (or a network failure reaching the proxy) into a `CliError`.
  * `send` failures raised here happened AFTER the daemon saved the local draft and handed the
@@ -128,6 +136,7 @@ function proxyHttpFailure(
   status: number,
   body: { json?: AgentProxyErrorBody },
   target: string | undefined,
+  { idempotent = false }: ProxyFailureOptions = {},
 ): CliError {
   const isSend = operation === "send";
   const proxy = body.json?.proxy;
@@ -150,10 +159,17 @@ function proxyHttpFailure(
   const draftSaved = proxy?.draft_saved !== undefined ? proxy.draft_saved : !isLocalPrecondition;
   const message = body.json?.error || `HTTP ${status}`;
   const code = failureCode(operation, status, body.json);
+  // Any upstream 5xx, including one the daemon relayed with the server's named code.
+  const transient =
+    code === "SERVER_5XX" ||
+    (proxy?.failure_class === "upstream_http_response" &&
+      (proxy.upstream_status ?? status) >= 500) ||
+    proxy?.failure_class === "pre_response_transport" ||
+    proxy?.failure_class === "mid_response_transport";
   return new CliError({
     code,
     message,
-    retryable: body.json?.retryable ?? false,
+    retryable: body.json?.retryable ?? (idempotent && transient),
     ...(isSend ? { draftSaved } : {}),
     correlationId: proxy?.correlation_id,
     proxy: proxy
@@ -211,12 +227,16 @@ function failureCode(operation: string, status: number, json: AgentProxyErrorBod
 
 /** A failure reaching the local daemon proxy itself (network/timeout): treated conservatively as
  * "may have been issued" — see `unknownDeliveryNextAction`. */
-function proxyTransportFailure(operation: string, target: string | undefined): CliError {
+function proxyTransportFailure(
+  operation: string,
+  target: string | undefined,
+  { idempotent = false }: ProxyFailureOptions = {},
+): CliError {
   const isSend = operation === "send";
   return new CliError({
     code: isSend ? "SEND_FAILED" : operationFailedCode(operation),
     message: "agent proxy request failed (network or timeout)",
-    retryable: false,
+    retryable: idempotent,
     ...(isSend
       ? { draftSaved: true, suggestedNextAction: unknownDeliveryNextAction(target ?? "") }
       : {}),
@@ -597,17 +617,30 @@ export function connectLocal(
       callWeeklyReportKeyPoints(command),
     weeklyReportMemory: (command: import("../index").WeeklyReportMemoryCommand) =>
       callWeeklyReportMemory(command),
+    // A failure is the proxy's typed error (the cloud's status, reason, code and the correlation
+    // id), so `git push` says why instead of only the proxy's own status. Fetching a credential
+    // changes nothing, so a 5xx or transport failure is retryable (`github-credential.ts`).
     githubCredential: async () => {
-      if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
-        throw new Error("coforge agent context is invalid");
-      if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
-      const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.githubCredentials.path), {
-        method: agentApiRoutes.proxy.githubCredentials.method,
-        headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
-        body: JSON.stringify({}),
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!response.ok) throw new Error(`GitHub credential request failed (${response.status})`);
+      requireProxySetup("github-credential", context, proxyUrl);
+      let response: Response;
+      try {
+        response = await fetch(proxyEndpoint(agentApiRoutes.proxy.githubCredentials.path), {
+          method: agentApiRoutes.proxy.githubCredentials.method,
+          headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
+          body: JSON.stringify({}),
+          signal: AbortSignal.timeout(GITHUB_CREDENTIAL_DEADLINE_MS),
+        });
+      } catch {
+        throw proxyTransportFailure("github-credential", undefined, { idempotent: true });
+      }
+      if (!response.ok)
+        throw proxyHttpFailure(
+          "github-credential",
+          response.status,
+          await readProxyErrorBody(response),
+          undefined,
+          { idempotent: true },
+        );
       return decodeGitHubCredentialResponse(await response.json());
     },
     githubCommitTrailers: async (repository: string | null): Promise<string[]> => {

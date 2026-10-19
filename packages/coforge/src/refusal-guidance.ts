@@ -45,6 +45,11 @@ export function refusalNextAction(
         "and is read-only for it, so running the command again is refused the same way. Reply " +
         "in a conversation this Agent may post to."
       );
+    case "GITHUB_RECONNECT_REQUIRED":
+      return (
+        "Retrying will not help: ask this Agent's owner to reconnect GitHub in Settings → " +
+        "Integrations, then retry the push or `gh` command."
+      );
   }
   if (operation === "send")
     return code === undefined && (status === 400 || status === 403)

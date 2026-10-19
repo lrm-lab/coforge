@@ -1,7 +1,31 @@
 import type { GitHubCredentialResponse } from "@lrm/coforge-sdk/agent";
 import { delimiter, dirname, resolve } from "node:path";
+import { CliError } from "./cli-error";
 
 type CredentialLookup = () => Promise<GitHubCredentialResponse>;
+
+/** How long to wait before asking again for a credential the cloud could not issue right now. At
+ * worst three lookups that each run to their 12-second deadline (a transport timeout) and these
+ * waits hold `git push` about 38 seconds. */
+const RETRY_DELAYS_MS = [500, 1_500] as const;
+
+export type CredentialRetry = { sleep?: (ms: number) => Promise<void> };
+
+/** `lookup`, asked again after a short wait while its failure says it is retryable (a 5xx or a
+ * transport failure: see `githubCredential` in `local-client.ts`). A refusal (the GitHub
+ * connection needs a person) is final. */
+async function lookupWithRetry(lookup: CredentialLookup, retry: CredentialRetry) {
+  const sleep = retry.sleep ?? ((ms: number) => Bun.sleep(ms));
+  for (const delay of RETRY_DELAYS_MS) {
+    try {
+      return await lookup();
+    } catch (error) {
+      if (!(error instanceof CliError && error.retryable === true)) throw error;
+      await sleep(delay);
+    }
+  }
+  return lookup();
+}
 
 /**
  * Normalizes a GitHub path-like segment (a credential-helper `path` field, or the tail of a
@@ -18,6 +42,7 @@ export async function runGitHubCredentialHelper(
   operation: string | undefined,
   input: string,
   lookup: CredentialLookup,
+  retry: CredentialRetry = {},
 ) {
   if (operation === "store" || operation === "erase") return "";
   if (operation !== "get") throw new Error("GitHub credential helper operation is invalid");
@@ -31,7 +56,7 @@ export async function runGitHubCredentialHelper(
   const rawPath = fields.get("path");
   const path = rawPath ? githubOwnerRepoName(rawPath) : null;
   if (!path) throw new Error("GitHub credential repository is invalid");
-  const credential = await lookup();
+  const credential = await lookupWithRetry(lookup, retry);
   return `username=${credential.username}\npassword=${credential.password}\n\n`;
 }
 
@@ -41,6 +66,7 @@ export async function runGitHubCli(
   lookup: CredentialLookup,
   environment: Record<string, string | undefined> = Bun.env,
   executablePath = process.execPath,
+  retry: CredentialRetry = {},
 ) {
   const wrapperDirectory = resolve(dirname(executablePath));
   const path = (environment.PATH ?? "")
@@ -49,7 +75,7 @@ export async function runGitHubCli(
     .join(delimiter);
   const executable = Bun.which("gh", { PATH: path });
   if (!executable) throw new Error("GitHub CLI is not installed");
-  const credential = await lookup();
+  const credential = await lookupWithRetry(lookup, retry);
   const process = Bun.spawn([executable, ...args], {
     env: { ...environment, PATH: path, GH_TOKEN: credential.password },
     stdin: "inherit",

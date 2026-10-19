@@ -77,6 +77,7 @@ import {
   getAgentJson,
   isRecord,
   postAgentEnvelopeJson,
+  readAgentResponseJson,
   readUpstreamErrorCode,
   sendAgentJson,
   validateAgentMessageArrayShape,
@@ -577,15 +578,33 @@ export const createAgentMessageHttpClient = (
           status,
         ),
     ),
+  // Through the shared wire helpers, so a refusal reaches the proxy as the cloud's own status, reason
+  // and code, and a network failure as a typed transport failure, never a bare message. A lookup is
+  // a read, so a 5xx that names its code (`TEMPORARILY_UNAVAILABLE`) is the cloud's answer, relayed
+  // with that status and code; a bare 5xx stays a transport failure.
   async requestGitHubCredential({ url, request, ...keys }) {
-    const response = await httpClient(url, {
-      method: "POST",
-      headers: agentHeaders(keys, true),
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
-    });
-    if (!response.ok) throw new Error(`GitHub credential request failed (${response.status})`);
-    return decodeGitHubCredentialResponse(await response.json());
+    const what = "GitHub credential";
+    const response = await fetchAgentResponse(
+      httpClient,
+      url,
+      {
+        method: "POST",
+        headers: agentHeaders(keys, true),
+        body: JSON.stringify(request),
+        signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
+      },
+      what,
+    );
+    const upstreamCode =
+      response.status >= 500 ? await readUpstreamErrorCode(response.clone()) : undefined;
+    if (upstreamCode)
+      throw new AgentUpstreamRefusalError(
+        `${what} request failed (${response.status})`,
+        upstreamCode,
+        response.status,
+      );
+    await assertAgentResponseOk(response, what);
+    return decodeGitHubCredentialResponse(await readAgentResponseJson<unknown>(response, what));
   },
   async requestGitHubCommitTrailers({ url, request, ...keys }) {
     const response = await httpClient(url, {

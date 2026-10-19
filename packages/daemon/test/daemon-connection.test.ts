@@ -1150,6 +1150,136 @@ test("GitHub credential HTTP transport rejects malformed credentials", async () 
   ).rejects.toThrow("invalid GitHub credential response");
 });
 
+test("GitHub credential HTTP transport keeps a bare 5xx a typed upstream HTTP failure", async () => {
+  const client = createAgentMessageHttpClient(
+    async () => new Response("Bad Gateway", { status: 502 }),
+  );
+
+  const error = await client.requestGitHubCredential!({
+    url: "https://server.example/api/agent/v1/github-credentials",
+    agentApiKey: `sk_agent_${"a".repeat(43)}`,
+    daemonApiKey: "daemon-token",
+    request: {},
+  }).catch((caught: unknown) => caught);
+
+  expect(error).toBeInstanceOf(AgentTransportError);
+  expect(error).toMatchObject({ failureClass: "upstream_http_response", upstreamStatus: 502 });
+});
+
+/** Asks for a GitHub credential the way `git push` does — CLI, local proxy, daemon connection — from
+ * a cloud that answers with `cloudResponse`, and returns what the CLI threw and what the daemon
+ * logged. */
+async function githubCredentialFailure(cloudResponse: () => Response) {
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: cloudResponse });
+  const transport = new DaemonConnection("wss://cloud.example", () => fakeClient().client);
+  await transport.start("daemon-token", { ...config, serverHttpUrl: server.url.origin });
+  try {
+    // The proxy starts inside the capture, so its request handling logs into it.
+    const { result, records } = await captureDaemonLogs(async () => {
+      const proxy = startAgentProxy({
+        runtime: {
+          agentMessage: async () => ({}),
+          githubCredential: (_context, request, agentApiKey) =>
+            transport.githubCredential(request, agentApiKey),
+        },
+      });
+      try {
+        const token = proxy.issue("agent-1", TEST_AGENT_API_KEY);
+        return await connectLocal("", token, proxy.url)
+          .githubCredential()
+          .then(
+            () => undefined,
+            (error: unknown) => error,
+          );
+      } finally {
+        proxy.close();
+      }
+    });
+    const failure = records.find((record) => record.properties.event === "agent.proxy.failure");
+    const events = records.map((record) => record.properties.event);
+    return { error: result as Record<string, unknown>, logged: failure?.properties, events };
+  } finally {
+    await transport.stop();
+    await server.stop(true);
+  }
+}
+
+/** The cloud route's refusal when the Agent owner's GitHub connection needs a person. */
+const RECONNECT_REQUIRED =
+  "GitHub is not connected for this Agent's owner, or its authorization expired; " +
+  "the owner must reconnect GitHub in Settings → Integrations";
+
+test("a GitHub credential the cloud refuses reaches the CLI with the cloud's status, reason and code", async () => {
+  const { error, logged } = await githubCredentialFailure(() =>
+    Response.json(
+      { error: RECONNECT_REQUIRED, code: "GITHUB_RECONNECT_REQUIRED", retryable: false },
+      { status: 403 },
+    ),
+  );
+  expect(error).toMatchObject({
+    code: "GITHUB_RECONNECT_REQUIRED",
+    message: RECONNECT_REQUIRED,
+    retryable: false,
+    proxy: { failureClass: "upstream_refusal", upstreamStatus: 403 },
+  });
+  expect(error.correlationId).toEqual(expect.any(String));
+  // The daemon's own record of the failure names the cloud's answer, under the same correlation.
+  expect(logged).toMatchObject({
+    correlation: error.correlationId,
+    failure_class: "upstream_refusal",
+    upstream_status: 403,
+    upstream_code: "GITHUB_RECONNECT_REQUIRED",
+  });
+});
+
+// A credential lookup is a read, so the cloud's named 5xx reaches the CLI as that status with the
+// code's public line (not a send's transport failure). The CLI names any upstream 5xx `SERVER_5XX`
+// and, the envelope's `retryable` not being relayed, marks this idempotent lookup's 5xx retryable
+// when it builds the error (`local-client.ts`).
+test("a GitHub credential the cloud cannot issue right now reaches the CLI as the cloud's 503", async () => {
+  const { error, logged, events } = await githubCredentialFailure(() =>
+    Response.json(
+      {
+        error: "GitHub could not issue a credential right now; try again shortly",
+        code: "TEMPORARILY_UNAVAILABLE",
+        retryable: true,
+      },
+      { status: 503 },
+    ),
+  );
+  expect(error).toMatchObject({
+    code: "SERVER_5XX",
+    message: "the server is temporarily unavailable; retry",
+    retryable: true,
+    proxy: {
+      failureClass: "upstream_http_response",
+      causeCode: "TEMPORARILY_UNAVAILABLE",
+      upstreamStatus: 503,
+    },
+  });
+  expect(error.correlationId).toEqual(expect.any(String));
+  expect(logged).toMatchObject({
+    correlation: error.correlationId,
+    cause_code: "TEMPORARILY_UNAVAILABLE",
+    upstream_status: 503,
+  });
+  // A named answer is not an unexplained 5xx: its body is not dumped at ERROR.
+  expect(events).not.toContain("agent.http.upstream_5xx_body");
+});
+
+test("a GitHub credential the cloud fails without naming a code reaches the CLI as a retryable 5xx", async () => {
+  const { error, events } = await githubCredentialFailure(
+    () => new Response("Bad Gateway", { status: 502 }),
+  );
+  expect(error).toMatchObject({
+    code: "SERVER_5XX",
+    retryable: true,
+    proxy: { failureClass: "upstream_http_response", upstreamStatus: 502 },
+  });
+  // An unexplained 5xx keeps its body diagnostic.
+  expect(events).toContain("agent.http.upstream_5xx_body");
+});
+
 test("GitHub commit trailers HTTP transport authenticates the Agent request", async () => {
   const calls: Array<{ url: string; headers: Headers; body: unknown }> = [];
   const client = createAgentMessageHttpClient(async (input, init) => {

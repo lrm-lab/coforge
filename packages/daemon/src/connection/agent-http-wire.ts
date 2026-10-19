@@ -110,7 +110,7 @@ export async function assertAgentResponseOk(response: Response, what: string): P
  * failure into a typed protocol-mismatch error — the response arrived, but the daemon could not
  * trust it. Never lets a missing required field reach the caller as a silent `undefined`.
  */
-async function readAgentResponseJson<Result>(
+export async function readAgentResponseJson<Result>(
   response: Response,
   what: string,
   validate?: (data: unknown) => string | undefined,
@@ -216,7 +216,9 @@ export async function getAgentEnvelopeJson<Result extends { ok: true }>(
 
 /** Reads the `code` out of an agent API error body; a body that is absent, empty or not JSON is
  * simply a refusal without a named code, which is exactly what the caller already sees. */
-export async function readUpstreamErrorCode(response: Response): Promise<string | undefined> {
+export async function readUpstreamErrorCode(
+  response: Pick<Response, "json">,
+): Promise<string | undefined> {
   try {
     const body = (await response.json()) as { code?: unknown };
     return typeof body.code === "string" && body.code.length > 0 ? body.code : undefined;

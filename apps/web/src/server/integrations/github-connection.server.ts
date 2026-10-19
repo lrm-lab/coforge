@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppErrorCode } from "#src/lib/app-error";
 import { gitObjectIdSchema } from "#src/lib/git-object-id";
 
-import { utf8Encoder, utf8Decoder } from "@lrm/coforge-sdk/internal";
+import { hasErrorCode, utf8Encoder, utf8Decoder } from "@lrm/coforge-sdk/internal";
 export type GitHubConfig = {
   appId: number;
   clientId: string;
@@ -1160,14 +1160,22 @@ export class GitHubConnection {
     return results;
   }
 
-  /** A current user token for one Agent-owned GitHub operation; never persisted by the caller. */
+  /**
+   * A current user token for one Agent-owned GitHub operation; never persisted by the caller.
+   * Throws `ACCESS_DENIED` only when the person must reconnect GitHub (no connection, or one whose
+   * authorization `withToken` cleared) and `TEMPORARILY_UNAVAILABLE` for anything thrown, even an
+   * `ACCESS_DENIED` from a GitHub 403/404, which cleared nothing. Logs the failure, with its
+   * reason, once.
+   */
   async credential(userId: string) {
     const result = await this.withToken(userId, async (token, _githubUserId, row) => ({
       username: "x-access-token",
       password: token,
       expiresAt: row.expiresAt.toISOString(),
-    }));
-    if (!result.ok) throw new AppError("ACCESS_DENIED");
+    })).catch((error: unknown) => {
+      throw credentialFailed(userId, "TEMPORARILY_UNAVAILABLE", failureReason(error));
+    });
+    if (!result.ok) throw credentialFailed(userId, "ACCESS_DENIED", result.status);
     return result.data;
   }
 
@@ -1242,7 +1250,7 @@ export class GitHubConnection {
         // Commit a rotated token even if the subsequent read fails. The action runs
         // after this transaction, so a transient GitHub failure cannot undo a refresh.
         return {
-          error: error instanceof AppError ? error : new AppError("TEMPORARILY_UNAVAILABLE"),
+          error: error instanceof AppError ? error : unavailable(failureReason(error)),
         };
       }
     });
@@ -1363,7 +1371,7 @@ export class GitHubConnection {
       return await (await this.send(url, init)).json();
     } catch (error) {
       if (error instanceof GitHubUnauthorized || error instanceof AppError) throw error;
-      throw new AppError("TEMPORARILY_UNAVAILABLE");
+      throw unavailable("invalid_response");
     }
   }
 
@@ -1388,11 +1396,13 @@ export class GitHubConnection {
       )
         throw new AppError("ACCESS_DENIED");
       if (!response.ok && !alsoAccept.includes(response.status))
-        throw new AppError("TEMPORARILY_UNAVAILABLE");
+        throw unavailable(`http_${response.status}`);
       return response;
     } catch (error) {
       if (error instanceof GitHubUnauthorized || error instanceof AppError) throw error;
-      throw new AppError("TEMPORARILY_UNAVAILABLE");
+      throw unavailable(
+        error instanceof DOMException && error.name === "TimeoutError" ? "timeout" : "network",
+      );
     }
   }
 
@@ -1445,12 +1455,27 @@ class GitHubOAuthRejected extends Error {
   }
 }
 
-/** What to log about a failed authorization step: a short identifier, never a message or body. */
+/**
+ * The short reason (`http_502`, `network`, GitHub's OAuth error name) behind a GitHub call's
+ * `TEMPORARILY_UNAVAILABLE`, for the logs. A WeakMap rather than a field or subclass: the browser
+ * serializer (seroval) copies an error's own properties, so the reason would reach the browser.
+ */
+const unavailableReasons = new WeakMap<AppError, string>();
+
+function unavailable(reason: string) {
+  const error = new AppError("TEMPORARILY_UNAVAILABLE");
+  unavailableReasons.set(error, reason);
+  return error;
+}
+
+/** What to log about a failed GitHub step: a short identifier, never a message, token or body. */
 function failureReason(error: unknown) {
   if (error instanceof GitHubOAuthRejected) return error.reason;
   if (error instanceof GitHubUnauthorized) return "unauthorized";
-  if (error instanceof AppError) return error.code.toLowerCase();
+  if (error instanceof AppError) return unavailableReasons.get(error) ?? error.code.toLowerCase();
   if (error instanceof z.ZodError) return "invalid_response";
+  // Prisma's transaction error: the advisory-lock transaction could not start in time, or expired.
+  if (hasErrorCode(error, "P2028")) return "lock_timeout";
   return "error";
 }
 
@@ -1462,6 +1487,20 @@ function failureReason(error: unknown) {
 function authorizationFailed(stage: string, reason: string) {
   console.warn(JSON.stringify({ event: "github.authorization_failed", stage, reason }));
   return false as const;
+}
+
+/**
+ * The Agent credential route answers with a fixed sentence, so this line is where the cause shows:
+ * whether the person must reconnect, and a short reason. It never carries a token or GitHub text.
+ */
+function credentialFailed(
+  userId: string,
+  code: "ACCESS_DENIED" | "TEMPORARILY_UNAVAILABLE",
+  reason: string,
+) {
+  const outcome = code === "ACCESS_DENIED" ? "reconnect" : "unavailable";
+  console.warn(JSON.stringify({ event: "github.credential_failed", userId, outcome, reason }));
+  return new AppError(code);
 }
 
 function randomValue() {
