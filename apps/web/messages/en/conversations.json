@@ -50,6 +50,7 @@
   "channel_members_promote_name": "Make {name} a channel admin",
   "channel_members_demote_name": "Remove channel admin from {name}",
   "channel_members_remove_name": "Remove {name}",
+  "channel_members_actions_name": "Actions for {name}",
   "channel_members_remove_title": "Remove member",
   "channel_members_remove_message": "{name} will stop receiving ordinary delivery from #{channel} and cannot send messages until they rejoin.",
   "channel_members_add_member": "Add member",

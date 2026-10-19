@@ -8,13 +8,15 @@ import {
   Heading,
   Text,
 } from "react-aria-components";
-import { ChevronDown, Plus, SearchLg } from "@untitledui/icons";
+import { ChevronDown, DotsHorizontal, Plus, SearchLg } from "@untitledui/icons";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import { createAgent } from "#src/features/agents/agents.functions";
@@ -30,6 +32,8 @@ import {
 } from "#src/features/computers/computers.functions";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { isAppErrorCode } from "#src/lib/app-error";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
@@ -67,12 +71,13 @@ function isServerAdmin(member: { serverRole?: string | null }) {
   return member.serverRole === "owner" || member.serverRole === "admin";
 }
 
-/** Owner and admin are Workspace roles; a channel admin is one by this channel's own role. */
+/** Owner and admin are Workspace roles; a channel admin is one by this channel's own role. A plain
+ * member has no label: a badge on every row would say nothing. */
 function roleLabel(member: { serverRole?: string | null; channelRole: string }) {
   if (member.serverRole === "owner") return m.channel_members_role_owner();
   if (member.serverRole === "admin") return m.channel_members_role_admin();
   if (member.channelRole === "admin") return m.channel_members_role_channel_admin();
-  return m.channel_members_role_member();
+  return undefined;
 }
 
 /**
@@ -194,6 +199,12 @@ function MembersRoster({
   const total = data.humans.length + data.agents.length;
   const hasCandidates = data.candidates.humans.length + data.candidates.agents.length > 0;
   const canManageRoles = data.channelCapabilities.manage_roles;
+  // Rows keep their actions behind a menu button on a coarse pointer or below `md`, where hover
+  // reveal is unavailable or the row is too narrow for inline buttons.
+  const coarsePointer = useCoarsePointer();
+  const wideViewport = useBreakpoint("md");
+  const actionsInMenu =
+    (coarsePointer || !wideViewport) && (canManageRoles || data.canRemoveMembers);
 
   // Stable across renders, so a live status update re-renders only the rows whose display changed.
   const toggleRole = useCallback(
@@ -231,6 +242,7 @@ function MembersRoster({
         canChangeRole={canManageRoles && !self}
         roleBusy={roleTarget === member.id}
         canRemove={data.canRemoveMembers}
+        actionsInMenu={actionsInMenu}
         onToggleRole={toggleRole}
         onRemove={setRemoving}
         onOpenProfile={onOpenProfile}
@@ -306,14 +318,16 @@ function MembersRoster({
   );
 }
 
-/** One roster row: identity, the role, and (revealed on hover or keyboard focus, always shown on
- * touch widths) the role and remove actions. */
+/** One roster row: identity, then at its right edge the role badge and the role and remove actions
+ * — revealed in the badge's place on hover or keyboard focus, or behind a menu button when
+ * `actionsInMenu`. */
 const MemberRow = memo(function MemberRow({
   member,
   display,
   canChangeRole,
   roleBusy,
   canRemove,
+  actionsInMenu,
   onToggleRole,
   onRemove,
   onOpenProfile,
@@ -324,12 +338,24 @@ const MemberRow = memo(function MemberRow({
   canChangeRole: boolean;
   roleBusy: boolean;
   canRemove: boolean;
+  /** Some row of the roster has actions and they sit behind a menu button; a row without any keeps
+   * the button's room, so every badge still ends on one line. */
+  actionsInMenu: boolean;
   onToggleRole: (member: Member) => void;
   onRemove: (member: Member) => void;
   onOpenProfile: (profile: RosterProfile, tab?: AgentProfileTabId) => void;
   autoFocus: boolean;
 }) {
   const hasActions = canChangeRole || canRemove;
+  const role = roleLabel(member);
+  const demotes = member.channelRole === "admin" || isServerAdmin(member);
+  const roleAction = demotes ? m.channel_members_demote() : m.channel_members_promote();
+  const actionsLabel = m.channel_members_actions_name({ name: member.displayName });
+  const badge = role && (
+    <Badge size="sm" color="gray">
+      {role}
+    </Badge>
+  );
   // The same peek the channel header's faces give (task #211): hovering an avatar shows the
   // profile card; pressing it (or the name) opens the profile. Avatar and name are separate
   // press targets — a hover-card trigger nested inside the row's button would nest buttons.
@@ -352,7 +378,7 @@ const MemberRow = memo(function MemberRow({
     </span>
   );
   return (
-    <li className="group flex items-center gap-3 px-4 py-2 md:px-6">
+    <li className="group flex min-h-16 items-center gap-3 rounded-lg p-2 hover:bg-primary_hover md:min-h-0 md:px-3">
       {member.kind === "agent" ? (
         <AgentHoverCard
           agentId={member.id}
@@ -406,51 +432,87 @@ const MemberRow = memo(function MemberRow({
       >
         {nameBlock}
       </AriaButton>
-      {/* Hidden by opacity, not visibility, so the actions stay in the tab order and a keyboard
-          focus reveals them. */}
-      <span className="flex shrink-0 items-center gap-2 md:grid">
-        <span
-          className={cn(
-            "flex items-center md:col-start-1 md:row-start-1 md:justify-self-end",
-            hasActions && "md:group-focus-within:opacity-0 md:group-hover:opacity-0",
+      {actionsInMenu ? (
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {badge}
+          {hasActions ? (
+            <Dropdown.Root>
+              <ButtonUtility
+                tooltip={actionsLabel}
+                icon={DotsHorizontal}
+                color="tertiary"
+                className="size-11"
+              />
+              <Dropdown.Popover placement="bottom end" className="w-48">
+                <Dropdown.Menu aria-label={actionsLabel}>
+                  {canChangeRole && (
+                    <Dropdown.Item
+                      id="role"
+                      label={roleAction}
+                      isDisabled={roleBusy}
+                      onAction={() => onToggleRole(member)}
+                    />
+                  )}
+                  {canRemove && (
+                    <Dropdown.Item
+                      id="remove"
+                      label={m.channel_members_remove_action()}
+                      onAction={() => onRemove(member)}
+                    />
+                  )}
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown.Root>
+          ) : (
+            <span aria-hidden="true" className="size-11" />
           )}
-        >
-          <Badge size="sm" color="gray">
-            {roleLabel(member)}
-          </Badge>
         </span>
-        {hasActions && (
-          <span className="flex items-center gap-2 md:col-start-1 md:row-start-1 md:justify-self-end md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
-            {canChangeRole && (
-              <Button
-                size="sm"
-                color="secondary"
-                isDisabled={roleBusy}
-                aria-label={
-                  member.channelRole === "admin" || isServerAdmin(member)
-                    ? m.channel_members_demote_name({ name: member.displayName })
-                    : m.channel_members_promote_name({ name: member.displayName })
-                }
-                onPress={() => onToggleRole(member)}
-              >
-                {member.channelRole === "admin" || isServerAdmin(member)
-                  ? m.channel_members_demote()
-                  : m.channel_members_promote()}
-              </Button>
-            )}
-            {canRemove && (
-              <Button
-                size="sm"
-                color="tertiary-destructive"
-                aria-label={m.channel_members_remove_name({ name: member.displayName })}
-                onPress={() => onRemove(member)}
-              >
-                {m.channel_members_remove_action()}
-              </Button>
-            )}
-          </span>
-        )}
-      </span>
+      ) : (
+        // The badge and the actions share one grid cell; the badge gives way to them on hover or
+        // keyboard focus. The actions are hidden by opacity, not visibility, so they stay in the
+        // tab order and a keyboard focus reveals them.
+        <span className="ml-auto grid shrink-0 items-center justify-items-end">
+          {badge && (
+            <span
+              className={cn(
+                "col-start-1 row-start-1 flex",
+                hasActions && "group-focus-within:opacity-0 group-hover:opacity-0",
+              )}
+            >
+              {badge}
+            </span>
+          )}
+          {hasActions && (
+            <span className="col-start-1 row-start-1 flex items-center gap-2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+              {canChangeRole && (
+                <Button
+                  size="sm"
+                  color="secondary"
+                  isDisabled={roleBusy}
+                  aria-label={
+                    demotes
+                      ? m.channel_members_demote_name({ name: member.displayName })
+                      : m.channel_members_promote_name({ name: member.displayName })
+                  }
+                  onPress={() => onToggleRole(member)}
+                >
+                  {roleAction}
+                </Button>
+              )}
+              {canRemove && (
+                <Button
+                  size="sm"
+                  color="tertiary-destructive"
+                  aria-label={m.channel_members_remove_name({ name: member.displayName })}
+                  onPress={() => onRemove(member)}
+                >
+                  {m.channel_members_remove_action()}
+                </Button>
+              )}
+            </span>
+          )}
+        </span>
+      )}
     </li>
   );
 });
@@ -476,14 +538,14 @@ function MemberGroup({
             aria-hidden="true"
             className={cn("size-4 shrink-0 transition-transform", !expanded && "-rotate-90")}
           />
-          <span>
-            {label} · <span className="tabular-nums">{count}</span>
-          </span>
+          <span className="tracking-wide uppercase">{label}</span>
+          <span className="text-quaternary tabular-nums">{count}</span>
         </AriaButton>
       </Heading>
       {/* A collapsed panel is `hidden="until-found"`, which Tailwind's preflight leaves displayed. */}
       <DisclosurePanel className={cn(!expanded && "hidden")}>
-        <ul>{expanded && children}</ul>
+        {/* Inset, so a row's hover background has room around it. */}
+        <ul className="px-2 md:px-3">{expanded && children}</ul>
       </DisclosurePanel>
     </Disclosure>
   );

@@ -51,6 +51,7 @@
   "channel_members_promote_name": "将 {name} 设为频道管理员",
   "channel_members_demote_name": "撤销 {name} 的频道管理员",
   "channel_members_remove_name": "移除 {name}",
+  "channel_members_actions_name": "{name} 的操作",
   "channel_members_remove_title": "移除成员",
   "channel_members_remove_message": "{name} 将停止接收 #{channel} 的常规消息，并且在重新加入前无法发送消息。",
   "channel_members_add_member": "添加成员",
