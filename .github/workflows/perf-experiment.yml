@@ -1,0 +1,51 @@
+# TEMPORARY perf experiment for CoForge task #7 (Windows CI dependency setup). Never merge.
+name: perf-experiment
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-deps:
+    name: ${{ matrix.variant }} ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-latest, windows-11-arm]
+        variant: [baseline, nocache]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Install pinned Bun
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          install_args: bun
+      - name: Cache Bun packages
+        if: matrix.variant == 'baseline'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Report install footprint
+        shell: bash
+        run: |
+          du -sh ~/.bun/install/cache node_modules
+          ls node_modules/.bun | wc -l
+
+      - name: Generate protocol
+        run: bun run --cwd packages/coforge-sdk generate
+      - name: Test compiled version and server configuration
+        env:
+          COFORGE_RELEASE_TEST_ARTIFACT_ROOT: ${{ runner.temp }}
+        run: bun test scripts/release/compile-targets.test.ts --test-name-pattern "published Computer"
+      - name: Test the code-agent search path on real Windows
+        run: bun test packages/daemon/test/code-agent-path.test.ts
