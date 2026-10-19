@@ -31,9 +31,8 @@ export type AgentRestartConfig = Readonly<{
   sessionId: string | undefined;
   /** The server's last launch identity for this Agent, set on a managed launch
    * or a rebind. A self-initiated (daemon-woken) launch reuses it instead of minting a new
-   * `launchId`. Lives only as long as this restart config does: `start()` replaces this whole
-   * entry (so callers must re-apply it after every `start()`), and `stop()`/`shutdown()` delete
-   * it along with everything else this Agent could be woken from. */
+   * `launchId`. A successful `start()` registers it with the runtime's restart config;
+   * `stop()`/`shutdown()` delete it along with everything else this Agent could be woken from. */
   serverLaunch?: ServerLaunchIdentity;
 }>;
 
@@ -43,6 +42,22 @@ export type ServerLaunchIdentity = Readonly<{
   controlEpoch: number;
   launchId: string;
 }>;
+
+export type AgentProcessStartOptions = Pick<
+  AgentSessionOptions,
+  | "agentWorkspaceDirectory"
+  | "sessionId"
+  | "environment"
+  | "runtimeId"
+  | "onSessionId"
+  | "sessionMode"
+> & {
+  assignedSkillPacks?: readonly AssignedSkillPack[];
+  /** Server-authored Agent identity for the standing prompt. */
+  identity?: AgentLaunchIdentity;
+  /** The already-authorized launch identity to remember only if the runtime starts. */
+  serverLaunch?: ServerLaunchIdentity;
+};
 
 export type { CodeAgentProviderFactory } from "#src/code-agent/contract";
 /** Owns Agent availability and runtime processes for one supervised Workspace. */
@@ -83,16 +98,19 @@ export class AgentProcessManager {
   async start(
     agentId: string,
     config: AgentRuntimeConfig,
-    agentWorkspaceDirectory: string,
-    sessionId?: string,
-    environment?: Readonly<Record<string, string>>,
-    runtimeId?: string,
-    onSessionId?: (sessionId: string, replacedSessionId?: string) => Promise<void>,
-    sessionMode?: "create" | "resume",
-    assignedSkillPacks: readonly AssignedSkillPack[] = [],
-    /** Server-authored Agent identity for the standing prompt (see `agent-instructions.ts`). */
-    identity?: AgentLaunchIdentity,
+    options: AgentProcessStartOptions,
   ): Promise<AgentRuntime> {
+    const {
+      agentWorkspaceDirectory,
+      sessionId,
+      environment,
+      runtimeId,
+      onSessionId,
+      sessionMode,
+      assignedSkillPacks = [],
+      identity,
+      serverLaunch,
+    } = options;
     if (this.#stopping.has(agentId)) {
       throw new Error(`Agent runtime is stopping: ${agentId}`);
     }
@@ -156,7 +174,11 @@ export class AgentProcessManager {
       throw error;
     }
     const runtime: AgentRuntime = Object.freeze({ config, session });
-    this.#restartConfigs.set(agentId, { config, sessionId });
+    this.#restartConfigs.set(agentId, {
+      config,
+      sessionId,
+      ...(serverLaunch ? { serverLaunch } : {}),
+    });
     this.#stateFor(agentId).transition("runtime_ready");
     this.#runtimes.set(agentId, runtime);
     session.onExit(() => {
@@ -235,7 +257,7 @@ export class AgentProcessManager {
     return this.#restartConfigs.get(agentId);
   }
 
-  /** Re-applies the server's last launch identity to this Agent's restart config.
+  /** Rebinds the server's launch identity on an existing Agent's restart config.
    * A no-op when there is no restart config to attach it to (the Agent is not currently
    * running/wakeable) — there is nothing for a later wake to read it back from anyway. */
   rememberServerLaunch(agentId: string, serverLaunch: ServerLaunchIdentity): void {

@@ -142,14 +142,18 @@ test("startup spawn failure permits the manager to retry", async () => {
   const runtime = { provider: "pi", model: "default", reasoning: "balanced" } as const;
   const workspace = agentWorkspace("startup-failure");
 
-  await expect(manager.start("agent-1", runtime, workspace)).rejects.toThrow(
-    "Executable not found",
-  );
+  await expect(
+    manager.start("agent-1", runtime, {
+      agentWorkspaceDirectory: workspace,
+    }),
+  ).rejects.toThrow("Executable not found");
   expect(manager.size).toBe(0);
 
-  await expect(manager.start("agent-1", runtime, workspace)).rejects.toThrow(
-    "Executable not found",
-  );
+  await expect(
+    manager.start("agent-1", runtime, {
+      agentWorkspaceDirectory: workspace,
+    }),
+  ).rejects.toThrow("Executable not found");
   expect(starts).toBe(2);
 });
 
@@ -182,10 +186,16 @@ test("startup cleanup probe failure blocks a replacement", async () => {
   const runtime = { provider: "pi", model: "default", reasoning: "balanced" } as const;
   const workspace = agentWorkspace("startup-probe");
 
-  await expect(manager.start("agent-1", runtime, workspace)).rejects.toThrow(
-    "process tree did not exit",
-  );
-  await expect(manager.start("agent-1", runtime, workspace)).rejects.toThrow("stopping");
+  await expect(
+    manager.start("agent-1", runtime, {
+      agentWorkspaceDirectory: workspace,
+    }),
+  ).rejects.toThrow("process tree did not exit");
+  await expect(
+    manager.start("agent-1", runtime, {
+      agentWorkspaceDirectory: workspace,
+    }),
+  ).rejects.toThrow("stopping");
   expect(starts).toBe(1);
 });
 
@@ -253,13 +263,17 @@ test.skipIf(process.platform === "win32")(
     const runtime = { provider: "pi", model: "default", reasoning: "balanced" } as const;
     const workspace = agentWorkspace("unexpected-exit");
 
-    await manager.start("agent-1", runtime, workspace);
+    await manager.start("agent-1", runtime, {
+      agentWorkspaceDirectory: workspace,
+    });
     await waitUntil(() => pids !== undefined);
     await waitUntil(() => manager.session("agent-1") === undefined);
     expect(manager.status("agent-1")).toBe("active");
     expect(pidExists(pids!.childPid)).toBe(false);
     expect(pidExists(pids!.grandchildPid)).toBe(false);
-    await manager.start("agent-1", runtime, workspace);
+    await manager.start("agent-1", runtime, {
+      agentWorkspaceDirectory: workspace,
+    });
     expect(starts).toBe(2);
     await manager.shutdown();
   },
@@ -297,10 +311,16 @@ test("failed unexpected-exit tree cleanup does not close or permit replacement",
   const runtime = { provider: "pi", model: "default", reasoning: "balanced" } as const;
   const workspace = agentWorkspace("failed-cleanup");
 
-  await manager.start("agent-1", runtime, workspace);
+  await manager.start("agent-1", runtime, {
+    agentWorkspaceDirectory: workspace,
+  });
   await waitUntil(() => failures > 0);
   expect(closes).toBe(0);
-  await expect(manager.start("agent-1", runtime, workspace)).rejects.toThrow("active");
+  await expect(
+    manager.start("agent-1", runtime, {
+      agentWorkspaceDirectory: workspace,
+    }),
+  ).rejects.toThrow("active");
   expect(starts).toBe(1);
   expect(manager.status("agent-1")).toBe("active");
 });

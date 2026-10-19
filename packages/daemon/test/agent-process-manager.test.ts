@@ -41,6 +41,53 @@ const testWorkspaceRoot = join(tmpdir(), `coforge-agent-manager-${crypto.randomU
 afterAll(() => rm(testWorkspaceRoot, { recursive: true, force: true }));
 
 describe("AgentProcessManager", () => {
+  test("successful start owns its server launch identity through release and clears it on stop", async () => {
+    const manager = new AgentProcessManager(() => ({
+      provider: "pi",
+      async createAgentSession() {
+        return sessionSpy();
+      },
+    }));
+    const launch = { requestId: "start-owned", controlEpoch: 3, launchId: "launch-owned" };
+    const options = {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "launch-owned", "agent-1"),
+      runtimeId: launch.launchId,
+      serverLaunch: launch,
+    };
+    try {
+      await manager.start("agent-1", config, options);
+      expect(manager.serverLaunch("agent-1")).toEqual(launch);
+      manager.recordClientSeq("agent-1", 7);
+      await manager.release("agent-1", 1_000);
+      await manager.start("agent-1", config, options);
+      expect(manager.serverLaunch("agent-1")).toEqual(launch);
+      expect(manager.lastClientSeq("agent-1")).toBe(7);
+      await manager.stop("agent-1");
+      expect(manager.serverLaunch("agent-1")).toBeUndefined();
+      expect(manager.lastClientSeq("agent-1")).toBe(0);
+    } finally {
+      await manager.shutdown();
+    }
+  });
+
+  test("a failed provider start does not register its server launch identity", async () => {
+    const manager = new AgentProcessManager(() => ({
+      provider: "pi",
+      async createAgentSession() {
+        throw new Error("provider refused launch");
+      },
+    }));
+    await expect(
+      manager.start("agent-1", config, {
+        agentWorkspaceDirectory: join(testWorkspaceRoot, "launch-refused", "agent-1"),
+        serverLaunch: { requestId: "refused", controlEpoch: 4, launchId: "launch-refused" },
+      }),
+    ).rejects.toThrow("provider refused launch");
+    expect(manager.serverLaunch("agent-1")).toBeUndefined();
+    expect(manager.restartConfig("agent-1")).toBeUndefined();
+    expect(manager.runningAgentIds()).toEqual([]);
+  });
+
   test("starts one runtime with its configuration and stops it", async () => {
     const session = sessionSpy();
     let startedOptions: AgentSessionOptions | undefined;
@@ -61,7 +108,9 @@ describe("AgentProcessManager", () => {
     );
 
     const workspace = join(testWorkspaceRoot, "a", "agents", "agent-1");
-    const runtime = await manager.start("agent-1", config, workspace);
+    const runtime = await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: workspace,
+    });
 
     expect(runtime.config).toEqual(config);
     expect(runtime.session).toBe(session);
@@ -112,11 +161,9 @@ describe("AgentProcessManager", () => {
       },
     };
 
-    const runtime = await manager.start(
-      "agent-credential",
-      credentialConfig,
-      join(testWorkspaceRoot, "credential", "agent-credential"),
-    );
+    const runtime = await manager.start("agent-credential", credentialConfig, {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "credential", "agent-credential"),
+    });
 
     expect(runtime.config.providerConfig).toEqual({
       kind: "coforge",
@@ -139,7 +186,9 @@ describe("AgentProcessManager", () => {
     }));
 
     try {
-      await manager.start("agent-1", config, workspace);
+      await manager.start("agent-1", config, {
+        agentWorkspaceDirectory: workspace,
+      });
       expect(directoryExistsAtStart).toBe(true);
     } finally {
       await manager.shutdown();
@@ -158,18 +207,11 @@ describe("AgentProcessManager", () => {
     }));
 
     try {
-      await manager.start(
-        "agent-1",
-        config,
-        workspace,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        [],
-        { name: "scout", displayName: "Scout", description: "Reviews pull requests." },
-      );
+      await manager.start("agent-1", config, {
+        agentWorkspaceDirectory: workspace,
+        assignedSkillPacks: [],
+        identity: { name: "scout", displayName: "Scout", description: "Reviews pull requests." },
+      });
       const content = await readFile(join(workspace, "MEMORY.md"), "utf8");
       expect(content).toBe(
         buildInitialMemoryMd({
@@ -197,14 +239,11 @@ describe("AgentProcessManager", () => {
       await manager.start(
         "memory",
         { ...config, toolProfile: "openviking-memory" },
-        workspace,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        ["weekly-report"],
-        { name: "memory", displayName: "Memory", description: "Team memory." },
+        {
+          agentWorkspaceDirectory: workspace,
+          assignedSkillPacks: ["weekly-report"],
+          identity: { name: "memory", displayName: "Memory", description: "Team memory." },
+        },
       );
       await expect(stat(join(workspace, "MEMORY.md"))).rejects.toMatchObject({ code: "ENOENT" });
       await expect(stat(join(workspace, ".pi", "skills"))).rejects.toMatchObject({
@@ -226,18 +265,12 @@ describe("AgentProcessManager", () => {
       },
     }));
     try {
-      await manager.start(
-        "task",
-        config,
-        workspace,
-        undefined,
-        { COFORGE_EVAL_DISABLE_HOST_PI_INJECTION: "1" },
-        undefined,
-        undefined,
-        undefined,
-        ["weekly-report"],
-        { name: "task", displayName: "Task" },
-      );
+      await manager.start("task", config, {
+        agentWorkspaceDirectory: workspace,
+        environment: { COFORGE_EVAL_DISABLE_HOST_PI_INJECTION: "1" },
+        assignedSkillPacks: ["weekly-report"],
+        identity: { name: "task", displayName: "Task" },
+      });
       await expect(stat(join(workspace, "MEMORY.md"))).rejects.toMatchObject({ code: "ENOENT" });
       await expect(stat(join(workspace, ".pi", "skills"))).rejects.toMatchObject({
         code: "ENOENT",
@@ -259,40 +292,26 @@ describe("AgentProcessManager", () => {
     }));
 
     try {
-      await manager.start(
-        "agent-1",
-        config,
-        workspace,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        [],
-        {
+      await manager.start("agent-1", config, {
+        agentWorkspaceDirectory: workspace,
+        assignedSkillPacks: [],
+        identity: {
           name: "scout",
         },
-      );
+      });
       await manager.stop("agent-1");
       const memoryPath = join(workspace, "MEMORY.md");
       const ownedContent = "# Scout\n\n## Role\nKnowledge the Agent accumulated on its own.\n";
       await writeFile(memoryPath, ownedContent, { encoding: "utf8" });
 
-      await manager.start(
-        "agent-1",
-        config,
-        workspace,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        [],
-        {
+      await manager.start("agent-1", config, {
+        agentWorkspaceDirectory: workspace,
+        assignedSkillPacks: [],
+        identity: {
           name: "scout",
           description: "A brand-new description that must not overwrite the file above.",
         },
-      );
+      });
 
       expect(await readFile(memoryPath, "utf8")).toBe(ownedContent);
     } finally {
@@ -310,7 +329,9 @@ describe("AgentProcessManager", () => {
       },
     }));
 
-    await manager.start("agent-1", config, join(testWorkspaceRoot, "exit", "agent-1"));
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "exit", "agent-1"),
+    });
     session.exit();
 
     expect(manager.status("agent-1")).toBe("active");
@@ -333,8 +354,12 @@ describe("AgentProcessManager", () => {
     };
     const manager = new AgentProcessManager(() => adapter);
 
-    await manager.start("agent-1", config, join(testWorkspaceRoot, "multiple", "agent-1"));
-    await manager.start("agent-2", config, join(testWorkspaceRoot, "multiple", "agent-2"));
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "multiple", "agent-1"),
+    });
+    await manager.start("agent-2", config, {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "multiple", "agent-2"),
+    });
     expect(starts).toBe(2);
     expect(manager.size).toBe(2);
   });
@@ -348,12 +373,10 @@ describe("AgentProcessManager", () => {
         return sessionSpy();
       },
     }));
-    await manager.start(
-      "agent-1",
-      config,
-      join(testWorkspaceRoot, "session", "agent-1"),
-      "session-7",
-    );
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "session", "agent-1"),
+      sessionId: "session-7",
+    });
     expect(options?.sessionId).toBe("session-7");
   });
 
@@ -366,18 +389,11 @@ describe("AgentProcessManager", () => {
         return sessionSpy();
       },
     }));
-    await manager.start(
-      "agent-1",
-      config,
-      join(testWorkspaceRoot, "identity", "agent-1"),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      [],
-      { name: "scout", runtimeContext: { computerName: "Builder Box" } },
-    );
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "identity", "agent-1"),
+      assignedSkillPacks: [],
+      identity: { name: "scout", runtimeContext: { computerName: "Builder Box" } },
+    });
     expect(options?.instructions).toContain('You are "scout", an AI agent in CoForge');
     expect(options?.instructions).toContain("- Computer: Builder Box");
   });
@@ -391,7 +407,9 @@ describe("AgentProcessManager", () => {
     }));
 
     await expect(
-      manager.start("agent-1", config, join(testWorkspaceRoot, "failure", "agent-1")),
+      manager.start("agent-1", config, {
+        agentWorkspaceDirectory: join(testWorkspaceRoot, "failure", "agent-1"),
+      }),
     ).rejects.toThrow("startup failed");
     expect(manager.size).toBe(0);
   });
@@ -407,10 +425,16 @@ describe("AgentProcessManager", () => {
     }));
     const workspace = join(testWorkspaceRoot, "startup-cleanup", "agent-1");
 
-    await expect(manager.start("agent-1", config, workspace)).rejects.toThrow(
-      "process tree did not exit",
-    );
-    await expect(manager.start("agent-1", config, workspace)).rejects.toThrow("stopping");
+    await expect(
+      manager.start("agent-1", config, {
+        agentWorkspaceDirectory: workspace,
+      }),
+    ).rejects.toThrow("process tree did not exit");
+    await expect(
+      manager.start("agent-1", config, {
+        agentWorkspaceDirectory: workspace,
+      }),
+    ).rejects.toThrow("stopping");
     expect(starts).toBe(1);
   });
 
@@ -432,13 +456,21 @@ describe("AgentProcessManager", () => {
       },
     }));
     const workspace = join(testWorkspaceRoot, "replacement", "agent-1");
-    await manager.start("agent-1", config, workspace);
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: workspace,
+    });
     const stopping = manager.stop("agent-1");
-    await expect(manager.start("agent-1", config, workspace)).rejects.toThrow("stopping");
+    await expect(
+      manager.start("agent-1", config, {
+        agentWorkspaceDirectory: workspace,
+      }),
+    ).rejects.toThrow("stopping");
     expect(starts).toBe(1);
     release();
     await stopping;
-    await manager.start("agent-1", config, workspace);
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: workspace,
+    });
     expect(starts).toBe(2);
   });
 
@@ -458,10 +490,16 @@ describe("AgentProcessManager", () => {
       },
     }));
     const workspace = join(testWorkspaceRoot, "unresolved", "agent-1");
-    await manager.start("agent-1", config, workspace);
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: workspace,
+    });
 
     await expect(manager.stop("agent-1")).rejects.toThrow("tree did not exit");
-    await expect(manager.start("agent-1", config, workspace)).rejects.toThrow("stopping");
+    await expect(
+      manager.start("agent-1", config, {
+        agentWorkspaceDirectory: workspace,
+      }),
+    ).rejects.toThrow("stopping");
     expect(starts).toBe(1);
     expect(manager.status("agent-1")).toBe("active");
   });
@@ -480,7 +518,9 @@ describe("AgentProcessManager", () => {
         return session;
       },
     }));
-    await manager.start("agent-1", config, join(testWorkspaceRoot, "release", "agent-1"));
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "release", "agent-1"),
+    });
     manager.rememberServerLaunch("agent-1", {
       requestId: "start-1",
       controlEpoch: 1,
@@ -510,7 +550,9 @@ describe("AgentProcessManager", () => {
         return session;
       },
     }));
-    await manager.start("agent-1", config, join(testWorkspaceRoot, "release-hang", "agent-1"));
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "release-hang", "agent-1"),
+    });
 
     await expect(manager.release("agent-1", 10)).rejects.toThrow("did not exit");
     expect(manager.session("agent-1")).toBe(session);
@@ -531,7 +573,9 @@ describe("AgentProcessManager", () => {
         return session;
       },
     }));
-    await manager.start("agent-1", config, join(testWorkspaceRoot, "release-stop", "agent-1"));
+    await manager.start("agent-1", config, {
+      agentWorkspaceDirectory: join(testWorkspaceRoot, "release-stop", "agent-1"),
+    });
 
     const released = manager.release("agent-1", 1_000);
     const stopped = manager.stop("agent-1");

@@ -74,7 +74,9 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - `AgentRestartConfig` remembers, per Agent and only for that Agent's lifetime,
   the last server-supplied launch identity (`requestId`, `controlEpoch`,
   `launchId`) and the last Activity `clientSeq` sent for it. A managed launch or
-  rebind sets it; `stop()` or `shutdown()` forgets it.
+  rebind sets it; `stop()` or `shutdown()` forgets it. A successful
+  `AgentProcessManager.start()` registers the supplied server identity with its
+  restart config; callers never restore it after starting the process.
 - A launch the daemon initiates itself (waking an idle or exited Agent for a
   Message or App Inbox item) reuses that identity: never mint a new `launchId`,
   continue the `clientSeq` counter, and send no `previousLaunchId`. The server's

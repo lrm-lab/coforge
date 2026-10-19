@@ -2285,98 +2285,107 @@ export class DaemonRuntime {
           ...(launchConfig.providerConfig ? { providerConfig: launchConfig.providerConfig } : {}),
           envVars: launchConfig.envVars,
         },
-        workspaceDirectory,
-        reference.sessionId,
         {
-          COFORGE_DAEMON_SOCKET: "",
-          COFORGE_AGENT_CONTEXT: localContext,
-          COFORGE_AGENT_PROXY_URL: this.#agentProxy?.url ?? "",
-          // Same server-authored identity the standing prompt's "Current Runtime Context"
-          // section renders; exported so the Agent process and every tool it spawns
-          // can read these facts directly instead of parsing them out of prose.
-          ...agentRuntimeContextEnvironment({
-            agentId,
-            agentWorkspaceDirectory: workspaceDirectory,
-            identity: launchConfig.identity,
-          }),
-        },
-        launch.launchId,
-        this.#transport.reportAgentSession
-          ? async (reportedSessionId, driverReplacedSessionId) => {
-              if (!current() || this.#stopping)
-                throw new Error("Agent session launch was superseded");
-              // Kept for compat on the session report's own `replacedSessionId` field only
-              // (unrelated to whether an invalidate is sent below): either a driver-reported
-              // replacement just now, or one carried over from AgentControl's own retry.
-              const replaced = driverReplacedSessionId ?? request.replacedSessionId;
-              if (driverReplacedSessionId) {
-                // Claude Code/Codex replace a missing native session inside the driver, with
-                // no separate "before the fresh launch" moment; this callback IS the point the
-                // daemon learns of it. Only a driver-reported replacement (this callback's own
-                // argument, never AgentControl's carried-over `request.replacedSessionId`,
-                // which was already reported once by `invalidateSession` before this launch)
-                // emits here — fixes a prior bug that re-sent a second invalidate/Activity for
-                // AgentControl's own retry, including harmlessly for `session_in_use`, which
-                // never sets `request.replacedSessionId` together with a reason to begin with.
-                // Sent BEFORE the session report below — fire-and-forget, never awaited, never
-                // delays or fails the report — so the server's exact match against the still-
-                // current stale session can still succeed; once the report lands below the
-                // server has already moved to the new id and this would always be a no-op.
-                this.#transport.sendSessionInvalidate?.(
-                  this.#sessionInvalidateMessage(
-                    agentId,
-                    config.provider,
-                    driverReplacedSessionId,
-                    launch.launchId,
-                    "missing",
-                  ),
-                );
-              }
-              await this.#reportAgentSession({
-                ...this.#envelope(),
-                agentId,
-                provider: config.provider,
-                sessionId: reportedSessionId,
-                ...(replaced ? { replacedSessionId: replaced } : {}),
-                daemonInstanceId: this.#runtimeInstanceId,
-                launchId: launch.launchId,
-                // Read live off `reference` (the same object `#rebindAgent` mutates in place),
-                // not the `requestId`/`control` consts this closure captured at
-                // launch time: a driver-side session replacement reported after a rebind must
-                // carry the NEW request/epoch, not the one this launch started under.
-                startRequestId: reference.requestId,
-                ...(reference.controlEpoch ? { controlEpoch: reference.controlEpoch } : {}),
-                ...(previousLaunchId ? { previousLaunchId } : {}),
-              });
-              if (!current()) return;
-              reference.sessionId = reportedSessionId;
-              reference.sessionMode = "resume";
-              reference.launchId = launch.launchId;
-              if (driverReplacedSessionId) {
-                const { detail, entryText } = sessionInvalidateActivityText(
-                  runtimeDisplayName(config.provider),
-                  driverReplacedSessionId,
-                  "missing",
-                );
-                this.#activityPublisher.publish(
+          agentWorkspaceDirectory: workspaceDirectory,
+          sessionId: reference.sessionId,
+          environment: {
+            COFORGE_DAEMON_SOCKET: "",
+            COFORGE_AGENT_CONTEXT: localContext,
+            COFORGE_AGENT_PROXY_URL: this.#agentProxy?.url ?? "",
+            // Same server-authored identity the standing prompt's "Current Runtime Context"
+            // section renders; exported so the Agent process and every tool it spawns
+            // can read these facts directly instead of parsing them out of prose.
+            ...agentRuntimeContextEnvironment({
+              agentId,
+              agentWorkspaceDirectory: workspaceDirectory,
+              identity: launchConfig.identity,
+            }),
+          },
+          runtimeId: launch.launchId,
+          onSessionId: this.#transport.reportAgentSession
+            ? async (reportedSessionId, driverReplacedSessionId) => {
+                if (!current() || this.#stopping)
+                  throw new Error("Agent session launch was superseded");
+                // Kept for compat on the session report's own `replacedSessionId` field only
+                // (unrelated to whether an invalidate is sent below): either a driver-reported
+                // replacement just now, or one carried over from AgentControl's own retry.
+                const replaced = driverReplacedSessionId ?? request.replacedSessionId;
+                if (driverReplacedSessionId) {
+                  // Claude Code/Codex replace a missing native session inside the driver, with
+                  // no separate "before the fresh launch" moment; this callback IS the point the
+                  // daemon learns of it. Only a driver-reported replacement (this callback's own
+                  // argument, never AgentControl's carried-over `request.replacedSessionId`,
+                  // which was already reported once by `invalidateSession` before this launch)
+                  // emits here — fixes a prior bug that re-sent a second invalidate/Activity for
+                  // AgentControl's own retry, including harmlessly for `session_in_use`, which
+                  // never sets `request.replacedSessionId` together with a reason to begin with.
+                  // Sent BEFORE the session report below — fire-and-forget, never awaited, never
+                  // delays or fails the report — so the server's exact match against the still-
+                  // current stale session can still succeed; once the report lands below the
+                  // server has already moved to the new id and this would always be a no-op.
+                  this.#transport.sendSessionInvalidate?.(
+                    this.#sessionInvalidateMessage(
+                      agentId,
+                      config.provider,
+                      driverReplacedSessionId,
+                      launch.launchId,
+                      "missing",
+                    ),
+                  );
+                }
+                await this.#reportAgentSession({
+                  ...this.#envelope(),
                   agentId,
-                  launch,
-                  this.#activity(
+                  provider: config.provider,
+                  sessionId: reportedSessionId,
+                  ...(replaced ? { replacedSessionId: replaced } : {}),
+                  daemonInstanceId: this.#runtimeInstanceId,
+                  launchId: launch.launchId,
+                  // Read live off `reference` (the same object `#rebindAgent` mutates in place),
+                  // not the `requestId`/`control` consts this closure captured at
+                  // launch time: a driver-side session replacement reported after a rebind must
+                  // carry the NEW request/epoch, not the one this launch started under.
+                  startRequestId: reference.requestId,
+                  ...(reference.controlEpoch ? { controlEpoch: reference.controlEpoch } : {}),
+                  ...(previousLaunchId ? { previousLaunchId } : {}),
+                });
+                if (!current()) return;
+                reference.sessionId = reportedSessionId;
+                reference.sessionMode = "resume";
+                reference.launchId = launch.launchId;
+                if (driverReplacedSessionId) {
+                  const { detail, entryText } = sessionInvalidateActivityText(
+                    runtimeDisplayName(config.provider),
+                    driverReplacedSessionId,
+                    "missing",
+                  );
+                  this.#activityPublisher.publish(
                     agentId,
-                    AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_UNAVAILABLE,
-                    "info",
-                    detail,
-                    {
-                      entries: [{ kind: "text", text: entryText }],
-                    },
-                  ),
-                );
+                    launch,
+                    this.#activity(
+                      agentId,
+                      AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_UNAVAILABLE,
+                      "info",
+                      detail,
+                      {
+                        entries: [{ kind: "text", text: entryText }],
+                      },
+                    ),
+                  );
+                }
               }
-            }
-          : undefined,
-        reference.sessionMode,
-        parseAssignedSkillPacks(launchConfig.assignedSkillPacks),
-        launchConfig.identity,
+            : undefined,
+          sessionMode: reference.sessionMode,
+          assignedSkillPacks: parseAssignedSkillPacks(launchConfig.assignedSkillPacks),
+          identity: launchConfig.identity,
+          serverLaunch: managedScope
+            ? {
+                requestId: managedScope.requestId,
+                controlEpoch: managedScope.controlEpoch ?? 0,
+                launchId: managedScope.launchId,
+              }
+            : undefined,
+        },
       );
       if (
         parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect")
@@ -2486,23 +2495,8 @@ export class DaemonRuntime {
         if (this.#currentActivityLaunches.get(agentId) === launch)
           this.#currentActivityLaunches.delete(agentId);
       });
-      // `AgentProcessManager.start()` just replaced this Agent's whole restart config
-      // entry, which would otherwise erase any previously remembered server launch identity —
-      // re-apply it (managed: the scope this launch was authorized under; reused: the same
-      // identity, unchanged) so a later wake or rebind can still find it. A reused launch also
-      // tells `AgentControl` the process is running again under that identity.
-      if (managedScope) {
-        if (control)
-          this.#agentProcessManager.rememberServerLaunch(agentId, {
-            requestId: managedScope.requestId,
-            controlEpoch: managedScope.controlEpoch ?? 0,
-            launchId: managedScope.launchId,
-          });
-        else if (serverLaunch) {
-          this.#agentProcessManager.rememberServerLaunch(agentId, serverLaunch);
-          void this.#agentControl.wake(agentId, launch.launchId).catch(() => {});
-        }
-      }
+      // The process manager owns the restart identity; control records still belong here.
+      if (reused) void this.#agentControl.wake(agentId, launch.launchId).catch(() => {});
       void this.drainAppInboxNotices(agentId).catch(() => {});
       return runtime;
     } catch (error) {
