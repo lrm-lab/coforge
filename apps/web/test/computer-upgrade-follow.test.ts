@@ -71,25 +71,28 @@ test("an in-flight recovery keeps the last error and stays followed", async () =
     return running;
   };
 
-  const first = observe(client, queryFn);
-  const stopFirst = first.subscribe(() => {});
-  await first.refetch();
-  expect(first.getCurrentResult().data).toEqual(running);
-
-  mode = "fail";
-  await first.refetch();
-  const failed = first.getCurrentResult();
-  expect(failed.isError).toBe(true);
-  expect(failed.isFetching).toBe(false);
-  expect(failed.data).toEqual(running);
-  // A finished failed read stops the follow. Reopening Computers is what starts the next one.
-  expect(settledUpgradeFollow(failed)).toEqual({ status: undefined });
-  stopFirst();
-
-  mode = "hang";
-  const recovery = observe(client, queryFn);
-  const stopRecovery = recovery.subscribe(() => {});
+  let stopFirst: (() => void) | undefined;
+  let stopRecovery: (() => void) | undefined;
   try {
+    const first = observe(client, queryFn);
+    stopFirst = first.subscribe(() => {});
+    await first.refetch();
+    expect(first.getCurrentResult().data).toEqual(running);
+
+    mode = "fail";
+    await first.refetch();
+    const failed = first.getCurrentResult();
+    expect(failed.isError).toBe(true);
+    expect(failed.isFetching).toBe(false);
+    expect(failed.data).toEqual(running);
+    // A finished failed read stops the follow. Reopening Computers is what starts the next one.
+    expect(settledUpgradeFollow(failed)).toEqual({ status: undefined });
+    stopFirst();
+    stopFirst = undefined;
+
+    mode = "hang";
+    const recovery = observe(client, queryFn);
+    stopRecovery = recovery.subscribe(() => {});
     const during = recovery.getCurrentResult();
     expect(during.isError).toBe(true);
     expect(during.isFetching).toBe(true);
@@ -107,7 +110,8 @@ test("an in-flight recovery keeps the last error and stays followed", async () =
     expect(settledUpgradeFollow(recovered)).toBeUndefined();
   } finally {
     releaseHang(running);
-    stopRecovery();
+    stopFirst?.();
+    stopRecovery?.();
     client.clear();
   }
 });
