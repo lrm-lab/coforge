@@ -53,12 +53,12 @@ The architecture invariants every change must respect are in
 | [docs/agents/e2e-testing/](docs/agents/e2e-testing/README.md) | Live OpenRouter integration test |
 | [docs/agents/mise-tasks.md](docs/agents/mise-tasks.md) | Mise task policy |
 | [docs/agents/reference-cli-research/](docs/agents/reference-cli-research/README.md) | Studying the latest Raft Computer reference binary, source tree, and installer |
+| [docs/agents/grok-acp.md](docs/agents/grok-acp.md) | Persistent Grok ACP behavior, compatibility and native verification |
 | [docs/research/](docs/research/README.md) | Evidence-backed research reports |
 | [apps/web/README.md](apps/web/README.md) | Web app setup and scripts |
 | [apps/web/src/components/ui/README.md](apps/web/src/components/ui/README.md) | UI component inventory and exceptions |
 | [packages/computer/README.md](packages/computer/README.md) | `coforge-computer` package |
 | [packages/daemon/README.md](packages/daemon/README.md) | `coforge-daemon` package |
-| [docs/agents/grok-acp.md](docs/agents/grok-acp.md) | Persistent Grok ACP behavior, compatibility and native verification |
 | [packages/agent/README.md](packages/agent/README.md) | Built-in Pi-based Agent runtime |
 | [packages/coforge/README.md](packages/coforge/README.md) | Agent-facing `coforge` CLI |
 | [docs/agent-cli/](docs/agent-cli/README.md) | `coforge` Agent CLI command reference |

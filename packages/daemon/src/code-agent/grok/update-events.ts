@@ -1,6 +1,6 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { asRecord, nonEmptyString } from "#src/code-agent/json-record";
-import { grokToolFailed, grokToolInput, grokToolOutputText } from "./tool-call";
+import { grokToolEnded, grokToolFailed, grokToolInput, grokToolOutputText } from "./tool-call";
 
 /** Display state belongs to a native turn, including turns started by background work. */
 export class GrokTurnEvents {
@@ -34,7 +34,7 @@ export class GrokTurnEvents {
       case "tool_call_update": {
         const id = nonEmptyString(update.toolCallId);
         if (!id || !this.#started.has(id) || this.#ended.has(id)) return [];
-        if (update.status !== "completed" && update.status !== "failed")
+        if (!grokToolEnded(update.status))
           return [{ type: "progress", source: "grok_tool_call_update" }];
         this.#ended.add(id);
         const text = grokToolOutputText(update.content);

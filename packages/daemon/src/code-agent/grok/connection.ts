@@ -1,4 +1,9 @@
-import { client, type AnyMessage } from "@agentclientprotocol/sdk";
+import {
+  client,
+  type AnyMessage,
+  type RequestPermissionRequest,
+  type RequestPermissionResponse,
+} from "@agentclientprotocol/sdk";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { asRecord } from "#src/code-agent/json-record";
 
@@ -19,6 +24,7 @@ export class GrokConnection {
     cwd: string,
     environment: Readonly<Record<string, string>>,
     onUpdate: (method: string, params: RecordValue) => void,
+    onPermission: (request: RequestPermissionRequest) => RequestPermissionResponse,
   ) {
     this.process = new JsonlProcess(command, cwd, environment);
     let unsubscribe: (() => void) | undefined;
@@ -43,6 +49,7 @@ export class GrokConnection {
       .onNotification("session/update", () => {})
       .onNotification("_x.ai/queue/changed", record, () => {})
       .onNotification("_x.ai/session_notification", record, () => {})
+      .onRequest("session/request_permission", ({ params }) => onPermission(params))
       .connect({
         readable,
         writable: new WritableStream<AnyMessage>({

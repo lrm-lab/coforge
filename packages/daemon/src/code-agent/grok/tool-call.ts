@@ -31,11 +31,16 @@ export function grokToolOutputText(content: unknown): string | undefined {
   return text || undefined;
 }
 
+/** Whether a `tool_call_update` status ends the call; any other status reports progress. */
+export function grokToolEnded(status: unknown): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
 /** Whether a finished call failed. Grok ends a call that could not run (a missing file) `failed`,
- * but a shell command that exits non-zero, or times out, still ends `completed` and says so in its
- * `Bash` `rawOutput`. */
+ * and one stopped before it finished `cancelled`, but a shell command that exits non-zero, or
+ * times out, still ends `completed` and says so in its `Bash` `rawOutput`. */
 export function grokToolFailed(status: unknown, rawOutput: unknown): boolean {
-  if (status === "failed") return true;
+  if (status === "failed" || status === "cancelled") return true;
   const output = asRecord(rawOutput);
   if (output?.type !== "Bash") return false;
   return (
