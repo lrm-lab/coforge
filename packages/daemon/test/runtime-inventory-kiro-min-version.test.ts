@@ -59,10 +59,11 @@ describe("Kiro minimum CLI version gate", () => {
     const marker = `${Bun.env.TMPDIR ?? "/tmp"}/coforge-kiro-catalog-should-not-spawn-${crypto.randomUUID()}`;
     try {
       const inventory = await discoverCodeAgentInventory({
-        // Pi's catalog is discovered in the same pass; a fixture home keeps that discovery off the
-        // developer's real Pi configuration, which also makes the pass take milliseconds.
+        // Pi's catalog is discovered in the same pass; the fake `piModels` and a fixture home keep it
+        // off the developer's real Pi SDK and configuration, so the pass takes milliseconds.
         environment: { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" },
         probe: kiroProbe("kiro-cli 2.16.0\n"),
+        piModels: async () => [],
         commands: {
           kiro: [
             process.execPath,

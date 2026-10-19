@@ -22,6 +22,7 @@ async function discover(mode: string, cache?: string, force = false) {
           mode,
         ],
       },
+      piModels: async () => [],
     });
   } finally {
     await rm(home, { recursive: true, force: true });

@@ -335,6 +335,7 @@ describe("external Code Agent inventory", () => {
         PATH: "",
         COFORGE_CURSOR_MODELS_OUTPUT: "Available models\n\nauto - Auto (default)\n",
       },
+      piModels: async () => [],
     });
 
     expect(inventory.runtimes).toContainEqual({
@@ -388,6 +389,7 @@ describe("external Code Agent inventory", () => {
         codex: fixture("codex-app-server.ts"),
       },
       environment: { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" },
+      piModels: async () => [],
     });
 
     expect(inventory.runtimes[0]).toEqual({
@@ -645,6 +647,7 @@ describe("Claude Code model catalog minimum versions", () => {
       const inventory = await discoverCodeAgentInventory({
         probe: probeFor({ claude: { path: "/bin/claude", version: `${version} (Claude Code)\n` } }),
         environment: { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" },
+        piModels: async () => [],
       });
       expect(inventory.runtimes).toContainEqual({
         provider: "claude-code",
@@ -660,7 +663,7 @@ describe("Claude Code model catalog minimum versions", () => {
     test(`the cached inventory of Claude Code ${version} lists the same models`, async () => {
       const { catalogs } = await loadCachedCodeAgentCatalogs(
         [{ provider: "claude-code", version, displayName: "Claude Code" }],
-        { environment: { HOME: "/fixture/home", PATH: "" } },
+        { probe: probeFor({}), environment: { HOME: "/fixture/home", PATH: "" } },
       );
       expectListed(ids(catalogs.find((catalog) => catalog.provider === "claude-code")), listed);
     });
@@ -701,6 +704,7 @@ describe("Claude Code model catalog minimum versions", () => {
         discoverCodeAgentInventory({
           probe: probeFor(installed),
           environment: { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" },
+          piModels: async () => [],
           cacheDirectory: stateDirectory,
         });
       const claudeModelIds = async () =>

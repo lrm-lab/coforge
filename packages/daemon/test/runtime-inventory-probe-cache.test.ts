@@ -139,18 +139,29 @@ describe("Code Agent probe cache", () => {
         }),
       );
     await writeModels("host-model-1");
+    // The real Pi SDK creates auth.json on discovery; the fake below does not, and the cache key
+    // needs both files to exist.
+    await Bun.write(join(agentDir, "auth.json"), "{}");
     const environment = { HOME: home, PATH: "", PI_OFFLINE: "1" };
     const runtimes = [{ provider: "pi" as const, version: "0.0.0", displayName: "Pi" }];
+    const probe: ExternalCodeAgentProbe = {
+      which: () => undefined,
+      spawn: () => ({ stdout: new Blob([]).stream(), exited: Promise.resolve(0) }),
+    };
     try {
       await discoverCodeAgentCatalogs(runtimes, {
         cwd: home,
         environment,
+        probe,
+        // Stands in for the Pi SDK reading models.json; this case is about the cache key.
+        piModels: async () => [{ id: "host-model-1", provider: "fixture" }] as never,
         cacheDirectory: stateDirectory,
       });
 
       const cached = await loadCachedCodeAgentCatalogs(runtimes, {
         cwd: home,
         environment,
+        probe,
         cacheDirectory: stateDirectory,
       });
       expect(cached.needsRefresh).toBe(false);
@@ -163,6 +174,7 @@ describe("Code Agent probe cache", () => {
       const stale = await loadCachedCodeAgentCatalogs(runtimes, {
         cwd: home,
         environment,
+        probe,
         cacheDirectory: stateDirectory,
       });
       expect(stale.needsRefresh).toBe(true);
@@ -221,6 +233,7 @@ test(
           environment: { PATH: process.env.PATH, HOME: "/fixture/home" },
           commands: { opencode: [process.execPath, OPENCODE_FIXTURE, "models"] },
           probe,
+          piModels: async () => [],
           cacheDirectory: stateDirectory,
         },
       );
