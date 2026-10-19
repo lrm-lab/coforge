@@ -2,7 +2,7 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
-import { ConversationListButton } from "./conversation-list-button";
+import { ConversationBackHeader } from "./conversation-list-button";
 
 /**
  * The loading screen Chat shows until its lists and the open conversation have been read in the
@@ -45,15 +45,15 @@ export function MessagesPending() {
   );
 }
 
-export function ConversationPending() {
+/** The open conversation's loading screen: its header, message skeletons and composer frame. */
+export function ConversationPending({ label = m.conversation_loading() }: { label?: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 md:px-6">
-        <ConversationListButton />
+      <ConversationBackHeader>
         <p role="status" className="sr-only">
-          {m.conversation_loading()}
+          {label}
         </p>
-      </header>
+      </ConversationBackHeader>
       <div
         aria-busy="true"
         aria-label={m.conversation_history()}

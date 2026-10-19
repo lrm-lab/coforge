@@ -466,9 +466,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       ),
     ).toBe(true);
     await browser("screenshot", join(artifacts, "phone.png"));
-    // No room beside the list on a phone: a row opens its conversation in Chat. The server
-    // renders a desktop's layout for this browser, so wait for the phone's, without the pane.
-    await browser("wait", "--fn", `${pane} === null`);
+    // No room beside the list on a phone: a row opens its conversation in Chat.
     await browser("find", "text", "E2E activity root", "click");
     await browser(
       "wait",
@@ -491,10 +489,8 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser(
       "wait",
       "--fn",
-      `location.pathname === ${JSON.stringify(`${workspacePath}/activity`)} && location.search === ""`,
+      `location.pathname === ${JSON.stringify(`${workspacePath}/activity`)} && location.search === "" && ${pane} === null && ${listHidden} === false && ${seededRows}.length === 1`,
     );
-    await browser("wait", "--fn", `${pane} === null && ${listHidden} === false`);
-    await browser("wait", "--fn", `${seededRows}.length === 1`);
   } finally {
     await browser("close").catch(() => undefined);
     await db.$disconnect();

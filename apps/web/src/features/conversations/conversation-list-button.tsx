@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { ArrowLeft } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
@@ -26,5 +26,18 @@ export function ConversationListButton() {
       onClick={navigation.showList}
       className="-ml-2 shrink-0 lg:hidden"
     />
+  );
+}
+
+/**
+ * A conversation pane's header bar with the back button to the list, where the loaded
+ * conversation's header stands, so the arrow does not move once the conversation loads.
+ */
+export function ConversationBackHeader({ children }: { children?: ReactNode }) {
+  return (
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 md:px-6">
+      <ConversationListButton />
+      {children}
+    </header>
   );
 }

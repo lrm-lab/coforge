@@ -2,13 +2,13 @@ import { memo, Suspense, useState, type Ref } from "react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
 
-import { Skeleton } from "#src/components/ui/skeleton";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { cx } from "#src/utils/cx";
-import { ConversationListButton } from "./conversation-list-button";
+import { ConversationBackHeader } from "./conversation-list-button";
 import { ConversationHostProvider } from "./conversation-host";
 import { ConversationPage } from "./conversation-page";
 import type { ConversationPageSearch, HostedConversationTarget } from "./conversation-page-search";
+import { ConversationPending } from "./conversation-pending";
 import { channelNamesQuery, savedMessagesQuery } from "./conversation-queries";
 import { NO_SAVED } from "./saved-messages-collection";
 import { listSavedMessages } from "./saved-messages.functions";
@@ -30,7 +30,7 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   label,
   loadingLabel,
   failedText,
-  className,
+  standaloneBelowLg = false,
   ref,
 }: {
   target: HostedConversationTarget;
@@ -40,16 +40,20 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   loadingLabel: string;
   /** Said in place of the conversation when it fails to load. */
   failedText: string;
-  /** Merged over the pane's column classes (a host whose pane can stand alone drops the border). */
-  className?: string;
+  /** The pane fills the page below `lg`, with no list beside it (so no divider there). */
+  standaloneBelowLg?: boolean;
   ref?: Ref<HTMLElement>;
 }) {
   const [failed, setFailed] = useState(false);
   return (
-    <section ref={ref} aria-label={label} className={cx(HOSTED_CONVERSATION_PANE_CLASS, className)}>
+    <section
+      ref={ref}
+      aria-label={label}
+      className={cx(HOSTED_CONVERSATION_PANE_CLASS, standaloneBelowLg && "max-lg:border-l-0")}
+    >
       {failed ? (
         <>
-          <HostedConversationBackRow />
+          <ConversationBackHeader />
           <p role="alert" className="p-4 text-sm text-error-primary">
             {failedText}
           </p>
@@ -61,7 +65,7 @@ export const HostedConversationPane = memo(function HostedConversationPane({
             errorComponent={() => null}
             onCatch={() => setFailed(true)}
           >
-            <Suspense fallback={<HostedConversationSkeleton label={loadingLabel} />}>
+            <Suspense fallback={<ConversationPending label={loadingLabel} />}>
               <HostedConversation target={target} search={search} />
             </Suspense>
           </CatchBoundary>
@@ -97,38 +101,5 @@ function HostedConversation({
         jumpMessage={target.messageId}
       />
     </ConversationHostProvider>
-  );
-}
-
-/**
- * The way back to the host's list where the pane stands in its place (a phone), while the
- * conversation's own header is not there: loading or failed. Empty, and so not shown, when the
- * host has no list to return to (`ConversationListButton` renders nothing).
- */
-function HostedConversationBackRow() {
-  return (
-    <div className="flex shrink-0 px-4 pt-3 empty:hidden lg:hidden">
-      <ConversationListButton />
-    </div>
-  );
-}
-
-/** Message-shaped placeholders while the conversation loads. */
-function HostedConversationSkeleton({ label }: { label: string }) {
-  return (
-    <>
-      <HostedConversationBackRow />
-      <div role="status" aria-label={label} className="flex flex-col gap-4 p-4">
-        {Array.from({ length: 6 }, (_, index) => (
-          <div key={index} className="flex gap-3">
-            <Skeleton className="size-8 shrink-0 rounded-full" />
-            <div className="flex flex-1 flex-col gap-2">
-              <Skeleton className="h-3 w-32" />
-              <Skeleton className="h-3 w-full" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
   );
 }

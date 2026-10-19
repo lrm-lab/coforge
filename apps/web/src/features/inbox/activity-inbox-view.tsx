@@ -90,13 +90,14 @@ export function ActivityInboxView({
   onFilterChange,
   opened,
   onOpen,
+  onClose,
 }: {
   filter: ActivityInboxFilter;
   onFilterChange: (filter: ActivityInboxFilter) => void;
-  /** The conversation the URL has open (beside the list from `lg`, in its place below), at its
-   * jump message and open thread. */
+  /** The conversation the URL has open, at its jump message and open thread. */
   opened: HostedConversationTarget | undefined;
   onOpen: (target: HostedConversationTarget) => void;
+  onClose: () => void;
 }) {
   const { user, currentWorkspace } = appRoute.useLoaderData();
   const workspaceId = currentWorkspace?.id ?? "";
@@ -124,8 +125,8 @@ export function ActivityInboxView({
   // opens Chat instead.
   const wide = useBreakpoint("lg");
   const currentKey = useMemo(
-    () => (wide ? openedItemKey([...pinned, ...items], opened) : undefined),
-    [wide, pinned, items, opened],
+    () => openedItemKey([...pinned, ...items], opened),
+    [pinned, items, opened],
   );
 
   const refreshList = useCallback(
@@ -198,8 +199,6 @@ export function ActivityInboxView({
     />
   );
 
-  // The conversation area exists only once a row is open; until then the list fills the page.
-  const paneOpen = opened !== undefined;
   const activeCount = firstPage?.activeItemCount;
   const list = (
     <div
@@ -208,7 +207,7 @@ export function ActivityInboxView({
         "flex min-h-0 flex-col",
         // Raft's 35rem column, at most half the page so the conversation keeps room at `lg`.
         // Narrower, the conversation takes the page in its place; the list stays mounted.
-        paneOpen ? "w-[min(35rem,50%)] shrink-0 max-lg:hidden" : "min-w-0 flex-1",
+        opened ? "w-[min(35rem,50%)] shrink-0 max-lg:hidden" : "min-w-0 flex-1",
       )}
     >
       <PageHeader
@@ -284,7 +283,13 @@ export function ActivityInboxView({
   return (
     <div className="flex h-full min-h-0 min-w-0">
       {list}
-      {paneOpen && <ActivityConversationPane key={`${opened.kind}:${opened.id}`} target={opened} />}
+      {opened && (
+        <ActivityConversationPane
+          key={`${opened.kind}:${opened.id}`}
+          target={opened}
+          onClose={onClose}
+        />
+      )}
     </div>
   );
 }

@@ -100,6 +100,12 @@ function ActivityPage() {
       }),
     [navigate],
   );
+  // Closing the conversation (its back arrow below `lg`) returns to the list in its current view,
+  // closing everything the conversation had open; it replaces the entry, as opening one does.
+  const onClose = useCallback(
+    () => void navigate({ search: (previous) => ({ filter: previous.filter }), replace: true }),
+    [navigate],
+  );
   // Kept by its fields, so the pane keeps its target while the list's view changes.
   const opened = useMemo(() => {
     const target = parseHostedConversation(open, msg);
@@ -111,6 +117,7 @@ function ActivityPage() {
       onFilterChange={onFilterChange}
       opened={opened}
       onOpen={onOpen}
+      onClose={onClose}
     />
   );
 }
