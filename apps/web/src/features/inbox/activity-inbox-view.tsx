@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getRouteApi, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -80,8 +80,8 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
 /**
  * The Activity page: the viewer's channels, direct messages and followed threads with activity
  * they have not marked Done, newest first. The All view puts the viewer's pinned conversations
- * (Chat's Pinned) first under a Pinned heading, Done or not, then the rest under All conversations;
- * with nothing pinned it shows no headings. A card opens its conversation or thread and reads it:
+ * (Chat's Pinned) first under a Pinned heading, then the rest under All conversations; with nothing
+ * pinned it shows no headings. A card opens its conversation or thread and reads it:
  * from `lg` up, beside the list, which stays on screen with the card marked as the open one (kept
  * in the URL); below it, in Chat. Nothing opens on its own, since opening reads. The check on a
  * card marks it Done, which keeps it away until a newer message arrives; the pane stays open.
@@ -138,7 +138,12 @@ export function ActivityInboxView({
     () => Promise.all([refreshList(), refreshSidebar()]).then(() => undefined),
     [refreshList, refreshSidebar],
   );
-  useActivityInboxRealtime({ workspaceId, userId: user.id, onActivity: refreshList });
+  useActivityInboxRealtime({
+    workspaceId,
+    userId: user.id,
+    onActivity: refreshList,
+    refreshOnPins: true,
+  });
 
   // A failed change is shown in the toolbar with its retry until it succeeds or is dismissed.
   const [failure, setFailure] = useState<{ retry: () => void } | null>(null);
@@ -160,6 +165,25 @@ export function ActivityInboxView({
     };
     run();
   }, [markAllRead, loadedAt, refresh]);
+
+  const empty = items.length === 0 && pinned.length === 0;
+  const sections = [
+    {
+      heading: <ActivityInboxSectionHeading icon={Pin01} label={m.conversation_pinned_section()} />,
+      label: m.conversation_pinned_section(),
+      items: pinned,
+    },
+    {
+      heading: pinned.length > 0 && (
+        <ActivityInboxSectionHeading
+          label={m.activity_inbox_all_conversations()}
+          className="mt-5"
+        />
+      ),
+      label: m.navigation_activity(),
+      items,
+    },
+  ].filter((section) => section.items.length > 0);
 
   const card = (item: ActivityInboxItem) => (
     <ActivityInboxCard
@@ -211,32 +235,19 @@ export function ActivityInboxView({
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:px-6">
-        {query.isError && items.length === 0 && pinned.length === 0 ? (
+        {query.isError && empty ? (
           <ActivityInboxLoadError onRetry={() => void query.refetch()} />
-        ) : items.length === 0 && pinned.length === 0 ? (
+        ) : empty ? (
           <ActivityInboxEmpty filter={filter} onShowAll={() => onFilterChange("all")} />
         ) : (
-          <>
-            {pinned.length > 0 && (
-              <>
-                <ActivityInboxSectionHeading icon={Pin01} label={m.conversation_pinned_section()} />
-                <ol aria-label={m.conversation_pinned_section()} className="flex flex-col gap-2">
-                  {pinned.map(card)}
-                </ol>
-                {items.length > 0 && (
-                  <ActivityInboxSectionHeading
-                    label={m.activity_inbox_all_conversations()}
-                    className="mt-5"
-                  />
-                )}
-              </>
-            )}
-            {items.length > 0 && (
-              <ol aria-label={m.navigation_activity()} className="flex flex-col gap-2">
-                {items.map(card)}
+          sections.map((section) => (
+            <Fragment key={section.label}>
+              {section.heading}
+              <ol aria-label={section.label} className="flex flex-col gap-2">
+                {section.items.map(card)}
               </ol>
-            )}
-          </>
+            </Fragment>
+          ))
         )}
         <ActivityInboxLoadMore
           hasNextPage={query.hasNextPage}

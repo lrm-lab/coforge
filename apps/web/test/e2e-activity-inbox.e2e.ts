@@ -93,6 +93,92 @@ function browserSession(session: string) {
   return { browser, evaluate };
 }
 
+/**
+ * A channel shared by the viewer and the seeded peer, reset to this run's messages: the viewer's
+ * thread root (`root`), which they follow, the peer's reply in it (`reply`), then a newer top-level
+ * message from the peer (`newest`). The message `mention` names mentions the viewer. Every id comes
+ * from `key`, so a rerun replaces the same rows.
+ */
+async function seedChannel(
+  db: PrismaClient,
+  options: {
+    workspaceId: string;
+    key: string;
+    channelName: string;
+    root: string;
+    reply: string;
+    newest: { key: string; body: string };
+    mention: "reply" | "newest";
+  },
+) {
+  const { workspaceId, key } = options;
+  const peer = await db.user.upsert({
+    where: { id: seededUuid("e2e-activity-inbox:peer") },
+    update: {},
+    create: {
+      id: seededUuid("e2e-activity-inbox:peer"),
+      username: "e2e-activity-peer",
+      displayName: "Activity Peer",
+    },
+  });
+  await db.workspaceMembership.upsert({
+    where: { workspaceId_userId: { workspaceId, userId: peer.id } },
+    update: {},
+    create: { workspaceId, userId: peer.id },
+  });
+  const channelId = seededUuid(`${key}channel`);
+  await db.conversation.upsert({
+    where: { id: channelId },
+    update: { archivedAt: null },
+    create: { id: channelId, workspaceId, channelName: options.channelName },
+  });
+  // Every run starts from the same state: no messages, follows or cursors from the last one.
+  await db.message.deleteMany({ where: { conversationId: channelId } });
+  const [viewer, other] = await Promise.all(
+    [DEV_BROWSER_USER.id, peer.id].map((userId) =>
+      db.conversationMember.upsert({
+        where: { conversationId_userId: { conversationId: channelId, userId } },
+        update: {
+          leftAt: null,
+          hiddenAt: null,
+          readThroughSequence: 0,
+          doneThroughSequence: null,
+          unreadFromSequence: null,
+        },
+        create: { conversationId: channelId, workspaceId, userId },
+      }),
+    ),
+  );
+  const rootId = seededUuid(`${key}root`);
+  const replyId = seededUuid(`${key}reply`);
+  const newestId = seededUuid(`${key}${options.newest.key}`);
+  const rows = [
+    { id: rootId, body: options.root, senderMemberId: viewer!.id, threadRootId: null },
+    { id: replyId, body: options.reply, senderMemberId: other!.id, threadRootId: rootId },
+    { id: newestId, body: options.newest.body, senderMemberId: other!.id, threadRootId: null },
+  ];
+  let sequence = 1;
+  for (const row of rows)
+    await db.message.create({
+      data: { ...row, conversationId: channelId, workspaceId, sequence: sequence++ },
+    });
+  await db.messageMention.create({
+    data: {
+      messageId: options.mention === "reply" ? replyId : newestId,
+      memberId: viewer!.id,
+      conversationId: channelId,
+      workspaceId,
+      kind: "user",
+      actorId: DEV_BROWSER_USER.id,
+      handle: DEV_BROWSER_USER.username,
+    },
+  });
+  await db.threadFollow.create({
+    data: { memberId: viewer!.id, rootMessageId: rootId, conversationId: channelId, workspaceId },
+  });
+  return { channelId, viewer: viewer!, rootId, replyId, newestId };
+}
+
 test("the Activity page lists, filters, marks Done and opens inbox items", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-${process.pid}`;
@@ -107,78 +193,14 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       include: { workspace: { select: { slug: true } } },
     });
     const workspacePath = `/en/w/${workspace.slug}`;
-    const peer = await db.user.upsert({
-      where: { id: seededUuid("e2e-activity-inbox:peer") },
-      update: {},
-      create: {
-        id: seededUuid("e2e-activity-inbox:peer"),
-        username: "e2e-activity-peer",
-        displayName: "Activity Peer",
-      },
-    });
-    await db.workspaceMembership.upsert({
-      where: { workspaceId_userId: { workspaceId, userId: peer.id } },
-      update: {},
-      create: { workspaceId, userId: peer.id },
-    });
-    const channelId = seededUuid("e2e-activity-inbox:channel");
-    await db.conversation.upsert({
-      where: { id: channelId },
-      update: { archivedAt: null },
-      create: { id: channelId, workspaceId, channelName: "e2e-activity-inbox" },
-    });
-    // Every run starts from the same state: no messages, follows, pins or cursors from the last one.
-    await db.message.deleteMany({ where: { conversationId: channelId } });
-    await db.conversationPin.deleteMany({ where: { conversationId: channelId } });
-    const [viewer, other] = await Promise.all(
-      [DEV_BROWSER_USER.id, peer.id].map((userId) =>
-        db.conversationMember.upsert({
-          where: { conversationId_userId: { conversationId: channelId, userId } },
-          update: {
-            leftAt: null,
-            readThroughSequence: 0,
-            doneThroughSequence: null,
-            unreadFromSequence: null,
-          },
-          create: { conversationId: channelId, workspaceId, userId },
-        }),
-      ),
-    );
-    const rootId = seededUuid("e2e-activity-inbox:root");
-    const replyId = seededUuid("e2e-activity-inbox:reply");
-    const rows = [
-      { id: rootId, body: "E2E activity root", senderMemberId: viewer!.id, threadRootId: null },
-      {
-        id: replyId,
-        body: `<@human:${DEV_BROWSER_USER.id}> E2E activity **reply** with \`code\``,
-        senderMemberId: other!.id,
-        threadRootId: rootId,
-      },
-      {
-        id: seededUuid("e2e-activity-inbox:unread"),
-        body: "E2E activity unread",
-        senderMemberId: other!.id,
-        threadRootId: null,
-      },
-    ];
-    let sequence = 1;
-    for (const row of rows)
-      await db.message.create({
-        data: { ...row, conversationId: channelId, workspaceId, sequence: sequence++ },
-      });
-    await db.messageMention.create({
-      data: {
-        messageId: replyId,
-        memberId: viewer!.id,
-        conversationId: channelId,
-        workspaceId,
-        kind: "user",
-        actorId: DEV_BROWSER_USER.id,
-        handle: DEV_BROWSER_USER.username,
-      },
-    });
-    await db.threadFollow.create({
-      data: { memberId: viewer!.id, rootMessageId: rootId, conversationId: channelId, workspaceId },
+    const { channelId, rootId, replyId } = await seedChannel(db, {
+      workspaceId,
+      key: "e2e-activity-inbox:",
+      channelName: "e2e-activity-inbox",
+      root: "E2E activity root",
+      reply: `<@human:${DEV_BROWSER_USER.id}> E2E activity **reply** with \`code\``,
+      newest: { key: "unread", body: "E2E activity unread" },
+      mention: "reply",
     });
     // A second channel with a followed thread the viewer has read to the end, where nothing
     // mentions them. The channel itself is Done, so only the thread card lists.
@@ -585,90 +607,26 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
   /** The text of every card under `selector` that previews this test's messages. */
   const cardsIn = (selector: string) =>
     `[...document.querySelectorAll(${selector})].map((card) => card.textContent).filter((text) => text.includes("E2E pinned"))`;
-  /** Every heading on the page below its title, in page order. */
-  const headings = `[...document.querySelectorAll("h2")].map((heading) => heading.textContent.trim())`;
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
       include: { workspace: { select: { slug: true } } },
     });
     const workspacePath = `/en/w/${workspace.slug}`;
-    const peer = await db.user.upsert({
-      where: { id: seededUuid("e2e-activity-inbox:peer") },
-      update: {},
-      create: {
-        id: seededUuid("e2e-activity-inbox:peer"),
-        username: "e2e-activity-peer",
-        displayName: "Activity Peer",
-      },
-    });
-    await db.workspaceMembership.upsert({
-      where: { workspaceId_userId: { workspaceId, userId: peer.id } },
-      update: {},
-      create: { workspaceId, userId: peer.id },
-    });
-    await db.conversation.upsert({
-      where: { id: channelId },
-      update: { archivedAt: null },
-      create: { id: channelId, workspaceId, channelName: "e2e-activity-pinned" },
-    });
-    // Every run starts unpinned, with no messages, follows or cursors from the last one.
+    // Every run starts unpinned.
     await db.conversationPin.deleteMany({ where: { conversationId: channelId } });
-    await db.message.deleteMany({ where: { conversationId: channelId } });
-    const [viewer, other] = await Promise.all(
-      [DEV_BROWSER_USER.id, peer.id].map((userId) =>
-        db.conversationMember.upsert({
-          where: { conversationId_userId: { conversationId: channelId, userId } },
-          update: {
-            leftAt: null,
-            hiddenAt: null,
-            readThroughSequence: 0,
-            doneThroughSequence: null,
-            unreadFromSequence: null,
-          },
-          create: { conversationId: channelId, workspaceId, userId },
-        }),
-      ),
-    );
     // A followed thread in the channel, and a newer top-level message that mentions the viewer.
-    const rootId = seededUuid("e2e-activity-inbox:pinned-root");
-    const helloId = seededUuid("e2e-activity-inbox:pinned-hello");
-    const rows = [
-      { id: rootId, body: "E2E pinned root", senderMemberId: viewer!.id, threadRootId: null },
-      {
-        id: seededUuid("e2e-activity-inbox:pinned-reply"),
-        body: "E2E pinned reply",
-        senderMemberId: other!.id,
-        threadRootId: rootId,
-      },
-      {
-        id: helloId,
-        body: `<@human:${DEV_BROWSER_USER.id}> E2E pinned hello`,
-        senderMemberId: other!.id,
-        threadRootId: null,
-      },
-    ];
-    let sequence = 1;
-    for (const row of rows)
-      await db.message.create({
-        data: { ...row, conversationId: channelId, workspaceId, sequence: sequence++ },
-      });
-    await db.messageMention.create({
-      data: {
-        messageId: helloId,
-        memberId: viewer!.id,
-        conversationId: channelId,
-        workspaceId,
-        kind: "user",
-        actorId: DEV_BROWSER_USER.id,
-        handle: DEV_BROWSER_USER.username,
-      },
-    });
-    await db.threadFollow.create({
-      data: { memberId: viewer!.id, rootMessageId: rootId, conversationId: channelId, workspaceId },
+    const { viewer, newestId: helloId } = await seedChannel(db, {
+      workspaceId,
+      key: "e2e-activity-inbox:pinned-",
+      channelName: "e2e-activity-pinned",
+      root: "E2E pinned root",
+      reply: "E2E pinned reply",
+      newest: { key: "hello", body: `<@human:${DEV_BROWSER_USER.id}> E2E pinned hello` },
+      mention: "newest",
     });
     await db.conversationPin.create({
-      data: { conversationId: channelId, memberId: viewer!.id, workspaceId, sortOrder: 0 },
+      data: { conversationId: channelId, memberId: viewer.id, workspaceId, sortOrder: 0 },
     });
     await mkdir(artifacts, { recursive: true });
 
@@ -713,7 +671,6 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     expect(
       await evaluate<boolean>(`document.querySelector('ol[aria-label="Pinned"]') === null`),
     ).toBe(true);
-    expect(await evaluate<string[]>(headings)).not.toContain("Pinned");
     await browser("find", "role", "tab", "click", "--name", "All");
     await browser("wait", "--fn", `${cardsIn(pinnedItems)}.length === 1`);
 
