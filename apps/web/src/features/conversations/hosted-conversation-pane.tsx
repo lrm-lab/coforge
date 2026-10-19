@@ -4,6 +4,8 @@ import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
 
 import { Skeleton } from "#src/components/ui/skeleton";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
+import { cx } from "#src/utils/cx";
+import { ConversationListButton } from "./conversation-list-button";
 import { ConversationHostProvider } from "./conversation-host";
 import { ConversationPage } from "./conversation-page";
 import type { ConversationPageSearch, HostedConversationTarget } from "./conversation-page-search";
@@ -28,6 +30,7 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   label,
   loadingLabel,
   failedText,
+  className,
   ref,
 }: {
   target: HostedConversationTarget;
@@ -37,15 +40,20 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   loadingLabel: string;
   /** Said in place of the conversation when it fails to load. */
   failedText: string;
+  /** Merged over the pane's column classes (a host whose pane can stand alone drops the border). */
+  className?: string;
   ref?: Ref<HTMLElement>;
 }) {
   const [failed, setFailed] = useState(false);
   return (
-    <section ref={ref} aria-label={label} className={HOSTED_CONVERSATION_PANE_CLASS}>
+    <section ref={ref} aria-label={label} className={cx(HOSTED_CONVERSATION_PANE_CLASS, className)}>
       {failed ? (
-        <p role="alert" className="p-4 text-sm text-error-primary">
-          {failedText}
-        </p>
+        <>
+          <HostedConversationBackRow />
+          <p role="alert" className="p-4 text-sm text-error-primary">
+            {failedText}
+          </p>
+        </>
       ) : (
         <ClientOnly>
           <CatchBoundary
@@ -92,19 +100,35 @@ function HostedConversation({
   );
 }
 
+/**
+ * The way back to the host's list where the pane stands in its place (a phone), while the
+ * conversation's own header is not there: loading or failed. Empty, and so not shown, when the
+ * host has no list to return to (`ConversationListButton` renders nothing).
+ */
+function HostedConversationBackRow() {
+  return (
+    <div className="flex shrink-0 px-4 pt-3 empty:hidden lg:hidden">
+      <ConversationListButton />
+    </div>
+  );
+}
+
 /** Message-shaped placeholders while the conversation loads. */
 function HostedConversationSkeleton({ label }: { label: string }) {
   return (
-    <div role="status" aria-label={label} className="flex flex-col gap-4 p-4">
-      {Array.from({ length: 6 }, (_, index) => (
-        <div key={index} className="flex gap-3">
-          <Skeleton className="size-8 shrink-0 rounded-full" />
-          <div className="flex flex-1 flex-col gap-2">
-            <Skeleton className="h-3 w-32" />
-            <Skeleton className="h-3 w-full" />
+    <>
+      <HostedConversationBackRow />
+      <div role="status" aria-label={label} className="flex flex-col gap-4 p-4">
+        {Array.from({ length: 6 }, (_, index) => (
+          <div key={index} className="flex gap-3">
+            <Skeleton className="size-8 shrink-0 rounded-full" />
+            <div className="flex flex-1 flex-col gap-2">
+              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-3 w-full" />
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </>
   );
 }

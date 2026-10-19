@@ -10,12 +10,15 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 /**
  * The Activity page in a real browser: listing, the "N active" count, the views, the row menu and
  * Done; on a wide screen, opening a row beside a narrowed list (kept through a change of view and a
- * reload) and at the right message; on a phone, opening Chat; member DMs; and the Pinned section.
+ * reload) and at the right message; on a phone, opening Chat from a row, and a link naming a
+ * conversation opening it full-screen with a back arrow to the list; member DMs; and the Pinned
+ * section.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
  * its messages are seeded deterministically and reset on every run. Screenshots of the wide
  * layout, with and without a conversation open, with a Pinned section (`pinned.png`), and of the
- * phone layout are written under `.amp/e2e/activity-inbox/`.
+ * phone layout, with and without a conversation open (`phone-open.png`), are written under
+ * `.amp/e2e/activity-inbox/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -54,6 +57,9 @@ const pane = `document.querySelector('section[aria-label="Selected conversation"
 
 /** The list's column: its width says whether a pane is beside it. */
 const listColumnWidth = `document.querySelector("[data-activity-list]").getBoundingClientRect().width`;
+
+/** Whether the list's column is mounted but not laid out (a phone with a conversation open). */
+const listHidden = `(() => { const list = document.querySelector("[data-activity-list]"); return Boolean(list) && list.getClientRects().length === 0; })()`;
 
 /** The header's "N active", as its number, or null when it is not shown. */
 const activeCount = `(() => { const text = document.querySelector("[data-activity-active-count]")?.textContent.trim() ?? ""; const match = /^(\\d+) active$/.exec(text); return match ? Number(match[1]) : null; })()`;
@@ -470,6 +476,25 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       `location.pathname === ${JSON.stringify(`${workspacePath}/channel/${channelId}`)}`,
     );
     expect(await evaluate<string>("location.search")).toContain(`threadRootId=${rootId}`);
+
+    // A link that names a conversation (a reload, a shared link) opens it full-screen on a phone,
+    // at its message, with the list hidden; the header's back arrow returns to the list.
+    await browser(
+      "open",
+      `${origin}${workspacePath}/activity?open=channel:${channelId}&msg=${rootId}`,
+    );
+    await browser("wait", "--fn", `${inPane(rootId)} && ${hydrated}`);
+    // The list is hidden, not removed: crossing `lg` does not remount it.
+    await browser("wait", "--fn", `${listHidden} === true`);
+    await browser("screenshot", join(artifacts, "phone-open.png"));
+    await browser("find", "role", "button", "click", "--name", "Back to conversations");
+    await browser(
+      "wait",
+      "--fn",
+      `location.pathname === ${JSON.stringify(`${workspacePath}/activity`)} && location.search === ""`,
+    );
+    await browser("wait", "--fn", `${pane} === null && ${listHidden} === false`);
+    await browser("wait", "--fn", `${seededRows}.length === 1`);
   } finally {
     await browser("close").catch(() => undefined);
     await db.$disconnect();

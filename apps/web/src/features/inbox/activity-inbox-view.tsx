@@ -81,7 +81,9 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
 /**
  * The Activity page: the viewer's items with activity past Done, newest first, the All view's
  * pinned conversations first. The list fills the page until a row is opened; from `lg` up the row's
- * conversation then opens beside a narrowed list (kept in the URL), and below `lg` in Chat.
+ * conversation then opens beside a narrowed list (kept in the URL), and below `lg` a row opens it
+ * in Chat. Below `lg` a URL that names a conversation (a reload, a shared link, a window narrowed
+ * with one open) shows it full-screen in place of the list, with a back arrow to the list.
  */
 export function ActivityInboxView({
   filter,
@@ -91,7 +93,8 @@ export function ActivityInboxView({
 }: {
   filter: ActivityInboxFilter;
   onFilterChange: (filter: ActivityInboxFilter) => void;
-  /** The conversation the URL has open beside the list, at its jump message and open thread. */
+  /** The conversation the URL has open (beside the list from `lg`, in its place below), at its
+   * jump message and open thread. */
   opened: HostedConversationTarget | undefined;
   onOpen: (target: HostedConversationTarget) => void;
 }) {
@@ -196,7 +199,7 @@ export function ActivityInboxView({
   );
 
   // The conversation area exists only once a row is open; until then the list fills the page.
-  const paneOpen = wide && opened !== undefined;
+  const paneOpen = opened !== undefined;
   const activeCount = firstPage?.activeItemCount;
   const list = (
     <div
@@ -204,7 +207,8 @@ export function ActivityInboxView({
       className={cn(
         "flex min-h-0 flex-col",
         // Raft's 35rem column, at most half the page so the conversation keeps room at `lg`.
-        paneOpen ? "w-[min(35rem,50%)] shrink-0" : "min-w-0 flex-1",
+        // Narrower, the conversation takes the page in its place; the list stays mounted.
+        paneOpen ? "w-[min(35rem,50%)] shrink-0 max-lg:hidden" : "min-w-0 flex-1",
       )}
     >
       <PageHeader
