@@ -86,6 +86,20 @@ describe("Agent runtime credentials", () => {
   });
 });
 
+test("an Agent the viewer no longer owns live, such as an archived one, has no credential summary to show, and refuses a write", async () => {
+  // The repository finds only live Agents, so an archived Agent's own profile asks about one it
+  // cannot find: that read answers null, while a write to it still fails.
+  const credentials = new AgentRuntimeCredentials(
+    new MemoryAgentRuntimeCredentialRepository(),
+    encryptionKey,
+  );
+
+  expect(await credentials.summary(principal, "archived-agent")).toBeNull();
+  await expect(
+    credentials.save(principal, "archived-agent", "sk-secret-value-1234"),
+  ).rejects.toThrow("Agent runtime credential is not available");
+});
+
 describe("Agent runtime credential encryption key configuration", () => {
   test("reads a 32-byte hexadecimal key from a mounted secret file", async () => {
     const directory = mkdtempSync(join(tmpdir(), "coforge-runtime-key-"));

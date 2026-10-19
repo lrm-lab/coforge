@@ -37,7 +37,14 @@ export class AgentRuntimeCredentials {
     principal: AgentRuntimeCredentialPrincipal,
     agentId: string,
   ): Promise<AgentRuntimeCredentialSummary | null> {
-    return summary((await this.#ownedConfig(principal, agentId)).provider);
+    // An archived Agent is not found here (only live ones are), and its read-only profile still
+    // asks: there is no credential to show, which is not a failure of the profile.
+    const agent = await this.repository.findOwnedAgent(
+      agentId,
+      principal.workspaceId,
+      principal.userId,
+    );
+    return agent ? summary(agent.runtimeConfig.provider) : null;
   }
 
   async save(
