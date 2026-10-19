@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Check, Loading02 } from "@untitledui/icons";
+import { Check } from "@untitledui/icons";
 
 import { cn } from "#src/lib/utils";
 
@@ -14,7 +14,7 @@ export type ProgressStepItem = {
 /**
  * A vertical list of steps, each marked done, running, or not started. Untitled UI's own Progress
  * steps are PRO-only, so this composes `@untitledui/icons` with semantic tokens. The running step
- * spins; with reduced motion it shows a still dot instead.
+ * shows a still dot; nothing here animates.
  */
 export function ProgressSteps({
   items,
@@ -55,8 +55,7 @@ function StepMark({ status }: { status: ProgressStepStatus }) {
   if (status === "current")
     return (
       <span aria-hidden className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-        <Loading02 className="size-4 text-fg-brand-primary motion-safe:animate-spin motion-reduce:hidden" />
-        <span className="hidden size-2 rounded-full bg-fg-brand-primary motion-reduce:block" />
+        <span className="size-2 rounded-full bg-fg-brand-primary" />
       </span>
     );
   return (

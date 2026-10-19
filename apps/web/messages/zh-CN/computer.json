@@ -222,8 +222,6 @@
   "computer_upgrade_running_title": "正在升级到 {version}",
   "computer_upgrade_step_delivered": "升级请求已送达 {name}",
   "computer_upgrade_step_installing": "正在安装并重启",
-  "computer_upgrade_step_installing_note": "等待 {name} 上报 {version}。",
-  "computer_upgrade_leave_page": "可以离开这个页面，升级会继续进行。",
   "computer_upgrade_failed_title": "升级到 {version} 失败",
   "computer_upgrade_failed_title_generic": "升级失败",
   "computer_upgrade_retry": "重试",

@@ -4,7 +4,6 @@ import {
   ArrowUp,
   Check,
   Copy01 as Copy,
-  Loading02,
   RefreshCw01 as RotateCw,
 } from "@untitledui/icons";
 import { Heading, ProgressBar, Text } from "react-aria-components";
@@ -121,19 +120,12 @@ export function ComputerUpgradeSlot({
         color="brand"
         actions={whatsNew}
         className="mt-3"
-        icon={
-          <FeaturedIcon
-            color="brand"
-            theme="light"
-            size="sm"
-            icon={<Loading02 aria-hidden className="size-4 motion-safe:animate-spin" />}
-          />
-        }
         title={
           slot.version
             ? m.computer_upgrade_running_title({ version: slot.version })
             : m.computer_upgrade_in_progress()
         }
+        // The sweeping bar is the panel's one animation; the stages under it stay still.
         description={
           <>
             <ProgressBar
@@ -152,18 +144,10 @@ export function ComputerUpgradeSlot({
                 },
                 {
                   title: m.computer_upgrade_step_installing(),
-                  description:
-                    slot.delivered && slot.version
-                      ? m.computer_upgrade_step_installing_note({
-                          name: computerName,
-                          version: slot.version,
-                        })
-                      : undefined,
                   status: slot.delivered ? "current" : "incomplete",
                 },
               ]}
             />
-            <p className="mt-3 border-t border-secondary pt-3">{m.computer_upgrade_leave_page()}</p>
           </>
         }
       />

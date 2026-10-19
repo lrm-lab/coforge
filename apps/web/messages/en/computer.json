@@ -221,8 +221,6 @@
   "computer_upgrade_running_title": "Upgrading to {version}",
   "computer_upgrade_step_delivered": "Request delivered to {name}",
   "computer_upgrade_step_installing": "Installing and restarting",
-  "computer_upgrade_step_installing_note": "Waiting for {name} to report {version}.",
-  "computer_upgrade_leave_page": "You can leave this page; the upgrade keeps running.",
   "computer_upgrade_failed_title": "Upgrade to {version} failed",
   "computer_upgrade_failed_title_generic": "Upgrade failed",
   "computer_upgrade_retry": "Retry",
