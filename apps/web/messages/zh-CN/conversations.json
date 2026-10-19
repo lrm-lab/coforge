@@ -508,15 +508,7 @@
   "activity_inbox_menu_done": "完成",
   "activity_inbox_menu_label": "动态条目操作",
   "activity_inbox_action_error": "操作没有保存，请重试。",
-  "activity_inbox_active_count": [
-    {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=other": "{count} 个活跃"
-      }
-    }
-  ],
+  "activity_inbox_active_count": "{count} 个活跃",
   "activity_inbox_new": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],

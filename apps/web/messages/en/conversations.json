@@ -524,16 +524,7 @@
   "activity_inbox_menu_done": "Done",
   "activity_inbox_menu_label": "Activity item actions",
   "activity_inbox_action_error": "That change could not be saved. Try again.",
-  "activity_inbox_active_count": [
-    {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=one": "{count} active",
-        "countPlural=other": "{count} active"
-      }
-    }
-  ],
+  "activity_inbox_active_count": "{count} active",
   "activity_inbox_new": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],

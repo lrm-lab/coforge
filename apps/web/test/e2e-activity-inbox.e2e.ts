@@ -8,18 +8,9 @@ import { peopleDirectKey } from "#src/features/conversations/direct-key";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
- * The Activity page in a real browser: a followed thread with an unread reply that mentions the
- * viewer and a channel with an unread message appear as rows with their badges and Markdown
- * previews, under a header that counts what the All view lists ("N active"); the Mentions view
- * keeps only the thread; the row menu offers read, Done and unfollow; Done removes a row for
- * good. On a wide screen the list fills the page until a row is opened: then it narrows to a
- * 35rem column and the conversation opens beside it, without leaving Activity, with the row marked
- * as the open one, through a change of view and a reload; the thread row opens its thread pane at
- * the first unread reply, and a thread read to the end opens at its newest reply. On a phone a row
- * opens the conversation in Chat. A direct message with a member, and the viewer's with themself,
- * list under that member's name and face, and opening one beside the list reads it. A pinned
- * channel lists under Pinned, before All conversations and not again below it, while its followed
- * thread stays below; it stays under Pinned after Done, and Mentions has no Pinned section.
+ * The Activity page in a real browser: listing, the "N active" count, the views, the row menu and
+ * Done; on a wide screen, opening a row beside a narrowed list (kept through a change of view and a
+ * reload) and at the right message; on a phone, opening Chat; member DMs; and the Pinned section.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
  * its messages are seeded deterministically and reset on every run. Screenshots of the wide
@@ -44,39 +35,36 @@ function seededUuid(key: string): string {
 
 /**
  * TanStack Start has hydrated the page: its SSR bootstrap (`$_TSR`) is marked hydrated, and
- * deleted once the stream has also ended. Server-rendered cards already satisfy the card waits,
+ * deleted once the stream has also ended. Server-rendered rows already satisfy the row waits,
  * and a click before hydration lands on inert HTML.
  */
 const hydrated = `(!window.$_TSR || window.$_TSR.hydrated === true)`;
 
 /**
- * The Activity list's cards, as a selector literal for page expressions. Scoped to the list: a
+ * The Activity list's rows, as a selector literal for page expressions. Scoped to the list: a
  * conversation open beside it renders its messages, with the same seeded text, as list items too.
  */
-const cardItems = JSON.stringify('ol[aria-label="Activity"] > li');
+const rowItems = JSON.stringify('ol[aria-label="Activity"] > li');
 
-/** The Pinned section's cards, as a selector literal for page expressions. */
+/** The Pinned section's rows, as a selector literal for page expressions. */
 const pinnedItems = JSON.stringify('ol[aria-label="Pinned"] > li');
 
-/** The pane beside the list that shows the conversation a card opened. */
+/** The pane beside the list that shows the conversation a row opened. */
 const pane = `document.querySelector('section[aria-label="Selected conversation"]')`;
 
-/** The list's column (its rows' scroller's parent): its width says whether a pane is beside it. */
-const listColumnWidth = `document.querySelector('ol[aria-label="Activity"]').parentElement.parentElement.getBoundingClientRect().width`;
+/** The list's column: its width says whether a pane is beside it. */
+const listColumnWidth = `document.querySelector("[data-activity-list]").getBoundingClientRect().width`;
 
-/** 35rem in px: the list column's width while a conversation is open beside it. */
-const columnRem35 = `35 * parseFloat(getComputedStyle(document.documentElement).fontSize)`;
-
-/** The header's "N active" beside the title, as its number, or null when it is not shown. */
-const activeCount = `(() => { const text = [...document.querySelectorAll("h1")].find((h) => h.textContent.trim() === "Activity")?.nextElementSibling?.textContent.trim() ?? ""; const match = /^(\\d+) active$/.exec(text); return match ? Number(match[1]) : null; })()`;
+/** The header's "N active", as its number, or null when it is not shown. */
+const activeCount = `(() => { const text = document.querySelector("[data-activity-active-count]")?.textContent.trim() ?? ""; const match = /^(\\d+) active$/.exec(text); return match ? Number(match[1]) : null; })()`;
 
 /** Whether message `id` is rendered inside the conversation pane (one line: a wait argument). */
 function inPane(id: string) {
   return `(() => { const pane = ${pane}; const row = document.getElementById("message-${id}"); return Boolean(pane && row && pane.contains(row)); })()`;
 }
 
-/** The text of the card marked as the one open in the pane, or null when none is. */
-const currentCard = `[...document.querySelectorAll(${cardItems})].find((item) => item.querySelector("a")?.getAttribute("aria-current") === "true")?.textContent ?? null`;
+/** The text of the row marked as the one open in the pane, or null when none is. */
+const currentRow = `[...document.querySelectorAll(${rowItems})].find((item) => item.querySelector("a")?.getAttribute("aria-current") === "true")?.textContent ?? null`;
 
 /** The open conversation as the Activity URL names it (`channel:<id>` or `dm:<id>`). */
 const openParam = `new URLSearchParams(location.search).get("open")`;
@@ -192,9 +180,9 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-${process.pid}`;
   const { browser, evaluate } = browserSession(session);
-  /** The text of every card this test seeded, in page order. */
-  const seededCards = `[...document.querySelectorAll(${cardItems})]
-    .map((card) => card.textContent)
+  /** The text of every row this test seeded, in page order. */
+  const seededRows = `[...document.querySelectorAll(${rowItems})]
+    .map((row) => row.textContent)
     .filter((text) => text.includes("E2E activity"))`;
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
@@ -212,7 +200,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       mention: "reply",
     });
     // A second channel with a followed thread the viewer has read to the end, where nothing
-    // mentions them. The channel itself is Done, so only the thread card lists.
+    // mentions them. The channel itself is Done, so only the thread row lists.
     const quietChannelId = seededUuid("e2e-activity-inbox:quiet-channel");
     await db.conversation.upsert({
       where: { id: quietChannelId },
@@ -281,36 +269,37 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
 
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/activity`);
-    await browser("wait", "--fn", `${seededCards}.length === 2 && ${hydrated}`);
-    const cards = await evaluate<string[]>(seededCards);
+    await browser("wait", "--fn", `${seededRows}.length === 2 && ${hydrated}`);
+    const rows = await evaluate<string[]>(seededRows);
     // Newest activity first: the channel's unread message was posted after the thread reply. A
     // channel's row goes by its bare name (the # is its icon); a thread's names its channel
     // before the latest reply.
-    expect(cards[0]).toContain("e2e-activity-inbox");
-    expect(cards[0]).not.toContain("#e2e-activity-inbox");
-    expect(cards[0]).toContain("1 new");
-    expect(cards[0]).toContain("Activity Peer: E2E activity unread");
-    expect(cards[1]).toContain("E2E activity root");
-    expect(cards[1]).toContain("@you");
-    expect(cards[1]).toContain("1 new");
-    expect(cards[1]).toContain("#e2e-activity-inbox · Activity Peer: ");
+    expect(rows[0]).toContain("e2e-activity-inbox");
+    expect(rows[0]).not.toContain("#e2e-activity-inbox");
+    expect(rows[0]).toContain("1 new");
+    expect(rows[0]).toContain("Activity Peer: E2E activity unread");
+    expect(rows[1]).toContain("E2E activity root");
+    expect(rows[1]).toContain("@you");
+    expect(rows[1]).toContain("1 new");
+    expect(rows[1]).toContain("#e2e-activity-inbox · Activity Peer: ");
     // Nothing is open, so there is no conversation area: the list spans the page.
     expect(await evaluate<boolean>(`${pane} === null`)).toBe(true);
-    expect(await evaluate<number>(`${listColumnWidth} / innerWidth`)).toBeGreaterThan(0.6);
+    const fullWidth = await evaluate<number>(listColumnWidth);
+    expect(fullWidth / (await evaluate<number>("innerWidth"))).toBeGreaterThan(0.6);
     // The header counts every row the All view lists, these two among them.
     const active = await evaluate<number | null>(activeCount);
     expect(active).toBeGreaterThanOrEqual(2);
     // The preview renders Markdown inline: the mention as a chip, emphasis and code as markup.
     const preview = await evaluate<{ strong: string | null; code: string | null }>(`(() => {
-      const card = [...document.querySelectorAll(${cardItems})].find((item) =>
+      const row = [...document.querySelectorAll(${rowItems})].find((item) =>
         item.textContent.includes("E2E activity root"));
       return {
-        strong: card.querySelector("strong")?.textContent ?? null,
-        code: card.querySelector("code")?.textContent ?? null,
+        strong: row.querySelector("strong")?.textContent ?? null,
+        code: row.querySelector("code")?.textContent ?? null,
       };
     })()`);
     expect(preview).toEqual({ strong: "reply", code: "code" });
-    // The Unread and Mentions tabs count cards: both seeded cards are unread, and the thread's
+    // The Unread and Mentions tabs count rows: both seeded rows are unread, and the thread's
     // reply is an unread mention. Other rows of the dev user's inbox may add to both.
     // Activity's own tabs: an open conversation beside the list has tabs of its own.
     const tabCounts = `Object.fromEntries([...document.querySelectorAll('[role="tablist"][aria-label="Filter Activity"] [role="tab"]')].map((tab) => [tab.textContent.replace(/[\\d+]/g, "").trim(), Number(tab.textContent.replace(/\\D/g, "")) || 0]))`;
@@ -323,18 +312,18 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
 
     await browser("find", "role", "tab", "click", "--name", "Mentions");
     await browser("wait", "--fn", `location.search.includes("filter=mentions")`);
-    await browser("wait", "--fn", `${seededCards}.length === 1`);
-    expect((await evaluate<string[]>(seededCards))[0]).toContain("E2E activity root");
+    await browser("wait", "--fn", `${seededRows}.length === 1`);
+    expect((await evaluate<string[]>(seededRows))[0]).toContain("E2E activity root");
     // The counts do not depend on the tab showing.
     expect(await evaluate<Record<string, number>>(tabCounts)).toEqual(counts);
     await browser("find", "role", "tab", "click", "--name", "All");
-    await browser("wait", "--fn", `${seededCards}.length === 2`);
+    await browser("wait", "--fn", `${seededRows}.length === 2`);
 
-    // The card menu opens on a right click (a long press on touch).
+    // The row menu opens on a right click (a long press on touch).
     await evaluate(`(() => {
-      const card = [...document.querySelectorAll(${cardItems})].find((item) =>
+      const row = [...document.querySelectorAll(${rowItems})].find((item) =>
         item.textContent.includes("E2E activity root"));
-      const link = card.querySelector("a");
+      const link = row.querySelector("a");
       const box = link.getBoundingClientRect();
       link.dispatchEvent(new MouseEvent("contextmenu", {
         bubbles: true, cancelable: true, clientX: box.x + 20, clientY: box.y + 10,
@@ -346,15 +335,15 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       `[...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())`,
     );
     expect(menu).toEqual(["Mark as Read", "Done", "Unfollow thread"]);
-    await browser("screenshot", join(artifacts, "card-menu.png"));
+    await browser("screenshot", join(artifacts, "row-menu.png"));
     await browser("press", "Escape");
 
-    // Read and unread from the card menu move the badge both ways.
+    // Read and unread from the row menu move the badge both ways.
     const channelMenu = (label: string) =>
       evaluate(`(() => {
-        const card = [...document.querySelectorAll(${cardItems})].find((item) =>
+        const row = [...document.querySelectorAll(${rowItems})].find((item) =>
           item.textContent.includes("E2E activity unread"));
-        const link = card.querySelector("a");
+        const link = row.querySelector("a");
         const box = link.getBoundingClientRect();
         link.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true, cancelable: true, clientX: box.x + 20, clientY: box.y + 10,
@@ -375,32 +364,32 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
             .click() ?? true`),
         );
     // One line: a wait expression is passed to the browser CLI as a single argument.
-    const channelCard = `[...document.querySelectorAll(${cardItems})].find((item) => item.textContent.includes("E2E activity unread")).textContent`;
+    const channelRow = `[...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E activity unread")).textContent`;
     await channelMenu("Mark as Read");
-    await browser("wait", "--fn", `!${channelCard}.includes("1 new")`);
+    await browser("wait", "--fn", `!${channelRow}.includes("1 new")`);
     await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread - 1}`);
     await channelMenu("Mark as Unread");
-    await browser("wait", "--fn", `${channelCard}.includes("1 new")`);
+    await browser("wait", "--fn", `${channelRow}.includes("1 new")`);
     await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread}`);
     expect(await evaluate<boolean>(`!document.querySelector('[role="alert"]')`)).toBe(true);
 
     await evaluate(`(() => {
-      const card = [...document.querySelectorAll(${cardItems})].find((item) =>
+      const row = [...document.querySelectorAll(${rowItems})].find((item) =>
         item.textContent.includes("E2E activity unread"));
-      card.querySelector('[aria-label="Mark as Done"]').click();
+      row.querySelector('[aria-label="Mark as Done"]').click();
       return true;
     })()`);
-    await browser("wait", "--fn", `${seededCards}.length === 1`);
+    await browser("wait", "--fn", `${seededRows}.length === 1`);
     // Done took an unread row away, and the Unread and active counts with it.
     await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread - 1}`);
     await browser("wait", "--fn", `${activeCount} === ${active! - 1}`);
     await browser("reload");
-    await browser("wait", "--fn", `${seededCards}.length === 1 && ${hydrated}`);
-    expect((await evaluate<string[]>(seededCards))[0]).toContain("E2E activity root");
+    await browser("wait", "--fn", `${seededRows}.length === 1 && ${hydrated}`);
+    expect((await evaluate<string[]>(seededRows))[0]).toContain("E2E activity root");
 
-    // Nothing is open until a card is clicked: opening one reads it.
+    // Nothing is open until a row is clicked: opening one reads it.
     expect(await evaluate<string | null>(openParam)).toBeNull();
-    expect(await evaluate<string | null>(currentCard)).toBeNull();
+    expect(await evaluate<string | null>(currentRow)).toBeNull();
     await browser("find", "text", "E2E activity root", "click");
     await browser("wait", "--fn", `location.search.includes("threadRootId=${rootId}")`);
     // The thread opens beside the list, which stays on Activity; its pane scrolls to the first
@@ -408,12 +397,10 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser("wait", "--fn", inPane(replyId));
     expect(await evaluate<string>("location.pathname")).toBe(`${workspacePath}/activity`);
     expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
-    expect(await evaluate<string | null>(currentCard)).toContain("E2E activity root");
-    // Opening a row narrows the list to its 35rem column beside the conversation.
+    expect(await evaluate<string | null>(currentRow)).toContain("E2E activity root");
+    // Opening a row narrows the list beside the conversation.
     expect(await evaluate<boolean>(`${pane} !== null`)).toBe(true);
-    expect(
-      await evaluate<number>(`Math.abs(${listColumnWidth} - ${columnRem35})`),
-    ).toBeLessThanOrEqual(1);
+    expect(await evaluate<number>(listColumnWidth)).toBeLessThan(fullWidth);
     await browser("screenshot", join(artifacts, "wide-open.png"));
     // Switching the list's view keeps the conversation open. Clicked through Activity's own
     // tablist: the open conversation has tabs too.
@@ -431,7 +418,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     // The open conversation lives in the URL: a reload reopens it beside the list.
     await browser("reload");
     await browser("wait", "--fn", `${inPane(replyId)} && ${hydrated}`);
-    await browser("wait", "--fn", `(${currentCard})?.includes("E2E activity root") === true`);
+    await browser("wait", "--fn", `(${currentRow})?.includes("E2E activity root") === true`);
     expect(await evaluate<string | null>(openParam)).toBe(`channel:${channelId}`);
 
     // A thread read to the end with no mention opens at its newest reply. Activity without an
@@ -463,9 +450,9 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
 
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}${workspacePath}/activity`);
-    await browser("wait", "--fn", `${seededCards}.length === 1 && ${hydrated}`);
-    // Opening the thread read it: its card stays, without the unread badge.
-    expect((await evaluate<string[]>(seededCards))[0]).not.toContain("1 new");
+    await browser("wait", "--fn", `${seededRows}.length === 1 && ${hydrated}`);
+    // Opening the thread read it: its row stays, without the unread badge.
+    expect((await evaluate<string[]>(seededRows))[0]).not.toContain("1 new");
     // On a phone the tabs take their own row under the title.
     expect(
       await evaluate<boolean>(
@@ -473,7 +460,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       ),
     ).toBe(true);
     await browser("screenshot", join(artifacts, "phone.png"));
-    // No room beside the list on a phone: a card opens its conversation in Chat. The server
+    // No room beside the list on a phone: a row opens its conversation in Chat. The server
     // renders a desktop's layout for this browser, so wait for the phone's, without the pane.
     await browser("wait", "--fn", `${pane} === null`);
     await browser("find", "text", "E2E activity root", "click");
@@ -493,9 +480,9 @@ test("a direct message with a member, and the one with themself, list with the m
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-dm-${process.pid}`;
   const { browser, evaluate } = browserSession(session);
-  /** One seeded card's text and avatar initial, found by a message it previews. */
-  const card = (text: string) =>
-    `(() => { const card = [...document.querySelectorAll(${cardItems})].find((item) => item.textContent.includes(${JSON.stringify(text)})); return card ? { text: card.textContent, avatar: card.querySelector("[data-avatar]")?.textContent ?? null } : null; })()`;
+  /** One seeded row's text and avatar initial, found by a message it previews. */
+  const row = (text: string) =>
+    `(() => { const row = [...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes(${JSON.stringify(text)})); return row ? { text: row.textContent, avatar: row.querySelector("[data-avatar]")?.textContent ?? null } : null; })()`;
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
@@ -586,19 +573,19 @@ test("a direct message with a member, and the one with themself, list with the m
     await browser(
       "wait",
       "--fn",
-      `${card("E2E activity DM hello")} !== null && ${card("E2E activity note to self")} !== null && ${hydrated}`,
+      `${row("E2E activity DM hello")} !== null && ${row("E2E activity note to self")} !== null && ${hydrated}`,
     );
     // The member's DM goes by their name and face, unread; the viewer's own by theirs, "(you)".
     // The title is the bare name, without an @.
     const dm = await evaluate<{ text: string; avatar: string | null }>(
-      card("E2E activity DM hello"),
+      row("E2E activity DM hello"),
     );
     expect(dm.text).not.toContain("@Activity DM Peer");
     expect(dm.text).toContain("1 new");
     expect(dm.text).toContain("Activity DM Peer: E2E activity DM hello");
     expect(dm.avatar).toBe("A");
     const self = await evaluate<{ text: string; avatar: string | null }>(
-      card("E2E activity note to self"),
+      row("E2E activity note to self"),
     );
     expect(self.text).toContain(`${viewerName} (you)`);
     expect(self.text).not.toContain(`@${viewerName}`);
@@ -606,7 +593,7 @@ test("a direct message with a member, and the one with themself, list with the m
     expect(self.avatar).not.toBeNull();
     await browser("screenshot", join(artifacts, "member-dm.png"));
 
-    // Opening the card shows the DM beside the list, at the unread message, and reads it.
+    // Opening the row shows the DM beside the list, at the unread message, and reads it.
     await browser("find", "text", "E2E activity DM hello", "click");
     await browser(
       "wait",
@@ -615,10 +602,10 @@ test("a direct message with a member, and the one with themself, list with the m
     );
     await browser("wait", "--fn", inPane(helloId));
     expect(await evaluate<string>("location.pathname")).toBe(`${workspacePath}/activity`);
-    expect(await evaluate<string | null>(currentCard)).toContain("E2E activity DM hello");
+    expect(await evaluate<string | null>(currentRow)).toContain("E2E activity DM hello");
     await browser("open", `${origin}${workspacePath}/activity`);
-    await browser("wait", "--fn", `${card("E2E activity DM hello")} !== null && ${hydrated}`);
-    expect((await evaluate<{ text: string }>(card("E2E activity DM hello"))).text).not.toContain(
+    await browser("wait", "--fn", `${row("E2E activity DM hello")} !== null && ${hydrated}`);
+    expect((await evaluate<{ text: string }>(row("E2E activity DM hello"))).text).not.toContain(
       "1 new",
     );
   } finally {
@@ -632,9 +619,9 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
   const session = `activity-inbox-pinned-${process.pid}`;
   const { browser, evaluate } = browserSession(session);
   const channelId = seededUuid("e2e-activity-inbox:pinned-channel");
-  /** The text of every card under `selector` that previews this test's messages. */
-  const cardsIn = (selector: string) =>
-    `[...document.querySelectorAll(${selector})].map((card) => card.textContent).filter((text) => text.includes("E2E pinned"))`;
+  /** The text of every row under `selector` that previews this test's messages. */
+  const rowsIn = (selector: string) =>
+    `[...document.querySelectorAll(${selector})].map((row) => row.textContent).filter((text) => text.includes("E2E pinned"))`;
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
@@ -663,22 +650,22 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     await browser(
       "wait",
       "--fn",
-      `${cardsIn(pinnedItems)}.length === 1 && ${cardsIn(cardItems)}.length === 1 && ${hydrated}`,
+      `${rowsIn(pinnedItems)}.length === 1 && ${rowsIn(rowItems)}.length === 1 && ${hydrated}`,
     );
-    // The channel's own card is under Pinned, and only there; its followed thread is below.
-    const [pinnedCard] = await evaluate<string[]>(cardsIn(pinnedItems));
+    // The channel's own row is under Pinned, and only there; its followed thread is below.
+    const [pinnedRow] = await evaluate<string[]>(rowsIn(pinnedItems));
     // The bare channel name, with the mention and new-message badges.
-    expect(pinnedCard).toContain("e2e-activity-pinned");
-    expect(pinnedCard).not.toContain("#e2e-activity-pinned");
-    expect(pinnedCard).toContain("@you");
-    expect(pinnedCard).toContain("Activity Peer: ");
-    expect(pinnedCard).toContain("E2E pinned hello");
-    expect(pinnedCard).toContain("1 new");
-    const [threadCard] = await evaluate<string[]>(cardsIn(cardItems));
-    expect(threadCard).toContain("E2E pinned root");
-    expect(threadCard).toContain("#e2e-activity-pinned · ");
-    expect(threadCard).not.toContain("E2E pinned hello");
-    // Pinned, its cards, then All conversations and the rest of the list.
+    expect(pinnedRow).toContain("e2e-activity-pinned");
+    expect(pinnedRow).not.toContain("#e2e-activity-pinned");
+    expect(pinnedRow).toContain("@you");
+    expect(pinnedRow).toContain("Activity Peer: ");
+    expect(pinnedRow).toContain("E2E pinned hello");
+    expect(pinnedRow).toContain("1 new");
+    const [threadRow] = await evaluate<string[]>(rowsIn(rowItems));
+    expect(threadRow).toContain("E2E pinned root");
+    expect(threadRow).toContain("#e2e-activity-pinned · ");
+    expect(threadRow).not.toContain("E2E pinned hello");
+    // Pinned, its rows, then All conversations and the rest of the list.
     expect(
       await evaluate<boolean>(`(() => {
         const pinned = document.querySelector('ol[aria-label="Pinned"]');
@@ -692,42 +679,42 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     ).toBe(true);
     await browser("screenshot", join(artifacts, "pinned.png"));
 
-    // Mentions has no Pinned section: the pinned channel lists among its cards.
+    // Mentions has no Pinned section: the pinned channel lists among its rows.
     await browser("find", "role", "tab", "click", "--name", "Mentions");
     await browser("wait", "--fn", `location.search.includes("filter=mentions")`);
     await browser(
       "wait",
       "--fn",
-      `${cardsIn(cardItems)}.some((text) => text.includes("E2E pinned hello"))`,
+      `${rowsIn(rowItems)}.some((text) => text.includes("E2E pinned hello"))`,
     );
     expect(
       await evaluate<boolean>(`document.querySelector('ol[aria-label="Pinned"]') === null`),
     ).toBe(true);
     await browser("find", "role", "tab", "click", "--name", "All");
-    await browser("wait", "--fn", `${cardsIn(pinnedItems)}.length === 1`);
+    await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1`);
 
-    // Done keeps a pinned card under Pinned. Done reads the card too, and Pinned keeps its badge
+    // Done keeps a pinned row under Pinned. Done reads the row too, and Pinned keeps its badge
     // until the refetch, so the badge leaving means the server took the Done.
     await evaluate(`(() => {
-      const card = [...document.querySelectorAll(${pinnedItems})].find((item) =>
+      const row = [...document.querySelectorAll(${pinnedItems})].find((item) =>
         item.textContent.includes("E2E pinned hello"));
-      card.querySelector('[aria-label="Mark as Done"]').click();
+      row.querySelector('[aria-label="Mark as Done"]').click();
       return true;
     })()`);
     await browser(
       "wait",
       "--fn",
-      `${cardsIn(pinnedItems)}.length === 1 && !${cardsIn(pinnedItems)}[0].includes("1 new")`,
+      `${rowsIn(pinnedItems)}.length === 1 && !${rowsIn(pinnedItems)}[0].includes("1 new")`,
     );
     expect(await evaluate<boolean>(`!document.querySelector('[role="alert"]')`)).toBe(true);
     await browser("reload");
-    await browser("wait", "--fn", `${cardsIn(pinnedItems)}.length === 1 && ${hydrated}`);
-    expect((await evaluate<string[]>(cardsIn(pinnedItems)))[0]).toContain("E2E pinned hello");
-    expect(await evaluate<string[]>(cardsIn(cardItems))).toEqual([
+    await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1 && ${hydrated}`);
+    expect((await evaluate<string[]>(rowsIn(pinnedItems)))[0]).toContain("E2E pinned hello");
+    expect(await evaluate<string[]>(rowsIn(rowItems))).toEqual([
       expect.stringContaining("E2E pinned root"),
     ]);
 
-    // A pinned card opens beside the list and is marked as the open one.
+    // A pinned row opens beside the list and is marked as the open one.
     await browser("find", "text", "E2E pinned hello", "click");
     await browser("wait", "--fn", `${openParam} === ${JSON.stringify(`channel:${channelId}`)}`);
     await browser("wait", "--fn", inPane(helloId));

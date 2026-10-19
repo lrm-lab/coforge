@@ -454,8 +454,8 @@ export class ActivityInbox {
     }));
   }
 
-  /** Loads the messages, DM peers (Agents and members), tasks and thread reply totals one page of
-   * items renders, in one query each. */
+  /** Loads the messages, DM peers (Agents and members) and tasks one page of items renders, in one
+   * query each. */
   private async hydrate(workspaceId: string, userId: string, page: readonly ActivityCandidate[]) {
     const messageIds = new Set<string>();
     const agentIds = new Set<string>();
@@ -472,7 +472,7 @@ export class ActivityInbox {
       const peerUserId = peopleDirectPeerId(candidate.directKey, userId);
       if (peerUserId) peerUserIds.set(candidate.conversationId, peerUserId);
     }
-    const [messages, agents, people, tasks, replyCounts] = await Promise.all([
+    const [messages, agents, people, tasks] = await Promise.all([
       this.db.message.findMany({
         where: { id: { in: [...messageIds] }, workspaceId },
         select: browserMessageFields,
@@ -500,14 +500,7 @@ export class ActivityInbox {
           },
         },
       }),
-      // A reply total counts people's replies, read or not; a system notice is not a reply.
-      this.db.message.groupBy({
-        by: ["threadRootId"],
-        where: { workspaceId, threadRootId: { in: rootIds }, senderMemberId: { not: null } },
-        _count: { _all: true },
-      }),
     ]);
-    const replyCountByRoot = new Map(replyCounts.map((row) => [row.threadRootId, row._count._all]));
     const messageById = new Map(
       messages.map((message) => [message.id, mapBrowserMessage(message, workspaceId)]),
     );
@@ -564,13 +557,7 @@ export class ActivityInbox {
           place,
           // A channel thread is listed because the viewer follows it; a direct-message thread
           // has no follow switch.
-          thread: root
-            ? {
-                root,
-                replyCount: replyCountByRoot.get(root.id) ?? 0,
-                task: taskByRoot.get(root.id) ?? null,
-              }
-            : null,
+          thread: root ? { root, task: taskByRoot.get(root.id) ?? null } : null,
           latest,
           latestSequence: candidate.latestSequence,
           unreadCount: candidate.unreadCount,
@@ -578,6 +565,8 @@ export class ActivityInbox {
           unreadMention: candidate.unreadMention,
           firstMentionMessageId: candidate.firstMentionMessageId,
           mentionAction: candidate.mentionAction ?? null,
+          /** The viewer pinned this conversation, in whichever view lists it. */
+          pinned: candidate.pin !== null,
         },
       ];
     });

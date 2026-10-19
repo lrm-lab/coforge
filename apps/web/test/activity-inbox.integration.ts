@@ -171,7 +171,6 @@ test("lists joined conversations and followed threads with activity, newest firs
     expect(channelItem!.latest.senderKind).toBe("system");
     expect(thread!.unreadCount).toBe(1);
     expect(thread!.firstUnreadMessageId).toBe(reply.id);
-    expect(thread!.thread?.replyCount).toBe(2);
     expect(thread!.thread?.root.body).toBe("a question");
     expect(thread!.latest.body).toBe("thanks");
     expect(thread!.firstMentionMessageId).toBe(reply.id);
@@ -409,6 +408,8 @@ test("a pinned conversation is listed under Pinned even when Done, and not again
       conversationId: quiet.conversation.id,
     });
     expect(page.items.map((item) => item.place.conversationId)).toEqual([general.conversation.id]);
+    // Each item says whether the viewer pinned it.
+    expect([...page.pinned, ...page.items].map((item) => item.pinned)).toEqual([true, false]);
     // The header's "N active" counts what the All view lists: the pin, and the item below it.
     expect(page.activeItemCount).toBe(2);
   } finally {
@@ -491,6 +492,13 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
     const unread = await inbox.list(workspace.id, alice.id, { filter: "unread" });
     expect(unread.pinned).toEqual([]);
     expect(unread.items.map((item) => item.place.conversationId)).toContain(quiet.conversation.id);
+    // A pinned conversation listed as an ordinary item still says it is pinned; a thread in a
+    // pinned channel is not itself pinned.
+    expect(Object.fromEntries(unread.items.map((item) => [item.key, item.pinned]))).toMatchObject({
+      [`conversation:${quiet.conversation.id}`]: true,
+      [`conversation:${calm.conversation.id}`]: false,
+      [`thread:${root.id}`]: false,
+    });
     const mentions = await inbox.list(workspace.id, alice.id, { filter: "mentions" });
     expect(mentions.pinned).toEqual([]);
     // The All view's count, whichever view is showing and on every page.
@@ -693,7 +701,7 @@ test("an item opens at its first mention past Done, read or not", async () => {
   }
 });
 
-test("a thread counts every reply but only the unread past its read cursor, on any page", async () => {
+test("a thread counts only the unread replies past its read cursor, on any page", async () => {
   const db = database();
   const suffix = crypto.randomUUID();
   try {
@@ -716,7 +724,7 @@ test("a thread counts every reply but only the unread past its read cursor, on a
       where: { id: general.aliceMember.id },
       data: { readThroughSequence: newer.sequence },
     });
-    // Read replies, the viewer's own and a system notice: two of them count, none is unread.
+    // Read replies, the viewer's own and a system notice: none is unread.
     await post(general.conversation.id, general.bobMember.id, "read one", {
       threadRootId: older.id,
     });
@@ -751,7 +759,6 @@ test("a thread counts every reply but only the unread past its read cursor, on a
     const inbox = new ActivityInbox(db);
     const firstPage = await inbox.list(workspace.id, alice.id, { filter: "all", limit: 1 });
     expect(firstPage.items.map((item) => item.thread?.root.body)).toEqual(["newer"]);
-    expect(firstPage.items[0]!.thread?.replyCount).toBe(1);
     const secondPage = await inbox.list(workspace.id, alice.id, {
       filter: "all",
       offset: firstPage.nextOffset!,
@@ -760,7 +767,6 @@ test("a thread counts every reply but only the unread past its read cursor, on a
     expect(secondPage.items).toHaveLength(1);
     const [thread] = secondPage.items;
     expect(thread!.thread?.root.body).toBe("older");
-    expect(thread!.thread?.replyCount).toBe(5);
     expect(thread!.unreadCount).toBe(2);
     expect(thread!.firstUnreadMessageId).toBe(firstUnread.id);
     // The counts cover the whole list, not the page: both threads have unread replies.

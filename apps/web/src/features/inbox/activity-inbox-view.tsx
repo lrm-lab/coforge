@@ -13,7 +13,7 @@ import {
   BellOff01,
   Check,
   CheckDone01,
-  Hash02,
+  Hash01,
   Inbox01,
   Mail01,
   MessageTextSquare01,
@@ -23,7 +23,6 @@ import {
 import { Link as AriaLink } from "react-aria-components";
 
 import { Tab, TabList, Tabs } from "#src/components/application/tabs/tabs";
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -53,7 +52,9 @@ import { MessagePreview } from "#src/features/conversations/message-preview";
 import { useRefreshSidebarLists } from "#src/features/conversations/sidebar-lists";
 import { TASK_STATUS_COLOR } from "#src/features/tasks/task-workflow";
 import { cn } from "#src/lib/utils";
+import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
+import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
@@ -79,16 +80,9 @@ import { activityChatLink, activityOpenTarget, openedItemKey } from "./activity-
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
 /**
- * The Activity page: the viewer's channels, direct messages and followed threads with activity
- * they have not marked Done, newest first, as flat rows under a header that says how many the All
- * view lists ("N active"). The All view puts the viewer's pinned conversations (Chat's Pinned)
- * first under a Pinned heading, then the rest under All conversations; with nothing pinned it
- * shows no headings. Until a row is opened the list fills the page and no conversation area is
- * shown. A row opens its conversation or thread and reads it: from `lg` up, beside the list, which
- * narrows to a column and keeps the row marked as the open one (kept in the URL); below it, in
- * Chat. Nothing opens on its own, since opening reads; the Activity nav item, which drops the URL's
- * `open`, is the way back to the full-width list. The check on a row marks it Done, which keeps it
- * away until a newer message arrives; the pane stays open.
+ * The Activity page: the viewer's items with activity past Done, newest first, the All view's
+ * pinned conversations first. The list fills the page until a row is opened; from `lg` up the row's
+ * conversation then opens beside a narrowed list (kept in the URL), and below `lg` in Chat.
  */
 export function ActivityInboxView({
   filter,
@@ -207,6 +201,7 @@ export function ActivityInboxView({
   const activeCount = firstPage?.activeItemCount;
   const list = (
     <div
+      data-activity-list
       className={cn(
         "flex min-h-0 flex-col",
         // Raft's 35rem column, at most half the page so the conversation keeps room at `lg`.
@@ -217,7 +212,10 @@ export function ActivityInboxView({
         heading={m.navigation_activity()}
         meta={
           activeCount !== undefined && (
-            <span className="shrink-0 text-sm text-tertiary tabular-nums">
+            <span
+              data-activity-active-count
+              className="shrink-0 text-sm text-tertiary tabular-nums"
+            >
               {m.activity_inbox_active_count({ count: activeCount })}
             </span>
           )
@@ -505,17 +503,10 @@ function useActivityItemActions({
         );
       },
       done: (item: ActivityInboxItem) => {
-        // Every view of this Workspace: the counts cover them all.
-        const views = { queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId] };
-        // Only the All view lists pins, so it is the one that knows a Done item stays listed.
-        const pinned = queryClient
-          .getQueriesData<InfiniteData<ActivityInboxPage>>(views)
-          .some(([, data]) =>
-            data?.pages.some((page) => page.pinned.some((entry) => entry.key === item.key)),
-          );
         queryClient.setQueriesData<InfiniteData<ActivityInboxPage>>(
-          views,
-          (data) => data && withoutItem(data, item, pinned),
+          // Every view of this Workspace: the counts cover them all.
+          { queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId] },
+          (data) => data && withoutItem(data, item),
         );
         run(() =>
           markDone({
@@ -557,13 +548,12 @@ function useActivityItemActions({
 /**
  * A cached view of the item's Workspace without the item, until the refetch lands. The tab counts
  * and the active count cover every view, so each view drops the item from them, whether or not it
- * lists the item. A pinned conversation stays under Pinned after Done, so `pinned` keeps it, and
- * it still counts as active.
+ * lists the item. A pinned conversation stays under Pinned after Done, so the Pinned section keeps
+ * it and it still counts as active.
  */
 function withoutItem(
   data: InfiniteData<ActivityInboxPage>,
   item: ActivityInboxItem,
-  pinned: boolean,
 ): InfiniteData<ActivityInboxPage> {
   return {
     ...data,
@@ -575,7 +565,7 @@ function withoutItem(
         0,
         page.unreadMentionItemCount - (item.unreadMention ? 1 : 0),
       ),
-      activeItemCount: Math.max(0, page.activeItemCount - (pinned ? 0 : 1)),
+      activeItemCount: Math.max(0, page.activeItemCount - (item.pinned ? 0 : 1)),
     })),
   };
 }
@@ -610,14 +600,16 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
   const href = router.buildLocation(link).publicHref;
   const unread = item.unreadCount > 0;
   const { place, thread } = item;
-  // A DM, and a thread in one, goes by who is on the other side, whether an Agent or a member.
-  const peerName =
-    place.kind === "direct" &&
-    (place.peer.kind === "people" && place.peer.userId === viewerId
-      ? m.conversation_dm_self_name({ name: place.peer.displayName })
-      : place.peer.displayName);
+  // A channel goes by its name; a DM, and a thread in one, by who is on the other side, whether an
+  // Agent or a member.
+  const title =
+    place.kind === "channel"
+      ? place.channelName
+      : place.peer.kind === "people" && place.peer.userId === viewerId
+        ? m.conversation_dm_self_name({ name: place.peer.displayName })
+        : place.peer.displayName;
   // Where a thread is, before its latest reply.
-  const placeLabel = place.kind === "channel" ? `#${place.channelName}` : `@${peerName}`;
+  const placeLabel = place.kind === "channel" ? `#${title}` : `@${title}`;
   const sender =
     item.latest.senderKind === "system" ? m.activity_inbox_system_sender() : item.latest.senderName;
 
@@ -665,7 +657,7 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
           className={cn(
             "flex items-center gap-3 px-4 py-3 outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 sm:px-6",
             // The row's own hover, kept while the pointer is on its Done check (a sibling).
-            current ? "bg-brand-primary_alt" : "group-hover:bg-primary_hover",
+            current ? "bg-chat-selected-bg" : "group-hover:bg-primary_hover",
           )}
         >
           <ActivityItemIcon item={item} />
@@ -677,13 +669,7 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
                   unread ? "text-primary" : "text-secondary",
                 )}
               >
-                {thread ? (
-                  <Preview message={thread.root} />
-                ) : place.kind === "channel" ? (
-                  place.channelName
-                ) : (
-                  peerName
-                )}
+                {thread ? <Preview message={thread.root} /> : title}
               </span>
               <ActivityItemBadges item={item} filter={filter} />
               {/* Gives way to the Done check wherever the check shows (hover, focus, the open
@@ -759,24 +745,28 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
 });
 
 /**
- * A row's 2.25rem mark: the peer's face for a DM, otherwise a muted square with the place's
- * glyph (`#` for a channel, a person for a DM), which a thread badges at its corner.
+ * A row's 2.25rem mark: the peer's face for a DM, with Chat's avatar components, otherwise a muted
+ * square with the place's glyph (`#` for a channel, a person for a DM), which a thread badges at
+ * its corner.
  */
 function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
   const { place, thread } = item;
   if (!thread && place.kind === "direct")
     return place.peer.kind === "agent" ? (
-      <Avatar size="sm" src={place.peer.avatarUrl} alt="" className="shrink-0" />
+      <ActivityAgentAvatar
+        agentId={place.peer.agentId}
+        name={place.peer.displayName}
+        src={place.peer.avatarUrl}
+      />
     ) : (
       <MemberAvatar
         size="sm"
         userId={place.peer.userId}
         name={place.peer.displayName}
         src={place.peer.avatarUrl}
-        className="shrink-0"
       />
     );
-  const Glyph = place.kind === "channel" ? Hash02 : User01;
+  const Glyph = place.kind === "channel" ? Hash01 : User01;
   return (
     <span className="relative flex size-9 shrink-0 items-center justify-center rounded-md bg-tertiary">
       <Glyph aria-hidden="true" className="size-4.5 text-fg-quaternary" />
@@ -787,6 +777,20 @@ function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
       )}
     </span>
   );
+}
+
+/** A DM Agent's face with its live status, as Chat's Direct messages row shows it. */
+function ActivityAgentAvatar({
+  agentId,
+  name,
+  src,
+}: {
+  agentId: string;
+  name: string;
+  src: string | null;
+}) {
+  const display = useLiveAgentDisplay(agentId);
+  return <AgentDisplayAvatar name={name} src={src} display={display} size="sm" />;
 }
 
 /** The marks after a row's title: its Task, an unread mention, and how many messages are new. */
