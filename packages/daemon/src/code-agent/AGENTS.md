@@ -100,7 +100,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   notifications stay internal diagnostics. Numbered stderr reconnect lines
   become informational `runtime_reconnecting` Activity.
 
-## Per-turn providers (Cursor, Grok, OpenCode, Antigravity)
+## Per-turn providers (Cursor, OpenCode, Antigravity)
 
 - Cursor's partial-output framing rules are in [`cursor/AGENTS.md`](cursor/AGENTS.md).
 - One child process per turn. `per-turn/session.ts` is their one `AgentSession` (state machine,
@@ -145,32 +145,17 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Grok Build (`grok`)
 
-- One headless process per turn: `grok -p <prompt> --output-format streaming-json`. Prompts ride argv,
-  standing instructions ride `--rules` every turn; a fresh session spawns nothing until real input.
-- A UUID pinned with `--session-id` creates a new session and refuses an existing id. Clear that
-  flag at spawn, not exit: a failed first turn can leave the session created. Later turns use
-  `--resume`, without `--fork-session`. A missing resume is retried fresh under a new id and
-  reported with `onSessionId(new, replaced)` only when remote restore says `404 Not Found`.
-- Every turn passes `--trust`: project skills and instructions load only from trusted folders
-  (`22-permissions-and-safety.md`); assigned skills live in `<Agent workspace>/.grok/skills`.
-  Trust is recorded in `~/.grok/trusted_folders.toml` and covers that folder's hooks, MCP and LSP
-  servers (`10-hooks.md`). Global `$GROK_HOME/skills` need no grant. Folder trust is a security
-  boundary: get Frank's approval before widening it past the Agent workspace or dropping it.
-- Tool events carry native `toolName` and `rawInput`; `read_file.target_file` becomes `file_path`.
-  Only terminal update `content` text is display output, never the `rawOutput` object. A shell
-  command ending `completed` can still fail via `rawOutput.exit_code` or `timed_out`.
-- `auto_compact_started`/`completed` report normalized compaction events; `cancelled`/`failed`
-  report interruption, never successful completion. Preserve the failed frame's error as an
-  error event without failing a turn the CLI subsequently completes successfully. Reader `end`
-  interrupts an unclosed episode before `completed` when the CLI exits without its final frame. The core
-  owns episode de-duplication and Activity. Unknown members of this event family stay ignored.
-- Catalog discovery uses ACP `initialize` then `_x.ai/models/list`, the same operation as
-  `grok models`, without authentication or a session. Read `_meta.reasoningEfforts[].value`
-  and `reasoningEffort`; a model without choices exposes none. Never invent a common effort list.
-- Create/resume identity, hidden `--trust`/`--no-memory`, model metadata and successful compaction
-  frames are verified on 1.0.52. SIGINT exits 130 without error/end frames; use the owned turn's
-  interruption state. Missing-session stderr and failed-first-turn persistence were observed
-  on 1.0.41. The CLI guide ships under `~/.grok/docs/user-guide/`; re-check on version changes.
+- One owned `grok agent --no-leader stdio` ACP process per session; inject standing instructions
+  with `session/new._meta.rules`, preserve workspace-only `--trust`, and keep native background tasks enabled.
+  Native resume retains the saved system prompt and its rules; ACP does not append new rules on load.
+- Idle input uses `session/prompt`; busy input uses `_x.ai/interject`. Native queue admission
+  settles delivery, and correlated protocol completion ends a turn without ending the process.
+- `_x.ai/queue/changed` observes autonomous turn admission; `_x.ai/session_notification`
+  carries durable `turn_completed` updates. Ignore session-load replay for live Activity.
+- Catalog discovery uses ACP `initialize` then `_x.ai/models/list` without a session.
+  Preserve each model's native reasoning choices; never invent common effort lists.
+- Native protocol validation uses an isolated Grok 1.0.62 executable and local fixture model,
+  without changing the Computer's installed CLI or using provider credits.
 
 ## Pi and built-in CoForge Agent
 

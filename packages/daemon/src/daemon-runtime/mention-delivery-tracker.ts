@@ -169,7 +169,11 @@ export class MentionDeliveryTracker {
           : MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
       );
     }
-    return busy ? this.#markPending(message) : this.#drain(message);
+    // Native acceptance can arrive after the turn's completion callback. Recheck before
+    // entering pending, since that earlier callback could not settle an unaccepted delivery.
+    return busy && this.ports.busy(message.agentId, message.conversationId)
+      ? this.#markPending(message)
+      : this.#drain(message);
   }
 
   /**

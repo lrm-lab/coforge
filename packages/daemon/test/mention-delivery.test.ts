@@ -1010,3 +1010,28 @@ test.each(["accepted", "rejected"] as const)(
     }
   },
 );
+
+test("a turn ending before notice acceptance still drains its tracked mention", async () => {
+  const accepted = Promise.withResolvers<void>();
+  const h = await harness({ noticeGate: accepted.promise });
+  try {
+    h.emit({ type: "progress" });
+    const delivery = h.deliver(1, h.envelope(1));
+    await h.noticeWritten;
+    h.emit({ type: "completed", status: "completed" });
+    accepted.resolve();
+    await delivery;
+    expect(h.frames).toContainEqual({
+      kind: "ack",
+      deliveryId: "delivery-1",
+      mentionDelivery: h.envelope(1),
+    });
+    const count = h.notices.length;
+    await h.deliver(1, h.envelope(1));
+    expect(h.notices).toHaveLength(count);
+    expect(h.frames.filter((frame) => frame.kind === "ack")).toHaveLength(2);
+  } finally {
+    accepted.resolve();
+    await h.runtime.stop();
+  }
+});

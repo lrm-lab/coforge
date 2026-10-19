@@ -24,7 +24,7 @@ const providers = [
   new KiroProvider({ command: command("kiro-acp.ts") }),
   new CursorProvider({ command: command("cursor-agent-fixture.ts") }),
   new OpenCodeProvider({ command: command("opencode-fixture.ts") }),
-  new GrokProvider({ command: command("grok-fixture.ts") }),
+  new GrokProvider({ command: command("grok-acp-fixture.ts") }),
   new AntigravityProvider({ command: command("antigravity-fixture.ts") }),
 ];
 
@@ -47,7 +47,7 @@ for (const provider of providers) {
             COFORGE_CURSOR_MODE: "hang",
             COFORGE_OPENCODE_MODE: "hang",
             COFORGE_GROK_MODE: "hang",
-            COFORGE_GROK_SESSIONS_DIR: join(root, "sessions"),
+            COFORGE_GROK_ACP_LOG: join(root, "grok-rpc.jsonl"),
             COFORGE_AGY_MODE: "hang",
           },
         });
