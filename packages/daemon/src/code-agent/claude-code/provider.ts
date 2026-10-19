@@ -16,8 +16,6 @@ import { createPromptFile } from "./prompt-file";
 import { claudeStreamEvents } from "./stream-events";
 import { claudeAssistantEvents, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
-import { claudeStaticCatalog, discoverExternalCodeAgents } from "#src/code-agent/runtime-inventory";
-import type { ProviderDiscoveryOptions } from "#src/code-agent/contract";
 import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record";
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
@@ -35,21 +33,6 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
       "--verbose",
       "--include-partial-messages",
     ];
-  }
-
-  async discoverRuntime(options: ProviderDiscoveryOptions = {}) {
-    return (
-      await discoverExternalCodeAgents(
-        options.probe,
-        options.environment,
-        options.platform,
-        RUNTIME_PROVIDER.CLAUDE_CODE,
-      )
-    )[0];
-  }
-
-  async discoverModelCatalog(options: ProviderDiscoveryOptions = {}) {
-    return claudeStaticCatalog(options.runtime?.version);
   }
 
   async readUsage(options: {

@@ -1,9 +1,4 @@
-import type {
-  AgentContextReport,
-  CodeAgentModelCatalog,
-  RuntimeMetadata,
-  RuntimeProvider,
-} from "@lrm/coforge-sdk/internal";
+import type { AgentContextReport, RuntimeProvider } from "@lrm/coforge-sdk/internal";
 export type { AgentContextReport } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions, UsageSnapshot } from "@coforge/agent";
 export type {
@@ -25,10 +20,6 @@ export type {
 export interface CodeAgentProvider {
   readonly provider: RuntimeProvider;
   createAgentSession(options: AgentSessionOptions): Promise<AgentSession>;
-  discoverRuntime?(options?: ProviderDiscoveryOptions): Promise<RuntimeMetadata | undefined>;
-  discoverModelCatalog?(
-    options?: ProviderDiscoveryOptions,
-  ): Promise<CodeAgentModelCatalog | undefined>;
   readUsage?(options: {
     workingDirectory: string;
     timeoutMs?: number;
@@ -47,15 +38,6 @@ export interface CodeAgentProvider {
   }): Promise<AgentContextReport | undefined>;
 }
 export type CodeAgentProviderFactory = (provider: RuntimeProvider) => CodeAgentProvider;
-export type ProviderDiscoveryOptions = Readonly<{
-  cwd?: string;
-  environment?: Readonly<Record<string, string | undefined>>;
-  platform?: NodeJS.Platform;
-  command?: readonly string[];
-  probe?: CodeAgentProbe;
-  /** What `discoverRuntime` just reported, for a catalog that depends on the installed version. */
-  runtime?: RuntimeMetadata;
-}>;
 export interface CodeAgentProbe {
   which(name: string, searchPath?: string): string | undefined;
   /** `env` is the discovery environment (`agentEnvironment` for the real probe): npm-style

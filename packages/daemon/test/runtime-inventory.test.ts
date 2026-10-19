@@ -11,7 +11,6 @@ import {
   loadCachedCodeAgentCatalogs,
   type ExternalCodeAgentProbe,
 } from "#src/code-agent/runtime-inventory";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { fileStatCacheKey, inventoryCachePath } from "#src/code-agent/runtime-inventory-cache";
 import {
   probeClaudeCodeVersion,
@@ -673,16 +672,9 @@ describe("Claude Code model catalog minimum versions", () => {
       );
       expectListed(ids(catalogs.find((catalog) => catalog.provider === "claude-code")), listed);
     });
-
-    test(`the Claude Code provider catalog for ${version} lists the same models`, async () => {
-      const catalog = await new ClaudeCodeProvider().discoverModelCatalog({
-        runtime: { provider: "claude-code", version, displayName: "Claude Code" },
-      });
-      expectListed(ids(catalog), listed);
-    });
   }
 
-  test("a version that is unknown or not a dotted number keeps the full list", async () => {
+  test("a version that is unknown or not a dotted number keeps the full list", () => {
     const full = [...ALIASES, FABLE_5_1, OPUS_5_5, SONNET_5_5, ...PINNED_WITHOUT_MINIMUM];
     for (const catalog of [
       claudeStaticCatalog(),
@@ -691,10 +683,6 @@ describe("Claude Code model catalog minimum versions", () => {
       claudeStaticCatalog("not-a-version"),
       // A pre-release suffix is not a dotted number, so the comparison declines to gate on it.
       claudeStaticCatalog("2.1.100-beta.1"),
-      await new ClaudeCodeProvider().discoverModelCatalog(),
-      await new ClaudeCodeProvider().discoverModelCatalog({
-        runtime: { provider: "claude-code", version: "", displayName: "Claude Code" },
-      }),
     ])
       expect(ids(catalog).toSorted()).toEqual(full.toSorted());
   });

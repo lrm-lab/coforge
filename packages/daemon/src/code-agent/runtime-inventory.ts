@@ -172,7 +172,7 @@ async function probeRuntimeVersion(
 }
 
 export async function discoverExternalCodeAgents(
-  probe: ExternalCodeAgentProbe = hostCodeAgentProbe,
+  probe: ExternalCodeAgentProbe,
   environment: Readonly<Record<string, string | undefined>> = Bun.env,
   platform: NodeJS.Platform = process.platform,
   requestedProvider?: RuntimeMetadata["provider"],
@@ -802,7 +802,7 @@ function catalogErrorMessage(error: unknown): string {
 export async function discoverPiCatalog(
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
-  discover: PiModelDiscovery = discoverPiModels,
+  discover: PiModelDiscovery,
   force = false,
 ): Promise<CodeAgentModelCatalog | undefined> {
   const startedAt = performance.now();
