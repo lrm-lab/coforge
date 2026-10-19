@@ -22,25 +22,13 @@ import {
   getCoforgeAgentDir,
   getCoforgeSessionDir,
   PI_SESSION_DIR,
-  PI_SDK_VERSION,
 } from "@coforge/agent";
 import { join } from "node:path";
-import type { RuntimeMetadata } from "@lrm/coforge-sdk/internal";
-import { discoverCoforgeCatalog, discoverPiCatalog } from "#src/code-agent/runtime-inventory";
-import { COFORGE_AGENT_RUNTIME_METADATA } from "./metadata";
 import { errorMessage } from "#src/code-agent/json-record";
 import { piSessionEvents } from "./session-events";
 
 export class PiProvider implements CodeAgentProvider {
   readonly provider: RuntimeProvider = RUNTIME_PROVIDER.PI;
-
-  async discoverRuntime(): Promise<RuntimeMetadata> {
-    return { provider: RUNTIME_PROVIDER.PI, version: PI_SDK_VERSION, displayName: "Pi" };
-  }
-
-  discoverModelCatalog(options: import("#src/code-agent/contract").ProviderDiscoveryOptions = {}) {
-    return discoverPiCatalog(options.cwd ?? process.cwd(), options.environment ?? Bun.env);
-  }
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     const runtime = options.runtime;
@@ -90,14 +78,6 @@ export class PiProvider implements CodeAgentProvider {
 /** CoForge Agent uses the same Pi SDK implementation without a child process. */
 export class CoforgeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.COFORGE;
-
-  async discoverRuntime(): Promise<RuntimeMetadata> {
-    return COFORGE_AGENT_RUNTIME_METADATA;
-  }
-
-  async discoverModelCatalog() {
-    return discoverCoforgeCatalog();
-  }
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     const runtime = options.runtime;

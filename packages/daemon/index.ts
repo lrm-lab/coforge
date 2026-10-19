@@ -11,6 +11,7 @@ import {
   type DaemonConfig,
   type RecoveredUpgradeResult,
 } from "#src/daemon-runtime/runtime";
+import { defaultCodeAgentDiscovery } from "#src/daemon-runtime/code-agent-inventory-sync";
 import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonConfigStore } from "#src/persistence/daemon-config";
@@ -359,7 +360,7 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
               ),
           },
           agentProxy,
-          undefined,
+          defaultCodeAgentDiscovery(daemonStateDirectory),
           daemonStateDirectory,
           {
             recoveredRestartRequestIds:

@@ -16,6 +16,7 @@ import { RUNNER_HOLD_REASONS } from "@lrm/coforge-sdk/internal";
 import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
 import { MentionDeliveryTracker } from "#src/daemon-runtime/mention-delivery-tracker";
 import { captureDaemonLogs } from "./log-capture";
+import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -155,6 +156,8 @@ async function harness(
         },
       }),
     },
+    undefined,
+    emptyCodeAgentDiscovery,
   );
   await runtime.start(connection);
   await runtime.startAgent("agent-a", config);

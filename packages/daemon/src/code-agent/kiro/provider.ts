@@ -20,10 +20,7 @@ import { scrubRuntimeErrorText } from "#src/agent-runtime/runtime-error-activity
 import { bounded, KIRO_ACP_ARGS, KiroConnection, record } from "./connection";
 import { readKiroUsage } from "./usage";
 import { kiroUpdateEvents } from "./update-events";
-import { discoverKiroCatalog } from "./catalog";
-import { discoverExternalCodeAgents } from "#src/code-agent/runtime-inventory";
 import { assertKiroVersionSupported } from "./version";
-import type { ProviderDiscoveryOptions } from "#src/code-agent/contract";
 
 /** How long a turn end waits for the steering outcome Kiro wrote before its prompt response. The
  * frames are already on the wire, so this only bounds a pathological dispatch delay. */
@@ -44,25 +41,6 @@ export class KiroProvider implements CodeAgentProvider {
   constructor(
     private readonly options: { command?: readonly string[]; configTimeoutMs?: number } = {},
   ) {}
-
-  async discoverRuntime(options: ProviderDiscoveryOptions = {}) {
-    return (
-      await discoverExternalCodeAgents(
-        options.probe,
-        options.environment,
-        options.platform,
-        RUNTIME_PROVIDER.KIRO,
-      )
-    )[0];
-  }
-
-  discoverModelCatalog(options: ProviderDiscoveryOptions = {}) {
-    return discoverKiroCatalog(
-      options.command ?? ["kiro-cli", ...KIRO_ACP_ARGS],
-      options.cwd ?? process.cwd(),
-      options.environment ?? Bun.env,
-    );
-  }
 
   readUsage(options: { workingDirectory: string; timeoutMs?: number }) {
     return readKiroUsage({ timeoutMs: options.timeoutMs });

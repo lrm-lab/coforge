@@ -6,7 +6,8 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 ## Provider seam
 
 - `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession`
-  instances and owns discovery, model catalog, and usage, composed from provider-internal modules.
+  instances and owns usage and context reports, composed from provider-internal modules.
+  Discovery and catalogs live in `runtime-inventory.ts`.
 - The registry returns Providers, never lifecycle wrappers or forwarding adapters.
 - Higher layers consume normalized status and Activity messages and must not
   parse Claude Code, Codex, Pi, or any other provider's output.
@@ -108,7 +109,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   input queue, interrupt, dispose, session identity and its reports, exit handling) and
   `per-turn/turn-process.ts` their one process wrapper. A provider adds `<provider>/turn-protocol.ts`
   (argv, environment, stdin mode, record mapping) and calls `createPerTurnSession` from its
-  `provider.ts`, which keeps discovery, catalog, usage, and the version gate. Never add a session copy.
+  `provider.ts`, which keeps provider-wide concerns (usage, the version gate). Never add a session copy.
 - Composition, not inheritance: a difference is a `TurnProtocol` field or a `TurnReader` hook. Each
   one (`instructionsTurn`, `resumedIdentity`, `repeatedSessionId`, `identityReports`,
   `mintSessionId`, `sanitizeEnvironment`, `lostResume`, reader `end`) records an observed CLI difference. Check the real CLI before adding

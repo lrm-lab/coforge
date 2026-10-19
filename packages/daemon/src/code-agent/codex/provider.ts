@@ -14,11 +14,6 @@ import { JsonlProcess, JsonlRequestError } from "#src/code-agent/jsonl-process";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { RUNTIME_PROVIDER, utf8Encoder } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import {
-  discoverCodexCatalog,
-  discoverExternalCodeAgents,
-} from "#src/code-agent/runtime-inventory";
-import type { ProviderDiscoveryOptions } from "#src/code-agent/contract";
 import { asRecord, eventTime } from "#src/code-agent/json-record";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "codex"]);
@@ -29,25 +24,6 @@ export class CodexProvider implements CodeAgentProvider {
 
   constructor(options: { command?: readonly string[] } = {}) {
     this.#command = options.command ?? ["codex", "app-server"];
-  }
-
-  async discoverRuntime(options: ProviderDiscoveryOptions = {}) {
-    return (
-      await discoverExternalCodeAgents(
-        options.probe,
-        options.environment,
-        options.platform,
-        RUNTIME_PROVIDER.CODEX,
-      )
-    )[0];
-  }
-
-  discoverModelCatalog(options: ProviderDiscoveryOptions = {}) {
-    return discoverCodexCatalog(
-      options.command ?? this.#command,
-      options.cwd ?? process.cwd(),
-      options.environment ?? Bun.env,
-    );
   }
 
   async readUsage(options: {

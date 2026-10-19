@@ -86,8 +86,8 @@ describe("Antigravity CLI version gate", () => {
 });
 
 describe("Antigravity CLI model catalog in the inventory", () => {
-  // Pi's catalog is discovered in the same pass; a fixture home keeps that discovery off the
-  // developer's real Pi configuration.
+  // Pi's catalog is discovered in the same pass; each test's fake `piModels` and this fixture home
+  // keep it off the developer's real Pi SDK and configuration.
   const environment = { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" };
 
   test(
@@ -97,6 +97,7 @@ describe("Antigravity CLI model catalog in the inventory", () => {
         probe: agyProbe("1.2.13\n"),
         commands: { antigravity: [process.execPath, MODELS_FIXTURE, "models"] },
         environment,
+        piModels: async () => [],
       });
 
       expect(inventory.runtimes).toContainEqual({
@@ -121,6 +122,7 @@ describe("Antigravity CLI model catalog in the inventory", () => {
         probe: agyProbe("1.2.13\n"),
         commands: { antigravity: [process.execPath, "-e", "process.exit(1)"] },
         environment,
+        piModels: async () => [],
       });
 
       expect(inventory.runtimes.some((runtime) => runtime.provider === "antigravity")).toBe(true);
@@ -147,6 +149,7 @@ describe("Antigravity CLI model catalog in the inventory", () => {
             ],
           },
           environment,
+          piModels: async () => [],
         });
         expect(inventory.runtimes.some((runtime) => runtime.provider === "antigravity")).toBe(
           false,
@@ -184,6 +187,7 @@ describe("Antigravity CLI model catalog in the inventory", () => {
           probe: agyProbe("1.2.13\n", agyPath),
           commands: { antigravity: [process.execPath, MODELS_FIXTURE, "models"] as const },
           environment,
+          piModels: async () => [],
           cacheDirectory: stateDirectory,
         };
         const live = await discoverCodeAgentCatalogs(runtimes, options);
@@ -192,6 +196,7 @@ describe("Antigravity CLI model catalog in the inventory", () => {
         // The cached read has no `commands`: it can only serve what the live pass wrote.
         const cached = await loadCachedCodeAgentCatalogs(runtimes, {
           probe: options.probe,
+          piModels: options.piModels,
           environment,
           cacheDirectory: stateDirectory,
         });

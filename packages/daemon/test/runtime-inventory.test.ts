@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PI_SDK_VERSION } from "@coforge/agent";
+import { discoverPiModels, PI_SDK_VERSION } from "@coforge/agent";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +11,6 @@ import {
   loadCachedCodeAgentCatalogs,
   type ExternalCodeAgentProbe,
 } from "#src/code-agent/runtime-inventory";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { fileStatCacheKey, inventoryCachePath } from "#src/code-agent/runtime-inventory-cache";
 import {
   probeClaudeCodeVersion,
@@ -55,6 +54,8 @@ describe("external Code Agent inventory", () => {
     try {
       const inventory = await discoverCodeAgentInventory({
         probe: probeFor({}),
+        // The real Pi SDK discovery, on purpose: the hermetic fixture home is what it reads.
+        piModels: discoverPiModels,
         cwd: home,
         environment: { HOME: home, PATH: "", PI_OFFLINE: "1" },
       });
@@ -335,6 +336,7 @@ describe("external Code Agent inventory", () => {
         PATH: "",
         COFORGE_CURSOR_MODELS_OUTPUT: "Available models\n\nauto - Auto (default)\n",
       },
+      piModels: async () => [],
     });
 
     expect(inventory.runtimes).toContainEqual({
@@ -388,6 +390,7 @@ describe("external Code Agent inventory", () => {
         codex: fixture("codex-app-server.ts"),
       },
       environment: { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" },
+      piModels: async () => [],
     });
 
     expect(inventory.runtimes[0]).toEqual({
@@ -645,6 +648,7 @@ describe("Claude Code model catalog minimum versions", () => {
       const inventory = await discoverCodeAgentInventory({
         probe: probeFor({ claude: { path: "/bin/claude", version: `${version} (Claude Code)\n` } }),
         environment: { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" },
+        piModels: async () => [],
       });
       expect(inventory.runtimes).toContainEqual({
         provider: "claude-code",
@@ -660,20 +664,17 @@ describe("Claude Code model catalog minimum versions", () => {
     test(`the cached inventory of Claude Code ${version} lists the same models`, async () => {
       const { catalogs } = await loadCachedCodeAgentCatalogs(
         [{ provider: "claude-code", version, displayName: "Claude Code" }],
-        { environment: { HOME: "/fixture/home", PATH: "" } },
+        {
+          probe: probeFor({}),
+          piModels: async () => [],
+          environment: { HOME: "/fixture/home", PATH: "" },
+        },
       );
       expectListed(ids(catalogs.find((catalog) => catalog.provider === "claude-code")), listed);
     });
-
-    test(`the Claude Code provider catalog for ${version} lists the same models`, async () => {
-      const catalog = await new ClaudeCodeProvider().discoverModelCatalog({
-        runtime: { provider: "claude-code", version, displayName: "Claude Code" },
-      });
-      expectListed(ids(catalog), listed);
-    });
   }
 
-  test("a version that is unknown or not a dotted number keeps the full list", async () => {
+  test("a version that is unknown or not a dotted number keeps the full list", () => {
     const full = [...ALIASES, FABLE_5_1, OPUS_5_5, SONNET_5_5, ...PINNED_WITHOUT_MINIMUM];
     for (const catalog of [
       claudeStaticCatalog(),
@@ -682,10 +683,6 @@ describe("Claude Code model catalog minimum versions", () => {
       claudeStaticCatalog("not-a-version"),
       // A pre-release suffix is not a dotted number, so the comparison declines to gate on it.
       claudeStaticCatalog("2.1.100-beta.1"),
-      await new ClaudeCodeProvider().discoverModelCatalog(),
-      await new ClaudeCodeProvider().discoverModelCatalog({
-        runtime: { provider: "claude-code", version: "", displayName: "Claude Code" },
-      }),
     ])
       expect(ids(catalog).toSorted()).toEqual(full.toSorted());
   });
@@ -701,6 +698,7 @@ describe("Claude Code model catalog minimum versions", () => {
         discoverCodeAgentInventory({
           probe: probeFor(installed),
           environment: { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" },
+          piModels: async () => [],
           cacheDirectory: stateDirectory,
         });
       const claudeModelIds = async () =>

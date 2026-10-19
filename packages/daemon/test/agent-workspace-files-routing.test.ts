@@ -13,6 +13,7 @@ import {
 } from "#src/connection/daemon-connection";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
+import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import {
   AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD,
   AGENT_WORKSPACE_FILE_READ_RESULT_METHOD,
@@ -125,11 +126,7 @@ test("WSS Workspace File read returns a fixture file's exact content", async () 
     credentials,
     { create: () => new DaemonConnection("wss://example.test", () => client) },
     undefined,
-    {
-      runtimes: async () => [],
-      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
-    },
+    emptyCodeAgentDiscovery,
     join(root, "state"),
   );
   try {

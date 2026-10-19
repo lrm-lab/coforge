@@ -37,6 +37,10 @@ test(
             cwd: home,
             environment: { HOME: home, PATH: "" },
             piModels: () => hungDiscovery,
+            probe: {
+              which: () => undefined,
+              spawn: () => ({ stdout: new Blob([]).stream(), exited: Promise.resolve(0) }),
+            },
             cacheDirectory: stateDirectory,
           },
         );

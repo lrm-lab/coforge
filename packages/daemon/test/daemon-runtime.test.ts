@@ -77,6 +77,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { LogRecord } from "@logtape/logtape";
 import { captureDaemonLogs } from "./log-capture";
+import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 function sessionSpy() {
   return {
@@ -91,12 +92,6 @@ function sessionSpy() {
     async dispose() {},
   } satisfies AgentSession;
 }
-
-const emptyCodeAgentDiscovery = {
-  runtimes: async () => [],
-  cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-  catalogs: async () => [],
-};
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -649,6 +644,8 @@ test("returned identity is acknowledged before Agent readiness and retired callb
         },
       }),
     },
+    undefined,
+    emptyCodeAgentDiscovery,
   );
   try {
     await runtime.start(connection);
@@ -722,6 +719,8 @@ test("cloud-authorized wake restores the acknowledged identity with a successor 
         },
       }),
     },
+    undefined,
+    emptyCodeAgentDiscovery,
   );
   try {
     await runtime.start(connection);
@@ -865,6 +864,8 @@ async function queueHarness(
         },
       }),
     },
+    undefined,
+    emptyCodeAgentDiscovery,
   );
   await runtime.start(connection);
   return {
@@ -937,6 +938,8 @@ async function messageHarness(
         agentAttachmentUploadSessionGet: respondUploadSessions?.get,
       }),
     },
+    undefined,
+    emptyCodeAgentDiscovery,
   );
   await runtime.start(connection);
   await runtime.startAgent("agent-a", config);
@@ -1651,6 +1654,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -1762,6 +1767,8 @@ describe("DaemonRuntime", () => {
             },
           }),
         },
+        undefined,
+        emptyCodeAgentDiscovery,
       );
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
@@ -1829,6 +1836,8 @@ describe("DaemonRuntime", () => {
             }),
           }),
         },
+        undefined,
+        emptyCodeAgentDiscovery,
       );
       try {
         await runtime.start(connection);
@@ -2906,6 +2915,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -2977,6 +2988,8 @@ describe("DaemonRuntime", () => {
           ),
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -3109,6 +3122,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -3194,6 +3209,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -3547,6 +3564,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     await runtime.start(connection);
@@ -3629,6 +3648,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     try {
@@ -3693,6 +3714,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     try {
@@ -3758,6 +3781,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     const deliver = (sequence: number) =>
       runtime.handleAgentMessage({
@@ -3973,6 +3998,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     try {
@@ -4039,6 +4066,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     try {
@@ -4137,6 +4166,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     const delivery = (sequence: number) => ({
       protocolMajor: 1 as const,
@@ -4242,6 +4273,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     const delivery = (sequence: number) => ({
       protocolMajor: 1 as const,
@@ -4335,6 +4368,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     const delivery = (sequence: number) => ({
       protocolMajor: 1 as const,
@@ -4424,6 +4459,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     const delivery = (sequence: number) => ({
       protocolMajor: 1 as const,
@@ -4494,6 +4531,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     const channelDelivery = (sequence: number, target: string, conversationId: string) => ({
       protocolMajor: 1 as const,
@@ -4602,6 +4641,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     const delivery = (sequence: number, target: string, conversationId: string) => ({
       protocolMajor: 1 as const,
@@ -4701,6 +4742,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     const delivery = (sequence: number, target: string, conversationId: string) => ({
       protocolMajor: 1 as const,
@@ -4778,6 +4821,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     await runtime.start(connection);
@@ -5138,16 +5183,23 @@ describe("DaemonRuntime", () => {
           };
         },
       };
-      const runtime = new DaemonRuntime(connection, () => adapter, credentials, {
-        create: () => ({
-          async start() {},
-          async ready() {},
-          async requestAgentLaunchConfig() {
-            return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
-          },
-          async stop() {},
-        }),
-      });
+      const runtime = new DaemonRuntime(
+        connection,
+        () => adapter,
+        credentials,
+        {
+          create: () => ({
+            async start() {},
+            async ready() {},
+            async requestAgentLaunchConfig() {
+              return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+            },
+            async stop() {},
+          }),
+        },
+        undefined,
+        emptyCodeAgentDiscovery,
+      );
       try {
         await runtime.start(connection);
         await runtime.startAgent("agent-a", {
@@ -5208,16 +5260,23 @@ describe("DaemonRuntime", () => {
         };
       },
     };
-    const runtime = new DaemonRuntime(connection, () => adapter, credentials, {
-      create: () => ({
-        async start() {},
-        async ready() {},
-        async requestAgentLaunchConfig() {
-          return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
-        },
-        async stop() {},
-      }),
-    });
+    const runtime = new DaemonRuntime(
+      connection,
+      () => adapter,
+      credentials,
+      {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async requestAgentLaunchConfig() {
+            return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+          },
+          async stop() {},
+        }),
+      },
+      undefined,
+      emptyCodeAgentDiscovery,
+    );
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", {
@@ -5332,6 +5391,8 @@ describe("DaemonRuntime", () => {
       }),
       credentials,
       { create: () => ({ async start() {}, async ready() {}, async stop() {} }) },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     try {
@@ -5371,6 +5432,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
 
@@ -5410,16 +5473,23 @@ describe("DaemonRuntime", () => {
         };
       },
     };
-    const runtime = new DaemonRuntime(connection, () => adapter, credentials, {
-      create: () => ({
-        async start() {},
-        async ready() {},
-        async requestAgentLaunchConfig() {
-          return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
-        },
-        async stop() {},
-      }),
-    });
+    const runtime = new DaemonRuntime(
+      connection,
+      () => adapter,
+      credentials,
+      {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async requestAgentLaunchConfig() {
+            return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+          },
+          async stop() {},
+        }),
+      },
+      undefined,
+      emptyCodeAgentDiscovery,
+    );
     await runtime.start(connection);
     try {
       // The 3rd positional argument seeds the current native session reference, the same way the
@@ -5488,16 +5558,23 @@ describe("DaemonRuntime", () => {
         };
       },
     };
-    const runtime = new DaemonRuntime(connection, () => adapter, credentials, {
-      create: () => ({
-        async start() {},
-        async ready() {},
-        async requestAgentLaunchConfig() {
-          return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
-        },
-        async stop() {},
-      }),
-    });
+    const runtime = new DaemonRuntime(
+      connection,
+      () => adapter,
+      credentials,
+      {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async requestAgentLaunchConfig() {
+            return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+          },
+          async stop() {},
+        }),
+      },
+      undefined,
+      emptyCodeAgentDiscovery,
+    );
     await runtime.start(connection);
     try {
       await runtime.startAgent("agent-a", {
@@ -5596,6 +5673,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     const first = runtime.start(connection);
@@ -5673,6 +5752,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     const starting = runtime.start(connection);
@@ -5771,6 +5852,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     const starting = runtime.start(connection);
@@ -5831,6 +5914,8 @@ describe("DaemonRuntime", () => {
           };
         },
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     await expect(runtime.start(connection)).rejects.toThrow("start failed");
@@ -5876,6 +5961,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     await expect(runtime.start(connection)).rejects.toThrow("ready failed");
@@ -5910,6 +5997,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -5948,6 +6037,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     const starting = runtime.start(connection);
@@ -5969,20 +6060,27 @@ describe("DaemonRuntime", () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const transportCalls: unknown[] = [];
-    const runtime = new DaemonRuntime(connection, () => adapter, credentials, {
-      create: () => ({
-        async start(token, config) {
-          transportCalls.push([token, config]);
-        },
-        async ready() {},
-        async requestAgentLaunchConfig() {
-          return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
-        },
-        async stop() {
-          transportCalls.push("stop");
-        },
-      }),
-    });
+    const runtime = new DaemonRuntime(
+      connection,
+      () => adapter,
+      credentials,
+      {
+        create: () => ({
+          async start(token, config) {
+            transportCalls.push([token, config]);
+          },
+          async ready() {},
+          async requestAgentLaunchConfig() {
+            return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
+          },
+          async stop() {
+            transportCalls.push("stop");
+          },
+        }),
+      },
+      undefined,
+      emptyCodeAgentDiscovery,
+    );
 
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -6032,6 +6130,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     await runtime.start(connection);
@@ -6076,6 +6176,8 @@ describe("DaemonRuntime", () => {
           async stop() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     await expect(runtime.start(connection)).rejects.toThrow("credential is missing");
@@ -6284,6 +6386,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     const first = runtime.startAgent("agent-a", config);
@@ -7129,6 +7233,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     const launching = runtime.startAgent("agent-a", config);
@@ -7210,6 +7316,7 @@ describe("DaemonRuntime", () => {
         }),
       },
       proxyFacade,
+      emptyCodeAgentDiscovery,
     );
     const proxy = startAgentProxy({ runtime });
     proxyFacade.url = proxy.url;
@@ -7285,6 +7392,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
 
     try {
@@ -7369,6 +7478,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     const intent = {
@@ -7548,6 +7659,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -7608,6 +7721,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -7655,6 +7770,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -7705,6 +7822,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -7763,6 +7882,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -7806,6 +7927,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     try {
       await runtime.start(connection);
@@ -7865,6 +7988,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     try {
       await runtime.start(connection);
@@ -7943,6 +8068,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     try {
       await runtime.start(connection);
@@ -8178,6 +8305,8 @@ describe("DaemonRuntime", () => {
           },
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     try {
       await runtime.start(connection);
@@ -8393,6 +8522,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
 
@@ -8445,6 +8576,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.handleAgentStart({
@@ -8505,6 +8638,8 @@ describe("DaemonRuntime", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     const intent = {
       protocolMajor: 1,
@@ -8563,6 +8698,7 @@ describe("DaemonRuntime", () => {
         }),
       },
       { url: "http://proxy", issue: () => "proxy-token", revoke: (id) => proxyRevokes.push(id) },
+      emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -9994,7 +10130,7 @@ describe("Agent delivery queue", () => {
         }),
       },
       undefined,
-      undefined,
+      emptyCodeAgentDiscovery,
       stateDirectory,
     );
     await runtime.start(connection);
@@ -11824,6 +11960,8 @@ describe("a launch that cannot start says why", () => {
           async revokeAgentApiKey() {},
         }),
       },
+      undefined,
+      emptyCodeAgentDiscovery,
     );
     try {
       await runtime.start(connection);

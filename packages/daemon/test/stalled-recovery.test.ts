@@ -17,6 +17,7 @@ import {
   STALLED_RECOVERY_SILENCE_MS,
   shouldRecoverStalledRuntime,
 } from "#src/daemon-runtime/stalled-recovery";
+import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 const tempRoot = realpathSync(tmpdir());
 const connection: WorkspaceConfig = {
@@ -180,6 +181,8 @@ async function harness(
         },
       }),
     },
+    undefined,
+    emptyCodeAgentDiscovery,
   );
   await runtime.start(connection);
   await runtime.handleAgentStart({

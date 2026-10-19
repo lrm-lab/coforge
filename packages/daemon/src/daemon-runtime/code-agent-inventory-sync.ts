@@ -4,10 +4,12 @@ import {
   type DaemonRuntimeProviderModelRefreshRequest,
   type RuntimeMetadata,
 } from "@lrm/coforge-sdk/internal";
+import { discoverPiModels } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import {
   discoverCodeAgentRuntimes,
   discoverCodeAgentCatalogs,
+  hostCodeAgentProbe,
   loadCachedCodeAgentCatalogs,
 } from "#src/code-agent/runtime-inventory";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
@@ -33,12 +35,15 @@ export type CodeAgentDiscovery = {
 };
 
 export function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDiscovery {
+  const host = {
+    probe: hostCodeAgentProbe,
+    piModels: discoverPiModels,
+    cacheDirectory: stateDirectory,
+  };
   return {
-    runtimes: () => discoverCodeAgentRuntimes({ cacheDirectory: stateDirectory }),
-    cachedCatalogs: (runtimes) =>
-      loadCachedCodeAgentCatalogs(runtimes, { cacheDirectory: stateDirectory }),
-    catalogs: (runtimes, options) =>
-      discoverCodeAgentCatalogs(runtimes, { cacheDirectory: stateDirectory, ...options }),
+    runtimes: () => discoverCodeAgentRuntimes(host),
+    cachedCatalogs: (runtimes) => loadCachedCodeAgentCatalogs(runtimes, host),
+    catalogs: (runtimes, options) => discoverCodeAgentCatalogs(runtimes, { ...host, ...options }),
   };
 }
 
