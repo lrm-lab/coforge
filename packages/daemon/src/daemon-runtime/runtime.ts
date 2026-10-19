@@ -84,7 +84,6 @@ import {
   type AgentSessionInvalidate,
   type AgentSessionInvalidateReason,
   type AgentMessageResponse,
-  type DaemonRuntimeProviderModelRefreshRequest,
   type AgentStartIntent,
   type AgentSessionReport,
   type AgentStopIntent,
@@ -98,9 +97,7 @@ import {
   type LocalInboxRequest,
   RUNTIME_PROVIDER,
   type RuntimeProvider,
-  type RuntimeMetadata,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
-  type CodeAgentModelCatalog,
   type UsageScanResponse,
   REMINDER_CAPABILITY,
   AGENT_MIGRATION_CAPABILITY,
@@ -183,10 +180,10 @@ import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
 import {
-  discoverCodeAgentRuntimes,
-  discoverCodeAgentCatalogs,
-  loadCachedCodeAgentCatalogs,
-} from "#src/code-agent/runtime-inventory";
+  CodeAgentInventorySync,
+  defaultCodeAgentDiscovery,
+  type CodeAgentDiscovery,
+} from "./code-agent-inventory-sync";
 import { getLogger } from "@logtape/logtape";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import {
@@ -203,32 +200,6 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 /** Per-provider reading deadline supplied by a runtime usage scan. */
 export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
-
-/**
- * The injectable half of Code Agent discovery. `runtimes` is the fast, always-awaited probe;
- * `cachedCatalogs` is a disk-only read (no spawning) used for the same report; `catalogs` is the
- * live, possibly-spawning discovery. Explicit refreshes forbid cached fallback.
- */
-export type CodeAgentDiscovery = {
-  runtimes(): Promise<RuntimeMetadata[]>;
-  cachedCatalogs(
-    runtimes: RuntimeMetadata[],
-  ): Promise<{ catalogs: CodeAgentModelCatalog[]; needsRefresh: boolean }>;
-  catalogs(
-    runtimes: RuntimeMetadata[],
-    options?: { force: boolean },
-  ): Promise<CodeAgentModelCatalog[]>;
-};
-
-function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDiscovery {
-  return {
-    runtimes: () => discoverCodeAgentRuntimes({ cacheDirectory: stateDirectory }),
-    cachedCatalogs: (runtimes) =>
-      loadCachedCodeAgentCatalogs(runtimes, { cacheDirectory: stateDirectory }),
-    catalogs: (runtimes, options) =>
-      discoverCodeAgentCatalogs(runtimes, { cacheDirectory: stateDirectory, ...options }),
-  };
-}
 
 /** A terminal upgrade operation carried forward from the Coordinator's durable record. */
 export type RecoveredUpgradeResult = {
@@ -441,8 +412,6 @@ export class DaemonRuntime {
   #skillsScanning = false;
   /** One Workspace Files list/read at a time per daemon, mirroring `#skillsScanning`. */
   #workspaceFilesScanning = false;
-  /** Serializes on-demand model-catalog refreshes (one CLI-spawning discovery at a time). */
-  #modelRefreshChain: Promise<void> = Promise.resolve();
   readonly #messageAttention: AgentMessageAttentionIndex;
   readonly #messageOperations: AgentMessageOperations;
   /** The Agent requests the daemon only authorizes and forwards over Agent HTTPS. */
@@ -514,7 +483,7 @@ export class DaemonRuntime {
     compaction: this.#trackPhase("compaction"),
     review: this.#trackPhase("review"),
   };
-  readonly #codeAgentDiscovery: CodeAgentDiscovery;
+  readonly #codeAgentInventory: CodeAgentInventorySync;
 
   constructor(
     connection: DaemonConfig,
@@ -576,7 +545,11 @@ export class DaemonRuntime {
     this.#credentials = credentials;
     this.#transportFactory = transportFactory;
     this.#agentProxy = agentProxy;
-    this.#codeAgentDiscovery = codeAgentDiscovery ?? defaultCodeAgentDiscovery(stateDirectory);
+    this.#codeAgentInventory = new CodeAgentInventorySync(
+      codeAgentDiscovery ?? defaultCodeAgentDiscovery(stateDirectory),
+      { workspaceId: connection.workspaceId, computerId: connection.computerId },
+      (transport) => !this.#stopping && this.#transport === transport,
+    );
     this.#transport = transportFactory.create(connection);
     this.#mentionDeliveries = new MentionDeliveryTracker(connection.computerId, {
       transition: (report) =>
@@ -999,13 +972,9 @@ export class DaemonRuntime {
       this.#subscribe(
         this.#transport.onReconnect?.(() => {
           const transport = this.#transport;
-          void this.#reportCodeAgentRuntimes(connection, transport)
-            .then((report) => {
-              if (report.needsCatalogRefresh && !this.#stopping && this.#transport === transport)
-                void this.#reportCodeAgentCatalogs(connection, report.runtimes, transport).catch(
-                  () => {},
-                );
-            })
+          void this.#codeAgentInventory
+            .reportRuntimes(transport)
+            .then((report) => this.#codeAgentInventory.refreshStaleCatalogs(report, transport))
             .catch(() => {});
           for (const agentId of this.#readyRunningAgentIds())
             void this.#requestReminderSnapshot(agentId).catch(() => {});
@@ -1100,11 +1069,7 @@ export class DaemonRuntime {
       this.#subscribe(
         this.#transport.onProviderModelRefresh?.(async (request) => {
           if (this.#stopping || request.computerId !== connection.computerId) return;
-          // Serialize: each request gets a real discovery, in arrival order, never overlapping.
-          this.#modelRefreshChain = this.#modelRefreshChain
-            .catch(() => {})
-            .then(() => this.#refreshProviderModels(connection, request, transport));
-          await this.#modelRefreshChain;
+          await this.#codeAgentInventory.refreshModels(request, transport);
         }),
       );
       this.#subscribe(
@@ -1270,18 +1235,13 @@ export class DaemonRuntime {
       this.#activityPublisher.enable();
       // Kick off optional inventory before flushing buffered publications so immediate probes can
       // make progress while the first Agent inputs are delivered.
-      const codeAgentReport = this.#reportCodeAgentRuntimes(connection, transport);
+      const codeAgentReport = this.#codeAgentInventory.reportRuntimes(transport);
       await Promise.all(buffered.map((flush) => flush()));
       // Inventory is optional and may spawn several provider CLIs. Start accepting Agent
       // traffic as soon as the cloud handshake and recovery replay are complete; a slow probe
       // must never hold the first reply or a daemon restart hostage.
       void codeAgentReport
-        .then((report) => {
-          if (report.needsCatalogRefresh && !this.#stopping && this.#transport === transport)
-            void this.#reportCodeAgentCatalogs(connection, report.runtimes, transport).catch(
-              () => {},
-            );
-        })
+        .then((report) => this.#codeAgentInventory.refreshStaleCatalogs(report, transport))
         .catch(() => {});
     } catch (error) {
       this.#unsubscribeAll();
@@ -1495,180 +1455,6 @@ export class DaemonRuntime {
       });
     } catch {
       return { status: "error" };
-    }
-  }
-
-  /**
-   * The fast half of Code Agent discovery: installed runtimes plus whatever model catalogs are
-   * already on disk from a previous probe. Never spawns a provider CLI beyond what runtime
-   * probing itself needs (Codex's `app-server` handshake), so this is safe to await before the
-   * daemon reports itself ready to the Coordinator.
-   */
-  async #reportCodeAgentRuntimes(
-    connection: DaemonConfig,
-    transport: DaemonConnectionClient,
-  ): Promise<{ runtimes: RuntimeMetadata[]; needsCatalogRefresh: boolean }> {
-    const requestId = crypto.randomUUID();
-    const scope = {
-      request_id: requestId,
-      workspace_id: connection.workspaceId,
-      computer_id: connection.computerId,
-    };
-    try {
-      const runtimes = await this.#codeAgentDiscovery.runtimes();
-      const { catalogs, needsRefresh } = await this.#codeAgentDiscovery.cachedCatalogs(runtimes);
-      if (this.#stopping || this.#transport !== transport)
-        return { runtimes, needsCatalogRefresh: false };
-      await transport.updateCodeAgents?.({
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId,
-        workspaceId: connection.workspaceId,
-        computerId: connection.computerId,
-        runtimes,
-        catalogs,
-      });
-      logger.info("Code Agent inventory reported", {
-        event: "code_agent_inventory:reported",
-        ...scope,
-        runtime_count: runtimes.length,
-        catalog_count: catalogs.length,
-        outcome: "ok",
-      });
-      return { runtimes, needsCatalogRefresh: needsRefresh };
-    } catch (error) {
-      logger.warning("Code Agent inventory report failed", {
-        event: "code_agent_inventory:report_failed",
-        ...scope,
-        error_code: diagnosticErrorCode(error),
-        outcome: "failed",
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * On-demand model-catalog re-discovery, driven by the server's `daemon:v1:provider:model_refresh`
-   * request (the browser's model selector asks for it). Re-runs the same live discovery the
-   * background refresh uses, re-reports through the ordinary inventory update so the server's copy
-   * is current, then answers the request with the fresh catalog. Serialized by `#modelRefreshChain`,
-   * and guarded against shutdown or a replaced transport like `#reportCodeAgentCatalogs`.
-   */
-  async #refreshProviderModels(
-    connection: DaemonConfig,
-    request: DaemonRuntimeProviderModelRefreshRequest,
-    transport: DaemonConnectionClient,
-  ): Promise<void> {
-    const requestId = crypto.randomUUID();
-    const scope = {
-      request_id: requestId,
-      workspace_id: connection.workspaceId,
-      computer_id: connection.computerId,
-    };
-    const startedAt = performance.now();
-    logger.info("Code Agent catalog refresh started", {
-      event: "code_agent_catalog:refresh_started",
-      ...scope,
-      outcome: "started",
-    });
-    const reply = async (response: {
-      accepted: boolean;
-      status: "refreshed" | "error";
-      message?: string;
-      catalogs?: CodeAgentModelCatalog[];
-    }): Promise<void> => {
-      await transport.sendProviderModelRefreshResult?.({
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId: request.requestId,
-        workspaceId: connection.workspaceId,
-        computerId: connection.computerId,
-        ...response,
-      });
-    };
-    try {
-      const runtimes = await this.#codeAgentDiscovery.runtimes();
-      const catalogs = await this.#codeAgentDiscovery.catalogs(runtimes, { force: true });
-      if (this.#stopping || this.#transport !== transport) return;
-      await transport.updateCodeAgents?.({
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId,
-        workspaceId: connection.workspaceId,
-        computerId: connection.computerId,
-        runtimes,
-        catalogs,
-      });
-      logger.info("Code Agent catalog refresh completed", {
-        event: "code_agent_catalog:refresh_completed",
-        ...scope,
-        catalog_count: catalogs.length,
-        elapsed_ms: Math.round(performance.now() - startedAt),
-        outcome: "ok",
-      });
-      await reply({ accepted: true, status: "refreshed", catalogs });
-    } catch (error) {
-      logger.warning("Code Agent catalog refresh failed", {
-        event: "code_agent_catalog:refresh_failed",
-        ...scope,
-        error_code: diagnosticErrorCode(error),
-        outcome: "failed",
-      });
-      if (this.#stopping || this.#transport !== transport) return;
-      await reply({
-        accepted: false,
-        status: "error",
-        message: error instanceof Error ? error.message : "model refresh failed",
-      }).catch(() => {});
-    }
-  }
-
-  /**
-   * The slow half: live model catalog discovery (Kiro and Pi spawn a CLI; Codex calls
-   * `model/list`). Always runs in the background, never blocking start() or a reconnect, and is
-   * guarded against a daemon shutdown or a transport replaced by a later reconnect while it was
-   * in flight — the same guard `onSkillsList` uses.
-   */
-  async #reportCodeAgentCatalogs(
-    connection: DaemonConfig,
-    runtimes: RuntimeMetadata[],
-    transport: DaemonConnectionClient,
-  ): Promise<void> {
-    const requestId = crypto.randomUUID();
-    const scope = {
-      request_id: requestId,
-      workspace_id: connection.workspaceId,
-      computer_id: connection.computerId,
-    };
-    const startedAt = performance.now();
-    logger.info("Code Agent catalog discovery started", {
-      event: "code_agent_catalog:summary_started",
-      ...scope,
-      outcome: "started",
-    });
-    try {
-      const catalogs = await this.#codeAgentDiscovery.catalogs(runtimes);
-      if (this.#stopping || this.#transport !== transport) return;
-      await transport.updateCodeAgents?.({
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId,
-        workspaceId: connection.workspaceId,
-        computerId: connection.computerId,
-        runtimes,
-        catalogs,
-      });
-      logger.info("Code Agent catalog discovery completed", {
-        event: "code_agent_catalog:summary_completed",
-        ...scope,
-        catalog_count: catalogs.length,
-        elapsed_ms: Math.round(performance.now() - startedAt),
-        outcome: "ok",
-      });
-    } catch (error) {
-      logger.warning("Code Agent catalog discovery failed", {
-        event: "code_agent_catalog:summary_failed",
-        ...scope,
-        elapsed_ms: Math.round(performance.now() - startedAt),
-        error_code: diagnosticErrorCode(error),
-        outcome: "failed",
-      });
     }
   }
 

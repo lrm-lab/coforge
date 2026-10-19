@@ -13,6 +13,9 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   identity and launch references for already-authorized wakes.
 - A launch this runtime initiates itself follows the launch-identity rules in
   [`agent-runtime/AGENTS.md`](../agent-runtime/AGENTS.md).
+- `code-agent-inventory-sync.ts` owns Code Agent runtime and catalog reports,
+  including the liveness re-check and refresh serialization. `runtime.ts` only
+  decides when to report; Agent traffic never waits for a report.
 - A start that fails stops its transport before replacing it, so a connection
   that came up never keeps reporting the Computer online for a Workspace that
   did not start. `stop` aborts a start still waiting on the cloud (connect or
