@@ -1242,6 +1242,36 @@ test("proxy forwards an authorized attachment download without exposing the Agen
   expect(legacyResponse.status).toBe(404);
 });
 
+test("attachment forwarding removes upstream connection headers and their named fields", async () => {
+  const proxy = startAgentProxy({
+    runtime: {
+      agentMessage: async () => ({}),
+      agentAttachment: async () =>
+        new Response("safe", {
+          headers: {
+            "content-type": "text/plain",
+            connection: "keep-alive, x-upstream-only",
+            "keep-alive": "timeout=30",
+            "x-upstream-only": "private connection metadata",
+            "proxy-authenticate": "Basic realm=upstream",
+          },
+        }),
+    },
+  });
+  proxies.push(proxy);
+  const token = proxy.issue("agent-1", `sk_agent_${"a".repeat(43)}`);
+  const response = await fetch(
+    new URL(agentApiRoutes.local.attachments.path("attachment-1"), proxy.url),
+    {
+      headers: { authorization: `Bearer ${token}` },
+    },
+  );
+  expect(response.headers.get("x-upstream-only")).toBeNull();
+  expect(response.headers.get("proxy-authenticate")).toBeNull();
+  expect(response.headers.get("content-type")).toBe("text/plain");
+  expect(await response.text()).toBe("safe");
+});
+
 test("proxy forwards an authorized multipart attachment upload without exposing the Agent API key", async () => {
   const calls: Array<{
     context: string;

@@ -1,4 +1,6 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
+import { connectLocal } from "@lrm/coforge/local-client";
+import { startAgentProxy } from "#src/agent-proxy";
 import type { LogRecord } from "@logtape/logtape";
 import {
   createAgentMessageHttpClient,
@@ -3657,6 +3659,191 @@ test("DaemonConnection.agentChannel routes a 404 through the same AgentTransport
     upstreamStatus: 404,
   });
 });
+
+test.each(["gzip", "zstd", "identity", "gzip-stream"] as const)(
+  "an authorized CLI download decodes a %s attachment exactly once through the proxy",
+  async (encoding) => {
+    const text = "# report\n附件下载 should retain its content.\n".repeat(30);
+    const algorithm = encoding === "gzip-stream" ? "gzip" : encoding;
+    const plain = new TextEncoder().encode(text);
+    const bytes = Uint8Array.from(
+      algorithm === "gzip"
+        ? Bun.gzipSync(plain)
+        : algorithm === "zstd"
+          ? Bun.zstdCompressSync(plain)
+          : plain,
+    );
+    let requested = 0;
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        requested++;
+        expect(request.headers.get("authorization")).toBe("Bearer daemon-token");
+        expect(request.headers.get("x-coforge-agent-api-key")).toBe(`Bearer ${TEST_AGENT_API_KEY}`);
+        const body =
+          encoding === "gzip-stream"
+            ? new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(bytes.subarray(0, 7));
+                  queueMicrotask(() => {
+                    controller.enqueue(bytes.subarray(7));
+                    controller.close();
+                  });
+                },
+              })
+            : bytes;
+        return new Response(body, {
+          headers: {
+            "content-type": "text/markdown",
+            ...(algorithm === "identity" ? {} : { "content-encoding": algorithm }),
+            ...(encoding === "gzip-stream" ? {} : { "content-length": String(bytes.byteLength) }),
+            "content-disposition": 'attachment; filename="report.md"',
+          },
+        });
+      },
+    });
+    const transport = new DaemonConnection("wss://cloud.example", () => fakeClient().client);
+    await transport.start("daemon-token", { ...config, serverHttpUrl: server.url.origin });
+    const proxy = startAgentProxy({
+      runtime: {
+        agentMessage: async () => ({}),
+        agentAttachment: (_context, id, key) => transport.agentAttachment(id, key!),
+      },
+    });
+    const token = proxy.issue("agent-1", TEST_AGENT_API_KEY);
+    try {
+      const client = connectLocal("", token, proxy.url);
+      const downloaded = await client.view("attachment-1");
+      expect(new TextDecoder().decode(downloaded.bytes)).toBe(text);
+      expect(downloaded.fileName).toContain("report.md");
+      const raw = await fetch(
+        new URL(agentApiRoutes.local.attachments.path("attachment-1"), proxy.url),
+        {
+          headers: { authorization: `Bearer ${token}` },
+          decompress: false,
+        },
+      );
+      expect(raw.headers.get("content-encoding")).toBe(algorithm === "identity" ? null : algorithm);
+      if (raw.headers.has("content-length"))
+        expect(raw.headers.get("content-length")).toBe(String(bytes.byteLength));
+      expect(new Uint8Array(await raw.arrayBuffer())).toEqual(bytes);
+      const unauthorized = await fetch(
+        new URL(agentApiRoutes.local.attachments.path("attachment-1"), proxy.url),
+      );
+      expect(unauthorized.status).toBe(401);
+      expect(requested).toBe(2);
+    } finally {
+      proxy.close();
+      await transport.stop();
+      await server.stop(true);
+    }
+  },
+);
+
+test("a compressed attachment starts reaching the CLI before the cloud finishes its stream", async () => {
+  const finish = Promise.withResolvers<void>();
+  const bytes = Bun.gzipSync(new TextEncoder().encode("streamed report\n".repeat(100)));
+  const split = Math.floor(bytes.length / 2);
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          async start(controller) {
+            controller.enqueue(bytes.subarray(0, split));
+            await finish.promise;
+            controller.enqueue(bytes.subarray(split));
+            controller.close();
+          },
+        }),
+        { headers: { "content-type": "text/markdown", "content-encoding": "gzip" } },
+      ),
+  });
+  const transport = new DaemonConnection("wss://cloud.example", () => fakeClient().client);
+  await transport.start("daemon-token", { ...config, serverHttpUrl: server.url.origin });
+  const proxy = startAgentProxy({
+    runtime: {
+      agentMessage: async () => ({}),
+      agentAttachment: (_context, id, key) => transport.agentAttachment(id, key!),
+    },
+  });
+  const token = proxy.issue("agent-1", TEST_AGENT_API_KEY);
+  try {
+    const response = await fetch(
+      new URL(agentApiRoutes.local.attachments.path("attachment-1"), proxy.url),
+      {
+        headers: { authorization: `Bearer ${token}` },
+        decompress: false,
+        signal: AbortSignal.timeout(2_000),
+      },
+    );
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+    expect(first.done).toBe(false);
+    expect(first.value!.byteLength).toBeGreaterThan(0);
+    expect([...first.value!]).toEqual([...bytes.subarray(0, first.value!.byteLength)]);
+    finish.resolve();
+    const rest: Uint8Array[] = [first.value!];
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      rest.push(next.value);
+    }
+    expect(rest.flatMap((chunk) => [...chunk])).toEqual([...bytes]);
+  } finally {
+    finish.resolve();
+    proxy.close();
+    await transport.stop();
+    await server.stop(true);
+  }
+});
+
+test.each(["upload", "create", "complete", "get", "cancel"] as const)(
+  "the %s attachment response remains compressed through the connection",
+  async (operation) => {
+    const bytes = Bun.gzipSync(
+      new TextEncoder().encode(JSON.stringify({ ok: true, note: "附件".repeat(100) })),
+    );
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () =>
+        new Response(bytes, {
+          headers: {
+            "content-type": "application/json",
+            "content-encoding": "gzip",
+            "content-length": String(bytes.byteLength),
+          },
+        }),
+    });
+    const transport = new DaemonConnection("wss://cloud.example", () => fakeClient().client);
+    await transport.start("daemon-token", { ...config, serverHttpUrl: server.url.origin });
+    try {
+      const form = new FormData();
+      form.set("file", new Blob(["upload"]), "file.txt");
+      const response =
+        operation === "upload"
+          ? await transport.agentAttachmentUpload(
+              new Request("http://local/upload", { method: "POST", body: form }),
+              TEST_AGENT_API_KEY,
+            )
+          : operation === "create"
+            ? await transport.agentAttachmentUploadSessionCreate({}, TEST_AGENT_API_KEY)
+            : operation === "complete"
+              ? await transport.agentAttachmentUploadSessionComplete("upload-1", TEST_AGENT_API_KEY)
+              : operation === "cancel"
+                ? await transport.agentAttachmentUploadSessionCancel("upload-1", TEST_AGENT_API_KEY)
+                : await transport.agentAttachmentUploadSessionGet("upload-1", TEST_AGENT_API_KEY);
+      expect(response.headers.get("content-encoding")).toBe("gzip");
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+    } finally {
+      await transport.stop();
+      await server.stop(true);
+    }
+  },
+);
 
 test("forwards a multipart attachment upload with its original content-type and Agent auth headers", async () => {
   const originalFetch = globalThis.fetch;

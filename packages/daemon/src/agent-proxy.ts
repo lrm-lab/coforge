@@ -271,9 +271,26 @@ const MAX_BODY_BYTES = 64 * 1024;
 const WEEKLY_REPORT_COLLECT_MAX_BODY_BYTES = 512 * 1024;
 const logger = getLogger(["coforge", "daemon", "agent-proxy"]);
 
-/** Forwards a cloud `Response` back through the local proxy unchanged. */
+/** Attachment responses retain their encoded bytes and representation metadata. Connection
+ * fields belong to the upstream hop; Bun frames the response for the local connection. */
 function forwardResponse(response: Response): Response {
-  return new Response(response.body, { status: response.status, headers: response.headers });
+  const headers = new Headers(response.headers);
+  const connectionFields = (headers.get("connection") ?? "").split(",");
+  for (const field of [
+    ...connectionFields,
+    "connection",
+    "keep-alive",
+    "proxy-connection",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+  ]) {
+    if (field.trim()) headers.delete(field.trim());
+  }
+  return new Response(response.body, { status: response.status, headers });
 }
 
 /**

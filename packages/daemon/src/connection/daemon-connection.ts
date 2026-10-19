@@ -1742,7 +1742,8 @@ export class DaemonConnection implements DaemonConnectionClient {
     this.#assertConnected();
     return fetch(
       this.#serverEndpoint("Agent attachment", agentApiRoutes.cloud.attachments.path(attachmentId)),
-      { headers: agentHeaders(this.#agentKeys(agentApiKey)) },
+      // The local proxy forwards these bytes and their encoding/length headers unchanged.
+      { headers: agentHeaders(this.#agentKeys(agentApiKey)), decompress: false },
     );
   }
 
@@ -1761,6 +1762,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     return fetch(
       this.#serverEndpoint("Agent attachment upload", agentApiRoutes.cloud.attachments.upload.path),
       {
+        decompress: false,
         method: agentApiRoutes.cloud.attachments.upload.method,
         headers: { ...agentHeaders(this.#agentKeys(agentApiKey)), "content-type": contentType },
         body,
@@ -1781,6 +1783,7 @@ export class DaemonConnection implements DaemonConnectionClient {
         agentApiRoutes.cloud.attachmentUploadSessions.create.path,
       ),
       {
+        decompress: false,
         method: agentApiRoutes.cloud.attachmentUploadSessions.create.method,
         headers: agentHeaders(this.#agentKeys(agentApiKey), true),
         body: JSON.stringify(body),
@@ -1799,6 +1802,7 @@ export class DaemonConnection implements DaemonConnectionClient {
         agentApiRoutes.cloud.attachmentUploadSessions.complete.path(uploadId),
       ),
       {
+        decompress: false,
         method: agentApiRoutes.cloud.attachmentUploadSessions.complete.method,
         headers: agentHeaders(this.#agentKeys(agentApiKey)),
       },
@@ -1816,6 +1820,7 @@ export class DaemonConnection implements DaemonConnectionClient {
         agentApiRoutes.cloud.attachmentUploadSessions.cancel.path(uploadId),
       ),
       {
+        decompress: false,
         method: agentApiRoutes.cloud.attachmentUploadSessions.cancel.method,
         headers: agentHeaders(this.#agentKeys(agentApiKey)),
       },
@@ -1829,7 +1834,7 @@ export class DaemonConnection implements DaemonConnectionClient {
         "Agent attachment upload session get",
         agentApiRoutes.cloud.attachmentUploadSessions.get.path(uploadId),
       ),
-      { headers: agentHeaders(this.#agentKeys(agentApiKey)) },
+      { headers: agentHeaders(this.#agentKeys(agentApiKey)), decompress: false },
     );
   }
 

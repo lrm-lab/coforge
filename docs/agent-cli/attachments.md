@@ -47,3 +47,11 @@ bytes (one retry on a network error or `408`/`429`/`5xx` response), then complet
 storage has no `If-None-Match` precondition, so "the object already exists" is Alibaba Cloud OSS's
 own `x-oss-forbid-overwrite` conflict status, `409`, not `412`. Below the threshold, or when
 direct upload is unavailable, the existing multipart path above runs unchanged.
+
+**Proxy encoding.** The Daemon forwards download, multipart-upload and upload-session
+responses as encoded byte streams: its upstream Bun `fetch` disables automatic
+decompression. The CLI decodes the HTTP content encoding once. The local proxy retains
+`Content-Encoding` and the matching `Content-Length`, and removes upstream connection
+fields (including fields named by `Connection`) so Bun can frame the local response.
+See [Bun fetch](https://bun.com/docs/api/fetch) and
+[HTTP representation coding](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4).
