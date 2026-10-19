@@ -77,8 +77,15 @@ type ActivityCandidate = {
   /** A mention the viewer was notified of from outside the channel, until they mark it Done. */
   mentionAction?: { resolutionId: string; threadRootId: string | null };
   /** Whether the item has activity past Done; a pinned conversation is returned without it. */
-  listed: boolean;
+  pastDone: boolean;
   /** A conversation's own item the viewer pinned: its place among their pins. Null otherwise. */
+  pin: { order: number; at: Date } | null;
+};
+
+type PinnedCandidate = ActivityCandidate & { pin: NonNullable<ActivityCandidate["pin"]> };
+
+/** A candidate as the grouped statements return it, with the pin as its two columns. */
+type ActivityCandidateRow = Omit<ActivityCandidate, "pin"> & {
   pinOrder: number | null;
   pinnedAt: Date | null;
 };
@@ -107,13 +114,13 @@ export class ActivityInbox {
     // Every candidate carries its unread and mention state: the filters select on them and the
     // Unread and Mentions counts cover every item, whichever filter is showing.
     const all = await this.candidates(workspaceId, userId);
-    const listed = all.filter((candidate) => candidate.listed);
-    const candidates = listed.filter((candidate) =>
+    const inboxCandidates = all.filter((candidate) => candidate.pastDone);
+    const candidates = inboxCandidates.filter((candidate) =>
       options.filter === "unread"
         ? candidate.unreadCount > 0
         : options.filter === "mentions"
           ? candidate.firstMentionMessageId !== null
-          : candidate.pinOrder === null,
+          : candidate.pin === null,
     );
     candidates.sort(
       (left, right) =>
@@ -126,11 +133,10 @@ export class ActivityInbox {
     const pins =
       options.filter === "all" && offset === 0
         ? all
-            .filter((candidate) => candidate.pinOrder !== null)
+            .filter((candidate): candidate is PinnedCandidate => candidate.pin !== null)
             .sort(
               (left, right) =>
-                left.pinOrder! - right.pinOrder! ||
-                left.pinnedAt!.getTime() - right.pinnedAt!.getTime(),
+                left.pin.order - right.pin.order || left.pin.at.getTime() - right.pin.at.getTime(),
             )
         : [];
     const [items, pinned] = await Promise.all([
@@ -145,9 +151,9 @@ export class ActivityInbox {
        */
       pinned,
       /** How many items have something unread, whatever the filter: the Unread tab's count. */
-      unreadItemCount: listed.filter((candidate) => candidate.unreadCount > 0).length,
+      unreadItemCount: inboxCandidates.filter((candidate) => candidate.unreadCount > 0).length,
       /** How many items have an unread mention, whatever the filter: the Mentions tab's count. */
-      unreadMentionItemCount: listed.filter((candidate) => candidate.unreadMention).length,
+      unreadMentionItemCount: inboxCandidates.filter((candidate) => candidate.unreadMention).length,
       /** Where the next page starts in the list, or null on the last page. */
       nextOffset: end < candidates.length ? end : null,
       /** When this list was read: Mark all read reads through it, and no further. */
@@ -336,7 +342,7 @@ export class ActivityInbox {
     // items, and none of them depends on the others. Starting them together means the page waits
     // for the slowest instead of for two waves.
     const [conversations, threads, mentions] = await Promise.all([
-      this.db.$queryRaw<ActivityCandidate[]>`
+      this.db.$queryRaw<ActivityCandidateRow[]>`
         SELECT
           CASE WHEN c."channelName" IS NOT NULL THEN 'channel' ELSE 'direct' END AS "kind",
           cm."id" AS "memberId",
@@ -352,7 +358,7 @@ export class ActivityInbox {
           unread."firstId" AS "firstUnreadMessageId",
           mention."unread" AS "unreadMention",
           mention."firstId" AS "firstMentionMessageId",
-          ${conversationPastDoneSql} AS "listed",
+          ${conversationPastDoneSql} AS "pastDone",
           pin."sortOrder" AS "pinOrder",
           pin."createdAt" AS "pinnedAt"
         FROM ${conversationItemsSql(workspaceId, userId)}
@@ -364,7 +370,7 @@ export class ActivityInbox {
         ${conversationMentionLateral}
         WHERE ${conversationItemVisibleSql(userId)}
           AND (${conversationPastDoneSql} OR pin."memberId" IS NOT NULL)`,
-      this.db.$queryRaw<ActivityCandidate[]>`
+      this.db.$queryRaw<ActivityCandidateRow[]>`
         SELECT
           threads."kind" AS "kind",
           threads."memberId" AS "memberId",
@@ -380,7 +386,7 @@ export class ActivityInbox {
           replies."firstUnreadId" AS "firstUnreadMessageId",
           mention."unread" AS "unreadMention",
           mention."firstId" AS "firstMentionMessageId",
-          TRUE AS "listed",
+          TRUE AS "pastDone",
           NULL::int AS "pinOrder",
           NULL::timestamp AS "pinnedAt"
         FROM ${threadItemsSql(workspaceId, userId)}
@@ -389,7 +395,7 @@ export class ActivityInbox {
         WHERE ${threadItemListedSql(userId)}`,
       this.mentionCandidates(workspaceId, userId),
     ]);
-    return [...conversations, ...threads, ...mentions];
+    return [...conversations, ...threads].map(activityCandidate).concat(mentions);
   }
 
   /**
@@ -437,9 +443,8 @@ export class ActivityInbox {
       unreadMention: !row.targetReadAt,
       firstMentionMessageId: row.messageId,
       mentionAction: { resolutionId: row.id, threadRootId: row.message.threadRootId },
-      listed: true,
-      pinOrder: null,
-      pinnedAt: null,
+      pastDone: true,
+      pin: null,
     }));
   }
 
@@ -664,6 +669,18 @@ const conversationPastDoneSql = Prisma.sql`(latest."sequence" > COALESCE(cm."don
 /** A joined conversation is listed when the inbox can list it and it has activity past Done. */
 function conversationItemListedSql(userId: string) {
   return Prisma.sql`${conversationItemVisibleSql(userId)} AND ${conversationPastDoneSql}`;
+}
+
+/** A candidate from its statement row, its two pin columns joined into one pin. */
+function activityCandidate({
+  pinOrder,
+  pinnedAt,
+  ...row
+}: ActivityCandidateRow): ActivityCandidate {
+  return {
+    ...row,
+    pin: pinOrder !== null && pinnedAt !== null ? { order: pinOrder, at: pinnedAt } : null,
+  };
 }
 
 /** An item's key on the page: its mention notification, its thread, or its conversation. */

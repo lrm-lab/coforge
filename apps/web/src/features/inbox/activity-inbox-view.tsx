@@ -167,10 +167,11 @@ export function ActivityInboxView({
   }, [markAllRead, loadedAt, refresh]);
 
   const empty = items.length === 0 && pinned.length === 0;
+  const pinnedLabel = m.conversation_pinned_section();
   const sections = [
     {
-      heading: <ActivityInboxSectionHeading icon={Pin01} label={m.conversation_pinned_section()} />,
-      label: m.conversation_pinned_section(),
+      heading: <ActivityInboxSectionHeading icon={Pin01} label={pinnedLabel} />,
+      label: pinnedLabel,
       items: pinned,
     },
     {
@@ -334,7 +335,7 @@ function ActivityInboxTabs({
   );
 }
 
-/** A list section's label (Pinned, All conversations): small tertiary text, with the section's
+/** A list section's label (Pinned, All conversations): a tertiary subheading, with the section's
  * mark when it has one. */
 function ActivityInboxSectionHeading({
   icon: Icon,
@@ -347,7 +348,7 @@ function ActivityInboxSectionHeading({
 }) {
   return (
     <h2
-      className={cn("mb-2 flex items-center gap-1.5 text-xs font-medium text-tertiary", className)}
+      className={cn("mb-2 flex items-center gap-1.5 text-sm font-medium text-tertiary", className)}
     >
       {Icon && <Icon aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />}
       {label}
