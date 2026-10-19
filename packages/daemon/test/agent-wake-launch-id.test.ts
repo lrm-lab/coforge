@@ -11,6 +11,7 @@ import type {
 } from "#src/code-agent/contract";
 import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
+import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 /** Focused daemon coverage for self-initiated launches reusing the server's last
  * launchId. Deliberately a new, small file — see the working rules for this branch — copying
@@ -131,11 +132,7 @@ async function harness() {
       }),
     },
     undefined,
-    {
-      runtimes: async () => [],
-      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
-    },
+    emptyCodeAgentDiscovery,
     stateDirectory,
   );
   return {

@@ -14,6 +14,7 @@ import {
 } from "#src/server/agents/agent-sessions.server";
 import { DaemonRuntime } from "@lrm/coforge-daemon";
 import { InMemoryDaemonCredentialStore } from "@lrm/coforge-daemon";
+import { emptyCodeAgentDiscovery } from "@lrm/coforge-daemon/test/fixtures/code-agent-discovery";
 import { AgentSessionRecoveryError } from "@lrm/coforge-daemon/src/code-agent/contract";
 import {
   decodeAgentStartIntent,
@@ -141,11 +142,7 @@ test("cloud and daemon preserve Restart identity, reset sessions, fence Full Res
         }),
       },
       undefined,
-      {
-        runtimes: async () => [],
-        cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-        catalogs: async () => [],
-      },
+      emptyCodeAgentDiscovery,
       join(root, "state"),
     );
   runtime = createRuntime();
@@ -402,11 +399,7 @@ test("a Start that meets an already-running process rebinds it: one process, pre
       }),
     },
     undefined,
-    {
-      runtimes: async () => [],
-      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
-    },
+    emptyCodeAgentDiscovery,
     join(root, "state"),
   );
   try {
@@ -627,11 +620,7 @@ test("Full Reset completes, not fails, when the workspace clear cannot finish", 
       }),
     },
     undefined,
-    {
-      runtimes: async () => [],
-      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
-    },
+    emptyCodeAgentDiscovery,
     join(root, "state"),
   );
   const execute = (action: "restart" | "full-reset") =>

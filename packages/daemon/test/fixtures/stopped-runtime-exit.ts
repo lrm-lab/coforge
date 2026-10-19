@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type { AgentRuntimeEvent, AgentSession } from "#src/code-agent/contract";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
+import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
 
 const root = await mkdtemp(join(tmpdir(), "coforge-stopped-runtime-"));
 try {
@@ -47,11 +48,7 @@ try {
       }),
     },
     undefined,
-    {
-      runtimes: async () => [],
-      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
-    },
+    emptyCodeAgentDiscovery,
     join(root, "state"),
   );
   await runtime.start(connection);

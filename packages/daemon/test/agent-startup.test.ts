@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
+import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import type { AgentRuntimeEvent, AgentSession, CodeAgentProvider } from "#src/code-agent/contract";
 import { KiroProvider } from "#src/code-agent/kiro/provider";
 import { AgentSessionRecoveryError } from "#src/code-agent/contract";
@@ -80,11 +81,7 @@ async function harness(provider?: CodeAgentProvider, input?: () => Promise<void>
       }),
     },
     undefined,
-    {
-      runtimes: async () => [],
-      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
-    },
+    emptyCodeAgentDiscovery,
   );
   await runtime.start(connection);
   return {
