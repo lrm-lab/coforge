@@ -215,11 +215,12 @@ export function describeComputerUpgradeFailure(
   };
 }
 
-/** What one upgrade status means for the panel: still running, done at a version, or failed. */
+/** What one upgrade status means for the panel: still running, done at a version, or failed. A
+ * running or failed one carries the release it was to install when its status names it. */
 export type ComputerUpgradeOutcome =
-  | { state: "running" }
+  | { state: "running"; version?: string }
   | { state: "succeeded"; version: string }
-  | { state: "failed"; failure: UpgradeRequestErrorCopy };
+  | { state: "failed"; failure: UpgradeRequestErrorCopy; version?: string };
 
 /**
  * The one reading of an upgrade status, for a status polled now and one a reload found alike. A
@@ -230,14 +231,23 @@ export function upgradeOutcome(
   status: ComputerUpgradeStatus,
   now = Date.now(),
 ): ComputerUpgradeOutcome {
-  if (upgradeRunning(status, now)) return { state: "running" };
+  const version = "expectedVersion" in status ? status.expectedVersion : undefined;
+  if (upgradeRunning(status, now)) return { state: "running", version };
   if (status.status === "accepted")
-    return { state: "failed", failure: describeComputerUpgradeFailure({ reason: "timeout" }) };
+    return {
+      state: "failed",
+      failure: describeComputerUpgradeFailure({ reason: "timeout" }),
+      version,
+    };
   if (status.status === "completed" && status.computerVersion)
     return { state: "succeeded", version: status.computerVersion };
   if (status.status === "failed")
     return { state: "failed", failure: describeComputerUpgradeFailure(status) };
-  return { state: "failed", failure: describeComputerUpgradeFailure({ reason: "evidence" }) };
+  return {
+    state: "failed",
+    failure: describeComputerUpgradeFailure({ reason: "evidence" }),
+    version,
+  };
 }
 
 /** An `UpgradeFailureView` plus an optional quiet error reference id, never the raw

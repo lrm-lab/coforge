@@ -9,6 +9,7 @@ import { Select } from "#src/components/base/select/select";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
+import { Alert } from "#src/components/ui/alert";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
@@ -181,23 +182,23 @@ export function AgentMigrationRefusalNotice({
   link: { href: string; label: string } | null;
 }) {
   return (
-    <div
-      role="alert"
-      className="mx-6 mt-4 flex items-start gap-3 rounded-lg border border-secondary bg-warning-primary px-3 py-2.5"
-    >
-      <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
-      <div className="grid min-w-0 gap-1 text-sm">
-        <p className="text-secondary">{message}</p>
-        {link && (
-          <a
-            href={link.href}
-            className="justify-self-start font-semibold text-brand-secondary hover:underline"
-          >
-            {link.label}
-          </a>
-        )}
-      </div>
-    </div>
+    <Alert
+      color="warning"
+      className="mx-6 mt-4"
+      description={
+        <div className="grid gap-1">
+          <p>{message}</p>
+          {link && (
+            <a
+              href={link.href}
+              className="justify-self-start font-semibold text-brand-secondary hover:underline"
+            >
+              {link.label}
+            </a>
+          )}
+        </div>
+      }
+    />
   );
 }
 

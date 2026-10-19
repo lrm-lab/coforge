@@ -27,7 +27,7 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Button } from "#src/components/base/buttons/button";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
-import { computerVersionLabel, isComputerUpdateAvailable } from "./computer-identity";
+import { computerVersionLabel, offeredUpdateVersion } from "./computer-identity";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 import { upgradeRunning } from "./computer-upgrade-status";
 
@@ -117,12 +117,7 @@ export function ComputerLayout({
                     <ComputerTile
                       computer={computer}
                       online={computer.online}
-                      updateAvailableVersion={
-                        computer.imageUpdate?.version ??
-                        (isComputerUpdateAvailable(computer.computerVersion, latestComputerVersion)
-                          ? latestComputerVersion
-                          : undefined)
-                      }
+                      updateAvailableVersion={offeredUpdateVersion(computer, latestComputerVersion)}
                       upgrading={upgradeRunning(computer.upgrade)}
                     />
                     <span className="flex min-w-0 flex-1 flex-col gap-1">

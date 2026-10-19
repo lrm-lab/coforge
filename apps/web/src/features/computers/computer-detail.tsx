@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertCircle,
-  ArrowUp,
   Check,
   ChevronRight,
   Copy01 as Copy,
@@ -42,11 +41,9 @@ import {
   computerKind,
   computerLabel,
   computerVersionLabel,
-  isComputerUpdateAvailable,
   operatingSystemLabel,
   type ComputerIdentity,
 } from "./computer-identity";
-import { cloudImageUpdateConsequences } from "./cloud-image-update";
 import {
   computerUpgradeStatusQuery,
   followComputerUpgrade,
@@ -56,9 +53,15 @@ import {
   describeUpgradeRequestError,
   upgradeOutcome,
   type ComputerUpgradeOutcome,
-  type UpgradeRequestErrorCopy,
 } from "./upgrade-failure";
 import { ComputerTile } from "./computer-tile";
+import {
+  CloudImageUpdateDialog,
+  ComputerUpgradeConfirmDialog,
+  ComputerUpgradeSlot,
+  upgradeSlotState,
+  type ComputerUpgradeRequest,
+} from "./computer-upgrade-slot";
 import { RuntimeUsage, UsageHealthDot, type UsageHealth } from "./runtime-usage";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
@@ -118,28 +121,6 @@ export type ComputerDetailView = ComputerIdentity & {
     display?: AgentDisplaySnapshot;
   }[];
 };
-
-/** One failure-recovery command, in the app's mono command style, with a copy-to-clipboard
- * affordance - the same `ButtonUtility` + Copy/Check pattern `ComputerInstallCommand` already
- * uses, sized for an inline list item rather than a terminal block. */
-function UpgradeCommand({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 align-middle font-mono text-xs text-secondary">
-      {command}
-      <ButtonUtility
-        icon={copied ? Check : Copy}
-        size="xs"
-        color="tertiary"
-        aria-label={m.computer_copy_command()}
-        onClick={() => {
-          void navigator.clipboard.writeText(command);
-          setCopied(true);
-        }}
-      />
-    </span>
-  );
-}
 
 /**
  * One Computer's detail panel: what this machine is, which Code Agents it
@@ -205,6 +186,7 @@ export function ComputerDetail({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [formatOpen, setFormatOpen] = useState(false);
   const [imageUpdateOpen, setImageUpdateOpen] = useState(false);
+  const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
   const [rescanning, setRescanning] = useState(false);
   const [rescanFailed, setRescanFailed] = useState(false);
   const rescan = async () => {
@@ -251,14 +233,7 @@ export function ComputerDetail({
   const [restartState, setRestartState] = useState<
     "idle" | "pending" | "accepted" | "completed" | "error"
   >("idle");
-  // A request this panel made: in flight, held by the server, or refused before the server held
-  // it (offline, release feed), which leaves no record a reload could find.
-  const [upgradeRequest, setUpgradeRequest] = useState<
-    | { state: "idle" }
-    | { state: "requesting" }
-    | { state: "accepted"; requestId: string }
-    | ({ state: "refused" } & UpgradeRequestErrorCopy)
-  >({ state: "idle" });
+  const [upgradeRequest, setUpgradeRequest] = useState<ComputerUpgradeRequest>({ state: "idle" });
   // The Computer's latest upgrade as the server holds it, so a reload keeps one running or failed.
   // It is polled by `ComputerUpgradeWatcher`; this panel only reads its live status.
   const storedUpgrade = computer.upgrade ?? undefined;
@@ -274,45 +249,54 @@ export function ComputerDetail({
       enabled: false,
     })),
   });
+  const storedOutcome = storedUpgrade ? upgradeOutcome(storedUpgrade) : undefined;
   const liveUpgrade: ComputerUpgradeOutcome | undefined = !liveStatus
     ? undefined
     : liveStatus.isError
       ? { state: "failed", failure: describeUpgradeRequestError(liveStatus.error) }
       : liveStatus.data
         ? upgradeOutcome(liveStatus.data)
-        : { state: "running" };
+        : upgradeRequest.state === "accepted"
+          ? { state: "running" }
+          : (storedOutcome ?? { state: "running" });
+  // A stored success is history: the loader's version already includes it.
   const upgrade: ComputerUpgradeOutcome | { state: "idle" } =
     upgradeRequest.state === "requesting"
       ? { state: "running" }
       : upgradeRequest.state === "refused"
         ? { state: "failed", failure: upgradeRequest }
-        : (liveUpgrade ?? (storedUpgrade ? upgradeOutcome(storedUpgrade) : { state: "idle" }));
+        : (liveUpgrade ??
+          (storedOutcome && storedOutcome.state !== "succeeded"
+            ? storedOutcome
+            : { state: "idle" }));
   const upgrading = upgrade.state === "running";
-  const upgradeFailure: UpgradeRequestErrorCopy | undefined =
-    upgrade.state === "failed" ? upgrade.failure : undefined;
-  const canUpgrade = Boolean(onUpgrade) && computer.ownedByCurrentUser;
-  const cloudImageVersion = computer.imageUpdate?.version;
-  const offeredVersion = cloudImageVersion ?? latestComputerVersion;
-  const upgradeAvailable =
-    canUpgrade &&
-    (computerKind(computer.kind) === "cloud"
-      ? Boolean(computer.imageUpdate)
-      : isComputerUpdateAvailable(computer.computerVersion, latestComputerVersion));
+  const currentVersion = upgrade.state === "succeeded" ? upgrade.version : computer.computerVersion;
+  const isCloud = computerKind(computer.kind) === "cloud";
+  const upgradeSlot = upgradeSlotState({
+    upgrade,
+    request: upgradeRequest,
+    computer,
+    currentVersion,
+    latestComputerVersion,
+    canUpgrade: Boolean(onUpgrade) && computer.ownedByCurrentUser,
+  });
+  const upgradeOffer = upgradeSlot && "offer" in upgradeSlot ? upgradeSlot.offer : undefined;
   const canEditDisplayName = computer.ownedByCurrentUser && Boolean(onUpdateDisplayName);
   const runUpgrade = async () => {
     if (!onUpgrade) return;
     const requestId = crypto.randomUUID();
-    setUpgradeRequest({ state: "requesting" });
+    const version = upgradeOffer;
+    setUpgradeRequest({ state: "requesting", version });
     try {
       const outcome = upgradeOutcome(await onUpgrade(requestId));
       if (outcome.state === "failed") {
-        setUpgradeRequest({ state: "refused", ...outcome.failure });
+        setUpgradeRequest({ state: "refused", version, ...outcome.failure });
         return;
       }
       followComputerUpgrade(queryClient, { computerId: computer.id, requestId, startedHere: true });
-      setUpgradeRequest({ state: "accepted", requestId });
+      setUpgradeRequest({ state: "accepted", requestId, version });
     } catch (error) {
-      setUpgradeRequest({ state: "refused", ...describeUpgradeRequestError(error) });
+      setUpgradeRequest({ state: "refused", version, ...describeUpgradeRequestError(error) });
     }
   };
   const scanWorkspaces = async () => {
@@ -325,36 +309,6 @@ export function ComputerDetail({
       setWorkspaceScanStatus("error");
     }
   };
-
-  // Upgrade shows for the owner only while there is something to do: a newer release is known, or
-  // an upgrade is running. With no update the Version row is just the version (task #107). A
-  // failed upgrade keeps it, since the newer release is still known and the button is the retry.
-  // Offline with an update known, it stays visible but disabled.
-  const upgradeButton =
-    canUpgrade && (upgradeAvailable || upgrading) ? (
-      <Button
-        type="button"
-        size="xs"
-        color="secondary"
-        iconLeading={ArrowUp}
-        isLoading={upgrading}
-        showTextWhileLoading
-        isDisabled={upgrading || !upgradeAvailable || !computer.online}
-        onPress={() => {
-          if (computerKind(computer.kind) === "cloud") {
-            setImageUpdateOpen(true);
-            return;
-          }
-          void runUpgrade();
-        }}
-      >
-        {upgrading
-          ? m.computer_upgrade_in_progress()
-          : upgradeAvailable && offeredVersion
-            ? m.computer_upgrade_action({ version: shortReleaseVersion(offeredVersion) })
-            : m.computer_upgrade()}
-      </Button>
-    ) : undefined;
 
   const runRestart = () => {
     if (!onRestart) return;
@@ -513,34 +467,23 @@ export function ComputerDetail({
               <DetailRow label={m.computer_system()} value={operatingSystemLabel(computer)} />
               <DetailRow
                 label={m.computer_version()}
-                value={<span className="font-mono">{computerVersionLabel(computer)}</span>}
-                action={upgradeButton}
+                value={
+                  <span className="font-mono">
+                    {computerVersionLabel({ computerVersion: currentVersion })}
+                  </span>
+                }
                 footer={
-                  upgradeFailure ? (
-                    <div role="alert" className="mt-1.5 text-sm text-error-primary">
-                      <p>{upgradeFailure.headline}</p>
-                      {upgradeFailure.steps.length > 0 && (
-                        <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-sm text-tertiary">
-                          {upgradeFailure.steps.map((step, index) => (
-                            <li key={index}>
-                              {step.text}
-                              {step.command && (
-                                <>
-                                  {" "}
-                                  <UpgradeCommand command={step.command} />
-                                </>
-                              )}
-                            </li>
-                          ))}
-                        </ol>
-                      )}
-                      {upgradeFailure.errorId && (
-                        <p className="mt-1.5 text-xs text-tertiary">
-                          {m.error_reference({ errorId: upgradeFailure.errorId })}
-                        </p>
-                      )}
-                    </div>
-                  ) : undefined
+                  upgradeSlot && (
+                    <ComputerUpgradeSlot
+                      slot={upgradeSlot}
+                      computerName={label}
+                      cloud={isCloud}
+                      online={computer.online}
+                      onUpgrade={() =>
+                        isCloud ? setImageUpdateOpen(true) : setUpgradeConfirmOpen(true)
+                      }
+                    />
+                  )
                 }
               />
               {computer.creator && (
@@ -748,10 +691,22 @@ export function ComputerDetail({
       )}
       <CloudImageUpdateDialog
         open={imageUpdateOpen}
-        version={offeredVersion}
+        name={label}
+        version={upgradeOffer}
         onOpenChange={setImageUpdateOpen}
         onConfirm={async () => {
           setImageUpdateOpen(false);
+          await runUpgrade();
+        }}
+      />
+      <ComputerUpgradeConfirmDialog
+        open={upgradeConfirmOpen}
+        onOpenChange={setUpgradeConfirmOpen}
+        computerName={label}
+        currentVersion={currentVersion}
+        targetVersion={upgradeOffer}
+        onConfirm={async () => {
+          setUpgradeConfirmOpen(false);
           await runUpgrade();
         }}
       />
@@ -1216,28 +1171,24 @@ function DetailGroup({
 }
 
 /**
- * One label—value row: label left, value (and an optional action that acts
- * on it) right, on a single line that never wraps. `footer` is an optional
- * full-width block below that line, such as an upgrade failure explanation.
+ * One label—value row: label left, value right, on a single line that never
+ * wraps. `footer` is an optional full-width block below that line, such as
+ * the upgrade slot under the Version row.
  */
 function DetailRow({
   label,
   value,
-  action,
   footer,
 }: {
   label: string;
   value: ReactNode;
-  action?: ReactNode;
   footer?: ReactNode;
 }) {
   return (
     <div className="grid min-h-11 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 py-3 @max-md:items-start">
       <dt className="text-sm font-medium whitespace-nowrap text-primary">{label}</dt>
-      {/* When the value and its action do not fit beside the label, the action drops below. */}
       <dd className="flex min-h-6 min-w-0 flex-wrap items-center justify-end gap-2 text-sm text-tertiary">
         <span className="min-w-0 truncate">{value}</span>
-        {action && <span className="shrink-0">{action}</span>}
       </dd>
       {footer && <dd className="col-span-2">{footer}</dd>}
     </div>
@@ -1302,97 +1253,6 @@ function TerminalCommand({ command }: { command: string }) {
         }}
       />
     </div>
-  );
-}
-
-function CloudImageUpdateDialog({
-  open,
-  version,
-  onOpenChange,
-  onConfirm,
-}: {
-  open: boolean;
-  version?: string | null;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => Promise<void>;
-}) {
-  const [confirming, guard] = useSubmitGuard();
-  const lossCopy: Record<(typeof cloudImageUpdateConsequences.lost)[number], string> = {
-    in_flight_runs: m.computer_cloud_image_update_loss_in_flight_runs(),
-    volatile_memory: m.computer_cloud_image_update_loss_volatile_memory(),
-    brief_disconnect: m.computer_cloud_image_update_loss_brief_disconnect(),
-  };
-  const keepCopy: Record<(typeof cloudImageUpdateConsequences.kept)[number], string> = {
-    volume_files: m.computer_cloud_image_update_keep_volume_files(),
-    workspace_bindings: m.computer_cloud_image_update_keep_workspace_bindings(),
-    agents_after_reconnect: m.computer_cloud_image_update_keep_agents_after_reconnect(),
-  };
-
-  return (
-    <ModalOverlay isOpen={open} onOpenChange={onOpenChange}>
-      <Modal className="w-[calc(100vw-2rem)] max-w-lg">
-        <Dialog className="overflow-hidden text-left">
-          {({ close }) => (
-            <>
-              <div className="px-6 pt-6">
-                <Heading
-                  slot="title"
-                  className="text-xl font-semibold text-primary sm:text-display-xs"
-                >
-                  {m.computer_cloud_image_update_dialog_title({
-                    version: version ? shortReleaseVersion(version) : "",
-                  })}
-                </Heading>
-                <Text className="mt-2 block text-sm text-tertiary">
-                  {m.computer_cloud_image_update_body()}
-                </Text>
-                <p className="mt-4 text-sm font-medium text-primary">
-                  {m.computer_cloud_image_update_lost_title()}
-                </p>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-tertiary">
-                  {cloudImageUpdateConsequences.lost.map((item) => (
-                    <li key={item}>{lossCopy[item]}</li>
-                  ))}
-                </ul>
-                <p className="mt-4 text-sm font-medium text-primary">
-                  {m.computer_cloud_image_update_kept_title()}
-                </p>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-tertiary">
-                  {cloudImageUpdateConsequences.kept.map((item) => (
-                    <li key={item}>{keepCopy[item]}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="flex justify-end gap-2 px-6 py-4">
-                <Button
-                  type="button"
-                  size="sm"
-                  color="secondary"
-                  isDisabled={confirming}
-                  onPress={() => close()}
-                >
-                  {m.computer_cloud_image_update_cancel()}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  isDisabled={confirming}
-                  isLoading={confirming}
-                  showTextWhileLoading
-                  onPress={() => {
-                    void guard(async () => {
-                      await onConfirm();
-                    });
-                  }}
-                >
-                  {m.computer_cloud_image_update_confirm()}
-                </Button>
-              </div>
-            </>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
   );
 }
 
@@ -1505,10 +1365,4 @@ function FormatCloudComputerDialog({
       </Modal>
     </ModalOverlay>
   );
-}
-
-/** The part a reader distinguishes releases by: `0.1.0-dev.29` reads as `dev.29`. */
-function shortReleaseVersion(version: string) {
-  const tail = version.split("-").at(-1);
-  return tail && tail !== version ? tail : version;
 }

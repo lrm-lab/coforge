@@ -44,6 +44,19 @@
     "Segoe UI Emoji", "Noto Color Emoji";
   --font-display: var(--font-body);
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* An indeterminate progress bar's segment (a third of its track) sweeping across it. The
+     official Untitled UI progress bar only shows a known value. */
+  --animate-progress-indeterminate: progress-indeterminate 1.4s ease-in-out infinite;
+
+  @keyframes progress-indeterminate {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(300%);
+    }
+  }
 }
 
 html,
