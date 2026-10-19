@@ -26,7 +26,6 @@ const PROTECTED_COFORGE_ENV_KEYS = [
   "COFORGE_AGENT_CONVERSATION_TARGET",
   "COFORGE_AGENT_PROXY_URL",
   "COFORGE_DAEMON_SOCKET",
-  "COFORGE_SUPERVISOR_SOCKET",
   "COFORGE_CURRENT_AGENT_ID",
   "COFORGE_CURRENT_AGENT_NAME",
   "COFORGE_CURRENT_WORKSPACE_ID",
@@ -39,6 +38,19 @@ const PROTECTED_COFORGE_ENV_KEYS = [
   "COFORGE_CURRENT_COMPUTER_VERSION",
   "COFORGE_CURRENT_AGENT_WORKSPACE_PATH",
   "COFORGE_GIT_CONFIG_BASE_COUNT",
+] as const;
+
+/** Env var names set on a Workspace Daemon's own process (`supervisor/`, and `daemon-host/` for the
+ * connection endpoint). Nothing inside an Agent reads them; an Agent's tools that inherited them
+ * would act on that Workspace (a Daemon test run from an Agent's checkout booted out every Agent
+ * job of its host Workspace). */
+export const WORKSPACE_DAEMON_ENV_KEYS = [
+  "COFORGE_DAEMON_HOME",
+  "COFORGE_WORKSPACE_AGENT_PREFIX",
+  "COFORGE_WORKSPACE_JOB_DIRECTORY",
+  "COFORGE_SUPERVISOR_SOCKET",
+  "COFORGE_SUPERVISOR_STATE_PATH",
+  "COFORGE_DAEMON_CONNECTION_ENDPOINT",
 ] as const;
 
 /** Strips CR/LF/NUL so a value can never inject a second env line or terminate the assignment
@@ -105,10 +117,11 @@ export function agentEnvironment(
   })) {
     if (value !== undefined) environment[name] = value;
   }
-  // Never reuse another Agent's local capability, the supervisor control socket, or a spoofed
-  // runtime-identity value. Ordinary host variables (including provider credentials and proxies)
-  // remain inherited.
+  // Never reuse another Agent's local capability, a spoofed runtime-identity value, or the
+  // Workspace Daemon's own scope. Ordinary host variables (including provider credentials and
+  // proxies) remain inherited.
   for (const key of PROTECTED_COFORGE_ENV_KEYS) delete environment[key];
+  for (const key of WORKSPACE_DAEMON_ENV_KEYS) delete environment[key];
   Object.assign(environment, declared);
   const seen = new Set<string>();
   const noProxy = [

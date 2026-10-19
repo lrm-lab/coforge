@@ -88,6 +88,7 @@ test.skipIf(process.platform !== "darwin")(
     const socketPath = join(root, "daemon.sock");
     const spawn = () =>
       Bun.spawn([executable, "__daemon", "--socket", socketPath, "--state-directory", root], {
+        env: process.env,
         stdout: "ignore",
         stderr: "inherit",
       });
@@ -210,6 +211,7 @@ test.skipIf(process.platform !== "darwin")(
     const socketPath = join(root, "daemon.sock");
     const spawn = () =>
       Bun.spawn([executable, "__daemon", "--socket", socketPath, "--state-directory", root], {
+        env: process.env,
         stdout: "ignore",
         stderr: "inherit",
       });
@@ -327,6 +329,7 @@ test.skipIf(process.platform !== "darwin")(
     const socketPath = join(root, "daemon.sock");
     const spawn = () =>
       Bun.spawn([executable, "__daemon", "--socket", socketPath, "--state-directory", root], {
+        env: process.env,
         stdout: "ignore",
         stderr: "inherit",
       });
@@ -440,7 +443,7 @@ test.skipIf(process.platform !== "darwin")(
     const socketPath = join(root, "daemon.sock");
     const coordinator = Bun.spawn(
       [executable, "__daemon", "--socket", socketPath, "--state-directory", root],
-      { stdout: "ignore", stderr: "inherit" },
+      { env: process.env, stdout: "ignore", stderr: "inherit" },
     );
     const client = new LocalDaemonLauncher({
       executablePath: executable,
@@ -548,7 +551,7 @@ test.skipIf(process.platform !== "darwin")(
     const socketPath = join(root, "daemon.sock");
     const coordinator = Bun.spawn(
       [executable, "__daemon", "--socket", socketPath, "--state-directory", root],
-      { stdout: "ignore", stderr: "inherit" },
+      { env: process.env, stdout: "ignore", stderr: "inherit" },
     );
     const client = new LocalDaemonLauncher({
       executablePath: executable,

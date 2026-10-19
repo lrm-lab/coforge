@@ -139,6 +139,7 @@ test("supervisor startup failure releases its process lock", async () => {
   await mkdir(stateDirectory);
   await writeFile(join(stateDirectory, "bindings.json"), "not-json");
   const failed = Bun.spawn([process.execPath, fixture, "supervisor-fail", stateDirectory], {
+    env: process.env,
     stderr: "ignore",
   });
   children.add(failed);

@@ -10169,7 +10169,12 @@ describe("Agent delivery queue", () => {
             process.execPath,
             new URL("./fixtures/stopped-runtime-exit.ts", import.meta.url).pathname,
           ],
-          { cwd: new URL("..", import.meta.url).pathname, stdout: "ignore", stderr: "pipe" },
+          {
+            cwd: new URL("..", import.meta.url).pathname,
+            env: process.env,
+            stdout: "ignore",
+            stderr: "pipe",
+          },
         );
         const exitCode = await child.exited;
         if (exitCode !== 0) throw new Error(await child.stderr.text());

@@ -200,6 +200,26 @@ test("declared runtime-context values win over an inherited or user-configured i
   expect(environment.COFORGE_CURRENT_WORKSPACE_NAME).toBeUndefined();
 });
 
+test("an Agent never inherits the Workspace Daemon's own launch scope", () => {
+  const runnerScope = {
+    COFORGE_DAEMON_HOME: "/Users/someone/.coforge/daemon/workspaces/a",
+    COFORGE_WORKSPACE_AGENT_PREFIX: "com.coforge.workspace.a.agent.",
+    COFORGE_WORKSPACE_JOB_DIRECTORY: "/Users/someone/.coforge/daemon/workspaces/a/jobs",
+    COFORGE_SUPERVISOR_SOCKET: "/Users/someone/.coforge/daemon/supervisor.sock",
+    COFORGE_SUPERVISOR_STATE_PATH: "/Users/someone/.coforge/daemon/upgrade-request-ids.json",
+    COFORGE_DAEMON_CONNECTION_ENDPOINT: "wss://coforge.example/connection/websocket",
+  };
+  const environment = agentEnvironment(
+    undefined,
+    { ...runnerScope, HOME: "/Users/someone", ANTHROPIC_API_KEY: "host-provider-key" },
+    "darwin",
+  );
+
+  for (const name of Object.keys(runnerScope)) expect(environment).not.toHaveProperty(name);
+  expect(environment.HOME).toBe("/Users/someone");
+  expect(environment.ANTHROPIC_API_KEY).toBe("host-provider-key");
+});
+
 test("source development resolves the CLI without a separately compiled daemon CLI", () => {
   const result = Bun.spawnSync(["coforge", "message", "check"], {
     cwd: "/tmp",

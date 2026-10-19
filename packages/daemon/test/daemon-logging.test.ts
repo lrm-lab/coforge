@@ -142,7 +142,7 @@ function spawnDaemon(socketPath: string, stateDirectory: string, role = "daemon"
       "--state-directory",
       stateDirectory,
     ],
-    { stdin: "ignore", stdout: "ignore", stderr: "ignore" },
+    { env: process.env, stdin: "ignore", stdout: "ignore", stderr: "ignore" },
   );
 }
 
