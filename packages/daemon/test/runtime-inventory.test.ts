@@ -6,9 +6,11 @@ import { join } from "node:path";
 import {
   claudeStaticCatalog,
   discoverCodeAgentInventory,
+  discoverCodeAgentRuntimes,
   discoverPiCatalog,
   discoverExternalCodeAgents,
   loadCachedCodeAgentCatalogs,
+  PI_CATALOG_DISCOVERY_TIMEOUT_MS,
   type ExternalCodeAgentProbe,
 } from "#src/code-agent/runtime-inventory";
 import { fileStatCacheKey, inventoryCachePath } from "#src/code-agent/runtime-inventory-cache";
@@ -17,7 +19,11 @@ import {
   resolveClaudeCodeExecutable,
 } from "#src/code-agent/claude-code/runtime";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
+import { VERSION_PROBE_TIMEOUT_MS } from "#src/code-agent/version-gate";
 import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
+
+/** The hung version probe test gives up this soon, so it need not wait out production's. */
+const SHORT_VERSION_PROBE_TIMEOUT_MS = 50;
 
 function probeFor(
   runtimes: Record<string, { path: string; version: string; exitCode?: number }>,
@@ -360,22 +366,33 @@ describe("external Code Agent inventory", () => {
     });
   });
 
-  test("does not wait indefinitely for a runtime version probe", async () => {
-    let killed = false;
-    const probe: ExternalCodeAgentProbe = {
-      which: (name) => (name === "codex" ? "/bin/codex" : undefined),
-      spawn: () => ({
-        stdout: new ReadableStream(),
-        exited: new Promise(() => {}),
-        kill: () => {
-          killed = true;
-        },
-      }),
-    };
+  test(
+    "does not wait indefinitely for a runtime version probe",
+    async () => {
+      // Production's probes wait this long.
+      expect(VERSION_PROBE_TIMEOUT_MS).toBe(5_000);
+      let killed = false;
+      const probe: ExternalCodeAgentProbe = {
+        which: (name) => (name === "codex" ? "/bin/codex" : undefined),
+        spawn: () => ({
+          stdout: new ReadableStream(),
+          exited: new Promise(() => {}),
+          kill: () => {
+            killed = true;
+          },
+        }),
+      };
 
-    await expect(discoverExternalCodeAgents(probe)).resolves.toEqual([]);
-    expect(killed).toBe(true);
-  }, 6_000);
+      const runtimes = await discoverCodeAgentRuntimes({
+        probe,
+        piModels: async () => [],
+        versionProbeTimeoutMs: SHORT_VERSION_PROBE_TIMEOUT_MS,
+      });
+      expect(runtimes.filter((runtime) => runtime.provider === "codex")).toEqual([]);
+      expect(killed).toBe(true);
+    },
+    SHORT_VERSION_PROBE_TIMEOUT_MS + 1_000,
+  );
 
   test("discovers Codex and Pi catalogs and reports the maintained Claude Code catalog", async () => {
     const fixture = (name: string) =>
@@ -595,6 +612,7 @@ test("Pi reasoning levels are the ones the SDK supports for each model", async (
         { id: "plain", provider: "openai", reasoning: true },
         { id: "chat", provider: "openai", reasoning: false },
       ] as never,
+    PI_CATALOG_DISCOVERY_TIMEOUT_MS,
   );
   expect(
     Object.fromEntries((catalog?.models ?? []).map((model) => [model.id, model.reasoningEfforts])),

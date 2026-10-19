@@ -9,10 +9,18 @@ import { ACP_TIMEOUT_MS } from "#src/code-agent/grok/session";
 import { VERSION_PROBE_TIMEOUT_MS } from "#src/code-agent/version-gate";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
 const FIXTURE = new URL("./fixtures/grok-acp-fixture.ts", import.meta.url).pathname;
-const BUDGET = VERSION_PROBE_TIMEOUT_MS + ACP_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS;
+const sessionTestBudgetMs = (acpTimeoutMs: number) =>
+  VERSION_PROBE_TIMEOUT_MS + acpTimeoutMs + 2 * PROCESS_TREE_EXIT_GRACE_MS;
+const BUDGET = sessionTestBudgetMs(ACP_TIMEOUT_MS);
+/** A test that waits out an ACP deadline gives its session this one instead of production's. It
+ * still bounds `open()` against a freshly spawned fixture, so it leaves room for that start. */
+const SHORT_ACP_TIMEOUT_MS = 1_500;
 
 /** A fixture session in its own workspace; `close` disposes it and removes the workspace. */
-async function openFixtureSession(options: Partial<AgentSessionOptions> = {}) {
+async function openFixtureSession(
+  options: Partial<AgentSessionOptions> = {},
+  acpTimeoutMs?: number,
+) {
   const workspace = await mkdtemp(join(tmpdir(), "grok-acp-"));
   const log = join(workspace, "rpc.jsonl");
   const close = async (session?: AgentSession) => {
@@ -22,6 +30,7 @@ async function openFixtureSession(options: Partial<AgentSessionOptions> = {}) {
   try {
     const session = await new GrokProvider({
       command: [process.execPath, FIXTURE],
+      acpTimeoutMs,
     }).createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: "instructions",
@@ -435,7 +444,9 @@ test("Grok requires the verified persistent ACP baseline", () => {
 test(
   "an ambiguous Grok admission timeout closes native input before rejecting delivery",
   async () => {
-    const { log, session, close } = await openFixtureSession();
+    // Production's sessions wait this long.
+    expect(ACP_TIMEOUT_MS).toBe(30_000);
+    const { log, session, close } = await openFixtureSession({}, SHORT_ACP_TIMEOUT_MS);
     try {
       const events: AgentRuntimeEvent[] = [];
       session.subscribe((event) => events.push(event));
@@ -451,7 +462,7 @@ test(
       await close();
     }
   },
-  BUDGET,
+  sessionTestBudgetMs(SHORT_ACP_TIMEOUT_MS),
 );
 
 test(

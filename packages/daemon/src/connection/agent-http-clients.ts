@@ -754,13 +754,14 @@ export const defaultAgentWeeklyReportMemoryHttpClient: AgentWeeklyReportMemoryHt
   },
 };
 
-export const defaultAgentTaskHttpClient: AgentTaskHttpClient = {
+/** `timeoutMs` bounds each request; production's client uses `AGENT_RPC_TIMEOUT_MS`. */
+export const createAgentTaskHttpClient = (timeoutMs: number): AgentTaskHttpClient => ({
   async execute({ url, request, ...keys }) {
     // `TaskRequest` already names the key `idempotencyKey` (the one HTTP name), so the body goes up
     // as-is; the response echoes it for correlation.
     const response = await fetch(url, {
       method: "POST",
-      signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: agentHeaders(keys, true),
       body: JSON.stringify(request),
     });
@@ -781,7 +782,9 @@ export const defaultAgentTaskHttpClient: AgentTaskHttpClient = {
       throw new Error("Task response idempotency key does not match request");
     return result;
   },
-};
+});
+
+export const defaultAgentTaskHttpClient = createAgentTaskHttpClient(AGENT_RPC_TIMEOUT_MS);
 
 /** Forwards the classified channel request to its mapped cloud route and returns the JSON
  * response body unchanged. A non-2xx throws a typed `AgentTransportError` carrying the real

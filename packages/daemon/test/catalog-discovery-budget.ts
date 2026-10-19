@@ -24,9 +24,21 @@ import {
  * (`PI_CATALOG_DISCOVERY_TIMEOUT_MS`) is part of the maximum, so the budget stays true if it grows.
  */
 export const CATALOG_DISCOVERY_BUDGET_MS = Math.max(
-  2 * CATALOG_DISCOVERY_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS,
+  spawnedCatalogDiscoveryBudgetMs(CATALOG_DISCOVERY_TIMEOUT_MS),
   PI_CATALOG_DISCOVERY_TIMEOUT_MS,
 );
+
+/** Two bounded waits of `timeoutMs` each, then the two rungs of the process cleanup ladder. */
+export function spawnedCatalogDiscoveryBudgetMs(timeoutMs: number) {
+  return 2 * timeoutMs + 2 * PROCESS_TREE_EXIT_GRACE_MS;
+}
+
+/**
+ * The catalog deadline a test injects when it waits one out, instead of production's. It still
+ * leaves a freshly spawned fixture time to answer `initialize`, so the wait that times out is
+ * `model/list`.
+ */
+export const SHORT_CATALOG_DISCOVERY_TIMEOUT_MS = 1_500;
 
 /**
  * The longest one OpenCode catalog discovery over a spawned process can run before the product

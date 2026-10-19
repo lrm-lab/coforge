@@ -3,8 +3,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverCodeAgentInventory } from "#src/code-agent/runtime-inventory";
+import {
+  SHORT_CATALOG_DISCOVERY_TIMEOUT_MS,
+  spawnedCatalogDiscoveryBudgetMs,
+} from "./catalog-discovery-budget";
 
-async function discover(mode: string, cache?: string, force = false) {
+async function discover(
+  mode: string,
+  cache?: string,
+  force = false,
+  catalogDiscoveryTimeoutMs?: number,
+) {
   const home = await mkdtemp(join(tmpdir(), "codex-catalog-"));
   try {
     if (cache !== undefined) await Bun.write(join(home, ".codex", "models_cache.json"), cache);
@@ -23,6 +32,7 @@ async function discover(mode: string, cache?: string, force = false) {
         ],
       },
       piModels: async () => [],
+      catalogDiscoveryTimeoutMs,
     });
   } finally {
     await rm(home, { recursive: true, force: true });
@@ -44,20 +54,29 @@ const cache = JSON.stringify({
   ],
 });
 
-test("falls back to the visible cached Codex models after a five-second timeout", async () => {
-  const inventory = await discover("catalog-timeout", cache);
-  expect(inventory.catalogs.find((catalog) => catalog.provider === "codex")?.models).toEqual([
-    {
-      id: "cached-model",
-      displayName: "Cached model",
-      description: "",
-      modelProvider: "",
-      reasoningEfforts: ["high"],
-      defaultReasoning: "high",
-      recommended: false,
-    },
-  ]);
-}, 10_000);
+test(
+  "falls back to the visible cached Codex models after the catalog deadline",
+  async () => {
+    const inventory = await discover(
+      "catalog-timeout",
+      cache,
+      false,
+      SHORT_CATALOG_DISCOVERY_TIMEOUT_MS,
+    );
+    expect(inventory.catalogs.find((catalog) => catalog.provider === "codex")?.models).toEqual([
+      {
+        id: "cached-model",
+        displayName: "Cached model",
+        description: "",
+        modelProvider: "",
+        reasoningEfforts: ["high"],
+        defaultReasoning: "high",
+        recommended: false,
+      },
+    ]);
+  },
+  spawnedCatalogDiscoveryBudgetMs(SHORT_CATALOG_DISCOVERY_TIMEOUT_MS),
+);
 
 test("prefers the live Codex catalog over cached models", async () => {
   const inventory = await discover("", cache);

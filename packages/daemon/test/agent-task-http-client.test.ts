@@ -1,12 +1,19 @@
 import { expect, test } from "bun:test";
 import { AgentUpstreamRefusalError } from "#src/connection/agent-upstream-refusal-error";
-import { defaultAgentTaskHttpClient } from "#src/connection/agent-http-clients";
+import {
+  createAgentTaskHttpClient,
+  defaultAgentTaskHttpClient,
+} from "#src/connection/agent-http-clients";
+import { AGENT_RPC_TIMEOUT_MS } from "#src/connection/agent-http-wire";
 
 const request = {
   idempotencyKey: "request-1",
   operation: "list",
   target: "#general",
 } as const;
+
+/** The deadline test's client gives up this soon, so it need not wait out production's. */
+const TASK_DEADLINE_MS = 100;
 
 test("Agent Task HTTP client rejects a response for a different request", async () => {
   const server = Bun.serve({
@@ -50,26 +57,32 @@ test("Agent Task HTTP client reports an authorization denial without treating it
   }
 });
 
-test("Agent Task HTTP client abandons a server request at its deadline", async () => {
-  const server = Bun.serve({
-    port: 0,
-    async fetch() {
-      return await new Promise<Response>(() => {});
-    },
-  });
-  try {
-    await expect(
-      defaultAgentTaskHttpClient.execute({
-        url: `${server.url}api/agent/v1/tasks`,
-        agentApiKey: "agent-key",
-        daemonApiKey: "daemon-key",
-        request,
-      }),
-    ).rejects.toBeInstanceOf(Error);
-  } finally {
-    await server.stop(true);
-  }
-}, 11_000);
+test(
+  "Agent Task HTTP client abandons a server request at its deadline",
+  async () => {
+    // Production's client is built with this deadline.
+    expect(AGENT_RPC_TIMEOUT_MS).toBe(10_000);
+    const server = Bun.serve({
+      port: 0,
+      async fetch() {
+        return await new Promise<Response>(() => {});
+      },
+    });
+    try {
+      await expect(
+        createAgentTaskHttpClient(TASK_DEADLINE_MS).execute({
+          url: `${server.url}api/agent/v1/tasks`,
+          agentApiKey: "agent-key",
+          daemonApiKey: "daemon-key",
+          request,
+        }),
+      ).rejects.toBeInstanceOf(Error);
+    } finally {
+      await server.stop(true);
+    }
+  },
+  TASK_DEADLINE_MS + 1_000,
+);
 
 test("Agent Task HTTP client keeps the server's refusal code for the daemon log only", async () => {
   const server = Bun.serve({
