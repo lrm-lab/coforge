@@ -11,7 +11,7 @@
 | 代码 | JetBrains Mono | 系统等宽 |
 
 - 字体栈：`Inter Variable` → `Noto Sans SC Variable` → 微软雅黑 → Noto Sans CJK SC。Inter 和 Noto Sans SC 都由 `@fontsource-variable` 自托管；Noto Sans SC 按 unicode-range 切成约 100 个 woff2，浏览器只下载页面用到的字，不要对它做 preload。
-- 定义在 `apps/web/src/styles.css`（`--font-body`、`--font-display`、`--font-mono`），不要在组件里写 `font-family`；代码和标识符用 `font-mono`。`theme.css` 里的同名变量被它覆盖，不手改。
+- 定义在 `apps/web/src/styles.css`（`--font-body`、`--font-display`、`--font-mono`），不要在组件里写 `font-family`；代码和标识符用 `font-mono`，另外 Activity 行的相对时间按 Raft 设计稿也用 `font-mono`。`theme.css` 里的同名变量被它覆盖，不手改。
 - 落地页同样用这套栈（`font-display`）；仓库里没有 Geist，也没有单独的展示字体。
 - 字体许可是 OFL-1.1，随 npm 包分发；不要把字体文件拷进仓库。
 

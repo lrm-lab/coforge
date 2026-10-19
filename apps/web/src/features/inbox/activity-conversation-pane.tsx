@@ -10,7 +10,7 @@ import { m } from "#src/paraglide/messages";
 const activityRoute = getRouteApi("/w/$workspaceSlug/activity");
 
 /**
- * The conversation a card opened, beside the Activity list, as Chat opens it
+ * The conversation a row opened, beside the Activity list, as Chat opens it
  * (`HostedConversationPane`). The page's own address state comes out of the Activity URL, shared
  * structurally: switching the list's view does not re-render the conversation.
  */

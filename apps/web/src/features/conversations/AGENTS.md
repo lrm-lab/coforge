@@ -61,7 +61,7 @@ These rules apply to `src/features/conversations/`.
   never bumps their badge or brings a closed chat back.
 - A message row's Task, thread and Agent status data is read by the part that
   shows it, by id, as Mattermost and Telegram Web do. An Agent's avatar
-  (`MessageAgentAvatar`) reads its one Agent through `useLiveAgentDisplay`. The Task a message became
+  (`LiveAgentAvatar`) reads its one Agent through `useLiveAgentDisplay`. The Task a message became
   (`MessageTask`) and a body's task reference (`TaskReference`) each read one
   Task under `ConversationIdProvider` (see `features/tasks/AGENTS.md`). A
   root's thread preview and thread entries (`thread-summary.tsx`) read that

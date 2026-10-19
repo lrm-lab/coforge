@@ -28,13 +28,12 @@ import {
   Modal,
   ModalOverlay,
 } from "#src/components/application/modals/modal";
-import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import type {
   OpenAgentProfile,
   OpenPersonProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
-import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
+import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
 import { AgentModelLabel } from "#src/features/agents/agent-model-label";
 import { fileTypeLabel } from "#src/features/files/file-meta";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
@@ -456,23 +455,6 @@ export function DayDivider({ value, locale }: { value: Date | string; locale?: s
  * that pins the main thread until the renderer is killed. */
 const ROW_CLASS = "flex flex-col";
 
-/** An Agent's avatar in the stream, with that Agent's live status dot: it reads that one Agent, so
- * another Agent's activity never repaints this row. */
-function MessageAgentAvatar({
-  agentId,
-  name,
-  src,
-  deleted,
-}: {
-  agentId: string;
-  name: string;
-  src?: string | null;
-  deleted: boolean;
-}) {
-  const display = useLiveAgentDisplay(agentId);
-  return <AgentDisplayAvatar name={name} src={src} display={display} deleted={deleted} size="sm" />;
-}
-
 /**
  * One history row: optional day divider, then the message with its hover actions.
  *
@@ -582,12 +564,12 @@ export const MessageRow = memo(function MessageRow({
   // An Agent's avatar in the stream carries the same online/working/thinking/error/offline dot the
   // sidebar, conversation header and @-mention popup use, so you can tell whether the Agent that
   // wrote a message is around right now without opening its profile. The avatar reads that one
-  // Agent from the app shell's live Agent store (`MessageAgentAvatar`). A person's avatar
+  // Agent from the app shell's live Agent store (`LiveAgentAvatar`). A person's avatar
   // stays plain here (people's presence is drawn on the Members page); a deleted Agent shows no dot
   // either (`AgentDisplayAvatar` greys it and drops the dot) — a deletion is not a presence state.
   const avatar =
     message.senderKind === "agent" && message.senderAgentId ? (
-      <MessageAgentAvatar
+      <LiveAgentAvatar
         agentId={message.senderAgentId}
         name={message.senderName}
         src={message.senderAvatarUrl}

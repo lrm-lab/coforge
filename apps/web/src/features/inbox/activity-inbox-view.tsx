@@ -52,9 +52,8 @@ import { MessagePreview } from "#src/features/conversations/message-preview";
 import { useRefreshSidebarLists } from "#src/features/conversations/sidebar-lists";
 import { TASK_STATUS_COLOR } from "#src/features/tasks/task-workflow";
 import { cn } from "#src/lib/utils";
-import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
-import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
+import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
@@ -731,7 +730,7 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
       <ButtonUtility
         icon={Check}
         size="xs"
-        color="tertiary"
+        color="secondary"
         tooltip={m.activity_inbox_done()}
         aria-label={m.activity_inbox_done()}
         onClick={() => actions.done(item)}
@@ -753,7 +752,7 @@ function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
   const { place, thread } = item;
   if (!thread && place.kind === "direct")
     return place.peer.kind === "agent" ? (
-      <ActivityAgentAvatar
+      <LiveAgentAvatar
         agentId={place.peer.agentId}
         name={place.peer.displayName}
         src={place.peer.avatarUrl}
@@ -777,20 +776,6 @@ function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
       )}
     </span>
   );
-}
-
-/** A DM Agent's face with its live status, as Chat's Direct messages row shows it. */
-function ActivityAgentAvatar({
-  agentId,
-  name,
-  src,
-}: {
-  agentId: string;
-  name: string;
-  src: string | null;
-}) {
-  const display = useLiveAgentDisplay(agentId);
-  return <AgentDisplayAvatar name={name} src={src} display={display} size="sm" />;
 }
 
 /** The marks after a row's title: its Task, an unread mention, and how many messages are new. */
