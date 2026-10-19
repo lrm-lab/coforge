@@ -142,11 +142,11 @@ These rules apply to `src/features/conversations/`.
   board, files, reading), one page for channels and direct messages: each kind supplies only its
   data, header, conversation and read cursor, and both kinds of DM share one read cursor
   (`dm:<conversationId>`), so a DM kind supplies only its name, header and conversation. Chat's
-  routes and `HostedConversationPane` (`hosted-conversation-pane.tsx`: the search preview and the
-  Activity pane, beside their page's own content) render it, so they never differ. A host loads
-  through `conversation-page-loader.ts` (a pane's, `loadHostedConversation`, with channel names and
-  Saved) and its `validateSearch` spreads `conversationPageSearchShape` (a pane's host also
-  `hostedConversationSearchShape`: `open`, `msg`).
+  routes and `HostedConversationPane` (`hosted-conversation-pane.tsx`: Search's preview beside its
+  results; Activity's pane beside the list from `lg`, filling the page below it with Chat's back
+  header) render it, so they never differ. A host loads through `conversation-page-loader.ts` (a
+  pane's, `loadHostedConversation`, with channel names and Saved) and its `validateSearch` spreads
+  `conversationPageSearchShape` (a pane's host also `hostedConversationSearchShape`: `open`, `msg`).
 - `mentionOutsiders` (the channel's people and public Agents outside it) is for
   @-completion only. Never merge it into `mentionables`, which also resolves
   plain `@handle` labels and stored mention tokens. `mentionables` lacks a deleted Agent, so a

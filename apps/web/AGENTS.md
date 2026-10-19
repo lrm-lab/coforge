@@ -107,7 +107,7 @@ Each line names a directory under `src/` (unless noted) and its single responsib
 - `features/device-auth/` — device-code verification page.
 - `features/errors/` — page-level load-error view and the router's 404 page.
 - `features/files/` — what a file is, from its name and media type: extension, size text, kind, preview kind and language, type label, and the icon it is drawn with (`FileTypeIcon`).
-- `features/inbox/` — the Activity page: conversations and threads not yet marked Done, the viewer's pinned conversations above them, and the conversation a row opens beside the list.
+- `features/inbox/` — the Activity page: conversations and threads not yet marked Done, the viewer's pinned conversations above them, and the conversation a row opens beside the list (full-screen below `lg` for an `open` link).
 - `features/install/` — Computer install command text.
 - `features/integrations/` — Settings → Integrations GitHub view and functions.
 - `features/landing/` — the public homepage.

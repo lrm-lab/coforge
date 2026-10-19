@@ -1,10 +1,10 @@
-import { memo, Suspense, useState, type Ref } from "react";
+import { memo, Suspense, useContext, useState, type Ref } from "react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { cx } from "#src/utils/cx";
-import { ConversationBackHeader } from "./conversation-list-button";
+import { ConversationBackHeader, ConversationListContext } from "./conversation-list-button";
 import { ConversationHostProvider } from "./conversation-host";
 import { ConversationPage } from "./conversation-page";
 import type { ConversationPageSearch, HostedConversationTarget } from "./conversation-page-search";
@@ -45,6 +45,8 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   ref?: Ref<HTMLElement>;
 }) {
   const [failed, setFailed] = useState(false);
+  // Only a host with a list to go back to (Activity) has a back arrow over the failure.
+  const backToList = useContext(ConversationListContext) !== null;
   return (
     <section
       ref={ref}
@@ -53,7 +55,7 @@ export const HostedConversationPane = memo(function HostedConversationPane({
     >
       {failed ? (
         <>
-          <ConversationBackHeader />
+          {backToList && <ConversationBackHeader />}
           <p role="alert" className="p-4 text-sm text-error-primary">
             {failedText}
           </p>

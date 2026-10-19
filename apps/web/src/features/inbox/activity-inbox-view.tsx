@@ -121,13 +121,13 @@ export function ActivityInboxView({
       .filter((item) => !seen.has(item.key) && seen.add(item.key));
   }, [query.data, pinned]);
 
-  // List and conversation side by side need the width Chat pins them at (`lg`); narrower, a row
-  // opens Chat instead.
-  const wide = useBreakpoint("lg");
   const currentKey = useMemo(
     () => openedItemKey([...pinned, ...items], opened),
     [pinned, items, opened],
   );
+  // A row opens its conversation beside the list only at the width Chat pins them side by side
+  // (`lg`); narrower, the row opens Chat instead.
+  const wide = useBreakpoint("lg");
 
   const refreshList = useCallback(
     () => queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX }),
