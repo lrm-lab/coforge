@@ -30,6 +30,10 @@ import {
 } from "#src/features/conversations/chat-sections";
 import { agentEnvironmentKey } from "#src/features/agents/profile-panel/agent-profile-queries";
 import {
+  computerUpgradeStatusQuery,
+  followedComputerUpgradesQuery,
+} from "#src/features/computers/computer-upgrade-status";
+import {
   channelNamesQuery,
   conversationAroundQuery,
   directConversationQuery,
@@ -1574,5 +1578,10 @@ describe("the queries the app really defines", () => {
     expect(persistsQuery(channelMembersQueryKey("c1"))).toBe(false);
     expect(persistsQuery(agentEnvironmentKey("agent-1"))).toBe(false);
     expect(persistsQuery(agentActivityKeys.workspace("w1"))).toBe(false);
+    // A "running" upgrade read back from disk would show a spinner for an upgrade long settled.
+    expect(persistsQuery(computerUpgradeStatusQuery("computer-1", "request-1").queryKey)).toBe(
+      false,
+    );
+    expect(persistsQuery(followedComputerUpgradesQuery.queryKey)).toBe(false);
   });
 });

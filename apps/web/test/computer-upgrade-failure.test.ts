@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import {
   describeComputerUpgradeFailure,
-  describeComputerUpgradeSuccess,
   describeUpgradeRequestError,
 } from "#src/features/computers/upgrade-failure";
+import { describeComputerUpgradeSuccess } from "#src/features/computers/computer-upgrade-status";
 import { AppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { COMPUTER_CLI_COMMANDS, UPGRADE_ERROR_CODE_VALUES } from "@lrm/coforge-sdk/internal";

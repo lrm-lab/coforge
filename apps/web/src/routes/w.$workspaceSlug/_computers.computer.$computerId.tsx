@@ -15,7 +15,6 @@ import {
 } from "#src/features/computers/computers-pending";
 import {
   readComputerRestartStatus,
-  readComputerUpgradeStatus,
   restartComputer,
   scanAgentWorkspaces,
   deleteAgentWorkspace,
@@ -76,7 +75,6 @@ function ComputerDetailPage() {
   const requestRestart = useServerFn(restartComputer);
   const readRestart = useServerFn(readComputerRestartStatus);
   const requestUpgrade = useServerFn(upgradeComputer);
-  const readUpgrade = useServerFn(readComputerUpgradeStatus);
   const scanWorkspaces = useServerFn(scanAgentWorkspaces);
   const deleteWorkspace = useServerFn(deleteAgentWorkspace);
   const removeComputer = useServerFn(deleteComputer);
@@ -169,13 +167,6 @@ function ComputerDetailPage() {
         // The list's upgrading badge reads the operation the server now holds. Not awaited, so the
         // panel starts following it at once.
         if (status.status === "accepted") void router.invalidate();
-        return status;
-      }}
-      onReadUpgradeStatus={async (requestId) => {
-        const status = await readUpgrade({ data: { computerId, requestId } });
-        // A settled upgrade clears the list's badge; a completed one also changes the version the
-        // list and the meta line show.
-        if (status.status !== "accepted") void router.invalidate();
         return status;
       }}
       onUpdateDisplayName={async (displayName) => {

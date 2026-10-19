@@ -7,6 +7,10 @@ import { ComputerLayout } from "#src/features/computers/computer-layout";
 import { ComputersPending } from "#src/features/computers/computers-pending";
 import { ensureCloudComputer } from "#src/features/computers/cloud-computers.functions";
 import { listComputers } from "#src/features/computers/computers.functions";
+import {
+  followComputerUpgrade,
+  upgradeRunning,
+} from "#src/features/computers/computer-upgrade-status";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { getInstallOrigin } from "#src/features/install/install.functions";
 import { getUserPreferences } from "#src/features/settings/settings.functions";
@@ -15,7 +19,7 @@ import { computerLabel } from "#src/features/computers/computer-identity";
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
 export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
-  loader: async () => {
+  loader: async ({ context }) => {
     // Creating a Workspace already starts this. Opening the page ensures it
     // again, including an attach that waited because the container was not
     // ready yet. A deployment without a cluster still shows the computers it has.
@@ -25,6 +29,14 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
       getUserPreferences(),
       getInstallOrigin(),
     ]);
+    // An upgrade still running is followed by the Workspace shell (`computer-upgrade-watcher.tsx`).
+    for (const computer of computers)
+      if (computer.upgrade && upgradeRunning(computer.upgrade))
+        followComputerUpgrade(context.queryClient, {
+          computerId: computer.id,
+          requestId: computer.upgrade.requestId,
+          startedHere: false,
+        });
     return {
       computers,
       timeZone: preferences.timeZone,

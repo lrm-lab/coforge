@@ -3,6 +3,7 @@ import { Outlet, createFileRoute, notFound, redirect, useNavigate } from "@tanst
 import { useServerFn } from "@tanstack/react-start";
 
 import { AppShell } from "#src/components/app-shell";
+import { ComputerUpgradeWatcher } from "#src/features/computers/computer-upgrade-watcher";
 import { TimeFormatProvider } from "#src/lib/time-format-context";
 import { TimeZoneProvider } from "#src/lib/time-zone-context";
 import { loadAssumedPhone } from "#src/features/settings/assumed-viewport.functions";
@@ -154,6 +155,7 @@ function AppLayout() {
                     viewerId={user.id}
                     workspaceId={currentWorkspace.id}
                   />
+                  <ComputerUpgradeWatcher />
                   <AppShell
                     user={{
                       id: user.id,

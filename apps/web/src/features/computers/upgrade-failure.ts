@@ -6,6 +6,7 @@ import {
   type UpgradeErrorCode,
 } from "@lrm/coforge-sdk/internal";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
+import { upgradeRunning } from "./computer-upgrade-status";
 
 /** Why an upgrade request ended without a verified new Computer version. */
 export type ComputerUpgradeFailure = {
@@ -214,23 +215,6 @@ export function describeComputerUpgradeFailure(
   };
 }
 
-/**
- * The one-line toast confirmation for a completed upgrade. Per docs/design/toast-vs-inline.md §13, the
- * version itself belongs to the meta line (the caller re-fetches once the status is completed);
- * this is only the courtesy that the action the user took just succeeded, never a second,
- * inline echo of the same event.
- */
-export function describeComputerUpgradeSuccess(version: string): string {
-  return m.computer_upgrade_succeeded_toast({ version });
-}
-
-/**
- * How long past the server's deadline the panel still takes an `accepted` status at its word. The
- * server times a request out at `expiresAt` itself; this is only a safety net for a status that
- * never moves on.
- */
-const UPGRADE_DEADLINE_MARGIN_MS = 90_000;
-
 /** What one upgrade status means for the panel: still running, done at a version, or failed. */
 export type ComputerUpgradeOutcome =
   | { state: "running" }
@@ -246,10 +230,9 @@ export function upgradeOutcome(
   status: ComputerUpgradeStatus,
   now = Date.now(),
 ): ComputerUpgradeOutcome {
+  if (upgradeRunning(status, now)) return { state: "running" };
   if (status.status === "accepted")
-    return Date.parse(status.expiresAt) + UPGRADE_DEADLINE_MARGIN_MS < now
-      ? { state: "failed", failure: describeComputerUpgradeFailure({ reason: "timeout" }) }
-      : { state: "running" };
+    return { state: "failed", failure: describeComputerUpgradeFailure({ reason: "timeout" }) };
   if (status.status === "completed" && status.computerVersion)
     return { state: "succeeded", version: status.computerVersion };
   if (status.status === "failed")

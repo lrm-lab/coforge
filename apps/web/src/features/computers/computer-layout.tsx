@@ -29,7 +29,7 @@ import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
 import { computerVersionLabel, isComputerUpdateAvailable } from "./computer-identity";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
-import { upgradeOutcome } from "./upgrade-failure";
+import { upgradeRunning } from "./computer-upgrade-status";
 
 export type ComputerListItem = ComputerIdentity &
   ComputerPlatformInfo & {
@@ -123,11 +123,7 @@ export function ComputerLayout({
                           ? latestComputerVersion
                           : undefined)
                       }
-                      upgrading={
-                        computer.upgrade
-                          ? upgradeOutcome(computer.upgrade).state === "running"
-                          : false
-                      }
+                      upgrading={upgradeRunning(computer.upgrade)}
                     />
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="truncate text-sm font-semibold">

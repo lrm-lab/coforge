@@ -19,3 +19,6 @@ These rules apply to `src/features/computers/`.
   user to pick a host. Formatting a cloud computer removes its service and disk,
   then places the same computer again. The owner must type its name; the server
   checks that name. Agents, messages, and workspace links stay.
+- An upgrade's status is polled and settled only by `ComputerUpgradeWatcher`, mounted in the
+  Workspace shell so it survives leaving the Computers page. The detail observes the same query
+  without polling, and the list reads loader data (`computer-upgrade-status.ts`).

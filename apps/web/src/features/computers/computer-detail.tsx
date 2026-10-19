@@ -15,7 +15,7 @@ import {
   XClose as X,
 } from "@untitledui/icons";
 import { useHydrated } from "@tanstack/react-router";
-import { skipToken, useQuery } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Heading, Text } from "react-aria-components";
 import type { RuntimeProvider, AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
@@ -48,7 +48,11 @@ import {
 } from "./computer-identity";
 import { cloudImageUpdateConsequences } from "./cloud-image-update";
 import {
-  describeComputerUpgradeSuccess,
+  computerUpgradeStatusQuery,
+  followComputerUpgrade,
+  upgradeRunning,
+} from "./computer-upgrade-status";
+import {
   describeUpgradeRequestError,
   upgradeOutcome,
   type ComputerUpgradeOutcome,
@@ -77,24 +81,6 @@ import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
 
 export const RESTART_POLL_INTERVAL_MS = 2_000;
 export const RESTART_MAX_POLLS = 31;
-
-/**
- * An upgrade is an external one-shot job that takes minutes, not an in-process restart. The panel
- * polls its status until the server settles it; the server decides the deadline (`expiresAt`), and
- * `upgradeOutcome`'s margin past it is only a safety net.
- */
-export const UPGRADE_POLL_INTERVAL_MS = 3_000;
-
-/** A followed upgrade's status is read for the last time once it has settled, or failed to read. */
-function upgradeStatusSettled({
-  data,
-  status,
-}: {
-  data: ComputerUpgradeStatus | undefined;
-  status: "pending" | "error" | "success";
-}) {
-  return status === "error" || (data !== undefined && upgradeOutcome(data).state !== "running");
-}
 
 export type ComputerDetailView = ComputerIdentity & {
   id: string;
@@ -167,11 +153,9 @@ export function ComputerDetail({
   onRestart,
   onReadRestartStatus,
   onUpgrade,
-  onReadUpgradeStatus,
   latestComputerVersion,
   restartPollIntervalMs = RESTART_POLL_INTERVAL_MS,
   restartMaxPolls = RESTART_MAX_POLLS,
-  upgradePollIntervalMs = UPGRADE_POLL_INTERVAL_MS,
   agentWorkspaceScan = null,
   onScanAgentWorkspaces,
   onDeleteAgentWorkspace,
@@ -190,7 +174,6 @@ export function ComputerDetail({
   onRestart?: (requestId: string) => Promise<ComputerRestartStatus>;
   onReadRestartStatus?: (requestId: string) => Promise<ComputerRestartStatus>;
   onUpgrade?: (requestId: string) => Promise<ComputerUpgradeStatus>;
-  onReadUpgradeStatus?: (requestId: string) => Promise<ComputerUpgradeStatus>;
   /** The last Agent workspace scan the owner took (kept across reloads); `null` when none. */
   agentWorkspaceScan?: AgentWorkspaceScanSnapshot | null;
   /** Scans the Computer and records the result as `agentWorkspaceScan`. */
@@ -208,7 +191,6 @@ export function ComputerDetail({
   latestComputerVersion?: string | null;
   restartPollIntervalMs?: number;
   restartMaxPolls?: number;
-  upgradePollIntervalMs?: number;
 }) {
   const [editingDisplayName, setEditingDisplayName] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState(computer.displayName);
@@ -256,6 +238,7 @@ export function ComputerDetail({
   };
   const workspaceSlug = useWorkspaceSlug();
   const toast = useAppToast();
+  const queryClient = useQueryClient();
   const creatorName = computer.creator ? humanLabel(computer.creator) : "";
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -276,49 +259,37 @@ export function ComputerDetail({
     | { state: "accepted"; requestId: string }
     | ({ state: "refused" } & UpgradeRequestErrorCopy)
   >({ state: "idle" });
-  // The Computer's latest upgrade, as the server holds it: a reload, another tab and another member
-  // all follow one still running, and keep the reason one failed.
+  // The Computer's latest upgrade as the server holds it, so a reload keeps one running or failed.
+  // It is polled by `ComputerUpgradeWatcher`; this panel only reads its live status.
   const storedUpgrade = computer.upgrade ?? undefined;
   const followedUpgradeId =
     upgradeRequest.state === "accepted"
       ? upgradeRequest.requestId
-      : storedUpgrade && upgradeOutcome(storedUpgrade).state === "running"
+      : storedUpgrade && upgradeRunning(storedUpgrade)
         ? storedUpgrade.requestId
         : null;
-  const upgradeStatus = useQuery({
-    queryKey: ["computers", "upgrade", computer.id, followedUpgradeId],
-    queryFn:
-      followedUpgradeId && onReadUpgradeStatus
-        ? () => onReadUpgradeStatus(followedUpgradeId)
-        : skipToken,
-    // Polled while running; once settled it is not read again, so the caller's refresh runs once.
-    refetchInterval: (query) => (upgradeStatusSettled(query.state) ? false : upgradePollIntervalMs),
-    staleTime: (query) => (upgradeStatusSettled(query.state) ? Infinity : 0),
+  const [liveStatus] = useQueries({
+    queries: (followedUpgradeId ? [followedUpgradeId] : []).map((requestId) => ({
+      ...computerUpgradeStatusQuery(computer.id, requestId),
+      enabled: false,
+    })),
   });
+  const liveUpgrade: ComputerUpgradeOutcome | undefined = !liveStatus
+    ? undefined
+    : liveStatus.isError
+      ? { state: "failed", failure: describeUpgradeRequestError(liveStatus.error) }
+      : liveStatus.data
+        ? upgradeOutcome(liveStatus.data)
+        : { state: "running" };
   const upgrade: ComputerUpgradeOutcome | { state: "idle" } =
     upgradeRequest.state === "requesting"
       ? { state: "running" }
       : upgradeRequest.state === "refused"
         ? { state: "failed", failure: upgradeRequest }
-        : upgradeStatus.isError
-          ? { state: "failed", failure: describeUpgradeRequestError(upgradeStatus.error) }
-          : upgradeStatus.data
-            ? upgradeOutcome(upgradeStatus.data)
-            : followedUpgradeId
-              ? { state: "running" }
-              : storedUpgrade
-                ? upgradeOutcome(storedUpgrade)
-                : { state: "idle" };
+        : (liveUpgrade ?? (storedUpgrade ? upgradeOutcome(storedUpgrade) : { state: "idle" }));
   const upgrading = upgrade.state === "running";
   const upgradeFailure: UpgradeRequestErrorCopy | undefined =
     upgrade.state === "failed" ? upgrade.failure : undefined;
-  // The version itself moves to the Version row (the caller refreshes the loader); a toast only
-  // confirms an action taken here (§13), never an upgrade this panel found running.
-  const upgradedHereVersion =
-    upgradeRequest.state === "accepted" && upgrade.state === "succeeded" ? upgrade.version : null;
-  useEffect(() => {
-    if (upgradedHereVersion) toast.success(describeComputerUpgradeSuccess(upgradedHereVersion));
-  }, [upgradedHereVersion]);
   const canUpgrade = Boolean(onUpgrade) && computer.ownedByCurrentUser;
   const cloudImageVersion = computer.imageUpdate?.version;
   const offeredVersion = cloudImageVersion ?? latestComputerVersion;
@@ -334,11 +305,12 @@ export function ComputerDetail({
     setUpgradeRequest({ state: "requesting" });
     try {
       const outcome = upgradeOutcome(await onUpgrade(requestId));
-      setUpgradeRequest(
-        outcome.state === "failed"
-          ? { state: "refused", ...outcome.failure }
-          : { state: "accepted", requestId },
-      );
+      if (outcome.state === "failed") {
+        setUpgradeRequest({ state: "refused", ...outcome.failure });
+        return;
+      }
+      followComputerUpgrade(queryClient, { computerId: computer.id, requestId, startedHere: true });
+      setUpgradeRequest({ state: "accepted", requestId });
     } catch (error) {
       setUpgradeRequest({ state: "refused", ...describeUpgradeRequestError(error) });
     }
