@@ -32,8 +32,10 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 
 ## Message attention and delivery
 
-- `agent-message-attention-index.ts` owns full-target thread attention,
-  model-visible positions, and the accepted-Message observation hook.
+- `agent-message-attention-index.ts` owns full-target thread attention, consumed
+  cursors and pending settlement. Cursor fields are one private record per Agent/target;
+  business operations coordinate updates and snapshot persistence inside this module.
+  Callers use its message operations and queries, never a separate mutable state dependency.
 - `memory-channel-updates.ts` coalesces ordinary Memory Agent channel deliveries per target: five updates or 30 seconds trigger a notice, whose body is read through `message_read`. Personal mentions remain immediate.
 - A create or resume launch opens one startup turn. Real recovery input or an explicit
   `resumePrompt` takes precedence; an empty fresh launch gets `Start.`, an empty resume gets a

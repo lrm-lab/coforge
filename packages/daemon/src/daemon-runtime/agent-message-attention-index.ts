@@ -161,16 +161,10 @@ export class AgentMessageAttentionIndex {
     }
   >();
   readonly #attention = new Map<string, Map<string, MessageAttention>>();
-  readonly #modelSeen = new Map<string, Map<string, number>>();
-  /** `exactSeqs`: the sequences above each target's contiguous frontier that the Agent was shown
-   * one by one (a `check`, an anchored `read`, a read the server did not call contiguous), kept
-   * ascending so a lookup is a binary search and an addition a linear merge. Durable with the
-   * frontier, bounded by `SEEN_EXACT_SEQS_LIMIT` per target, and pruned as the frontier reaches
-   * them. */
-  readonly #exactSeen = new Map<string, Map<string, readonly number[]>>();
-  /** `aliases`, with chains compressed: every spelling maps straight to the canonical target its
-   * consumed state is kept under, so a lookup is one `get`. */
-  readonly #aliases = new Map<string, Map<string, string>>();
+  /** One privately owned cursor aggregate per Agent, hydrated on first use. Each target keeps
+   * its frontier, exact sequences, conversation and review together; aliases and review order
+   * belong to the Agent. Message operations update this state and pending attention together. */
+  readonly #consumedByAgent = new Map<string, ConsumedAgent>();
   /** The targets with attention in each conversation, learned from their deliveries and pruned with
    * the attention, so a history read's consumption scope settles a conversation's targets however
    * each is spelled. `#attentionConversation` is the way back, for the pruning. */
@@ -183,26 +177,8 @@ export class AgentMessageAttentionIndex {
    * reviewed, which is what lets a resend through instead of holding it again. Bounded by
    * `PENDING_WINDOW_LIMIT`; pruned as the boundary advances and dropped with the Agent. */
   readonly #pendingWindow = new Map<string, Map<string, PendingWindowEntry[]>>();
-  readonly #readContext = new Map<string, Map<string, number>>();
-  /** The newest message a review of each target showed: a `read` other than `--around`, or the
-   * context a presented (not withheld) hold showed, which reviews the target as well as moving its
-   * frontier. Unlike `#modelSeen`, a `check`, an anchored read and a sent send's advanced boundary
-   * never move it: it answers "has a review shown the Agent anything here", which is what makes a
-   * thread count as reply context. Persisted apart from the frontier as `reviewedSeq`. */
-  readonly #reviewedSequence = new Map<string, Map<string, number>>();
-  /** The conversation each target's consumed cursor counts in (`conversationId`, persisted). */
-  readonly #cursorConversation = new Map<string, Map<string, string>>();
-  readonly #readContextCounters = new Map<string, number>();
-  /** `consumed-seqs.json`: the durable copy of `#modelSeen` (the `seq` frontier), `#readContext`
-   * (the `readOrder` each target was last reviewed at), `#reviewedSequence` (`reviewedSeq`),
-   * `#exactSeen` (`exactSeqs`) and `#aliases`. Once an Agent is hydrated these maps are the
-   * source of truth, and each operation writes one snapshot of them. */
+  /** Durable snapshots of the same aggregate; each consumption operation writes at most once. */
   readonly #consumedSeqs?: AgentConsumedSeqPort;
-  /** Agents whose durable cursor has already been folded into the maps above. The file is read
-   * once per Agent per daemon life rather than on every lookup: the same answer, minus the
-   * syscall in a message loop, and `clearAgent` drops the marker so a re-registered Agent reads
-   * it again. */
-  readonly #hydrated = new Set<string>();
   readonly #workspaceId: string;
   readonly #runtimes: Pick<AgentProcessManager, "session"> &
     Partial<Pick<AgentProcessManager, "runtime">>;
@@ -366,7 +342,7 @@ export class AgentMessageAttentionIndex {
       outcome,
       model_seen_seq: this.modelSeenSequence(message.agentId, target),
       exact_seen: containsSorted(
-        this.#exactSeen.get(message.agentId)?.get(target),
+        this.#consumedByAgent.get(message.agentId)?.targets.get(target)?.exactSeqs,
         message.sequence,
       ),
     });
@@ -485,7 +461,7 @@ export class AgentMessageAttentionIndex {
         const id =
           unreadConversationIds[target] ??
           messages.find((message) => message.target === target)?.conversationId ??
-          this.#cursorConversation.get(agentId)?.get(target);
+          this.#consumedByAgent.get(agentId)?.targets.get(target)?.conversationId;
         if (!id) throw new Error("Memory recovery requires a canonical conversation id");
         scopes.set(id, target);
       }
@@ -498,7 +474,8 @@ export class AgentMessageAttentionIndex {
               ([name]) =>
                 (unreadConversationIds[name] ??
                   messages.find((message) => message.target === name)?.conversationId ??
-                  this.#cursorConversation.get(agentId)?.get(name)) === conversationId,
+                  this.#consumedByAgent.get(agentId)?.targets.get(name)?.conversationId) ===
+                conversationId,
             ),
           ),
           unreadConversationIds,
@@ -893,7 +870,7 @@ export class AgentMessageAttentionIndex {
    * At most one write, for every target.
    */
   recordExactSeen(agentId: string, shown: ReadonlyMap<string, readonly number[]>): void {
-    this.#hydrate(agentId);
+    this.#consumedState(agentId);
     let changed = false;
     for (const [target, sequences] of shown) {
       if (!target || !this.#addExact(agentId, target, sequences)) continue;
@@ -921,7 +898,7 @@ export class AgentMessageAttentionIndex {
       scope?: Pick<AgentHistoryConsumptionScope, "conversationId" | "channelType" | "target">;
     },
   ): void {
-    this.#hydrate(agentId);
+    this.#consumedState(agentId);
     const { target } = read;
     let changed = this.#setAlias(agentId, read.spelling, target);
     if (read.through > 0) changed = this.#advanceFrontier(agentId, target, read.through) || changed;
@@ -947,7 +924,6 @@ export class AgentMessageAttentionIndex {
     review?: { sequence: number },
   ): void {
     if (!Number.isInteger(through) || through < 1) return;
-    this.#hydrate(agentId);
     const changed = this.#advanceFrontier(agentId, target, through);
     if (review) this.#takeReadOrder(agentId, target, review.sequence);
     if (changed || review) this.#persist(agentId);
@@ -956,35 +932,30 @@ export class AgentMessageAttentionIndex {
   /** The exact sequences a send reports for `target` (`seenExactSeqs`): those above its
    * frontier, ascending, at most `SEEN_EXACT_SEQS_LIMIT`. Returned as held, never copied. */
   seenExactSequences(agentId: string, target: string): readonly number[] {
-    this.#hydrate(agentId);
-    return this.#exactSeen.get(agentId)?.get(target) ?? NO_SEQUENCES;
+    return this.#consumedState(agentId).targets.get(target)?.exactSeqs ?? NO_SEQUENCES;
   }
 
   /** Whether the Agent was shown anything of `target` one by one above its frontier. */
   hasExactSeen(agentId: string, target: string): boolean {
-    this.#hydrate(agentId);
-    return (this.#exactSeen.get(agentId)?.get(target)?.length ?? 0) > 0;
+    return (this.#consumedState(agentId).targets.get(target)?.exactSeqs?.length ?? 0) > 0;
   }
 
   /** The spelling `target`'s consumed state is kept under. */
   resolveTarget(agentId: string, target: string): string {
-    this.#hydrate(agentId);
-    return this.#aliases.get(agentId)?.get(target) ?? target;
+    return this.#consumedState(agentId).aliases.get(target) ?? target;
   }
 
   /** `spelling` shares the consumed state kept under `canonical`. */
   recordTargetAlias(agentId: string, spelling: string, canonical: string): void {
-    this.#hydrate(agentId);
+    this.#consumedState(agentId);
     if (this.#setAlias(agentId, spelling, canonical)) this.#persist(agentId);
   }
 
   /** Whether the Agent has already been shown message `sequence` of the canonical `target`: at or
    * below its contiguous frontier, or shown one by one. */
   hasSeen(agentId: string, target: string, sequence: number): boolean {
-    return (
-      this.modelSeenSequence(agentId, target) >= sequence ||
-      containsSorted(this.#exactSeen.get(agentId)?.get(target), sequence)
-    );
+    const entry = this.#consumedState(agentId).targets.get(target);
+    return (entry?.seq ?? 0) >= sequence || containsSorted(entry?.exactSeqs, sequence);
   }
 
   /** A delivery's target is the server's canonical spelling, so it needs no alias lookup. */
@@ -1003,12 +974,10 @@ export class AgentMessageAttentionIndex {
    * without a conversation, because a read drops it.
    */
   bindConversation(agentId: string, target: string, conversationId: string): void {
-    this.#hydrate(agentId);
-    const byTarget = this.#cursorConversation.get(agentId) ?? new Map<string, string>();
-    this.#cursorConversation.set(agentId, byTarget);
-    const recorded = byTarget.get(target);
+    const entry = this.#targetState(agentId, target);
+    const recorded = entry.conversationId;
     if (recorded === conversationId) return;
-    byTarget.set(target, conversationId);
+    entry.conversationId = conversationId;
     if (recorded !== undefined) {
       logger.info("Agent consumed cursor reset for a recreated conversation", {
         event: "agent.message.consumed_cursor_reset",
@@ -1016,57 +985,49 @@ export class AgentMessageAttentionIndex {
         target,
         previous_conversation_id: recorded,
         conversation_id: conversationId,
-        model_seen_seq: this.#modelSeen.get(agentId)?.get(target) ?? 0,
+        model_seen_seq: entry.seq ?? 0,
       });
-      this.#modelSeen.get(agentId)?.delete(target);
-      this.#exactSeen.get(agentId)?.delete(target);
-      this.#reviewedSequence.get(agentId)?.delete(target);
+      delete entry.seq;
+      delete entry.exactSeqs;
+      delete entry.reviewedSeq;
     }
     this.#persist(agentId);
   }
 
   /** Adds `sequences` above the frontier to `target`'s exact set; whether anything was added. */
   #addExact(agentId: string, target: string, sequences: readonly number[]): boolean {
-    if (sequences.length === 0) return false;
-    const byTarget = this.#exactSeen.get(agentId) ?? new Map<string, readonly number[]>();
-    const existing = byTarget.get(target) ?? NO_SEQUENCES;
+    if (!sequences.length) return false;
+    const entry = this.#targetState(agentId, target);
+    const existing = entry.exactSeqs ?? NO_SEQUENCES;
     const incoming = isAscending(sequences) ? sequences : [...sequences].sort(byNumber);
-    const merged = mergeSeenExactSeqs(
-      this.#modelSeen.get(agentId)?.get(target) ?? 0,
-      existing,
-      incoming,
-    );
+    const merged = mergeSeenExactSeqs(entry.seq ?? 0, existing, incoming);
     if (merged.length === existing.length && merged.every((value, i) => value === existing[i]))
       return false;
-    byTarget.set(target, merged);
-    this.#exactSeen.set(agentId, byTarget);
+    entry.exactSeqs = merged;
     return true;
   }
 
   /** Moves `target`'s frontier up to `sequence` (never lower), drops the exact sequences it now
    * covers, and settles the pending attention at or below it. Whether the frontier moved. */
   #advanceFrontier(agentId: string, target: string, sequence: number): boolean {
-    const byTarget = this.#modelSeen.get(agentId) ?? new Map<string, number>();
-    const prior = byTarget.get(target) ?? 0;
-    if (sequence <= prior) return false;
-    const frontier = sequence;
-    byTarget.set(target, frontier);
-    this.#modelSeen.set(agentId, byTarget);
-    const exactByTarget = this.#exactSeen.get(agentId);
-    const exact = exactByTarget?.get(target);
+    const entry = this.#targetState(agentId, target);
+    if (sequence <= (entry.seq ?? 0)) return false;
+    entry.seq = sequence;
+    const exact = entry.exactSeqs;
     if (exact?.length) {
-      const kept = exact.slice(firstAbove(exact, frontier));
-      if (kept.length === 0) exactByTarget!.delete(target);
-      else if (kept.length !== exact.length) exactByTarget!.set(target, kept);
+      const kept = exact.slice(firstAbove(exact, sequence));
+      if (!kept.length) delete entry.exactSeqs;
+      else if (kept.length !== exact.length) entry.exactSeqs = kept;
     }
-    this.#settlePending(agentId, target, (pending) => pending <= frontier);
+    this.#settlePending(agentId, target, (pending) => pending <= sequence);
     return true;
   }
 
   /** Settles `target`'s pending attention for everything the Agent has seen of it. */
   #settleSeen(agentId: string, target: string): void {
-    const frontier = this.#modelSeen.get(agentId)?.get(target) ?? 0;
-    const exact = this.#exactSeen.get(agentId)?.get(target);
+    const entry = this.#consumedState(agentId).targets.get(target);
+    const frontier = entry?.seq ?? 0;
+    const exact = entry?.exactSeqs;
     this.#settlePending(
       agentId,
       target,
@@ -1156,7 +1117,7 @@ export class AgentMessageAttentionIndex {
    * `spelling`, keeping every chain one step long. Whether anything changed. */
   #setAlias(agentId: string, spelling: string, canonical: string): boolean {
     if (!spelling || !canonical || spelling === canonical) return false;
-    const aliases = this.#aliases.get(agentId) ?? new Map<string, string>();
+    const { aliases } = this.#consumedState(agentId);
     let target = aliases.get(canonical) ?? canonical;
     // `canonical` was itself a spelling of `spelling`: the newer mapping wins.
     if (target === spelling) {
@@ -1166,54 +1127,46 @@ export class AgentMessageAttentionIndex {
     if (aliases.get(spelling) === target) return false;
     aliases.set(spelling, target);
     for (const [other, named] of aliases) if (named === spelling) aliases.set(other, target);
-    this.#aliases.set(agentId, aliases);
     return true;
   }
 
   #takeReadOrder(agentId: string, target: string, sequence: number): void {
-    if (Number.isInteger(sequence) && sequence > 0) {
-      const reviewed = this.#reviewedSequence.get(agentId) ?? new Map<string, number>();
-      reviewed.set(target, Math.max(reviewed.get(target) ?? 0, sequence));
-      this.#reviewedSequence.set(agentId, reviewed);
-    }
-    // Reviewing a target is what orders it against every other target, which is the comparison
-    // the thread-mismatch guard makes. The counter resumes above every order the durable cursor
-    // held (see `#hydrate`).
-    const order = (this.#readContextCounters.get(agentId) ?? 0) + 1;
-    this.#readContextCounters.set(agentId, order);
-    const byTarget = this.#readContext.get(agentId) ?? new Map<string, number>();
-    byTarget.set(target, order);
-    this.#readContext.set(agentId, byTarget);
+    const state = this.#consumedState(agentId);
+    const entry = this.#targetState(agentId, target);
+    if (Number.isInteger(sequence) && sequence > 0)
+      entry.reviewedSeq = Math.max(entry.reviewedSeq ?? 0, sequence);
+    // A review orders this target against all others; loading resumes above every saved order.
+    entry.readOrder = ++state.lastReadOrder;
   }
 
   /** Writes one snapshot of the Agent's durable consumed state. */
   #persist(agentId: string): void {
     const store = this.#consumedSeqs;
     if (!store) return;
+    const state = this.#consumedState(agentId);
     const targets: Record<string, AgentConsumedSeqEntry> = {};
-    const entry = (target: string) => (targets[target] ??= {}) as MutableEntry;
-    for (const [target, seq] of this.#modelSeen.get(agentId) ?? []) entry(target).seq = seq;
-    const reviewed = this.#reviewedSequence.get(agentId);
-    for (const [target, readOrder] of this.#readContext.get(agentId) ?? []) {
-      const record = entry(target);
-      record.readOrder = readOrder;
-      const reviewedSeq = reviewed?.get(target);
-      if (reviewedSeq !== undefined) record.reviewedSeq = reviewedSeq;
+    for (const [target, entry] of state.targets) {
+      const record: ConsumedTarget = {};
+      if (entry.seq !== undefined) record.seq = entry.seq;
+      if (entry.readOrder !== undefined) {
+        record.readOrder = entry.readOrder;
+        if (entry.reviewedSeq !== undefined) record.reviewedSeq = entry.reviewedSeq;
+      }
+      if (entry.exactSeqs?.length) record.exactSeqs = entry.exactSeqs;
+      // A conversation binding by itself never made a persisted cursor entry.
+      if (Object.keys(record).length === 0) continue;
+      if (entry.conversationId !== undefined) record.conversationId = entry.conversationId;
+      targets[target] = record;
     }
-    for (const [target, exactSeqs] of this.#exactSeen.get(agentId) ?? [])
-      if (exactSeqs.length > 0) entry(target).exactSeqs = exactSeqs;
-    for (const [target, conversationId] of this.#cursorConversation.get(agentId) ?? [])
-      if (targets[target]) entry(target).conversationId = conversationId;
     store.write(agentId, {
       targets,
-      aliases: Object.fromEntries(this.#aliases.get(agentId) ?? []),
-      nextReadOrder: (this.#readContextCounters.get(agentId) ?? 0) + 1,
+      aliases: Object.fromEntries(state.aliases),
+      nextReadOrder: state.lastReadOrder + 1,
     });
   }
 
   modelSeenSequence(agentId: string, target: string): number {
-    this.#hydrate(agentId);
-    return this.#modelSeen.get(agentId)?.get(target) ?? 0;
+    return this.#consumedState(agentId).targets.get(target)?.seq ?? 0;
   }
 
   /** Messages the Agent has not been shown yet for this exact target. A target with no attention
@@ -1253,7 +1206,6 @@ export class AgentMessageAttentionIndex {
    * it orders nothing. */
   recordModelSeen(agentId: string, target: string, sequence: number): void {
     if (!Number.isInteger(sequence) || sequence < 1) return;
-    this.#hydrate(agentId);
     if (this.#advanceFrontier(agentId, target, sequence)) this.#persist(agentId);
   }
 
@@ -1264,15 +1216,13 @@ export class AgentMessageAttentionIndex {
    * how recently a thread was read against how recently its parent target was read.
    */
   recordReadContext(agentId: string, target: string, sequence = 0): void {
-    this.#hydrate(agentId);
     this.#takeReadOrder(agentId, target, sequence);
     this.#persist(agentId);
   }
 
   /** The most recently read context order for `target`, or `undefined` if never recorded. */
   readOrder(agentId: string, target: string): number | undefined {
-    this.#hydrate(agentId);
-    return this.#readContext.get(agentId)?.get(target);
+    return this.#consumedState(agentId).targets.get(target)?.readOrder;
   }
 
   /** The most recently read thread target rooted under `parentTarget` whose reads have shown the
@@ -1282,71 +1232,58 @@ export class AgentMessageAttentionIndex {
     agentId: string,
     parentTarget: string,
   ): { target: string; order: number } | undefined {
-    this.#hydrate(agentId);
-    const byTarget = this.#readContext.get(agentId);
-    if (!byTarget) return undefined;
     const prefix = `${parentTarget}:`;
     let latest: { target: string; order: number } | undefined;
-    const reviewed = this.#reviewedSequence.get(agentId);
-    for (const [target, order] of byTarget)
+    for (const [target, entry] of this.#consumedState(agentId).targets) {
+      const order = entry.readOrder;
       if (
+        order !== undefined &&
         target.startsWith(prefix) &&
-        (reviewed?.get(target) ?? 0) > 0 &&
+        (entry.reviewedSeq ?? 0) > 0 &&
         (!latest || order > latest.order)
       )
         latest = { target, order };
+    }
     return latest;
   }
 
-  /** Loads the durable consumed cursor for one Agent into this index's own maps, once per daemon
-   * life, before anything else touches that Agent's cursor; from then on these maps are the source
-   * of truth and each operation writes a snapshot of them. The store has already normalized the
-   * file (it is input nobody in this process wrote). The read-order counter resumes above every
-   * order in the file. */
-  #hydrate(agentId: string): void {
-    const store = this.#consumedSeqs;
-    if (!store || this.#hydrated.has(agentId)) return;
-    this.#hydrated.add(agentId);
-    const state = store.read(agentId);
-    const modelSeen = new Map<string, number>();
-    const readContext = new Map<string, number>();
-    const reviewedSequence = new Map<string, number>();
-    const exactSeen = new Map<string, readonly number[]>();
-    const cursorConversation = new Map<string, string>();
-    for (const [target, entry] of Object.entries(state.targets)) {
-      if (entry.conversationId !== undefined) cursorConversation.set(target, entry.conversationId);
-      if (entry.seq !== undefined) modelSeen.set(target, entry.seq);
-      if (entry.readOrder !== undefined) readContext.set(target, entry.readOrder);
-      if (entry.reviewedSeq !== undefined) reviewedSequence.set(target, entry.reviewedSeq);
-      if (entry.exactSeqs?.length) exactSeen.set(target, entry.exactSeqs);
+  /** Load once; aggregate presence is the hydration marker. Clearing the Agent forgets only
+   * this cached view so a subsequent registration reloads the durable cursor. */
+  #consumedState(agentId: string): ConsumedAgent {
+    const existing = this.#consumedByAgent.get(agentId);
+    if (existing) return existing;
+    const state: ConsumedAgent = { targets: new Map(), aliases: new Map(), lastReadOrder: 0 };
+    this.#consumedByAgent.set(agentId, state);
+    if (this.#consumedSeqs) {
+      const saved = this.#consumedSeqs.read(agentId);
+      for (const [target, entry] of Object.entries(saved.targets))
+        state.targets.set(target, { ...entry });
+      state.aliases = new Map(Object.entries(saved.aliases));
+      state.lastReadOrder = saved.nextReadOrder - 1;
     }
-    this.#modelSeen.set(agentId, modelSeen);
-    this.#readContext.set(agentId, readContext);
-    this.#reviewedSequence.set(agentId, reviewedSequence);
-    this.#exactSeen.set(agentId, exactSeen);
-    this.#cursorConversation.set(agentId, cursorConversation);
-    this.#aliases.set(agentId, new Map(Object.entries(state.aliases)));
-    this.#readContextCounters.set(agentId, state.nextReadOrder - 1);
+    return state;
+  }
+
+  #targetState(agentId: string, target: string): ConsumedTarget {
+    const { targets } = this.#consumedState(agentId);
+    const existing = targets.get(target);
+    if (existing) return existing;
+    const entry: ConsumedTarget = {};
+    targets.set(target, entry);
+    return entry;
   }
 
   clearAgent(agentId: string, { cancelNotices = false }: { cancelNotices?: boolean } = {}): void {
     this.#memoryUpdates.clearAgent(agentId);
-    this.#hydrated.delete(agentId);
+    this.#consumedByAgent.delete(agentId);
     if (cancelNotices)
       this.#generations.get(agentId)?.cancellation.abort(new Error("Agent notice was cancelled"));
     this.#generations.delete(agentId);
     this.#attention.delete(agentId);
-    this.#modelSeen.delete(agentId);
-    this.#reviewedSequence.delete(agentId);
-    this.#exactSeen.delete(agentId);
-    this.#cursorConversation.delete(agentId);
-    this.#aliases.delete(agentId);
     this.#conversationTargets.delete(agentId);
     this.#attentionConversation.delete(agentId);
     this.#pendingSequences.delete(agentId);
     this.#pendingWindow.delete(agentId);
-    this.#readContext.delete(agentId);
-    this.#readContextCounters.delete(agentId);
   }
 
   /** Forgets the pending attention of these channel targets and every thread under them: the Agent
@@ -1380,7 +1317,14 @@ export class AgentMessageAttentionIndex {
 
 const NO_SEQUENCES: readonly number[] = [];
 
-type MutableEntry = { -readonly [K in keyof AgentConsumedSeqEntry]: AgentConsumedSeqEntry[K] };
+type ConsumedAgent = {
+  targets: Map<string, ConsumedTarget>;
+  aliases: Map<string, string>;
+  lastReadOrder: number;
+};
+/** Exact sequences stay sorted above the frontier. reviewedSeq advances only for presented
+ * review context, independently of consumption; readOrder compares reviews across targets. */
+type ConsumedTarget = { -readonly [K in keyof AgentConsumedSeqEntry]: AgentConsumedSeqEntry[K] };
 
 const byNumber = (left: number, right: number) => left - right;
 
