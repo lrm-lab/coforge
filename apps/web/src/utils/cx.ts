@@ -4,6 +4,8 @@ const twMerge = extendTailwindMerge({
   extend: {
     theme: {
       text: ["display-xs", "display-sm", "display-md", "display-lg", "display-xl", "display-2xl"],
+      // The page gutter (`--spacing-page` in styles.css), so `px-page` overrides `px-4`.
+      spacing: ["page"],
     },
   },
 });

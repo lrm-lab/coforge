@@ -46,9 +46,7 @@ export function PageHeader({
         identity={title}
         actions={actions && <div className="flex items-center gap-2">{actions}</div>}
         tabs={tabs}
-        // The page gutter (`px-page`) as an override of TabbedHeader's own `px-4 md:px-6`:
-        // tailwind-merge does not know `px-page`, so passing it would leave `px-4` in place too.
-        className="sm:px-6"
+        className="px-page"
       />
     );
   return (

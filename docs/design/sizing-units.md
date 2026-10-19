@@ -10,7 +10,7 @@
 
 - 首选 Tailwind 刻度，它本身就是 rem：Tailwind v4 的 `--spacing` 是 `0.25rem`，`p-4` = 1rem，`size-12` = 3rem；`theme.css` 的字号是 `--spacing` 的倍数（`text-sm` = 0.875rem）；圆角用 `rounded-md/lg/xl` 等 token（`--radius-*` 是 rem）。
 - 刻度里没有的值写 rem 任意值：`w-[18rem]`、`md:grid-cols-[repeat(auto-fill,minmax(18rem,1fr))]`、`max-w-[36rem]`。不写 `w-[280px]`、`text-[10px]`、`rounded-[10px]`。
-- 页面内容的左右留白（页面沟槽）统一用 `px-page`：1rem，`sm` 起 1.5rem，定义在 `styles.css` 的 `--page-gutter`。页头、页面正文、列表行都用它，不再手写 `px-4 sm:px-6`；要和沟槽对齐的偏移从变量算，例如 Activity 行的分隔线 `before:left-[calc(var(--page-gutter)+3rem)]`（沟槽加 2.25rem 图标加 0.75rem 间距）。对话头部（`TabbedHeader`）从 `md` 起才放宽，是另一套，不用它；带标签的 `PageHeader` 借用 `TabbedHeader`，用 `sm:px-6` 覆盖它的 `px-4 md:px-6` 得到同一沟槽，因为 tailwind-merge 认不出 `px-page`，无法用它去覆盖。
+- 页面内容的左右留白（页面沟槽）统一用 `px-page`：1rem，`sm` 起 1.5rem，定义在 `styles.css` 的 `--page-gutter`。`page` 是 Tailwind 的间距值（`--spacing-page`），`left-page`、`-mx-page` 等同样可用，`cx`／`cn` 的 tailwind-merge 也认得它。页头、页面正文、列表行都用它，不再手写 `px-4 sm:px-6`；要和沟槽对齐的任意值偏移从变量算，例如 Activity 行的分隔线 `before:left-[calc(var(--page-gutter)+3rem)]`（沟槽加 2.25rem 图标加 0.75rem 间距）。对话头部（`TabbedHeader`）从 `md` 起才放宽，是另一套，不用它；带标签的 `PageHeader` 借用 `TabbedHeader`，传 `px-page` 覆盖它的 `px-4`，保留的 `md:px-6` 与沟槽相等。
 - 会话窗格旁的列表栏（Activity、Search）宽度用 `w-list-column`：`min(35rem, 50%)`，至多半页，让会话留出空间。Chat 的会话列表是常驻的圆角面板（`lg:w-72`），不用它。
 - 断点用 Tailwind 的 `sm/md/lg/xl` 刻度，不写 `min-[1024px]:`。注意媒体查询里的 rem 取浏览器默认字号，不随浏览器的字号设置变化；用刻度断点是为了全站一致。`xs`/`xxs` 是 `theme.css` 定义的 px 断点，照用即可。窗格宽度决定布局时（例如旁边打开了资料面板），用容器查询 `@container` 而不是视口断点。
 - 内联 `style` 里的数字在 React 中按 px 处理：`style={{ paddingLeft: 16 }}` 是 16px。要写成 rem 字符串，例如树形缩进 `style={{ paddingLeft: `${0.25 + (level - 1)}rem` }}`，或改用 CSS 变量加 Tailwind 类。

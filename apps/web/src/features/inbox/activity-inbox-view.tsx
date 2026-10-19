@@ -205,8 +205,7 @@ export function ActivityInboxView({
       data-activity-list
       className={cn(
         "flex min-h-0 flex-col",
-        // Raft's 35rem column (`w-list-column`), at most half the page so the conversation keeps
-        // room at `lg`.
+        // Raft's 35rem column beside the conversation at `lg`.
         // Narrower, the conversation takes the page in its place; the list stays mounted.
         opened ? "w-list-column shrink-0 max-lg:hidden" : "min-w-0 flex-1",
       )}

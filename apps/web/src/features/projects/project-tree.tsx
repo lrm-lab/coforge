@@ -67,7 +67,7 @@ export function ProjectTree({ slug, path }: { slug: string; path: string }) {
             </div>
           }
         />
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-page py-4 sm:py-6">
           <RepositoryStatusMessage
             status={repository.status}
             onRetry={() => queryClient.invalidateQueries({ queryKey: ["project", slug] })}
@@ -141,7 +141,7 @@ export function ProjectTree({ slug, path }: { slug: string; path: string }) {
           treeSha={repository.sha}
         />
       ) : !entry || entry.type === "dir" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-page py-4 sm:py-6">
           <DirectoryBody
             slug={slug}
             path={path}
@@ -291,7 +291,7 @@ function UnindexedPath({
   const { data } = useQuery(projectObjectQuery(slug, path));
   if (data?.status === "ready" && data.node.kind === "tree")
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-page py-4 sm:py-6">
         <DirectoryBody
           slug={slug}
           path={path}

@@ -299,7 +299,10 @@ export function WeeklyReportSettings({
           )}
         </div>
 
-        <TabPanel id="templates" className="min-h-0 flex-1 overflow-auto bg-primary p-4 sm:p-6">
+        <TabPanel
+          id="templates"
+          className="min-h-0 flex-1 overflow-auto bg-primary px-page py-4 sm:py-6"
+        >
           {templates.length === 0 ? (
             <Empty className="py-10">
               <EmptyHeader>

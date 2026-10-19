@@ -31,7 +31,9 @@
 }
 
 /* The page gutter: page content's side inset, 1rem and 1.5rem from `sm`
-   (docs/design/sizing-units.md). Offsets that line up with it compute from `--page-gutter`. */
+   (docs/design/sizing-units.md). `page` is a spacing value, so `px-page`, `left-page` and
+   `-mx-page` are generated; arbitrary offsets that line up with it compute from
+   `--page-gutter`. */
 :root {
   --page-gutter: 1rem;
 
@@ -40,8 +42,8 @@
   }
 }
 
-@utility px-page {
-  padding-inline: var(--page-gutter);
+@theme inline {
+  --spacing-page: var(--page-gutter);
 }
 
 /* A list column beside a conversation pane (Activity, Search): 35rem, at most half the page so

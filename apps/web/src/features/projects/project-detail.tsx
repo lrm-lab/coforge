@@ -87,7 +87,7 @@ export function ProjectDetail({
           )
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-page py-4 sm:py-6">
         {project.description && (
           <p className="mb-6 whitespace-pre-wrap break-words text-sm text-tertiary">
             {project.description}
