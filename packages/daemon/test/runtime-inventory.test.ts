@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PI_SDK_VERSION } from "@coforge/agent";
+import { discoverPiModels, PI_SDK_VERSION } from "@coforge/agent";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -55,6 +55,8 @@ describe("external Code Agent inventory", () => {
     try {
       const inventory = await discoverCodeAgentInventory({
         probe: probeFor({}),
+        // The real Pi SDK discovery, on purpose: the hermetic fixture home is what it reads.
+        piModels: discoverPiModels,
         cwd: home,
         environment: { HOME: home, PATH: "", PI_OFFLINE: "1" },
       });
@@ -663,7 +665,11 @@ describe("Claude Code model catalog minimum versions", () => {
     test(`the cached inventory of Claude Code ${version} lists the same models`, async () => {
       const { catalogs } = await loadCachedCodeAgentCatalogs(
         [{ provider: "claude-code", version, displayName: "Claude Code" }],
-        { probe: probeFor({}), environment: { HOME: "/fixture/home", PATH: "" } },
+        {
+          probe: probeFor({}),
+          piModels: async () => [],
+          environment: { HOME: "/fixture/home", PATH: "" },
+        },
       );
       expectListed(ids(catalogs.find((catalog) => catalog.provider === "claude-code")), listed);
     });

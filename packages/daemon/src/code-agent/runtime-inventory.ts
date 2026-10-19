@@ -39,7 +39,6 @@ import {
 } from "#src/code-agent/opencode/version";
 import { getLogger } from "@logtape/logtape";
 import type { CodeAgentProbe } from "./contract";
-import { createCodeAgentProvider } from "./registry";
 import { isVersionBelow, VERSION_PROBE_TIMEOUT_MS } from "./version-gate";
 import { withDeadline } from "./deadline";
 import { asRecord } from "./json-record";
@@ -55,7 +54,8 @@ const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
 export type ExternalCodeAgentProbe = CodeAgentProbe;
 
-const bunProbe: ExternalCodeAgentProbe = {
+/** Probes the Code Agent CLIs installed on this host: PATH lookups and real `--version` spawns. */
+export const hostCodeAgentProbe: ExternalCodeAgentProbe = {
   which: (name, searchPath) => Bun.which(name, { PATH: searchPath }) ?? undefined,
   spawn: (executable, env) =>
     Bun.spawn({
@@ -172,7 +172,7 @@ async function probeRuntimeVersion(
 }
 
 export async function discoverExternalCodeAgents(
-  probe: ExternalCodeAgentProbe = bunProbe,
+  probe: ExternalCodeAgentProbe = hostCodeAgentProbe,
   environment: Readonly<Record<string, string | undefined>> = Bun.env,
   platform: NodeJS.Platform = process.platform,
   requestedProvider?: RuntimeMetadata["provider"],
@@ -300,10 +300,11 @@ type CatalogCommands = {
 export type CodeAgentDiscoveryOptions = {
   /** Explicit refreshes may not substitute a provider's local cache for a failed live probe. */
   force?: boolean;
-  probe?: ExternalCodeAgentProbe;
+  /** How external Code Agent CLIs are found and versioned; production passes `hostCodeAgentProbe`. */
+  probe: ExternalCodeAgentProbe;
   commands?: CatalogCommands;
-  /** Replaces the Pi SDK's in-process model discovery, as `commands` replaces the spawned CLIs. */
-  piModels?: PiModelDiscovery;
+  /** Pi's in-process model discovery; production passes the Pi SDK's `discoverPiModels`. */
+  piModels: PiModelDiscovery;
   cwd?: string;
   environment?: Readonly<Record<string, string | undefined>>;
   platform?: NodeJS.Platform;
@@ -351,9 +352,9 @@ async function catalogCacheKeyPaths(
  * of Code Agent discovery and is safe to await before a daemon reports itself ready.
  */
 export async function discoverCodeAgentRuntimes(
-  options: CodeAgentDiscoveryOptions = {},
+  options: CodeAgentDiscoveryOptions,
 ): Promise<RuntimeMetadata[]> {
-  const probe = options.probe ?? bunProbe;
+  const probe = options.probe;
   const environment = options.environment ?? Bun.env;
   return [
     COFORGE_AGENT_RUNTIME_METADATA,
@@ -376,9 +377,9 @@ export async function discoverCodeAgentRuntimes(
  */
 export async function loadCachedCodeAgentCatalogs(
   runtimes: RuntimeMetadata[],
-  options: CodeAgentDiscoveryOptions = {},
+  options: CodeAgentDiscoveryOptions,
 ): Promise<{ catalogs: CodeAgentModelCatalog[]; needsRefresh: boolean }> {
-  const probe = options.probe ?? bunProbe;
+  const probe = options.probe;
   const environment = options.environment ?? Bun.env;
   const searchPath = codeAgentExecutableSearchPath(environment, options.platform);
   const catalogs: CodeAgentModelCatalog[] = [discoverCoforgeCatalog()];
@@ -412,9 +413,9 @@ export async function loadCachedCodeAgentCatalogs(
  */
 export async function discoverCodeAgentCatalogs(
   runtimes: RuntimeMetadata[],
-  options: CodeAgentDiscoveryOptions = {},
+  options: CodeAgentDiscoveryOptions,
 ): Promise<CodeAgentModelCatalog[]> {
-  const probe = options.probe ?? bunProbe;
+  const probe = options.probe;
   const environment = options.environment ?? Bun.env;
   const searchPath = codeAgentExecutableSearchPath(environment, options.platform);
   const cwd = options.cwd ?? process.cwd();
@@ -558,32 +559,8 @@ export async function discoverCodeAgentCatalogs(
 }
 
 export async function discoverCodeAgentInventory(
-  options: CodeAgentDiscoveryOptions = {},
+  options: CodeAgentDiscoveryOptions,
 ): Promise<CodeAgentInventory> {
-  if (!options.probe && !options.commands) {
-    const providers = Object.values(RUNTIME_PROVIDER).map(createCodeAgentProvider);
-    const discoveries = providers.map(async (provider) => {
-      const runtime = await provider.discoverRuntime?.({
-        cwd: options.cwd,
-        environment: options.environment,
-        platform: options.platform,
-      });
-      const catalog = runtime
-        ? await provider.discoverModelCatalog?.({
-            cwd: options.cwd,
-            environment: options.environment,
-            platform: options.platform,
-            runtime,
-          })
-        : undefined;
-      return { runtime, catalog };
-    });
-    const discovered = await Promise.all(discoveries);
-    return {
-      runtimes: discovered.flatMap(({ runtime }) => (runtime ? [runtime] : [])),
-      catalogs: discovered.flatMap(({ catalog }) => (catalog ? [catalog] : [])),
-    };
-  }
   const runtimes = await discoverCodeAgentRuntimes(options);
   const catalogs = await discoverCodeAgentCatalogs(runtimes, options);
   return { runtimes, catalogs };

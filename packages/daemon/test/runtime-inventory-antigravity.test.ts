@@ -196,6 +196,7 @@ describe("Antigravity CLI model catalog in the inventory", () => {
         // The cached read has no `commands`: it can only serve what the live pass wrote.
         const cached = await loadCachedCodeAgentCatalogs(runtimes, {
           probe: options.probe,
+          piModels: options.piModels,
           environment,
           cacheDirectory: stateDirectory,
         });

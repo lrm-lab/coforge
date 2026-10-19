@@ -7,7 +7,7 @@ import {
   codeAgentExecutableSearchPath,
   executablePathDelimiter,
 } from "#src/platform/code-agent-path";
-import { discoverExternalCodeAgents } from "#src/code-agent/runtime-inventory";
+import { discoverExternalCodeAgents, hostCodeAgentProbe } from "#src/code-agent/runtime-inventory";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
 import { captureDaemonLogs } from "./log-capture";
@@ -136,7 +136,8 @@ describe("npm-installed Codex discovery through the public seam", () => {
       expect(Bun.which("codex", { PATH: searchPath })).not.toBeNull();
       const { result: runtimes, records } = await captureDaemonLogs(() =>
         discoverExternalCodeAgents(
-          undefined,
+          // The real host probe, on purpose: it runs only the hermetic npm-style launcher fixture.
+          hostCodeAgentProbe,
           environment,
           process.platform,
           RUNTIME_PROVIDER.CODEX,

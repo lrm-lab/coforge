@@ -162,6 +162,7 @@ describe("Code Agent probe cache", () => {
         cwd: home,
         environment,
         probe,
+        piModels: async () => [],
         cacheDirectory: stateDirectory,
       });
       expect(cached.needsRefresh).toBe(false);
@@ -175,6 +176,7 @@ describe("Code Agent probe cache", () => {
         cwd: home,
         environment,
         probe,
+        piModels: async () => [],
         cacheDirectory: stateDirectory,
       });
       expect(stale.needsRefresh).toBe(true);
@@ -194,6 +196,7 @@ describe("Code Agent probe cache", () => {
             which: () => "/bin/codex",
             spawn: () => ({ stdout: new Blob([]).stream(), exited: Promise.resolve(0) }),
           },
+          piModels: async () => [],
           cacheDirectory: stateDirectory,
         },
       );
