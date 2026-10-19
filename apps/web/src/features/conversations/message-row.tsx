@@ -60,7 +60,7 @@ import {
   messagePlainText,
   selectionFragmentHtml,
 } from "./selection-copy";
-import { copyText } from "#src/features/records/report-editor/lib/clipboard";
+import { copyText } from "#src/lib/clipboard";
 import { MessageTask } from "#src/features/tasks/message-task";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";

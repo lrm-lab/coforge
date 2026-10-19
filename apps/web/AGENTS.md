@@ -1,8 +1,6 @@
 # Web application instructions
 
-These rules apply to `apps/web`, the TanStack Start Web/backend modular
-monolith, and refine the repository-level `AGENTS.md`. Directory-specific rules
-live in nested `AGENTS.md` files listed at the end.
+These rules apply to `apps/web`, the TanStack Start Web/backend modular monolith, and refine the repository-level `AGENTS.md`. Directory-specific rules live in nested `AGENTS.md` files listed at the end.
 
 ## Product design
 
@@ -91,16 +89,14 @@ live in nested `AGENTS.md` files listed at the end.
 
 ## Module map
 
-Each line names a directory under `src/` (unless noted) and its single
-responsibility.
+Each line names a directory under `src/` (unless noted) and its single responsibility.
 
 - `routes/` — URL ownership and route lifecycle; `routes/api/` raw HTTP routes.
 - `components/` — `base/`, `application/` and `shared-assets/` official Untitled UI
   source (`shared-assets/` holds the backgrounds and illustrations `EmptyState`
   draws), `ui/` sanctioned primitives, `layout/` app chrome, `foundations/` logos
   and icons, `spell/` and `magicui/` landing-page motion.
-- `lib/` shared pure helpers; `hooks/` shared React hooks; `utils/` Untitled
-  UI class helpers.
+- `lib/` shared browser capabilities (including clipboard copying) and pure helpers; `hooks/` shared React hooks; `utils/` Untitled UI class helpers.
 - `features/agents/` — Members page, Agent creation, profile panel, control buttons, and Agent status and Activity display.
 - `features/auth/` — the sign-in error page, the split shell of the pages before
   sign-in, `returnTo` handling, signing out (`signOut`) and the step `/` takes to resume sign-in
@@ -118,8 +114,7 @@ responsibility.
 - `features/notifications/` — browser push lifecycle and in-page notifications.
 - `features/panel-tabs/` — each member's saved panel tab order.
 - `features/profiles/` — current-user profile read and update, and the one rule for a person's name (`person-name.ts`).
-- `features/projects/` — Projects directory, project detail, file browser,
-  and project settings page.
+- `features/projects/` — Projects directory, project detail, file browser, and project settings page.
 - `features/realtime/` — the one browser Centrifuge connection, and its status as the page shows it (`connection-status.ts`).
 - `features/records/` — Workspace Records (see the last section).
 - `features/settings/` — preference pages and device-local preferences, and what the request says

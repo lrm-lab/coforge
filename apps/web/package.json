@@ -200,7 +200,6 @@
     "#src/features/records/report-editor/extensions/code-block-fence": "./src/features/records/report-editor/extensions/code-block-fence.ts",
     "#src/features/records/report-editor/extensions/file-upload": "./src/features/records/report-editor/extensions/file-upload.ts",
     "#src/features/records/report-editor/i18n": "./src/features/records/report-editor/i18n.ts",
-    "#src/features/records/report-editor/lib/clipboard": "./src/features/records/report-editor/lib/clipboard.ts",
     "#src/features/records/report-editor/lib/ids": "./src/features/records/report-editor/lib/ids.ts",
     "#src/features/records/report-editor/lib/ime": "./src/features/records/report-editor/lib/ime.ts",
     "#src/features/records/report-editor/lowlight": "./src/features/records/report-editor/lowlight.ts",
@@ -522,7 +521,8 @@
     "#src/server/agents/manual/topics/tasks.md": "./src/server/agents/manual/topics/tasks.md",
     "#src/styles.css": "./src/styles.css",
     "#src/server/workspace-memory/explicit-diagnosis": "./src/server/workspace-memory/explicit-diagnosis.ts",
-    "#src/server/openviking/explicit-diagnosis.server": "./src/server/openviking/explicit-diagnosis.server.ts"
+    "#src/server/openviking/explicit-diagnosis.server": "./src/server/openviking/explicit-diagnosis.server.ts",
+    "#src/lib/clipboard": "./src/lib/clipboard.ts"
   },
   "scripts": {
     "dev": "bun --bun vite dev --port 8788 --host 127.0.0.1 --strictPort",

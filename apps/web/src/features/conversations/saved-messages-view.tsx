@@ -15,7 +15,7 @@ import {
 } from "#src/components/ui/empty";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useAppToast } from "#src/components/ui/toast";
-import { copyText } from "#src/features/records/report-editor/lib/clipboard";
+import { copyText } from "#src/lib/clipboard";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { useSavedEntries, useSavedMessages } from "./conversation-host";

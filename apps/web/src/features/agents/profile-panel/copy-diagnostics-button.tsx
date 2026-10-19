@@ -8,7 +8,7 @@ import {
   type AgentDiagnosticFacts,
 } from "#src/features/agents/agent-diagnostics";
 import { useReadAgentActivityFeed } from "#src/features/agents/workspace-agents-realtime";
-import { copyText } from "#src/features/records/report-editor/lib/clipboard";
+import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 
 /** Copies the Agent's diagnostic block; the icon turns into a check for a moment to confirm it.

@@ -31,7 +31,7 @@ import { styles as buttonStyles } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { ContentEditor } from "#src/features/records/report-editor/content-editor";
-import { copyText } from "#src/features/records/report-editor/lib/clipboard";
+import { copyText } from "#src/lib/clipboard";
 import { sharedLowlight } from "#src/features/records/report-editor/lowlight";
 import { formatFileSize, getFileExtension } from "#src/features/files/file-meta";
 import { extensionToLanguage } from "#src/features/files/preview";

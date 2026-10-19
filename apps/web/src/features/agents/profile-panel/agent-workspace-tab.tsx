@@ -25,7 +25,7 @@ import type {
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useResizeObserver } from "#src/hooks/use-resize-observer";
-import { copyText } from "#src/features/records/report-editor/lib/clipboard";
+import { copyText } from "#src/lib/clipboard";
 import { ProjectFileViewSkeleton } from "#src/features/projects/project-file-view-pending";
 import { Attachment } from "#src/features/records/report-editor/attachment";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";

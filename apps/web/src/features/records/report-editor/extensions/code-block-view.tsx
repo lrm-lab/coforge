@@ -20,7 +20,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { cn } from "#src/lib/utils";
-import { copyText } from "#src/features/records/report-editor/lib/clipboard";
+import { copyText } from "#src/lib/clipboard";
 import { useT } from "#src/features/records/report-editor/i18n";
 import {
   INSERTABLE_CODE_BLOCK_LANGUAGES,
