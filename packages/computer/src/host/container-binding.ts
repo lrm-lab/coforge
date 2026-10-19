@@ -3,6 +3,7 @@ import {
   FileDaemonCredentialStore,
   workspaceStateDirectory,
 } from "@lrm/coforge-daemon";
+import { CONTAINER_BINDING_ENV_KEYS } from "./container-binding-env";
 
 /** Agent workspaces live on the computer volume, so a replaced container can
  * resume the sessions already stored there. */
@@ -15,20 +16,6 @@ export type RunningWorkspaceStart = {
   daemonApiKey: string;
   serverHttpUrl: string;
 };
-
-const REQUIRED_ENV = [
-  "COFORGE_DAEMON_API_KEY",
-  "COFORGE_WORKSPACE_ID",
-  "COFORGE_COMPUTER_ID",
-  "COFORGE_SERVER_URL",
-] as const;
-
-/** Every variable a cloud Computer container is started with (`containerEnv` in run-host.ts). */
-export const CONTAINER_BINDING_ENV_KEYS = [
-  ...REQUIRED_ENV,
-  "COFORGE_WORKSPACE_SLUG",
-  "COFORGE_COMPUTER_NAME",
-] as const;
 
 /**
  * Write the Daemon credential and one enabled workspace binding, keeping any

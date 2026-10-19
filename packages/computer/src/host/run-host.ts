@@ -1,3 +1,4 @@
+import type { ContainerBindingEnv } from "./container-binding-env";
 import { createDockerContainers, swarmAccepting, type ContainerRuntime } from "./docker-containers";
 import { HttpHostCloud, type ClaimedContainerJob, type HostHeartbeatReport } from "./host-cloud";
 
@@ -21,7 +22,7 @@ export interface HostCloud {
   report(token: string, jobId: string, containerId?: string): Promise<void>;
 }
 
-export function containerEnv(job: ClaimedContainerJob, serverUrl: string): Record<string, string> {
+export function containerEnv(job: ClaimedContainerJob, serverUrl: string): ContainerBindingEnv {
   if (!job.daemonApiKey) throw new Error("cloud computer job has no daemon key");
   return {
     COFORGE_DAEMON_API_KEY: job.daemonApiKey,

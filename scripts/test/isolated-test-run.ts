@@ -8,22 +8,8 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CONTAINER_BINDING_ENV_KEYS } from "@coforge/computer/src/host/container-binding-env";
 import { DAEMON_LAUNCH_ENV_KEYS } from "@lrm/coforge-daemon/src/code-agent/environment";
-
-/** What a cloud Computer container starts with (`containerEnv` in
- * packages/computer/src/host/run-host.ts, read by `prepareContainerBinding` in
- * packages/computer/src/host/container-binding.ts): its Workspace's Daemon API key and identity.
- * Named here rather than imported: container-binding.ts imports the Daemon package's whole export
- * surface, which this script, run before any test task's own setup, should not load;
- * container-binding-keys.test.ts keeps the two lists equal. */
-export const CONTAINER_BINDING_ENV_KEYS = [
-  "COFORGE_DAEMON_API_KEY",
-  "COFORGE_WORKSPACE_ID",
-  "COFORGE_WORKSPACE_SLUG",
-  "COFORGE_COMPUTER_ID",
-  "COFORGE_COMPUTER_NAME",
-  "COFORGE_SERVER_URL",
-] as const;
 
 /** The parent's environment without any Agent's or Workspace's CoForge variables, with the
  * Daemon's state directory at `daemonHome` (its default is the machine's real `~/.coforge/daemon`).
