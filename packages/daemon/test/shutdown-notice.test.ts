@@ -19,6 +19,7 @@ import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime
 import { SHUTDOWN_HOLD_REASON_WINDOW_MS } from "#src/daemon-runtime/shutdown-reason";
 import type { AgentRuntimeConfig, AgentSession } from "#src/code-agent/contract";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
+import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -204,7 +205,7 @@ async function runtimeHarness(
       }),
     },
     undefined,
-    undefined,
+    emptyCodeAgentDiscovery,
     undefined,
     { installerJournalExists: hooks.installerJournalExists ?? (() => false) },
   );

@@ -183,11 +183,7 @@ import { SystemCleaner, type SystemCleanerOptions } from "#src/system-cleaner/sy
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
-import {
-  CodeAgentInventorySync,
-  defaultCodeAgentDiscovery,
-  type CodeAgentDiscovery,
-} from "./code-agent-inventory-sync";
+import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-inventory-sync";
 import { getLogger } from "@logtape/logtape";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import {
@@ -507,8 +503,8 @@ export class DaemonRuntime {
     createProvider: CodeAgentProviderFactory,
     credentials: DaemonCredentialStore,
     transportFactory: DaemonConnectionClientFactory,
-    agentProxy?: AgentProxy,
-    codeAgentDiscovery?: CodeAgentDiscovery,
+    agentProxy: AgentProxy | undefined,
+    codeAgentDiscovery: CodeAgentDiscovery,
     private readonly stateDirectory = ".coforge-daemon-state",
     private readonly lifecycle: {
       requestRestart?(requestId: string): Promise<void>;
@@ -563,7 +559,7 @@ export class DaemonRuntime {
     this.#transportFactory = transportFactory;
     this.#agentProxy = agentProxy;
     this.#codeAgentInventory = new CodeAgentInventorySync(
-      codeAgentDiscovery ?? defaultCodeAgentDiscovery(stateDirectory),
+      codeAgentDiscovery,
       { workspaceId: connection.workspaceId, computerId: connection.computerId },
       (transport) => !this.#stopping && this.#transport === transport,
     );

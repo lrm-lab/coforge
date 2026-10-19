@@ -11,6 +11,7 @@ import {
   AGENT_ACTIVITY_DETAIL_KIND,
   type AgentActivityDetailKind,
 } from "@lrm/coforge-sdk/internal";
+import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -89,6 +90,8 @@ async function harness() {
         },
       }),
     },
+    undefined,
+    emptyCodeAgentDiscovery,
   );
   await runtime.start(connection);
   await runtime.startAgent("agent-a", config);

@@ -16,6 +16,7 @@ import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import { COMPACTION_STALE_MS, REVIEW_STALE_MS } from "#src/agent-runtime/runtime-phases";
 import type { AgentActivity, AgentActivityDetailKind } from "@lrm/coforge-sdk/internal";
+import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -53,18 +54,6 @@ function sessionSpy() {
 function agentLaunchConfig(agentApiKey: string) {
   return { agentApiKey };
 }
-
-// Without this, DaemonRuntime falls back to real Code Agent discovery, which spawns Pi's
-// embedded SDK in the background to report its live model catalog (see runtime.ts
-// #reportCodeAgentCatalogs). That background work outlives `await runtime.start()`, uses real
-// timers of its own (Pi's session-lock renewal), and races the test's `jest.useFakeTimers()` -
-// leaking timers the heartbeat tests never armed. daemon-runtime.test.ts already stubs this for
-// the same reason.
-const emptyCodeAgentDiscovery = {
-  runtimes: async () => [],
-  cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-  catalogs: async () => [],
-};
 
 /** Boots a runtime whose one Agent session hands the test direct control over runtime events. */
 async function harness(provider?: CodeAgentProvider) {
