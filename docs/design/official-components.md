@@ -2,10 +2,15 @@
 
 - 公开首页 `features/landing` 保留已安装的 Spell / Magic UI 动效组件，其余控件同样只用官方组件；本节其余规则针对产品界面。
 - 组件通过 `npx untitledui@latest add <name>` 安装到 `src/components/base/` 和 `src/components/application/`，**源码不改**。要改外观，在调用处传 `className`；要改行为，改调用方。
-- 用户明确要求移除历史 lint 豁免后，仅有两处限定修补：`base/badges/badges.tsx` 和
-  `application/app-navigation/base-components/nav-account-card.tsx` 的原生按钮替换为
-  React Aria Button，保留官方样式和公开接口；未使用的 `base/select/select-native.tsx` 已移除。
-  这不是任意修改官方源码的许可；升级时保留这两处限定修补并重新验证。
+- 官方安装文件仅有三处限定修补：
+  - 用户明确要求移除历史 lint 豁免后，`base/badges/badges.tsx` 和
+    `application/app-navigation/base-components/nav-account-card.tsx` 的原生按钮替换为
+    React Aria Button，保留官方样式和公开接口（未使用的 `base/select/select-native.tsx` 已移除）。
+  - `src/utils/cx.ts` 的 `extendTailwindMerge` 在 `theme` 中加 `spacing: ["page"]`，让 `cx`/`cn` 把
+    `px-page`（`styles.css` 的 `--spacing-page`，取值自 `--page-gutter`）识别为内边距；缺了它，
+    合并类名时 `px-page` 覆盖不了 `px-4`。
+
+  这不是任意修改官方源码的许可；升级或重新 init 时保留这三处限定修补并重新验证。
 - 例外：`application/app-navigation/sidebar-navigation/` 下的 `sidebar-simple.tsx`、`sidebar-slim.tsx`
   和 `base-components/mobile-header.tsx` 是官方的**演示模板**（写死 Untitled 自己的 logo、搜索框、假账号卡片、固定像素宽度），不是可参数化的
   组件。这两个文件允许复制到 `src/components/layout/sidebar/` 后按需修改；复制之后就是 CoForge 自己
