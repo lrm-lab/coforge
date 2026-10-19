@@ -1444,7 +1444,7 @@ function NotificationSettings({
   const showActions = browserNotificationsEnabled && browserNotificationsConfigured;
 
   return (
-    <div className="w-full px-4 pb-8 sm:px-6">
+    <div className="w-full px-page pb-8">
       <div className="divide-y divide-secondary border-b border-secondary">
         <div className="py-2">
           <div className="flex min-h-14 items-center justify-between gap-5">

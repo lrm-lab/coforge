@@ -144,10 +144,7 @@ export function SearchEntityList({
 }) {
   const displays = useAgentDisplays();
   return (
-    <section
-      aria-labelledby="search-entities-heading"
-      className="flex flex-col gap-2 px-4 pt-4 sm:px-6"
-    >
+    <section aria-labelledby="search-entities-heading" className="flex flex-col gap-2 px-page pt-4">
       <h2 id="search-entities-heading" className="text-sm font-semibold text-secondary">
         {m.search_entities_heading()}
       </h2>

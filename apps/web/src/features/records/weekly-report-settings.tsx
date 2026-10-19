@@ -253,7 +253,7 @@ export function WeeklyReportSettings({
         }}
         className="min-h-0 flex-1"
       >
-        <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 sm:px-6">
+        <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
           {returnTo ? (
             <Button
               size="sm"

@@ -49,7 +49,7 @@ export function SettingsPending() {
       </nav>
       <section className="@container/settings hidden min-w-0 flex-1 flex-col overflow-hidden bg-primary md:flex lg:rounded-xl">
         <PageHeader icon={UserCircle} heading={m.settings_account()} />
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pb-8 sm:px-6">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-page pb-8">
           <section>
             <header className="flex min-h-12 items-center pb-4">
               <h2 className="text-lg font-semibold">{m.settings_profile()}</h2>

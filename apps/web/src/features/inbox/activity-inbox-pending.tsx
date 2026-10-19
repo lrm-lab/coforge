@@ -16,7 +16,7 @@ export function ActivityInboxPending() {
       {/* The list's rows at their final inset and size, full width: nothing is open yet. */}
       <ol className="flex flex-col py-1">
         {[0, 1, 2, 3].map((row) => (
-          <li key={row} className="flex items-center gap-3 px-4 py-3 sm:px-6">
+          <li key={row} className="flex items-center gap-3 px-page py-3">
             <Skeleton className="size-9 shrink-0 rounded-md" />
             <div className="min-w-0 flex-1">
               <Skeleton className="h-4 w-1/3" />

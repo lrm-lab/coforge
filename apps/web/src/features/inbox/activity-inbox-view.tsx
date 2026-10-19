@@ -205,9 +205,10 @@ export function ActivityInboxView({
       data-activity-list
       className={cn(
         "flex min-h-0 flex-col",
-        // Raft's 35rem column, at most half the page so the conversation keeps room at `lg`.
+        // Raft's 35rem column (`w-list-column`), at most half the page so the conversation keeps
+        // room at `lg`.
         // Narrower, the conversation takes the page in its place; the list stays mounted.
-        opened ? "w-[min(35rem,50%)] shrink-0 max-lg:hidden" : "min-w-0 flex-1",
+        opened ? "w-list-column shrink-0 max-lg:hidden" : "min-w-0 flex-1",
       )}
     >
       <PageHeader
@@ -244,7 +245,7 @@ export function ActivityInboxView({
       {failure && (
         <div
           role="alert"
-          className="flex shrink-0 items-center gap-3 border-b border-secondary px-4 py-2 text-sm text-error-primary sm:px-6"
+          className="flex shrink-0 items-center gap-3 border-b border-secondary px-page py-2 text-sm text-error-primary"
         >
           <span className="min-w-0 flex-1">{m.activity_inbox_action_error()}</span>
           <Button size="sm" color="link-gray" onClick={failure.retry}>
@@ -370,7 +371,7 @@ function ActivityInboxSectionHeading({
   return (
     <h2
       className={cn(
-        "flex items-center gap-1.5 px-4 pt-2 pb-1 text-sm font-semibold text-tertiary sm:px-6",
+        "flex items-center gap-1.5 px-page pt-2 pb-1 text-sm font-semibold text-tertiary",
         className,
       )}
     >
@@ -629,8 +630,9 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
   }
 
   return (
-    // A hairline divides a row from the one above it, from the text column on (past the icon).
-    <li className="group relative select-none [-webkit-touch-callout:none] before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-16 before:border-t before:border-secondary first:before:hidden sm:before:left-18">
+    // A hairline divides a row from the one above it, from the text column on: past the gutter,
+    // the 2.25rem icon and the 0.75rem gap.
+    <li className="group relative select-none [-webkit-touch-callout:none] before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-[calc(var(--page-gutter)+3rem)] before:border-t before:border-secondary first:before:hidden">
       {/* The row is a React Aria link so the context menu (`MenuTrigger trigger="contextMenu"`)
           can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
           navigation. Opening a row reads it, like opening the conversation does. */}
@@ -663,7 +665,7 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
             )
           }
           className={cn(
-            "flex items-center gap-3 px-4 py-3 outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 sm:px-6",
+            "flex items-center gap-3 px-page py-3 outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2",
             // The row's own hover, kept while the pointer is on its Done check (a sibling).
             current ? "bg-chat-selected-bg" : "group-hover:bg-primary_hover",
           )}
@@ -744,7 +746,7 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
         aria-label={m.activity_inbox_done()}
         onClick={() => actions.done(item)}
         className={cn(
-          "absolute top-1/2 right-3 -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:right-5 [@media(hover:none)]:hidden",
+          "absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:hidden",
           current ? "opacity-100" : "opacity-0",
         )}
       />

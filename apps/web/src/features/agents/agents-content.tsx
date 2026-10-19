@@ -208,7 +208,7 @@ export function AgentsContent({
     >
       {/* One row with centred tabs once the pane (not the viewport) is wide enough; narrower, as
        * on a phone or beside the profile panel, the tabs wrap onto their own row. */}
-      <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-secondary px-4 sm:px-6 @2xl/members:grid @2xl/members:h-12 @2xl/members:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-secondary px-page @2xl/members:grid @2xl/members:h-12 @2xl/members:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         <div className="flex h-12 min-w-0 flex-1 items-center gap-3">
           <MobileNavigationButton />
           <h1 className="truncate text-lg font-semibold text-primary">
@@ -245,7 +245,7 @@ export function AgentsContent({
         </div>
       </header>
       {tabTotal > 0 && (
-        <div className="flex shrink-0 flex-wrap items-center gap-3 px-4 pt-5 sm:px-6">
+        <div className="flex shrink-0 flex-wrap items-center gap-3 px-page pt-5">
           {onAgentTab && (
             <ButtonGroup
               aria-label={m.member_owner_filter()}
@@ -276,10 +276,7 @@ export function AgentsContent({
       )}
       {/* `relative` makes the list the containing block of the cards' absolutely positioned
           `sr-only` labels; without it they escape this scroll box and stretch the document. */}
-      <TabPanel
-        id={memberType}
-        className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-8 sm:px-6"
-      >
+      <TabPanel id={memberType} className="relative min-h-0 flex-1 overflow-y-auto px-page pb-8">
         {deferredStart && (
           <p
             role="status"

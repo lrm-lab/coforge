@@ -9,7 +9,7 @@ export function AgentsPending() {
   return (
     <main className="flex h-full min-w-0">
       <section className="@container/members flex min-w-0 flex-1 flex-col overflow-hidden bg-primary">
-        <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-secondary px-4 sm:px-6 @2xl/members:grid @2xl/members:h-12 @2xl/members:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+        <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-secondary px-page @2xl/members:grid @2xl/members:h-12 @2xl/members:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
           <div className="flex h-12 min-w-0 flex-1 items-center gap-3">
             <MobileNavigationButton />
             <h1 className="truncate text-lg font-semibold text-primary">
@@ -36,7 +36,7 @@ export function AgentsPending() {
             </Button>
           </div>
         </header>
-        <div className="flex shrink-0 flex-wrap items-center gap-3 px-4 pt-5 sm:px-6">
+        <div className="flex shrink-0 flex-wrap items-center gap-3 px-page pt-5">
           <Skeleton aria-hidden="true" className="h-9 w-32 rounded-lg" />
           <Input
             type="search"
@@ -49,7 +49,7 @@ export function AgentsPending() {
             className="w-full sm:w-80"
           />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 sm:px-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-page pb-8">
           <p role="status" className="sr-only">
             {m.agents_loading()}
           </p>

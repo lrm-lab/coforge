@@ -65,7 +65,7 @@ export function SearchHome({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4 sm:px-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-page py-4">
       {history.length > 0 && (
         <section aria-labelledby="search-history-heading" className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">

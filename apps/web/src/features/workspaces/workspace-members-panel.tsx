@@ -53,7 +53,7 @@ export function WorkspaceMembersPanel(props: {
   }
 
   return (
-    <div className="w-full px-4 pb-8 sm:px-6">
+    <div className="w-full px-page pb-8">
       <div className="divide-y divide-secondary border-b border-secondary">
         <section className="py-6">
           <header className="flex items-center justify-between gap-4 pb-4">

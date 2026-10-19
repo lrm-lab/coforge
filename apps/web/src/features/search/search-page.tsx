@@ -170,12 +170,12 @@ export function SearchPage({
       <main className="flex h-full min-w-0 bg-primary">
         <div
           className={
-            showPreview ? "flex w-[35rem] shrink-0 flex-col" : "flex min-w-0 flex-1 flex-col"
+            showPreview ? "flex w-list-column shrink-0 flex-col" : "flex min-w-0 flex-1 flex-col"
           }
         >
           <PageHeader heading={m.search_title()} />
           <div
-            className="border-b border-secondary px-4 py-3 sm:px-6"
+            className="border-b border-secondary px-page py-3"
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
           >
@@ -396,7 +396,7 @@ function MessageResults({
       <div
         role="status"
         aria-label={m.search_searching()}
-        className="flex flex-col gap-2 p-4 sm:px-6"
+        className="flex flex-col gap-2 px-page py-4"
       >
         {Array.from({ length: 5 }, (_, index) => (
           <Skeleton key={index} className="h-[4.75rem] rounded-xl" />
@@ -418,7 +418,7 @@ function MessageResults({
   }
 
   return (
-    <section aria-labelledby="search-messages-heading" className="flex flex-col gap-2 p-4 sm:px-6">
+    <section aria-labelledby="search-messages-heading" className="flex flex-col gap-2 px-page py-4">
       <div className="flex items-baseline justify-between gap-2">
         <h2 id="search-messages-heading" className="text-sm font-semibold text-secondary">
           {m.search_messages_heading()}

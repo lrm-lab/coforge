@@ -6,7 +6,7 @@ export function ProjectsPending({ heading = m.projects_title() }: { heading?: st
   return (
     <main className="flex h-full min-w-0 flex-col bg-primary">
       <PageHeader heading={heading} />
-      <div aria-busy="true" aria-label={heading} className="space-y-6 px-4 py-6 sm:px-6">
+      <div aria-busy="true" aria-label={heading} className="space-y-6 px-page py-6">
         <p role="status" className="sr-only">
           {m.projects_loading()}
         </p>

@@ -146,7 +146,7 @@ export function ProjectSettingsPage({
           <span className="hidden truncate text-sm text-tertiary sm:block">{project.name}</span>
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+      <div className="min-h-0 flex-1 overflow-y-auto px-page py-6 sm:py-8">
         <form
           onSubmit={submit}
           onChange={() => setSaved(false)}

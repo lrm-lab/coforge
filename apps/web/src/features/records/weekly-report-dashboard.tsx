@@ -15,7 +15,7 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
   return (
     <>
       <PageHeader heading={m.records_dashboard()} leading={<BackToRecords />} />
-      <div className="min-h-0 flex-1 overflow-auto bg-primary px-4 py-5 sm:px-6">
+      <div className="min-h-0 flex-1 overflow-auto bg-primary px-page py-5">
         <div className="mx-auto w-full max-w-6xl space-y-6">
           <div>
             <h2 className="text-lg font-semibold text-primary">{m.records_dashboard_title()}</h2>
