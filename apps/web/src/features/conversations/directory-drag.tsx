@@ -62,12 +62,7 @@ export function useDirectoryDrag({
   commitOrder: (order: DirectorySectionId[]) => void;
 }) {
   const [dragging, setDragging] = useState<DirectoryLayout | null>(null);
-  const [active, setActive] = useState<{
-    id: string;
-    group: boolean;
-    label: string;
-    width: number;
-  } | null>(null);
+  const [active, setActive] = useState<DirectoryDragActive | null>(null);
   const [hoveredSection, setHoveredSection] = useState<DirectorySectionId | null>(null);
   const start = useRef<DirectoryLayout | null>(null);
   const sensors = useSensors(
@@ -150,7 +145,6 @@ export function useDirectoryDrag({
       active: {
         id: string | number;
         data: { current?: Record<string, unknown> };
-        rect: { current: { initial: { width: number } | null } };
       };
       activatorEvent: Event | null;
     }) => {
@@ -160,11 +154,9 @@ export function useDirectoryDrag({
         id: String(event.active.id),
         group: event.active.data.current?.type === "group",
         label: String(event.active.data.current?.label ?? ""),
-        // dnd-kit measures `rect.initial` after this callback, so it is still empty here: the
-        // overlay takes the width of the row or section that was pressed instead.
-        width:
-          event.active.rect.current.initial?.width ||
-          draggedWidth(event.activatorEvent?.target ?? null),
+        // Measured now, while the list still has the layout it was pressed in: see
+        // `DirectoryDragOverlay` for why the overlay cannot use dnd-kit's own measurement.
+        origin: pressedRect(event.activatorEvent?.target ?? null),
       });
     },
     onDragOver: relayout,
@@ -182,11 +174,22 @@ export function useDirectoryDrag({
   };
 }
 
-/** The width of the row (`li`) or section that a drag started on, from the pressed element. */
-function draggedWidth(target: EventTarget | null): number {
-  if (!(target instanceof Element)) return 0;
+type DirectoryDragActive = {
+  id: string;
+  group: boolean;
+  label: string;
+  /** The viewport box of the row (`li`) or section that was pressed, as it was when pressed. */
+  origin: { top: number; left: number; width: number } | null;
+};
+
+/** The viewport box of the row (`li`) or section that a drag started on, from the pressed
+ * element. */
+function pressedRect(target: EventTarget | null): DirectoryDragActive["origin"] {
+  if (!(target instanceof Element)) return null;
   const item = target.closest("[data-chat-section-sortable], li");
-  return item?.getBoundingClientRect().width ?? 0;
+  if (!item) return null;
+  const { top, left, width } = item.getBoundingClientRect();
+  return { top, left, width };
 }
 
 /** Pointer drops must be inside a valid target. Keyboard drags use closestCenter, as the
@@ -372,25 +375,36 @@ export function DirectorySortableSection({
 }
 
 /** Always mounted for the framework's drop animation; the preview is presentational, never a
- * second sortable item. Its measured width is the source row's width, independent of scroll. */
+ * second sortable item. Its measured width is the source row's width, independent of scroll.
+ *
+ * It starts where the pressed row or section was when pressed, so the pointer keeps the point it
+ * grabbed. dnd-kit would place it at the source's first measurement after the drag-start render,
+ * but that render changes the list (every section folds for a section drag, hidden empty
+ * sections are revealed for a row drag), and its scroll compensation cannot undo a shift near the
+ * top of the list: the preview then trailed the pointer by the height that folded away. */
 export function DirectoryDragOverlay({
   active,
   children,
 }: {
-  active: { id: string; group: boolean; label: string; width: number } | null;
+  active: DirectoryDragActive | null;
   children: ReactNode;
 }) {
   // A section keeps its title row's mark while it is carried: Pinned its pin, the others the
   // chevron they show folded (every section folds while the sections are reordered).
   const Mark = active?.id === "group:pinned" ? Pin01 : ChevronRight;
   if (typeof document === "undefined") return null;
+  const origin = active?.origin;
   return createPortal(
-    <DragOverlay dropAnimation={{ duration: 150, easing: "ease-out" }}>
+    <DragOverlay
+      dropAnimation={{ duration: 150, easing: "ease-out" }}
+      // Overrides dnd-kit's own `top`/`left`; its transform (the pointer's travel) still applies.
+      style={origin ? { top: origin.top, left: origin.left } : undefined}
+    >
       {active ? (
         <div
           aria-hidden="true"
           data-directory-drag-overlay
-          style={{ width: active.width }}
+          style={{ width: origin?.width }}
           className="pointer-events-none rounded-md bg-primary p-1 shadow-lg ring-1 ring-secondary"
         >
           {active.group ? (
