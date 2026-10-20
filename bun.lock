@@ -158,10 +158,28 @@
         "vite": "8.2.2",
       },
     },
+    "benchmark/harness": {
+      "name": "@coforge/eval-harness",
+      "version": "0.0.0",
+      "dependencies": {
+        "@coforge/web": "workspace:*",
+        "@lrm/coforge-sdk": "workspace:*",
+        "@prisma/client": "^7.10.0",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.0",
+        "@types/node": "26.4.0",
+        "oxfmt": "0.65.0",
+        "oxlint": "1.80.0",
+        "typescript": "7.0.2",
+        "vite": "8.2.2",
+      },
+    },
     "benchmark/longmemeval-collab": {
       "name": "@coforge/longmemeval-collab-eval",
       "version": "0.0.0",
       "dependencies": {
+        "@coforge/eval-harness": "workspace:*",
         "@coforge/web": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
         "@prisma/adapter-pg": "^7.10.0",
@@ -448,6 +466,8 @@
     "@coforge/agent": ["@coforge/agent@workspace:packages/agent"],
 
     "@coforge/computer": ["@coforge/computer@workspace:packages/computer"],
+
+    "@coforge/eval-harness": ["@coforge/eval-harness@workspace:benchmark/harness"],
 
     "@coforge/evolbench-collab-eval": ["@coforge/evolbench-collab-eval@workspace:benchmark/evolbench-collab"],
 

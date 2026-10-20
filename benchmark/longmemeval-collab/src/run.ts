@@ -1,6 +1,6 @@
 import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
-import { startEvalDaemon, startAgent, type EvalDaemon } from "./eval-daemon";
+import { startEvalDaemon, startAgent, type EvalDaemon } from "@coforge/eval-harness";
 import { evaluateQuestion } from "./eval-qa";
 import { createEvalDispatcher, ingestSample } from "./ingest";
 import { gradeReply } from "./judge";
@@ -96,7 +96,23 @@ async function runSample(arm: (typeof env.arms)[number], sampleIndex: number) {
       dispatcher,
       fromSession: env.ingestFromSession,
     });
-    daemon = await startEvalDaemon({ workspace, env });
+    daemon = await startEvalDaemon({
+      label: "lme",
+      workspace,
+      webUrl: env.webUrl,
+      agents: [
+        {
+          agentId: workspace.memoryAgentId,
+          provider: env.memoryAgentProvider,
+          model: env.memoryAgentModel,
+        },
+        {
+          agentId: workspace.taskAgentId,
+          provider: env.taskAgentProvider,
+          model: env.taskAgentModel,
+        },
+      ],
+    });
     await resetAgentSessions(workspace);
     await startAgent(workspace, workspace.memoryAgentId, workspaceProfileToToolFence(arm));
     await startAgent(workspace, workspace.taskAgentId);

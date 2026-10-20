@@ -44,6 +44,7 @@ The architecture invariants every change must respect are in
 | [docs/observability/](docs/observability/README.md) | Agent Activity, status, and observability baseline |
 | [docs/local-gemma-evaluation.md](docs/local-gemma-evaluation.md) | Local SWE evaluation, Gemma service management, Docker and token audits |
 | [benchmark/evolbench-collab/ops/swe-gemma/README.md](benchmark/evolbench-collab/ops/swe-gemma/README.md) | SWE Docker Task runtime and independent 20-worker evaluation pools |
+| [benchmark/harness/README.md](benchmark/harness/README.md) | Eval computer shared by the collaborative benchmarks |
 | [docs/local-logging.md](docs/local-logging.md) | Computer/Daemon logging contract |
 | [docs/release/](docs/release/README.md) | Release contract: deployment, Computer distribution, installer feed, promotion, rollback |
 | [docs/design/](docs/design/README.md) | Product UI design guidance |

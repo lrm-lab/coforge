@@ -10,6 +10,7 @@
     "format": "oxfmt src test"
   },
   "dependencies": {
+    "@coforge/eval-harness": "workspace:*",
     "@coforge/web": "workspace:*",
     "@lrm/coforge-sdk": "workspace:*",
     "@prisma/adapter-pg": "^7.10.0",

@@ -1,0 +1,28 @@
+{
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "@types/node": "26.4.0",
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
+  },
+  "name": "@coforge/eval-harness",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "exports": {
+    ".": "./src/eval-daemon.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "format": "oxfmt src test",
+    "check": "oxfmt --check src test && oxlint src test && bun run typecheck"
+  },
+  "dependencies": {
+    "@coforge/web": "workspace:*",
+    "@lrm/coforge-sdk": "workspace:*",
+    "@prisma/client": "^7.10.0"
+  }
+}

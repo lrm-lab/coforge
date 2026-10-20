@@ -32,13 +32,39 @@ import { PrismaMentionDeliveryRepository } from "../../../apps/web/src/server/db
 import { createAgentSessions } from "../../../apps/web/src/server/db/repositories/agent-session.repositories.server";
 import { PrismaDirectConversationRepository } from "../../../apps/web/src/server/db/repositories/direct-conversation.repositories.server";
 import { createCentrifugoServerApi } from "../../../apps/web/src/server/centrifugo/server-api.server";
-import type { EvalEnv } from "./env";
-import type { EvalWorkspace } from "./workspace";
+import type { PrismaClient } from "../../../apps/web/src/generated/prisma/client";
+
+/** The workspace fields the eval daemon reads; every benchmark's EvalWorkspace has them. */
+export type EvalHostWorkspace = {
+  db: PrismaClient;
+  workspaceId: string;
+  slug: string;
+  evalUserId: string;
+  machineId: string;
+  computerId: string;
+};
+
+/** An Agent the eval computer hosts, with the Pi provider and model its runtime config names. */
+export type EvalHostedAgent = { agentId: string; provider: string; model: string };
 
 export type EvalDaemon = {
   computerId: string;
+  /** Daemon workspaces root; agent N's execution dir is
+   * `<workspaceRoot>/<workspaceId>/agents/<agentId>`. */
+  workspaceRoot: string;
   stop: () => Promise<void>;
 };
+
+/** The names one benchmark's eval computer registers and keeps its daemon state under, derived
+ * from the benchmark's short label (`lme`, `sb`, `pcm`). */
+export function evalHostIdentity(label: string, workspaceId: string) {
+  return {
+    name: `${label}-eval-host`,
+    displayName: `${label.toUpperCase()} Eval Host`,
+    registrationIdempotencyKey: `${label}-eval-${workspaceId}`,
+    stateDirectory: join(tmpdir(), `${label}-daemon-${workspaceId.slice(0, 8)}`),
+  };
+}
 
 function memoryApiKey(provider: string): string {
   const inline = Bun.env.DEV_MEMORY_API_KEY?.trim();
@@ -71,16 +97,17 @@ async function encryptApiKey(agentId: string, providerId: string, apiKeyInput: s
   };
 }
 
-/** Hosts every workspace agent on one eval computer: the Memory Agent (with the
- * openviking-memory fence attached to its AgentStart intent) and the Task Agent
- * (unfenced — it gets the ordinary channel tools the product gives any agent). */
+/** Hosts the given workspace Agents on one eval computer. A fence, when an Agent needs one, is
+ * attached to its AgentStart intent by `startAgent`, never stored in its runtime config. */
 export async function startEvalDaemon(input: {
-  workspace: EvalWorkspace;
-  env: EvalEnv;
+  label: string;
+  workspace: EvalHostWorkspace;
+  webUrl: string | null;
+  agents: EvalHostedAgent[];
 }): Promise<EvalDaemon> {
   process.env[EVAL_DISABLE_HOST_PI_INJECTION] = "1";
   Bun.env[EVAL_DISABLE_HOST_PI_INJECTION] = "1";
-  const webUrl = input.env.webUrl ?? "http://127.0.0.1:8788";
+  const webUrl = input.webUrl ?? "http://127.0.0.1:8788";
   const centrifugoWs =
     Bun.env.COFORGE_EVAL_CENTRIFUGO_WS ?? "ws://127.0.0.1:18000/connection/websocket";
   if (!process.env.COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY)
@@ -103,6 +130,7 @@ export async function startEvalDaemon(input: {
   if (probeStatus !== 200 && probeStatus !== 307 && probeStatus !== 302)
     throw new Error(`eval web ${webUrl} returned ${probeStatus || probeError}`);
 
+  const identity = evalHostIdentity(input.label, input.workspace.workspaceId);
   const registrar = new ComputerRegistrar({
     workspaceAccess: new PrismaWorkspaceAccess(input.workspace.db),
     registrations: new PrismaComputerRegistrationRepository(input.workspace.db),
@@ -112,18 +140,18 @@ export async function startEvalDaemon(input: {
       protocolMajor: 1,
       requestId: crypto.randomUUID(),
       workspaceSlug: input.workspace.slug,
-      name: "lme-eval-host",
-      displayName: "LME Eval Host",
+      name: identity.name,
+      displayName: identity.displayName,
       machineId: input.workspace.machineId,
       platform: process.platform,
       osVersion: "eval",
       computerVersion: "eval",
-      registrationIdempotencyKey: `lme-eval-${input.workspace.workspaceId}`,
+      registrationIdempotencyKey: identity.registrationIdempotencyKey,
     },
     { userId: input.workspace.evalUserId },
   );
 
-  const stateDirectory = join(tmpdir(), `lme-daemon-${input.workspace.workspaceId.slice(0, 8)}`);
+  const stateDirectory = identity.stateDirectory;
   process.env.COFORGE_DAEMON_HOME = stateDirectory;
   const { configureDaemonLogging } =
     await import("../../../packages/daemon/src/platform/daemon-logging");
@@ -143,7 +171,7 @@ export async function startEvalDaemon(input: {
     mode: 0o600,
   });
   process.env.PI_CODING_AGENT_DIR = isolatedPiHost;
-  for (const agentId of [input.workspace.memoryAgentId, input.workspace.taskAgentId]) {
+  for (const { agentId } of input.agents) {
     const builtinDir = join(
       workspaceRoot,
       input.workspace.workspaceId,
@@ -212,55 +240,32 @@ export async function startEvalDaemon(input: {
     await runtime.stop().catch(() => undefined);
     throw new Error(error instanceof Error ? error.message : String(error));
   }
-  const memoryApiKey_ = memoryApiKey(input.env.memoryAgentProvider);
-  const taskApiKey = memoryApiKey(input.env.taskAgentProvider);
-  await input.workspace.db.agent.update({
-    where: { id: input.workspace.memoryAgentId },
-    data: {
-      computerId: registration.computerId,
-      stoppedAt: null,
-      runtimeConfig: {
-        runtime: RUNTIME_PROVIDER.COFORGE,
-        provider: {
-          kind: "coforge" as const,
-          providerId: input.env.memoryAgentProvider,
-          apiKey: await encryptApiKey(
-            input.workspace.memoryAgentId,
-            input.env.memoryAgentProvider,
-            memoryApiKey_,
-          ),
+  // Every Agent's key is read before any is stored, so a missing key changes nothing in the db.
+  const apiKeys = input.agents.map((agent) => memoryApiKey(agent.provider));
+  for (const [index, agent] of input.agents.entries()) {
+    await input.workspace.db.agent.update({
+      where: { id: agent.agentId },
+      data: {
+        computerId: registration.computerId,
+        stoppedAt: null,
+        runtimeConfig: {
+          runtime: RUNTIME_PROVIDER.COFORGE,
+          provider: {
+            kind: "coforge" as const,
+            providerId: agent.provider,
+            apiKey: await encryptApiKey(agent.agentId, agent.provider, apiKeys[index]!),
+          },
+          model: agent.model,
+          modelProvider: agent.provider,
+          reasoning: "",
         },
-        model: input.env.memoryAgentModel,
-        modelProvider: input.env.memoryAgentProvider,
-        reasoning: "",
       },
-    },
-  });
-  await input.workspace.db.agent.update({
-    where: { id: input.workspace.taskAgentId },
-    data: {
-      computerId: registration.computerId,
-      stoppedAt: null,
-      runtimeConfig: {
-        runtime: RUNTIME_PROVIDER.COFORGE,
-        provider: {
-          kind: "coforge" as const,
-          providerId: input.env.taskAgentProvider,
-          apiKey: await encryptApiKey(
-            input.workspace.taskAgentId,
-            input.env.taskAgentProvider,
-            taskApiKey,
-          ),
-        },
-        model: input.env.taskAgentModel,
-        modelProvider: input.env.taskAgentProvider,
-        reasoning: "",
-      },
-    },
-  });
+    });
+  }
   input.workspace.computerId = registration.computerId;
   return {
     computerId: registration.computerId,
+    workspaceRoot,
     async stop() {
       await runtime?.stop();
     },
@@ -288,7 +293,7 @@ function centrifugoApiWithFence(fence: MemoryAgentToolProfile | undefined) {
 }
 
 export async function startAgent(
-  workspace: EvalWorkspace,
+  workspace: EvalHostWorkspace,
   agentId: string,
   fence?: MemoryAgentToolProfile,
 ): Promise<void> {
