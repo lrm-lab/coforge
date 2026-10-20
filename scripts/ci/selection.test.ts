@@ -1,8 +1,44 @@
 import { expect, test } from "bun:test";
-import { selectChecks } from "./selection";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { crossPackageScans, selectChecks } from "./selection";
 
 test("a Web-only PR does not run client or infrastructure checks", () => {
-  expect(selectChecks(["apps/web/src/features/tasks/task-board.tsx"], "changes")).toEqual(["web"]);
+  // coforge-sdk's RuntimeProvider literal scan reads apps/web/src too.
+  expect(selectChecks(["apps/web/src/features/tasks/task-board.tsx"], "changes")).toEqual([
+    "coforge-sdk",
+    "web",
+  ]);
+  expect(selectChecks(["apps/web/test/a.test.ts"], "changes")).toEqual(["web"]);
+});
+
+test("a change a cross-package scan test reads runs the check that owns the scan", () => {
+  expect(
+    selectChecks(["packages/daemon/src/code-agent/runtime-executable.ts"], "changes"),
+  ).toContain("coforge-sdk");
+  expect(selectChecks(["apps/web/src/routes/index.tsx"], "changes")).toContain("coforge-sdk");
+  expect(selectChecks(["packages/computer/src/cli.ts"], "changes")).toContain("web");
+  // The literal scan skips test and generated files.
+  for (const path of [
+    "packages/daemon/test/foo.test.ts",
+    "packages/daemon/src/foo.test.ts",
+    "packages/computer/src/gen/a.ts",
+    "packages/computer/src/a.gen.ts",
+  ]) {
+    expect(selectChecks([path], "changes")).not.toContain("coforge-sdk");
+  }
+  // The import-alias scan reads only .ts files.
+  expect(selectChecks(["packages/computer/src/a.tsx"], "changes")).not.toContain("web");
+  // The Web track deploys only for the image's inputs; a scan adds nothing there.
+  expect(selectChecks(["packages/computer/src/cli.ts"], "web")).toEqual([]);
+  expect(selectChecks(["packages/daemon/test/foo.test.ts"], "web")).toEqual([]);
+});
+
+test("every cross-package scan test exists, so moving one breaks CI", () => {
+  expect(crossPackageScans.length).toBeGreaterThan(0);
+  for (const { test: file } of crossPackageScans) {
+    expect(existsSync(join(import.meta.dir, "..", "..", file)), file).toBe(true);
+  }
 });
 
 test("CI policy runs when its scripts, setup, or shared inputs change", () => {
@@ -12,21 +48,29 @@ test("CI policy runs when its scripts, setup, or shared inputs change", () => {
 });
 
 test("test-only client changes validate their owner without rebuilding native executables", () => {
+  // Web's import-alias scan reads packages' test files too, so each also runs Web.
   expect(selectChecks(["packages/daemon/test/held-publications.test.ts"], "changes")).toEqual([
     "daemon",
+    "web",
   ]);
-  expect(selectChecks(["packages/computer/test/setup.test.ts"], "changes")).toEqual(["computer"]);
+  expect(selectChecks(["packages/computer/test/setup.test.ts"], "changes")).toEqual([
+    "computer",
+    "web",
+  ]);
   expect(selectChecks(["packages/daemon/test/macos-supervisor.test.ts"], "changes")).toEqual([
     "daemon",
     "macos-lifecycle",
+    "web",
   ]);
   // The real-launchd Agent relay cases; launchd-process.test.ts keeps only portable ones.
   expect(selectChecks(["packages/daemon/test/launchd-process.integration.ts"], "changes")).toEqual([
     "daemon",
     "macos-lifecycle",
+    "web",
   ]);
   expect(selectChecks(["packages/daemon/test/launchd-process.test.ts"], "changes")).toEqual([
     "daemon",
+    "web",
   ]);
 });
 
@@ -42,6 +86,7 @@ test("workspace manifests validate their consumers and the image that copies the
 
 test("dependency changes include downstream consumers, but not unrelated modules", () => {
   expect(selectChecks(["packages/daemon/src/runtime.ts"], "changes")).toEqual([
+    "coforge-sdk",
     "computer",
     "daemon",
     "macos-lifecycle",
@@ -50,6 +95,7 @@ test("dependency changes include downstream consumers, but not unrelated modules
   ]);
   expect(selectChecks(["packages/coforge/src/cli.ts"], "changes")).toEqual([
     "coforge",
+    "coforge-sdk",
     "computer",
     "daemon",
     "macos-lifecycle",
@@ -58,6 +104,7 @@ test("dependency changes include downstream consumers, but not unrelated modules
   ]);
   expect(selectChecks(["packages/agent/src/contract.ts"], "changes")).toEqual([
     "agent",
+    "coforge-sdk",
     "computer",
     "daemon",
     "macos-lifecycle",
@@ -99,8 +146,10 @@ test("documentation skips application checks, while shared and unknown inputs fa
     expect(selectChecks([path], "changes")).toEqual(all);
   }
   expect(selectChecks(["packages/computer/src/cli.ts"], "changes")).toEqual([
+    "coforge-sdk",
     "computer",
     "macos-lifecycle",
+    "web",
     "windows-release",
   ]);
   // The install scripts' own behavior is exercised by packages/computer/test/installer-scripts.test.ts
@@ -134,6 +183,7 @@ test("documentation skips application checks, while shared and unknown inputs fa
   expect(selectChecks(["crates/installer/AGENTS.md"], "changes")).toEqual([]);
   // The installer's tests take the Computer's machine mutation lock through this very module.
   expect(selectChecks(["packages/daemon/src/platform/process-lock.ts"], "changes")).toEqual([
+    "coforge-sdk",
     "computer",
     "daemon",
     "installer-crate",
@@ -242,7 +292,7 @@ test("workflow selection accepts NUL-delimited filenames and emits job and matri
   });
   const output = await new Response(child.stdout).text();
   expect(await child.exited).toBe(0);
-  expect(output).toContain('libraries=["coforge"]\n');
+  expect(output).toContain('libraries=["coforge","coforge-sdk"]\n');
   expect(output).toContain("contracts=[]\n");
   expect(output).toContain(
     'jobs=["changes","libraries","computer","daemon","macos-lifecycle","web","windows-release"]\n',

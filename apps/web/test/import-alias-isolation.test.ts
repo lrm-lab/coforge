@@ -13,6 +13,7 @@ const specifier = /["']#src\/([^"']+)["']/g;
 
 function packageAliasSpecifiers(): Map<string, string> {
   const found = new Map<string, string>();
+  // Changing this scope? Update scripts/ci/selection.ts's cross-package scan table.
   const glob = new Bun.Glob("packages/*/{src,test}/**/*.ts");
   for (const file of glob.scanSync({ cwd: repoRoot })) {
     for (const match of readFileSync(join(repoRoot, file), "utf8").matchAll(specifier)) {

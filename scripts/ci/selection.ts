@@ -17,6 +17,38 @@ const allChecks = [
   "windows-release",
 ];
 
+const walked = (path: string) =>
+  !path.split("/").some((part) => part === "node_modules" || part.startsWith("."));
+
+/**
+ * Tests that read source outside their own package, so a change there runs the check owning
+ * the test. Each `scans` mirrors its test's scan scope; keep the two in step.
+ */
+export const crossPackageScans: {
+  test: string;
+  scans: (path: string) => boolean;
+  check: string;
+}[] = [
+  {
+    // Scan scope mirrors runtime-provider-literal-scan.test.ts's scanRoots (and its
+    // isScannableSource and collectSourceFiles filters): tests and generated files are skipped.
+    test: "packages/coforge-sdk/src/internal/runtime-provider-literal-scan.test.ts",
+    scans: (path) =>
+      /^(packages\/[^/]+|apps\/web)\/src\/.+\.tsx?$/.test(path) &&
+      !/\.(test|gen)\.tsx?$/.test(path) &&
+      !/\/(gen|generated)\//.test(path) &&
+      walked(path),
+    check: "coforge-sdk",
+  },
+  {
+    // Scan scope mirrors import-alias-isolation.test.ts's scan roots (packageAliasSpecifiers'
+    // glob): .ts only, packages' test files included.
+    test: "apps/web/test/import-alias-isolation.test.ts",
+    scans: (path) => /^packages\/[^/]+\/(src|test)\/.+\.ts$/.test(path) && walked(path),
+    check: "web",
+  },
+];
+
 export function selectChecks(paths: string[], track: "changes" | "web" | "local" | "installer") {
   if (track === "installer") {
     // The installer's own publication, from the exact main commit: its crate on all six native
@@ -98,6 +130,10 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
     }
     // The image copies workspace manifests for its frozen install, even for client packages.
     if (/^(apps|packages)\/[^/]+\/package\.json$/.test(path)) checks.add("web");
+    // The Web track deploys only for the image's inputs, so a scan selects nothing there.
+    for (const scan of crossPackageScans) {
+      if (track !== "web" && scan.scans(path)) checks.add(scan.check);
+    }
     for (const check of affected) checks.add(check);
   }
   if (track === "web") {

@@ -40,8 +40,14 @@ with three scopes selected by `scripts/ci/selection.ts`:
   select a Web deployment.
   Agent changes additionally validate Web's imported Agent test contract.
   Client source changes retain native macOS and Windows smoke checks. Changes
-  confined to Computer/Daemon test files run their owning package; the three
-  macOS lifecycle test files also run on macOS. Shared fixtures retain full
+  confined to Computer/Daemon test files run their owning package, plus Web,
+  whose import-alias scan reads package tests; the three
+  macOS lifecycle test files also run on macOS. A test that scans source
+  outside its own package (the SDK's RuntimeProvider literal scan over every
+  `src`, Web's import-alias scan over package `src` and `test`) is listed in
+  `selection.ts`'s cross-package scan table, so a change inside its scan scope
+  runs that test's check; on the Web track the table adds nothing, so no such
+  change selects a Web deployment. Shared fixtures retain full
   consumer checks. Workspace manifests select their package's consumers plus
   Web's frozen image install; lockfile changes still select full coverage.
   PowerShell installer changes run both PowerShell parsers and lint. Both

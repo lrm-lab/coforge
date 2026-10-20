@@ -16,7 +16,10 @@ const SCANNED_PROVIDER_VALUES = Object.values(RUNTIME_PROVIDER).filter(
 
 const REPO_ROOT = join(import.meta.dir, "../../../..");
 
-/** Every package's `src` directory, plus the web app's. */
+/**
+ * Every package's `src` directory, plus the web app's. Changing this scope (or
+ * `isScannableSource`)? Update scripts/ci/selection.ts's cross-package scan table.
+ */
 async function scanRoots(): Promise<string[]> {
   const packagesDirectory = join(REPO_ROOT, "packages");
   const entries = await readdir(packagesDirectory, { withFileTypes: true });
