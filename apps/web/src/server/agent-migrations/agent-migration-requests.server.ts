@@ -68,7 +68,11 @@ export class AgentMigrationRequests {
        */
       orchestrator: () => Pick<AgentMigrationOrchestrator, "request" | "cancel">;
       /** The owner of a live Agent in the Workspace, or undefined when there is none. */
-      agentOwner(workspaceId: string, agentId: string): Promise<string | undefined>;
+      agentOwner(
+        workspaceId: string,
+        agentId: string,
+        viewerUserId: string,
+      ): Promise<string | undefined>;
       /** Whether the person is one of the Workspace's owners or admins. */
       isWorkspaceAdmin(workspaceId: string, userId: string): Promise<boolean>;
       /** A Computer's name as people see it, or null when it has none. */
@@ -96,7 +100,7 @@ export class AgentMigrationRequests {
 
   /** The Agent's latest migration, and whether a new one can be asked for at all. */
   async status(principal: Principal, agentId: string) {
-    const owner = await this.deps.agentOwner(principal.workspaceId, agentId);
+    const owner = await this.deps.agentOwner(principal.workspaceId, agentId, principal.userId);
     if (
       !owner ||
       (owner !== principal.userId &&
@@ -203,7 +207,7 @@ export class AgentMigrationRequests {
   }
 
   async #assertManager(principal: Principal, agentId: string) {
-    const owner = await this.deps.agentOwner(principal.workspaceId, agentId);
+    const owner = await this.deps.agentOwner(principal.workspaceId, agentId, principal.userId);
     if (!owner) throw new AppError("NOT_FOUND");
     if (
       owner !== principal.userId &&

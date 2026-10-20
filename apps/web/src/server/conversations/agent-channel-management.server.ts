@@ -1,3 +1,4 @@
+import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 import type { Conversation, PrismaClient } from "#src/generated/prisma/client";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -46,18 +47,18 @@ export type AgentChannelInfo = {
   joined: boolean;
   muted: boolean;
   memberCounts: { agents: number; humans: number };
-  /** Present only when the acting Agent is currently an active member (its stored
-   * `ConversationMember.channelRole`); absent for a non-member, since each part shows only when
-   * present. */
+  /**
+   * Stored channelRole, present only for an active acting member.
+   */
   channelRole?: string;
   /** Present only when the acting Agent has channel-admin authority on this channel — either
    * basis. */
   channelAdminBasis?: ChannelAdminBasis;
   /** Every capability name; only the ones this Agent may currently invoke are `true`. */
   channelCapabilities: ChannelCapabilities;
-  /** Present only when this channel is a Project discussion group for a Project the
-   * Agent's own Workspace owns. Field names and source match `workspace info --projects`
-   * (`WorkspaceInfoProject` in `@lrm/coforge-sdk`), so an Agent can match the two surfaces up. */
+  /**
+   * A Project discussion group owned by this Workspace; fields match workspace info --projects.
+   */
   project?: {
     id: string;
     name: string;
@@ -69,9 +70,7 @@ export type AgentChannelInfo = {
 
 export type AgentChannelRoster = {
   target: string;
-  // `channelRole`/`channelAdminBasis` are present for a `#channel` roster (every listed member
-  // is an active member there) and absent for the `@user` DM roster, which has no channel-role
-  // concept at all.
+  // Channel roles apply to active #channel members; @user DM rosters omit them.
   agents: Array<{
     name: string;
     displayName: string;
@@ -114,9 +113,7 @@ function memberNotFound(handle: string) {
 }
 
 /**
- * Agent-facing channel lifecycle and roster management. Every read/write here is scoped by
- * Workspace and, where the operation targets a specific member, filtered through
- * `ACTIVE_MEMBER_WHERE` so a soft-left member never counts as present, joined, or listed.
+ * Workspace-scoped Agent channel lifecycle and rosters. ACTIVE_MEMBER_WHERE excludes soft-left targets.
  */
 export class AgentChannelManagement {
   private readonly channels: PublicChannels;
@@ -147,7 +144,11 @@ export class AgentChannelManagement {
     const parentTarget = target.split(":")[0] ?? "";
     if (parentTarget.startsWith("#")) {
       const { channel } = await this.targetChannel(workspaceId, parentTarget);
-      const raw = await this.channels.members(workspaceId, { agentId }, channel.id);
+      const raw = await this.channels.members(
+        workspaceId,
+        await this.actor(workspaceId, agentId),
+        channel.id,
+      );
       return this.shapeAgentRoster(workspaceId, agentId, `#${channel.channelName}`, raw);
     }
     if (!USER_TARGET.test(parentTarget))
@@ -155,8 +156,7 @@ export class AgentChannelManagement {
     const username = parentTarget.slice(1);
     const user = await this.db.user.findUnique({ where: { username }, select: { id: true } });
     if (!user) throw new AgentChannelManagementError(404, "channel not found");
-    // Look up only: inspecting who could message in a DM must not have the side effect of
-    // starting one (unlike `read`/`search`/`send`, which lazily create it).
+    // Roster lookup never starts a DM; read/search/send may create one.
     const conversation = await new PrismaDirectConversationRepository(
       this.db,
     ).findUserAgentConversation(workspaceId, user.id, agentId);
@@ -164,9 +164,23 @@ export class AgentChannelManagement {
     return this.roster(workspaceId, conversation.id, agentId, parentTarget);
   }
 
+  private async actor(workspaceId: string, agentId: string) {
+    const user = await workspaceAssistantUser(this.db, workspaceId, agentId);
+    return user ? { userId: user.userId } : { agentId };
+  }
+
   async join(workspaceId: string, agentId: string, target: string) {
     const { channel } = await this.targetChannel(workspaceId, target);
     if (channel.archivedAt) throw new AgentChannelManagementError(409, "channel is archived");
+    const actor = await this.actor(workspaceId, agentId);
+    if ("userId" in actor) {
+      const before = await this.db.conversationMember.findFirst({
+        where: { conversationId: channel.id, userId: actor.userId, leftAt: null },
+        select: { id: true },
+      });
+      await this.channels.join(workspaceId, actor.userId!, channel.id);
+      return { target: `#${channel.channelName}`, joined: true, alreadyJoined: Boolean(before) };
+    }
     await this.assertCallerNotPrivate(workspaceId, agentId, "join");
     const existing = await this.db.conversationMember.findFirst({
       where: { conversationId: channel.id, agentId, ...ACTIVE_MEMBER_WHERE },
@@ -187,6 +201,15 @@ export class AgentChannelManagement {
     const { channelName, channel } = await this.targetChannel(workspaceId, target);
     if (channelName === "general")
       throw new AgentChannelManagementError(400, "cannot leave #general");
+    const actor = await this.actor(workspaceId, agentId);
+    if ("userId" in actor) {
+      const before = await this.db.conversationMember.findFirst({
+        where: { conversationId: channel.id, userId: actor.userId, leftAt: null },
+        select: { id: true },
+      });
+      await this.channels.leave(workspaceId, actor.userId!, channel.id);
+      return { target: `#${channel.channelName}`, joined: false, wasMember: Boolean(before) };
+    }
     const wasMember = await this.markLeft(channel.id, { agentId });
     if (wasMember) {
       await announceMemberChanged(this.realtime, { workspaceId, conversationIds: [channel.id] });
@@ -206,8 +229,22 @@ export class AgentChannelManagement {
     rawName: string,
     description: string | undefined,
   ) {
-    // Slack's default: any Agent that belongs to the Workspace may create a
-    // channel, the same as `PublicChannels.create` for humans — no admin gate.
+    const delegated = await workspaceAssistantUser(this.db, workspaceId, agentId);
+    if (delegated) {
+      const name = this.normalizeChannelName(rawName);
+      const created = await this.channels.create(
+        workspaceId,
+        delegated.userId,
+        name,
+        undefined,
+        description,
+      );
+      return {
+        target: `#${name}`,
+        channel: { id: created.id, name: `#${name}`, description: description ?? "" },
+      };
+    }
+    // Workspace members may create channels without an admin role.
     const agent = await this.db.agent.findFirst({
       where: { id: agentId, workspaceId },
       select: { id: true, ownerId: true },
@@ -270,7 +307,14 @@ export class AgentChannelManagement {
       throw new AgentChannelManagementError(400, "update requires --name or --description");
     const { channelName, channel } = await this.targetChannel(workspaceId, target);
     // Authority before the input is judged, so an Agent without it learns nothing else.
-    if (!(await hasChannelAdminAuthority(this.db, workspaceId, { agentId }, channel)))
+    if (
+      !(await hasChannelAdminAuthority(
+        this.db,
+        workspaceId,
+        await this.actor(workspaceId, agentId),
+        channel,
+      ))
+    )
       throw channelAuthorityDeniedError("update");
     if (channel.archivedAt) throw new AgentChannelManagementError(409, "channel is archived");
     let nextName: string | undefined;
@@ -282,10 +326,15 @@ export class AgentChannelManagement {
     }
     // Shared with the human settings panel, which applies the same authority and archive rules.
     try {
-      await this.channels.updateInfo(workspaceId, { agentId }, channel.id, {
-        name: nextName,
-        description: patch.description,
-      });
+      await this.channels.updateInfo(
+        workspaceId,
+        await this.actor(workspaceId, agentId),
+        channel.id,
+        {
+          name: nextName,
+          description: patch.description,
+        },
+      );
     } catch (error) {
       if (isAppErrorCode(error, "ACCESS_DENIED")) throw channelAuthorityDeniedError("update");
       if (isAppErrorCode(error, "CONFLICT"))
@@ -305,7 +354,12 @@ export class AgentChannelManagement {
     if (channelName === "general")
       throw new AgentChannelManagementError(400, `cannot ${operation} #general`);
     try {
-      await this.channels.setArchived(workspaceId, { agentId }, channel.id, archived);
+      await this.channels.setArchived(
+        workspaceId,
+        await this.actor(workspaceId, agentId),
+        channel.id,
+        archived,
+      );
     } catch (error) {
       if (isAppErrorCode(error, "ACCESS_DENIED")) throw channelAuthorityDeniedError(operation);
       throw error;
@@ -314,11 +368,8 @@ export class AgentChannelManagement {
   }
 
   /**
-   * Slack rule: the acting Agent must itself be an active member of the target
-   * channel — enforced inside `PublicChannels.addMembers`, not re-implemented here. This method
-   * only resolves the `@handle` to an id (so a genuinely unknown handle is a 404, distinct from
-   * a real Workspace member/Agent the actor isn't allowed to add-through) and reshapes the
-   * response for the CLI.
+   * PublicChannels.addMembers enforces active actor membership. Resolve handles and reshape
+   * CLI output here; distinguish unknown handles from targets the actor cannot add.
    */
   async addMember(
     workspaceId: string,
@@ -341,16 +392,12 @@ export class AgentChannelManagement {
     } else {
       const agentRow = await this.db.agent.findFirst({
         where: { workspaceId, name: handle, ...ACTIVE_AGENT_WHERE },
-        select: { id: true, ownerId: true, visibility: true },
+        select: { id: true, ownerId: true, visibility: true, systemKind: true },
       });
       if (!agentRow) throw memberNotFound(handle);
-      // A private Agent the calling Agent cannot see answers the stable
-      // `agent_not_visible` outcome with an explanation, distinct from a genuinely nonexistent
-      // handle's plain "member not found" — the same distinction `user info`/`profile show`
-      // make. A private Agent the caller CAN see (its own creator, or an owner/admin) still
-      // cannot be added to any channel; `PublicChannels.addMembers` below is the unconditional
-      // enforcement, but rejecting it here with a clear reason avoids a confusing generic error
-      // for a target the caller already knows exists.
+      // Invisible private targets return agent_not_visible; nonexistent handles return member not found.
+      // Visible private Agents still cannot join channels. PublicChannels enforces this too;
+      // the early refusal gives the caller a useful reason.
       const viewer = await agentVisibilityViewerForActor(this.db, workspaceId, {
         agentId: callingAgentId,
       });
@@ -371,7 +418,7 @@ export class AgentChannelManagement {
     try {
       const result = await this.channels.addMembers(
         workspaceId,
-        { agentId: callingAgentId },
+        await this.actor(workspaceId, callingAgentId),
         channel.id,
         {
           userIds: userId ? [userId] : [],
@@ -420,7 +467,7 @@ export class AgentChannelManagement {
         !(await hasChannelAdminAuthority(
           this.db,
           workspaceId,
-          { agentId: callingAgentId },
+          await this.actor(workspaceId, callingAgentId),
           channel,
         ))
       )
@@ -459,8 +506,9 @@ export class AgentChannelManagement {
     return { target: `#${channel.channelName}`, removed: true as const, wasMember };
   }
 
-  /** A private Agent can neither join nor create a channel — the acting Agent's OWN
-   * visibility, independent of any target. Reused by `join()` and `create()`. */
+  /**
+   * Ordinary private Agents cannot join/create channels; shared by join and create.
+   */
   private async assertCallerNotPrivate(
     workspaceId: string,
     agentId: string,
@@ -468,7 +516,7 @@ export class AgentChannelManagement {
   ): Promise<void> {
     const agent = await this.db.agent.findFirst({
       where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-      select: { visibility: true },
+      select: { visibility: true, systemKind: true },
     });
     if (!agent || agent.visibility !== AGENT_VISIBILITY.PUBLIC)
       throw new AgentChannelManagementError(403, `a private Agent cannot ${operation} a channel`);
@@ -507,13 +555,14 @@ export class AgentChannelManagement {
     channel: Pick<Conversation, "id" | "channelName" | "description" | "archivedAt" | "projectId">,
     agentId: string,
   ): Promise<AgentChannelInfo> {
+    const actor = await this.actor(workspaceId, agentId);
     const [member, memberCounts, authority, project] = await Promise.all([
       this.db.conversationMember.findFirst({
-        where: { conversationId: channel.id, agentId, ...ACTIVE_MEMBER_WHERE },
+        where: { conversationId: channel.id, ...actor, ...ACTIVE_MEMBER_WHERE },
         select: { channelMuted: true },
       }),
       this.memberCounts(channel.id),
-      resolveChannelAuthority(this.db, workspaceId, { agentId }, channel),
+      resolveChannelAuthority(this.db, workspaceId, actor, channel),
       this.channelProject(workspaceId, channel.projectId),
     ]);
     return {
@@ -531,10 +580,9 @@ export class AgentChannelManagement {
     };
   }
 
-  /** Resolves a channel's bound Project, scoped to the caller's own Workspace so a `projectId`
-   * that somehow points outside it (never a case reachable through `PublicChannels.create`'s own
-   * Workspace check, but not otherwise enforced at the database level) can never leak another
-   * Workspace's Project name, slug, or GitHub binding. */
+  /**
+   * Resolve the bound Project only in this Workspace, even if a corrupt projectId crosses Workspaces.
+   */
   private async channelProject(
     workspaceId: string,
     projectId: string | null,
@@ -566,8 +614,9 @@ export class AgentChannelManagement {
     return { agents, humans };
   }
 
-  /** The `@user` DM roster: not a named channel, so `PublicChannels.members` (which requires
-   * `channelName` set) does not apply; queried directly, then shaped the same way. */
+  /**
+   * DM roster: query directly because PublicChannels.members requires a named channel.
+   */
   private async roster(
     workspaceId: string,
     conversationId: string,
@@ -601,8 +650,7 @@ export class AgentChannelManagement {
         })
       : [];
     const roleByUserId = new Map(roles.map((role) => [role.userId, role.role]));
-    // A DM is not a named channel: there is no channel-role concept here, so `channelRole`/
-    // `channelAdminBasis` stay unset for every entry (see `AgentChannelRoster`).
+    // DM entries omit channelRole/channelAdminBasis.
     return this.shapeAgentRoster(workspaceId, callingAgentId, target, {
       agents: agentRows.map((agent) => ({ ...agent, serverRole: agent.role })),
       humans: humanRows.map((row) => ({
@@ -614,10 +662,8 @@ export class AgentChannelManagement {
   }
 
   /**
-   * Reshapes `PublicChannels.members`' (or the DM roster's) raw membership facts into the
-   * Agent-facing response: role/self tags plus each Agent's live status
-   * (`resolveAgentChannelStatuses`). The only Agent-specific glue here is `self` and `status`/
-   * `activity`/`activityDetail` — membership, roles, and authority all come from the shared data.
+   * Shape shared channel/DM membership facts for the Agent: add self and live status/activity
+   * via resolveAgentChannelStatuses; keep membership, roles and authority in shared data.
    */
   private async shapeAgentRoster(
     workspaceId: string,
@@ -671,9 +717,9 @@ export class AgentChannelManagement {
     };
   }
 
-  /** Deferred: constructing the real `AgentDisplay` throws when `REDIS_URL` is unset, and that
-   * failure must be caught per-Agent (as "unknown") by `resolveAgentChannelStatuses`, not thrown
-   * out of the whole roster read. */
+  /**
+   * Construct AgentDisplay lazily so missing Redis becomes per-Agent unknown status, not a failed roster.
+   */
   private resolvedDisplay(): Pick<AgentDisplay, "snapshot" | "snapshotMany"> {
     return (
       this.display ?? {

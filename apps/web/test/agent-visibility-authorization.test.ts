@@ -129,22 +129,27 @@ describe("canSeeAgent", () => {
   });
 });
 
-/** Interprets exactly the two `Prisma.AgentWhereInput` shapes `visibleAgentWhere` ever returns,
- * against a candidate Agent row, so the where-clause builder and `canSeeAgent` can be asserted to
- * agree row for row rather than only individually. */
+/** Evaluates the small visibility predicate against literal roster rows. Database integration
+ * coverage also runs these predicates through Prisma, including the assistant exception. */
 function matchesAgentWhere(
   where: Prisma.AgentWhereInput,
-  agent: { visibility: string; ownerId: string },
+  agent: { visibility: string; ownerId: string; systemKind?: string | null },
 ): boolean {
-  if (Object.keys(where).length === 0) return true;
-  const or = where.OR;
-  if (!Array.isArray(or)) throw new Error("expected an OR clause");
-  return or.some((clause) => {
-    if (typeof clause !== "object" || clause === null) throw new Error("unexpected OR clause");
-    if ("visibility" in clause) return clause.visibility === agent.visibility;
-    if ("ownerId" in clause) return clause.ownerId === agent.ownerId;
-    throw new Error("unexpected OR clause shape");
-  });
+  if (where.AND) {
+    const clauses = Array.isArray(where.AND) ? where.AND : [where.AND];
+    if (!clauses.every((clause) => matchesAgentWhere(clause, agent))) return false;
+  }
+  if (where.OR && !where.OR.some((clause) => matchesAgentWhere(clause, agent))) return false;
+  if (where.visibility !== undefined && where.visibility !== agent.visibility) return false;
+  if (where.ownerId !== undefined && where.ownerId !== agent.ownerId) return false;
+  if (where.systemKind === null && agent.systemKind != null) return false;
+  if (
+    typeof where.systemKind === "object" &&
+    where.systemKind !== null &&
+    where.systemKind.not === agent.systemKind
+  )
+    return false;
+  return true;
 }
 
 describe("visibleAgentWhere agrees with canSeeAgent", () => {
@@ -178,17 +183,26 @@ describe("visibleAgentWhere agrees with canSeeAgent", () => {
     });
   }
 
-  test("an owner/admin-like viewer gets the empty filter (nothing hidden)", () => {
-    expect(visibleAgentWhere(humanAdminViewer)).toEqual({});
-    expect(visibleAgentWhere(workspaceOwnerViewer)).toEqual({});
-    expect(visibleAgentWhere(adminRoleAgentViewer)).toEqual({});
+  test("an owner/admin-like viewer sees ordinary Agents but never another member's assistant", () => {
+    for (const viewer of [humanAdminViewer, workspaceOwnerViewer, adminRoleAgentViewer]) {
+      expect(
+        matchesAgentWhere(visibleAgentWhere(viewer), { visibility: "private", ownerId: CREATOR }),
+      ).toBeTrue();
+      expect(
+        matchesAgentWhere(visibleAgentWhere(viewer), {
+          visibility: "private",
+          ownerId: "someone-else",
+          systemKind: "workspace-assistant",
+        }),
+      ).toBeFalse();
+    }
   });
 
   test("a plain viewer gets 'public, or mine'", () => {
-    expect(visibleAgentWhere(otherMemberViewer)).toEqual({
+    expect(visibleAgentWhere(otherMemberViewer)).toMatchObject({
       OR: [{ visibility: "public" }, { ownerId: OTHER_MEMBER }],
     });
-    expect(visibleAgentWhere(otherMembersAgentViewer)).toEqual({
+    expect(visibleAgentWhere(otherMembersAgentViewer)).toMatchObject({
       OR: [{ visibility: "public" }, { ownerId: OTHER_MEMBER }],
     });
   });

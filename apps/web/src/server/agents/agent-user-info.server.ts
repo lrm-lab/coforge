@@ -153,6 +153,7 @@ export async function findWorkspaceUser(
       runtimeConfig: true,
       ownerId: true,
       visibility: true,
+      systemKind: true,
       computer: { select: { name: true, displayName: true } },
     },
   });

@@ -1,5 +1,23 @@
 import type { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
+
+/** Delegated uploads remain attributed to the private assistant that uploaded them. */
+export function userUploadedAttachmentWhere(userId: string): Prisma.AttachmentWhereInput {
+  return {
+    OR: [
+      { uploaderId: userId },
+      {
+        uploaderAgent: {
+          ownerId: userId,
+          systemKind: WORKSPACE_ASSISTANT_KIND,
+          deletedAt: null,
+          workspaceAssistantSession: { userId },
+        },
+      },
+    ],
+  };
+}
 
 type ClaimedAttachment = {
   id: string;
@@ -21,7 +39,13 @@ export async function claimUploadedAttachments(
 ): Promise<ClaimedAttachment[]> {
   if (!attachmentIds.length) return [];
   const available = await tx.attachment.findMany({
-    where: { id: { in: [...new Set(attachmentIds)] }, ...scope, messageId: null },
+    where: {
+      id: { in: [...new Set(attachmentIds)] },
+      workspaceId: scope.workspaceId,
+      conversationId: scope.conversationId,
+      ...userUploadedAttachmentWhere(scope.uploaderId),
+      messageId: null,
+    },
     select: { id: true, fileName: true, contentType: true, sizeBytes: true, objectKey: true },
   });
   const byId = new Map(available.map((attachment) => [attachment.id, attachment]));

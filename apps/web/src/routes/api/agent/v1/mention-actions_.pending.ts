@@ -1,8 +1,9 @@
+import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
 import { createFileRoute } from "@tanstack/react-router";
 import type { AgentMentionPendingResponse } from "@lrm/coforge-sdk/agent";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import {
-  pendingMentionActionsForAgent,
+  pendingMentionActionsForActor,
   type PendingMentionActionView,
 } from "#src/server/conversations/pending-mention-actions.server";
 
@@ -41,8 +42,14 @@ export const Route = createFileRoute("/api/agent/v1/mention-actions_/pending")({
     handlers: {
       GET: ({ context: { principal, db } }) =>
         handleAgentMentionPendingGet(principal, {
-          pendingMentionActions: (workspaceId, agentId) =>
-            pendingMentionActionsForAgent(db, workspaceId, agentId),
+          pendingMentionActions: async (workspaceId, agentId) => {
+            const user = await workspaceAssistantUser(db, workspaceId, agentId);
+            return pendingMentionActionsForActor(
+              db,
+              workspaceId,
+              user ? { userId: user.userId } : { agentId },
+            );
+          },
         }),
     },
   },

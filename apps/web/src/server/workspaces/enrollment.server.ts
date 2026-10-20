@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { AppError } from "#src/lib/app-error";
 import { attachDefaultMemoryAgentToGeneral } from "#src/server/workspace-memory/default-memory-agent.server";
 import { WorkspaceCatalog, PrismaWorkspaceCatalogStore } from "./catalog.server";
@@ -111,6 +112,7 @@ export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore 
   async createForUser(input: { slug: string; name: string; userId: string }) {
     const row = await createOwnedWorkspace(this.db, input, { id: true });
     await attachDefaultMemoryAgentToGeneral(this.db, row.id, input.userId);
+    await new WorkspaceAssistants(this.db).ensure(row.id, input.userId);
     return row.id;
   }
 }

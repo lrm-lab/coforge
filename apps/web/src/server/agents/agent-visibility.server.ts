@@ -1,8 +1,12 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
-import { resolveActorServerRole } from "#src/server/conversations/channel-authority.server";
+import {
+  effectiveAgentServerRole,
+  resolveActorServerRole,
+} from "#src/server/conversations/channel-authority.server";
 import { isElevatedServerRole } from "#src/server/workspaces/member-role.server";
 
 /**
@@ -72,13 +76,13 @@ export async function agentVisibilityViewerForActor(
   if ("userId" in actor) return agentVisibilityViewerForUser(db, workspaceId, actor.userId);
   const agent = await db.agent.findFirst({
     where: { id: actor.agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-    select: { ownerId: true, role: true },
+    select: { ownerId: true, role: true, systemKind: true },
   });
   return {
     kind: "agent",
     agentId: actor.agentId,
     ownerId: agent?.ownerId ?? "",
-    role: agent?.role,
+    role: agent ? await effectiveAgentServerRole(db, workspaceId, agent) : undefined,
   };
 }
 
@@ -91,8 +95,10 @@ export async function agentVisibilityViewerForActor(
  */
 export function canSeeAgent(
   viewer: AgentVisibilityViewer,
-  agent: { visibility: string; ownerId: string },
+  agent: { visibility: string; ownerId: string; systemKind?: string | null },
 ): boolean {
+  if (agent.systemKind === WORKSPACE_ASSISTANT_KIND)
+    return viewerCreatorId(viewer) === agent.ownerId;
   if (agent.visibility === AGENT_VISIBILITY.PUBLIC) return true;
   if (isElevatedServerRole(viewer.role)) return true;
   return viewerCreatorId(viewer) === agent.ownerId;
@@ -120,8 +126,16 @@ export function canDirectMessageAgent(
  * that agreement, not just each function in isolation.
  */
 export function visibleAgentWhere(viewer: AgentVisibilityViewer): Prisma.AgentWhereInput {
-  if (isElevatedServerRole(viewer.role)) return {};
+  const assistantScope = {
+    OR: [
+      { systemKind: null },
+      { systemKind: { not: WORKSPACE_ASSISTANT_KIND } },
+      { ownerId: viewerCreatorId(viewer) },
+    ],
+  };
+  if (isElevatedServerRole(viewer.role)) return assistantScope;
   return {
+    AND: [assistantScope],
     OR: [{ visibility: AGENT_VISIBILITY.PUBLIC }, { ownerId: viewerCreatorId(viewer) }],
   };
 }
@@ -150,7 +164,7 @@ export function visiblePrivateAgentWhere(viewer: AgentVisibilityViewer): Prisma.
  */
 export function assertAgentVisible(
   viewer: AgentVisibilityViewer,
-  agent: { visibility: string; ownerId: string },
+  agent: { visibility: string; ownerId: string; systemKind?: string | null },
 ): void {
   if (!canSeeAgent(viewer, agent)) throw new AppError("AGENT_NOT_VISIBLE");
 }

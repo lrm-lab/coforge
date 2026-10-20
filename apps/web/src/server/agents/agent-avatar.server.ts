@@ -163,6 +163,7 @@ export class AgentAvatars {
       select: {
         ownerId: true,
         visibility: true,
+        systemKind: true,
         avatarObjectKey: true,
         avatarContentType: true,
       },

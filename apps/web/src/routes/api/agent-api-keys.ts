@@ -7,6 +7,7 @@ import {
   isAgentApiKeyBoundToComputer,
 } from "#src/server/agents/agent-api-key.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { PrismaAgentApiKeyRepository } from "#src/server/db/repositories/agent-api-key.repositories.server";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import {
@@ -49,6 +50,7 @@ type LaunchIdentityComputer = AgentRuntimeContextComputer;
  * is omitted rather than sent empty so an older Daemon's defensive decoder degrades cleanly.
  */
 function buildAgentLaunchIdentity(agent: {
+  systemKind?: string | null;
   name: string;
   displayName: string;
   description: string;
@@ -59,6 +61,9 @@ function buildAgentLaunchIdentity(agent: {
 }) {
   const runtimeContext = buildAgentRuntimeContext(agent);
   const identity = {
+    ...(agent.systemKind === WORKSPACE_ASSISTANT_KIND
+      ? { systemKind: WORKSPACE_ASSISTANT_KIND }
+      : {}),
     ...(agent.name ? { name: agent.name } : {}),
     ...(agent.displayName ? { displayName: agent.displayName } : {}),
     ...(agent.description ? { description: agent.description } : {}),
@@ -98,6 +103,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             name: true,
             displayName: true,
             description: true,
+            systemKind: true,
             weeklyReportAssistant: { select: { id: true } },
             weeklyReportCollectorBinding: { select: { id: true } },
             workspace: { select: { slug: true, name: true } },
@@ -156,6 +162,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           repository: new PrismaAgentApiKeyRepository(db),
         });
         const identity = buildAgentLaunchIdentity({
+          systemKind: agent.systemKind,
           name: agent.name,
           displayName: agent.displayName,
           description: agent.description,

@@ -17,6 +17,7 @@ import {
   WorkspaceCatalog,
 } from "#src/server/workspaces/catalog.server";
 import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-assistant.server";
+import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { createWorkspaceAndStartCloudComputer } from "#src/server/workspaces/create-workspace.server";
 import {
   preferredWorkspaceSlugFromRequest,
@@ -61,6 +62,7 @@ export const loadWorkspaceSwitcher = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     const { user, workspaceId } = context;
+    await new WorkspaceAssistants(context.db).ensure(workspaceId, user.id);
     const workspaces = await catalog().listForUser(user.id);
     const current = workspaces.find((workspace) => workspace.id === workspaceId)!;
     if (preferredWorkspaceSlugFromRequest() !== current.slug)
@@ -144,6 +146,12 @@ export const createWorkspace = createServerFn({ method: "POST" })
           productionCloudComputers(requireDatabaseClient()).ensureDefault(request),
         bindWeeklyReportAssistant: (request) =>
           ensureWeeklyReportAssistant(requireDatabaseClient(), request),
+        bindWorkspaceAssistant: (request) =>
+          new WorkspaceAssistants(requireDatabaseClient()).bindComputer(
+            request.workspaceId,
+            request.userId,
+            request.computerId,
+          ),
       },
       { userId: user.id, name: data.name, slug: data.slug, now: new Date() },
     );

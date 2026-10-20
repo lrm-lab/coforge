@@ -5,9 +5,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Provider seam
 
-- `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession`
-  instances and owns usage and context reports, composed from provider-internal modules.
-  Discovery and catalogs live in `runtime-inventory.ts`.
+- `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession` instances and owns usage and context reports, composed from provider-internal modules. Discovery and catalogs live in `runtime-inventory.ts`.
 - The registry returns Providers, never lifecycle wrappers or forwarding adapters.
 - Higher layers consume normalized status and Activity messages and must not
   parse Claude Code, Codex, Pi, or any other provider's output.
@@ -72,6 +70,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   compatible Web before upgraded CLI/Daemon, and roll clients back before the
   server. A check/read/resolve window that contains tracked Tasks includes
   one Tasks-manual pointer; ordinary messages do not.
+- Only a trusted `workspace-assistant` launch identity appends `workspace-assistant-instructions.ts`, the platform playbook; ordinary Agent instructions retain their existing prompt budget.
 - Every Provider injects them through the provider's native system or developer
   instruction mechanism: Codex app-server `developerInstructions`, the Claude
   Code system-prompt-file option, the CoForge Agent resource-loader

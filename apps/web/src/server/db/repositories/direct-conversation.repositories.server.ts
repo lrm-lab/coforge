@@ -1,3 +1,5 @@
+import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
+import { WorkspaceAssistantCommands } from "#src/server/agents/workspace-assistant-commands.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import {
@@ -643,10 +645,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   readonly #agentChannels?: Map<string, Promise<{ id: string }>>;
 
   /**
-   * `oneRequest` keeps each Agent channel lookup for the instance's life, so the steps of one
-   * Agent send (its Memory Offer check, freshness and the send itself) resolve the channel once.
-   * Only for an instance created per request: a longer-lived one would keep a membership the
-   * Agent has since lost. The send re-reads the sender's membership when it writes the message.
+   * Cache channel lookups only for this request, sharing send freshness/Memory reads.
+   * Longer caching could retain revoked membership; the send rechecks it before writing.
    */
   constructor(
     private readonly db: PrismaClient,
@@ -705,11 +705,45 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     return lookup;
   }
 
-  setAgentChannelMuted(workspaceId: string, agentId: string, target: string, muted: boolean) {
+  async setAgentChannelMuted(workspaceId: string, agentId: string, target: string, muted: boolean) {
+    const user = await workspaceAssistantUser(this.db, workspaceId, agentId);
+    if (user) {
+      const scope = await new WorkspaceAssistantCommands(this.db).target(
+        { workspaceId, agentId },
+        target,
+      );
+      if (!scope.isChannel) throw new AppError("INVALID_INPUT");
+      return new PublicChannels(this.db).setUserMuted(
+        workspaceId,
+        user.userId,
+        scope.conversationId,
+        muted,
+      );
+    }
     return new PublicChannels(this.db).setAgentMuted(workspaceId, agentId, target, muted);
   }
 
-  setAgentThreadFollowed(workspaceId: string, agentId: string, target: string, followed: boolean) {
+  async setAgentThreadFollowed(
+    workspaceId: string,
+    agentId: string,
+    target: string,
+    followed: boolean,
+  ) {
+    const user = await workspaceAssistantUser(this.db, workspaceId, agentId);
+    if (user) {
+      const scope = await new WorkspaceAssistantCommands(this.db).target(
+        { workspaceId, agentId },
+        target,
+      );
+      if (!scope.isChannel || !scope.threadRootId) throw new AppError("INVALID_INPUT");
+      return new PublicChannels(this.db).setUserThreadFollowed(
+        workspaceId,
+        user.userId,
+        scope.conversationId,
+        scope.threadRootId,
+        followed,
+      );
+    }
     return new PublicChannels(this.db).setAgentThreadFollowed(
       workspaceId,
       agentId,
@@ -775,6 +809,19 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     agentId: string,
     target: string,
   ): Promise<ResolvedAgentTarget> {
+    const delegate = await workspaceAssistantUser(this.db, workspaceId, agentId);
+    if (delegate && target.split(":")[0] !== `@${delegate.username}`) {
+      const scope = await new WorkspaceAssistantCommands(this.db).target(
+        { workspaceId, agentId },
+        target,
+      );
+      return {
+        conversationId: scope.conversationId,
+        threadRootId: scope.threadRootId ?? null,
+        canonicalTarget: deliveryTarget(target.split(":")[0]!, scope.threadRootId ?? null),
+        isChannel: scope.isChannel,
+      };
+    }
     return this.#resolveAgentTarget(workspaceId, agentId, target, (userId) =>
       this.getOrCreateUserAgent(workspaceId, userId, agentId),
     );
@@ -945,10 +992,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   async getOrCreateUserAgent(workspaceId: string, userId: string, agentId: string) {
-    // Deliberately *not* filtered by `ACTIVE_AGENT_WHERE`: a deleted Agent's direct conversation
-    // stays readable (history is kept), and `DirectConversations.authorize` decides per operation
-    // whether reading or writing is allowed. `DirectConversations.open` refuses to start one with
-    // a deleted Agent.
+    // Retain deleted-Agent DM history. DirectConversations.authorize checks read/write access;
+    // DirectConversations.open refuses to create a deleted Agent's DM.
     const agent = await this.db.agent.findFirst({
       where: { id: agentId, workspaceId, workspace: { members: { some: { userId } } } },
       select: { id: true, ownerId: true, visibility: true },
@@ -1210,10 +1255,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             }
           : unauthorizedScope()),
       viewerId: sender.user ? userId : undefined,
-      // Who a mention here can be resolved to. A direct conversation has no candidate affinity to
-      // rank (see `mentionAffinityScores`), so every member scores 0 and handle order is the whole
-      // ordering; the viewer's own row is included because this list is also what *resolves* a
-      // mention of them — leaving it out rendered `<@human:uuid>` raw in their own pane.
+      // DM mention candidates have zero affinity and sort by handle. Include the viewer so
+      // their own stored human mention resolves instead of rendering a raw token.
       mentionables: members
         .map((member) =>
           member.user
@@ -1498,10 +1541,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       ? unreceived
       : { AND: [select.orUnreceived ? { OR: [unreceived, chosen] } : chosen] };
     const deliveries = await this.db.agentMessageDelivery.findMany({
-      // Deliveries into a channel hidden from the Workspace wait there until it is restored. A
-      // channel the Agent has left (or was removed from, or left by going private) no longer
-      // replays: its daemon was told to drop those messages. Direct messages always replay, and
-      // so does one channel message the Agent was notified of from outside the channel.
+      // Hidden-channel deliveries wait for restore. Left/removed/private-transition channel
+      // memberships never replay; DMs and notified non-member channel messages still do.
       where: {
         workspaceId,
         agentId,
@@ -1546,11 +1587,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       ).map((member) => member.conversationId),
     );
     return deliveries.map((delivery) => {
-      // An Agent-authored message has no `user` on its sender row, so a `user.username`-only
-      // derivation produced a bare `@` and rejected every pending Agent message. Reuse the one
-      // sender projection every Agent read path calls (`agentMessageSender`): it
-      // throws a named error rather than shipping a degraded identity, and the handle it
-      // returns is already checked against the public handle grammar.
+      // agentMessageSender handles both human and Agent authors and validates the handle;
+      // reading sender.user alone produces a bare @ for Agent messages.
       const sender = agentMessageSender(delivery.message.sender);
       const target = deliveryTarget(
         conversationTarget(delivery.conversation),
@@ -1805,10 +1843,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       unreadConversationIds[target] = row.conversationId;
       if (row.globalRank > AGENT_RECOVERY_MESSAGE_LIMIT) continue;
       if (!row.deliveryId) throw new Error(`Unread Agent message has no delivery: ${row.id}`);
-      // The author, read from the message in every conversation kind. A DM's other member is its
-      // *recipient*, so deriving the sender from the conversation attributes the message to the
-      // wrong side — and, in a conversation with no user member, to nothing at all. Routed through
-      // the shared projection so a missing name fails loudly rather than degrading.
+      // Read the author from the message with the shared sender projection. A DM peer is the
+      // recipient, so deriving the author from the conversation misattributes Agent messages.
       const sender = agentMessageSender(
         row.senderMemberId === null
           ? null
@@ -1853,10 +1889,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   /**
-   * Drains up to `limit` messages the Agent still owes attention to, in global
-   * `(conversation, thread root, sequence)` order, and advances its read boundary for exactly the
-   * targets returned (ack-on-drain). Boundaries only move forward. Default page is 20 (capped at
-   * 100) so an unscoped check does not dump a 50-row wall of full bodies into the transcript.
+   * Drain owed attention in (conversation, thread root, sequence) order and advance only
+   * returned targets, monotonically. Default 20, capped 100, to bound unscoped transcript input.
    */
   async drainAgentEvents(
     workspaceId: string,
@@ -2257,10 +2291,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     });
     let sender = members.find((m) => m.agentId === agentId && !m.leftAt);
     const user = members.find((m) => m.userId && !m.leftAt);
-    // A soft-left DM membership is not an intentional leave: visibility changes never touch
-    // DMs, and a deleted Agent cannot call send (keys revoked). Clear `leftAt` on the same
-    // row — the channel rejoin pattern — so a still-live Agent can deliver again instead of
-    // surfacing a bare 500. Channel soft-leaves stay rejected; those are intentional removals.
+    // Clear leftAt for live Agent DMs: visibility changes never leave DMs, and deleted Agents
+    // have revoked keys. Preserve channel soft-leaves, which represent intentional removals.
     if (!sender && !conversation.channelName) {
       const softLeft = members.find((m) => m.agentId === agentId && m.leftAt);
       if (softLeft) {
@@ -2331,10 +2363,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         }
       }
       const sequence = await allocateSequence(tx, conversationId);
-      // The sending Agent must be the same Agent that uploaded each attachment (the
-      // earlier limitation of never checking uploader identity, closed by the Agent
-      // upload route: `uploaderAgentId` now names the uploading Agent). Validated before the
-      // message exists, then linked (messageId + position) once it does.
+      // Require the sending Agent's own uploads before creating the message; link messageId
+      // and position afterward in the same transaction.
       const requestedAttachmentIds = attachmentIds ?? [];
       const availableAttachments = requestedAttachmentIds.length
         ? await tx.attachment.findMany({
@@ -2379,14 +2409,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           mentionedMemberIds.push(match.id);
         }
       }
-      // Bodies are persisted in the Slack-style token form. In a channel every @mention that
-      // resolves to an active member — whether given as a structured `--mention` selector or
-      // written plainly — becomes a `<@kind:uuid>` token plus a MessageMention row; a DM keeps
-      // plain `@handle` text (no mention targets). On every conversation a `task #N` naming a
-      // real task becomes `<@task:N>`, a `#name` naming a Workspace channel becomes
-      // `<@channel:uuid:name>`, and a `#name:shortid` naming one of its threads becomes
-      // `<@thread:uuid:uuid:name>`, so a renderer reads each back as a chip instead of parsing
-      // prose.
+      // Channel member mentions (structured or plain) become <@kind:uuid> plus MessageMention;
+      // DM @handles stay plain. Resolved task/channel/thread references become stored tokens
+      // in either conversation kind, rendered as chips without reparsing prose.
       const stored = await storeMessageBody(
         tx,
         { workspaceId: conversation.workspaceId, conversationId },

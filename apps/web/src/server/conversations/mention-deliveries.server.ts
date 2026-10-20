@@ -1,14 +1,10 @@
 /**
- * Tracked @mention delivery on the cloud side. Every delivery that personally mentions its Agent
- * is tracked on its delivery row. When the Agent has a running launch and session, the push
- * carries an envelope naming them, and the daemon answers it with an ACK echoing the envelope
- * (delivered) or a terminal error (lost with a reason category, or unknown). An Agent that is not
- * running is woken as before, without an envelope, and its mention stays pending; one nothing may
- * wake is not launched. Delivered and lost are final, except that a daemon's echoed ACK overrides
- * a person's Stop settling the mention; unknown is not final. A pending mention that went out
- * without an envelope, or with one for a launch that is no longer the Agent's, is issued again for
- * its current launch and session when a launch's session is accepted and when its daemon comes
- * back ready; nothing re-issues on a timer.
+ * Tracked mentions persist on delivery rows. Running launches receive session-bound envelopes:
+ * ACK means delivered; terminal errors mean lost (with category) or unknown. Stopped/deleted/
+ * unassigned Agents are not launched; other inactive Agents wake without an envelope and remain pending.
+ * Delivered/lost are final except an echoed ACK overrides Stop; unknown remains revisable.
+ * Pending missing/stale envelopes reissue for the current launch on session acceptance or daemon ready,
+ * never on a timer.
  */
 import type { AgentMentionDelivery } from "@lrm/coforge-sdk/agent";
 import {
@@ -492,15 +488,19 @@ export class MentionDeliveryLookup {
   ) {}
 
   async forSender(
-    scope: { workspaceId: string; agentId: string },
+    scope: { workspaceId: string } & ({ agentId: string } | { userId: string }),
     messageId: string,
   ): Promise<SenderMentionDeliveries> {
     if (!SENDER_MESSAGE_ANCHOR.test(messageId)) return { state: "not_found" };
-    const messages = await this.repository.readSenderDeliveries(
-      scope.workspaceId,
-      scope.agentId,
-      messageId,
-    );
+    const messages =
+      "userId" in scope
+        ? await this.repository.readSenderDeliveries(
+            scope.workspaceId,
+            scope.userId,
+            messageId,
+            "user",
+          )
+        : await this.repository.readSenderDeliveries(scope.workspaceId, scope.agentId, messageId);
     if (messages.length > 1) return { state: "ambiguous" };
     const [message] = messages;
     if (!message) return { state: "not_found" };

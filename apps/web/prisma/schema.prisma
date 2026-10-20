@@ -9,6 +9,7 @@ datasource db {
 }
 
 model Workspace {
+  assistant WorkspaceAssistant?
   id                     String                  @id @default(uuid(7)) @db.Uuid
   slug                   String                  @unique
   name                   String
@@ -107,6 +108,7 @@ model Project {
 }
 
 model User {
+  workspaceAssistantSessions WorkspaceAssistantSession[]
   id                          String                          @id @default(uuid(7)) @db.Uuid
   username                    String                          @unique
   /// The latest email the identity provider reported at login. Not unique and never an identity key.
@@ -249,6 +251,9 @@ model GitHubUserInstallation {
 }
 
 model Agent {
+  /// Platform-owned execution identity; ordinary Agents leave this null.
+  systemKind String?
+  workspaceAssistantSession WorkspaceAssistantSession?
   id                        String                     @id @default(uuid(7)) @db.Uuid
   workspaceId               String                     @db.Uuid
   name                      String
@@ -278,11 +283,9 @@ model Agent {
   /// Set when a user stopped this Agent: nothing may start or wake it except an
   /// explicit user Start, Restart, Reset session or Full reset. Independent of `controlState`.
   stoppedAt                 DateTime?
-  /// Soft delete (shown to users as archiving): a deleted Agent is hidden from every directory,
-  /// list and wake, but its profile (read-only), Messages, Tasks and Action cards are kept so
-  /// history stays readable. Never hard-deleted: `Message.sender`, `Task.creator/owner` and
-  /// `ActionCard.preparedByAgent` are `onDelete: Restrict`, the same blocker `leftAt` solved
-  /// for channel membership.
+  /// Archive: hide from directories, lists and wakes; retain read-only profile and history.
+  /// Message.sender, Task.creator/owner and ActionCard.preparedByAgent restrict hard deletion,
+  /// as leftAt does for channel membership.
   deletedAt                 DateTime?
   /// Who deleted (archived) the Agent; null for one deleted before this was recorded, or whose
   /// deleting User is gone.
@@ -482,6 +485,48 @@ model WeeklyReportAssistantRuntimeSession {
   @@map("weekly_report_assistant_runtime_sessions")
 }
 
+/// Shared assistant configuration; each member's private Agent isolates native sessions,
+/// credentials, working directories and read cursors.
+model WorkspaceAssistant {
+  workspaceId String @id @db.Uuid
+  displayName String @default("通用助手")
+  createdAt DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sessions WorkspaceAssistantSession[]
+
+  @@map("workspace_assistants")
+}
+
+model WorkspaceAssistantSession {
+  id String @id @default(uuid(7)) @db.Uuid
+  workspaceId String @db.Uuid
+  userId String @db.Uuid
+  agentId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  assistant WorkspaceAssistant @relation(fields: [workspaceId], references: [workspaceId], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent Agent @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  readCursors WorkspaceAssistantReadCursor[]
+
+  @@unique([workspaceId, userId])
+  @@unique([agentId, workspaceId])
+  @@index([userId])
+  @@map("workspace_assistant_sessions")
+}
+
+/// Independent consumption state for delegated reads; canonical messages remain in conversations.
+model WorkspaceAssistantReadCursor {
+  sessionId String @db.Uuid
+  conversationId String @db.Uuid
+  /// Empty for the parent conversation, otherwise the full thread-root UUID.
+  scope String @default("")
+  readThroughSequence Int @default(0)
+  session WorkspaceAssistantSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, conversationId, scope])
+  @@map("workspace_assistant_read_cursors")
+}
+
 /// A provider-native Session belongs to the Agent and the Computer/runtime that created it.
 /// Switching runtime creates another record; it never relabels or converts the old transcript.
 model AgentSession {
@@ -588,11 +633,8 @@ model DaemonApiKey {
   @@map("daemon_api_keys")
 }
 
-/// A daemon credential that stopped being valid because its Workspace was deleted or its Computer
-/// was removed from the Workspace, keyed by the credential's hash. It has no relation to the
-/// Workspace, Computer, or key row, so it outlives their cascade: the connect proxy answers the
-/// reason only to a caller presenting that exact, formerly valid key. Kept for
-/// `DAEMON_CREDENTIAL_REVOCATION_RETENTION_MS`
+/// Hash-keyed revocation after Workspace deletion or Computer removal; no cascading relations.
+/// Only the exact former key reveals the reason. Retention: DAEMON_CREDENTIAL_REVOCATION_RETENTION_MS
 /// (src/server/db/repositories/daemon-credential-revocation.repositories.server.ts).
 model DaemonCredentialRevocation {
   apiKeyHash String   @id @map("api_key_hash")
@@ -603,12 +645,8 @@ model DaemonCredentialRevocation {
   @@map("daemon_credential_revocations")
 }
 
-/// One in-flight RFC 8628 device authorization grant, durable rather than in-process: the browser
-/// approving it and the Computer polling for it may reach different web replicas, and a deploy
-/// between `login` and the user finishing the approval page must not silently invalidate it.
-///
-/// Neither secret is stored in the clear: the device code is the Computer's polling bearer, and the
-/// user code is short enough to type, so to guess; both are looked up by hash, like daemon API keys.
+/// Durable RFC 8628 device grant: approval and polling may hit different replicas or span deploys.
+/// Hash both codes: the device code is a bearer credential and the short user code is guessable.
 model DeviceAuthorization {
   id             String    @id @default(uuid(7)) @db.Uuid
   deviceCodeHash String    @unique @map("device_code_hash")
@@ -852,11 +890,8 @@ model ConversationMember {
   userId                   String?           @db.Uuid
   agentId                  String?           @db.Uuid
   agentReadThroughSequence Int               @default(0)
-  /// Human member's read boundary over top-level (non-thread) messages in this
-  /// conversation. Agents keep their own delivery cursor above; a human's
-  /// channel-list unread count is `top-level messages with sequence > this`
-  /// excluding their own messages. Thread replies never advance it: reading a
-  /// thread does not consume unread in the channel's main target.
+  /// Human top-level read cursor, separate from Agent delivery. Unread excludes own messages;
+  /// thread reads never advance the parent cursor.
   readThroughSequence      Int               @default(0)
   channelMuted             Boolean           @default(false)
   chatSectionId            String?           @db.Uuid
@@ -869,11 +904,8 @@ model ConversationMember {
   /// (onDelete: Restrict), so "left" is represented here instead of by row absence.
   /// Re-joining clears this and keeps the row, so read boundaries and mute preferences survive.
   leftAt                   DateTime?
-  /// Role stored on this membership: admin | member. Channel creators get "admin" on their own
-  /// membership row; #general members always stay "member" (nobody can be channel admin of
-  /// #general, its rules are fixed). Never the sole authority source — see
-  /// `channel-authority.server.ts`'s admin-basis computation, which also considers the actor's
-  /// Workspace/Agent server role.
+  /// Stored admin | member role; creators get admin, #general memberships always stay member.
+  /// channel-authority.server.ts also considers Workspace/Agent roles when deriving admin authority.
   channelRole              String            @default("member")
   /// Forced unread marker (mark-as-unread): top-level messages with sequence >= this read as
   /// unread regardless of readThroughSequence. Null = none. Cleared when the member reads past it.
@@ -1110,12 +1142,9 @@ model ThreadFollow {
   @@map("thread_follows")
 }
 
-/// A resolved @mention of one conversation member in one channel Message, persisted in the
-/// same transaction as the Message. Send-time resolution (grammar ∩ active membership) is the
-/// single source the stream highlight, directed Agent delivery, and Agent wake all read; the
-/// plain-text `@handle` in the body stays the canonical form for Agents and history. `handle`
-/// is denormalized from `agent.name` (fixed at creation) and `user.username` (not changed after it
-/// is allocated), so reads never join the member directory and a later member departure keeps the record intact.
+/// A member @mention resolved by grammar and active membership in the Message transaction.
+/// Highlight, delivery and wake share this record; Agents/history read @handle text.
+/// The immutable Agent name or allocated username is denormalized as handle, surviving departure.
 model MessageMention {
   messageId      String             @db.Uuid
   memberId       String             @db.Uuid
@@ -1140,11 +1169,8 @@ model MessageMention {
   @@map("message_mentions")
 }
 
-/// One `@handle` of a sent message that named someone outside its conversation: a Workspace human
-/// or a public Agent who is not an active member, and so was not notified. The sender can act on it
-/// until `expiresAt` (7 days after the send): add the target to the channel, or let it go (the
-/// client-side Ignore writes nothing). Resolving it records the action taken; the row is kept so
-/// a repeated action reads as no longer pending. `id` is the resolution id the sender acts with.
+/// An unnotified non-member human/public-Agent mention. The sender acts by resolution id
+/// until expiresAt (send + 7 days); Ignore writes nothing. Retain resolved rows for replay.
 model PendingMentionAction {
   id             String             @id @default(uuid(7)) @db.Uuid
   messageId      String             @db.Uuid
@@ -1875,10 +1901,8 @@ model HostJob {
   @@map("host_jobs")
 }
 
-/// One move of an Agent and its workspace files from one Computer to another. The state machine,
-/// its fencing and who may take each step live in `server/agent-migrations/`; this row is its only
-/// persistence. A Computer is soft-deleted (`deletedAt`), so its migrations stay; the switch refuses a
-/// target that is no longer a live Computer of the Workspace. The cascades only follow a hard delete.
+/// An Agent/working-directory move between Computers; server/agent-migrations owns its state machine.
+/// Soft-deleted Computers retain migrations. Switch requires a live Workspace target; only hard deletes cascade.
 model AgentMigration {
   id                String    @id @default(uuid(7)) @db.Uuid
   workspaceId       String    @db.Uuid

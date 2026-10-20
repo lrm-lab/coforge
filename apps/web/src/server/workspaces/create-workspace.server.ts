@@ -44,6 +44,11 @@ export async function createWorkspaceAndStartCloudComputer(
       workspaceId: string;
       computerId: string;
     }) => Promise<unknown>;
+    bindWorkspaceAssistant?: (input: {
+      userId: string;
+      workspaceId: string;
+      computerId: string;
+    }) => Promise<unknown>;
   },
   input: { userId: string; name: string; slug: string; now: Date },
 ): Promise<WorkspaceRecord> {
@@ -57,6 +62,12 @@ export async function createWorkspaceAndStartCloudComputer(
     now: input.now,
   });
   const computerId = defaultCloudComputerId(started);
+  if (computerId)
+    await deps.bindWorkspaceAssistant?.({
+      userId: input.userId,
+      workspaceId: workspace.id,
+      computerId,
+    });
   if (computerId)
     await deps.bindWeeklyReportAssistant?.({
       userId: input.userId,
