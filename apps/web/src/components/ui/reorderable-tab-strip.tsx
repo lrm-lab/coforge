@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type FC } from "react";
+import { useCallback, useRef, type FC, type RefObject } from "react";
 import {
   DndContext,
   MouseSensor,
@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 
 import { Tab, TabList, Tabs } from "#src/components/application/tabs/tabs";
+import { useActiveTabInView } from "#src/hooks/use-active-tab-in-view";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { cx } from "#src/utils/cx";
 
@@ -38,6 +39,7 @@ export function ReorderableTabStrip<T extends string>({
   onReorder,
   size = "sm",
   className,
+  scrollRef,
   "aria-label": ariaLabel,
 }: {
   /** The tabs in display order. */
@@ -48,6 +50,9 @@ export function ReorderableTabStrip<T extends string>({
   onReorder: (order: T[]) => void;
   size?: "sm" | "md";
   className?: string;
+  /** The caller's element that scrolls the strip sideways when its tabs do not fit; the selected
+   * tab is kept in view inside it (`useActiveTabInView`). */
+  scrollRef?: RefObject<HTMLElement | null>;
   "aria-label": string;
 }) {
   const sensors = useSensors(
@@ -58,12 +63,8 @@ export function ReorderableTabStrip<T extends string>({
   // reorders. The flag is cleared when the next press starts.
   const dragged = useRef(false);
   const tabsRef = useRef<HTMLDivElement>(null);
-  // On a narrow viewport the strip scrolls, so the selected tab can start out of sight.
-  useEffect(() => {
-    tabsRef.current
-      ?.querySelector('[aria-selected="true"]')
-      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
-  }, [active]);
+  // A strip with more tabs than room scrolls, so the selected tab can start out of sight.
+  useActiveTabInView(tabsRef, scrollRef ?? tabsRef);
 
   const dropped = ({ active: moved, over }: DragEndEvent) => {
     const from = tabs.indexOf(moved.id as T);
