@@ -40,6 +40,7 @@ The architecture invariants every change must respect are in
 | [docs/memory-disposition.md](docs/memory-disposition.md) | Target-only Memory Hint receipts, configuration, and validation |
 | [docs/reliable-message-delivery.md](docs/reliable-message-delivery.md) | Message delivery guarantees |
 | [docs/workspace-deletion.md](docs/workspace-deletion.md) | What deleting a Workspace removes, and when |
+| [docs/authorization-server/](docs/authorization-server/README.md) | "Login with CoForge": the OpenID Connect authorization server for third-party apps, its configuration and endpoints |
 | [docs/observability/](docs/observability/README.md) | Agent Activity, status, and observability baseline |
 | [docs/local-gemma-evaluation.md](docs/local-gemma-evaluation.md) | Local SWE evaluation, Gemma service management, Docker and token audits |
 | [benchmark/evolbench-collab/ops/swe-gemma/README.md](benchmark/evolbench-collab/ops/swe-gemma/README.md) | SWE Docker Task runtime and independent 20-worker evaluation pools |

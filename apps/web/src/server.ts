@@ -1,5 +1,6 @@
 import handler from "@tanstack/react-start/server-entry";
 
+import { isNonLocalizedPath } from "#src/lib/non-localized-path";
 import { paraglideMiddleware } from "#src/paraglide/server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
 import { assertStartupConfig } from "#src/server/startup-config.server";
@@ -17,12 +18,7 @@ startWeeklyReportScheduleTickFromEnv();
 export function isNonLocalizedRequest(request: Request): boolean {
   const pathname = new URL(request.url).pathname;
   return (
-    pathname === "/api" ||
-    pathname.startsWith("/api/") ||
-    pathname === "/oauth" ||
-    pathname.startsWith("/oauth/") ||
-    pathname === "/.well-known" ||
-    pathname.startsWith("/.well-known/") ||
+    isNonLocalizedPath(pathname) ||
     // The two bootstrap installer entry points (`curl .../computer/install.sh | sh`,
     // `irm .../computer/install.ps1 | iex`) must resolve at exactly this path in every
     // environment (docs/release/local-feed-hosting.md). Paraglide's

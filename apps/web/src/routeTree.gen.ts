@@ -28,8 +28,10 @@ import { Route as NotificationsOpenRouteImport } from './routes/notifications.op
 import { Route as OauthDeviceRouteImport } from './routes/oauth/device'
 import { Route as OauthTokenRouteImport } from './routes/oauth/token'
 import { Route as OauthVerifyRouteImport } from './routes/oauth/verify'
+import { Route as OidcJwksRouteImport } from './routes/oidc.jwks'
 import { Route as WWorkspaceSlugRouteImport } from './routes/w.$workspaceSlug'
 import { Route as WorkspacesNewRouteImport } from './routes/workspaces.new'
+import { Route as DotwellKnownOauthAuthorizationServerOidcRouteImport } from './routes/[.]well-known.oauth-authorization-server_.oidc'
 import { Route as ApiAttachmentsAttachmentIdRouteImport } from './routes/api/attachments.$attachmentId'
 import { Route as ApiComputerAttachRouteImport } from './routes/api/computer/attach'
 import { Route as ApiComputerWorkspaceRouteImport } from './routes/api/computer/workspace'
@@ -42,6 +44,7 @@ import { Route as ApiInternalCentrifugoConnectRouteImport } from './routes/api/i
 import { Route as ApiInternalWeeklyReportScheduleRouteImport } from './routes/api/internal/weekly-report-schedule'
 import { Route as ApiMeAvatarRouteImport } from './routes/api/me/avatar'
 import { Route as ApiWorkspacesSlugRouteImport } from './routes/api/workspaces.$slug'
+import { Route as OidcDotwellKnownOpenidConfigurationRouteImport } from './routes/oidc.[.]well-known.openid-configuration'
 import { Route as WWorkspaceSlugChatRouteImport } from './routes/w.$workspaceSlug/_chat'
 import { Route as WWorkspaceSlugComputersRouteImport } from './routes/w.$workspaceSlug/_computers'
 import { Route as WWorkspaceSlugActivityRouteImport } from './routes/w.$workspaceSlug/activity'
@@ -220,6 +223,11 @@ const OauthVerifyRoute = OauthVerifyRouteImport.update({
   path: '/oauth/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OidcJwksRoute = OidcJwksRouteImport.update({
+  id: '/oidc/jwks',
+  path: '/oidc/jwks',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WWorkspaceSlugRoute = WWorkspaceSlugRouteImport.update({
   id: '/w/$workspaceSlug',
   path: '/w/$workspaceSlug',
@@ -230,6 +238,12 @@ const WorkspacesNewRoute = WorkspacesNewRouteImport.update({
   path: '/workspaces/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DotwellKnownOauthAuthorizationServerOidcRoute =
+  DotwellKnownOauthAuthorizationServerOidcRouteImport.update({
+    id: '/.well-known/oauth-authorization-server_/oidc',
+    path: '/.well-known/oauth-authorization-server/oidc',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAttachmentsAttachmentIdRoute =
   ApiAttachmentsAttachmentIdRouteImport.update({
     id: '/$attachmentId',
@@ -295,6 +309,12 @@ const ApiWorkspacesSlugRoute = ApiWorkspacesSlugRouteImport.update({
   path: '/api/workspaces/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OidcDotwellKnownOpenidConfigurationRoute =
+  OidcDotwellKnownOpenidConfigurationRouteImport.update({
+    id: '/oidc/.well-known/openid-configuration',
+    path: '/oidc/.well-known/openid-configuration',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const WWorkspaceSlugChatRoute = WWorkspaceSlugChatRouteImport.update({
   id: '/_chat',
   getParentRoute: () => WWorkspaceSlugRoute,
@@ -777,8 +797,10 @@ export interface FileRoutesByFullPath {
   '/oauth/device': typeof OauthDeviceRoute
   '/oauth/token': typeof OauthTokenRoute
   '/oauth/verify': typeof OauthVerifyRoute
+  '/oidc/jwks': typeof OidcJwksRoute
   '/w/$workspaceSlug': typeof WWorkspaceSlugRouteWithChildren
   '/workspaces/new': typeof WorkspacesNewRoute
+  '/.well-known/oauth-authorization-server/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -791,6 +813,7 @@ export interface FileRoutesByFullPath {
   '/api/internal/weekly-report-schedule': typeof ApiInternalWeeklyReportScheduleRoute
   '/api/me/avatar': typeof ApiMeAvatarRoute
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
+  '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsRouteWithChildren
@@ -891,8 +914,10 @@ export interface FileRoutesByTo {
   '/oauth/device': typeof OauthDeviceRoute
   '/oauth/token': typeof OauthTokenRoute
   '/oauth/verify': typeof OauthVerifyRoute
+  '/oidc/jwks': typeof OidcJwksRoute
   '/w/$workspaceSlug': typeof WWorkspaceSlugChatIndexRoute
   '/workspaces/new': typeof WorkspacesNewRoute
+  '/.well-known/oauth-authorization-server/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -905,6 +930,7 @@ export interface FileRoutesByTo {
   '/api/internal/weekly-report-schedule': typeof ApiInternalWeeklyReportScheduleRoute
   '/api/me/avatar': typeof ApiMeAvatarRoute
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
+  '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
@@ -1004,8 +1030,10 @@ export interface FileRoutesById {
   '/oauth/device': typeof OauthDeviceRoute
   '/oauth/token': typeof OauthTokenRoute
   '/oauth/verify': typeof OauthVerifyRoute
+  '/oidc/jwks': typeof OidcJwksRoute
   '/w/$workspaceSlug': typeof WWorkspaceSlugRouteWithChildren
   '/workspaces/new': typeof WorkspacesNewRoute
+  '/.well-known/oauth-authorization-server_/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -1018,6 +1046,7 @@ export interface FileRoutesById {
   '/api/internal/weekly-report-schedule': typeof ApiInternalWeeklyReportScheduleRoute
   '/api/me/avatar': typeof ApiMeAvatarRoute
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
+  '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/_chat': typeof WWorkspaceSlugChatRouteWithChildren
   '/w/$workspaceSlug/_computers': typeof WWorkspaceSlugComputersRouteWithChildren
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
@@ -1122,8 +1151,10 @@ export interface FileRouteTypes {
     | '/oauth/device'
     | '/oauth/token'
     | '/oauth/verify'
+    | '/oidc/jwks'
     | '/w/$workspaceSlug'
     | '/workspaces/new'
+    | '/.well-known/oauth-authorization-server/oidc'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
     | '/api/computer/workspace'
@@ -1136,6 +1167,7 @@ export interface FileRouteTypes {
     | '/api/internal/weekly-report-schedule'
     | '/api/me/avatar'
     | '/api/workspaces/$slug'
+    | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/members'
     | '/w/$workspaceSlug/records'
@@ -1236,8 +1268,10 @@ export interface FileRouteTypes {
     | '/oauth/device'
     | '/oauth/token'
     | '/oauth/verify'
+    | '/oidc/jwks'
     | '/w/$workspaceSlug'
     | '/workspaces/new'
+    | '/.well-known/oauth-authorization-server/oidc'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
     | '/api/computer/workspace'
@@ -1250,6 +1284,7 @@ export interface FileRouteTypes {
     | '/api/internal/weekly-report-schedule'
     | '/api/me/avatar'
     | '/api/workspaces/$slug'
+    | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/members'
     | '/w/$workspaceSlug/search'
@@ -1348,8 +1383,10 @@ export interface FileRouteTypes {
     | '/oauth/device'
     | '/oauth/token'
     | '/oauth/verify'
+    | '/oidc/jwks'
     | '/w/$workspaceSlug'
     | '/workspaces/new'
+    | '/.well-known/oauth-authorization-server_/oidc'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
     | '/api/computer/workspace'
@@ -1362,6 +1399,7 @@ export interface FileRouteTypes {
     | '/api/internal/weekly-report-schedule'
     | '/api/me/avatar'
     | '/api/workspaces/$slug'
+    | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/_chat'
     | '/w/$workspaceSlug/_computers'
     | '/w/$workspaceSlug/activity'
@@ -1465,8 +1503,10 @@ export interface RootRouteChildren {
   OauthDeviceRoute: typeof OauthDeviceRoute
   OauthTokenRoute: typeof OauthTokenRoute
   OauthVerifyRoute: typeof OauthVerifyRoute
+  OidcJwksRoute: typeof OidcJwksRoute
   WWorkspaceSlugRoute: typeof WWorkspaceSlugRouteWithChildren
   WorkspacesNewRoute: typeof WorkspacesNewRoute
+  DotwellKnownOauthAuthorizationServerOidcRoute: typeof DotwellKnownOauthAuthorizationServerOidcRoute
   ApiComputerAttachRoute: typeof ApiComputerAttachRoute
   ApiComputerWorkspaceRoute: typeof ApiComputerWorkspaceRoute
   ApiDaemonAgentMigrationsRoute: typeof ApiDaemonAgentMigrationsRoute
@@ -1477,6 +1517,7 @@ export interface RootRouteChildren {
   ApiInternalCentrifugoConnectRoute: typeof ApiInternalCentrifugoConnectRoute
   ApiInternalWeeklyReportScheduleRoute: typeof ApiInternalWeeklyReportScheduleRoute
   ApiWorkspacesSlugRoute: typeof ApiWorkspacesSlugRoute
+  OidcDotwellKnownOpenidConfigurationRoute: typeof OidcDotwellKnownOpenidConfigurationRoute
   ApiAgentV1ChannelsRoute: typeof ApiAgentV1ChannelsRoute
   ApiAgentV1EventsRoute: typeof ApiAgentV1EventsRoute
   ApiAgentV1GithubCommitTrailersRoute: typeof ApiAgentV1GithubCommitTrailersRoute
@@ -1662,6 +1703,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OauthVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/oidc/jwks': {
+      id: '/oidc/jwks'
+      path: '/oidc/jwks'
+      fullPath: '/oidc/jwks'
+      preLoaderRoute: typeof OidcJwksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/w/$workspaceSlug': {
       id: '/w/$workspaceSlug'
       path: '/w/$workspaceSlug'
@@ -1674,6 +1722,13 @@ declare module '@tanstack/react-router' {
       path: '/workspaces/new'
       fullPath: '/workspaces/new'
       preLoaderRoute: typeof WorkspacesNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-authorization-server_/oidc': {
+      id: '/.well-known/oauth-authorization-server_/oidc'
+      path: '/.well-known/oauth-authorization-server/oidc'
+      fullPath: '/.well-known/oauth-authorization-server/oidc'
+      preLoaderRoute: typeof DotwellKnownOauthAuthorizationServerOidcRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/attachments/$attachmentId': {
@@ -1758,6 +1813,13 @@ declare module '@tanstack/react-router' {
       path: '/api/workspaces/$slug'
       fullPath: '/api/workspaces/$slug'
       preLoaderRoute: typeof ApiWorkspacesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oidc/.well-known/openid-configuration': {
+      id: '/oidc/.well-known/openid-configuration'
+      path: '/oidc/.well-known/openid-configuration'
+      fullPath: '/oidc/.well-known/openid-configuration'
+      preLoaderRoute: typeof OidcDotwellKnownOpenidConfigurationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/w/$workspaceSlug/_chat': {
@@ -2516,8 +2578,11 @@ const rootRouteChildren: RootRouteChildren = {
   OauthDeviceRoute: OauthDeviceRoute,
   OauthTokenRoute: OauthTokenRoute,
   OauthVerifyRoute: OauthVerifyRoute,
+  OidcJwksRoute: OidcJwksRoute,
   WWorkspaceSlugRoute: WWorkspaceSlugRouteWithChildren,
   WorkspacesNewRoute: WorkspacesNewRoute,
+  DotwellKnownOauthAuthorizationServerOidcRoute:
+    DotwellKnownOauthAuthorizationServerOidcRoute,
   ApiComputerAttachRoute: ApiComputerAttachRoute,
   ApiComputerWorkspaceRoute: ApiComputerWorkspaceRoute,
   ApiDaemonAgentMigrationsRoute: ApiDaemonAgentMigrationsRoute,
@@ -2529,6 +2594,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalCentrifugoConnectRoute: ApiInternalCentrifugoConnectRoute,
   ApiInternalWeeklyReportScheduleRoute: ApiInternalWeeklyReportScheduleRoute,
   ApiWorkspacesSlugRoute: ApiWorkspacesSlugRoute,
+  OidcDotwellKnownOpenidConfigurationRoute:
+    OidcDotwellKnownOpenidConfigurationRoute,
   ApiAgentV1ChannelsRoute: ApiAgentV1ChannelsRoute,
   ApiAgentV1EventsRoute: ApiAgentV1EventsRoute,
   ApiAgentV1GithubCommitTrailersRoute: ApiAgentV1GithubCommitTrailersRoute,

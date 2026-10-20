@@ -1,4 +1,8 @@
 import {
+  readAuthorizationServerConfiguration,
+  rememberAuthorizationServerConfiguration,
+} from "#src/server/authorization-server/configuration.server";
+import {
   readFileDeliveryConfig,
   rememberFileDeliveryConfig,
 } from "#src/server/files/file-delivery.server";
@@ -17,7 +21,9 @@ import { readWeeklyReportScheduleTickMs } from "#src/server/records/weekly-repor
  * only a set URL with a missing or unreadable key is a boot failure. The same holds for public
  * profile-image delivery: unset is valid, but a deployment that publishes public image URLs
  * without the bucket that domain reads, or points them at the signed attachment domain, fails
- * here rather than serving broken avatars.
+ * here rather than serving broken avatars. The OIDC authorization server likewise: an unset
+ * `COFORGE_OIDC_ISSUER` is valid; a set issuer that is not a usable URL, or comes without a
+ * usable signing keyset, is a boot failure.
  */
 export async function assertStartupConfig(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const delivery = await readFileDeliveryConfig(env);
@@ -25,6 +31,8 @@ export async function assertStartupConfig(env: NodeJS.ProcessEnv = process.env):
   const imageDelivery = readPublicImageDeliveryConfig(env);
   const imageStorage = await readPublicImageStorageConfig(env);
   const weeklyReportScheduleTickMs = readWeeklyReportScheduleTickMs(env);
+  const authorizationServer = await readAuthorizationServerConfiguration(env);
+  if (env === process.env) rememberAuthorizationServerConfiguration(authorizationServer);
   console.info(
     JSON.stringify({
       event: "startup_config_checked",
@@ -32,6 +40,7 @@ export async function assertStartupConfig(env: NodeJS.ProcessEnv = process.env):
       public_image_delivery: imageDelivery ? "configured" : "disabled",
       public_image_bucket: imageStorage ? "configured" : "shared",
       weekly_report_schedule_tick_ms: weeklyReportScheduleTickMs ?? null,
+      authorization_server: authorizationServer.status === "ready" ? "configured" : "disabled",
     }),
   );
 }
