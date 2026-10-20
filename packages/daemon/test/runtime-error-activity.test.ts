@@ -1,10 +1,12 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   buildRuntimeErrorActivity,
   buildRuntimeCrashedActivity,
+  buildRuntimeErrorFingerprintFenceActivity,
   buildRuntimeReconnectingActivity,
   scrubRuntimeErrorText,
   fingerprintRuntimeError,
+  type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
 
 test("builds a runtime_error activity from the provider's message as reported, with an Error: entry and structured fields", () => {
@@ -122,4 +124,66 @@ test("fingerprintRuntimeError is a stable 8-hex-character hash", () => {
   expect(fingerprintRuntimeError("same")).toBe(fingerprintRuntimeError("same"));
   expect(fingerprintRuntimeError("same")).not.toBe(fingerprintRuntimeError("different"));
   expect(fingerprintRuntimeError("same")).toMatch(/^[0-9a-f]{8}$/);
+});
+
+describe("a provider's usage limit", () => {
+  const message = "You've hit your session limit · resets 3:45pm";
+  const resetsAt = "2100-01-01T00:00:00.000Z";
+  const limitError = (providerLimit: RuntimeErrorEvent["providerLimit"]) =>
+    ({ type: "error", message, providerErrorCode: "rate_limit", providerLimit }) as const;
+
+  test("an exhausted quota with a reset is a RateLimitError saying when the limit resets", () => {
+    const activity = buildRuntimeErrorActivity(limitError({ kind: "quota_exhausted", resetsAt }));
+    const detail = `${message} (limit resets at ${resetsAt})`;
+    expect(activity.detail).toBe(detail);
+    expect(activity.entries).toEqual([{ kind: "text", text: `Error: ${detail}` }]);
+    expect(activity.runtimeError).toMatchObject({
+      errorClass: "RateLimitError",
+      errorReason: "quota_exhausted",
+    });
+  });
+
+  test("the reset time never changes the fingerprint", () => {
+    const fingerprints = [
+      limitError({ kind: "quota_exhausted", resetsAt }),
+      limitError({ kind: "quota_exhausted", resetsAt: "2100-01-02T00:00:00.000Z" }),
+      limitError({ kind: "quota_exhausted" }),
+    ].map((event) => buildRuntimeErrorActivity(event).runtimeError?.fingerprint);
+    expect(new Set(fingerprints)).toEqual(new Set([fingerprintRuntimeError(message)]));
+  });
+
+  test.each([
+    ["an exhausted quota without a reset", { kind: "quota_exhausted" }, "quota_exhausted"],
+    ["a transient rate limit", { kind: "transient_rate_limit", resetsAt }, "rate_limited"],
+  ] as const)("%s shows the provider text alone, classified %s", (_kind, limit, reason) => {
+    const activity = buildRuntimeErrorActivity(limitError(limit));
+    expect(activity.detail).toBe(message);
+    expect(activity.runtimeError).toMatchObject({
+      errorClass: "RateLimitError",
+      errorReason: reason,
+    });
+  });
+
+  test("a fenced repeat of it names the provider text alone, without the reset", () => {
+    const failed = limitError({ kind: "quota_exhausted", resetsAt });
+    const built = buildRuntimeErrorActivity(failed);
+    const fingerprint = built.runtimeError?.fingerprint ?? "";
+    const fence = { fingerprint, attempts: 3, fenced: true };
+    const fenced = buildRuntimeErrorFingerprintFenceActivity(built, fence, failed);
+    expect(fenced.detail).toContain(`Last error: ${message} Restart`);
+    expect(fenced.detail).not.toContain("limit resets at");
+    expect(fenced.entries).toEqual([{ kind: "text", text: `Error: ${fenced.detail}` }]);
+    expect(fenced.runtimeError).toMatchObject({ errorReason: "runtime_error_fenced" });
+  });
+
+  test("a crash after it is classed from the limit, with the reset left out of its wording", () => {
+    const crashed = limitError({ kind: "quota_exhausted", resetsAt });
+    const activity = buildRuntimeCrashedActivity(crashed);
+    expect(activity.detail).toBe(`Crashed (${message})`);
+    expect(activity.runtimeError).toEqual({
+      errorClass: "RateLimitError",
+      errorReason: "runtime_crashed",
+      fingerprint: fingerprintRuntimeError(`Crashed (${message})`),
+    });
+  });
 });

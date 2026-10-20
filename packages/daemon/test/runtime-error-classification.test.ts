@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  classifyRuntimeError,
   classifyRuntimeErrorText,
   RUNTIME_ERROR_CLASS,
   RUNTIME_ERROR_RETRY_DECISION,
@@ -89,4 +90,21 @@ test("falls back to the generic runtime error class for unrecognized text, treat
 test("model-not-found text is model config, not the generic not-found class", () => {
   const result = classifyRuntimeErrorText("model gpt-9 not found");
   expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.MODEL_CONFIG);
+});
+
+test.each([
+  ["quota_exhausted", "quota_exhausted"],
+  ["transient_rate_limit", "rate_limited"],
+] as const)("a provider's %s limit is a retryable rate limit, whatever its text", (kind, why) => {
+  // The text alone reads as a terminal timeout; the provider's normalized limit wins.
+  expect(classifyRuntimeError({ message: "request timed out", providerLimit: { kind } })).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+    errorReason: why,
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+  });
+});
+
+test("without a provider limit, a failure is classified from its text alone", () => {
+  for (const message of ["request timed out", "You've hit your session limit", "429"])
+    expect(classifyRuntimeError({ message })).toEqual(classifyRuntimeErrorText(message));
 });

@@ -1,7 +1,7 @@
 import type { AgentActivity, AgentRuntimeEvent } from "@coforge/agent";
 import { AGENT_ACTIVITY_DETAIL_KIND, truncateCodePoints } from "@lrm/coforge-sdk/internal";
 import {
-  classifyRuntimeErrorText,
+  classifyRuntimeError,
   type RuntimeErrorClassification,
 } from "./runtime-error-classification";
 import type { RuntimeErrorFingerprintFenceState } from "./runtime-error-recovery";
@@ -60,6 +60,35 @@ export function fingerprintRuntimeError(message: string): string {
 export type RuntimeErrorEvent = Extract<AgentRuntimeEvent, { type: "error" }>;
 export type RuntimeReconnectingEvent = Extract<AgentRuntimeEvent, { type: "reconnecting" }>;
 
+/** When an exhausted quota resets, as a suffix to a live failure's visible wording, if known.
+ * Never part of a fingerprint (the same limit is the same failure whatever reset it names), nor
+ * of the fence or crash wording, which quote the provider text alone. */
+function limitResetNote(event: RuntimeErrorEvent): string {
+  const limit = event.providerLimit;
+  return limit?.kind === "quota_exhausted" && limit.resetsAt
+    ? ` (limit resets at ${limit.resetsAt})`
+    : "";
+}
+
+/** The class and reason a failure reports: the classification's for a provider's normalized
+ * limit, else a provider's own free-form class/code and reason hints as-is, else the
+ * classification's. `classify` runs at most once, and only when its result is used. */
+function reportedClassification(
+  event: RuntimeErrorEvent,
+  classify: () => RuntimeErrorClassification,
+): { errorClass: string; errorReason: string } {
+  let classified: RuntimeErrorClassification | undefined;
+  const classification = () => (classified ??= classify());
+  if (event.providerLimit) {
+    const { errorClass, errorReason } = classification();
+    return { errorClass, errorReason };
+  }
+  return {
+    errorClass: event.providerErrorClass ?? event.providerErrorCode ?? classification().errorClass,
+    errorReason: event.providerErrorReason ?? classification().errorReason,
+  };
+}
+
 /**
  * Builds the visible Activity for a provider-reported `error` event observed
  * mid-turn. Always attaches a single `{ kind: "text", text: "Error: ..." }`
@@ -68,16 +97,12 @@ export type RuntimeReconnectingEvent = Extract<AgentRuntimeEvent, { type: "recon
  */
 export function buildRuntimeErrorActivity(
   event: RuntimeErrorEvent,
-  // A provider's own richer class/reason hint is always kept as-is; only text this daemon has no
-  // provider hint for gets classified (runtime-error-classification.ts) instead of the previous
-  // generic "AgentRuntimeError"/"runtime_failure" default for every unhinted message. A caller
-  // that already needs the classification for its own decision passes it in rather than making
-  // this classify the same string a second time.
-  classified: RuntimeErrorClassification = classifyRuntimeErrorText(event.message),
+  // Passed in by a caller that already classified this failure for its own decision.
+  classified: RuntimeErrorClassification = classifyRuntimeError(event),
 ): AgentActivity {
   // A provider's own error message is shown as reported; only the crash summary built at
   // process exit is redacted and capped.
-  const detail = event.message;
+  const detail = `${event.message}${limitResetNote(event)}`;
   return {
     detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
     level: "error",
@@ -85,9 +110,8 @@ export function buildRuntimeErrorActivity(
     observedAtMs: event.occurredAt ? Date.parse(event.occurredAt) : Date.now(),
     entries: [{ kind: "text", text: `Error: ${detail}` }],
     runtimeError: {
-      errorClass: event.providerErrorClass ?? event.providerErrorCode ?? classified.errorClass,
-      errorReason: event.providerErrorReason ?? classified.errorReason,
-      fingerprint: fingerprintRuntimeError(detail),
+      ...reportedClassification(event, () => classified),
+      fingerprint: fingerprintRuntimeError(event.message),
     },
   };
 }
@@ -99,9 +123,9 @@ export function buildRuntimeErrorActivity(
 export function buildRuntimeErrorFingerprintFenceActivity(
   built: ReturnType<typeof buildRuntimeErrorActivity>,
   fence: RuntimeErrorFingerprintFenceState,
+  lastError: RuntimeErrorEvent,
 ): ReturnType<typeof buildRuntimeErrorActivity> {
-  const lastErrorMessage = built.detail;
-  const detail = `Runtime stopped retrying after ${fence.attempts} consecutive failures with the same underlying error. Last error: ${lastErrorMessage} Restart this Agent once the issue is fixed.`;
+  const detail = `Runtime stopped retrying after ${fence.attempts} consecutive failures with the same underlying error. Last error: ${lastError.message} Restart this Agent once the issue is fixed.`;
   return {
     ...built,
     detail,
@@ -134,10 +158,8 @@ export function buildRuntimeCrashedActivity(lastError: RuntimeErrorEvent): Agent
     runtimeError: {
       // The exit reason itself is always "runtime_crashed" below, regardless of the underlying
       // error's own class; only the class is worth refining from an unhinted provider message.
-      errorClass:
-        lastError.providerErrorClass ??
-        lastError.providerErrorCode ??
-        classifyRuntimeErrorText(lastError.message).errorClass,
+      errorClass: reportedClassification(lastError, () => classifyRuntimeError(lastError))
+        .errorClass,
       errorReason: "runtime_crashed",
       fingerprint: fingerprintRuntimeError(detail),
     },

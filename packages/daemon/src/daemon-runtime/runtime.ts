@@ -38,7 +38,7 @@ import {
   fingerprintRuntimeError,
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
-import { classifyRuntimeErrorText } from "#src/agent-runtime/runtime-error-classification";
+import { classifyRuntimeError } from "#src/agent-runtime/runtime-error-classification";
 import {
   AgentProcessManager,
   type CodeAgentProviderFactory,
@@ -2644,16 +2644,18 @@ export class DaemonRuntime {
     if (event.type === "error") {
       launch.crashDetail = event;
       // Classified once here: the Activity's fallback class/reason and this failure's retry
-      // decision are the same reading of the same text.
-      const classification = classifyRuntimeErrorText(event.message);
+      // decision are the same reading of the same failure.
+      const classification = classifyRuntimeError(event);
       const built = buildRuntimeErrorActivity(event, classification);
-      // Retry policy uses the failure's text classification, never provider-native class/reason hints.
+      // Retry policy reads that classification, never free-form provider hints.
       const fence = this.#runtimeErrorHold.noteFailure(
         agentId,
         classification,
         built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
       );
-      const reported = fence ? buildRuntimeErrorFingerprintFenceActivity(built, fence) : built;
+      const reported = fence
+        ? buildRuntimeErrorFingerprintFenceActivity(built, fence, event)
+        : built;
       publish(
         agentId,
         launch,

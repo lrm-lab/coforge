@@ -1,12 +1,15 @@
+import type { AgentRuntimeEvent } from "@coforge/agent";
+
 /**
- * Turns a runtime failure's own text into a stable CoForge error class, a stable reason, and an
- * explicit retry decision — independent of which code-agent provider produced it. This is the one
- * place that decision is made; `runtime-error-activity.ts` uses it only when a provider has not
- * already supplied its own richer `providerErrorClass`/`providerErrorReason` hint (a provider's
- * own hint is always kept as-is), and `daemon-runtime/runtime.ts` uses it unconditionally to
- * decide whether a failure is worth backing off and retrying a held delivery for (see
- * `runtime-error-recovery.ts`), since an arbitrary provider hint string is not something this
- * table can look up.
+ * Turns a runtime failure into a stable CoForge error class, a stable reason, and an explicit
+ * retry decision — independent of which code-agent provider produced it. This is the one place
+ * that decision is made. It reads the failure's own text, or a provider's normalized
+ * `providerLimit` when there is one (a closed vocabulary, unlike the free-form
+ * `providerErrorCode`/`providerErrorClass`/`providerErrorReason` hints, which this table cannot
+ * look up). `runtime-error-activity.ts` shows a provider's own class/reason hint as-is when it has
+ * one and no limit; `daemon-runtime/runtime.ts` uses the classification unconditionally to decide
+ * whether a failure is worth backing off and retrying a held delivery for (see
+ * `runtime-error-recovery.ts`).
  *
  * Table-driven and ordered: the first matching rule wins, so a more specific pattern (an
  * unsupported model, an oversized prompt) must be listed ahead of a broader one (a bare "not
@@ -174,6 +177,20 @@ const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
     matches: (message) => /\bnot found\b/i.test(message),
   },
 ];
+
+/** A provider's normalized limit is a retryable rate limit, whatever its text says; any other
+ * failure is classified from its text. */
+export function classifyRuntimeError(
+  event: Pick<Extract<AgentRuntimeEvent, { type: "error" }>, "message" | "providerLimit">,
+): RuntimeErrorClassification {
+  const limit = event.providerLimit;
+  if (!limit) return classifyRuntimeErrorText(event.message);
+  return {
+    errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+    errorReason: limit.kind === "quota_exhausted" ? "quota_exhausted" : "rate_limited",
+    retryDecision: RETRY,
+  };
+}
 
 /** Classifies a runtime failure from its own text alone (no provider hint involved — see the
  * module comment for why callers that care about a provider's own hint apply it separately). */

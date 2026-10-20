@@ -55,7 +55,7 @@ attention 或确认旧投递；意外退出仍沿用原有的身份和恢复语�
 
 `AgentRuntimeEvent`（`packages/agent/src/contract.ts`）的 `error` 成员
 （`message`、可选的 `retryable`/`providerErrorCode`/`providerErrorClass`/
-`providerErrorReason`/`occurredAt`）和 `reconnecting` 成员（`attempt`/
+`providerErrorReason`/`providerLimit`/`occurredAt`）和 `reconnecting` 成员（`attempt`/
 `message`）是四个 provider（Claude Code、Codex、Kiro、Pi）唯一允许上报运行时失败
 和重连的方式，只携带原始事实，不带格式化或分类。`packages/daemon/src/agent-runtime/
 runtime-error-activity.ts` 是把这些事实变成可见 Activity 的唯一位置：provider 报错文案
@@ -65,7 +65,14 @@ entry，以及运行中错误的 `runtimeError`（`errorClass`/
 [启动失败原因](#启动失败原因)，在 `launch-failure.ts`）；`error` 事件
 额外携带的 `providerErrorCode`/`providerErrorClass`/`providerErrorReason` 会被优先
 采用（例如 Codex 的 turn 失败带着原生错误码和 `turn_failed` 这个比通用分类更精确的
-reason），否则退回到通用的 `AgentRuntimeError`/`runtime_failure`。没有任何
+reason），否则退回到通用的 `AgentRuntimeError`/`runtime_failure`。唯一的例外是
+`providerLimit`：它不是自由格式的提示，而是封闭取值的事实（`quota_exhausted` 或
+`transient_rate_limit`，可带 `resetsAt`），provider 只在确知失败是用量或限流上限时才设置
+（目前只有 Claude Code，依据 assistant 记录的 `error` 和同一会话最近的 `rate_limit_event`）。
+有它时，分类和重试一律按 `RateLimitError` 处理（reason 为 `quota_exhausted`/`rate_limited`），
+退避在回合结束后仍保留；`quota_exhausted` 带 `resetsAt` 时，运行中错误 Activity 的可见文案
+末尾追加 ` (limit resets at <ISO>)`，指纹不含这段后缀，指纹熔断和 `runtime_crashed` 的文案也只
+引用 provider 原文、不带它。没有任何
 `code-agent/*/provider.ts` 文件再自行构造 `runtime_error`/`runtime_crashed`/
 `runtime_reconnecting` 的 Activity。
 

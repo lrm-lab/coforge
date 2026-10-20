@@ -198,6 +198,11 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
    * "turn_failed" for a turn ending in failure, as opposed to a mid-stream RPC
    * error) — omit any of the three when the provider has no such fact. `retryable`
    * reflects a provider's own "will retry" signal, if it has one.
+   *
+   * `providerLimit`, unlike those free-form hints, is a normalized fact from a closed vocabulary:
+   * a provider sets it only when it knows the failure is a usage or rate limit (`quota_exhausted`
+   * until the account's limit resets, at `resetsAt` (ISO) when known; `transient_rate_limit`
+   * otherwise). That is why the daemon's retry policy may honor it.
    */
   | {
       type: "error";
@@ -206,6 +211,10 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       providerErrorCode?: string;
       providerErrorClass?: string;
       providerErrorReason?: string;
+      providerLimit?: {
+        kind: "quota_exhausted" | "transient_rate_limit";
+        resetsAt?: string;
+      };
       occurredAt?: string;
     }
   /** The provider is reconnecting to its upstream after a transient disconnect. */

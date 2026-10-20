@@ -16,7 +16,7 @@ import { createPromptFile } from "./prompt-file";
 import { claudeStreamEvents } from "./stream-events";
 import { claudeAssistantEvents, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
-import { claudeRateLimitWindow } from "./rate-limit";
+import { ClaudeRateLimitState } from "./rate-limit";
 import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record";
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
@@ -167,7 +167,7 @@ class ClaudeCodeAgentSession implements AgentSession {
     resolve(): void;
     reject(error: Error): void;
   }> = [];
-  #usageSnapshot: UsageSnapshot = { provider: RUNTIME_PROVIDER.CLAUDE_CODE };
+  readonly #rateLimits = new ClaudeRateLimitState();
   #interrupt = new InterruptTracker();
 
   constructor(
@@ -570,17 +570,8 @@ class ClaudeCodeAgentSession implements AgentSession {
       return;
     }
     if (record.type === "rate_limit_event") {
-      const info = asRecord(record.rate_limit_info);
-      const usageWindow = claudeRateLimitWindow(info);
-      if (!usageWindow) return;
-      this.#usageSnapshot = {
-        ...this.#usageSnapshot,
-        [usageWindow.key]: usageWindow.window,
-      };
-      this.#emit({
-        type: AGENT_RUNTIME_EVENT_TYPE.USAGE,
-        snapshot: this.#usageSnapshot,
-      });
+      const snapshot = this.#rateLimits.observe(record, this.#sessionId);
+      if (snapshot) this.#emit({ type: AGENT_RUNTIME_EVENT_TYPE.USAGE, snapshot });
       return;
     }
     if (record.type === "stream_event") {
@@ -594,7 +585,9 @@ class ClaudeCodeAgentSession implements AgentSession {
       }
       for (const event of events) {
         if (event.type === "tool-start") this.#subagentLineage.rememberCall(event);
-        this.#emit(event);
+        this.#emit(
+          event.type === "error" ? this.#rateLimits.annotate(event, this.#sessionId) : event,
+        );
       }
       return;
     }
