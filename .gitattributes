@@ -1,0 +1,26 @@
+# Files no agent writes (linguist-generated): lockfiles, generated code, and benchmark/eval data.
+# The pre-commit file size check (docs/agents/git-hooks.md) skips them, and GitHub collapses them
+# in diffs. Mark a file linguist-generated only if it is genuinely generated.
+# A pattern without a slash matches that file name in every directory.
+
+# Lockfiles
+bun.lock linguist-generated
+Cargo.lock linguist-generated
+mise.lock linguist-generated
+skills-lock.json linguist-generated
+crates/installer/contract/lock.json linguist-generated
+
+# Generated code
+apps/web/src/routeTree.gen.ts linguist-generated
+*.generated.ts linguist-generated
+
+# Hooks run as `#!/bin/sh` scripts; keep them LF even where core.autocrlf=true (Git for Windows)
+.githooks/* text eol=lf
+
+# Agent-written, not generated: its hand-maintained `imports` map cannot be split (size check only)
+apps/web/package.json size-limit=off
+
+# Benchmark and evaluation data (the Markdown beside it is agent-written and stays checked)
+benchmark/**/data/** linguist-generated
+docs/skill-node-design-grill/**/*.jsonl linguist-generated
+docs/skill-node-design-grill/**/*.json linguist-generated

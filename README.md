@@ -52,6 +52,7 @@ The architecture invariants every change must respect are in
 | [docs/agents/testing.md](docs/agents/testing.md) | Testing guidance for agents |
 | [docs/agents/e2e-testing/](docs/agents/e2e-testing/README.md) | Live OpenRouter integration test |
 | [docs/agents/mise-tasks.md](docs/agents/mise-tasks.md) | Mise task policy |
+| [docs/agents/git-hooks.md](docs/agents/git-hooks.md) | Pre-commit file size limit, its ratchet, and marking generated files |
 | [docs/agents/reference-cli-research/](docs/agents/reference-cli-research/README.md) | Studying the latest Raft Computer reference binary, source tree, and installer |
 | [docs/agents/grok-acp.md](docs/agents/grok-acp.md) | Persistent Grok ACP behavior, compatibility and native verification |
 | [.agents/skills/coforge-verify/features/](.agents/skills/coforge-verify/features/README.md) | Feature Map: how to reach, drive and observe each product feature when verifying a change |
