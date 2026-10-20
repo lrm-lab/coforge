@@ -3,8 +3,8 @@
  *
  * Adding a newly introduced upstream route:
  * 1. Upgrade the pinned OpenViking revision in
- *    `docs/research/openviking-prototype-interface-inventory.md` and add the
- *    method/path to `PINNED_OPENVIKING_ROUTES` in `route-catalog.ts`.
+ *    `docs/research/openviking-prototype-interface-inventory/revision-runtime-auth.md`
+ *    and add the method/path to `PINNED_OPENVIKING_ROUTES` in `route-catalog.ts`.
  * 2. Re-inventory the public runtime interface. New routes stay unclassified
  *    and therefore denied.
  * 3. Classify the route explicitly in exactly one family manifest as

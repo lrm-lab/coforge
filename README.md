@@ -71,6 +71,7 @@ The architecture invariants every change must respect are in
 | [docs/operations/cloud-swarm/](docs/operations/cloud-swarm/README.md) | Attach one Swarm cluster when standing up a CoForge deployment |
 | [docs/operations/staging/](docs/operations/staging/README.md) | Staging environment runbook |
 | [docs/operations/production/](docs/operations/production/README.md) | Production environment runbook |
+| [docs/operations/openviking-prototype/](docs/operations/openviking-prototype/README.md) | Non-production OpenViking prototype runtime: gates, enable/disable, data lifecycle, known issues, smoke |
 | [infra/production/README.md](infra/production/README.md) | Production Compose environment (points to its runbook) |
 
 Project skills live in `.agents/skills`; `skills-lock.json` pins the upstream ones.
