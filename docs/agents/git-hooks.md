@@ -16,8 +16,8 @@ The repository uses plain `core.hooksPath`, not a hook manager: husky overwrites
 `core.hooksPath`, lefthook needs a postinstall Bun runs only for trusted packages, and the ratchet
 would be custom code either way.
 
-`.githooks/pre-commit` runs the [hard rules](#hard-rules) (`scripts/ci/hard-rules.ts --staged`)
-on the content being committed, the file size limit below among them, and reports every
+`.githooks/pre-commit` runs the [hard rules](#hard-rules) on the content being committed (the file
+size limit below among them), and `.githooks/pre-push` on what a push sends; each reports every
 violation before failing.
 
 ## Pre-commit: file size limit
@@ -67,25 +67,25 @@ staged sizes in bytes for one that crossed the limit or grew. Split the file int
 - `git commit --amend` compares against the commit being amended, so a file that commit added
   without the hook counts as existing.
 
-The hook runs the checker with `bun` from PATH, or mise's pinned `bun`. When it finds neither, it
-blocks the commit and says so.
+Both hooks run the checker with `bun` from PATH or mise's pinned `bun`, and block without either.
 
 ## Hard rules
 
 Rules a machine enforces, with no allowlist and no inline override. One checker,
-`scripts/ci/hard-rules.ts`, runs in two places:
+`scripts/ci/hard-rules.ts`, runs in three places:
 
 - **pre-commit**, `--staged`: the staged content against HEAD, and the author and the committer.
-- **CI**, `--range "$BASE" "$HEAD" --authors-since "$BEFORE"`: the "Check hard rules" step of the
-  always-run Plan checks job, with the same `BASE` and `HEAD` that job diffs (a PR's base, or the
-  head of the last successful push run on `main`). The file rules judge the change from their
-  merge base, as `git diff BASE...HEAD` does, so a later commit that fixes a violation cures the
-  range. The identity rule checks a PR's `BASE..HEAD`, but only the commits a push introduced
-  (`BEFORE`, the push event's `before`): a bot commit on `main` fails its own push's run, not
-  every run until `main` is rewritten. A `before` that is not a commit (empty, all zeros, or
-  force-pushed away) falls back to `BASE..HEAD`. With no base commit (no successful push run yet,
-  a first push, a force push that removed the base, or a run dispatched by a deploy or release
-  workflow) the step prints a warning and passes.
+- **pre-push** ([githooks](https://git-scm.com/docs/githooks#_pre_push)): per pushed ref,
+  `--range <remote sha> <local sha> --authors-since <remote sha>`; a new ref from its merge base
+  with `origin/main` (without one, a warning and no check); a deletion passes.
+- **CI**, `--range "$BASE" "$HEAD" --authors-since "$BEFORE"`: the always-run Plan checks job's
+  "Check hard rules" step, with the `BASE` and `HEAD` that job diffs (a PR's base, or the head of
+  the last successful push run on `main`). File rules judge from their merge base, as
+  `git diff BASE...HEAD` does, so a later fixing commit cures the range. The identity rule checks
+  a PR's `BASE..HEAD` but only a push's own commits (`BEFORE`, the push event's `before`; if that
+  is not a commit, `BASE..HEAD`), so a bot commit on `main` fails one run, not every run. With no
+  base commit (no successful push run, a first push, a force push that removed the base, or a run
+  a deploy or release workflow dispatched) the step warns and passes.
 
 A violation exits 1 and lists, per rule, each `file:line` (or commit), what was found, and how to
 fix it. Bad input (a malformed `skills-lock.json`, a base and head with no merge base) exits 2 with
@@ -153,15 +153,15 @@ add. The size rule also keeps the two skips it was approved with (task #25): fil
 
 ### Limits
 
-- The hook is local: `git commit --no-verify` skips it, and a clone or worktree has none until
-  `bun install`. The local backstop is `mise run check` (`bun run check`), which root `AGENTS.md`
-  requires before every push. Its first step, `scripts/ci/local-gate.ts`, fails unless
-  `core.hooksPath` is `.githooks` (a hooks path of your own passes only if its `pre-commit` runs
-  `.githooks/pre-commit`), and runs CI's range check on the commits not yet on your local
+- The hooks are local: `git commit --no-verify` and `git push --no-verify` skip them, and a clone
+  or worktree has none until `bun install`. `mise run check` (`bun run check`), which root
+  `AGENTS.md` requires before every push, starts with `scripts/ci/local-gate.ts`: it fails unless
+  `core.hooksPath` is `.githooks`, which enables both hooks (a hooks path of your own passes only if
+  its `pre-commit` runs `.githooks/pre-commit`), and range-checks the commits not yet on your local
   `origin/main`. Without `origin` or `origin/main` it says so and skips that part; a stale
   `origin/main` can list others' commits, so a failure names its base and asks for
   `git fetch origin`. It changes no config, and does nothing with `CI=true` or outside a work tree.
-  It is still a convention: nothing runs `mise run check` before `git push`.
+  It is a convention, and `--no-verify` bypasses the hooks: only CI cannot be skipped.
 - A maintainer or an Agent may push directly to `main` (root `AGENTS.md`); CI validates a push only
   afterwards, so a violation that got past the hook and the gate is reported once on `main`, and
   its author fixes it before pushing anything else. A PR cannot merge without "CI passed".
@@ -182,8 +182,8 @@ add. The size rule also keeps the two skips it was approved with (task #25): fil
 
 ## Sources
 
-- git hooks: [githooks](https://git-scm.com/docs/githooks) (`pre-commit`, `pre-merge-commit`,
-  `pre-applypatch`, and the directory hooks run in).
+- git hooks: [githooks](https://git-scm.com/docs/githooks) (`pre-commit`, `pre-push`,
+  `pre-merge-commit`, `pre-applypatch`, and the directory hooks run in).
 - [git-var](https://git-scm.com/docs/git-var) (`GIT_AUTHOR_IDENT`) and
   [git-diff](https://git-scm.com/docs/git-diff) (`A...B` diffs from the merge base).
 - [`core.hooksPath`](https://git-scm.com/docs/git-config#Documentation/git-config.txt-corehooksPath)

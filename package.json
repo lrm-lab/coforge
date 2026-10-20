@@ -19,7 +19,7 @@
     "test:release": "bun run --cwd packages/coforge-sdk generate && bun scripts/test/isolated-test-run.ts bun test scripts/release",
     "check:release": "bunx oxfmt --check scripts/release && bunx oxlint scripts/release && mise exec -- shellcheck scripts/release/install.sh",
     "test:ci": "bun scripts/test/isolated-test-run.ts bun test scripts/ci ./scripts/test scripts/git-hooks scripts/e2e/computer-setup-harness.test.ts",
-    "check:ci": "actionlint && bunx oxfmt --check scripts/ci scripts/test scripts/git-hooks && bunx oxlint scripts/ci scripts/test scripts/git-hooks && mise exec -- shellcheck .githooks/pre-commit",
+    "check:ci": "actionlint && bunx oxfmt --check scripts/ci scripts/test scripts/git-hooks && bunx oxlint scripts/ci scripts/test scripts/git-hooks && mise exec -- shellcheck .githooks/pre-commit .githooks/pre-push",
     "test:cdn-certs": "bun scripts/test/isolated-test-run.ts bun test scripts/ops/cdn-certificates.test.ts",
     "check:cdn-certs": "bunx oxfmt --check scripts/ops/cdn-certificates.test.ts && bunx oxlint scripts/ops/cdn-certificates.test.ts && mise exec -- shellcheck scripts/ops/renew-cdn-certificates.sh",
     "test:reference-computer": "bun scripts/test/isolated-test-run.ts bun test ./scripts/reference-computer",

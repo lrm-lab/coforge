@@ -1,0 +1,20 @@
+#!/bin/sh
+# CoForge pre-push hook: runs the hard rules (scripts/ci/hard-rules.ts --range) on exactly what
+# each pushed ref sends, as CI will judge it (scripts/git-hooks/pre-push.ts reads git's ref lines
+# from stdin: https://git-scm.com/docs/githooks#_pre_push); see docs/agents/git-hooks.md.
+# `bun install` enables it (core.hooksPath=.githooks); `git push --no-verify` skips it, so CI
+# remains the check that cannot be bypassed.
+hooks_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd) || exit 1
+scripts="$hooks_dir/../scripts"
+
+if command -v bun >/dev/null 2>&1; then
+  bun_path=bun
+elif command -v mise >/dev/null 2>&1; then
+  bun_path=$(CDPATH='' cd -- "$hooks_dir/.." && mise which bun 2>/dev/null) || bun_path=
+fi
+if [ -z "${bun_path:-}" ]; then
+  echo "pre-push: bun was not found, so the hard rules cannot run." >&2
+  echo "Install the toolchain (mise install), or bypass the checks once with git push --no-verify." >&2
+  exit 1
+fi
+exec "$bun_path" "$scripts/git-hooks/pre-push.ts"
