@@ -6,6 +6,7 @@ import { hashAppClientSecret } from "#src/server/apps/app-client-secret.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { AppRegistry } from "#src/server/apps/app-registry.server";
 import { PrismaAppRegistryStore } from "#src/server/db/repositories/app.repositories.server";
+import { agentLaunchApps } from "#src/server/app-agent-access/app-agent-access-composition.server";
 
 /**
  * The app registry against local PostgreSQL with migrations applied: what registering, listing,
@@ -212,6 +213,42 @@ test.skipIf(!db)(
           actorUserId: theirs.actor("member").actorUserId,
         }),
       ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+    } finally {
+      await mine.cleanup();
+      await theirs.cleanup();
+    }
+  },
+);
+
+test.skipIf(!db)(
+  "an Agent's launch names its Workspace's apps by name, never another Workspace's",
+  async () => {
+    const mine = await workspaceFixture(db!);
+    const theirs = await workspaceFixture(db!);
+    const registry = createAppRegistry(db!);
+    try {
+      for (const [key, name] of [
+        [`zeta-${mine.suffix}`, "Zeta Board"],
+        [`acme-${mine.suffix}`, "Acme Notes"],
+      ])
+        await registry.registerApp(mine.actor("owner"), { ...registration(key), name });
+      await registry.registerApp(theirs.actor("owner"), registration(`theirs-${theirs.suffix}`));
+
+      const directory = await agentLaunchApps(db!, mine.workspace.id);
+      expect(directory).toEqual([
+        {
+          key: `acme-${mine.suffix}`,
+          name: "Acme Notes",
+          description: "Notes for the team.",
+          whenToUse: "Read or write the team's notes.",
+        },
+        {
+          key: `zeta-${mine.suffix}`,
+          name: "Zeta Board",
+          description: "Notes for the team.",
+          whenToUse: "Read or write the team's notes.",
+        },
+      ]);
     } finally {
       await mine.cleanup();
       await theirs.cleanup();

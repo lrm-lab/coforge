@@ -15,6 +15,8 @@ let allowed = true;
 let launchAllowed = true;
 let lookups = 0;
 let issued = 0;
+let installedApps: unknown[] = [];
+const appQueries: unknown[] = [];
 const previous = Bun.env.COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY;
 Bun.env.COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY = "07".repeat(32);
 const db = {
@@ -48,6 +50,12 @@ const db = {
             },
           }
         : null;
+    },
+  },
+  app: {
+    findMany: async (query: unknown) => {
+      appQueries.push(query);
+      return installedApps;
     },
   },
 };
@@ -171,4 +179,51 @@ test("authorized launch HTTP response contains decrypted explicit env only, no-s
   expect(failed.status).toBe(503);
   expect(await failed.json()).toEqual({ error: "service unavailable" });
   expect(issued).toBe(1);
+});
+
+test("the launch identity names the apps installed in the Agent's Workspace, and omits apps when there are none", async () => {
+  const appRow = (key: string, name: string) => ({
+    key,
+    ownerWorkspaceId: "workspace-1",
+    name,
+    description: `${name} for the team.`,
+    whenToUse: `Use ${name}.`,
+    homepageUrl: null,
+    redirectUris: [],
+    category: "productivity",
+    allowedScopes: ["openid"],
+    secretRotatedAt: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  });
+  // The test above leaves an environment that no longer decrypts.
+  runtimeConfig = { ...runtimeConfig, environment: undefined };
+  installedApps = [appRow("acme-notes", "Acme Notes"), appRow("zeta-board", "Zeta Board")];
+  appQueries.length = 0;
+  try {
+    const payload = await ((await request("valid")) as Response).json();
+    expect(appQueries).toEqual([
+      expect.objectContaining({
+        where: { installations: { some: { workspaceId: "workspace-1" } } },
+      }),
+    ]);
+    expect(payload.identity.apps).toEqual([
+      {
+        key: "acme-notes",
+        name: "Acme Notes",
+        description: "Acme Notes for the team.",
+        whenToUse: "Use Acme Notes.",
+      },
+      {
+        key: "zeta-board",
+        name: "Zeta Board",
+        description: "Zeta Board for the team.",
+        whenToUse: "Use Zeta Board.",
+      },
+    ]);
+  } finally {
+    installedApps = [];
+  }
+  const payload = await ((await request("valid")) as Response).json();
+  expect(payload.identity).not.toHaveProperty("apps");
 });

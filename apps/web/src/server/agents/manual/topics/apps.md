@@ -1,7 +1,8 @@
 # Using your Workspace's apps
 
 Your Workspace's owners and admins install apps (Settings → Applications). Each app is a service
-that accepts a CoForge token for you; it decides itself what you may do there.
+that accepts a CoForge token for you; it decides itself what you may do there. Your standing
+prompt lists the apps installed when you launched; `coforge app list` is always current.
 
 **`coforge app list`** shows each installed app: its key, name, when to use it, what it is, its
 homepage, and your access — granted, granted on first use, needs a person's approval, or waiting

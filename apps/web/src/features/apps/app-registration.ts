@@ -1,3 +1,4 @@
+import { APP_KEY_PATTERN } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import { hasControlOrBidiCharacter, isInvisibleText } from "#src/features/profiles/person-name";
 import { nameToSlug } from "#src/lib/slug";
 import { APP_CATEGORIES, type AppCategory } from "./app-category";
@@ -15,10 +16,6 @@ export const APP_WHEN_TO_USE_MAX_LENGTH = 160;
 /** The longest URL an app may give: what browsers and proxies reliably carry through a redirect
  * (the de facto 2,048-character limit). */
 export const APP_URL_MAX_LENGTH = 2048;
-
-/** A third-party app's key, which is also its OIDC `client_id`: 3 to `APP_KEY_MAX_LENGTH`
- * characters. Never dotted, so it never names a built-in app (`system.cleaner`). */
-const APP_KEY = new RegExp(`^[a-z][a-z0-9-]{2,${APP_KEY_MAX_LENGTH - 1}}$`);
 
 /** The scopes an app may be allowed to request. */
 export const APP_SCOPES = ["openid", "profile", "identity", "email"] as const;
@@ -138,7 +135,10 @@ const allowedScopes: FieldCheck<string[]> = (value) => {
 
 /** Every field an app's input has, each with its rule: the one list of what a caller may set. */
 const FIELD_CHECKS: { [Field in AppInputField]: FieldCheck<AppRegistrationInput[Field]> } = {
-  key: (value) => (typeof value === "string" && APP_KEY.test(value) ? accept(value) : REFUSE),
+  // The SDK's one key pattern (3 to `APP_KEY_MAX_LENGTH`, never dotted like a built-in app's), which
+  // an Agent's launch identity checks too.
+  key: (value) =>
+    typeof value === "string" && APP_KEY_PATTERN.test(value) ? accept(value) : REFUSE,
   name: text(1, APP_NAME_MAX_LENGTH),
   description: text(0, APP_DESCRIPTION_MAX_LENGTH, { lines: true }),
   whenToUse: text(0, APP_WHEN_TO_USE_MAX_LENGTH),

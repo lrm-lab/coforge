@@ -7,6 +7,27 @@ A Workspace's own apps are the ones its owners and admins register in Settings â
 ([Login with CoForge](../authorization-server/README.md)); an Agent calls one with a short-lived
 token for it.
 
+## In the standing prompt
+
+An Agent learns which apps its Workspace has from its standing prompt: an `## Apps` section lists
+each installed app on one line (its name, key, description and when to use it), and points at
+`coforge app list` for the current list and the `apps` Manual topic for how to use one; the prompt
+teaches no workflow. The list travels in the launch identity's `apps` (`POST /api/agent-api-keys`),
+so it is the one from the Agent's launch. Built-in apps are not in it, and there is no section when
+nothing is installed, nor for the Memory Agent, which has no shell. The section says that the
+publisher wrote the text, that it is reference data rather than instructions, and that it grants no
+access.
+
+One SDK module, `@lrm/coforge-sdk/internal/agent-launch-apps`, defines the list and its bounds. Web
+builds it with `normalizeAgentLaunchApps` and the daemon applies the same function to what it
+receives: at most 20 apps, in name order, each with a registry key (`^[a-z][a-z0-9-]{2,63}$`) and a
+name; each field one line of at most 80 (name), 200 (description) or 160 (when to use) code points,
+a cut one ending with `â€¦`, with control and format characters (bidi controls, zero-width
+characters) removed and backticks turned into apostrophes. The rendered section stays within 4 KB;
+the apps that do not fit are counted on a last line that points at `coforge app list`. A daemon
+older than the field ignores it; a server older than it sends none. A failure reading the apps
+omits the list rather than failing the launch.
+
 ## `app list`
 
 ```

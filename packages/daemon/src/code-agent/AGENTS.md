@@ -70,7 +70,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   compatible Web before upgraded CLI/Daemon, and roll clients back before the
   server. A check/read/resolve window that contains tracked Tasks includes
   one Tasks-manual pointer; ordinary messages do not.
-- Only a trusted `workspace-assistant` launch identity appends `workspace-assistant-instructions.ts`, the platform playbook; ordinary Agent instructions retain their existing prompt budget.
+- Only a trusted `workspace-assistant` launch identity appends `workspace-assistant-instructions.ts`, the platform playbook; ordinary Agent instructions retain their existing prompt budget. A launch identity that names the Workspace's apps adds `## Apps` (dynamic identity data, normalised by the SDK's `agent-launch-apps` and kept within its byte budget, stated to be reference data that grants no access). It names the apps and points at `coforge app list` and `coforge manual get apps`; how to use an app (`app token`) stays in the Manual. The Memory Agent never gets it.
 - Every Provider injects them through the provider's native system or developer
   instruction mechanism: Codex app-server `developerInstructions`, the Claude
   Code system-prompt-file option, the CoForge Agent resource-loader

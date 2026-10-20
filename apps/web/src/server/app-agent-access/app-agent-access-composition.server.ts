@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AgentAppUse } from "#src/server/app-agent-access/agent-app-use.server";
+import { listAgentLaunchApps } from "#src/server/app-agent-access/agent-launch-apps.server";
 import { AppAgentAccess } from "#src/server/app-agent-access/app-agent-access.server";
 import {
   authorizationServerConfiguration,
@@ -66,4 +67,9 @@ export function createAgentAppUse(
         })
       ).slug,
   });
+}
+
+/** The apps installed in the Workspace, over PostgreSQL, for an Agent's launch identity. */
+export function agentLaunchApps(db: PrismaClient, workspaceId: string) {
+  return listAgentLaunchApps(new PrismaAppAgentAccessStore(db), workspaceId);
 }

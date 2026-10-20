@@ -26,6 +26,8 @@ import {
   buildAgentRuntimeContext,
   type AgentRuntimeContextComputer,
 } from "#src/server/agents/agent-runtime-context.server";
+import type { AgentLaunchApp } from "@lrm/coforge-sdk/internal/agent-launch-apps";
+import { agentLaunchApps } from "#src/server/app-agent-access/app-agent-access-composition.server";
 
 const createAgentApiKeyInputSchema = z.object({
   agentId: z.string().min(1),
@@ -47,7 +49,8 @@ type LaunchIdentityComputer = AgentRuntimeContextComputer;
  * The Agent's server-authored identity for the Daemon's standing prompt (`agent-instructions.ts`
  * on the Daemon side). It travels in this launch-config response because that is where the Agent's
  * other per-launch server data (`apiKey`/`providerConfig`/`envVars`) already travels. Every field
- * is omitted rather than sent empty so an older Daemon's defensive decoder degrades cleanly.
+ * is omitted rather than sent empty so an older Daemon's defensive decoder degrades cleanly; an
+ * older Daemon ignores `apps`, the Workspace's installed apps as of this launch.
  */
 function buildAgentLaunchIdentity(agent: {
   systemKind?: string | null;
@@ -58,6 +61,7 @@ function buildAgentLaunchIdentity(agent: {
   workspace: { slug: string; name: string } | null;
   computerId: string;
   computer: LaunchIdentityComputer;
+  apps: AgentLaunchApp[];
 }) {
   const runtimeContext = buildAgentRuntimeContext(agent);
   const identity = {
@@ -68,6 +72,7 @@ function buildAgentLaunchIdentity(agent: {
     ...(agent.displayName ? { displayName: agent.displayName } : {}),
     ...(agent.description ? { description: agent.description } : {}),
     ...(Object.keys(runtimeContext).length > 0 ? { runtimeContext } : {}),
+    ...(agent.apps.length > 0 ? { apps: agent.apps } : {}),
   };
   return Object.keys(identity).length > 0 ? identity : undefined;
 }
@@ -171,6 +176,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           computerId: principal.computerId,
           // The lookup above already requires `computerId: principal.computerId`.
           computer: agent.computer,
+          apps: await agentLaunchApps(db, agent.workspaceId),
         });
         const assignedSkillPacks = agent.weeklyReportAssistant
           ? (["weekly-report"] as const)

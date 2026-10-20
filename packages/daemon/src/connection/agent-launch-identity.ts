@@ -1,3 +1,7 @@
+import {
+  normalizeAgentLaunchApps,
+  type AgentLaunchApp,
+} from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import type { AgentLaunchIdentity } from "#src/code-agent/agent-instructions";
 
 const IDENTITY_NAME_MAX_LENGTH = 80;
@@ -36,6 +40,14 @@ function parseIdentityRuntimeContext(
     : undefined;
 }
 
+/** The Workspace's installed apps, normalised again here whatever the server did: the standing
+ * prompt renders them as they are. A server older than the field sends none. */
+function parseIdentityApps(value: unknown): AgentLaunchApp[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const apps = normalizeAgentLaunchApps(value);
+  return apps.length > 0 ? apps : undefined;
+}
+
 /**
  * Decode optional launch identity fields defensively for older/newer Web compatibility.
  * Invalid shapes drop the identity or sub-field instead of failing launch; only identity-derived
@@ -52,6 +64,7 @@ export function parseAgentLaunchIdentity(value: unknown): AgentLaunchIdentity | 
     displayName: parseIdentityString(record.displayName, IDENTITY_NAME_MAX_LENGTH),
     description: parseIdentityString(record.description, IDENTITY_DESCRIPTION_MAX_LENGTH),
     runtimeContext: parseIdentityRuntimeContext(record.runtimeContext),
+    apps: parseIdentityApps(record.apps),
   };
   const present = Object.fromEntries(
     Object.entries(identity).filter(([, entry]) => entry !== undefined),

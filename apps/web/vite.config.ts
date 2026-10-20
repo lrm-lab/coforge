@@ -15,12 +15,17 @@ import {
 
 // Workspace packages resolve through bun's symlinked node_modules, which
 // rolldown's native resolver fails to follow in some Linux environments
-// (musl, overlayfs). Alias them explicitly.
-const workspaceAliases = {
-  "@lrm/coforge-sdk/internal": fileURLToPath(
-    new URL("../../packages/coforge-sdk", import.meta.url),
-  ),
-};
+// (musl, overlayfs). Alias them explicitly: the bare `@lrm/coforge-sdk/internal`
+// to the package root, and each `@lrm/coforge-sdk/internal/<name>` subpath to
+// `src/internal/<name>.ts`, as the package's own `"./internal/*"` export does.
+const coforgeSdk = fileURLToPath(new URL("../../packages/coforge-sdk", import.meta.url));
+const workspaceAliases = [
+  { find: /^@lrm\/coforge-sdk\/internal$/, replacement: coforgeSdk },
+  {
+    find: /^@lrm\/coforge-sdk\/internal\/(.+)$/,
+    replacement: `${coforgeSdk}/src/internal/$1.ts`,
+  },
+];
 
 const config = defineConfig({
   resolve: {
