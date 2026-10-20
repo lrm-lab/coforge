@@ -50,8 +50,8 @@ export class TestRepo {
     };
   }
 
-  run(command: string[], env: Record<string, string> = {}): Run {
-    const result = Bun.spawnSync(command, { cwd: this.dir, env: this.environment(env) });
+  run(command: string[], env: Record<string, string> = {}, cwd = this.dir): Run {
+    const result = Bun.spawnSync(command, { cwd, env: this.environment(env) });
     return {
       exitCode: result.exitCode,
       stdout: result.stdout.toString(),

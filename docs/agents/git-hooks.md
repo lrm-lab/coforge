@@ -1,23 +1,20 @@
 # Git hooks
 
-The repository's git hooks live in `.githooks/`. `bun install` runs the root package's
-`prepare` script, which runs `scripts/git-hooks/install-hooks-path.ts`. That script sets the
-repository-local `core.hooksPath` to `.githooks`. Git resolves a relative hooks path from the
-directory hooks run in, which is the root of the work tree, so the one setting serves every
-worktree. The installer does nothing outside a git work tree (a Docker build context, an unpacked
-tarball). It leaves an existing `core.hooksPath` of yours alone and prints one line instead; point
-that hooks directory at `.githooks/pre-commit` yourself if you want the checks. A CoForge Agent's
-own hook shims forward to the repository's hooks directory, so Agents run these hooks too.
+The repository's git hooks live in `.githooks/`. `bun install` runs the root package's `prepare`
+script, `scripts/git-hooks/install-hooks-path.ts`, which sets the repository-local `core.hooksPath`
+to `.githooks`. Git resolves a relative hooks path from the root of the work tree, so the one
+setting serves every worktree. The installer does nothing outside a git work tree (a Docker build
+context, an unpacked tarball). It leaves an existing `core.hooksPath` of yours alone and prints one
+line; point that hooks directory at `.githooks/pre-commit` yourself. A CoForge Agent's own hook
+shims forward to the repository's hooks directory, so Agents run these hooks too.
 
-In a fresh clone or worktree, no hook runs until the first `bun install`, and
-`bun install --ignore-scripts` skips `prepare`, so it leaves the hook off. `.gitattributes` keeps
-`.githooks/*` at `text eol=lf`, so a `core.autocrlf=true` checkout (Git for Windows) does not give
-the `#!/bin/sh` hook CRLF line endings.
+In a fresh clone or worktree, no hook runs until the first `bun install` (`--ignore-scripts` skips
+`prepare`); `mise run check` [reports that](#limits). `.gitattributes` keeps `.githooks/*` at
+`text eol=lf`, so a `core.autocrlf=true` checkout (Git for Windows) gets no CRLF in the hook.
 
-The repository uses plain `core.hooksPath` rather than a hook manager. husky sets
-`core.hooksPath` without checking for an existing value, which must be left alone. lefthook adds a
-dependency whose postinstall Bun does not run unless the package is trusted. Either way the
-ratchet itself would still be custom code.
+The repository uses plain `core.hooksPath`, not a hook manager: husky overwrites an existing
+`core.hooksPath`, lefthook needs a postinstall Bun runs only for trusted packages, and the ratchet
+would be custom code either way.
 
 `.githooks/pre-commit` runs the [hard rules](#hard-rules) (`scripts/ci/hard-rules.ts --staged`)
 on the content being committed, the file size limit below among them, and reports every
@@ -27,7 +24,7 @@ violation before failing.
 
 A commit may not add agent-written files over **5,000 tokens**, estimated as bytes / 4: the limit
 is 20,000 bytes, so a file of exactly 20,000 bytes is allowed and one of 20,001 is not. The check
-(`scripts/git-hooks/staged-file-size.ts`, run by the hard-rules checker) reads the staged blobs, the content being committed,
+(`scripts/git-hooks/staged-file-size.ts`, run by the hard-rules checker) reads the staged blobs,
 never the working tree, and judges each added, modified, renamed or type-changed file:
 
 | Staged file over the limit | Result |
@@ -41,9 +38,8 @@ This is a ratchet: files that were already over the limit when the hook arrived 
 stay the same, but never grow. A rename is judged against the size its source path had at HEAD.
 Deletions and submodules are not checked.
 
-When the hook blocks a commit, it exits non-zero, so git aborts the commit. It lists each file
-with its size in tokens and why: a new file, or the HEAD and staged sizes in bytes for one that
-crossed the limit or grew. Split the file into smaller ones.
+A blocked commit lists each file with its size in tokens and why: a new file, or the HEAD and
+staged sizes in bytes for one that crossed the limit or grew. Split the file into smaller ones.
 
 ### Files that are not checked
 
@@ -60,8 +56,6 @@ crossed the limit or grew. Split the file into smaller ones.
 
 ### What is not covered
 
-- `git commit --no-verify` skips the hook for one commit. CI runs the same ratchet over the
-  pushed or proposed range as a [hard rule](#hard-rules), after the fact.
 - Merge commits that `git merge` creates by itself: it runs `pre-merge-commit`, which this
   repository does not provide. A merge that stops on conflicts is committed separately, and that
   commit runs `pre-commit`, so it is checked, against its first parent (HEAD): what the merged
@@ -159,14 +153,20 @@ add. The size rule also keeps the two skips it was approved with (task #25): fil
 
 ### Limits
 
-- The hook is local. `git commit --no-verify` skips it, and a clone or worktree has no hook until
-  `bun install` runs (see above), so a violation can still be committed.
-- A maintainer or an Agent may push directly to `main` (root `AGENTS.md`), and CI validates a push
-  only afterwards: it blocks nothing, so a violation is reported once it is already on `main`. Its
-  author fixes it before pushing anything else, as for any red run on `main`. A PR cannot merge
-  without the "CI passed" check, so there the step blocks.
-- Merges without conflicts, `git rebase` (`--continue` included), `git revert`, `git am` and a
-  conflict-free `git cherry-pick` do not run `pre-commit` ([details](#what-is-not-covered)).
+- The hook is local: `git commit --no-verify` skips it, and a clone or worktree has none until
+  `bun install`. The local backstop is `mise run check` (`bun run check`), which root `AGENTS.md`
+  requires before every push. Its first step, `scripts/ci/local-gate.ts`, fails unless
+  `core.hooksPath` is `.githooks` (a hooks path of your own passes only if its `pre-commit` runs
+  `.githooks/pre-commit`), and runs CI's range check on the commits not yet on your local
+  `origin/main`. Without `origin` or `origin/main` it says so and skips that part; a stale
+  `origin/main` can list others' commits, so a failure names its base and asks for
+  `git fetch origin`. It changes no config, and does nothing with `CI=true` or outside a work tree.
+  It is still a convention: nothing runs `mise run check` before `git push`.
+- A maintainer or an Agent may push directly to `main` (root `AGENTS.md`); CI validates a push only
+  afterwards, so a violation that got past the hook and the gate is reported once on `main`, and
+  its author fixes it before pushing anything else. A PR cannot merge without "CI passed".
+- Merges, rebases (`--continue` included), reverts, `git am` and a conflict-free cherry-pick do
+  not run `pre-commit` ([details](#what-is-not-covered)).
 - A CI run without a base commit only warns, so that range is never checked.
 - A push run cancelled by a newer push loses its identity check: the newer push's `before` is the
   cancelled push's head. The file rules still cover it, as the next run diffs from the last pass.
