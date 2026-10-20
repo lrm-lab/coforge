@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { RUNTIME_ERROR_CLASS } from "#src/agent-runtime/runtime-error-classification";
 import {
   RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS,
   RUNTIME_ERROR_DELIVERY_BACKOFF_MAX_MS,
@@ -48,31 +49,31 @@ test("jitter never pushes the delay above the configured maximum", () => {
 test("RuntimeErrorDeliveryBackoff.recordFailure counts attempts and computes an increasing until-time", () => {
   const backoff = new RuntimeErrorDeliveryBackoff({ jitterRandom: () => 0 });
   const now = 1_000_000;
-  const first = backoff.recordFailure("agent-1", now);
+  const first = backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RUNTIME, now);
   expect(first.attempts).toBe(1);
   expect(first.delayMs).toBe(RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS);
   expect(first.untilMs).toBe(now + RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS);
-  const second = backoff.recordFailure("agent-1", now);
+  const second = backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RUNTIME, now);
   expect(second.attempts).toBe(2);
   expect(second.delayMs).toBe(RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS * 2);
 });
 
 test("RuntimeErrorDeliveryBackoff.reset clears the streak and reports how many failures were cleared", () => {
   const backoff = new RuntimeErrorDeliveryBackoff({ jitterRandom: () => 0 });
-  backoff.recordFailure("agent-1");
-  backoff.recordFailure("agent-1");
+  backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RUNTIME);
+  backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RUNTIME);
   expect(backoff.reset("agent-1")).toBe(2);
   expect(backoff.attempts("agent-1")).toBe(0);
   // A fresh failure after reset starts back at the base delay.
-  const after = backoff.recordFailure("agent-1", 0);
+  const after = backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RUNTIME, 0);
   expect(after.attempts).toBe(1);
   expect(after.delayMs).toBe(RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS);
 });
 
 test("RuntimeErrorDeliveryBackoff tracks each Agent independently", () => {
   const backoff = new RuntimeErrorDeliveryBackoff({ jitterRandom: () => 0 });
-  backoff.recordFailure("agent-1");
-  backoff.recordFailure("agent-1");
+  backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RUNTIME);
+  backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RUNTIME);
   expect(backoff.attempts("agent-2")).toBe(0);
 });
 

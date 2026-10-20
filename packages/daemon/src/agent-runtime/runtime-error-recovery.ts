@@ -1,3 +1,7 @@
+import type { AgentRuntimeEvent } from "@coforge/agent";
+import type { RuntimeErrorClass } from "./runtime-error-classification";
+import { PHASE_EDGES } from "./runtime-phases";
+
 /**
  * Per-Agent bookkeeping for a retryable runtime error observed mid-turn (a provider's `error`
  * event whose classified retry decision is `retry` — see `runtime-error-classification.ts`).
@@ -9,7 +13,8 @@
  * caller (`daemon-runtime/runtime-error-delivery-hold.ts`) decides what the computed delay
  * means — releasing `AgentDeliveryQueue`'s explicit hold — and owns the actual timer.
  *
- * Two independent streaks live here, both reset only by a genuinely successful turn:
+ * Two independent streaks live here; the caller decides which runtime events reset each one
+ * (`runtimeErrorRecoverySignal` below names what a raw event signals):
  * - `RuntimeErrorDeliveryBackoff` counts consecutive retryable failures for an Agent, regardless
  *   of which failure text caused each one, and computes the exponential/jittered delay before the
  *   next held delivery is released.
@@ -17,8 +22,8 @@
  *   (agent-runtime/runtime-error-activity.ts's `fingerprintRuntimeError`). Backing off forever at
  *   the delivery backoff's cap would otherwise retry an Agent whose runtime is stuck on the exact
  *   same failure indefinitely; once the same fingerprint repeats
- *   `RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD` times in a row, the caller stops retrying that
- *   fingerprint instead of holding forever.
+ *   `RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD` times in a row, with nothing resetting the streak
+ *   in between, the caller stops retrying that fingerprint instead of holding forever.
  */
 
 /** First delivery-backoff delay: ten seconds. */
@@ -66,32 +71,41 @@ export type RuntimeErrorDeliveryBackoffState = Readonly<{
 }>;
 
 export class RuntimeErrorDeliveryBackoff {
-  readonly #attempts = new Map<string, number>();
+  readonly #streaks = new Map<string, { attempts: number; latestClass: RuntimeErrorClass }>();
 
   constructor(private readonly options: RuntimeErrorDeliveryBackoffOptions = {}) {}
 
   /** Records one retryable failure for `agentId` and returns the delay the next release owes. */
-  recordFailure(agentId: string, now: number = Date.now()): RuntimeErrorDeliveryBackoffState {
+  recordFailure(
+    agentId: string,
+    errorClass: RuntimeErrorClass,
+    now: number = Date.now(),
+  ): RuntimeErrorDeliveryBackoffState {
     const attempts = this.attempts(agentId) + 1;
-    this.#attempts.set(agentId, attempts);
+    this.#streaks.set(agentId, { attempts, latestClass: errorClass });
     const delayMs = runtimeErrorDeliveryBackoffDelayMs(attempts, this.options);
     return { attempts, delayMs, untilMs: now + delayMs };
   }
 
-  /** Clears the streak after a successful turn. Returns how many consecutive failures were
+  /** Clears the streak once the runtime has moved on. Returns how many consecutive failures were
    * cleared, so the caller can narrate a recovery only when there was one. */
   reset(agentId: string): number {
     const attempts = this.attempts(agentId);
-    this.#attempts.delete(agentId);
+    this.#streaks.delete(agentId);
     return attempts;
   }
 
   attempts(agentId: string): number {
-    return this.#attempts.get(agentId) ?? 0;
+    return this.#streaks.get(agentId)?.attempts ?? 0;
+  }
+
+  /** The class of the latest failure in the Agent's current streak, or undefined with none. */
+  latestClass(agentId: string): RuntimeErrorClass | undefined {
+    return this.#streaks.get(agentId)?.latestClass;
   }
 
   clear(): void {
-    this.#attempts.clear();
+    this.#streaks.clear();
   }
 }
 
@@ -104,7 +118,9 @@ export type RuntimeErrorFingerprintFenceState = Readonly<{
 export class RuntimeErrorFingerprintFence {
   readonly #state = new Map<string, { fingerprint: string; attempts: number }>();
 
-  constructor(private readonly threshold: number = RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD) {}
+  /** Consecutive same-fingerprint failures that trip the fence: the count a tripped fence
+   * stopped retrying after. */
+  constructor(readonly threshold: number = RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD) {}
 
   /** Records one retryable failure carrying `fingerprint` for `agentId`. A fingerprint different
    * from the one last seen restarts the streak at one, matching a brand-new problem rather than a
@@ -116,7 +132,7 @@ export class RuntimeErrorFingerprintFence {
     return { fingerprint, attempts, fenced: attempts >= this.threshold };
   }
 
-  /** Clears the streak after a successful turn. */
+  /** Clears the streak once the runtime has moved on. */
   reset(agentId: string): void {
     this.#state.delete(agentId);
   }
@@ -124,4 +140,42 @@ export class RuntimeErrorFingerprintFence {
   clear(): void {
     this.#state.clear();
   }
+}
+
+/** What one raw runtime event says about recovery from runtime errors: output (thinking, text, a
+ * tool call or its output), progress without output, or a finished phase (compaction, review). */
+export type RuntimeErrorRecoverySignal = "output" | "progress" | "phase_finished";
+
+/** What each recovery signal does to an Agent's two streaks: whether it ends a delivery backoff
+ * (releasing what it held), and whether it resets the fingerprint fence's streak. A turn end is
+ * not a signal here; the hold handles it on its own. */
+export const RUNTIME_ERROR_RECOVERY_EFFECTS: Readonly<
+  Record<RuntimeErrorRecoverySignal, Readonly<{ endsBackoff: boolean; resetsFence: boolean }>>
+> = {
+  output: { endsBackoff: true, resetsFence: true },
+  progress: { endsBackoff: true, resetsFence: false },
+  phase_finished: { endsBackoff: false, resetsFence: true },
+};
+
+/**
+ * Maps a raw runtime event to its recovery signal, by the event kinds of the reference Computer
+ * 1.0.50 (darwin-arm64, release cd67c4a2-20c5-41f4-a59c-f089887d01f7, sha256 b504580d…59b4fe,
+ * observed 2026-10-20), connection.ts `runtimeErrorFingerprintFenceResetEvent` /
+ * `clearRuntimeErrorDeliveryBackoffAfterProgress`. A `tool-end` is not among them, and a turn
+ * end is reported to the hold on its own.
+ */
+export function runtimeErrorRecoverySignal(
+  event: AgentRuntimeEvent,
+): RuntimeErrorRecoverySignal | undefined {
+  switch (event.type) {
+    case "text-delta":
+    case "thinking-delta":
+    case "tool-start":
+    case "tool-output":
+      return "output";
+    case "progress":
+    case "subagent-progress":
+      return "progress";
+  }
+  return PHASE_EDGES.get(event.type)?.[1] === "finish" ? "phase_finished" : undefined;
 }

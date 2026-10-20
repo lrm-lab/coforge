@@ -23,6 +23,7 @@ import {
   type PhaseActivity,
   type RuntimePhase,
 } from "#src/agent-runtime/runtime-phases";
+import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
 import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import {
   OutstandingBackgroundTasks,
@@ -2275,7 +2276,12 @@ export class DaemonRuntime {
       const unsubscribe = runtime.session.subscribe((event) => {
         progress.observe();
         toolCalls.observe(event);
-        const startupFailed = current() && launch.startup?.observe(event);
+        const isCurrent = current();
+        // Raw: text and thinking count before the trajectory coalesces them, and before this
+        // event marks the Agent busy (a hold released while busy flushes only at the turn end).
+        const recoverySignal = isCurrent ? runtimeErrorRecoverySignal(event) : undefined;
+        if (recoverySignal) this.#runtimeErrorHold.noteRecoverySignal(agentId, recoverySignal);
+        const startupFailed = isCurrent && launch.startup?.observe(event);
         const turnActivity =
           event.type === "activity"
             ? isBusyActivityDetailKind(event.activity.detailKind)
@@ -2737,10 +2743,7 @@ export class DaemonRuntime {
       event.status === "failed"
         ? (launch.crashDetail?.message ?? "Agent runtime failed.").slice(0, 2000)
         : undefined;
-    // Only a genuinely successful turn clears the delivery-backoff streak and the
-    // fingerprint fence; a failed or interrupted turn leaves both exactly as they were, so a
-    // still-active backoff correctly keeps holding across it.
-    if (event.status === "completed") this.#runtimeErrorHold.noteSuccess(agentId);
+    this.#runtimeErrorHold.noteTurnEnd(agentId);
     // Release whatever a queue_until_idle provider held while this turn ran, as one
     // coalesced notice for the next turn — never blocking this turn-end Activity on it.
     this.#releaseTurnEndHolds(agentId);

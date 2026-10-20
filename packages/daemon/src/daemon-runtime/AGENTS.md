@@ -125,8 +125,8 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   `ready` (a Start still surfaces it as unread from the read boundary).
 - `runtime-error-delivery-hold.ts` owns an Agent's delivery hold after
   mid-turn runtime errors: the backoff, the fingerprint fence, and the one
-  release timer. `runtime.ts` only reports failures, successful turns, and
-  explicit Stops to it; keep hold and release decisions out of `runtime.ts`.
+  release timer. `runtime.ts` only reports failures, raw output and progress,
+  turn ends and explicit Stops to it; keep hold and release decisions out of it.
   `stop` disposes it, so no release timer outlives the runtime.
 - Never launch an exited Agent for a delivery it has already consumed; ACK it
   instead.

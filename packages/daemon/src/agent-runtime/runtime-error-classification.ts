@@ -13,10 +13,10 @@
  * found"). Every class maps to exactly one of the two decisions in `RUNTIME_ERROR_RETRY_DECISION`
  * — there is no third "maybe" outcome here. CoForge does not yet split failures three ways
  * between "recoverable-but-terminal" and "permanently sticky" (auth/model/input-size handling is
- * a later CR's territory); this module intentionally simplifies that down to retry-or-stop, and
- * the repeat fence in `runtime-error-recovery.ts`
- * is what keeps an always-retryable class like the generic fallback from looping forever on a
- * failure that never actually clears.
+ * a later CR's territory); this module intentionally simplifies that down to retry-or-stop. The
+ * repeat fence in `runtime-error-recovery.ts` stops retrying a failure that repeats with no turn
+ * end or output in between; one that ends every turn is never fenced, and the generic fallback's
+ * backoff ends with each turn (`daemon-runtime/runtime-error-delivery-hold.ts`).
  */
 
 export const RUNTIME_ERROR_CLASS = {

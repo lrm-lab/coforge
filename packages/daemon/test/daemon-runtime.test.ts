@@ -10244,6 +10244,44 @@ describe("Agent delivery queue", () => {
   describe("runtime-error delivery backoff and fingerprint fence", () => {
     afterEach(() => jest.useRealTimers());
 
+    /** Raw runtime events and whether each ends a backoff and resets the fence's streak. Kept
+     * literal, not derived from `RUNTIME_ERROR_RECOVERY_EFFECTS`: a wrong entry there must fail
+     * here rather than move the expectation with it. */
+    const RECOVERY_EVENTS = [
+      ["text", { type: "text-delta", text: "back" }, true, true],
+      ["thinking", { type: "thinking-delta", text: "hm" }, true, true],
+      ["a tool call", { type: "tool-start", id: "tool-1", name: "bash" }, true, true],
+      ["tool output", { type: "tool-output", id: "tool-1", text: "ok" }, true, true],
+      ["provider progress", { type: "progress" }, true, false],
+      [
+        "subagent progress",
+        { type: "subagent-progress", phase: "progress", taskId: "task-1" },
+        true,
+        false,
+      ],
+      ["a finished compaction", { type: "compaction-finished" }, false, true],
+      ["a finished review", { type: "review-finished" }, false, true],
+      ["a tool end", { type: "tool-end", id: "tool-1", isError: false }, false, false],
+      ["a reconnect", { type: "reconnecting", attempt: 1 }, false, false],
+    ] as const satisfies ReadonlyArray<
+      readonly [kind: string, event: AgentRuntimeEvent, endsBackoff: boolean, resetsFence: boolean]
+    >;
+
+    const fencedActivities = (
+      activities: readonly import("@lrm/coforge-sdk/internal").AgentActivity[],
+    ) =>
+      activities.filter(
+        (activity) => activity.runtimeError?.errorReason === "runtime_error_fenced",
+      );
+
+    /** Each runtime_error Activity's errorReason, in order. */
+    const runtimeErrorReasons = (
+      activities: readonly import("@lrm/coforge-sdk/internal").AgentActivity[],
+    ) =>
+      activities
+        .filter((activity) => activity.detailKind === "runtime_error")
+        .map((activity) => activity.runtimeError?.errorReason);
+
     test("a retryable runtime error holds a new delivery and releases it once the backoff elapses", async () => {
       const acks = ackGate(1);
       const { fake, deliver } = await deliveryQueueHarness("pi", acks);
@@ -10263,6 +10301,154 @@ describe("Agent delivery queue", () => {
       expect(fake.notices).toHaveLength(1);
     });
 
+    test("the same error ending every turn never trips the fence, so a later delivery is still notified", async () => {
+      // A Claude Code usage limit fails every turn the same way until it resets. Each turn end
+      // resets the fence's streak (reference behaviour cited at `runtimeErrorRecoverySignal`),
+      // so the Agent is never fenced.
+      const acks = ackGate(1);
+      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+      const { runtime, fake, deliver } = await deliveryQueueHarness(
+        "pi",
+        acks,
+        undefined,
+        (activity) => activities.push(activity),
+      );
+      jest.useFakeTimers();
+      try {
+        for (let turn = 0; turn < 3; turn++) {
+          fake.emit({ type: "error", message: "You've hit your session limit · resets 3:45pm" });
+          fake.emit({ type: "completed", status: "failed" });
+        }
+        expect(fencedActivities(activities)).toEqual([]);
+
+        // The last turn end also ended the unclassified error's backoff, so nothing holds the
+        // delivery: it is notified before it is acknowledged.
+        await deliver(1);
+        await acks.done;
+        expect(fake.notices).toHaveLength(1);
+      } finally {
+        await runtime.stop();
+      }
+    });
+
+    test.each(
+      RECOVERY_EVENTS.filter(([, , endsBackoff]) => endsBackoff).map(
+        ([kind, event]) => [kind, event] as const,
+      ),
+    )(
+      "runtime progress during a backoff ends it and flushes the held delivery at once (%s)",
+      async (_kind, progress) => {
+        const acks = ackGate(1);
+        const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+        jest.useFakeTimers();
+
+        // A classified error, whose backoff its own turn end leaves holding.
+        fake.emit({ type: "error", message: "429 Too Many Requests" });
+        fake.emit({ type: "completed", status: "failed" });
+        await deliver(1);
+        expect(fake.notices).toEqual([]);
+
+        fake.emit(progress);
+        await fake.waitForNotices(1); // no timer advanced: the progress released it
+        await acks.done;
+        expect(fake.notices).toHaveLength(1);
+      },
+    );
+
+    test.each(
+      RECOVERY_EVENTS.filter(([, , endsBackoff]) => !endsBackoff).map(
+        ([kind, event]) => [kind, event] as const,
+      ),
+    )(
+      "%s during a backoff leaves the held delivery held until the delay elapses",
+      async (_kind, between) => {
+        const acks = ackGate(1);
+        const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+        jest.useFakeTimers();
+
+        // A classified error, whose turn end leaves its backoff holding.
+        fake.emit({ type: "error", message: "429 Too Many Requests" });
+        await deliver(1);
+        // Mid-turn, as these arrive (each marks the Agent busy until the turn end).
+        fake.emit(between);
+        fake.emit({ type: "completed", status: "failed" });
+        // A held delivery is acknowledged without a notice; one not held is notified first.
+        await acks.done;
+        expect(fake.notices).toEqual([]);
+
+        jest.advanceTimersByTime(10_000 * 1.1 + 1);
+        await fake.waitForNotices(1);
+        expect(fake.notices).toHaveLength(1);
+      },
+    );
+
+    test("output while busy mid-turn ends a backoff, and the held delivery is delivered at that turn's end", async () => {
+      const acks = ackGate(1);
+      const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+      jest.useFakeTimers();
+
+      fake.emit({ type: "text-delta", text: "working" }); // the Agent is busy in a turn
+      fake.emit({ type: "error", message: "429 Too Many Requests" });
+      await deliver(1);
+      await acks.done; // held: acknowledged without a notice
+      fake.emit({ type: "text-delta", text: "back" }); // ends the backoff while still busy
+
+      fake.emit({ type: "completed", status: "completed" });
+      await fake.waitForNotices(1); // no timer advanced: the output released it
+      expect(fake.notices).toHaveLength(1);
+    });
+
+    test.each(
+      RECOVERY_EVENTS.map(
+        ([kind, event, , resetsFence]) =>
+          [kind, resetsFence ? "not fenced" : "fenced", event] as const,
+      ),
+    )("three identical errors with %s between them: %s", async (_kind, outcome, between) => {
+      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+      const { runtime, fake } = await deliveryQueueHarness("pi", undefined, undefined, (activity) =>
+        activities.push(activity),
+      );
+      try {
+        fake.emit({ type: "error", message: "connect ECONNRESET" });
+        fake.emit({ type: "error", message: "connect ECONNRESET" });
+        fake.emit(between);
+        fake.emit({ type: "error", message: "connect ECONNRESET" });
+        expect(runtimeErrorReasons(activities)).toEqual([
+          "provider_connection_error",
+          "provider_connection_error",
+          outcome === "fenced" ? "runtime_error_fenced" : "provider_connection_error",
+        ]);
+      } finally {
+        await runtime.stop();
+      }
+    });
+
+    test.each(["failed", "completed", "interrupted"] as const)(
+      "a %s turn end between three identical errors resets the fence's streak",
+      async (status) => {
+        const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+        const { runtime, fake } = await deliveryQueueHarness(
+          "pi",
+          undefined,
+          undefined,
+          (activity) => activities.push(activity),
+        );
+        try {
+          fake.emit({ type: "error", message: "connect ECONNRESET" });
+          fake.emit({ type: "error", message: "connect ECONNRESET" });
+          fake.emit({ type: "completed", status });
+          fake.emit({ type: "error", message: "connect ECONNRESET" });
+          expect(runtimeErrorReasons(activities)).toEqual([
+            "provider_connection_error",
+            "provider_connection_error",
+            "provider_connection_error",
+          ]);
+        } finally {
+          await runtime.stop();
+        }
+      },
+    );
+
     test("a non-retryable runtime error does not hold the next delivery", async () => {
       const acks = ackGate(1);
       const { fake, deliver } = await deliveryQueueHarness("pi", acks);
@@ -10273,7 +10459,7 @@ describe("Agent delivery queue", () => {
       expect(fake.notices).toHaveLength(1);
     });
 
-    test("a successful turn resets the backoff streak, so the next failure starts at the base delay again", async () => {
+    test("output resets the backoff streak, so the next failure starts at the base delay again", async () => {
       const acks = ackGate(2);
       const { fake, deliver } = await deliveryQueueHarness("pi", acks);
       jest.useFakeTimers();
@@ -10285,7 +10471,8 @@ describe("Agent delivery queue", () => {
       jest.advanceTimersByTime(10_000 * 1.1 + 1);
       await fake.waitForNotices(1);
 
-      // A successful turn in between resets the streak.
+      // A turn with output in between resets the streak.
+      fake.emit({ type: "text-delta", text: "done" });
       fake.emit({ type: "completed", status: "completed" });
 
       // A second failure: if the streak had not reset, the second attempt's delay would double
@@ -10299,21 +10486,45 @@ describe("Agent delivery queue", () => {
       expect(fake.notices).toHaveLength(2);
     });
 
-    test("a failed (not completed) turn does not reset the backoff streak", async () => {
+    test("a turn end ends the backoff of an unclassified error and flushes what it held", async () => {
       const acks = ackGate(1);
       const { fake, deliver } = await deliveryQueueHarness("pi", acks);
       jest.useFakeTimers();
 
-      fake.emit({ type: "error", message: "connect ECONNRESET" });
+      fake.emit({ type: "error", message: "something odd happened" });
       await deliver(1);
+      expect(fake.notices).toEqual([]); // held behind the backoff while the turn runs
       fake.emit({ type: "completed", status: "failed" });
-      expect(fake.notices).toEqual([]); // still held: a failed turn is not a successful one
 
-      jest.advanceTimersByTime(10_000 * 1.1 + 1);
-      await fake.waitForNotices(1);
+      await fake.waitForNotices(1); // no timer advanced: the turn end released it
       await acks.done;
       expect(fake.notices).toHaveLength(1);
     });
+
+    test.each([
+      ["rate limit", "429 Too Many Requests", "failed"],
+      ["provider connection", "connect ECONNRESET", "failed"],
+      ["rate limit", "429 Too Many Requests", "interrupted"],
+      ["rate limit", "429 Too Many Requests", "completed"],
+    ] as const)(
+      "a classified retryable error's backoff keeps holding across a turn end with no output (%s: %s, turn %s)",
+      async (_class, message, status) => {
+        const acks = ackGate(1);
+        const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+        jest.useFakeTimers();
+
+        fake.emit({ type: "error", message });
+        fake.emit({ type: "completed", status });
+        // A held delivery is acknowledged without a notice; one not held is notified first.
+        await deliver(1);
+        await acks.done;
+        expect(fake.notices).toEqual([]); // still held until its delay elapses
+
+        jest.advanceTimersByTime(10_000 * 1.1 + 1);
+        await fake.waitForNotices(1);
+        expect(fake.notices).toHaveLength(1);
+      },
+    );
 
     test.each([
       ["classified", {}, "ProviderConnectionError", "provider_connection_error"],
@@ -10335,20 +10546,19 @@ describe("Agent delivery queue", () => {
     ] as const)(
       "three consecutive failures with the same fingerprint trip the fence, reporting it in CoForge's own words (%s)",
       async (_hint, hints, errorClass, errorReason) => {
-        const acks = ackGate(2);
         const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-        const { runtime, fake, deliver } = await deliveryQueueHarness(
+        const { runtime, fake } = await deliveryQueueHarness(
           "pi",
-          acks,
+          undefined,
           undefined,
           (activity) => activities.push(activity),
         );
         const error = { type: "error", message: "connect ECONNRESET", ...hints } as const;
         jest.useFakeTimers();
         try {
-          // Two failures back off and release normally.
+          // The same failure repeating with no turn end or output in between: the first two
+          // back off, as any retryable failure does.
           fake.emit(error);
-          fake.emit({ type: "completed", status: "failed" });
           const initial = activities.find((activity) => activity.detailKind === "runtime_error");
           expect(initial).toMatchObject({
             agentId: "agent-a",
@@ -10359,21 +10569,11 @@ describe("Agent delivery queue", () => {
             runtimeError: { errorClass, errorReason },
           });
           expect(initial!.runtimeError!.fingerprint).toMatch(/^[0-9a-f]{8}$/);
-          await deliver(1);
-          jest.advanceTimersByTime(10_000 * 1.1 + 1);
-          await fake.waitForNotices(1);
-
           fake.emit(error);
-          fake.emit({ type: "completed", status: "failed" });
-          await deliver(2);
-          jest.advanceTimersByTime(20_000 * 1.1 + 1);
-          await fake.waitForNotices(2);
-          await acks.done;
 
           // The third consecutive failure with the same fingerprint trips the fence.
           activities.length = 0;
           fake.emit(error);
-          fake.emit({ type: "completed", status: "failed" });
 
           const fenced = activities.find((activity) => activity.detailKind === "runtime_error");
           expect(fenced).toBeDefined();
@@ -10398,7 +10598,6 @@ describe("Agent delivery queue", () => {
           // Further failures still name the current streak, even after retrying stopped.
           activities.length = 0;
           fake.emit(error);
-          fake.emit({ type: "completed", status: "failed" });
           const laterErrors = activities.filter(
             (activity) => activity.detailKind === "runtime_error",
           );
@@ -10422,34 +10621,79 @@ describe("Agent delivery queue", () => {
       },
     );
 
-    test("a fenced Agent stops delivering entirely: a new delivery is held, not notified, with no timer left to release it", async () => {
-      const acks = ackGate(2);
-      const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+    test("a tripped fence holds every delivery, across its own turn end and later output, until an explicit Stop", async () => {
+      const acks = ackGate(3);
+      const { runtime, fake, deliver } = await deliveryQueueHarness("pi", acks);
       jest.useFakeTimers();
 
-      fake.emit({ type: "error", message: "connect ECONNRESET" });
+      // Three identical failures with no turn end or output in between trip the fence. An
+      // unclassified error, whose backoff a turn end would otherwise end.
+      for (let attempt = 0; attempt < 3; attempt++)
+        fake.emit({ type: "error", message: "something odd happened" });
+      // The third failure's own turn end, and output after it, leave the tripped fence holding:
+      // releasing would deliver straight into the runtime it just stopped retrying.
       fake.emit({ type: "completed", status: "failed" });
+      fake.emit({ type: "text-delta", text: "still here" });
+      // Nor does a later retryable failure that does not itself trip the fence.
+      fake.emit({ type: "error", message: "429 Too Many Requests" });
+      fake.emit({ type: "completed", status: "failed" });
+
+      // Nothing schedules a release any more, even long past the longest backoff: a later
+      // delivery is still acknowledged as held, with no notice.
       await deliver(1);
-      jest.advanceTimersByTime(10_000 * 1.1 + 1);
-      await fake.waitForNotices(1);
-
-      fake.emit({ type: "error", message: "connect ECONNRESET" });
-      fake.emit({ type: "completed", status: "failed" });
-      await deliver(2);
-      jest.advanceTimersByTime(20_000 * 1.1 + 1);
-      await fake.waitForNotices(2);
-      await acks.done;
-
-      // The third failure trips the fence: it must not release/flush whatever is held (that
-      // would deliver straight into the same broken runtime it just failed on three times).
-      fake.emit({ type: "error", message: "connect ECONNRESET" });
-      fake.emit({ type: "completed", status: "failed" });
-
-      // A further delivery is held instead of reaching the runtime, even long past what would
-      // have been the next backoff's release time — nothing schedules one any more.
-      await deliver(3);
       jest.advanceTimersByTime(5 * 60_000 * 1.1 + 1_000);
-      expect(fake.notices).toHaveLength(2);
+      await deliver(2);
+      expect(acks.acks).toEqual(["delivery-1", "delivery-2"]);
+      expect(fake.notices).toEqual([]);
+
+      // An explicit Stop lifts it: a fresh launch is delivered to at once.
+      await runtime.stopAgent("agent-a");
+      await runtime.startAgent("agent-a", { ...config, provider: "pi" });
+      await deliver(3);
+      await fake.waitForNotices(1);
+      await acks.done;
+      expect(fake.notices).toHaveLength(1);
+    });
+
+    test("while fenced, every later failure says retrying stopped, naming the latest error, after the fence's own turn end", async () => {
+      const acks = ackGate(2);
+      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+      const { runtime, fake, deliver } = await deliveryQueueHarness(
+        "pi",
+        acks,
+        undefined,
+        (activity) => activities.push(activity),
+      );
+      jest.useFakeTimers();
+      try {
+        for (let attempt = 0; attempt < 3; attempt++)
+          fake.emit({ type: "error", message: "something odd happened" });
+        // The turn end resets the fence's streak, but the tripped fence still holds deliveries.
+        fake.emit({ type: "completed", status: "failed" });
+
+        activities.length = 0;
+        fake.emit({ type: "error", message: "something odd happened" });
+        fake.emit({ type: "error", message: "429 Too Many Requests" });
+        const errors = activities.filter((activity) => activity.detailKind === "runtime_error");
+        expect(errors.map((activity) => activity.runtimeError?.errorReason)).toEqual([
+          "runtime_error_fenced",
+          "runtime_error_fenced",
+        ]);
+        // The count is the one the fence tripped at; the error named is the latest.
+        expect(errors[1]!.detail).toBe(
+          "Runtime stopped retrying after 3 consecutive failures with the same underlying error. Last error: 429 Too Many Requests Restart this Agent once the issue is fixed.",
+        );
+
+        // Still held by the fence, long past the longest backoff: a held delivery is acknowledged
+        // without a notice; one not held is notified first.
+        await deliver(1);
+        jest.advanceTimersByTime(5 * 60_000 * 1.1 + 1_000);
+        await deliver(2);
+        await acks.done;
+        expect(fake.notices).toEqual([]);
+      } finally {
+        await runtime.stop();
+      }
     });
 
     test("an explicit Stop discards the backoff and fence streaks for the next launch", async () => {
@@ -10598,8 +10842,9 @@ describe("Agent delivery queue", () => {
     });
 
     test.each([
-      // The third identical failure trips the fingerprint fence: the Agent answers idle, as it
-      // did before it had anything unread, rather than looking busy with what the fence holds.
+      // The third identical failure in one turn trips the fingerprint fence: the Agent answers
+      // idle, as it did before it had anything unread, rather than looking busy with what the
+      // fence holds.
       ["the fingerprint fence", "connect ECONNRESET", 3, AGENT_ACTIVITY_DETAIL_KIND.IDLE],
       // A backoff hold is temporary: the held message is still debt the Agent will be given.
       [
@@ -10625,10 +10870,8 @@ describe("Agent delivery queue", () => {
       );
       jest.useFakeTimers();
       try {
-        for (let failure = 0; failure < failures; failure++) {
-          fake.emit({ type: "error", message });
-          fake.emit({ type: "completed", status: "failed" });
-        }
+        for (let failure = 0; failure < failures; failure++) fake.emit({ type: "error", message });
+        fake.emit({ type: "completed", status: "failed" });
         await deliver(1);
         await acks.done;
         expect(fake.notices).toEqual([]); // held, not told
