@@ -51,21 +51,13 @@ export class PhaseTracker {
    * `"finished"`.
    */
   finish(agentId: string): PhaseFinishResult {
-    const state = this.#states.get(agentId);
-    if (!state || state.kind !== "active") return "not-active";
-    clearTimeout(state.watchdog);
-    this.#states.set(agentId, { kind: "inactive" });
-    return "finished";
+    return this.#deactivate(agentId) ? "finished" : "not-active";
   }
 
   /** Ends an active phase as interrupted. Like `finish`, a no-op unless one is
    * active, so the caller only reports the interruption when this returns `"interrupted"`. */
   interrupt(agentId: string): PhaseInterruptResult {
-    const state = this.#states.get(agentId);
-    if (!state || state.kind !== "active") return "not-active";
-    clearTimeout(state.watchdog);
-    this.#states.set(agentId, { kind: "inactive" });
-    return "interrupted";
+    return this.#deactivate(agentId) ? "interrupted" : "not-active";
   }
 
   isActive(agentId: string): boolean {
@@ -85,6 +77,14 @@ export class PhaseTracker {
     for (const state of this.#states.values())
       if (state.kind === "active") clearTimeout(state.watchdog);
     this.#states.clear();
+  }
+
+  #deactivate(agentId: string): boolean {
+    const state = this.#states.get(agentId);
+    if (!state || state.kind !== "active") return false;
+    clearTimeout(state.watchdog);
+    this.#states.set(agentId, { kind: "inactive" });
+    return true;
   }
 
   #markStale(agentId: string, startedAt: number): void {
