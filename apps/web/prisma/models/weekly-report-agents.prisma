@@ -1,0 +1,138 @@
+/// One User's durable weekly-report Collector Agent on one owned Computer.
+model WeeklyReportCollectorBinding {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  workspaceId      String    @db.Uuid
+  userId           String    @db.Uuid
+  computerId       String    @db.Uuid
+  collectorAgentId String    @unique @db.Uuid
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  computer         Computer  @relation(fields: [computerId], references: [id], onDelete: Cascade)
+  agent            Agent     @relation(fields: [collectorAgentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, computerId])
+  @@unique([collectorAgentId, workspaceId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([computerId])
+  @@map("weekly_report_collector_bindings")
+}
+
+/// One Collect Run for a member weekly report. Not a generic job.
+model WeeklyReportCollectRun {
+  id          String                  @id @default(uuid(7)) @db.Uuid
+  workspaceId String                  @db.Uuid
+  userId      String                  @db.Uuid
+  reportId    String                  @db.Uuid
+  /// collecting | synthesizing | awaiting_confirm | done | cancelled
+  status      String
+  /// week | month | quarter | year | custom
+  windowKind  String
+  windowStart DateTime
+  windowEnd   DateTime
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  workspace   Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  report      WeeklyReport            @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  slots       WeeklyReportCollectSlot[]
+
+  @@index([workspaceId, userId, reportId])
+  @@index([reportId, createdAt])
+  @@map("weekly_report_collect_runs")
+}
+
+/// Per-Computer slot inside a Collect Run.
+model WeeklyReportCollectSlot {
+  id               String                 @id @default(uuid(7)) @db.Uuid
+  runId            String                 @db.Uuid
+  computerId       String                 @db.Uuid
+  collectorAgentId String                 @db.Uuid
+  /// Path snapshot for this run only; Computer-local collect-roots remain authoritative.
+  scanPaths        Json
+  /// running | ready | failed | empty | stalled | cancelled
+  status           String
+  retryCount       Int                    @default(0)
+  failureReason    String?
+  /// Collect pack markdown when status=ready; null otherwise.
+  packMarkdown     String?
+  /// HTTPS submit-pack idempotency key when a pack or failure was accepted.
+  requestId        String?                @unique
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  run              WeeklyReportCollectRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  computer         Computer               @relation(fields: [computerId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, computerId])
+  @@index([runId])
+  @@index([computerId])
+  @@map("weekly_report_collect_slots")
+}
+
+/// One User's fixed Agent identity for weekly-report AI in one Workspace.
+model WeeklyReportAssistant {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  userId      String    @db.Uuid
+  agentId     String    @unique @db.Uuid
+  /// Versioned writing habits, observations, and open work threads for this user.
+  memory      Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent       Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@unique([agentId, workspaceId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("weekly_report_assistants")
+}
+
+/// Side-chat session scoped to one page subject (report/cycle).
+model WeeklyReportAssistantChatSession {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  workspaceId String          @db.Uuid
+  userId      String          @db.Uuid
+  /// report | cycle
+  subjectType String
+  subjectId   String          @db.Uuid
+  title       String          @default("")
+  /// active | archived
+  status      String          @default("active")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments    RecordComment[]
+
+  @@index([workspaceId, userId, subjectType, subjectId, updatedAt])
+  @@index([workspaceId, userId])
+  @@map("weekly_report_assistant_chat_sessions")
+}
+
+/// Agent-session reservation for one WeeklyReportAssistant and one Records
+/// page subject. Not the side-chat thread and not Agent.currentSessionId.
+model WeeklyReportAssistantRuntimeSession {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @db.Uuid
+  agentId     String   @db.Uuid
+  /// report | cycle
+  subjectType String
+  subjectId   String   @db.Uuid
+  /// Provider session id reserved for create/resume of this subject.
+  sessionId   String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent       Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([workspaceId, agentId, subjectType, subjectId])
+  @@index([workspaceId, agentId])
+  @@map("weekly_report_assistant_runtime_sessions")
+}

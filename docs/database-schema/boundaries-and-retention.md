@@ -22,7 +22,7 @@ constrained now.
 
 The DirectConversation, ConversationMember, and Message tables are included in
 the `20260828000003_direct_conversations` migration. Setup-owned identity and Workspace connection tables are
-implemented separately under `apps/web/prisma/schema.prisma` and its migration.
+implemented separately in the `apps/web/prisma/` schema and its migration.
 Approved
 implementations use Prisma schema, generated Prisma Client, and Prisma Migrate.
 That approval does not approve the draft messaging tables or their future SQL

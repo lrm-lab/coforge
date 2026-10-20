@@ -1,0 +1,182 @@
+model Agent {
+  /// Platform-owned execution identity; ordinary Agents leave this null.
+  systemKind String?
+  workspaceAssistantSession WorkspaceAssistantSession?
+  id                        String                     @id @default(uuid(7)) @db.Uuid
+  workspaceId               String                     @db.Uuid
+  name                      String
+  displayName               String
+  description               String                     @default("")
+  /// Current picture in the shared image store. Bytes and delivery URLs stay out of PostgreSQL,
+  /// the same rule as User.avatarObjectKey.
+  avatarObjectKey           String?
+  avatarContentType         String?
+  /// Agent's own server role for management authority: owner | admin | member (never "owner" in
+  /// practice today, since only a human is ever created as a Workspace owner). Independent of
+  /// `Agent.ownerId`'s WorkspaceMembership role.
+  role                      String                     @default("member")
+  /// Who can see this Agent at all: "public" is
+  /// visible workspace-wide; "private" is visible only to its creator (`ownerId`), other Agents
+  /// sharing that same creator, and a viewer whose own server role is owner/admin. Existing rows
+  /// default to "public".
+  visibility                String                     @default("public")
+  createdAt                 DateTime                   @default(now())
+  ownerId                   String                     @db.Uuid
+  computerId                String?                    @db.Uuid
+  runtimeConfig             Json
+  /// Runtime launch fencing only; provider-native identity lives in AgentSession.
+  runtimeSession            Json?
+  /// Current control request and fencing only, not Session history or a job queue.
+  controlState              Json?
+  /// Set when a user stopped this Agent: nothing may start or wake it except an
+  /// explicit user Start, Restart, Reset session or Full reset. Independent of `controlState`.
+  stoppedAt                 DateTime?
+  /// Archive: hide from directories, lists and wakes; retain read-only profile and history.
+  /// Message.sender, Task.creator/owner and ActionCard.preparedByAgent restrict hard deletion,
+  /// as leftAt does for channel membership.
+  deletedAt                 DateTime?
+  /// Who deleted (archived) the Agent; null for one deleted before this was recorded, or whose
+  /// deleting User is gone.
+  deletedByUserId           String?                    @db.Uuid
+  /// Creation time of an owed DM introduction (`AgentIntroduction`); set by human creation
+  /// and private platform-assistant provisioning. Null once settled or when none is owed.
+  introductionDueAt         DateTime?
+  currentSessionId          String?                    @db.Uuid
+  currentSession            AgentSession?              @relation("CurrentAgentSession", fields: [currentSessionId], references: [id], onDelete: SetNull)
+  sessions                  AgentSession[]             @relation("AgentSessions")
+  workspace                 Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner                     User                       @relation("AgentOwner", fields: [ownerId], references: [id])
+  deletedBy                 User?                      @relation("AgentDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
+  computer                  Computer?                  @relation(fields: [computerId], references: [id], onDelete: SetNull)
+  conversations             ConversationMember[]
+  coordinatedConversations Conversation[]         @relation("ConversationCoordinator")
+  taskExecutionSessions    TaskExecutionSession[]
+  pendingMentionActions     PendingMentionAction[]
+  deliveries                AgentMessageDelivery[]
+  apiKeys                   AgentApiKey[]
+  activity                  AgentActivity[]
+  manualEvents              AgentManualEvent[]
+  reminders                 Reminder[]
+  reminderOperationReceipts ReminderOperationReceipt[]
+  preparedActionCards       ActionCard[]
+  weeklyReportAssistant         WeeklyReportAssistant?
+  weeklyReportAssistantRuntimeSessions WeeklyReportAssistantRuntimeSession[]
+  weeklyReportCollectorBinding  WeeklyReportCollectorBinding?
+  attachments               Attachment[]
+  attachmentUploadSessions  AttachmentUploadSession[]
+  workspaceMemoryAgent      WorkspaceMemoryAgent?
+  migrations                AgentMigration[]
+  appConfigs                AgentAppConfig[]
+
+  @@unique([workspaceId, name])
+  @@unique([id, workspaceId])
+  @@index([workspaceId, ownerId])
+  @@index([workspaceId, createdAt])
+  @@index([computerId])
+  @@map("agents")
+}
+
+/// One Agent App's settings for one Agent (`system.cleaner`, ...), validated per App by the SDK's
+/// `APP_CONFIG_DEFINITIONS`. An Agent with no row for an App has that App's defaults at revision 0;
+/// each write raises `revision`, which the daemon's mirror fences on.
+model AgentAppConfig {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  agentId   String   @db.Uuid
+  appId     String
+  revision  Int
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, appId])
+  @@map("agent_app_configs")
+}
+
+/// A provider-native Session belongs to the Agent and the Computer/runtime that created it.
+/// Switching runtime creates another record; it never relabels or converts the old transcript.
+model AgentSession {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  agentId         String   @db.Uuid
+  workspaceId     String   @db.Uuid
+  computerId      String   @db.Uuid
+  provider        String
+  nativeSessionId String?
+  state           String   @default("unknown")
+  createdAt       DateTime @default(now())
+  agent           Agent    @relation("AgentSessions", fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  currentFor      Agent[]  @relation("CurrentAgentSession")
+
+  @@index([agentId, createdAt])
+  @@map("agent_sessions")
+}
+
+model AgentActivity {
+  id                      String    @id @default(uuid(7)) @db.Uuid
+  workspaceId             String    @db.Uuid
+  agentId                 String    @db.Uuid
+  computerId              String    @db.Uuid
+  launchId                String
+  conversationId          String?   @db.Uuid
+  conversationTarget      String?
+  clientSeq               Int
+  detailKind              String
+  level                   String
+  detail                  String
+  entries                 Json?
+  runtimeErrorClass       String?
+  runtimeErrorReason      String?
+  runtimeErrorFingerprint String?
+  occurredAt              DateTime
+  createdAt               DateTime  @default(now())
+  agent                   Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace               Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  computer                Computer  @relation(fields: [computerId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, launchId, clientSeq])
+  @@index([workspaceId, agentId, occurredAt(sort: Desc), clientSeq(sort: Desc)])
+  @@map("agent_activities")
+}
+
+/// One `coforge manual get|search` call: who asked, what topic/query with its
+/// required intent/reason, and whether it hit. Written for both `hit` and `not_found`; an
+/// invalid-input 400 (bad topic slug, invalid query, invalid intent/reason) is never recorded.
+model AgentManualEvent {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  workspaceId  String    @db.Uuid
+  agentId      String    @db.Uuid
+  kind         String
+  topicOrQuery String
+  intent       String
+  reason       String
+  outcome      String
+  resultSlugs  String[]  @default([])
+  createdAt    DateTime  @default(now())
+  agent        Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([agentId, createdAt])
+  @@map("agent_manual_events")
+}
+
+model AgentApiKey {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  apiKeyHash  String    @unique
+  agentId     String    @db.Uuid
+  workspaceId String    @db.Uuid
+  ownerId     String    @db.Uuid
+  computerId  String    @db.Uuid
+  revokedAt   DateTime?
+  disabledAt  DateTime?
+  createdAt   DateTime  @default(now())
+  agent       Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  computer    Computer  @relation(fields: [computerId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, workspaceId])
+  @@index([ownerId])
+  @@index([computerId])
+  @@map("agent_api_keys")
+}

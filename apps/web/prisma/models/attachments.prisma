@@ -1,0 +1,58 @@
+model Attachment {
+  id              String       @id @default(uuid(7)) @db.Uuid
+  workspaceId     String       @db.Uuid
+  conversationId  String       @db.Uuid
+  /// Exactly one of `uploaderId` / `uploaderAgentId` is set; enforced in
+  /// `storeAttachment`/`storeAgentAttachment`, not a DB check constraint.
+  uploaderId      String?      @db.Uuid
+  uploaderAgentId String?      @db.Uuid
+  messageId       String?      @db.Uuid
+  /// Stable per-message ordering for multiple attachments; irrelevant while messageId is null.
+  position        Int          @default(0)
+  objectKey       String       @unique
+  fileName        String
+  contentType     String
+  sizeBytes       Int
+  createdAt       DateTime     @default(now())
+  workspace       Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation    Conversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  uploader        User?        @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  uploaderAgent   Agent?       @relation(fields: [uploaderAgentId], references: [id], onDelete: Cascade)
+  message         Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, workspaceId])
+  @@index([uploaderId])
+  @@index([uploaderAgentId])
+  @@index([messageId, position])
+  @@map("attachments")
+}
+
+/// A reserved presigned-upload session: the Agent PUTs bytes straight to storage,
+/// then `complete` verifies the object and creates the `Attachment` row that `attachmentId`
+/// reserves ahead of time. `attachmentId` is not a foreign key — that row does not exist until
+/// verification succeeds — only a unique reservation the eventual `Attachment.id` must match.
+model AttachmentUploadSession {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  workspaceId    String       @db.Uuid
+  conversationId String       @db.Uuid
+  agentId        String       @db.Uuid
+  attachmentId   String       @unique @db.Uuid
+  objectKey      String       @unique
+  fileName       String
+  contentType    String
+  sizeBytes      Int
+  idempotencyKey String       @db.Uuid
+  state          String       @default("pending")
+  terminalReason String?
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation   Conversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  agent          Agent        @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([agentId, idempotencyKey])
+  @@index([conversationId, workspaceId])
+  @@index([expiresAt])
+  @@map("attachment_upload_sessions")
+}

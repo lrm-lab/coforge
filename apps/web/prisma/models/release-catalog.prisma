@@ -1,0 +1,16 @@
+/// One app release's notes in the release catalog (`server/release-catalog/`). Self-contained: no
+/// relation to any CoForge domain table, so the catalog can move to its own service whole.
+model ReleaseCatalogRelease {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// The released app's slug, e.g. `coforge-computer`.
+  app       String
+  /// The release version in full, e.g. `0.1.4` or `0.1.4-dev.2`.
+  version   String
+  notesEn   String
+  notesZhCn String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([app, version])
+  @@map("release_catalog_releases")
+}

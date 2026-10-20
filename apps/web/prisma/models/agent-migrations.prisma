@@ -1,0 +1,38 @@
+/// An Agent/working-directory move between Computers; server/agent-migrations owns its state machine.
+/// Soft-deleted Computers retain migrations. Switch requires a live Workspace target; only hard deletes cascade.
+model AgentMigration {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  workspaceId       String    @db.Uuid
+  agentId           String    @db.Uuid
+  sourceComputerId  String    @db.Uuid
+  targetComputerId  String    @db.Uuid
+  requestedByUserId String    @db.Uuid
+  /// requested | source_stopped | uploaded | placing | switched | completed | canceled | failed
+  state             String    @default("requested")
+  /// Bumped by every transition; a step applies only at the revision it read.
+  revision          Int       @default(0)
+  /// Bumped when a new transfer attempt replaces the previous one; fences a stale attempt.
+  generation        Int       @default(1)
+  /// When `Agent.computerId` moved to the target. Before it the source owns the Agent and a cancel
+  /// leaves it there; after it the target keeps the Agent and a cancel only cleans up.
+  switchedAt        DateTime?
+  errorCode         String?
+  errorDetail       String?
+  /// The bundle manifest the source sent with `upload_complete`: chunk digests and totals the
+  /// target verifies against. Opaque to the state machine.
+  manifest          Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  finishedAt        DateTime?
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent             Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  sourceComputer    Computer  @relation("AgentMigrationSource", fields: [sourceComputerId], references: [id], onDelete: Cascade)
+  targetComputer    Computer  @relation("AgentMigrationTarget", fields: [targetComputerId], references: [id], onDelete: Cascade)
+  requestedBy       User      @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId], map: "agent_migrations_one_active", where: raw("\"state\" <> 'completed' AND \"state\" <> 'canceled' AND \"state\" <> 'failed'"))
+  @@index([sourceComputerId])
+  @@index([targetComputerId])
+  @@index([workspaceId])
+  @@map("agent_migrations")
+}

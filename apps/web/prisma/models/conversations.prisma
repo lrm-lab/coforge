@@ -1,0 +1,165 @@
+/// Personal Chat sidebar groups; deleting one keeps its conversations and messages.
+model ChatSection {
+  id            String               @id @default(uuid(7)) @db.Uuid
+  workspaceId   String               @db.Uuid
+  userId        String               @db.Uuid
+  name          String
+  emoji         String?
+  collapsed     Boolean              @default(false)
+  sortOrder     Int                  @default(0)
+  /// How the sidebar orders the section's rows: "manual" (drag order), "recent" (latest message
+  /// first) or "alpha" (by name). Validated by `chatSectionSortModes`.
+  sortMode      String               @default("manual")
+  createdAt     DateTime             @default(now())
+  membership    WorkspaceMembership  @relation(fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
+  conversations ConversationMember[]
+
+  @@index([workspaceId, userId, createdAt])
+  @@map("chat_sections")
+}
+
+model Conversation {
+  id             String                 @id @default(uuid(7)) @db.Uuid
+  workspaceId    String                 @db.Uuid
+  projectId      String?                @db.Uuid
+  coordinatorAgentId String?             @db.Uuid
+  directKey      String?
+  channelName    String?
+  description    String                 @default("")
+  archivedAt     DateTime?
+  /// Set while a Workspace owner/admin has hidden this channel from the whole Workspace (only
+  /// `#general` can be): it leaves every channel list, search, post, member and Agent surface,
+  /// its history kept, until they restore it. Unrelated to a member closing a chat
+  /// (`ConversationMember.hiddenAt`).
+  hiddenFromWorkspaceAt DateTime?
+  nextTaskNumber Int                    @default(1)
+  createdAt      DateTime               @default(now())
+  workspace      Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members        ConversationMember[]
+  messages       Message[]
+  deliveries     AgentMessageDelivery[]
+  attachments    Attachment[]
+  attachmentUploadSessions AttachmentUploadSession[]
+  tasks          Task[]
+  actionCards    ActionCard[]
+  savedMessages  SavedMessage[]
+  pins           ConversationPin[]
+  project        Project?               @relation("ProjectConversations", fields: [projectId], references: [id], onDelete: SetNull)
+  coordinatorAgent Agent?               @relation("ConversationCoordinator", fields: [coordinatorAgentId, workspaceId], references: [id, workspaceId], onDelete: NoAction)
+
+  @@unique([workspaceId, directKey])
+  @@unique([workspaceId, channelName])
+  @@unique([id, workspaceId])
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([coordinatorAgentId])
+  @@map("conversations")
+}
+
+model ConversationMember {
+  id                       String            @id @default(uuid(7)) @db.Uuid
+  conversationId           String            @db.Uuid
+  workspaceId              String            @db.Uuid
+  userId                   String?           @db.Uuid
+  agentId                  String?           @db.Uuid
+  agentReadThroughSequence Int               @default(0)
+  /// Human top-level read cursor, separate from Agent delivery. Unread excludes own messages;
+  /// thread reads never advance the parent cursor.
+  readThroughSequence      Int               @default(0)
+  channelMuted             Boolean           @default(false)
+  chatSectionId            String?           @db.Uuid
+  chatSectionSortOrder     Int               @default(0)
+  chatSection              ChatSection?      @relation(fields: [chatSectionId], references: [id], onDelete: SetNull)
+  /// This member's own display preference for this conversation: long messages fold behind
+  /// "Show more". On unless they turn it off.
+  collapseLongMessages     Boolean           @default(true)
+  /// Soft leave marker. Member rows can never be deleted once they own a Message/Task
+  /// (onDelete: Restrict), so "left" is represented here instead of by row absence.
+  /// Re-joining clears this and keeps the row, so read boundaries and mute preferences survive.
+  leftAt                   DateTime?
+  /// Stored admin | member role; creators get admin, #general memberships always stay member.
+  /// channel-authority.server.ts also considers Workspace/Agent roles when deriving admin authority.
+  channelRole              String            @default("member")
+  /// Forced unread marker (mark-as-unread): top-level messages with sequence >= this read as
+  /// unread regardless of readThroughSequence. Null = none. Cleared when the member reads past it.
+  unreadFromSequence     Int?
+  /// Activity inbox Done boundary over top-level messages: the conversation leaves this
+  /// member's Activity list once they mark it Done, and returns when a top-level message with a
+  /// higher sequence arrives. Null = never marked Done. Thread replies never advance it; a
+  /// thread keeps its own boundary in `ThreadRead.doneThroughSequence`.
+  doneThroughSequence    Int?
+  /// Per-member hide/close: the conversation disappears from this member's list only.
+  /// Distinct from archivedAt (whole conversation) and leftAt (membership ended).
+  hiddenAt               DateTime?
+  /// When this member first joined the conversation. Kept across a soft leave and rejoin, so the
+  /// channel list orders its members by who joined first. Backfilled approximately by its migration.
+  joinedAt               DateTime          @default(now())
+  conversation             Conversation      @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace                Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                     User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent                    Agent?            @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  messages                 Message[]
+  threadReads              ThreadRead[]
+  threadFollows            ThreadFollow[]
+  reactions                MessageReaction[]
+  mentions                 MessageMention[]
+  sentPendingMentionActions PendingMentionAction[]
+  savedMessages            SavedMessage[]
+  pins                     ConversationPin[]
+  ownedTasks               Task[]            @relation("TaskOwner")
+  createdTasks             Task[]            @relation("TaskCreator")
+
+  @@unique([id, conversationId, workspaceId])
+  @@unique([conversationId, userId])
+  @@unique([conversationId, agentId])
+  @@index([workspaceId, userId])
+  @@index([workspaceId, agentId])
+  @@index([chatSectionId])
+  @@map("conversation_members")
+}
+
+model ThreadRead {
+  memberId            String             @db.Uuid
+  rootMessageId       String             @db.Uuid
+  conversationId      String             @db.Uuid
+  workspaceId         String             @db.Uuid
+  readThroughSequence Int                @default(0)
+  /// Activity inbox Done boundary over this thread's replies, the thread counterpart of
+  /// `ConversationMember.doneThroughSequence`. Null = never marked Done.
+  doneThroughSequence Int?
+  member              ConversationMember @relation(fields: [memberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
+  root                Message            @relation(fields: [rootMessageId, conversationId], references: [id, conversationId], onDelete: Cascade)
+
+  @@id([memberId, rootMessageId])
+  @@index([rootMessageId, conversationId])
+  @@map("thread_reads")
+}
+
+model ThreadFollow {
+  memberId       String             @db.Uuid
+  rootMessageId  String             @db.Uuid
+  conversationId String             @db.Uuid
+  workspaceId    String             @db.Uuid
+  createdAt      DateTime           @default(now())
+  member         ConversationMember @relation(fields: [memberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
+  root           Message            @relation(fields: [rootMessageId, conversationId], references: [id, conversationId], onDelete: Cascade)
+
+  @@id([memberId, rootMessageId])
+  @@index([rootMessageId, conversationId])
+  @@map("thread_follows")
+}
+
+/// A member's pinned conversations (#121): ordered, per-member, independent of archive/leave.
+model ConversationPin {
+  conversationId String             @db.Uuid
+  workspaceId    String             @db.Uuid
+  memberId       String             @db.Uuid
+  sortOrder      Int                @default(0)
+  createdAt      DateTime           @default(now())
+  conversation   Conversation       @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  member         ConversationMember @relation(fields: [memberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
+
+  @@id([conversationId, memberId])
+  @@index([workspaceId, memberId, sortOrder])
+  @@map("conversation_pins")
+}

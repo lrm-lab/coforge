@@ -1,0 +1,131 @@
+model DaemonApiKey {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  apiKeyHash  String    @unique @map("api_key_hash")
+  workspaceId String    @map("workspace_id") @db.Uuid
+  computerId  String    @map("computer_id") @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  computer    Computer  @relation(fields: [computerId], references: [id], onDelete: Cascade)
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, computerId])
+  @@index([ownerId])
+  @@map("daemon_api_keys")
+}
+
+/// Hash-keyed revocation after Workspace deletion or Computer removal; no cascading relations.
+/// Only the exact former key reveals the reason. Retention: DAEMON_CREDENTIAL_REVOCATION_RETENTION_MS
+/// (src/server/db/repositories/daemon-credential-revocation.repositories.server.ts).
+model DaemonCredentialRevocation {
+  apiKeyHash String   @id @map("api_key_hash")
+  reason     String
+  revokedAt  DateTime @map("revoked_at")
+
+  @@index([revokedAt])
+  @@map("daemon_credential_revocations")
+}
+
+model Computer {
+  id                String                 @id @default(uuid(7)) @db.Uuid
+  ownerId           String                 @db.Uuid
+  machineId         String
+  name              String                 @default("")
+  displayName       String                 @default("")
+  computerVersion   String?
+  platform          String?
+  osVersion         String?
+  metadataStartedAt BigInt?
+  /// Where this Computer runs: "local" on a machine the User controls,
+  /// "cloud" on the deployment's Swarm cluster.
+  kind              String                 @default("local")
+  /// "default" or "extra" for a cloud Computer. Local Computers leave this empty.
+  /// One live default per account, and one live extra per Workspace, are partial unique indexes below.
+  cloudSlot         String?
+  /// The Workspace an extra cloud Computer is for. Empty for the default and for local Computers.
+  homeWorkspaceId   String?                @db.Uuid
+  /// Set when the cluster reports that an extra cloud Computer's service is gone.
+  /// That Workspace's extra slot stays taken until then. The default Computer is never deleted.
+  deletedAt         DateTime?
+  workspaces        WorkspaceComputer[]
+  runtimes          ComputerRuntime[]
+  modelCatalogs     ComputerModelCatalog[]
+  agents                        Agent[]
+  agentApiKeys                  AgentApiKey[]
+  daemonApiKeys                 DaemonApiKey[]
+  hostJobs                      HostJob[]
+  agentActivity                 AgentActivity[]
+  reminders                     Reminder[]
+  weeklyReportCollectorBindings WeeklyReportCollectorBinding[]
+  weeklyReportCollectSlots      WeeklyReportCollectSlot[]
+  migrationsOut                 AgentMigration[]       @relation("AgentMigrationSource")
+  migrationsIn                  AgentMigration[]       @relation("AgentMigrationTarget")
+  owner                         User                   @relation(fields: [ownerId], references: [id])
+
+  @@unique([ownerId, machineId])
+  @@unique([ownerId], map: "computers_one_live_cloud_default", where: raw("\"kind\" = 'cloud' AND \"cloudSlot\" = 'default' AND \"deletedAt\" IS NULL"))
+  @@unique([ownerId, homeWorkspaceId], map: "computers_one_live_cloud_extra_per_workspace", where: raw("\"kind\" = 'cloud' AND \"cloudSlot\" = 'extra' AND \"deletedAt\" IS NULL AND \"homeWorkspaceId\" IS NOT NULL"))
+  @@map("computers")
+}
+
+model ComputerRuntime {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  computerId  String    @db.Uuid
+  provider    String
+  version     String
+  displayName String
+  observedAt  DateTime  @default(now())
+  isPublic    Boolean   @default(false)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  computer    Computer  @relation(fields: [computerId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, computerId, provider])
+  @@index([workspaceId, computerId])
+  @@map("computer_runtimes")
+}
+
+model ComputerModelCatalog {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  computerId  String    @db.Uuid
+  provider    String
+  models      Json
+  observedAt  DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  computer    Computer  @relation(fields: [computerId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, computerId, provider])
+  @@index([workspaceId, computerId])
+  @@map("computer_model_catalogs")
+}
+
+model WorkspaceComputer {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  workspaceId String     @db.Uuid
+  computerId  String     @db.Uuid
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  computer    Computer   @relation(fields: [computerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now())
+  reminders   Reminder[]
+
+  @@unique([workspaceId, computerId])
+  @@map("workspace_computers")
+}
+
+/// One submitted server connection per Workspace. The install command is not stored: a later
+/// read shows who submitted it and whether a Daemon is online, and does not mint another command.
+model WorkspaceServerConnection {
+  workspaceId       String    @id @db.Uuid
+  installOrigin     String
+  workspaceSlug     String
+  submittedByUserId String    @db.Uuid
+  submittedAt       DateTime
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  submittedBy       User      @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([submittedByUserId])
+  @@map("workspace_server_connections")
+}

@@ -12,7 +12,7 @@ export function prismaDatasource(env: NodeJS.ProcessEnv) {
 }
 
 export default defineConfig({
-  schema: "prisma/schema.prisma",
+  schema: "prisma",
   migrations: { path: "prisma/migrations" },
   // Schema validation and client generation do not connect to PostgreSQL.
   // Runtime commands must provide DATABASE_URL explicitly.

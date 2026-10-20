@@ -1,0 +1,42 @@
+/// The one Swarm cluster this deployment controls. The token is stored only as a hash of
+/// COFORGE_CLOUD_CLUSTER_TOKEN. accepting is the runtime's latest "can place another service" flag.
+model HostNode {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  name       String
+  nodeKey    String?   @unique @map("node_key")
+  tokenHash  String    @unique @map("token_hash")
+  accepting  Boolean   @default(true)
+  lastSeenAt DateTime? @map("last_seen_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  jobs       HostJob[]
+
+  @@index([lastSeenAt])
+  @@map("host_nodes")
+}
+
+/// One create, attach, update, or delete for a cloud Computer. The daemon key stays here until the
+/// cluster reports the job, then it is cleared. The browser never receives it.
+model HostJob {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  hostId            String    @map("host_id") @db.Uuid
+  /// "create", "delete", "attach", or "update".
+  operation         String    @default("create")
+  workspaceId       String    @map("workspace_id") @db.Uuid
+  workspaceSlug     String    @map("workspace_slug")
+  computerId        String    @map("computer_id") @db.Uuid
+  requestedByUserId String    @map("requested_by_user_id") @db.Uuid
+  idempotencyKey    String    @map("idempotency_key")
+  name              String
+  daemonApiKey      String?   @map("daemon_api_key")
+  containerId       String?   @map("container_id")
+  createdAt         DateTime  @map("created_at")
+  reportedAt        DateTime? @map("reported_at")
+  host              HostNode  @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  computer          Computer  @relation(fields: [computerId], references: [id], onDelete: Cascade)
+  requestedBy       User      @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([requestedByUserId, idempotencyKey])
+  @@index([hostId, reportedAt])
+  @@map("host_jobs")
+}

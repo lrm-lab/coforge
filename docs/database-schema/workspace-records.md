@@ -1,6 +1,6 @@
 # Workspace Records (proposed)
 
-Weekly-report persistence is modeled in `apps/web/prisma/schema.prisma` and
+Weekly-report persistence is modeled in `apps/web/prisma/models/records.prisma` and
 migration `20260910000000_workspace_records`. Status is **proposed** until Frank
 approves the schema gate. Tables:
 

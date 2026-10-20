@@ -1,7 +1,5 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
+import { readPrismaSchema } from "./helpers/prisma-schema";
 
 describe("Prisma id generation uses time-ordered UUIDv7", () => {
   // Task #84 (2026-10-13): every primary key switched from Prisma's default `uuid()` (v4,
@@ -17,10 +15,7 @@ describe("Prisma id generation uses time-ordered UUIDv7", () => {
   // all raw-SQL inserts go into the composite-key table thread_reads, which has no id column.
   // This schema default is therefore the single id-generation path; pinning it in text keeps a
   // random v4 from sneaking back in when a new table is added.
-  const schema = readFileSync(
-    join(fileURLToPath(new URL("..", import.meta.url)), "prisma/schema.prisma"),
-    "utf8",
-  );
+  const schema = readPrismaSchema();
 
   test("no random v4 defaults remain", () => {
     expect(schema).not.toContain("@default(uuid())");

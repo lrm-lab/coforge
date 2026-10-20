@@ -1,0 +1,155 @@
+model Workspace {
+  assistant WorkspaceAssistant?
+  id                     String                  @id @default(uuid(7)) @db.Uuid
+  slug                   String                  @unique
+  name                   String
+  iconObjectKey          String?
+  iconContentType        String?
+  members                WorkspaceMembership[]
+  joinLinks              WorkspaceJoinLink[]
+  computers              WorkspaceComputer[]
+  serverConnection       WorkspaceServerConnection?
+  hostJobs               HostJob[]
+  computerRuntimes       ComputerRuntime[]
+  modelCatalogs          ComputerModelCatalog[]
+  agents                 Agent[]
+  weeklyReportAssistants       WeeklyReportAssistant[]
+  weeklyReportAssistantChatSessions WeeklyReportAssistantChatSession[]
+  weeklyReportAssistantRuntimeSessions WeeklyReportAssistantRuntimeSession[]
+  weeklyReportCollectorBindings WeeklyReportCollectorBinding[]
+  weeklyReportCollectRuns      WeeklyReportCollectRun[]
+  agentApiKeys           AgentApiKey[]
+  daemonApiKeys          DaemonApiKey[]
+  conversations          Conversation[]
+  conversationMembers    ConversationMember[]
+  messageDeliveries      AgentMessageDelivery[]
+  agentActivity          AgentActivity[]
+  agentManualEvents      AgentManualEvent[]
+  reminders              Reminder[]
+  reminderEvents         ReminderEvent[]
+  attachments            Attachment[]
+  attachmentUploadSessions AttachmentUploadSession[]
+  tasks                  Task[]
+  taskExecutionSessions  TaskExecutionSession[]
+  actionCards            ActionCard[]
+  weeklyReportCycles     WeeklyReportCycle[]
+  weeklyReports          WeeklyReport[]
+  weeklyTemplates        WeeklyReportTemplate[]
+  recordNotes            RecordNote[]
+  recordComments         RecordComment[]
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  projects               Project[]
+  memoryProfile          WorkspaceMemoryProfile?
+  openvikingBinding      OpenVikingBinding?
+  openvikingMappedIdentities OpenVikingMappedIdentity[]
+  admittedPublicChannelSegments AdmittedPublicChannelSegment[]
+  admittedSegmentSourceMessages AdmittedSegmentSourceMessage[]
+  admittedSegmentDispatches AdmittedSegmentDispatch[]
+  openvikingCitations    OpenVikingCitationRecord[]
+  memoryHints            MemoryHintRecord[]
+  memoryOffers           MemoryOfferRecord[]
+  memoryOfferCitations   MemoryOfferCitation[]
+  memoryCleanupWork      WorkspaceMemoryCleanupWork[]
+  workspaceMemoryAgent   WorkspaceMemoryAgent?
+  formerSlugs            WorkspaceFormerSlug[]
+  agentMigrations        AgentMigration[]
+
+  @@map("workspaces")
+}
+
+/// A URL (slug) the Workspace had before its owner changed it. It keeps naming that Workspace, so
+/// old links and Computers set up with it still reach it, and no other Workspace can take it.
+model WorkspaceFormerSlug {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  slug        String    @unique
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("workspace_former_slugs")
+}
+
+model Project {
+  id                   String         @id @default(uuid(7)) @db.Uuid
+  workspaceId          String         @db.Uuid
+  name                 String
+  description          String         @default("")
+  iconObjectKey        String?
+  iconContentType      String?
+  slug                 String
+  githubInstallationId Int?
+  githubRepositoryId   Int?
+  githubFullName       String?
+  githubHtmlUrl        String?
+  // Whether an Agent's git commits in this Project's repository get a CoForge
+  // `Co-authored-by` trailer; withheld unless COFORGE_COMMIT_COAUTHOR is set.
+  commitCoAuthor       Boolean        @default(true)
+  workspace            Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations        Conversation[] @relation("ProjectConversations")
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@unique([workspaceId, githubRepositoryId])
+  @@index([workspaceId])
+  @@map("projects")
+}
+
+model WorkspaceMembership {
+  workspaceId String    @db.Uuid
+  userId      String    @db.Uuid
+  /// Workspace role: owner | admin | member. Owner is created at Workspace creation and is immutable.
+  role        String    @default("member")
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferences WorkspaceMemberPreference?
+  chatSections ChatSection[]
+
+  @@id([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_memberships")
+}
+
+/// A member's own settings inside one Workspace, removed with the membership.
+model WorkspaceMemberPreference {
+  workspaceId          String              @db.Uuid
+  userId               String              @db.Uuid
+  membership           WorkspaceMembership @relation(fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
+  /// Chat/Tasks/Files tab ids in the member's order; the first opens by default. Empty = default order.
+  conversationTabOrder String[]            @default([])
+  /// Agent profile panel tab ids (profile, reminders, activity, workspace) in the member's order.
+  agentProfileTabOrder   String[]            @default([])
+  /// Chat sidebar sections top to bottom: "pinned", "channels", "agents" and custom section ids.
+  /// Empty = the default order. Written with the custom sections' own `sortOrder`.
+  chatSectionOrder     String[]            @default([])
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@id([workspaceId, userId])
+  @@map("workspace_member_preferences")
+}
+
+/// A reusable link anyone signed in can open to join the Workspace as an ordinary member (no role).
+/// "Updating" a link revokes it and creates a new one, so the old URL stops working at once.
+model WorkspaceJoinLink {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  workspaceId     String    @db.Uuid
+  /// 32 random bytes, base64url. Plaintext: owners and admins see the link again.
+  token           String    @unique
+  createdByUserId String    @db.Uuid
+  /// NULL is no use limit.
+  maxUses         Int?
+  useCount        Int       @default(0)
+  /// NULL never expires.
+  expiresAt       DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy       User      @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("workspace_join_links")
+}

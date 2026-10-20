@@ -1,0 +1,149 @@
+model Message {
+  memoryHint            MemoryHintRecord?
+  id             String                 @id @default(uuid(7)) @db.Uuid
+  conversationId String                 @db.Uuid
+  workspaceId    String                 @db.Uuid
+  senderMemberId String?                @db.Uuid
+  body           String
+  sequence       Int
+  createdAt      DateTime               @default(now())
+  conversation   Conversation           @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  sender         ConversationMember?    @relation(fields: [senderMemberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Restrict)
+  deliveries     AgentMessageDelivery[]
+  attachments    Attachment[]
+  threadRootId   String?                @db.Uuid
+  threadRoot     Message?               @relation("MessageThread", fields: [threadRootId, conversationId], references: [id, conversationId], onDelete: Cascade)
+  replies        Message[]              @relation("MessageThread")
+  threadReads    ThreadRead[]
+  threadFollows  ThreadFollow[]
+  reactions      MessageReaction[]
+  mentions       MessageMention[]
+  pendingMentionActions PendingMentionAction[]
+  savedBy        SavedMessage[]
+  task           Task?
+  actionCard     ActionCard?
+  /// Raised in each reaction write's transaction; pages show the newest summary.
+  reactionVersion Int                  @default(0)
+
+  @@unique([id, conversationId])
+  @@unique([conversationId, sequence])
+  @@index([conversationId, threadRootId, sequence])
+  @@index([conversationId, createdAt])
+  /// Serves workspace-wide top-level message scans with sequence ranges — the
+  /// sidebar's unread counts and future inbox-style reads.
+  @@index([workspaceId, threadRootId, sequence])
+  /// Serves a member's own top-level messages newest first (the own-messages jump index read on
+  /// every conversation open) and the `sender` foreign-key check when a member row is deleted.
+  @@index([senderMemberId, threadRootId, sequence])
+  /// Serves a member's messages newest first across threads: the viewer's recent @-mentions that
+  /// score a channel's @-completion stop after their newest 50 mentioning messages.
+  @@index([senderMemberId, sequence])
+  /// Serves Workspace-wide message reads newest first: human and Agent message search sorted by
+  /// recency, and a search with filters but no text, walk this index and stop after one page
+  /// instead of sorting every message in the Workspace.
+  @@index([workspaceId, createdAt(sort: Desc), id(sort: Desc)])
+  /// Serves message search: case-insensitive substring match (`ILIKE '%term%'`) on the body,
+  /// including Chinese text, which PostgreSQL's word-based full-text search does not segment.
+  /// Needs the `pg_trgm` extension, which the migration that adds this index creates.
+  @@index([body(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("messages")
+}
+
+/// A member @mention resolved by grammar and active membership in the Message transaction.
+/// Highlight, delivery and wake share this record; Agents/history read @handle text.
+/// The immutable Agent name or allocated username is denormalized as handle, surviving departure.
+model MessageMention {
+  messageId      String             @db.Uuid
+  memberId       String             @db.Uuid
+  conversationId String             @db.Uuid
+  workspaceId    String             @db.Uuid
+  /// Which side of the member row carried the handle: "user" | "agent".
+  kind           String
+  /// The mentioned actor's stable UUID (`user.id` or `agent.id`) — the value embedded in the
+  /// body's `<@human:uuid>`/`<@agent:uuid>` token, denormalized so renders never join.
+  actorId        String             @db.Uuid
+  /// The handle as written: `user.username` or `agent.name`. Neither changes once
+  /// allocated.
+  handle         String
+  createdAt      DateTime           @default(now())
+  member         ConversationMember @relation(fields: [memberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
+  message        Message            @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
+
+  @@id([messageId, memberId])
+  @@index([conversationId, createdAt])
+  /// Serves one member's mentions (the Activity inbox's Mentions filter and mention badge).
+  @@index([memberId])
+  @@map("message_mentions")
+}
+
+/// An unnotified non-member human/public-Agent mention. The sender acts by resolution id
+/// until expiresAt (send + 7 days); Ignore writes nothing. Retain resolved rows for replay.
+model PendingMentionAction {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  messageId      String             @db.Uuid
+  conversationId String             @db.Uuid
+  workspaceId    String             @db.Uuid
+  senderMemberId String             @db.Uuid
+  /// Exactly one target is set (CHECK in the migration).
+  targetUserId   String?            @db.Uuid
+  targetAgentId  String?            @db.Uuid
+  /// The `@handle` as the sender wrote it (`user.username` or `agent.name`). Neither
+  /// changes once allocated.
+  targetHandle   String
+  expiresAt      DateTime
+  /// When the sender acted on it, and how: "add" (CHECK in the migration). Null while pending.
+  resolvedAt     DateTime?
+  resolvedAction String?
+  /// When the sender had the target notified without adding them. The action stays pending (the
+  /// target can still be added); a repeat notify is `already_queued`.
+  notifiedAt     DateTime?
+  /// When a notified person cleared it from their Activity inbox.
+  dismissedAt    DateTime?
+  /// When a notified Agent target read the message (`message check`); until then it is unread.
+  targetReadAt   DateTime?
+  createdAt      DateTime           @default(now())
+  message        Message            @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
+  sender         ConversationMember @relation(fields: [senderMemberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
+  targetUser     User?              @relation(fields: [targetUserId], references: [id], onDelete: Cascade)
+  targetAgent    Agent?             @relation(fields: [targetAgentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([messageId, targetUserId])
+  @@unique([messageId, targetAgentId])
+  /// Serves a sender's pending list: their unresolved, unexpired actions.
+  @@index([senderMemberId, resolvedAt, expiresAt])
+  /// Serve the cascades when a target human or Agent is deleted.
+  @@index([targetUserId])
+  @@index([targetAgentId, workspaceId])
+  @@map("pending_mention_actions")
+}
+
+model MessageReaction {
+  messageId      String             @db.Uuid
+  conversationId String             @db.Uuid
+  workspaceId    String             @db.Uuid
+  memberId       String             @db.Uuid
+  emoji          String
+  createdAt      DateTime           @default(now())
+  message        Message            @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
+  member         ConversationMember @relation(fields: [memberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
+
+  @@id([messageId, memberId, emoji])
+  @@index([conversationId, messageId])
+  @@map("message_reactions")
+}
+
+/// A member's saved messages (#120): bookmark a message, list them, jump back to the conversation.
+model SavedMessage {
+  messageId      String             @db.Uuid
+  conversationId String             @db.Uuid
+  workspaceId    String             @db.Uuid
+  memberId       String             @db.Uuid
+  createdAt      DateTime           @default(now())
+  message        Message            @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
+  member         ConversationMember @relation(fields: [memberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
+  conversation   Conversation       @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@id([messageId, memberId])
+  @@index([workspaceId, memberId, createdAt])
+  @@map("saved_messages")
+}

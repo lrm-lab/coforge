@@ -1,0 +1,157 @@
+/// ISO week bucket for Workspace Records (成员周报 grouping).
+model WeeklyReportCycle {
+  id          String                 @id @default(uuid(7)) @db.Uuid
+  workspaceId String                 @db.Uuid
+  year        Int
+  week        Int
+  title       String
+  createdById String                 @db.Uuid
+  createdAt   DateTime               @default(now())
+  workspace   Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User                   @relation("WeeklyReportCycleCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  reports     WeeklyReport[]
+  comments    RecordComment[]        @relation("CycleComments")
+
+  @@unique([workspaceId, year, week])
+  @@index([workspaceId, year, week])
+  @@map("weekly_report_cycles")
+}
+
+/// Member or cycle-template weekly report document with Markdown JSON body.
+model WeeklyReport {
+  id               String                 @id @default(uuid(7)) @db.Uuid
+  workspaceId      String                 @db.Uuid
+  cycleId          String                 @db.Uuid
+  authorId         String                 @db.Uuid
+  /// When kind=member, optional template this submission was written against.
+  sourceTemplateId String?                @db.Uuid
+  /// When kind=template, optional send-settings stream this format/overview belongs to.
+  settingsId       String?                @db.Uuid
+  /// member | template
+  kind             String
+  title            String
+  /// draft | submitted | shared
+  status           String                 @default("draft")
+  /// Author removed this row from「我的周报」. Submitted and shared rows stay
+  /// so the Leader parent still shows the copy that was already sent.
+  hiddenFromAuthor Boolean                @default(false)
+  content          Json
+  submittedAt      DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cycle            WeeklyReportCycle      @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  author           User                   @relation("WeeklyReportAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  sourceTemplate   WeeklyReport?          @relation("TemplateSubmissions", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  submissions      WeeklyReport[]         @relation("TemplateSubmissions")
+  settings         WeeklyReportTemplate?  @relation(fields: [settingsId], references: [id], onDelete: SetNull)
+  favorites        WeeklyReportFavorite[]
+  comments         RecordComment[]        @relation("ReportComments")
+  collectRuns      WeeklyReportCollectRun[]
+
+  @@index([workspaceId, authorId])
+  @@index([cycleId, kind])
+  @@index([cycleId, authorId, kind])
+  @@index([sourceTemplateId])
+  @@index([settingsId])
+  @@map("weekly_reports")
+}
+
+model WeeklyReportFavorite {
+  userId    String       @db.Uuid
+  reportId  String       @db.Uuid
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  report    WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@id([userId, reportId])
+  @@index([reportId])
+  @@map("weekly_report_favorites")
+}
+
+/// Per-user send configuration (周报设置); not shared across Workspace members.
+model WeeklyReportTemplate {
+  id              String                          @id @default(uuid(7)) @db.Uuid
+  workspaceId     String                          @db.Uuid
+  /// Owning User; list/mutate/apply are private to this user within the Workspace.
+  ownerId         String                          @db.Uuid
+  name            String
+  /// weekly
+  frequency       String                          @default("weekly")
+  sendTime        String                          @default("15:00")
+  /// ISO weekday 1=Monday … 7=Sunday; default Friday.
+  sendWeekday     Int                             @default(5)
+  dimensions      Json
+  mainTitles      Json
+  allMembers      Boolean                         @default(false)
+  /// When true, this settings row is an active send stream (multiple allowed per owner).
+  applied         Boolean                         @default(false)
+  /// When true with applied, scheduled/periodic send is allowed.
+  scheduleEnabled Boolean                         @default(false)
+  createdAt       DateTime                        @default(now())
+  updatedAt       DateTime                        @updatedAt
+  workspace       Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner           User                            @relation("WeeklyReportTemplateOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  recipients      WeeklyReportTemplateRecipient[]
+  reports         WeeklyReport[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, ownerId])
+  @@index([workspaceId, applied])
+  @@map("weekly_report_templates")
+}
+
+model WeeklyReportTemplateRecipient {
+  templateId String               @db.Uuid
+  userId     String               @db.Uuid
+  template   WeeklyReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([templateId, userId])
+  @@index([userId])
+  @@map("weekly_report_template_recipients")
+}
+
+model RecordNote {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  authorId    String    @db.Uuid
+  title       String
+  body        String    @default("")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author      User      @relation("RecordNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, authorId])
+  @@map("record_notes")
+}
+
+/// Side-panel comments on Record subjects; assistant authorType reserved for future AI.
+model RecordComment {
+  id                 String                          @id @default(uuid(7)) @db.Uuid
+  workspaceId        String                          @db.Uuid
+  /// report | cycle
+  subjectType        String
+  reportId           String?                         @db.Uuid
+  cycleId            String?                         @db.Uuid
+  /// Optional side-chat session; null = legacy pre-session rows.
+  assistantSessionId String?                         @db.Uuid
+  /// user | system | assistant
+  authorType         String
+  authorUserId       String?                         @db.Uuid
+  body               String
+  payload            Json?
+  createdAt          DateTime                        @default(now())
+  workspace          Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  authorUser         User?                           @relation("RecordCommentAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  report             WeeklyReport?                   @relation("ReportComments", fields: [reportId], references: [id], onDelete: Cascade)
+  cycle              WeeklyReportCycle?              @relation("CycleComments", fields: [cycleId], references: [id], onDelete: Cascade)
+  assistantSession   WeeklyReportAssistantChatSession? @relation(fields: [assistantSessionId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, subjectType, createdAt])
+  @@index([reportId])
+  @@index([cycleId])
+  @@index([assistantSessionId])
+  @@map("record_comments")
+}

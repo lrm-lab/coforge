@@ -1,6 +1,4 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import {
   AgentMigrations,
   FINISHED_AGENT_MIGRATION_STATES,
@@ -8,6 +6,7 @@ import {
   type MigrationParticipant,
 } from "#src/server/agent-migrations/agent-migrations.server";
 import { memoryStore } from "./helpers/agent-migration-memory-store";
+import { readPrismaSchema } from "./helpers/prisma-schema";
 
 const workspaceId = "workspace-1";
 const source = { workspaceId, computerId: "computer-a" };
@@ -47,7 +46,7 @@ async function step(
 const MANIFEST = { format: "tar+gzip", sha256: "abc", chunks: [] };
 
 test("the one-active index finishes on the same states as the domain", () => {
-  const schema = readFileSync(join(import.meta.dir, "../prisma/schema.prisma"), "utf8");
+  const schema = readPrismaSchema();
   // Spelled as AND-ed `<>` rather than `NOT IN`: PostgreSQL stores `NOT IN` as `<> ALL (ARRAY…)`,
   // which Prisma's diff never matches back to the schema, so every `migrate dev` would re-create it.
   const predicate = FINISHED_AGENT_MIGRATION_STATES.map(

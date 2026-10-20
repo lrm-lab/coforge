@@ -1,0 +1,41 @@
+/// Shared assistant configuration; each member's private Agent isolates native sessions,
+/// credentials, working directories and read cursors.
+model WorkspaceAssistant {
+  workspaceId String @id @db.Uuid
+  displayName String @default("通用助手")
+  createdAt DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sessions WorkspaceAssistantSession[]
+
+  @@map("workspace_assistants")
+}
+
+model WorkspaceAssistantSession {
+  id String @id @default(uuid(7)) @db.Uuid
+  workspaceId String @db.Uuid
+  userId String @db.Uuid
+  agentId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  assistant WorkspaceAssistant @relation(fields: [workspaceId], references: [workspaceId], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent Agent @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  readCursors WorkspaceAssistantReadCursor[]
+
+  @@unique([workspaceId, userId])
+  @@unique([agentId, workspaceId])
+  @@index([userId])
+  @@map("workspace_assistant_sessions")
+}
+
+/// Independent consumption state for delegated reads; canonical messages remain in conversations.
+model WorkspaceAssistantReadCursor {
+  sessionId String @db.Uuid
+  conversationId String @db.Uuid
+  /// Empty for the parent conversation, otherwise the full thread-root UUID.
+  scope String @default("")
+  readThroughSequence Int @default(0)
+  session WorkspaceAssistantSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, conversationId, scope])
+  @@map("workspace_assistant_read_cursors")
+}

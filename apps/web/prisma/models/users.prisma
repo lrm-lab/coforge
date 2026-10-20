@@ -1,0 +1,119 @@
+model User {
+  workspaceAssistantSessions WorkspaceAssistantSession[]
+  id                          String                          @id @default(uuid(7)) @db.Uuid
+  username                    String                          @unique
+  /// The latest email the identity provider reported at login. Not unique and never an identity key.
+  email                       String?
+  /// The name teammates see. Required, as Slack requires a name: an account starts with the name
+  /// its sign-in provider reported (`initialDisplayName`), and a person confirms it at first
+  /// sign-in. A person is never shown by `username`.
+  displayName                 String
+  /// When the person finished first sign-in (confirmed their name and made their Workspace); null
+  /// until then, which is what sends them to that step.
+  welcomedAt                  DateTime?
+  description                 String                          @default("")
+  /// An image object key, or `preset:<id>` for a platform picture the app serves itself.
+  avatarObjectKey             String?
+  avatarContentType           String?
+  createdAt                   DateTime                        @default(now())
+  preferences                 UserPreference?
+  identities                  UserIdentity[]
+  gitHubConnection            GitHubConnection?
+  gitHubAuthorization         GitHubAuthorization?
+  gitHubUserInstallations     GitHubUserInstallation[]
+  memberships                 WorkspaceMembership[]
+  pendingMentionActions       PendingMentionAction[]
+  createdJoinLinks            WorkspaceJoinLink[]
+  agents                      Agent[]                     @relation("AgentOwner")
+  deletedAgents               Agent[]                     @relation("AgentDeletedBy")
+  weeklyReportAssistants        WeeklyReportAssistant[]
+  weeklyReportAssistantChatSessions WeeklyReportAssistantChatSession[]
+  weeklyReportCollectorBindings WeeklyReportCollectorBinding[]
+  weeklyReportCollectRuns       WeeklyReportCollectRun[]
+  agentApiKeys                AgentApiKey[]
+  daemonApiKeys               DaemonApiKey[]
+  computers                   Computer[]
+  submittedServerConnections  WorkspaceServerConnection[]
+  requestedHostJobs           HostJob[]
+  conversationMembers         ConversationMember[]
+  webPushSubscriptions        WebPushSubscription[]
+  attachments                 Attachment[]
+  deviceAuthorizations        DeviceAuthorization[]
+  weeklyReportCyclesCreated   WeeklyReportCycle[]             @relation("WeeklyReportCycleCreator")
+  weeklyReportsAuthored       WeeklyReport[]                  @relation("WeeklyReportAuthor")
+  weeklyReportFavorites       WeeklyReportFavorite[]
+  weeklyTemplateRecipients    WeeklyReportTemplateRecipient[]
+  weeklyTemplatesOwned        WeeklyReportTemplate[]          @relation("WeeklyReportTemplateOwner")
+  recordNotesAuthored         RecordNote[]                    @relation("RecordNoteAuthor")
+  recordCommentsAuthored      RecordComment[]                 @relation("RecordCommentAuthor")
+  committedActionCards        ActionCard[]
+  requestedAgentMigrations    AgentMigration[]
+
+  @@map("users")
+}
+
+/// One row per user, created on the first saved preference. Every setting is nullable:
+/// NULL means "not chosen", and the default lives in code so it can change later.
+/// Closed sets are TEXT guarded by CHECK constraints in the migration, not Postgres enums.
+model UserPreference {
+  userId                      String   @id @db.Uuid
+  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeZone                    String?
+  browserNotificationsEnabled Boolean?
+  /// Slack's "When I view a channel" behavior: newest-read, first-unread, or newest-unread.
+  conversationOpenMode        String?
+  /// Clock display: 12h or 24h. NULL follows the display language. Display only.
+  timeFormat                  String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@map("user_preferences")
+}
+
+model WebPushSubscription {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  userId         String    @db.Uuid
+  endpoint       String    @unique
+  p256dh         String
+  auth           String
+  expirationTime DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("web_push_subscriptions")
+}
+
+model UserIdentity {
+  id              String @id @default(uuid(7)) @db.Uuid
+  userId          String @db.Uuid
+  provider        String
+  providerSubject String
+  user            User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@index([userId])
+  @@map("user_identities")
+}
+
+/// Durable RFC 8628 device grant: approval and polling may hit different replicas or span deploys.
+/// Hash both codes: the device code is a bearer credential and the short user code is guessable.
+model DeviceAuthorization {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  deviceCodeHash String    @unique @map("device_code_hash")
+  userCodeHash   String    @unique @map("user_code_hash")
+  /// Null until a signed-in browser approves this grant; the token is minted for this user.
+  userId         String?   @map("user_id") @db.Uuid
+  status         String    @default("pending")
+  expiresAt      DateTime  @map("expires_at")
+  approvedAt     DateTime? @map("approved_at")
+  /// Last poll, so a Computer polling faster than the advertised interval gets `slow_down`.
+  lastPolledAt   DateTime? @map("last_polled_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  user           User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([userId])
+  @@map("device_authorizations")
+}

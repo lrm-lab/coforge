@@ -1,0 +1,112 @@
+model OpenVikingCitationRecord {
+  id               String                @id @default(uuid(7)) @db.Uuid
+  workspaceId      String                @map("workspace_id") @db.Uuid
+  citationId       String                @map("citation_id")
+  accountId        String                @map("account_id")
+  uri              String
+  contentHash      String?               @map("content_hash")
+  contentVersion   String?               @map("content_version")
+  matchedLevel     String                @map("matched_level")
+  title            String?
+  excerpt          String?
+  boundOperationId String                @map("bound_operation_id")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  workspace        Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  offerCitations   MemoryOfferCitation[]
+
+  @@unique([workspaceId, citationId])
+  @@index([workspaceId, boundOperationId])
+  @@index([workspaceId, accountId])
+  @@map("openviking_citation_records")
+}
+
+/// Profile-neutral Memory Offer. Typed citation refs live in MemoryOfferCitation.
+model MemoryOfferRecord {
+  id                 String                @id @default(uuid(7)) @db.Uuid
+  workspaceId        String                @map("workspace_id") @db.Uuid
+  operationId        String                @map("operation_id")
+  conversationId     String                @map("conversation_id")
+  recipientAgentId   String                @map("recipient_agent_id")
+  recipientRationale String                @map("recipient_rationale")
+  messageId          String                @map("message_id")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  workspace          Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  citations          MemoryOfferCitation[]
+
+  @@unique([workspaceId, operationId])
+  @@map("memory_offer_records")
+}
+
+model MemoryOfferCitation {
+  id                   String                  @id @default(uuid(7)) @db.Uuid
+  workspaceId          String                  @map("workspace_id") @db.Uuid
+  offerOperationId     String                  @map("offer_operation_id")
+  citationKind         String                  @map("citation_kind")
+  citationId           String                  @map("citation_id")
+  openvikingCitationId String                  @map("openviking_citation_id")
+  createdAt            DateTime                @default(now()) @map("created_at")
+  workspace            Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade, map: "memory_offer_citations_workspace_fkey")
+  offer                MemoryOfferRecord       @relation(fields: [workspaceId, offerOperationId], references: [workspaceId, operationId], onDelete: Cascade, map: "memory_offer_citations_offer_fkey")
+  openvikingCitation   OpenVikingCitationRecord @relation(fields: [workspaceId, openvikingCitationId], references: [workspaceId, citationId], onDelete: Restrict, map: "memory_offer_citations_openviking_citation_fkey")
+
+  @@unique([workspaceId, offerOperationId, citationKind, citationId])
+  @@index([workspaceId, citationKind, citationId])
+  @@map("memory_offer_citations")
+}
+
+/// Server-authored frozen Memory Hint; delivery creates one exposure.
+model MemoryHintRecord {
+  id              String                   @id @default(uuid(7)) @db.Uuid
+  workspaceId     String                   @map("workspace_id") @db.Uuid
+  operationId     String                   @map("operation_id")
+  targetAgentId   String                   @map("target_agent_id") @db.Uuid
+  memoryAgentId   String                   @map("memory_agent_id") @db.Uuid
+  conversationId  String                   @map("conversation_id") @db.Uuid
+  bodyHash        String                   @map("body_hash")
+  sources         Json
+  ttlMilliseconds Int                      @map("ttl_milliseconds")
+  deliveredAt     DateTime?                @map("delivered_at")
+  expiresAt       DateTime?                @map("expires_at")
+  messageId       String?                  @unique @map("message_id") @db.Uuid
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  workspace       Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  message         Message?                 @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  dispositions    MemoryDispositionEvent[]
+
+  @@unique([workspaceId, operationId])
+  @@unique([workspaceId, id])
+  @@index([workspaceId, targetAgentId])
+  @@map("memory_hint_records")
+}
+
+/// Append-only authenticated target decisions. At most defer then one terminal decision.
+model MemoryDispositionEvent {
+  id                 String                      @id @default(uuid(7)) @db.Uuid
+  workspaceId        String                      @map("workspace_id") @db.Uuid
+  hintId             String                      @map("hint_id") @db.Uuid
+  sequence           Int
+  targetAgentId      String                      @map("target_agent_id") @db.Uuid
+  decision           String
+  reason             String
+  intendedActionRefs String[]                    @map("intended_action_refs")
+  skippedSourceRefs  String[]                    @map("skipped_source_refs")
+  decidedAt          DateTime                    @map("decided_at")
+  hint               MemoryHintRecord            @relation(fields: [workspaceId, hintId], references: [workspaceId, id], onDelete: Cascade)
+  citations          MemoryDispositionCitation[]
+
+  @@unique([hintId, sequence])
+  @@map("memory_disposition_events")
+}
+
+/// Per-source consideration/rejection. Never an applied or utility event.
+model MemoryDispositionCitation {
+  id            String                 @id @default(uuid(7)) @db.Uuid
+  dispositionId String                 @map("disposition_id") @db.Uuid
+  citationId    String                 @map("citation_id")
+  role          String
+  source        Json
+  disposition   MemoryDispositionEvent @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+
+  @@unique([dispositionId, citationId])
+  @@map("memory_disposition_citations")
+}

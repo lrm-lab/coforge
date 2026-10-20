@@ -5,8 +5,10 @@ approved decision supersedes it:
 
 ```text
 apps/web/
+├── prisma.config.ts             # schema: "prisma" (the whole directory)
 ├── prisma/
-│   ├── schema.prisma
+│   ├── schema.prisma            # generator and datasource only
+│   ├── models/<domain>.prisma
 │   └── migrations/
 └── src/server/
     └── db/
@@ -14,7 +16,8 @@ apps/web/
         └── repositories/
 ```
 
-- `schema.prisma` is the single declarative model for tables owned by
+- The `prisma/` schema (`schema.prisma` plus every `models/*.prisma` file, one
+  per domain) is the single declarative model for tables owned by
   Web/backend. Generated client output is an implementation artifact and must
   not be hand-edited or imported by browser code.
 - `prisma migrate dev` is for a developer's isolated Docker PostgreSQL only;
