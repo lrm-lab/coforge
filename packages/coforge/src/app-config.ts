@@ -1,5 +1,10 @@
-import type { AgentAppConfigView } from "@lrm/coforge-sdk/agent";
+import type {
+  AgentAppConfigPatch,
+  AgentAppConfigResponse,
+  AgentAppConfigView,
+} from "@lrm/coforge-sdk/agent";
 import type { AppConfigValues } from "@lrm/coforge-sdk/internal";
+import { CliError, withOutputMode } from "#src/cli-error";
 
 /** `coforge app config`: read one of the Agent's own Apps' config, or change it when any `--set`
  * or `--unset` is given. */
@@ -93,4 +98,30 @@ export function formatAppConfig(config: AgentAppConfigView): string {
       `Change it with: coforge app config --app ${config.appId} --set <key>=<value> --unset <key>`,
     );
   return lines.join("\n");
+}
+
+/** The transport `coforge app config` reads and changes the config through. */
+export type AppConfigTransport = {
+  appConfigGet?(appId: string): Promise<AgentAppConfigResponse>;
+  appConfigUpdate?(appId: string, change: AgentAppConfigPatch): Promise<AgentAppConfigResponse>;
+};
+
+/** Reads the config, and changes it against the revision just read when the invocation does. */
+export async function runAppConfig(invocation: AppConfigInvocation, transport: AppConfigTransport) {
+  if (!transport.appConfigGet || !transport.appConfigUpdate)
+    throw new Error("App config transport is unavailable");
+  const { appId, set, unset } = invocation;
+  const current = await transport.appConfigGet(appId);
+  let result = current;
+  if (Object.keys(set).length > 0 || unset.length > 0)
+    result = await transport
+      .appConfigUpdate(appId, { expectedRevision: current.revision, set, unset })
+      .catch((error: unknown) => {
+        if (!(error instanceof CliError) || error.code !== "REVISION_CONFLICT") throw error;
+        throw withOutputMode(error, invocation.json ? "json" : "text", {
+          suggestedNextAction:
+            "Rerun the same command: it reads the current revision and applies your change to it.",
+        });
+      });
+  return invocation.json ? result : formatAppConfig(result);
 }

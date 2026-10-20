@@ -90,7 +90,7 @@ model ActionCard {
   messageId         String       @id @db.Uuid
   conversationId    String       @db.Uuid
   workspaceId       String       @db.Uuid
-  /// channel:create | agent:create | channel:add_member
+  /// channel:create | agent:create | channel:add_member | app:grant_agent (server-posted)
   kind              String
   payload           Json
   draftHint         String?

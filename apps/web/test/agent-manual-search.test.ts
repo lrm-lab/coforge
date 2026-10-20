@@ -160,6 +160,7 @@ test("P3 topics hold the how-to moved out of the standing prompt", () => {
   expect(findManualTopic("memory")?.body).toContain("# <Your Name>");
   expect(MANUAL_TOPICS.map((topic) => topic.slug)).toEqual([
     "action-cards",
+    "apps",
     "attachments",
     "channels",
     "etiquette",

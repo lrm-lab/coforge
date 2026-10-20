@@ -4,10 +4,10 @@ import { AGENT_NAME_MAX_LENGTH, AGENT_NAME_PATTERN } from "#src/internal/agent-n
 import { CHANNEL_NAME_PATTERN } from "#src/internal/channel-references";
 
 /**
- * Agent-prepared action card contract (`coforge action prepare`). CoForge v1
- * supports exactly three card kinds: `channel:create`, `agent:create`,
- * `channel:add_member`. `integration:*` kinds are intentionally out of scope
- * for this PR.
+ * Agent-prepared action card contract (`coforge action prepare`). An Agent
+ * prepares exactly three card kinds: `channel:create`, `agent:create`,
+ * `channel:add_member`. A fourth, `app:grant_agent`, only the server posts: it
+ * asks a person to approve an Agent's use of an app (`coforge app token`).
  *
  * An Agent identifies humans, Agents, channels, and computers by handle
  * (`@alice`, `alice`, `#general`, `general`) or UUID. `ActionCards.prepare`
@@ -90,7 +90,9 @@ export const actionCardActionSchema = z.discriminatedUnion("type", [
   channelAddMemberActionSchema,
 ]);
 export type ActionCardAction = z.infer<typeof actionCardActionSchema>;
-export type ActionCardKind = ActionCardAction["type"];
+/** The server-posted approval card for an Agent's use of an app; never an Agent's action. */
+export const APP_GRANT_AGENT_CARD_KIND = "app:grant_agent";
+export type ActionCardKind = ActionCardAction["type"] | typeof APP_GRANT_AGENT_CARD_KIND;
 
 /**
  * Cross-field rules the schema alone cannot express. Returns a human-readable
@@ -130,10 +132,21 @@ export type ResolvedChannelAddMemberPayload = {
   humanIds?: string[];
   agentIds?: string[];
 };
+/** Approving it approves the Agent's waiting request `requestId` for the app `appKey`, granting
+ * `scopes`; denying it denies the request. */
+export type ResolvedAppGrantAgentPayload = {
+  type: typeof APP_GRANT_AGENT_CARD_KIND;
+  requestId: string;
+  agentId: string;
+  appKey: string;
+  appName: string;
+  scopes: string[];
+};
 export type ResolvedActionCardPayload =
   | ResolvedChannelCreatePayload
   | ResolvedAgentCreatePayload
-  | ResolvedChannelAddMemberPayload;
+  | ResolvedChannelAddMemberPayload
+  | ResolvedAppGrantAgentPayload;
 
 /** `POST /api/agent/v1/actions/prepare` request body. */
 export type AgentActionPrepareRequest = {

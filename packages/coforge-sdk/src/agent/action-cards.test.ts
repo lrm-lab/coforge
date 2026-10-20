@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   actionCardActionSchema,
+  APP_GRANT_AGENT_CARD_KIND,
   agentCreateActionSchema,
   channelAddMemberActionSchema,
   channelCreateActionSchema,
@@ -206,4 +207,13 @@ describe("validateActionCardAction", () => {
       "channel:add_member must include at least one human or agent",
     );
   });
+});
+
+test("an Agent cannot prepare the server's app approval card", () => {
+  const parsed = actionCardActionSchema.safeParse({
+    type: APP_GRANT_AGENT_CARD_KIND,
+    requestId: "r-1",
+    appKey: "acme-notes",
+  });
+  expect(parsed.success).toBe(false);
 });

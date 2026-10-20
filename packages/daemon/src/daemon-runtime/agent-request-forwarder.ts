@@ -4,6 +4,7 @@ import type {
   AgentAppConfigGetRequest,
   AgentAppConfigResponse,
   AgentAppConfigUpdateRequest,
+  AgentAppRequest,
   AgentManualGetRequest,
   AgentManualGetResponse,
   AgentManualSearchRequest,
@@ -48,6 +49,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "profileUpdate"
     | "appConfigGet"
     | "appConfigUpdate"
+    | "agentApp"
     | "agentMemoryDisposition"
     | "agentOpenviking"
     | "mentionPending"
@@ -221,6 +223,15 @@ export class AgentRequestForwarder {
       request,
       agentApiKey,
     );
+  }
+
+  async agentApp(
+    context: string,
+    request: AgentAppRequest,
+    agentApiKey: string,
+  ): Promise<Response> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall("agentApp", NOT_CONNECTED)(request, agentApiKey);
   }
 
   async agentMemoryDisposition(

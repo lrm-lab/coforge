@@ -26,7 +26,8 @@ export type AgentAccessFacts = {
 
 export type AgentAccessDecision =
   | { kind: "not_installed" }
-  /** The active grant covers the request; `scopes` are the grant's. */
+  /** The active grant covers the request; `scopes` are the grant's the app still allows, so
+   * narrowing an app's allowed scopes takes effect for the next token. */
   | { kind: "granted"; scopes: string[] }
   /** The Agent never had a grant for the app: it gets one now, with `scopes`. */
   | { kind: "grant_automatically"; scopes: string[] }
@@ -47,7 +48,7 @@ export function decideAgentAccess(facts: AgentAccessFacts): AgentAccessDecision 
   const { grant, pendingRequest } = facts;
   if (!grant) return { kind: "grant_automatically", scopes: requested };
   if (!grant.revoked && grantCovers(grant.scopes, requested))
-    return { kind: "granted", scopes: [...grant.scopes] };
+    return { kind: "granted", scopes: allowedGrantScopes(grant.scopes, facts.allowedScopes) };
   if (pendingRequest)
     return {
       kind: "needs_approval",

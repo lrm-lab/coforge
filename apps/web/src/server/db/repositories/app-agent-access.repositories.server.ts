@@ -5,12 +5,14 @@ import { isWorkspaceMemberRole } from "#src/server/workspaces/member-role.server
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import type { AppAgentAccessStore } from "#src/server/app-agent-access/app-agent-access.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { settleAppGrantCard } from "#src/server/conversations/app-grant-cards.server";
 
 const INSTALLED_APP = {
   id: true,
   key: true,
   name: true,
   description: true,
+  whenToUse: true,
   homepageUrl: true,
   allowedScopes: true,
 } as const;
@@ -123,6 +125,18 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
     }));
   }
 
+  async listGrantStates(agentId: string) {
+    const rows = await this.db.appAgentGrant.findMany({
+      where: { agentId },
+      select: { appId: true, scopes: true, revokedAt: true },
+    });
+    return rows.map((row) => ({
+      appId: row.appId,
+      scopes: row.scopes,
+      revoked: row.revokedAt !== null,
+    }));
+  }
+
   async findGrant(appId: string, agentId: string) {
     const row = await this.db.appAgentGrant.findUnique({
       where: { appId_agentId: { appId, agentId } },
@@ -149,22 +163,21 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
       : undefined;
   }
 
-  async giveGrant(grant: GrantInput) {
-    await this.db.$transaction(async (tx) => {
+  giveGrant(grant: GrantInput) {
+    return this.db.$transaction(async (tx) => {
       await upsertGrant(tx, grant);
       const pending = await tx.appAgentAccessRequest.findFirst({
         where: { appId: grant.appId, agentId: grant.agentId, status: PENDING },
         select: { id: true, scopes: true },
       });
-      if (pending && grantCovers(grant.scopes, pending.scopes))
-        await tx.appAgentAccessRequest.updateMany({
-          where: { id: pending.id, status: PENDING },
-          data: {
-            status: "approved",
-            decidedAt: new Date(),
-            decidedByUserId: grant.grantedByUserId,
-          },
-        });
+      if (!pending || !grantCovers(grant.scopes, pending.scopes)) return undefined;
+      const { count } = await tx.appAgentAccessRequest.updateMany({
+        where: { id: pending.id, status: PENDING },
+        data: { status: "approved", decidedAt: new Date(), decidedByUserId: grant.grantedByUserId },
+      });
+      if (count !== 1) return undefined;
+      await settleAppGrantCard(tx, pending.id, { approved: true, userId: grant.grantedByUserId });
+      return pending.id;
     });
   }
 
@@ -220,6 +233,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
         data: { status: "approved", decidedAt: new Date(), decidedByUserId: input.userId },
       });
       if (count !== 1) return false;
+      await settleAppGrantCard(tx, input.requestId, { approved: true, userId: input.userId });
       const { grant } = input;
       const active = await tx.appAgentGrant.findFirst({
         where: { appId: grant.appId, agentId: grant.agentId, revokedAt: null },
@@ -236,11 +250,15 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
     });
   }
 
-  async denyRequest(input: { agentId: string; requestId: string; userId: string }) {
-    const { count } = await this.db.appAgentAccessRequest.updateMany({
-      where: { id: input.requestId, agentId: input.agentId, status: PENDING },
-      data: { status: "denied", decidedAt: new Date(), decidedByUserId: input.userId },
+  denyRequest(input: { agentId: string; requestId: string; userId: string }) {
+    return this.db.$transaction(async (tx) => {
+      const { count } = await tx.appAgentAccessRequest.updateMany({
+        where: { id: input.requestId, agentId: input.agentId, status: PENDING },
+        data: { status: "denied", decidedAt: new Date(), decidedByUserId: input.userId },
+      });
+      if (count !== 1) return false;
+      await settleAppGrantCard(tx, input.requestId, { approved: false, userId: input.userId });
+      return true;
     });
-    return count === 1;
   }
 }

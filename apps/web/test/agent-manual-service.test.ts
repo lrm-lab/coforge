@@ -174,3 +174,17 @@ test("recordManualEvent forwards the event to the repository on success", async 
     resultSlugs: ["github"],
   });
 });
+
+test("an Agent finds how to call its Workspace's apps by searching for a token", () => {
+  const outcome = resolveManualSearch({
+    query: "app token",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+  });
+  expect(outcome.status).toBe(200);
+  if (outcome.status !== 200) throw new Error("expected a hit");
+  expect(outcome.resultSlugs[0]).toBe("apps");
+  const topic = resolveManualGet({ topic: "apps", intent: VALID_INTENT, reason: VALID_REASON });
+  if (topic.status !== 200) throw new Error("expected a hit");
+  expect(topic.body.content).toContain("coforge app token --app");
+});

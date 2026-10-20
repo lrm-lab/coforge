@@ -4,6 +4,7 @@
 // works identically in the Vite production build and in the test runner without a separate
 // loader or a generated TS module.
 import actionCardsBody from "#src/server/agents/manual/topics/action-cards.md?raw";
+import appsBody from "#src/server/agents/manual/topics/apps.md?raw";
 import attachmentsBody from "#src/server/agents/manual/topics/attachments.md?raw";
 import channelsBody from "#src/server/agents/manual/topics/channels.md?raw";
 import etiquetteBody from "#src/server/agents/manual/topics/etiquette.md?raw";
@@ -31,6 +32,13 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     summary:
       "How to post a typed action card with coforge action prepare, the three supported kinds, and how to tell pending from executed without claiming you created the resource.",
     body: actionCardsBody,
+  },
+  {
+    slug: "apps",
+    title: "Using your Workspace's apps",
+    summary:
+      "coforge app list and coforge app token: which apps you can use, running a program with a five-minute app token on file descriptor 3, and asking a person to approve with --target.",
+    body: appsBody,
   },
   {
     slug: "attachments",

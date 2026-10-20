@@ -148,5 +148,12 @@
   "agent_apps_homepage": "Homepage",
   "agent_apps_empty": "No apps have access yet",
   "agent_apps_empty_description": "Apps installed in this Workspace get access the first time this Agent uses them.",
-  "agent_apps_grant_no_apps_description": "Workspace owners and admins register apps in Settings → Applications."
+  "agent_apps_grant_no_apps_description": "Workspace owners and admins register apps in Settings → Applications.",
+  "app_card_title": "Approve app access",
+  "app_card_request": "Wants to use {app}",
+  "app_card_scopes": "Scopes: {scopes}",
+  "app_card_denied_reason": "Only Workspace owners and admins, or the Agent's creator, can approve this.",
+  "app_card_approving": "Approving…",
+  "app_card_denying": "Denying…",
+  "app_card_denied": "Denied"
 }

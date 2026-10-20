@@ -68,4 +68,33 @@ access token: `sub` and, per scope: `profile` — `name`, `preferred_username`, 
 still ask for and the consent still covers, and refuses the token once the person
 left the Workspace, the consent was revoked, the app uninstalled, or the code was presented twice.
 The access token's audience is `<issuer>/me`; the tokens Agents get for an app carry the app's
-client ID as their audience.
+client ID as their audience ([Agent tokens](#agent-tokens)).
+
+An app tells the two apart by `type`: a person's identity comes from UserInfo (`type: "user"` with
+the `identity` scope), while an Agent's token carries `type: "agent"` itself, with the Agent's id as
+`sub`. An Agent token is not accepted at UserInfo; the app reads it, after verifying it, as below.
+
+## Agent tokens
+
+An Agent calls one of its Workspace's apps with a token it gets from `coforge app token`
+([Agent Apps](../agent-cli/apps.md)), over the Agent HTTPS API
+(`POST /api/agent/v1/apps/{key}/token`), never from the endpoints above. It needs the app installed
+in its Workspace and a grant ([Agents' app access](../database-schema/app-agent-access.md)): the
+first use grants it automatically; after a person revoked it, a person's approval does, through an
+approval card. Without an issuer configured, no Agent token is issued.
+
+The token is an RFC 9068 JWT access token signed with the issuer's current key (`ES256`, header
+`typ: at+jwt`, `kid`), valid five minutes, with no refresh: the Agent asks again at each use.
+
+| Claim | Value |
+| --- | --- |
+| `iss` | The issuer |
+| `aud`, `client_id` | The app's client ID (its key) |
+| `sub` | The Agent's id |
+| `type` | `agent` |
+| `workspace_id`, `workspace_slug` | The Agent's Workspace |
+| `scope` | The grant's scopes the app still allows, space-separated |
+| `iat`, `exp`, `jti` | Issued, expiry (`iat` + 300), and a unique id |
+
+An app verifies it like any RFC 9068 token: the signature against `<issuer>/jwks` by `kid`, `typ`
+`at+jwt`, `iss` the issuer, `aud` its own client ID, and `exp`.

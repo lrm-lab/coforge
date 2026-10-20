@@ -18,6 +18,7 @@ import type {
   AgentProfileUpdateRequest,
   AgentProfileUpdateResponse,
   AgentAppConfigGetRequest,
+  AgentAppRequest,
   AgentAppConfigResponse,
   AgentAppConfigUpdateRequest,
   AgentMentionExecuteRequest,
@@ -167,6 +168,7 @@ import {
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import type { AgentRuntimeProviderConfig } from "#src/code-agent/contract";
 import type { AgentLaunchIdentity } from "#src/code-agent/agent-instructions";
+import { parseAgentLaunchIdentity } from "./agent-launch-identity";
 import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
 import { controlPayloadShape } from "./control-payload";
 import { connectionLiveness, INBOUND_STALLED_MS } from "./connection-liveness";
@@ -458,6 +460,7 @@ export interface DaemonConnectionClient {
   agentAttachmentUploadSessionComplete?(uploadId: string, agentApiKey: string): Promise<Response>;
   agentAttachmentUploadSessionCancel?(uploadId: string, agentApiKey: string): Promise<Response>;
   agentAttachmentUploadSessionGet?(uploadId: string, agentApiKey: string): Promise<Response>;
+  agentApp?(request: AgentAppRequest, agentApiKey: string): Promise<Response>;
   requestAgentApiKey?(input: { agentId: string; workspaceId: string }): Promise<string>;
   requestAgentLaunchConfig?(input: {
     agentId: string;
@@ -1838,6 +1841,20 @@ export class DaemonConnection implements DaemonConnectionClient {
     );
   }
 
+  /** `coforge app list|token`, sent on as it is; the cloud's response is the Agent's answer. */
+  async agentApp(request: AgentAppRequest, agentApiKey: string): Promise<Response> {
+    this.#assertConnected();
+    const { list, token } = agentApiRoutes.cloud.apps;
+    const isToken = request.operation === "token";
+    const path = isToken ? token.path(request.appKey) : list.path;
+    return fetch(this.#serverEndpoint(`Agent app ${request.operation}`, path), {
+      decompress: false,
+      method: isToken ? token.method : list.method,
+      headers: agentHeaders(this.#agentKeys(agentApiKey), isToken),
+      ...(isToken ? { body: JSON.stringify({ target: request.target }) } : {}),
+    });
+  }
+
   /** One request against the Agent API key endpoint; `what` names the caller in errors. */
   async #agentApiKeyRequest(what: string, method: "POST" | "DELETE", body: unknown) {
     const response = await fetch(this.#serverEndpoint(what, "/api/agent-api-keys"), {
@@ -2522,65 +2539,6 @@ function parseAgentEnvironment(value: unknown): Record<string, string> {
   const envVars: Record<string, string> = Object.create(null);
   for (const [name, entry] of Object.entries(value)) envVars[name] = entry as string;
   return envVars;
-}
-
-const IDENTITY_NAME_MAX_LENGTH = 80;
-const IDENTITY_DESCRIPTION_MAX_LENGTH = 2000;
-const IDENTITY_OTHER_MAX_LENGTH = 200;
-
-/** A trimmed, length-capped wire string, or `undefined` for anything else (wrong type, empty
- * after trimming, or over the cap) — never a thrown error, so one bad field never invalidates
- * the rest of `identity`. */
-function parseIdentityString(value: unknown, maxLength: number): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed && trimmed.length <= maxLength ? trimmed : undefined;
-}
-
-function parseIdentityRuntimeContext(
-  value: unknown,
-): AgentLaunchIdentity["runtimeContext"] | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  const runtimeContext = {
-    workspaceId: parseIdentityString(record.workspaceId, IDENTITY_OTHER_MAX_LENGTH),
-    workspaceSlug: parseIdentityString(record.workspaceSlug, IDENTITY_OTHER_MAX_LENGTH),
-    workspaceName: parseIdentityString(record.workspaceName, IDENTITY_OTHER_MAX_LENGTH),
-    computerId: parseIdentityString(record.computerId, IDENTITY_OTHER_MAX_LENGTH),
-    computerName: parseIdentityString(record.computerName, IDENTITY_OTHER_MAX_LENGTH),
-    computerHostname: parseIdentityString(record.computerHostname, IDENTITY_OTHER_MAX_LENGTH),
-    computerOs: parseIdentityString(record.computerOs, IDENTITY_OTHER_MAX_LENGTH),
-    computerVersion: parseIdentityString(record.computerVersion, IDENTITY_OTHER_MAX_LENGTH),
-  };
-  const present = Object.fromEntries(
-    Object.entries(runtimeContext).filter(([, entry]) => entry !== undefined),
-  );
-  return Object.keys(present).length > 0
-    ? (present as AgentLaunchIdentity["runtimeContext"])
-    : undefined;
-}
-
-/**
- * Decode optional launch identity fields defensively for older/newer Web compatibility.
- * Invalid shapes drop the identity or sub-field instead of failing launch; only identity-derived
- * standing instructions degrade. Unlike runtime provider config/API keys, this parser never throws.
- */
-function parseAgentLaunchIdentity(value: unknown): AgentLaunchIdentity | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  const identity: AgentLaunchIdentity = {
-    ...(record.systemKind === "workspace-assistant"
-      ? { systemKind: "workspace-assistant" as const }
-      : {}),
-    name: parseIdentityString(record.name, IDENTITY_NAME_MAX_LENGTH),
-    displayName: parseIdentityString(record.displayName, IDENTITY_NAME_MAX_LENGTH),
-    description: parseIdentityString(record.description, IDENTITY_DESCRIPTION_MAX_LENGTH),
-    runtimeContext: parseIdentityRuntimeContext(record.runtimeContext),
-  };
-  const present = Object.fromEntries(
-    Object.entries(identity).filter(([, entry]) => entry !== undefined),
-  );
-  return Object.keys(present).length > 0 ? (present as AgentLaunchIdentity) : undefined;
 }
 
 function parseAgentRuntimeProviderConfig(value: unknown): AgentRuntimeProviderConfig | undefined {

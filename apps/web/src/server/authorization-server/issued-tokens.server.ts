@@ -35,6 +35,41 @@ export async function mintAccessToken(
     .sign(await privateKey(signingKeys));
 }
 
+/** An Agent's token for an app lives five minutes: it is asked for at each use. */
+export const AGENT_TOKEN_TTL_SECONDS = 300;
+
+/** An RFC 9068 JWT access token for the Agent `agentId` to call the app `appKey`: its audience is
+ * the app (its client ID), and `type: "agent"` tells it from a person's. Each one has its own
+ * `jti`. */
+export async function mintAgentAccessToken(
+  { issuer, signingKeys }: TokenIssuer,
+  token: {
+    agentId: string;
+    appKey: string;
+    workspaceId: string;
+    workspaceSlug: string;
+    scopes: readonly string[];
+  },
+  now: Date,
+): Promise<string> {
+  const issuedAt = epochSeconds(now);
+  return new SignJWT({
+    client_id: token.appKey,
+    type: "agent",
+    workspace_id: token.workspaceId,
+    workspace_slug: token.workspaceSlug,
+    scope: token.scopes.join(" "),
+  })
+    .setProtectedHeader(header(signingKeys, "at+jwt"))
+    .setIssuer(issuer)
+    .setSubject(token.agentId)
+    .setAudience(token.appKey)
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + AGENT_TOKEN_TTL_SECONDS)
+    .setJti(crypto.randomUUID())
+    .sign(await privateKey(signingKeys));
+}
+
 /** An OIDC Core §2 ID token for the app `clientId`, with `at_hash` binding `accessToken`
  * (§3.1.3.6). It carries no scope claims: with an access token issued, those are UserInfo's
  * (§5.4). */

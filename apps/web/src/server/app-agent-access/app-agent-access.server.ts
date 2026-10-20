@@ -1,3 +1,4 @@
+import type { AgentAppAccessState } from "@lrm/coforge-sdk/agent";
 import { AppError } from "#src/lib/app-error";
 import {
   agentGrantScopes,
@@ -6,7 +7,11 @@ import {
 } from "#src/features/apps/agent-app-access";
 import type { WorkspaceMemberRole } from "#src/features/workspaces/workspace-roles";
 import { canSeeAgent } from "#src/server/agents/agent-visibility.server";
-import { canManageAgentAppAccess, decideAgentAccess } from "./access-rules.server";
+import {
+  canManageAgentAppAccess,
+  decideAgentAccess,
+  type AgentAccessDecision,
+} from "./access-rules.server";
 
 /** A person acting in the Workspace the request names. */
 export type AgentAppAccessActor = { workspaceId: string; userId: string };
@@ -16,6 +21,7 @@ export type InstalledAppView = {
   key: string;
   name: string;
   description: string;
+  whenToUse: string;
   homepageUrl: string | null;
   allowedScopes: string[];
 };
@@ -49,12 +55,18 @@ export type AgentAppAccessList = {
   pendingRequests: AgentAppRequestView[];
 };
 
+/** An installed app as the Agent itself lists it, with its access to the app. */
+export type AgentInstalledAppView = Omit<InstalledAppView, "allowedScopes"> & {
+  access: AgentAppAccessState;
+};
+
 /** The answer to an Agent asking to use an app. */
 export type AgentAccessOutcome =
   | { status: "not_installed" }
   /** `automatic` when this use gave the grant. */
   | { status: "granted"; scopes: string[]; automatic: boolean }
-  | { status: "pending"; requestId: string; scopes: string[] };
+  /** `appName` names the app to whoever approves. */
+  | { status: "pending"; requestId: string; scopes: string[]; appName: string };
 
 type InstalledApp = InstalledAppView & { id: string };
 type AgentRow = { ownerId: string; visibility: string; systemKind: string | null };
@@ -77,6 +89,10 @@ export interface AppAgentAccessStore {
   findInstalledApp(workspaceId: string, appKey: string): Promise<InstalledApp | undefined>;
   listActiveGrants(agentId: string): Promise<AgentAppGrantView[]>;
   listPendingRequests(agentId: string): Promise<AgentAppRequestView[]>;
+  /** Every grant the Agent has, active or revoked. */
+  listGrantStates(
+    agentId: string,
+  ): Promise<{ appId: string; scopes: string[]; revoked: boolean }[]>;
   /** The Agent's grant for the app, active or revoked. */
   findGrant(
     appId: string,
@@ -92,8 +108,9 @@ export interface AppAgentAccessStore {
     requestId: string,
   ): Promise<{ appKey: string; scopes: string[]; pending: boolean } | undefined>;
   /** Gives the grant a person chose, and approves, as `grant.grantedByUserId`, the Agent's pending
-   * request for the app when the grant covers it. */
-  giveGrant(grant: GrantInput): Promise<void>;
+   * request for the app when the grant covers it: that request's id. A decided request's approval
+   * card is settled with it. */
+  giveGrant(grant: GrantInput): Promise<string | undefined>;
   /** Creates the grant of an Agent's first use; `false` when the Agent already has a row. */
   createAutomaticGrant(grant: GrantInput): Promise<boolean>;
   /** `false` when the Agent has no active grant `grantId`. */
@@ -112,6 +129,15 @@ export interface AppAgentAccessStore {
   denyRequest(input: { agentId: string; requestId: string; userId: string }): Promise<boolean>;
 }
 
+/** What the Agent's next use of an installed app gets, as it lists the app. */
+function accessState(decision: AgentAccessDecision): AgentAppAccessState {
+  if (decision.kind === "granted") return "granted";
+  if (decision.kind === "grant_automatically") return "automatic";
+  return decision.kind === "needs_approval" && decision.pendingRequestId
+    ? "pending_approval"
+    : "needs_approval";
+}
+
 /** How many times a use is decided again after another use of the same app won a race. */
 const RESOLVE_ATTEMPTS = 3;
 
@@ -122,7 +148,14 @@ const RESOLVE_ATTEMPTS = 3;
  * NOT_FOUND; so is an app not installed in the Agent's Workspace.
  */
 export class AppAgentAccess {
-  constructor(private readonly store: AppAgentAccessStore) {}
+  constructor(
+    private readonly store: AppAgentAccessStore,
+    /** Told once a request is decided, so browsers refresh its approval card. Best effort. */
+    private readonly requestDecided: (
+      workspaceId: string,
+      requestId: string,
+    ) => Promise<void> = async () => {},
+  ) {}
 
   async list(actor: AgentAppAccessActor, agentId: string): Promise<AgentAppAccessList> {
     const { canManage } = await this.viewAgent(actor, agentId);
@@ -132,6 +165,31 @@ export class AppAgentAccess {
       this.store.listPendingRequests(agentId),
     ]);
     return { canManage, apps: apps.map(({ id: _id, ...app }) => app), grants, pendingRequests };
+  }
+
+  /** The apps installed in the Agent's Workspace, as the Agent sees them: what its next use of each
+   * gets (`decideAgentAccess`, asking for no more than the fixed scopes). */
+  async listForAgent(agent: {
+    workspaceId: string;
+    agentId: string;
+  }): Promise<AgentInstalledAppView[]> {
+    if (!(await this.store.findAgent(agent.workspaceId, agent.agentId)))
+      throw new AppError("NOT_FOUND");
+    const [apps, grants, pendingRequests] = await Promise.all([
+      this.store.listInstalledApps(agent.workspaceId),
+      this.store.listGrantStates(agent.agentId),
+      this.store.listPendingRequests(agent.agentId),
+    ]);
+    return apps.map(({ id, allowedScopes, ...app }) => {
+      const decision = decideAgentAccess({
+        installed: true,
+        allowedScopes,
+        requestedScopes: [],
+        grant: grants.find((grant) => grant.appId === id),
+        pendingRequest: pendingRequests.find((request) => request.appKey === app.key),
+      });
+      return { ...app, access: accessState(decision) };
+    });
   }
 
   /** Grants the app to the Agent with the fixed scopes and `scopes`, replacing a revoked or
@@ -144,7 +202,7 @@ export class AppAgentAccess {
     const app = await this.installedApp(actor.workspaceId, input.appKey);
     const scopes = agentGrantScopes(input.scopes, app.allowedScopes);
     if (!scopes) throw new AppError("INVALID_INPUT", { errorId: "app-scope-not-allowed" });
-    await this.store.giveGrant({
+    const approved = await this.store.giveGrant({
       appId: app.id,
       agentId: input.agentId,
       workspaceId: actor.workspaceId,
@@ -152,6 +210,7 @@ export class AppAgentAccess {
       source: "person",
       grantedByUserId: actor.userId,
     });
+    if (approved) await this.decided(actor.workspaceId, approved);
   }
 
   /** Revokes the grant at once; the Agent then needs an approval for the app again. */
@@ -187,6 +246,7 @@ export class AppAgentAccess {
       },
     });
     if (!approved) throw new AppError("CONFLICT");
+    await this.decided(actor.workspaceId, input.requestId);
   }
 
   async deny(
@@ -197,6 +257,12 @@ export class AppAgentAccess {
     await this.pendingRequest(input.agentId, input.requestId);
     if (!(await this.store.denyRequest({ ...input, userId: actor.userId })))
       throw new AppError("CONFLICT");
+    await this.decided(actor.workspaceId, input.requestId);
+  }
+
+  /** The decision is stored; a missed card refresh is repaired by browser reconciliation. */
+  private async decided(workspaceId: string, requestId: string) {
+    await this.requestDecided(workspaceId, requestId).catch(() => {});
   }
 
   /**
@@ -236,6 +302,7 @@ export class AppAgentAccess {
           status: "pending",
           requestId: decision.pendingRequestId,
           scopes: decision.scopes,
+          appName: app.name,
         };
       const target = { appId: app.id, agentId: agent.agentId, workspaceId: agent.workspaceId };
       if (decision.kind === "grant_automatically") {
@@ -248,7 +315,8 @@ export class AppAgentAccess {
         if (created) return { status: "granted", scopes: decision.scopes, automatic: true };
       } else {
         const requestId = await this.store.createRequest({ ...target, scopes: decision.scopes });
-        if (requestId) return { status: "pending", requestId, scopes: decision.scopes };
+        if (requestId)
+          return { status: "pending", requestId, scopes: decision.scopes, appName: app.name };
       }
     }
     throw new AppError("CONFLICT");

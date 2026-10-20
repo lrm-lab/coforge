@@ -6,6 +6,7 @@ import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { ActionCards } from "#src/server/conversations/action-cards.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { createAppAgentAccess } from "#src/server/app-agent-access/app-agent-access-composition.server";
 
 /**
  * Human commit/cancel Server Functions for Agent-prepared action cards.
@@ -64,6 +65,30 @@ export const commitChannelAddMemberActionCard = createServerFn({ method: "POST" 
         userIds: data.userIds,
         agentIds: data.agentIds,
       },
+    );
+  });
+
+/** `app:grant_agent`: approving the card approves the Agent's request for the app. */
+export const commitAppGrantActionCard = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(messageIdInput)
+  .handler(async ({ data, context: { db, workspaceId, user } }) => {
+    await actionCards(db).commitAppGrant(
+      { workspaceId, userId: user.id },
+      data.messageId,
+      createAppAgentAccess(db),
+    );
+  });
+
+/** `app:grant_agent`: the card's cancel, which denies the Agent's request. */
+export const denyAppGrantActionCard = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(messageIdInput)
+  .handler(async ({ data, context: { db, workspaceId, user } }) => {
+    await actionCards(db).denyAppGrant(
+      { workspaceId, userId: user.id },
+      data.messageId,
+      createAppAgentAccess(db),
     );
   });
 

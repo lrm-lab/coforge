@@ -1,4 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
+import type { Logger } from "@logtape/logtape";
+import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
 
 /**
  * Reap this Workspace's detached Agent processes left behind by a previous daemon instance.
@@ -117,3 +119,22 @@ const procProcessTable: LinuxProcessTable = {
     process.kill(-group, "SIGKILL");
   },
 };
+
+/** Sweeps, on boot, this Workspace's detached Agent processes that a previous daemon instance left
+ * behind (`stopWorkspaceAgentProcesses`), logging the outcome. Best-effort: a sweep failure must
+ * never keep the daemon from starting. */
+export async function reapLeftoverAgentProcesses(workspaceId: string, logger: Logger) {
+  try {
+    const reaped = await stopWorkspaceAgentProcesses(workspaceId);
+    if (reaped > 0)
+      logger.info("Reaped Agent process groups left by a previous daemon instance", {
+        event: "daemon:agent_processes_reaped",
+        count: reaped,
+      });
+  } catch (error) {
+    logger.warning("Could not reap leftover Agent processes", {
+      event: "daemon:agent_process_reap_failed",
+      error_code: diagnosticErrorCode(error),
+    });
+  }
+}

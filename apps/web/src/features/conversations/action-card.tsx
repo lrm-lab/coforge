@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { CpuChip01 as Cpu, Hash01 as Hash, UserPlus01 as UserPlus } from "@untitledui/icons";
+import {
+  CpuChip01 as Cpu,
+  Hash01 as Hash,
+  Key01 as Key,
+  UserPlus01 as UserPlus,
+} from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -9,7 +14,9 @@ import { m } from "#src/paraglide/messages";
 import {
   cancelActionCard,
   commitChannelAddMemberActionCard,
+  commitAppGrantActionCard,
   commitChannelCreateActionCard,
+  denyAppGrantActionCard,
   loadActionCardStates,
 } from "./action-cards.functions";
 import { CreateChannelDialog } from "./create-channel-dialog";
@@ -52,6 +59,10 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const refresh = useServerFn(loadActionCardStates);
   const commitChannelCreate = useServerFn(commitChannelCreateActionCard);
   const commitAddMember = useServerFn(commitChannelAddMemberActionCard);
+  const approveAppGrant = useServerFn(commitAppGrantActionCard);
+  const denyAppGrant = useServerFn(denyAppGrantActionCard);
+  const [approving, setApproving] = useState(false);
+  const isAppGrant = view.kind === "app:grant_agent";
   const create = useServerFn(createAgent);
   const loadComputers = useServerFn(listComputers);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
@@ -67,7 +78,8 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     setCancelling(true);
     setError("");
     try {
-      await cancel({ data: { messageId: view.messageId } });
+      // An app approval card is cancelled by denying the Agent's request.
+      await (isAppGrant ? denyAppGrant : cancel)({ data: { messageId: view.messageId } });
       await refetch();
     } catch {
       setError(m.action_card_error());
@@ -76,8 +88,22 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     }
   }
 
+  async function approve() {
+    setApproving(true);
+    setError("");
+    try {
+      await approveAppGrant({ data: { messageId: view.messageId } });
+      await refetch();
+    } catch {
+      setError(m.action_card_error());
+    } finally {
+      setApproving(false);
+    }
+  }
+
   async function openDialog() {
     setError("");
+    if (isAppGrant) return approve();
     if (view.kind === "agent:create" && !computers) {
       try {
         setComputers(await loadComputers());
@@ -90,25 +116,39 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   }
 
   const icon =
-    view.kind === "channel:create" ? Hash : view.kind === "agent:create" ? Cpu : UserPlus;
+    view.kind === "channel:create"
+      ? Hash
+      : view.kind === "agent:create"
+        ? Cpu
+        : isAppGrant
+          ? Key
+          : UserPlus;
   const title =
     view.kind === "channel:create"
       ? m.action_card_title_channel_create()
       : view.kind === "agent:create"
         ? m.action_card_title_agent_create()
-        : m.action_card_title_add_member();
+        : isAppGrant
+          ? m.app_card_title()
+          : m.action_card_title_add_member();
   const commitLabel =
     view.kind === "channel:create"
       ? m.action_card_commit_channel_create()
       : view.kind === "agent:create"
         ? m.action_card_commit_agent_create()
-        : m.action_card_commit_add_member();
+        : isAppGrant
+          ? approving
+            ? m.app_card_approving()
+            : m.agent_apps_approve()
+          : m.action_card_commit_add_member();
   const deniedReason =
     view.kind === "agent:create"
       ? m.action_card_denied_agent_create()
       : view.kind === "channel:add_member"
         ? m.action_card_denied_add_member({ channel: view.channel.displayName })
-        : undefined;
+        : isAppGrant
+          ? m.app_card_denied_reason()
+          : undefined;
 
   const Icon = icon;
   return (
@@ -158,6 +198,12 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             {chipList([...view.humans, ...view.agents])}
           </>
         )}
+        {view.kind === "app:grant_agent" && (
+          <>
+            <p>{m.app_card_request({ app: `${view.app.name} (${view.app.key})` })}</p>
+            <p className="text-tertiary">{m.app_card_scopes({ scopes: view.scopes.join(", ") })}</p>
+          </>
+        )}
         {view.draftHint && <p className="text-xs text-tertiary italic">{view.draftHint}</p>}
       </div>
 
@@ -170,7 +216,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
       {view.state === "pending" && (
         <div className="flex flex-wrap items-center gap-2">
           {view.canCommit ? (
-            <Button size="sm" onPress={() => void openDialog()}>
+            <Button size="sm" isDisabled={approving} onPress={() => void openDialog()}>
               {commitLabel}
             </Button>
           ) : (
@@ -183,7 +229,13 @@ export function ActionCard({ card }: { card: ActionCardView }) {
               isDisabled={cancelling}
               onPress={() => void doCancel()}
             >
-              {cancelling ? m.action_card_cancelling() : m.action_card_dismiss()}
+              {isAppGrant
+                ? cancelling
+                  ? m.app_card_denying()
+                  : m.agent_apps_deny()
+                : cancelling
+                  ? m.action_card_cancelling()
+                  : m.action_card_dismiss()}
             </Button>
           )}
         </div>
@@ -225,7 +277,9 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         </p>
       )}
       {view.state === "cancelled" && (
-        <p className="text-xs text-tertiary">{m.action_card_cancelled()}</p>
+        <p className="text-xs text-tertiary">
+          {isAppGrant ? m.app_card_denied() : m.action_card_cancelled()}
+        </p>
       )}
 
       {dialogOpen && view.kind === "channel:create" && (

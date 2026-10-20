@@ -26,7 +26,7 @@ import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
 import { configureDaemonLogging } from "#src/platform/daemon-logging";
 import { installerJournalExists } from "#src/platform/installer-journal";
 import { stopLaunchdAgents } from "#src/platform/launchd-process";
-import { stopWorkspaceAgentProcesses } from "#src/platform/linux-agent-processes";
+import { reapLeftoverAgentProcesses } from "#src/platform/linux-agent-processes";
 import {
   WorkspaceHealthJournal,
   workspaceDegradedMessage,
@@ -261,24 +261,8 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
         process.exitCode = 0;
         return;
       }
-      // Linux has no per-Agent service to reap on boot the way macOS reaps its launchd jobs, so
-      // sweep this Workspace's detached Agent processes that a previous daemon instance left
-      // behind. Best-effort: a sweep failure must never keep the daemon from starting.
-      if (process.platform === "linux" && config?.workspaceId) {
-        try {
-          const reaped = await stopWorkspaceAgentProcesses(config.workspaceId);
-          if (reaped > 0)
-            logger.info("Reaped Agent process groups left by a previous daemon instance", {
-              event: "daemon:agent_processes_reaped",
-              count: reaped,
-            });
-        } catch (error) {
-          logger.warning("Could not reap leftover Agent processes", {
-            event: "daemon:agent_process_reap_failed",
-            error_code: diagnosticErrorCode(error),
-          });
-        }
-      }
+      if (process.platform === "linux" && config?.workspaceId)
+        await reapLeftoverAgentProcesses(config.workspaceId, logger);
       const requireRuntime = (): DaemonRuntime => {
         if (!runtime) throw new Error("daemon runtime is not running");
         return runtime;
@@ -326,6 +310,7 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
           profileUpdate: async (...input) => agentRequests().profileUpdate(...input),
           appConfigGet: async (...input) => agentRequests().appConfigGet(...input),
           appConfigUpdate: async (...input) => agentRequests().appConfigUpdate(...input),
+          agentApp: async (...input) => agentRequests().agentApp(...input),
           mentionPending: async (...input) => agentRequests().mentionPending(...input),
           mentionExecute: async (...input) => agentRequests().mentionExecute(...input),
           mentionDelivery: async (...input) => agentRequests().mentionDelivery(...input),

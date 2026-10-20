@@ -9,11 +9,18 @@ may use an app (`decideAgentAccess`). Migration `20261020200000_app_agent_access
   a pending request instead of a new grant; only a person's approval (or grant) gives it back.
 - A grant's scopes are the app's fixed scopes (`openid`, `profile`, `identity`) and any others the
   app allows (`email`) that were asked for. A use asking for a scope the active grant lacks also
-  waits for approval, of the grant's scopes and the new one.
+  waits for approval, of the grant's scopes and the new one. A use is granted only the grant's
+  scopes the app still allows, so narrowing an app's `allowedScopes` applies to the next token.
 - Workspace owners and admins, and the Agent's creator while a member, grant, revoke, approve and
   deny (`canManageAgentAppAccess`, the `manageAgentAppAccess` capability). Every member who can see
   the Agent reads its access. A person's grant also approves the Agent's pending request for that
   app when it covers the request's scopes.
+- An Agent uses an app through `coforge app token`, which applies this rule and mints its
+  five-minute token ([Agent tokens](../authorization-server/README.md#agent-tokens)). A request it
+  opens gets at most one approval card (`action_cards.kind` `app:grant_agent`, its `payload` naming
+  the request), posted with the request row locked and only while it is pending: committing the card approves the request, cancelling it denies the request, and a
+  request decided anywhere else (the Agent's Apps tab, a person's grant) settles its card in the
+  same transaction: `executed` when approved, `cancelled` when denied.
 
 `app_agent_grants` — one row per app and Agent:
 

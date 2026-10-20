@@ -1,8 +1,70 @@
 # Agent Apps
 
-An Agent App is a built-in helper that runs for one Agent on its Computer. Its config belongs to
-that Agent and is kept by the cloud; the daemon running the Agent gets every change.
-`system.cleaner` (the System Cleaner) is the first App with a config.
+Two kinds of app reach an Agent. A built-in Agent App is a helper that runs for one Agent on its
+Computer; its config belongs to that Agent and is kept by the cloud, and the daemon running the
+Agent gets every change (`system.cleaner`, the System Cleaner, is the first App with a config).
+A Workspace's own apps are the ones its owners and admins register in Settings → Applications
+([Login with CoForge](../authorization-server/README.md)); an Agent calls one with a short-lived
+token for it.
+
+## `app list`
+
+```
+coforge app list [--all] [--json]
+```
+
+Prints each app installed in the Agent's Workspace: its key, name, when to use it, description,
+homepage, and the Agent's access to it: `granted`, granted on first use (`automatic`), needs a
+person's approval (`needs_approval`, after a person revoked its access), or waiting for one
+(`pending_approval`). Built-in apps are hidden unless `--all` is given; they need no token. `--json`
+prints `{ "apps": [...] }` with the same filter, each app's `access` as above and `builtIn`.
+
+## `app token`
+
+```
+coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]
+```
+
+Gets a five-minute token for the app and runs `<program> <args>` with it. The program receives the
+token by design; the CLI never prints it, nor puts it in an argument or variable:
+
+- The program reads it from file descriptor 3; `COFORGE_APP_TOKEN_FD=3` names it.
+- Its environment is only `PATH`, the locale (`LANG`, `LC_*`), `TZ` and `TMPDIR`, so neither the
+  Agent's CoForge credentials nor `HOME` reach it. stdin is the CLI's.
+- Its stdout and stderr pass through with the token redacted: every occurrence of the whole token,
+  of its signature, or of its header and payload together is replaced by `[REDACTED]`. A program
+  that transforms the token before printing it (encodes it, prints its payload) is not caught.
+- The program runs in its own process group, and nothing started in it outlives the command: once
+  the program exits, whatever it left running is stopped (SIGTERM, then SIGKILL two seconds
+  later). The command exits with the program's exit status (128 plus the signal number when a
+  signal ended it); 127 means the program could not be run.
+- `--timeout` (1 to 300 seconds, default 60) bounds the whole command, output included: at the
+  deadline the group is stopped the same way, the output is no longer read (a process that left the
+  group may still hold it open), and the command exits 124, even when the program itself had
+  already exited.
+- SIGTERM, SIGINT or SIGHUP to the CLI stops the group the same way, and the command exits 128 plus
+  that signal's number.
+
+The token is an RFC 9068 JWT (`typ: at+jwt`): its audience is the app's key, its subject the Agent
+id, and `type: "agent"` tells the app it is an Agent's. The app verifies it with the issuer's JWKS.
+
+When a person must approve the Agent's use first (a person revoked its access earlier), nothing is
+run and the command exits 2. With `--target` (the `message send` grammar; the Agent must be able to
+post there) an approval card is posted there, once per waiting request; a Workspace owner or admin,
+or the Agent's creator, approves or denies it ([action cards](action-cards.md)). Without
+`--target` the command says to run again with one. Run the same command again once approved.
+
+An app not installed in the Workspace, or a built-in app, has no token: the command exits 1.
+
+| Error code               | Meaning                                                                       |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| `APP_TOKENS_UNAVAILABLE` | The server runs no Login with CoForge authorization server.                   |
+| `TARGET_INVALID`         | The approval card cannot be posted to `--target`; the request still waits.     |
+| `REQUEST_INVALID`        | The request body was not `{ target? }`.                                       |
+| `NOT_FOUND`              | The calling Agent is no longer in its Workspace.                              |
+| `CONFLICT`               | A concurrent use changed the Agent's access twice; the CLI already asked again. |
+| `INVALID_INPUT`          | The app does not allow what was asked for.                                    |
+| `ACCESS_DENIED`          | The Agent may not use the app this way.                                       |
 
 ## `app config`
 
@@ -38,6 +100,14 @@ coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [-
 The `workspace-cleanup` Agent Manual topic says when to raise `threshold_bytes`.
 
 ## HTTP
+
+`GET /api/agent/v1/apps` answers `{ ok: true, apps }`. `POST /api/agent/v1/apps/{key}/token` takes
+`{ target? }` and answers `{ ok: true, status: "issued", access_token, token_type:
+"Bearer", expires_in: 300, audience, scope }`, `{ ok: true, status: "approval_required", requestId,
+actionCardMessageId? }` or `{ ok: true, status: "not_installed" }`; a refusal is `{ ok: false,
+errorCode, error }`. It takes no idempotency key, since asking again is harmless by construction:
+an Agent has at most one grant and one waiting request per app, a request has at most one card, a
+card is never posted for a request already decided, and each token is a fresh five-minute one.
 
 `GET` and `PATCH /api/agent/v1/apps/{appId}/config`, reached through the daemon's local proxy.
 The `PATCH` body is `{ expectedRevision, set, unset, idempotencyKey }` and nothing else. Each

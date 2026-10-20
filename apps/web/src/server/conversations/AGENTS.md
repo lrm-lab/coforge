@@ -181,20 +181,20 @@ These rules apply to `src/server/conversations/`.
 
 ## Action cards
 
-- `ActionCards.prepare` resolves every handle in a `channel:create`,
-  `agent:create`, or `channel:add_member` action to a UUID, reuses the Agent
-  message-send target resolver and membership rule, and creates the posted
-  Message and the `ActionCard` row in the same conversation-locked transaction.
-- `ActionCards.viewsFor(workspaceId, viewerUserId, messageIds)` is one batched
-  lookup per message page. Never look up action cards per message.
-- Every commit path runs the real operation first, under the committing
-  human's identity and that operation's own authorization
-  (`PublicChannels.create`/`addMembers`, or `createAgent` with
-  `assertCanCreateAgents`), then marks the card `executed` with a conditional
-  update. A double commit fails on the operation's own uniqueness rule or is a
-  harmless `addMembers` no-op.
-- `ActionCards.cancel` is allowed for the preparing Agent's owner or a
-  Workspace owner/admin, and only moves `pending → cancelled`.
+- `ActionCards.prepare` resolves every handle in a `channel:create`, `agent:create`, or
+  `channel:add_member` action to a UUID, reuses the Agent message-send target resolver and
+  membership rule (`resolveActionCardTarget`), and creates the posted Message and the `ActionCard`
+  row in one conversation-locked transaction (`createActionCardMessage`). The server alone posts
+  `app:grant_agent` (`AppGrantCards`) once per waiting app access request, under its row lock;
+  whoever decides the request settles the card in that transaction (`settleAppGrantCard`).
+- `ActionCards.viewsFor(workspaceId, viewerUserId, messageIds)` is one batched lookup per message
+  page. Never look up action cards per message.
+- Every commit path runs the real operation first, under the committing human's identity and that
+  operation's own authorization (`PublicChannels.create`/`addMembers`, `createAgent` with
+  `assertCanCreateAgents`, `AppAgentAccess.approve`), then marks the card `executed` with a
+  conditional update; a double commit fails on that operation's uniqueness rule or is a no-op.
+- `ActionCards.cancel` (the preparing Agent's owner or a Workspace owner/admin) only moves `pending
+→ cancelled`; it refuses `app:grant_agent`, which `denyAppGrant` cancels after `AppAgentAccess.deny`.
 - Card state changes publish the existing `ConversationRealtime.messageAvailable`; do not add a card-specific realtime channel.
 - Agent-facing message reads append ` [action card: <state>]` to a card message's body so an Agent never claims a
   resource exists before a human commits it.

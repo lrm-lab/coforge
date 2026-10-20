@@ -65,6 +65,12 @@ import {
   unknownDeliveryNextAction,
 } from "./cli-error";
 import { refusalNextAction } from "./refusal-guidance";
+import {
+  envelopeRequest,
+  operationFailedCode,
+  preIssuanceError,
+  requireProxySetup,
+} from "./proxy-request";
 
 /** The local daemon proxy's JSON error contract (`AgentProxyFailureBody` in the SDK). A few proxy
  * refusals decided before a request is parsed (`unauthorized`, `not found`, `bad request`, …) are
@@ -86,39 +92,12 @@ async function readProxyErrorBody(response: Response): Promise<{ json?: AgentPro
   return {};
 }
 
-function operationFailedCode(operation: string): string {
-  return `${operation.toUpperCase().replace(/-/g, "_")}_FAILED`;
-}
-
 /** The deadline of every local proxy call but a message send (`AGENT_SEND_LOCAL_DEADLINE_MS`). */
 const OPERATION_DEADLINE_MS = 10_000;
 
 /** Past the daemon's own 10-second upstream deadline (`AGENT_RPC_TIMEOUT_MS`, started later), so
  * the daemon's classified failure, with its correlation id, arrives before this one gives up. */
 const GITHUB_CREDENTIAL_DEADLINE_MS = 12_000;
-
-/** The agent-context token grammar the proxy checks before issuing any request. */
-const PROXY_CONTEXT_PATTERN = /^sfp_[A-Za-z0-9_-]{43}$/;
-
-/** A local condition that meant no request was ever issued: nothing to wait on or undo. */
-function preIssuanceError(operation: string, message: string): CliError {
-  const isSend = operation === "send";
-  return new CliError({
-    code: isSend ? "SEND_PRECONDITION_FAILED" : operationFailedCode(operation),
-    message,
-    retryable: false,
-    ...(isSend ? { draftSaved: false, suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION } : {}),
-  });
-}
-/** The preflight every proxied request runs before it issues: the context must exist and match
- * the token grammar, and a proxy must be configured. Raises the operation's own pre-issuance
- * error, so no request is ever sent on a missing setup. */
-function requireProxySetup(operation: string, context: string, proxyUrl: string): void {
-  if (!context) throw preIssuanceError(operation, "coforge agent context is not configured");
-  if (!PROXY_CONTEXT_PATTERN.test(context))
-    throw preIssuanceError(operation, "coforge agent context is invalid");
-  if (!proxyUrl) throw preIssuanceError(operation, "coforge agent proxy is not configured");
-}
 
 /** `idempotent`: asking again changes nothing (a read), so an upstream 5xx or a transport failure
  * is worth retrying. Off by default: most proxied operations have effects. */
@@ -300,60 +279,6 @@ async function versionRequest(
     throw proxyHttpFailure("version", response.status, errorBody, undefined);
   }
   return decodeAgentVersionResponse(await response.json().catch(() => undefined));
-}
-
-/**
- * Calls a route that always answers a domain error as JSON `{ ok: false, errorCode, error }`
- * for Manual, user info, profile and App config: `errorCode` becomes the `CliError` code directly.
- * A GET carries `query`; a route that takes a JSON body carries `body`. A route may supply
- * guidance for its decoded error code without duplicating the request or error handling.
- */
-async function envelopeRequest<T>(
-  proxyEndpoint: (path: string) => URL,
-  context: string,
-  proxyUrl: string,
-  request: { method: string; path: string; query?: Record<string, string>; body?: unknown },
-  decode: (value: unknown) => T,
-  decodeError: (value: unknown) => { errorCode: string; error: string } | undefined,
-  operation: string,
-  nextAction?: (errorCode: string | undefined) => string | undefined,
-): Promise<T> {
-  requireProxySetup(operation, context, proxyUrl);
-  const endpoint = proxyEndpoint(request.path);
-  for (const [key, value] of Object.entries(request.query ?? {}))
-    endpoint.searchParams.set(key, value);
-  const hasBody = request.body !== undefined;
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      method: request.method,
-      headers: {
-        authorization: `Bearer ${context}`,
-        ...(hasBody ? { "content-type": "application/json" } : {}),
-      },
-      ...(hasBody ? { body: JSON.stringify(request.body) } : {}),
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
-    throw new CliError({
-      code: operationFailedCode(operation),
-      message: "agent proxy request failed (network or timeout)",
-      retryable: false,
-    });
-  }
-  const rawBody: unknown = await response.json().catch(() => undefined);
-  if (!response.ok) {
-    const errorBody = decodeError(rawBody);
-    throw new CliError({
-      code: errorBody?.errorCode
-        ? errorBody.errorCode.toUpperCase()
-        : operationFailedCode(operation),
-      message: errorBody?.error ?? `HTTP ${response.status}`,
-      retryable: false,
-      suggestedNextAction: nextAction?.(errorBody?.errorCode),
-    });
-  }
-  return decode(rawBody);
 }
 
 /**

@@ -148,5 +148,12 @@
   "agent_apps_homepage": "主页",
   "agent_apps_empty": "还没有应用获得访问权限",
   "agent_apps_empty_description": "本工作区已安装的应用会在此智能体首次使用时获得访问权限。",
-  "agent_apps_grant_no_apps_description": "工作区所有者和管理员可在 设置 → 应用 中注册应用。"
+  "agent_apps_grant_no_apps_description": "工作区所有者和管理员可在 设置 → 应用 中注册应用。",
+  "app_card_title": "批准应用访问",
+  "app_card_request": "想要使用 {app}",
+  "app_card_scopes": "权限范围：{scopes}",
+  "app_card_denied_reason": "只有工作区所有者和管理员，或此智能体的创建者，可以批准。",
+  "app_card_approving": "正在批准…",
+  "app_card_denying": "正在拒绝…",
+  "app_card_denied": "已拒绝"
 }

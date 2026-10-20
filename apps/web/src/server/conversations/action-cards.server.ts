@@ -1,12 +1,13 @@
 import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import {
   actionCardActionSchema,
+  APP_GRANT_AGENT_CARD_KIND,
   validateActionCardAction,
   type ActionCardAction,
   type ActionCardKind,
   type ResolvedActionCardPayload,
 } from "@lrm/coforge-sdk/agent";
-import { UUID_LIKE_PATTERN, isChannelMessageTarget } from "@lrm/coforge-sdk/internal";
+import { UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
@@ -18,64 +19,37 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { ActionCardError } from "./action-card-error.server";
-import { lockConversation } from "./conversation-lock.server";
-import {
-  getAgentChannel,
-  PublicChannels,
-  resolveChannelThreadRoot,
-} from "./public-channels.server";
+import { PublicChannels } from "./public-channels.server";
 import { ConversationHistory } from "./conversation-history.server";
-import { allocateSequence } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { messageSignalScope, type ConversationRealtime } from "./conversation-realtime.server";
+import type { ConversationRealtime } from "./conversation-realtime.server";
+import {
+  createActionCardMessage,
+  publishActionCardMessage,
+  publishActionCardUpdate,
+} from "./action-card-message.server";
+import {
+  resolveActionCardTarget,
+  type ActionCardTargetRepository,
+} from "./action-card-target.server";
+import type {
+  ActionCardPrepareResult,
+  ActionCardRef,
+  ActionCardState,
+  ActionCardView,
+  ActionCardViewBase,
+} from "./action-card-view.server";
+import type {
+  AgentAppAccessActor as Actor,
+  AppAgentAccess,
+} from "#src/server/app-agent-access/app-agent-access.server";
+import { canManageAgentAppAccess } from "#src/server/app-agent-access/access-rules.server";
 import { isAdminLike } from "#src/server/workspaces/member-role.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 
 const UUID_PATTERN = UUID_LIKE_PATTERN;
 
-export type ActionCardPrepareResult = { messageId: string; metadata: { kind: "action-card" } };
-
-export type ActionCardState = "pending" | "executed" | "cancelled";
-
-/** A resolved id plus display name for a card's chips; unresolved ids render as "unknown". */
-export type ActionCardRef = { id: string; displayName: string };
-
-export type ActionCardViewBase = {
-  messageId: string;
-  state: ActionCardState;
-  draftHint?: string;
-  committedBy?: { displayName: string };
-  committedAt?: string;
-  /** Whether the viewer may commit this card right now (implies `state === "pending"`). */
-  canCommit: boolean;
-  /** Whether the viewer may cancel this card right now (implies `state === "pending"`). */
-  canCancel: boolean;
-};
-
-export type ActionCardView =
-  | (ActionCardViewBase & {
-      kind: "channel:create";
-      name: string;
-      visibility: "public" | "private";
-      description?: string;
-      initialHumans: ActionCardRef[];
-      initialAgents: ActionCardRef[];
-      result?: { channelId: string };
-    })
-  | (ActionCardViewBase & {
-      kind: "agent:create";
-      name: string;
-      description?: string;
-      suggestedComputer?: ActionCardRef;
-      requiredComputer?: ActionCardRef;
-      result?: { agentId: string };
-    })
-  | (ActionCardViewBase & {
-      kind: "channel:add_member";
-      channel: ActionCardRef;
-      humans: ActionCardRef[];
-      agents: ActionCardRef[];
-      result?: { channelId: string; userIds: string[]; agentIds: string[] };
-    });
+export type * from "./action-card-view.server";
+export type { ActionCardTargetRepository } from "./action-card-target.server";
 
 async function safeWorkspaceRole(db: PrismaClient, workspaceId: string, userId: string) {
   try {
@@ -84,19 +58,6 @@ async function safeWorkspaceRole(db: PrismaClient, workspaceId: string, userId: 
     return undefined;
   }
 }
-
-/**
- * The narrow slice of `DirectConversationRepository` `ActionCards` needs to resolve a `@user` DM
- * target, required (not optional) here since every call site always provides a real repository.
- */
-export type ActionCardTargetRepository = {
-  userIdForUsername(target: string): Promise<string>;
-  getOrCreateUserAgent(
-    workspaceId: string,
-    userId: string,
-    agentId: string,
-  ): Promise<{ id: string }>;
-};
 
 /** Strips one leading `@` or `#`, if present. */
 function bareHandle(value: string): string {
@@ -151,8 +112,8 @@ export function parseActionCardAction(value: unknown) {
 /**
  * Resolves an Agent-prepared action card (`coforge action prepare`) into a posted Message plus an
  * `ActionCard` record (see `packages/coforge-sdk/src/agent/action-cards.ts`).
- * A human commits the card under their own identity in a follow-up PR; this PR only persists it
- * and renders it as an ordinary Agent message with a readable summary.
+ * A person commits or cancels it under their own identity; it renders as an ordinary Agent
+ * message with a readable summary.
  */
 export class ActionCards {
   constructor(
@@ -167,53 +128,29 @@ export class ActionCards {
     input: { target: string; action: unknown },
   ): Promise<ActionCardPrepareResult> {
     const action = parseActionCardAction(input.action);
-    const target = await this.resolveTarget(principal.workspaceId, principal.agentId, input.target);
+    if (!this.conversations)
+      throw new Error("ActionCards.prepare requires a conversations repository");
+    const target = await resolveActionCardTarget(
+      this.db,
+      this.conversations,
+      principal.workspaceId,
+      principal.agentId,
+      input.target,
+    );
     const payload = await this.resolvePayload(principal.workspaceId, principal.agentId, action);
     const body = action.draftHint
       ? `${summaryFor(action)}\n${action.draftHint}`
       : summaryFor(action);
 
-    const created = await this.db.$transaction(async (tx) => {
-      await lockConversation(tx, target.conversationId);
-      const sequence = await allocateSequence(tx, target.conversationId);
-      const message = await tx.message.create({
-        data: {
-          conversationId: target.conversationId,
-          workspaceId: principal.workspaceId,
-          senderMemberId: target.senderMemberId,
-          threadRootId: target.threadRootId,
-          body,
-          sequence,
-        },
-        select: { id: true, sequence: true },
-      });
-      await tx.actionCard.create({
-        data: {
-          messageId: message.id,
-          conversationId: target.conversationId,
-          workspaceId: principal.workspaceId,
-          kind: action.type,
-          payload: payload as unknown as Prisma.InputJsonValue,
-          draftHint: action.draftHint,
-          preparedByAgentId: principal.agentId,
-        },
-      });
-      return message;
-    });
-
-    // A card waits for a person to commit it, so it wakes no Agent; only the browser realtime publish.
-    try {
-      await this.realtime?.messageAvailable({
-        conversationId: target.conversationId,
-        messageId: created.id,
-        sequence: created.sequence,
-        ...(await messageSignalScope(this.db, target.conversationId, principal.workspaceId)),
-        threadRootId: target.threadRootId,
-      });
-    } catch {
-      // PostgreSQL remains canonical; browser reconciliation repairs a missed publication.
-    }
-
+    const created = await this.db.$transaction((tx) =>
+      createActionCardMessage(tx, principal, target, {
+        kind: action.type,
+        payload,
+        body,
+        draftHint: action.draftHint,
+      }),
+    );
+    await publishActionCardMessage(this.db, this.realtime, principal.workspaceId, target, created);
     return { messageId: created.id, metadata: { kind: "action-card" } };
   }
 
@@ -258,7 +195,7 @@ export class ActionCards {
       } else if (payload.type === "agent:create") {
         if (payload.suggestedComputerId) computerIds.add(payload.suggestedComputerId);
         if (payload.requiredComputerId) computerIds.add(payload.requiredComputerId);
-      } else {
+      } else if (payload.type === "channel:add_member") {
         channelIds.add(payload.channelId);
         for (const id of payload.humanIds ?? []) userIds.add(id);
         for (const id of payload.agentIds ?? []) agentIds.add(id);
@@ -358,6 +295,20 @@ export class ActionCards {
           canCommit: pending && isAdminViewer,
           result: card.result as { agentId: string } | undefined,
         });
+      } else if (payload.type === APP_GRANT_AGENT_CARD_KIND) {
+        // Managing the Agent's app access, by the server's rule.
+        const canManage =
+          pending &&
+          canManageAgentAppAccess({ userId: viewerUserId, role: viewerRole }, card.preparedByAgent);
+        views.set(card.messageId, {
+          ...base,
+          kind: APP_GRANT_AGENT_CARD_KIND,
+          app: { key: payload.appKey, name: payload.appName },
+          scopes: payload.scopes,
+          canCommit: canManage,
+          canCancel: canManage,
+          result: card.result as { requestId: string } | undefined,
+        });
       } else {
         views.set(card.messageId, {
           ...base,
@@ -429,28 +380,7 @@ export class ActionCards {
       },
     });
     if (updated.count === 0) throw new AppError("CONFLICT");
-    await this.publishCardUpdate(conversationId, messageId);
-  }
-
-  private async publishCardUpdate(conversationId: string, messageId: string) {
-    try {
-      const message = await this.db.message.findUnique({
-        where: { id: messageId },
-        select: { sequence: true, threadRootId: true, workspaceId: true },
-      });
-      if (message)
-        await this.realtime?.messageAvailable({
-          conversationId,
-          messageId,
-          sequence: message.sequence,
-          // A card prepared inside a thread stays a thread reply here: republishing it without
-          // its anchor would let the browser count it as a channel message.
-          ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
-          ...(await messageSignalScope(this.db, conversationId, message.workspaceId)),
-        });
-    } catch {
-      // PostgreSQL remains canonical; browser reconciliation repairs a missed publication.
-    }
+    await publishActionCardUpdate(this.db, this.realtime, conversationId, messageId);
   }
 
   /** `channel:create` commit: `PublicChannels.create` (any Workspace member), then
@@ -559,7 +489,39 @@ export class ActionCards {
     await this.markExecuted(messageId, card.conversationId, actorUserId, { agentId });
   }
 
-  /** Cancel: allowed for the preparing Agent's owner (`Agent.ownerId`) or a Workspace owner/admin. */
+  /** `app:grant_agent` commit: approves the request, as `AppAgentAccess.approve` authorizes. */
+  async commitAppGrant(
+    actor: Actor,
+    messageId: string,
+    access: Pick<AppAgentAccess, "approve">,
+  ): Promise<void> {
+    await access.approve(actor, (await this.loadAppGrantCard(actor, messageId)).payload);
+  }
+
+  /** `app:grant_agent` cancel: denies the request, as `AppAgentAccess.deny` authorizes. */
+  async denyAppGrant(
+    actor: Actor,
+    messageId: string,
+    access: Pick<AppAgentAccess, "deny">,
+  ): Promise<void> {
+    await access.deny(actor, (await this.loadAppGrantCard(actor, messageId)).payload);
+  }
+
+  private async loadAppGrantCard(actor: Actor, id: string) {
+    const card = await this.loadPendingCard(
+      actor.workspaceId,
+      actor.userId,
+      id,
+      APP_GRANT_AGENT_CARD_KIND,
+    );
+    return {
+      ...card,
+      payload: card.payload as ResolvedActionCardPayload & { type: "app:grant_agent" },
+    };
+  }
+
+  /** Cancel: by the preparing Agent's owner (`Agent.ownerId`) or a Workspace owner/admin; an
+   * `app:grant_agent` card only by denying it (`denyAppGrant`). */
   async cancel(
     principal: { workspaceId: string; actorUserId: string },
     messageId: string,
@@ -569,6 +531,7 @@ export class ActionCards {
       select: {
         conversationId: true,
         workspaceId: true,
+        kind: true,
         state: true,
         preparedByAgent: { select: { ownerId: true } },
       },
@@ -584,43 +547,17 @@ export class ActionCards {
     const canCancel =
       card.preparedByAgent.ownerId === principal.actorUserId || (role ? isAdminLike(role) : false);
     if (!canCancel) throw new AppError("ACCESS_DENIED");
+    if (card.kind === APP_GRANT_AGENT_CARD_KIND) throw new AppError("INVALID_INPUT");
+    await this.markCancelled(card.conversationId, messageId);
+  }
+
+  private async markCancelled(conversationId: string, messageId: string) {
     const updated = await this.db.actionCard.updateMany({
       where: { messageId, state: "pending" },
       data: { state: "cancelled" },
     });
     if (updated.count === 0) throw new AppError("CONFLICT");
-    await this.publishCardUpdate(card.conversationId, messageId);
-  }
-
-  /** Same target grammar and membership rules as Agent `message send` (see `direct-message.server.ts`). */
-  private async resolveTarget(workspaceId: string, agentId: string, target: string) {
-    const [parentTarget, anchor, extra] = target.split(":");
-    if (!parentTarget || extra !== undefined) throw new AppError("INVALID_INPUT");
-    // A channel thread's anchor is eight hex characters or the whole id, as for `message send`;
-    // a shorter prefix that happens to be unique still names no thread.
-    if (parentTarget.startsWith("#") && anchor !== undefined && !isChannelMessageTarget(target))
-      throw new AppError("INVALID_INPUT");
-    if (!this.conversations)
-      throw new Error("ActionCards.prepare requires a conversations repository");
-    const conversations = this.conversations;
-    const conversationId = parentTarget.startsWith("#")
-      ? (await getAgentChannel(this.db, workspaceId, agentId, parentTarget)).id
-      : (
-          await conversations.getOrCreateUserAgent(
-            workspaceId,
-            await conversations.userIdForUsername(target),
-            agentId,
-          )
-        ).id;
-    const threadRootId = anchor
-      ? (await resolveChannelThreadRoot(this.db, conversationId, anchor)).id
-      : undefined;
-    const member = await this.db.conversationMember.findFirst({
-      where: { conversationId, agentId },
-      select: { id: true },
-    });
-    if (!member) throw new AppError("ACCESS_DENIED");
-    return { conversationId, threadRootId, senderMemberId: member.id };
+    await publishActionCardUpdate(this.db, this.realtime, conversationId, messageId);
   }
 
   private async resolvePayload(

@@ -46,6 +46,8 @@ import {
   type AgentAppConfigResponse,
   type AgentAppConfigUpdateRequest,
   decodeAgentAppConfigPatch,
+  decodeAgentAppTokenBody,
+  type AgentAppRequest,
   AGENT_MENTION_ACTION_MAX_IDS,
   isAgentMentionActionKind,
   type AgentMentionExecuteRequest,
@@ -56,13 +58,8 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { classifyAgentProxyFailure, AGENT_PROXY_CORRELATION_HEADER } from "./agent-proxy-failure";
+import * as domain from "./agent-proxy-domain-failures";
 import { AgentPreflightError } from "#src/daemon-runtime/agent-preflight-error";
-import { AgentManualRequestError } from "#src/connection/agent-manual-request-error";
-import { AgentUserInfoRequestError } from "#src/connection/agent-user-info-request-error";
-import { AgentProfileRequestError } from "#src/connection/agent-profile-request-error";
-import { AgentAppConfigRequestError } from "#src/connection/agent-app-config-request-error";
-import { AgentMentionActionRequestError } from "#src/connection/agent-mention-action-request-error";
-import { AgentMentionDeliveryRequestError } from "#src/connection/agent-mention-delivery-request-error";
 import {
   validateWeeklyReportCollectCommand,
   type WeeklyReportCollectCommand,
@@ -83,7 +80,6 @@ import { getLogger } from "@logtape/logtape";
 import {
   admitOpenVikingControl,
   admitOpenVikingRead,
-  OpenVikingReadProxyError,
   type OpenVikingAgentProxyCommand,
 } from "./openviking-read-proxy";
 
@@ -180,6 +176,8 @@ export type AgentProxyRuntime = {
     request: AgentAppConfigUpdateRequest,
     agentApiKey: string,
   ): Promise<AgentAppConfigResponse>;
+  /** `coforge app list|token`: forwarded as it is, the cloud's response answered as it came. */
+  agentApp?(context: string, request: AgentAppRequest, agentApiKey: string): Promise<Response>;
   mentionPending?(
     context: string,
     request: Record<string, never>,
@@ -430,45 +428,6 @@ function operationFamily(prefix: string, fallback: string) {
     `${prefix}${typeof fields.operation === "string" ? fields.operation : fallback}`;
 }
 
-/** The Manual routes answer a domain error as JSON `{ ok: false, errorCode, error }`, so an
- * `AgentManualRequestError` is forwarded rather than classified. */
-function manualDomainFailure(error: unknown): Response | undefined {
-  if (!(error instanceof AgentManualRequestError)) return undefined;
-  return Response.json(
-    { ok: false, errorCode: error.errorCode, error: error.message },
-    { status: error.status },
-  );
-}
-
-/** `user info` answers a domain error as JSON `{ ok: false, errorCode, error }` (same convention
- * as the Manual routes), so an `AgentUserInfoRequestError` is forwarded rather than
- * classified. */
-function userInfoDomainFailure(error: unknown): Response | undefined {
-  if (!(error instanceof AgentUserInfoRequestError)) return undefined;
-  return Response.json(
-    { ok: false, errorCode: error.errorCode, error: error.message },
-    { status: error.status },
-  );
-}
-
-/** Same convention as `userInfoDomainFailure`, for `profile show`/`profile update`. */
-function profileDomainFailure(error: unknown): Response | undefined {
-  if (!(error instanceof AgentProfileRequestError)) return undefined;
-  return Response.json(
-    { ok: false, errorCode: error.errorCode, error: error.message },
-    { status: error.status },
-  );
-}
-
-/** Same convention as `profileDomainFailure`, for `app config`. */
-function appConfigDomainFailure(error: unknown): Response | undefined {
-  if (!(error instanceof AgentAppConfigRequestError)) return undefined;
-  return Response.json(
-    { ok: false, errorCode: error.errorCode, error: error.message },
-    { status: error.status },
-  );
-}
-
 /** The SDK's patch shape plus the key the CLI names its request with; whether each key and value
  * belongs to the App is the cloud's answer. */
 function parseAppConfigUpdate(
@@ -481,30 +440,6 @@ function parseAppConfigUpdate(
   const { idempotencyKey } = fields;
   if (!change || typeof idempotencyKey !== "string" || !idempotencyKey) return badRequest();
   return { appId, ...change, idempotencyKey };
-}
-
-/** OpenViking reads answer a sanitized C2 error instead of the generic proxy-failure shape. */
-function openvikingDomainFailure(error: unknown): Response | undefined {
-  if (!(error instanceof OpenVikingReadProxyError)) return undefined;
-  return Response.json(error.body, { status: error.status });
-}
-
-/** Same convention as `profileDomainFailure`, for the mention action routes. */
-function mentionActionDomainFailure(error: unknown): Response | undefined {
-  if (!(error instanceof AgentMentionActionRequestError)) return undefined;
-  return Response.json(
-    { ok: false, errorCode: error.errorCode, error: error.message },
-    { status: error.status },
-  );
-}
-
-/** Same convention, for mention delivery (a message the Agent did not send is its 404). */
-function mentionDeliveryDomainFailure(error: unknown): Response | undefined {
-  if (!(error instanceof AgentMentionDeliveryRequestError)) return undefined;
-  return Response.json(
-    { ok: false, errorCode: error.errorCode, error: error.message },
-    { status: error.status },
-  );
 }
 
 function parseMentionExecuteFields(fields: JsonObject): AgentMentionExecuteRequest | Response {
@@ -727,7 +662,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
       intent: url.searchParams.get("intent") ?? "",
       reason: url.searchParams.get("reason") ?? "",
     }),
-    domainFailure: manualDomainFailure,
+    domainFailure: domain.manualDomainFailure,
   }),
   defineRoute({
     family: "agent-api/manual-search",
@@ -740,7 +675,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
       intent: url.searchParams.get("intent") ?? "",
       reason: url.searchParams.get("reason") ?? "",
     }),
-    domainFailure: manualDomainFailure,
+    domainFailure: domain.manualDomainFailure,
   }),
   defineRoute({
     family: "agent-api/version",
@@ -760,7 +695,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
       const name = decodePathParam(param);
       return name instanceof Response ? name : { name };
     },
-    domainFailure: userInfoDomainFailure,
+    domainFailure: domain.userInfoDomainFailure,
   }),
   defineRoute({
     family: "agent-api/profile-show",
@@ -769,7 +704,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     body: "none",
     handler: "profileShow",
     parse: ({ url }) => ({ target: url.searchParams.get("target") ?? undefined }),
-    domainFailure: profileDomainFailure,
+    domainFailure: domain.profileDomainFailure,
   }),
   defineRoute({
     family: "agent-api/profile-update",
@@ -778,7 +713,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     body: "json-object",
     handler: "profileUpdate",
     parse: ({ fields }) => parseProfileUpdateFields(fields),
-    domainFailure: profileDomainFailure,
+    domainFailure: domain.profileDomainFailure,
   }),
   defineRoute({
     family: "agent-api/app-config-get",
@@ -790,7 +725,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
       const appId = decodePathParam(param);
       return appId instanceof Response ? appId : { appId };
     },
-    domainFailure: appConfigDomainFailure,
+    domainFailure: domain.appConfigDomainFailure,
   }),
   defineRoute({
     family: "agent-api/app-config-update",
@@ -799,7 +734,31 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     body: "json-object",
     handler: "appConfigUpdate",
     parse: ({ param, fields }) => parseAppConfigUpdate(param, fields),
-    domainFailure: appConfigDomainFailure,
+    domainFailure: domain.appConfigDomainFailure,
+  }),
+  defineRoute({
+    family: "agent-api/app-list",
+    method: LOCAL_PROXY_ROUTES.apps.list.method,
+    match: exactPath(LOCAL_PROXY_ROUTES.apps.list.path),
+    body: "none",
+    handler: "agentApp",
+    parse: () => ({ operation: "list" as const }),
+    respond: forwardResponse,
+  }),
+  defineRoute({
+    family: "agent-api/app-token",
+    method: LOCAL_PROXY_ROUTES.apps.token.method,
+    // The same `/api/agent/v1/apps/` prefix as an App's config.
+    match: pathParam(LOCAL_APP_CONFIG_ROUTE_PREFIX, "/token"),
+    body: "json-object",
+    handler: "agentApp",
+    parse: ({ param, fields }) => {
+      const appKey = decodePathParam(param);
+      const body = decodeAgentAppTokenBody(fields);
+      if (appKey instanceof Response) return appKey;
+      return body ? { operation: "token" as const, appKey, ...body } : badRequest();
+    },
+    respond: forwardResponse,
   }),
   defineRoute({
     family: "agent-api/mention-pending",
@@ -808,7 +767,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     body: "none",
     handler: "mentionPending",
     parse: () => ({}),
-    domainFailure: mentionActionDomainFailure,
+    domainFailure: domain.mentionActionDomainFailure,
   }),
   defineRoute({
     family: "agent-api/mention-execute",
@@ -817,7 +776,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     body: "json-object",
     handler: "mentionExecute",
     parse: ({ fields }) => parseMentionExecuteFields(fields),
-    domainFailure: mentionActionDomainFailure,
+    domainFailure: domain.mentionActionDomainFailure,
   }),
   defineRoute({
     family: "agent-api/mention-delivery",
@@ -830,7 +789,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
       if (messageId instanceof Response) return messageId;
       return MESSAGE_ID_ANCHOR.test(messageId) ? { messageId } : badRequest();
     },
-    domainFailure: mentionDeliveryDomainFailure,
+    domainFailure: domain.mentionDeliveryDomainFailure,
   }),
   defineRoute({
     family: "agent-api/attachment",
@@ -1015,7 +974,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
         ? admitted.command
         : Response.json(admitted.body, { status: admitted.status });
     },
-    domainFailure: openvikingDomainFailure,
+    domainFailure: domain.openvikingDomainFailure,
   }),
   defineRoute({
     family: "agent-api/inbox",

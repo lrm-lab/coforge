@@ -47,6 +47,14 @@ describe("decideAgentAccess", () => {
     ).toEqual({ kind: "granted", scopes: ALL_SCOPES });
   });
 
+  test("an active grant is used only with the scopes the app still allows", () => {
+    expect(
+      decideAgentAccess(
+        facts({ allowedScopes: FIXED, grant: { scopes: ALL_SCOPES, revoked: false } }),
+      ),
+    ).toEqual({ kind: "granted", scopes: FIXED });
+  });
+
   test("after a revoke the Agent needs an approval, and a pending request is reused as it is", () => {
     const revoked = { scopes: ALL_SCOPES, revoked: true };
     expect(decideAgentAccess(facts({ grant: revoked }))).toEqual({

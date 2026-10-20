@@ -4,6 +4,8 @@ import { connectLocal } from "./local-client";
 import { CliError, renderCliError } from "./cli-error";
 import { runGitHubCli, runGitHubCredentialHelper } from "./github-credential";
 import { runGitPrepareCommitMsg } from "./git-prepare-commit-msg";
+import { connectAppClient } from "./app-client";
+import { parseAppArgs, runAppCommand } from "./app-commands";
 import { COFORGE_CLI_VERSION } from "./version";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
@@ -15,13 +17,28 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
     return;
   }
 
-  const transport = connectLocal(
-    Bun.env.COFORGE_DAEMON_SOCKET ?? "",
-    Bun.env.COFORGE_AGENT_CONTEXT ?? "",
-    Bun.env.COFORGE_AGENT_PROXY_URL ?? "",
-  );
-
   try {
+    // `app token` owns the program's stdio and exit code, so neither goes through `run`.
+    if (args[0] === "app" && (args[1] === "list" || args[1] === "token")) {
+      process.exitCode = await runAppCommand(
+        parseAppArgs(args.slice(1)),
+        connectAppClient(
+          Bun.env.COFORGE_AGENT_CONTEXT ?? "",
+          Bun.env.COFORGE_AGENT_PROXY_URL ?? "",
+        ),
+        {
+          stdout: (chunk) => process.stdout.write(chunk),
+          stderr: (chunk) => process.stderr.write(chunk),
+          env: Bun.env,
+        },
+      );
+      return;
+    }
+    const transport = connectLocal(
+      Bun.env.COFORGE_DAEMON_SOCKET ?? "",
+      Bun.env.COFORGE_AGENT_CONTEXT ?? "",
+      Bun.env.COFORGE_AGENT_PROXY_URL ?? "",
+    );
     if (args[0] === "github" && args[1] === "credential") {
       const output = await runGitHubCredentialHelper(
         args[2],

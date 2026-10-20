@@ -32,6 +32,16 @@ const APP_CONFIG_ROUTES = {
   update: { method: "PATCH", path: appConfigPath },
 } as const;
 
+/** `coforge app list|token`: the Workspace's apps, and a short-lived token for one. Same routes
+ * under `proxy`, `local` and `cloud`. */
+const APP_ROUTES = {
+  list: { method: "GET", path: "/api/agent/v1/apps" },
+  token: {
+    method: "POST",
+    path: (appKey: string) => `/api/agent/v1/apps/${encodeURIComponent(appKey)}/token`,
+  },
+} as const;
+
 /** Resumable attachment uploads. Same routes under `local` and `cloud`. */
 const ATTACHMENT_UPLOAD_SESSION_ROUTES = {
   create: { method: "POST", path: "/api/agent/v1/attachment-upload-sessions" },
@@ -85,6 +95,7 @@ export const agentApiRoutes = {
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     profile: PROFILE_ROUTES,
     appConfig: APP_CONFIG_ROUTES,
+    apps: APP_ROUTES,
   },
   local: {
     messages: {
@@ -121,6 +132,7 @@ export const agentApiRoutes = {
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     profile: PROFILE_ROUTES,
     appConfig: APP_CONFIG_ROUTES,
+    apps: APP_ROUTES,
   },
   cloud: {
     workspace: { info: { method: "GET", path: "/api/agent/v1/workspace" } },
@@ -232,6 +244,7 @@ export const agentApiRoutes = {
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     profile: PROFILE_ROUTES,
     appConfig: APP_CONFIG_ROUTES,
+    apps: APP_ROUTES,
   },
   workspace: {
     info: {

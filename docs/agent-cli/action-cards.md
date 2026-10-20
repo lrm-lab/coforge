@@ -16,7 +16,7 @@ COFORGEACTION
 As with `message send`, stdin redirected from a regular file another user owns
 fails with `STDIN_FILE_NOT_OWNED` before any request.
 
-Three kinds are supported today; the `integration:*` kinds are not implemented
+An Agent prepares three kinds; the `integration:*` kinds are not implemented
 yet:
 
 - **`channel:create`**: `name` (1-32 chars, `^[a-z0-9][a-z0-9_-]{0,31}$` after
@@ -69,3 +69,15 @@ coforge message read --target "#design" --around <message-id>
 ```
 
 Only `executed` means the resource now exists.
+
+## App approval cards
+
+The server posts one more kind itself, never through `action prepare`: `app:grant_agent`, when
+`coforge app token --target <target>` finds that a person must approve the Agent's use of an app
+([Agent Apps](apps.md)). It is posted once per waiting request, wherever the first `--target`
+named, and carries the request, the app and the scopes. A Workspace owner or admin, or the Agent's
+creator, commits it (Approve), which approves the request under the same rule as the Agent's Apps
+settings, or cancels it (Deny), which denies the request; the generic Dismiss does not apply to it.
+A request approved or denied in the Agent's Apps settings settles its card the same way.
+Read back, the card shows `[action card: executed]` once approved and `[action card: cancelled]`
+once denied; run `coforge app token` again after an approval.

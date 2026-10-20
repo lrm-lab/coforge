@@ -9,6 +9,7 @@ export * from "./version";
 export * from "./user-info";
 export * from "./profile";
 export * from "./app-config";
+export * from "./apps";
 export * from "./memory-citations";
 export * from "./openviking-memory";
 export * from "./memory-tool-fences";
