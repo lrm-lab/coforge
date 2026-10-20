@@ -79,8 +79,9 @@ These rules apply to `src/features/agents/`.
   Daemon's `detail` wins; fall back to the "… finished" wording only when
   `detail` is empty.
 - Memory Activity retains conversation lineage: chat peeks filter to the current group,
-  while the member timeline aggregates groups and links each scoped row to its origin.
-  Unscoped historical rows keep their original meaning.
+  while the member timeline aggregates groups. Timeline rows show no conversation link (like
+  every other Agent's); the lineage stays in the data. Unscoped historical rows keep their
+  original meaning.
 - The Agent card (`agent-hover-card.tsx`) peeks from the avatars in a message
   stream only; conversation and profile headers show a plain avatar. Its
   Recent activity goes only to the viewers who get the panel's Activity tab

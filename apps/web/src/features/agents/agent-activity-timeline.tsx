@@ -1,6 +1,4 @@
 import { memo, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Link } from "@tanstack/react-router";
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { replaceEqualDeep } from "@tanstack/react-query";
 import { Activity as ActivityIcon, ChevronRight } from "@untitledui/icons";
 import { Badge } from "#src/components/base/badges/badges";
@@ -102,7 +100,6 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
   row: PresentedActivityRow;
   timeZone: string | null;
 }) {
-  const workspaceSlug = useWorkspaceSlug();
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
   const canExpand = row.expandable && row.detail.length > 200;
@@ -139,20 +136,6 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
       <div className="min-w-0">
         <div className="text-sm wrap-anywhere">
           {label}
-          {row.conversationId && row.conversationTarget && (
-            <Link
-              to={
-                row.conversationTarget.startsWith("#")
-                  ? "/w/$workspaceSlug/channel/$channelId"
-                  : "/w/$workspaceSlug/dm/$dmId"
-              }
-              params={{ workspaceSlug, channelId: row.conversationId, dmId: row.conversationId }}
-              search={{ profile: undefined, agentTab: undefined }}
-              className="ml-1.5 cursor-pointer text-xs text-tertiary underline hover:text-primary"
-            >
-              {row.conversationTarget.split(":")[0]}
-            </Link>
-          )}
           {row.subagent && (
             <Badge type="modern" size="sm" color="gray" className="ml-1.5 inline-flex">
               {subagentBadgeLabel(row.subagent)}
