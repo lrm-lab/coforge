@@ -4,6 +4,7 @@ import { AppError } from "#src/lib/app-error";
 import { APP_LOGO_UPLOAD_TYPES } from "#src/lib/image-upload";
 import type { FileStorage } from "#src/server/files/file-storage.server";
 import { validateImage } from "#src/server/files/image-upload.server";
+import { replaceStoredImage } from "#src/server/files/stored-image-replacement.server";
 import type { AppCategory } from "#src/features/apps/app-category";
 import {
   APP_INPUT_ERROR_IDS,
@@ -194,21 +195,25 @@ export class AppRegistry {
     const app = await this.requireOwnApp(actor, key);
     await validateImage(file, APP_LOGO_UPLOAD_TYPES);
     const objectKey = appLogoObjectKey(actor.workspaceId, key);
-    const images = await this.images.storage();
-    await images.put(objectKey, file, file.type);
-    try {
-      await this.swapLogo(actor, app, { objectKey, contentType: file.type });
-    } catch (error) {
-      await images.remove(objectKey);
-      throw error;
-    }
+    await replaceStoredImage({
+      storage: await this.images.storage(),
+      objectKey,
+      file,
+      contentType: file.type,
+      previousObjectKey: app.logoObjectKey,
+      commit: () => this.swapLogo(actor, app, { objectKey, contentType: file.type }),
+      reportRemovalFailure: (error) => this.images.removalFailed(error),
+    });
     return { ...app, logoObjectKey: objectKey };
   }
 
   /** Back to the monogram: the logo's object is removed. */
   async resetAppLogo(actor: AppActor, key: string): Promise<AppView> {
     const app = await this.requireOwnApp(actor, key);
-    if (app.logoObjectKey) await this.swapLogo(actor, app, null);
+    if (app.logoObjectKey) {
+      await this.swapLogo(actor, app, null);
+      await this.removeImage(app.logoObjectKey);
+    }
     return { ...app, logoObjectKey: null };
   }
 
@@ -237,21 +242,19 @@ export class AppRegistry {
     return app;
   }
 
-  /** Moves the app's logo from the one `app` was read with to `to`, then removes the old object;
-   * CONFLICT when another change came first, NOT_FOUND when the app went. */
+  /** Moves the app's logo from the one `app` was read with to `to`, leaving the old object to the
+   * caller; CONFLICT when another change came first, NOT_FOUND when the app went. */
   private async swapLogo(
     actor: AppActor,
     app: AppView,
     to: { objectKey: string; contentType: string } | null,
   ): Promise<void> {
-    const from = app.logoObjectKey;
-    if (!(await this.store.replaceLogo(actor.workspaceId, app.key, from, to))) {
+    if (!(await this.store.replaceLogo(actor.workspaceId, app.key, app.logoObjectKey, to))) {
       const current = await this.store.find(app.key);
       throw new AppError(
         current?.ownerWorkspaceId === actor.workspaceId ? "CONFLICT" : "NOT_FOUND",
       );
     }
-    await this.removeImage(from);
   }
 
   /** The change is already committed, so a failed removal is reported, never thrown. */

@@ -11,6 +11,7 @@ import {
 } from "#src/server/files/public-image-delivery.server";
 import { getPublicImageStorage } from "#src/server/files/public-image-storage.server";
 import { validateImage } from "#src/server/files/image-upload.server";
+import { replaceStoredImage } from "#src/server/files/stored-image-replacement.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import {
   AGENT_AVATAR_POOL_VERSION,
@@ -105,25 +106,21 @@ export class AgentAvatars {
     await validateImage(file);
     const current = await this.#owned(workspaceId, userId, agentId);
     const objectKey = avatarObjectKey(workspaceId, agentId);
-    const files = await this.storage();
-    await files.put(objectKey, file, file.type);
-    try {
-      const updated = await this.db.agent.updateMany({
-        where: { id: agentId, avatarObjectKey: current.avatarObjectKey },
-        data: { avatarObjectKey: objectKey, avatarContentType: file.type },
-      });
-      if (!updated.count) throw new AppError("CONFLICT");
-    } catch (error) {
-      await files.remove(objectKey);
-      throw error;
-    }
-    if (current.avatarObjectKey) {
-      try {
-        await files.remove(current.avatarObjectKey);
-      } catch (error) {
-        toPublicServerError(error);
-      }
-    }
+    await replaceStoredImage({
+      storage: await this.storage(),
+      objectKey,
+      file,
+      contentType: file.type,
+      previousObjectKey: current.avatarObjectKey,
+      commit: async () => {
+        const updated = await this.db.agent.updateMany({
+          where: { id: agentId, avatarObjectKey: current.avatarObjectKey },
+          data: { avatarObjectKey: objectKey, avatarContentType: file.type },
+        });
+        if (!updated.count) throw new AppError("CONFLICT");
+      },
+      reportRemovalFailure: (error) => void toPublicServerError(error),
+    });
     return { avatarUrl: agentAvatarUrl(workspaceId, agentId, objectKey) };
   }
 

@@ -10,6 +10,7 @@ import {
 } from "#src/server/files/public-image-delivery.server";
 import { getPublicImageStorage } from "#src/server/files/public-image-storage.server";
 import { validateImage } from "#src/server/files/image-upload.server";
+import { replaceStoredImage } from "#src/server/files/stored-image-replacement.server";
 import { toPublicServerError } from "#src/server/errors/public-error.server";
 
 /**
@@ -49,26 +50,21 @@ export class ProjectImages {
     const previous = await this.db.project.findFirst({ where, select: { iconObjectKey: true } });
     if (!previous) throw new AppError("NOT_FOUND");
     const objectKey = `workspaces/${workspaceId}/projects/${projectId}/icons/${crypto.randomUUID()}/original`;
-    const files = await this.storage();
-    await files.put(objectKey, file, file.type);
-    try {
-      const updated = await this.db.project.updateMany({
-        where: { ...where, iconObjectKey: previous.iconObjectKey },
-        data: { iconObjectKey: objectKey, iconContentType: file.type },
-      });
-      if (!updated.count) throw new AppError("CONFLICT");
-    } catch (error) {
-      await files.remove(objectKey);
-      throw error;
-    }
-    // The new image is already committed; cleanup failure must not undo its result.
-    if (previous.iconObjectKey) {
-      try {
-        await files.remove(previous.iconObjectKey);
-      } catch (error) {
-        toPublicServerError(error);
-      }
-    }
+    await replaceStoredImage({
+      storage: await this.storage(),
+      objectKey,
+      file,
+      contentType: file.type,
+      previousObjectKey: previous.iconObjectKey,
+      commit: async () => {
+        const updated = await this.db.project.updateMany({
+          where: { ...where, iconObjectKey: previous.iconObjectKey },
+          data: { iconObjectKey: objectKey, iconContentType: file.type },
+        });
+        if (!updated.count) throw new AppError("CONFLICT");
+      },
+      reportRemovalFailure: (error) => void toPublicServerError(error),
+    });
     return { iconUrl: projectIconUrl(projectId, objectKey) };
   }
 

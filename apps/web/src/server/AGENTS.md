@@ -20,7 +20,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/conversations/` — public channels, channel authority, stopping and resuming a channel's Agents, direct messages, history, message search, action cards, reactions, tracked @mention delivery outcomes (`mention-deliveries`), and conversation realtime.
 - `server/db/` — the Prisma client, repositories (a DM's list preferences apart from its messages; the Agent attention rule in `agent-attention`), and the shared unique-violation check.
 - `server/errors/` — public error mapping and request error handling.
-- `server/files/` — file storage (per object, and bulk removal by keys or prefix), delivery, and uploaded-image validation.
+- `server/files/` — file storage (per object, and bulk removal by keys or prefix), delivery, uploaded-image validation, and replacing a row's stored image (`stored-image-replacement`).
 - `server/http/`, `server/install/`, `server/observability/` — public origin,
   response types and request timeouts, install scripts, tracing, and Server-Timing.
 - `server/inbox/` — the Activity inbox read model and its Done and read-all writes.
