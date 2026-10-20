@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
-import { bunChildEnv, bunExecutable } from "./local-bun";
+import { bunChildEnv } from "./local-bun";
+import { runSupervisedBun } from "./supervised-bun";
 
 const SERVER_ENTRY_RELATIVE = ".output/server/index.mjs";
 
@@ -21,11 +22,8 @@ export async function runNitro(port: number): Promise<void> {
   const host = process.env.HOST?.trim() || "localhost";
   console.log(`==> Starting production Nitro server on http://${host}:${port}`);
 
-  const child = Bun.spawn([bunExecutable(), serverEntry], {
+  const exitCode = await runSupervisedBun([serverEntry], {
     cwd: webRoot,
-    stdout: "inherit",
-    stderr: "inherit",
-    stdin: "inherit",
     env: bunChildEnv({
       HOST: host,
       PORT: String(port),
@@ -33,5 +31,5 @@ export async function runNitro(port: number): Promise<void> {
     }),
   });
 
-  process.exit(await child.exited);
+  process.exit(exitCode);
 }
