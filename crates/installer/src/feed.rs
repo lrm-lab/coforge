@@ -10,7 +10,10 @@
 
 use std::fs;
 use std::path::Path;
+use std::rc::Rc;
+use std::time::Duration;
 
+use crate::clock::Clock;
 use crate::contract::{ArtifactIdentity, ComputerArtifact, NamedArtifact, ReleaseManifest};
 use crate::fetch::{self, FetchError, FetchErrorCode, FetchReceipt, FetchRequest};
 use crate::manifest::parse_release_manifest;
@@ -31,18 +34,28 @@ pub(crate) const COMPUTER_BINARY: &str = "coforge-computer";
 pub(crate) const COMPUTER_GZIP: &str = "coforge-computer.gz";
 pub(crate) const PHOTON_WASM: &str = "photon_rs_bg.wasm";
 
+/// The waits before the second and the third attempt at one object. Only a transient failure
+/// ([`is_transient`]) is retried, and each attempt starts the object from scratch.
+const RETRY_WAITS: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(5)];
+/// Every request the feed makes, at most.
+const ATTEMPTS: usize = RETRY_WAITS.len() + 1;
+
 pub struct Feed {
     base: String,
     agent: ureq::Agent,
+    /// What the waits between attempts sleep on; shared, not borrowed, so a fixture can own a feed.
+    clock: Rc<dyn Clock>,
 }
 
 impl Feed {
     /// A client for the feed at `base_url` (a trailing `/` is optional), using `agent` for every
-    /// request: [`fetch::agent`] with [`fetch::Transport::Https`] in production.
-    pub fn new(base_url: &str, agent: ureq::Agent) -> Self {
+    /// request ([`fetch::agent`] with [`fetch::Transport::Https`] in production) and waiting on
+    /// `clock` between attempts. Each retry is announced on standard error.
+    pub fn new(base_url: &str, agent: ureq::Agent, clock: Rc<dyn Clock>) -> Self {
         Self {
             base: base_url.trim_end_matches('/').to_owned(),
             agent,
+            clock,
         }
     }
 
@@ -58,8 +71,7 @@ impl Feed {
                 ))
             };
         }
-        let bytes = fetch::fetch_bytes(&self.agent, &self.url("latest"), MAX_POINTER_BYTES)
-            .map_err(feed_error)?;
+        let bytes = self.fetch_bytes_retrying(&self.url("latest"), MAX_POINTER_BYTES)?;
         // Surrounding whitespace is a formatting accident; anything else must be a version.
         let pointer = String::from_utf8(bytes)
             .ok()
@@ -79,8 +91,7 @@ impl Feed {
     /// `<version>/manifest.json`, validated as the release manifest of exactly that version.
     pub fn manifest(&self, version: &str) -> Result<ReleaseManifest, UpdateError> {
         let url = self.version_url(version, "manifest.json")?;
-        let bytes =
-            fetch::fetch_bytes(&self.agent, &url, MAX_MANIFEST_BYTES).map_err(feed_error)?;
+        let bytes = self.fetch_bytes_retrying(&url, MAX_MANIFEST_BYTES)?;
         parse_release_manifest(&bytes, version)
     }
 
@@ -97,8 +108,7 @@ impl Feed {
     ) -> Result<ArtifactIdentity, UpdateError> {
         let url = self.version_url(version, &format!("{target}/{COMPUTER_GZIP}"))?;
         let request = computer_request(artifact, url, out)?;
-        let receipt = fetch::fetch(&self.agent, &request)
-            .map_err(|error| transfer_error(error, COMPUTER_GZIP))?;
+        let receipt = self.fetch_retrying(&request)?;
         computer_result(receipt, artifact, out)
     }
 
@@ -110,9 +120,57 @@ impl Feed {
         out: &Path,
     ) -> Result<ArtifactIdentity, UpdateError> {
         let request = photon_request(artifact, self.version_url(version, PHOTON_WASM)?, out)?;
-        let receipt = fetch::fetch(&self.agent, &request)
-            .map_err(|error| transfer_error(error, PHOTON_WASM))?;
+        let receipt = self.fetch_retrying(&request)?;
         photon_result(receipt, artifact, out)
+    }
+
+    /// A small object (`latest`, a manifest) read into memory, retried by [`Self::with_retries`].
+    fn fetch_bytes_retrying(&self, url: &str, max_bytes: u64) -> Result<Vec<u8>, UpdateError> {
+        self.with_retries(url, || fetch::fetch_bytes(&self.agent, url, max_bytes))
+            .map_err(feed_error)
+    }
+
+    /// One release object transferred to its file, retried by [`Self::with_retries`].
+    fn fetch_retrying(&self, request: &FetchRequest) -> Result<FetchReceipt, UpdateError> {
+        self.with_retries(&request.url, || fetch::fetch(&self.agent, request))
+            .map_err(|error| transfer_error(error, object_name(&request.url)))
+    }
+
+    /// Runs `attempt` on `url` until it succeeds or fails for good, waiting before each retry and
+    /// saying so on standard error.
+    fn with_retries<T>(
+        &self,
+        url: &str,
+        mut attempt: impl FnMut() -> Result<T, FetchError>,
+    ) -> Result<T, FetchError> {
+        let mut waits = RETRY_WAITS.iter().enumerate();
+        loop {
+            let error = match attempt() {
+                Err(error) if is_transient(&error) => error,
+                result => return result,
+            };
+            let Some((index, wait)) = waits.next() else {
+                let proxy = self.proxy_route(url);
+                return Err(FetchError {
+                    message: format!("{} ({ATTEMPTS} attempts; {proxy})", error.message),
+                    ..error
+                });
+            };
+            eprintln!("{}", retry_line(object_name(url), index + 2, *wait, &error));
+            self.clock.sleep(*wait);
+        }
+    }
+
+    /// Whether the agent sends `url` through a proxy (`proxy configured`), past one that
+    /// `NO_PROXY` exempts it from (`proxy bypassed`), or has none (`no proxy`). Never the proxy.
+    fn proxy_route(&self, url: &str) -> &'static str {
+        let Some(proxy) = self.agent.config().proxy() else {
+            return "no proxy";
+        };
+        match url.parse::<ureq::http::Uri>() {
+            Ok(uri) if proxy.is_no_proxy(&uri) => "proxy bypassed",
+            _ => "proxy configured",
+        }
     }
 
     fn url(&self, path: &str) -> String {
@@ -251,11 +309,40 @@ pub(crate) fn photon_result(
     Ok(recorded.clone())
 }
 
+/// The object `url` names, its last segment: how a retry line and an error name it.
+fn object_name(url: &str) -> &str {
+    url.rsplit_once('/').map_or(url, |(_, name)| name)
+}
+
+/// The line printed to standard error before attempt `attempt` at `object`, `wait` from now.
+fn retry_line(object: &str, attempt: usize, wait: Duration, error: &FetchError) -> String {
+    format!(
+        "coforge-installer: retrying {object} in {}s (attempt {attempt} of {ATTEMPTS}): {}",
+        wait.as_secs(),
+        error.message
+    )
+}
+
+/// Whether asking again could succeed: the transfer itself failed, or the server answered 408,
+/// 429, or 5xx. A rejected request, another status, an object that arrived wrong, or a local
+/// failure is final.
+fn is_transient(error: &FetchError) -> bool {
+    match error.code {
+        FetchErrorCode::Download => true,
+        FetchErrorCode::HttpStatus(status) => matches!(status, 408 | 429 | 500..=599),
+        FetchErrorCode::Rejected
+        | FetchErrorCode::SizeLimit
+        | FetchErrorCode::ChecksumMismatch
+        | FetchErrorCode::GzipInvalid
+        | FetchErrorCode::Write => false,
+    }
+}
+
 /// A metadata object the feed could not deliver is a download failure; one that arrived larger
 /// than its ceiling is a feed that breaks its rules.
 pub(crate) fn feed_error(error: FetchError) -> UpdateError {
     match error.code {
-        FetchErrorCode::Download | FetchErrorCode::HttpStatus => {
+        FetchErrorCode::Download | FetchErrorCode::Rejected | FetchErrorCode::HttpStatus(_) => {
             UpdateError::DownloadFailed(error.message)
         }
         FetchErrorCode::SizeLimit
@@ -269,7 +356,7 @@ pub(crate) fn feed_error(error: FetchError) -> UpdateError {
 /// object; a bad object is an integrity failure.
 pub(crate) fn transfer_error(error: FetchError, object: &str) -> UpdateError {
     match error.code {
-        FetchErrorCode::Download | FetchErrorCode::HttpStatus => {
+        FetchErrorCode::Download | FetchErrorCode::Rejected | FetchErrorCode::HttpStatus(_) => {
             UpdateError::DownloadFailed(error.message)
         }
         FetchErrorCode::SizeLimit => UpdateError::IntegrityFailed(format!(
@@ -290,5 +377,7 @@ pub(crate) fn transfer_error(error: FetchError, object: &str) -> UpdateError {
 
 #[cfg(test)]
 mod download_failure_tests;
+#[cfg(test)]
+mod retry_tests;
 #[cfg(test)]
 mod tests;

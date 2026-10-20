@@ -213,7 +213,7 @@ fn fetch_reports_a_non_success_status() {
 
     let error = fetch(&agent(Transport::LoopbackHttp), &req).unwrap_err();
 
-    assert_eq!(error.code, FetchErrorCode::HttpStatus, "{}", error.message);
+    assert_eq!(error.code, FetchErrorCode::HttpStatus(404), "{error:?}");
     assert!(scratch.entries().is_empty(), "{:?}", scratch.entries());
 }
 
@@ -226,7 +226,7 @@ fn the_production_agent_refuses_plain_http() {
 
     let error = fetch(&agent(Transport::Https), &req).unwrap_err();
 
-    assert_eq!(error.code, FetchErrorCode::Download, "{}", error.message);
+    assert_eq!(error.code, FetchErrorCode::Rejected, "{}", error.message);
 }
 
 fn serve(routes: &[(&str, test_support::Response)]) -> test_support::Server {
@@ -257,8 +257,7 @@ fn fetch_refuses_a_redirect() {
 
     let error = fetch(&agent(Transport::LoopbackHttp), &req).unwrap_err();
 
-    assert_eq!(error.code, FetchErrorCode::HttpStatus, "{}", error.message);
-    assert!(error.message.contains("302"), "{}", error.message);
+    assert_eq!(error.code, FetchErrorCode::HttpStatus(302), "{error:?}");
     assert_eq!(
         server.requests(),
         ["/moved.gz"],
@@ -304,7 +303,7 @@ fn fetch_bytes_reports_a_status_and_refuses_a_redirect() {
         ("/elsewhere", test_support::Response::ok(b"x".to_vec())),
     ]);
 
-    for path in ["/missing", "/moved"] {
+    for (path, status) in [("/missing", 404), ("/moved", 302)] {
         let error = fetch_bytes(
             &agent(Transport::LoopbackHttp),
             &format!("{}{path}", server.base_url()),
@@ -313,7 +312,7 @@ fn fetch_bytes_reports_a_status_and_refuses_a_redirect() {
         .unwrap_err();
         assert_eq!(
             error.code,
-            FetchErrorCode::HttpStatus,
+            FetchErrorCode::HttpStatus(status),
             "{path}: {}",
             error.message
         );
@@ -330,7 +329,7 @@ fn fetch_bytes_refuses_plain_http_in_production() {
     )
     .unwrap_err();
 
-    assert_eq!(error.code, FetchErrorCode::Download, "{}", error.message);
+    assert_eq!(error.code, FetchErrorCode::Rejected, "{}", error.message);
 }
 
 // ---- the wire cap and the expansion cap are separate -------------------------------------

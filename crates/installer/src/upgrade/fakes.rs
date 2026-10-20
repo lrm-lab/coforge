@@ -24,7 +24,7 @@ use crate::service::{
 };
 use crate::store::VersionStore;
 use crate::switch::Ports;
-use crate::test_support::{Release, Scratch, Server};
+use crate::test_support::{Release, Response, Scratch, Server, loopback_feed};
 
 /// The release target of the machine the tests run on: `activate` switches by the target's
 /// platform (a symlink on Unix, a junction on Windows), so a fixture claiming another platform
@@ -251,19 +251,23 @@ impl Fixture {
 
     /// A fixture whose feed's `latest` pointer names `latest` (one of [`OLD`] and [`NEW`]).
     pub(crate) fn with_latest(label: &str, latest: &str) -> Self {
+        Self::serving(label, latest, BTreeMap::new())
+    }
+
+    /// A fixture whose feed answers the first requests for a path in `first` with that path's
+    /// responses, one each, and then as [`Fixture::new`]'s feed does.
+    pub(crate) fn with_first_answers(label: &str, first: BTreeMap<String, Vec<Response>>) -> Self {
+        Self::serving(label, NEW, first)
+    }
+
+    fn serving(label: &str, latest: &str, first: BTreeMap<String, Vec<Response>>) -> Self {
         let scratch = Scratch::new(label);
         let mut routes = Release::new(OLD, TARGET).routes();
         routes.extend(Release::new(NEW, TARGET).routes());
-        routes.insert(
-            "/latest".to_owned(),
-            crate::test_support::Response::ok(format!("{latest}\n")),
-        );
-        let server = Server::start(routes);
+        routes.insert("/latest".to_owned(), Response::ok(format!("{latest}\n")));
+        let server = Server::start_scripted(routes, first);
         let root = scratch.path().join("install");
-        let feed = Feed::new(
-            &server.base_url(),
-            crate::fetch::agent(crate::fetch::Transport::LoopbackHttp),
-        );
+        let feed = loopback_feed(&server.base_url(), Default::default());
         Self {
             binary_directory: scratch.path().join("bin"),
             store: VersionStore::new(&root, TARGET),

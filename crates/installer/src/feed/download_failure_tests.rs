@@ -2,8 +2,7 @@
 //! object that arrived and breaks the feed's rules is an invalid feed.
 
 use super::tests::{TARGET, VERSION, download_failed, feed};
-use super::*;
-use crate::test_support::{Release, Response, Server};
+use crate::test_support::{Release, Response, Server, loopback_feed};
 
 #[test]
 fn a_manifest_the_feed_could_not_deliver_is_a_download_failure_not_an_invalid_feed() {
@@ -45,10 +44,7 @@ fn a_manifest_the_feed_could_not_deliver_is_a_download_failure_not_an_invalid_fe
         .unwrap()
         .local_addr()
         .unwrap();
-    let unreachable = Feed::new(
-        &format!("http://{closed}"),
-        crate::fetch::agent(crate::fetch::Transport::LoopbackHttp),
-    );
+    let unreachable = loopback_feed(&format!("http://{closed}"), Default::default());
     let message = download_failed(unreachable.manifest(VERSION).unwrap_err());
     assert!(message.contains("manifest.json"), "{message}");
 }

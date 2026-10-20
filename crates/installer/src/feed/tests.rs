@@ -6,7 +6,7 @@ use super::*;
 use crate::contract::ReleaseManifest;
 use crate::digest::measure_bytes;
 use crate::manifest::{computer_artifact, parse_release_manifest};
-use crate::test_support::{Release, Response, Scratch, Server, gzip};
+use crate::test_support::{Release, Response, Scratch, Server, gzip, loopback_feed};
 
 pub(super) const VERSION: &str = "0.2.0";
 pub(super) const TARGET: &str = "linux-x64";
@@ -16,13 +16,10 @@ fn serve(release: &Release) -> Server {
 }
 
 pub(super) fn feed(server: &Server) -> Feed {
-    Feed::new(
-        &server.base_url(),
-        crate::fetch::agent(crate::fetch::Transport::LoopbackHttp),
-    )
+    loopback_feed(&server.base_url(), Default::default())
 }
 
-fn manifest_of(release: &Release) -> ReleaseManifest {
+pub(super) fn manifest_of(release: &Release) -> ReleaseManifest {
     parse_release_manifest(release.manifest().to_string().as_bytes(), &release.version).unwrap()
 }
 
@@ -151,10 +148,7 @@ fn objects_are_requested_below_the_feed_url_whatever_its_trailing_slashes() {
         .collect();
     let server = Server::start(routes);
     for base in ["/feed", "/feed/", "/feed//"] {
-        let feed = Feed::new(
-            &format!("{}{base}", server.base_url()),
-            crate::fetch::agent(crate::fetch::Transport::LoopbackHttp),
-        );
+        let feed = loopback_feed(&format!("{}{base}", server.base_url()), Default::default());
         assert_eq!(feed.resolve_version("latest").unwrap(), VERSION, "{base}");
     }
     assert_eq!(server.requests(), ["/feed/latest"; 3]);

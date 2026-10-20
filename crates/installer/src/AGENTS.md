@@ -31,9 +31,10 @@ module: its file and single responsibility. Update it before adding or reorganiz
   `<version>/manifest.json` and the choice of one target's artifact; no I/O.
 - `src/feed.rs`: the release feed client. Resolves `latest`, fetches and
   validates a manifest, downloads one version's binary and Pi image library
-  into a directory through `fetch`, checked against the manifest. The size
+  into a directory through `fetch`, checked against the manifest, retrying a
+  transient failure of any of these requests on the clock port. The size
   ceilings and the transfer checks it shares with `release_directory` are
-  `pub(crate)` helpers here.
+  `pub(crate)` helpers here. Retry tests in `src/feed/retry_tests.rs`.
 - `src/release_directory.rs`: a release read from a local directory (`--from-directory`), the
   same objects in the flat local-package layout, through the same caps and checks as `feed`.
   Tests in `src/release_directory/tests.rs`.
@@ -120,5 +121,6 @@ module: its file and single responsibility. Update it before adding or reorganiz
   that settles, otherwise restores the previous version. Writes a receipt only when none exists;
   clears the journal only after settling. Tests in `src/recover/tests.rs`.
 - `src/test_support.rs`: test-only helpers shared by the modules' tests: a
-  scratch directory, a loopback HTTP server, a tiny release tree, and runners
+  scratch directory, a loopback HTTP server (`src/test_support/loopback.rs`,
+  which can script a path's first answers), a tiny release tree, and runners
   that repeat a test in a child process, killed after `CHILD_DEADLINE` (30 s).

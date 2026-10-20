@@ -3,6 +3,7 @@
 //! clock, and feed). The commands call these use cases; they build no ports of their own.
 
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use crate::clock::SystemClock;
 use crate::compiled_feed::FeedEndpoint;
@@ -82,7 +83,8 @@ fn with_ports<T>(
     )
     .map_err(|error| error.to_string())?;
     let store = setup.store();
-    let feed = Feed::new(&setup.feed.base_url, fetch::agent(setup.feed.transport));
+    let agent = fetch::agent(setup.feed.transport);
+    let feed = Feed::new(&setup.feed.base_url, agent, Rc::new(clock));
     let directory;
     let release: &dyn ReleaseSource = match origin {
         ReleaseOrigin::Feed => &feed,

@@ -68,7 +68,9 @@ The module map is in [`src/AGENTS.md`](src/AGENTS.md), next to the modules it de
 Output: each stage line is `==> <stage>` on stdout, flushed as it happens. A succeeded install or
 upgrade ends with `CoForge Computer <version> is active.`. A refusal or a failed receipt's message
 goes to stderr as `coforge-installer: <message>`, or `coforge-installer: <CODE>: <message>` when the
-receipt has an `errorCode`.
+receipt has an `errorCode`. A feed retry first prints `coforge-installer: retrying <object> in <n>s
+(attempt <k> of 3): <error>` to stderr. A feed request that failed 3 times ends its message with
+`(3 attempts; proxy configured|proxy bypassed|no proxy)`; bypassed: `NO_PROXY` exempts the feed.
 
 Exit status (`contract.rs`): 0 succeeded, 1 failed (a receipt, or a usage error that wrote
 nothing), 2 held (another run holds the lock, or the request id belongs to something else), 3
@@ -145,16 +147,18 @@ mise exec -- cargo about generate --locked --fail --output-file THIRD_PARTY_NOTI
 
 ## Rules and gotchas
 
-- The feed is read as `install.sh --prepare-directory` reads it: no redirects,
-  `latest` ≤ 4096 bytes, a manifest ≤ 1 MiB, every object capped at its recorded
-  size (≤ 512 MiB) on the wire and expanded. Several gzip members, nothing after
-  them. An installed version is verified and reused, never overwritten.
-- A transfer that receives nothing for `fetch::IDLE_TIMEOUT` (60 s) fails; there
-  is deliberately no limit on the whole download, which is legitimate on a slow
-  link. Anything that changes the install root (`prepare_version`,
-  `VersionStore::begin_staging`) takes `&MachineMutationLock` and checks it with
-  `VersionStore::require_lock`, which refuses a lock on a different root: keep it
+- The feed is read as `install.sh --prepare-directory` reads it: no redirects, `latest` ≤ 4096
+  bytes, a manifest ≤ 1 MiB, every object capped at its recorded size (≤ 512 MiB) on the wire and
+  expanded. Several gzip members, nothing after them. An installed version is verified and reused,
+  never overwritten.
+- A transfer that receives nothing for `fetch::IDLE_TIMEOUT` (60 s) fails; there is deliberately
+  no limit on the whole download, which is legitimate on a slow link. Anything that changes the
+  install root (`prepare_version`, `VersionStore::begin_staging`) takes `&MachineMutationLock` and
+  checks it with `VersionStore::require_lock`, which refuses a lock on a different root: keep it
   that way for the next such function.
+- Feed requests retry a transient failure (`feed::is_transient`: no connection, reset, timeout, cut
+  short, a proxy refusing CONNECT, HTTP 408/429/5xx) afresh: 3 attempts, 2 s then 5 s apart on
+  `Clock`. TLS, https_only, a bad URI or proxy URL fail at once. No Range resume: wire is hashed.
 - `crates/installer/Cargo.toml` keeps `publish = false` and no `license` field; the repository
   has no license. `deny.toml` and `about.toml` ignore the private crate itself.
 - `junction` (NTFS junctions, Windows only) is pinned `=1.2.0`. Its newer releases want

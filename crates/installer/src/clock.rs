@@ -1,6 +1,6 @@
 //! The clock and sleep port. Every bounded wait in the installer (a service manager that has to
-//! drop a job, a process that has to exit) reads time and sleeps through [`Clock`], so its tests
-//! run on a virtual clock and take no real time.
+//! drop a job, a process that has to exit, the feed's wait before retrying a download) reads time
+//! and sleeps through [`Clock`], so its tests run on a virtual clock and take no real time.
 
 use std::time::{Duration, Instant};
 

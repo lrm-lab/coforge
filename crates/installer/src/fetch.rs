@@ -58,8 +58,14 @@ pub struct FetchReceipt {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum FetchErrorCode {
+    /// The transfer itself failed: no connection, a reset, a timeout, a body cut short.
     Download,
-    HttpStatus,
+    /// The request failed for a reason that asking again does not change: TLS refused the
+    /// server, a plain-HTTP URL on the HTTPS-only agent, a bad URI or proxy setting, a reply that
+    /// is not HTTP.
+    Rejected,
+    /// The server answered this status instead of 2xx.
+    HttpStatus(u16),
     SizeLimit,
     ChecksumMismatch,
     GzipInvalid,
@@ -70,7 +76,8 @@ impl FetchErrorCode {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Download => "DOWNLOAD_FAILED",
-            Self::HttpStatus => "HTTP_STATUS",
+            Self::Rejected => "REQUEST_REJECTED",
+            Self::HttpStatus(_) => "HTTP_STATUS",
             Self::SizeLimit => "SIZE_LIMIT",
             Self::ChecksumMismatch => "CHECKSUM_MISMATCH",
             Self::GzipInvalid => "GZIP_INVALID",
@@ -91,6 +98,32 @@ impl FetchError {
             code,
             message: message.into(),
         }
+    }
+
+    fn http_status(url: &str, status: u16) -> Self {
+        Self::new(
+            FetchErrorCode::HttpStatus(status),
+            format!("{url} answered HTTP {status}"),
+        )
+    }
+
+    /// A request that brought no response. A failure of the transport itself, including a proxy
+    /// that refused or did not answer CONNECT, is a `Download`; one that the same request would
+    /// meet again is `Rejected`. rustls reports a refused certificate as I/O with `InvalidData`.
+    fn request(url: &str, error: ureq::Error) -> Self {
+        let code = match &error {
+            ureq::Error::StatusCode(status) => return Self::http_status(url, *status),
+            ureq::Error::Io(io) if io.kind() == io::ErrorKind::InvalidData => {
+                FetchErrorCode::Rejected
+            }
+            ureq::Error::Io(_)
+            | ureq::Error::Timeout(_)
+            | ureq::Error::HostNotFound
+            | ureq::Error::ConnectionFailed
+            | ureq::Error::ConnectProxyFailed(_) => FetchErrorCode::Download,
+            _ => FetchErrorCode::Rejected,
+        };
+        Self::new(code, format!("{url}: {error}"))
     }
 }
 
@@ -169,18 +202,12 @@ pub fn fetch_bytes(agent: &ureq::Agent, url: &str, max_bytes: u64) -> Result<Vec
 /// Starts a GET. Only a 2xx answer is a success: with redirects disabled a 3xx comes back as an
 /// ordinary response, and it is refused here like any other status.
 fn get(agent: &ureq::Agent, url: &str) -> Result<ureq::Body, FetchError> {
-    let response = agent.get(url).call().map_err(|error| match error {
-        ureq::Error::StatusCode(status) => FetchError::new(
-            FetchErrorCode::HttpStatus,
-            format!("{url} answered HTTP {status}"),
-        ),
-        other => FetchError::new(FetchErrorCode::Download, format!("{url}: {other}")),
-    })?;
+    let response = agent
+        .get(url)
+        .call()
+        .map_err(|error| FetchError::request(url, error))?;
     if !response.status().is_success() {
-        return Err(FetchError::new(
-            FetchErrorCode::HttpStatus,
-            format!("{url} answered HTTP {}", response.status().as_u16()),
-        ));
+        return Err(FetchError::http_status(url, response.status().as_u16()));
     }
     Ok(response.into_body())
 }

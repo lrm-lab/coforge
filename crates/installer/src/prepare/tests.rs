@@ -10,15 +10,12 @@ use crate::digest::measure_bytes;
 use crate::feed::Feed;
 use crate::lock::MachineMutationLock;
 use crate::release_directory::ReleaseDirectory;
-use crate::test_support::{Release, Response, Scratch, Server};
+use crate::test_support::{Release, Response, Scratch, Server, loopback_feed};
 
 const VERSION: &str = "0.2.0";
 
 fn feed(server: &Server) -> Feed {
-    Feed::new(
-        &server.base_url(),
-        crate::fetch::agent(crate::fetch::Transport::LoopbackHttp),
-    )
+    loopback_feed(&server.base_url(), Default::default())
 }
 
 fn names(directory: &Path) -> Vec<String> {
