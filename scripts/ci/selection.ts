@@ -77,6 +77,8 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       // The installer's tests take the Computer's machine mutation lock through this module.
       if (path === "packages/daemon/src/platform/process-lock.ts") affected.push("installer-crate");
       if (path.startsWith("packages/agent/")) affected.push("agent", "web");
+      // Web's tests and the benchmarks import Daemon source; the image has no Daemon.
+      if (path.startsWith("packages/daemon/") && track !== "web") affected.push("web");
       if (path.startsWith("packages/coforge/")) affected.push("coforge");
     } else if (path.startsWith("scripts/release/")) {
       affected = ["computer", "daemon", "macos-lifecycle", "release", "windows-release"];

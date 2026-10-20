@@ -33,7 +33,9 @@ with three scopes selected by `scripts/ci/selection.ts`:
 
 - Pull requests and pushes to `main` validate changed modules and affected
   downstream consumers.
-  Web-only changes run Web gates; Daemon changes also validate Computer.
+  Web-only changes run Web gates; Daemon changes also validate Computer, and
+  Web, whose tests and the benchmarks import Daemon source (the image has no
+  Daemon, so a Daemon change never selects a Web deployment).
   Agent changes additionally validate Web's imported Agent test contract.
   Client source changes retain native macOS and Windows smoke checks. Changes
   confined to Computer/Daemon test files run their owning package; the three

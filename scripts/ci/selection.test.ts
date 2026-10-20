@@ -45,6 +45,7 @@ test("dependency changes include downstream consumers, but not unrelated modules
     "computer",
     "daemon",
     "macos-lifecycle",
+    "web",
     "windows-release",
   ]);
   expect(selectChecks(["packages/coforge/src/cli.ts"], "changes")).toEqual([
@@ -136,6 +137,7 @@ test("documentation skips application checks, while shared and unknown inputs fa
     "daemon",
     "installer-crate",
     "macos-lifecycle",
+    "web",
     "windows-release",
   ]);
   expect(selectChecks(["infra/staging/caddy/Caddyfile"], "changes")).toEqual(["deploy", "web"]);
@@ -166,6 +168,16 @@ test("benchmark changes run the Web job, which checks the benchmarks, and deploy
   expect(web).toBeGreaterThan(-1);
   expect(benchmarks).toBeGreaterThan(web);
   expect(ci.jobs.web.steps[benchmarks].if).toBe("inputs.track != 'web'");
+});
+
+test("Daemon changes run the Web job, whose tests and benchmarks import Daemon, and deploy nothing", () => {
+  // apps/web/bunfig.toml preloads a Daemon test helper; Web tests and benchmarks import its source.
+  expect(selectChecks(["packages/daemon/index.ts"], "changes")).toContain("web");
+  expect(selectChecks(["packages/daemon/test/cli-temp-state.preload.ts"], "changes")).toContain(
+    "web",
+  );
+  // The image has no Daemon, so a Daemon change selects no Web deployment.
+  expect(selectChecks(["packages/daemon/index.ts"], "web")).toEqual([]);
 });
 
 test("deployment validates the exact Web track only when the image or deployment is affected", () => {
