@@ -16,6 +16,7 @@ import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import { COMPACTION_STALE_MS, REVIEW_STALE_MS } from "#src/agent-runtime/runtime-phases";
 import type { AgentActivity, AgentActivityDetailKind } from "@lrm/coforge-sdk/internal";
+import { backgroundBash, claudeEventFeed, claudeFixtureProvider } from "./fixtures/claude-feed";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
@@ -1618,6 +1619,81 @@ test("a new launch forgets the previous launch's outstanding background tasks", 
     await runtime.stop();
   }
 });
+
+/** The real Claude Code adapter over the stream-json fixture, which writes the records `feed`
+ * hands it after the launch's startup input. */
+function claudeOverFeed() {
+  const feed = claudeEventFeed();
+  const claude = claudeFixtureProvider();
+  const provider: CodeAgentProvider = {
+    provider: "claude-code",
+    async createAgentSession(options) {
+      const session = await claude.createAgentSession({
+        ...options,
+        instructions: "Test Agent instructions.",
+        environment: { ...options.environment, ...feed.environment },
+      });
+      feed.attach(session);
+      return session;
+    },
+  };
+  return { provider, feed };
+}
+
+test(
+  "a Claude turn started by a finished background task that starts another ends waiting, not Idle",
+  async () => {
+    const { provider, feed } = claudeOverFeed();
+    const { runtime, activities } = await harness(provider);
+    try {
+      // The launch's startup turn leaves a background command running.
+      await feed.emit(...backgroundBash("first"), { type: "result", subtype: "success" });
+      expect(activities.at(-1)).toMatchObject({ detail: "Waiting for 1 background task" });
+      await feed.emit({
+        type: "system",
+        subtype: "task_notification",
+        task_id: "task-first",
+        tool_use_id: "toolu_first",
+        status: "completed",
+        summary: "Background command completed (exit code 0)",
+      });
+      expect(activities.at(-1)).toMatchObject({ detailKind: "idle" });
+      // Claude Code handles the notification in a turn of its own, which starts another.
+      activities.length = 0;
+      await feed.emit(
+        { type: "system", subtype: "init", session_id: await feed.sessionId() },
+        { type: "stream_event", parent_tool_use_id: null, event: { type: "message_start" } },
+        {
+          type: "assistant",
+          parent_tool_use_id: null,
+          message: { content: [{ type: "text", text: "The task printed done." }] },
+        },
+        ...backgroundBash("next"),
+        {
+          type: "result",
+          subtype: "success",
+          origin: { kind: "task-notification", producer: "session-task", runId: "run-first" },
+        },
+      );
+      expect(
+        activities.some((activity) =>
+          activity.entries?.some(
+            (entry) => entry.kind === "text" && entry.text === "The task printed done.",
+          ),
+        ),
+      ).toBe(true);
+      expect(activities.at(-1)).toMatchObject({
+        detailKind: "subagent_activity",
+        detail: "Waiting for 1 background task",
+      });
+      expect(runtime.busyAgents()).toMatchObject([{ agentId: "agent-a" }]);
+    } finally {
+      await runtime.stop();
+      feed.stop();
+    }
+  },
+  10_000 + 2 * PROCESS_TREE_EXIT_GRACE_MS + DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS,
+);
 
 test("compaction interruptions and subagent progress retain their conversation origin", async () => {
   const { runtime, activities, emitEvent } = await harness();

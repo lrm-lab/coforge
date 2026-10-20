@@ -142,6 +142,8 @@ function handle(record: Record<string, unknown>): void {
       },
     });
     if (process.argv.includes("exit-after-init")) process.exit(1);
+    // Reads the event feed before any input, so a test can write records to an idle session.
+    if (process.argv.includes("feed-before-input")) startFeed();
     return;
   }
   if (record.type === "user") {
@@ -332,17 +334,20 @@ function handle(record: Record<string, unknown>): void {
 function inputObserved(): void {
   // Only the process that accepted the input consumes controlled events. A
   // failed resume must not leave an outstanding poll stealing fresh events.
-  if (eventFeed && !feedStarted) {
-    feedStarted = true;
-    void (async () => {
-      while (true) {
-        const response = await fetch(eventFeed);
-        const records = (await response.json()) as Record<string, unknown>[];
-        for (const record of records) write(record);
-      }
-    })();
-  }
+  startFeed();
   for (const record of textBlock("fixture-input-observed")) write(record);
+}
+
+function startFeed(): void {
+  if (!eventFeed || feedStarted) return;
+  feedStarted = true;
+  void (async () => {
+    while (true) {
+      const response = await fetch(eventFeed);
+      const records = (await response.json()) as Record<string, unknown>[];
+      for (const record of records) write(record);
+    }
+  })();
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   type AgentSession,
 } from "#src/code-agent/contract";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
+import { backgroundBash, claudeEventFeed, claudeFixtureProvider } from "./fixtures/claude-feed";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
 
@@ -22,7 +23,7 @@ test.each(["missing-resume", "missing-before-initialize"])(
   async (mode) => {
     const reports: Array<[string, string | undefined]> = [];
     const confirmed = Promise.withResolvers<void>();
-    const session = await fixtureAdapter(mode).createAgentSession({
+    const session = await claudeFixtureProvider(mode).createAgentSession({
       agentWorkspaceDirectory: tmpdir(),
       instructions: TEST_AGENT_INSTRUCTIONS,
       sessionId: "missing-session",
@@ -71,7 +72,7 @@ test.each([
 ] as const)("Claude does not retry %s as missing history", async (name, args) => {
   const directory = await mkdtemp(join(tmpdir(), "claude-no-replay-"));
   const log = join(directory, "launches");
-  const session = await fixtureAdapter(...args, "--launch-log", log).createAgentSession({
+  const session = await claudeFixtureProvider(...args, "--launch-log", log).createAgentSession({
     agentWorkspaceDirectory: directory,
     instructions: TEST_AGENT_INSTRUCTIONS,
     sessionId: "missing-session",
@@ -95,7 +96,10 @@ test.each([
 });
 
 test("Claude ends the tasks of a session it replaces with a fresh one", async () => {
-  const session = await fixtureAdapter("missing-resume", "task-before-missing").createAgentSession({
+  const session = await claudeFixtureProvider(
+    "missing-resume",
+    "task-before-missing",
+  ).createAgentSession({
     agentWorkspaceDirectory: tmpdir(),
     instructions: TEST_AGENT_INSTRUCTIONS,
     sessionId: "missing-session",
@@ -170,7 +174,7 @@ test("Claude first input and turn boundary flow while late identity ACK is pendi
   const confirmed = Promise.withResolvers<void>();
   let reports = 0;
   let reportedSessionId: string | undefined;
-  const session = await fixtureAdapter().createAgentSession({
+  const session = await claudeFixtureProvider().createAgentSession({
     agentWorkspaceDirectory: tmpdir(),
     instructions: TEST_AGENT_INSTRUCTIONS,
     async onSessionId(id) {
@@ -259,7 +263,7 @@ for (const [mode, sessionId] of [
 ] as const) {
   test(`Claude terminates ${sessionId ? "resume" : "fresh session"} on ${mode} without accepting later success`, async () => {
     const reports: string[] = [];
-    const session = await fixtureAdapter(mode).createAgentSession({
+    const session = await claudeFixtureProvider(mode).createAgentSession({
       agentWorkspaceDirectory: tmpdir(),
       instructions: TEST_AGENT_INSTRUCTIONS,
       sessionId,
@@ -305,7 +309,7 @@ test("Claude Code initializes before the first prompt without waiting for turn m
 });
 
 test("Claude Code resolves a written notification without any input replay or run completion", async () => {
-  const session = await fixtureAdapter().createAgentSession({
+  const session = await claudeFixtureProvider().createAgentSession({
     agentWorkspaceDirectory: tmpdir(),
     instructions: TEST_AGENT_INSTRUCTIONS,
   });
@@ -332,7 +336,7 @@ test("Claude Code retains concurrent notices while initial session metadata is p
       return new Response("ready");
     },
   });
-  const session = await fixtureAdapter().createAgentSession({
+  const session = await claudeFixtureProvider().createAgentSession({
     agentWorkspaceDirectory,
     instructions: TEST_AGENT_INSTRUCTIONS,
     environment: { COFORGE_CLAUDE_INIT_GATE: gate.url.href },
@@ -453,7 +457,7 @@ test("Claude Code starts the user's installed CLI from PATH in streaming mode", 
 
 test("Claude Code maps stream-json turns behind the code-agent seam", async () => {
   const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-events-"));
-  const adapter = fixtureAdapter();
+  const adapter = claudeFixtureProvider();
 
   try {
     const session = await adapter.createAgentSession({
@@ -613,7 +617,7 @@ test("Claude Code exposes account rate-limit events as partial usage snapshots",
   const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-usage-event-"));
 
   try {
-    const session = await fixtureAdapter().createAgentSession({
+    const session = await claudeFixtureProvider().createAgentSession({
       agentWorkspaceDirectory,
       instructions: TEST_AGENT_INSTRUCTIONS,
     });
@@ -644,7 +648,7 @@ test("Claude Code reports a context-window reading, selecting the largest model 
   const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-context-usage-"));
 
   try {
-    const session = await fixtureAdapter().createAgentSession({
+    const session = await claudeFixtureProvider().createAgentSession({
       agentWorkspaceDirectory,
       instructions: TEST_AGENT_INSTRUCTIONS,
     });
@@ -672,7 +676,7 @@ test("Claude Code selects the configured model's context window over the largest
   );
 
   try {
-    const session = await fixtureAdapter().createAgentSession({
+    const session = await claudeFixtureProvider().createAgentSession({
       agentWorkspaceDirectory,
       instructions: TEST_AGENT_INSTRUCTIONS,
       runtime: {
@@ -705,7 +709,7 @@ test("Claude Code emits no context-usage event when no modelUsage entry carries 
   );
 
   try {
-    const session = await fixtureAdapter().createAgentSession({
+    const session = await claudeFixtureProvider().createAgentSession({
       agentWorkspaceDirectory,
       instructions: TEST_AGENT_INSTRUCTIONS,
     });
@@ -765,7 +769,7 @@ test(
   async () => {
     const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-lifecycle-"));
     const launchLog = join(agentWorkspaceDirectory, "launches");
-    const adapter = fixtureAdapter("--launch-log", launchLog);
+    const adapter = claudeFixtureProvider("--launch-log", launchLog);
     const initRequested = Promise.withResolvers<void>();
     const releaseInit = Promise.withResolvers<void>();
     const initialized = Promise.withResolvers<void>();
@@ -828,7 +832,7 @@ test("Claude Code accepts busy notifications in the existing session", async () 
   const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-notify-"));
 
   try {
-    const session = await fixtureAdapter().createAgentSession({
+    const session = await claudeFixtureProvider().createAgentSession({
       agentWorkspaceDirectory,
       instructions: TEST_AGENT_INSTRUCTIONS,
     });
@@ -1421,6 +1425,123 @@ test(
   5_000 + 2 * PROCESS_TREE_EXIT_GRACE_MS,
 );
 
+test(
+  "Claude reports a turn it starts by itself for a finished background task, from its init to its result",
+  async () => {
+    // Shaped like Claude Code 2.1.304 stream-json (observed 2026-10-20): after the session's
+    // result, a background task's notification makes Claude Code open a turn of its own, which
+    // starts with a top-level `init` for the same session and whose `result` names its origin.
+    const fixture = await controlledClaude();
+    const { session, emit } = fixture;
+    const events: AgentRuntimeEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    const shown = () =>
+      events.flatMap((event) => {
+        if (event.type === "text-delta" && event.text !== "fixture-input-observed")
+          return [`text: ${event.text}`];
+        if (event.type === "tool-start") return [`tool-start: ${event.name}`];
+        if (event.type === "tool-end") return [`tool-end: ${event.id}`];
+        if (event.type === "subagent-progress") return [`task ${event.phase}: ${event.taskId}`];
+        if (event.type === "completed") return [`completed: ${event.status}`];
+        return [];
+      });
+    try {
+      await session.sendMessage("wait");
+      await emit({ type: "result", subtype: "success" });
+      expect(session.hasLiveTurn).toBe(false);
+      events.length = 0;
+      await emit({ type: "system", subtype: "init", session_id: fixture.sessionId });
+      expect(session.hasLiveTurn).toBe(true);
+      await emit(
+        { type: "system", subtype: "status", status: "requesting" },
+        { type: "stream_event", event: { type: "message_start" }, parent_tool_use_id: null },
+        {
+          type: "assistant",
+          parent_tool_use_id: null,
+          message: { content: [{ type: "text", text: "The task printed done." }] },
+        },
+        ...backgroundBash("next"),
+      );
+      expect(session.hasLiveTurn).toBe(true);
+      await emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        origin: { kind: "task-notification", producer: "session-task", runId: "run-previous" },
+      });
+      expect(session.hasLiveTurn).toBe(false);
+      expect(shown()).toEqual([
+        "text: The task printed done.",
+        "tool-start: Bash",
+        "task started: task-next",
+        "tool-end: toolu_next",
+        "completed: completed",
+      ]);
+      // The turn ended like any other: CoForge can start the next one.
+      await session.sendMessage("wait");
+      expect(session.hasLiveTurn).toBe(true);
+    } finally {
+      await fixture.dispose();
+    }
+  },
+  5_000 + 2 * PROCESS_TREE_EXIT_GRACE_MS,
+);
+
+test(
+  "Claude opens no turn for an idle init that names another session, and ends the session",
+  async () => {
+    // Pins behavior that predates self-started turns: a foreign session's init still ends it.
+    const fixture = await controlledClaude();
+    const { session, emit } = fixture;
+    const events: AgentRuntimeEvent[] = [];
+    const exited = Promise.withResolvers<void>();
+    session.onExit(() => exited.resolve());
+    session.subscribe((event) => events.push(event));
+    try {
+      await session.sendMessage("wait");
+      await emit({ type: "result", subtype: "success" });
+      events.length = 0;
+      // The session ends at this init, so it never reads a marker after these records.
+      fixture.write(
+        { type: "system", subtype: "init", session_id: "another-session" },
+        { type: "stream_event", event: { type: "message_start" } },
+        { type: "assistant", message: { content: [{ type: "text", text: "Not this session." }] } },
+        { type: "result", subtype: "success" },
+      );
+      await exited.promise;
+      expect(session.hasLiveTurn).toBe(false);
+      expect(events.map((event) => event.type)).toEqual(["error"]);
+      expect(events[0]).toMatchObject({
+        message: "Claude did not establish a valid session identity",
+      });
+    } finally {
+      await fixture.dispose();
+    }
+  },
+  5_000 + 2 * PROCESS_TREE_EXIT_GRACE_MS,
+);
+
+test(
+  "Claude opens no turn for an idle init of its session before any turn has ended",
+  async () => {
+    const fixture = await controlledClaude(undefined, undefined, "feed-before-input");
+    const { session } = fixture;
+    try {
+      await fixture.emitBeforeInput({
+        type: "system",
+        subtype: "init",
+        session_id: fixture.sessionId,
+      });
+      expect(session.hasLiveTurn).toBe(false);
+      await session.sendMessage("wait");
+      expect(session.hasLiveTurn).toBe(true);
+    } finally {
+      await fixture.dispose();
+    }
+  },
+  5_000 + 2 * PROCESS_TREE_EXIT_GRACE_MS,
+);
+
 test("Claude Code observes the next native turn after a busy notification was written", async () => {
   const fixture = await controlledClaude();
   const { session, emit } = fixture;
@@ -1448,7 +1569,7 @@ test("Claude Code observes the next native turn after a busy notification was wr
 
 for (const terminal of ["dispose", "exit"] as const) {
   test(`Claude Code rejects retained notices on ${terminal} without completing the active turn`, async () => {
-    const session = await fixtureAdapter("exit-on-interrupt").createAgentSession({
+    const session = await claudeFixtureProvider("exit-on-interrupt").createAgentSession({
       agentWorkspaceDirectory: tmpdir(),
       instructions: TEST_AGENT_INSTRUCTIONS,
     });
@@ -1710,79 +1831,26 @@ async function controlledClaude(
   onSessionId?: (id: string) => Promise<void>,
   ...args: string[]
 ) {
-  const responses: Response[] = [];
-  let waiting: ((response: Response) => void) | undefined;
-  const server = Bun.serve({
-    port: 0,
-    fetch: () => {
-      const response = responses.shift();
-      return (
-        response ??
-        new Promise<Response>((resolve) => {
-          waiting = resolve;
-        })
-      );
-    },
-  });
-  const session = await fixtureAdapter(...args).createAgentSession({
+  const feed = claudeEventFeed();
+  const session = await claudeFixtureProvider(...args).createAgentSession({
     agentWorkspaceDirectory: tmpdir(),
     instructions: TEST_AGENT_INSTRUCTIONS,
     sessionId,
     onSessionId,
-    environment: { COFORGE_CLAUDE_EVENT_FEED: server.url.href },
+    environment: feed.environment,
   });
-  const identity = await session.readSessionIdentity!();
-  if (!identity) throw new Error("fixture session identity unavailable");
-  const nativeSessionId = identity.sessionId;
-  let serial = 0;
-  const markers = new Map<string, () => void>();
-  const initialInput = Promise.withResolvers<void>();
-  session.subscribe((event) => {
-    if (event.type === "text-delta" && event.text === "fixture-input-observed")
-      initialInput.resolve();
-    if (event.type === "text-delta") markers.get(event.text)?.();
-    if (event.type === "usage" && event.snapshot.primary?.resetsAt)
-      markers.get(event.snapshot.primary.resetsAt)?.();
-  });
+  feed.attach(session);
   return {
     session,
-    sessionId: nativeSessionId,
-    async emit(...records: Record<string, unknown>[]) {
-      await initialInput.promise;
-      const resetsAt = 1_900_000_000 + ++serial;
-      const marker = new Date(resetsAt * 1000).toISOString();
-      const observed = new Promise<void>((resolve) => {
-        markers.set(marker, resolve);
-      });
-      const response = Response.json([
-        ...records,
-        {
-          type: "rate_limit_event",
-          rate_limit_info: { status: "allowed", rateLimitType: "five_hour", resetsAt },
-        },
-      ]);
-      if (waiting) {
-        waiting(response);
-        waiting = undefined;
-      } else responses.push(response);
-      await observed;
-      markers.delete(marker);
-    },
+    sessionId: await feed.sessionId(),
+    emit: feed.emit,
+    emitBeforeInput: feed.emitBeforeInput,
+    write: feed.write,
     async dispose() {
       await session.dispose();
-      server.stop(true);
+      feed.stop();
     },
   };
-}
-
-function fixtureAdapter(...args: string[]): ClaudeCodeProvider {
-  return new ClaudeCodeProvider({
-    command: [
-      process.execPath,
-      new URL("./fixtures/claude-stream-json.ts", import.meta.url).pathname,
-      ...args,
-    ],
-  });
 }
 
 async function waitForEvent(

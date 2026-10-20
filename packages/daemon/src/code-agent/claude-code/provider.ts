@@ -142,6 +142,9 @@ class ClaudeCodeAgentSession implements AgentSession {
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   #state: "idle" | "running" | "interrupting" | "disposed" = "idle";
   #nativeTurnQueued = false;
+  /** Whether a top-level `result` has been seen. Set once and never reset: the fresh relaunch
+   * (`#startFresh`) runs only before any progress, and a result is progress. */
+  #resultObserved = false;
   #initialized = false;
   #nativeIdentityObserved = false;
   #initialization: { process: JsonlProcess; promise: Promise<void> } | undefined;
@@ -385,10 +388,8 @@ class ClaudeCodeAgentSession implements AgentSession {
     if (this.#inputFailure) throw this.#inputFailure;
     this.#firstInput ??= text;
     // Reserve the turn before writing; a native result can arrive during flush.
-    if (this.#state === "idle") {
-      this.#state = "running";
-      this.#nativeTurnQueued = false;
-    } else this.#nativeTurnQueued = true;
+    if (this.#state === "idle") this.#beginNativeTurn();
+    else this.#nativeTurnQueued = true;
     this.#setIdentity("unknown");
     await this.#process.send({
       type: "user",
@@ -515,8 +516,7 @@ class ClaudeCodeAgentSession implements AgentSession {
         (record.type === "assistant" ||
           (record.type === "stream_event" && asRecord(record.event)?.type === "message_start"));
       if (!this.#nativeTurnQueued || !nativeStart) return;
-      this.#nativeTurnQueued = false;
-      this.#state = "running";
+      this.#beginNativeTurn();
     }
     if (
       ["stream_event", "assistant", "user", "result"].includes(String(record.type)) ||
@@ -553,6 +553,11 @@ class ClaudeCodeAgentSession implements AgentSession {
         this.#failRecovery();
         return;
       }
+      // UNDOCUMENTED, observed with Claude Code 2.1.304 stream-json on 2026-10-20 (re-check when
+      // raising the Claude Code version gate): a turn Claude Code starts by itself after a
+      // background task opens with this session's top-level init; no ended turn's leftover is one.
+      if (this.#state === "idle" && this.#resultObserved && record.parent_tool_use_id == null)
+        this.#beginNativeTurn();
       if (typeof record.session_id === "string" && record.session_id !== this.#sessionId) {
         this.#sessionId = record.session_id;
       }
@@ -578,21 +583,12 @@ class ClaudeCodeAgentSession implements AgentSession {
       return;
     }
     if (record.type === "stream_event") {
-      const event = asRecord(record.event);
-      if (
-        record.parent_tool_use_id == null &&
-        event?.type === "message_start" &&
-        this.#state === "idle"
-      ) {
-        this.#state = "running";
-      }
       for (const streamed of claudeStreamEvents(record)) this.#emit(streamed);
       return;
     }
     if (record.type === "assistant") {
       const { ids, events } = claudeAssistantEvents(record, this.#subagentLineage.of(record));
       if (record.parent_tool_use_id == null) {
-        if (this.#state === "idle") this.#state = "running";
         for (const id of ids) this.#outstandingTools.add(id);
       }
       for (const event of events) {
@@ -632,6 +628,7 @@ class ClaudeCodeAgentSession implements AgentSession {
           occurredAt: contextUsage.occurredAt,
         });
       this.#sessionReadyForNotices = true;
+      this.#resultObserved = true;
       this.#setIdentity("resumable");
       this.#compacting = false;
       this.#outstandingTools.clear();
@@ -695,6 +692,12 @@ class ClaudeCodeAgentSession implements AgentSession {
     if (this.#identity?.sessionId === this.#sessionId && this.#identity.state === state) return;
     this.#identity = { sessionId: this.#sessionId, state };
     this.#emit({ type: "session", identity: this.#identity });
+  }
+
+  /** Starts a turn while idle, consuming any queued native turn. */
+  #beginNativeTurn(): void {
+    this.#nativeTurnQueued = false;
+    this.#state = "running";
   }
 
   #isDisposed(): boolean {
