@@ -1,0 +1,18 @@
+#!/bin/sh
+# CoForge pre-commit hook: blocks staged files over the 5,000-token size limit
+# (scripts/git-hooks/staged-file-size.ts; see docs/agents/git-hooks.md).
+# `bun install` enables it (core.hooksPath=.githooks); `git commit --no-verify` skips it.
+# Git runs this from the top of the work tree being committed, which is where the check
+# reads the index from, so the script is located from this file instead.
+hooks_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd) || exit 1
+check="$hooks_dir/../scripts/git-hooks/staged-file-size.ts"
+
+if command -v bun >/dev/null 2>&1; then
+  exec bun "$check"
+fi
+if command -v mise >/dev/null 2>&1; then
+  bun_path=$(CDPATH='' cd -- "$hooks_dir/.." && mise which bun 2>/dev/null) && exec "$bun_path" "$check"
+fi
+echo "pre-commit: bun was not found, so the staged file size check cannot run." >&2
+echo "Install the toolchain (mise install), or bypass the check once with git commit --no-verify." >&2
+exit 1
