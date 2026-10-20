@@ -58,6 +58,8 @@ model Workspace {
   appInstallations       AppInstallation[]
   oauthAuthorizationCodes OAuthAuthorizationCode[]
   appConsents            UserAppConsent[]
+  appAgentGrants         AppAgentGrant[]
+  appAgentAccessRequests AppAgentAccessRequest[]
 
   @@map("workspaces")
 }

@@ -6,7 +6,6 @@ import { ArrowLeft, Edit01 as Pencil, UserX01, XClose as X } from "@untitledui/i
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { isAppErrorCode } from "#src/lib/app-error";
-import { Skeleton } from "#src/components/ui/skeleton";
 import {
   Empty,
   EmptyHeader,
@@ -71,6 +70,8 @@ import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs"
 import { AgentProfileTab } from "./agent-profile-tab";
 import { AgentWorkspaceTab } from "./agent-workspace-tab";
 import { AgentActivityTab } from "./agent-activity-tab";
+import { AgentAppsTab } from "./agent-apps-tab";
+import { AgentProfileSkeleton } from "./agent-profile-skeleton";
 import { AgentErrorBanner } from "./agent-error-banner";
 import {
   resolveAgentProfileTab,
@@ -156,7 +157,11 @@ export function AgentProfilePanel({
             online: Boolean(computer.online),
           }))
       : undefined;
-  const tabOrder = useAgentProfileTabOrder(canManage, canSeeWorkspace);
+  const tabOrder = useAgentProfileTabOrder(
+    canManage,
+    canSeeWorkspace,
+    Boolean(profile) && !deleted,
+  );
   const tab = resolveAgentProfileTab(requestedTab, tabOrder.tabs);
   // Opened without `agentTab`, the panel lands on the first tab of the viewer's order once their
   // permissions are known, and records it through `onTabChange` (the URL, or the embedding page's
@@ -381,19 +386,12 @@ export function AgentProfilePanel({
           }
         />
       )}
-      {/* Underline tabs on the band's bottom rule: the rule is the band's
-          own hairline, drawn under the strip, so the active tab's underline stands in for it. The strip
-          scrolls sideways on a narrow phone instead of pushing the panel wider; the rule stays put. */}
-      <div className="relative shrink-0 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border-secondary">
-        <div className="scrollbar-hide flex items-end overflow-x-auto px-5 pt-1">
-          <AgentProfileTabs
-            active={tab}
-            tabs={tabOrder.tabs}
-            onSelect={onTabChange}
-            onReorder={tabOrder.reorder}
-          />
-        </div>
-      </div>
+      <AgentProfileTabs
+        active={tab}
+        tabs={tabOrder.tabs}
+        onSelect={onTabChange}
+        onReorder={tabOrder.reorder}
+      />
       {/* Workspace (a split tree/file viewer) and Activity (a fixed band over a scrolling log)
           scroll their own parts. A shared overflow here would grow with the content and drag the
           tree or the band out of view. */}
@@ -405,17 +403,7 @@ export function AgentProfilePanel({
         }
       >
         {!profile || !diagnosticFacts ? (
-          <div className="flex flex-col gap-4 px-5 py-5">
-            <div className="flex items-center gap-4">
-              <Skeleton className="size-16 shrink-0 rounded-full" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-4 w-20" />
-              </div>
-            </div>
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-24 w-full" />
-          </div>
+          <AgentProfileSkeleton />
         ) : tab === "activity" ? (
           <AgentActivityTab agent={diagnosticFacts} display={display} timeZone={timeZone} />
         ) : tab === "reminders" ? (
@@ -427,6 +415,8 @@ export function AgentProfilePanel({
               onLoad={onLoadReminders}
             />
           </div>
+        ) : tab === "apps" ? (
+          <AgentAppsTab agentId={agentId} timeZone={timeZone} />
         ) : tab === "workspace" ? (
           <AgentWorkspaceTab
             agentId={agentId}

@@ -16,6 +16,7 @@ import {
   canListArchivedChannels,
   deriveChannelAdminBasis,
 } from "#src/server/conversations/channel-authority.server";
+import { canManageAgentAppAccess } from "#src/server/app-agent-access/access-rules.server";
 import {
   assertCanDeleteAgents,
   assertCanManageApps,
@@ -52,6 +53,7 @@ describe("the Workspace capability table", () => {
       "manageChannels",
       "manageWorkspaceSettings",
       "manageApps",
+      "manageAgentAppAccess",
     ] as const)
       expect([capability, holders(capability)]).toEqual([capability, ["owner", "admin"]]);
     expect(holders("changeWorkspaceSlug")).toEqual(["owner"]);
@@ -79,6 +81,9 @@ describe("the Workspace capability table", () => {
       expect(canManageMembers(role)).toBe(can("manageMembers"));
       expect(canManageWorkspaceSettings(role)).toBe(can("manageWorkspaceSettings"));
       expect(passes(() => assertCanManageApps(role))).toBe(can("manageApps"));
+      expect(canManageAgentAppAccess({ userId: "viewer", role }, { ownerId: "creator" })).toBe(
+        can("manageAgentAppAccess"),
+      );
       expect(canChangeWorkspaceSlug(role)).toBe(can("changeWorkspaceSlug"));
       expect(canDeleteWorkspace(role)).toBe(can("deleteWorkspace"));
       expect(canDeleteChannel("random", role)).toBe(can("manageChannels"));

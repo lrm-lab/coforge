@@ -75,19 +75,29 @@ describe("agentProfileSearchWithoutThread", () => {
 });
 
 describe("visibleAgentProfileTabs", () => {
-  test("shows reminders and activity to managers, workspace to the owner, profile to everyone", () => {
-    expect(visibleAgentProfileTabs(false, false)).toEqual(["profile"]);
-    expect(visibleAgentProfileTabs(true, false)).toEqual(["profile", "activity", "reminders"]);
-    expect(visibleAgentProfileTabs(false, true)).toEqual(["profile", "workspace"]);
-    expect(visibleAgentProfileTabs(true, true)).toEqual([...AGENT_PROFILE_TABS]);
+  test("shows reminders and activity to managers, workspace to the owner, profile and apps to everyone", () => {
+    expect(visibleAgentProfileTabs(false, false, true)).toEqual(["profile", "apps"]);
+    expect(visibleAgentProfileTabs(true, false, true)).toEqual([
+      "profile",
+      "activity",
+      "reminders",
+      "apps",
+    ]);
+    expect(visibleAgentProfileTabs(false, true, true)).toEqual(["profile", "workspace", "apps"]);
+    expect(visibleAgentProfileTabs(true, true, true)).toEqual([...AGENT_PROFILE_TABS]);
   });
 
-  test("opens on Profile, then lists Activity, Reminders and Workspace by default", () => {
-    expect(visibleAgentProfileTabs(true, true)).toEqual([
+  test("an archived Agent shows Profile alone", () => {
+    expect(visibleAgentProfileTabs(false, false, false)).toEqual(["profile"]);
+  });
+
+  test("opens on Profile, then lists Activity, Reminders, Workspace and Apps by default", () => {
+    expect(visibleAgentProfileTabs(true, true, true)).toEqual([
       "profile",
       "activity",
       "reminders",
       "workspace",
+      "apps",
     ]);
   });
 });

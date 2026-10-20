@@ -34,6 +34,9 @@ export const WORKSPACE_CAPABILITY_ROLES = {
   manageChannels: WORKSPACE_ADMIN_ROLES,
   manageWorkspaceSettings: WORKSPACE_ADMIN_ROLES,
   manageApps: WORKSPACE_ADMIN_ROLES,
+  /** Granting, revoking, approving and denying an Agent's app access; an Agent's creator may too
+   * (`canManageAgentAppAccess`). */
+  manageAgentAppAccess: WORKSPACE_ADMIN_ROLES,
   changeWorkspaceSlug: OWNER_ONLY,
   deleteWorkspace: OWNER_ONLY,
 } as const satisfies Record<string, readonly WorkspaceMemberRole[]>;

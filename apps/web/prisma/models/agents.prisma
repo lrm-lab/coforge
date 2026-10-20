@@ -67,6 +67,8 @@ model Agent {
   workspaceMemoryAgent      WorkspaceMemoryAgent?
   migrations                AgentMigration[]
   appConfigs                AgentAppConfig[]
+  appGrants                 AppAgentGrant[]
+  appAccessRequests         AppAgentAccessRequest[]
 
   @@unique([workspaceId, name])
   @@unique([id, workspaceId])

@@ -1,0 +1,63 @@
+/// An Agent's access to an app installed in its Workspace (`server/app-agent-access/`). One row per
+/// app and Agent: it is created the first time the Agent uses the app (`automatic`), when a person
+/// grants it (`person`), or when a person approves the Agent's request (`approval`). A revoked row
+/// stays, so the Agent needs a person's approval for that app again instead of a new automatic
+/// grant.
+model AppAgentGrant {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  appId           String    @db.Uuid
+  agentId         String    @db.Uuid
+  workspaceId     String    @db.Uuid
+  /// A subset of the app's `allowedScopes`, always with `openid`, `profile` and `identity`.
+  scopes          String[]
+  /// How the grant was last given: `person`, `automatic` or `approval`
+  /// (`app_agent_grants_source_check`).
+  source          String
+  /// The person who gave it; null for an automatic grant, or once that person is deleted.
+  grantedByUserId String?   @db.Uuid
+  createdAt       DateTime  @default(now())
+  /// When it was last given or revoked: an active grant's `updatedAt` is when it was given.
+  updatedAt       DateTime  @updatedAt
+  /// Set when a person revoked it; cleared when it is given again.
+  revokedAt       DateTime?
+  revokedByUserId String?   @db.Uuid
+  app             App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  grantedBy       User?     @relation("AppAgentGrantGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+  revokedBy       User?     @relation("AppAgentGrantRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([appId, agentId])
+  @@index([agentId])
+  @@index([workspaceId])
+  @@index([grantedByUserId])
+  @@index([revokedByUserId])
+  @@map("app_agent_grants")
+}
+
+/// An Agent's request to use an app whose grant a person revoked (or that does not cover the
+/// scopes it asks for), waiting for a person who may manage the Agent's app access to approve or
+/// deny it. At most one is pending per app and Agent.
+model AppAgentAccessRequest {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  appId           String    @db.Uuid
+  agentId         String    @db.Uuid
+  workspaceId     String    @db.Uuid
+  /// The scopes the grant would carry, always with `openid`, `profile` and `identity`.
+  scopes          String[]
+  /// `pending`, `approved` or `denied` (`app_agent_access_requests_status_check`).
+  status          String    @default("pending")
+  createdAt       DateTime  @default(now())
+  decidedAt       DateTime?
+  decidedByUserId String?   @db.Uuid
+  app             App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decidedBy       User?     @relation(fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([appId, agentId], map: "app_agent_access_requests_one_pending", where: raw("\"status\" = 'pending'"))
+  @@index([agentId, createdAt])
+  @@index([workspaceId])
+  @@index([decidedByUserId])
+  @@map("app_agent_access_requests")
+}

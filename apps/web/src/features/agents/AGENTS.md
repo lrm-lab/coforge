@@ -158,6 +158,10 @@ These rules apply to `src/features/agents/`.
 - `agent-visibility.ts` holds the `AgentVisibility` vocabulary outside any
   `.server.ts` file so browser validators can import it.
 - The environment editor edits only user-declared Agent environment overrides.
+- The Apps tab (`agent-apps-tab.tsx`, after Raft's web UI) shows every viewer of a live
+  Agent its pending requests and active grants; Approve, Deny, Grant access and Revoke only when
+  the read's `canManage` says so (Workspace owner/admin or the Agent's creator). Revoke acts at
+  once, with no confirmation, and every failure stays inline at the top of the tab.
 - The Skills tab displays Global/Workspace metadata only, never skill bodies
   or a claim that a running session has loaded each entry.
 - The context popover is display-only: no toast and nothing triggers on a

@@ -52,6 +52,9 @@ model User {
   appInstallations            AppInstallation[]
   oauthAuthorizationCodes     OAuthAuthorizationCode[]
   appConsents                 UserAppConsent[]
+  appAgentGrantsGiven         AppAgentGrant[]         @relation("AppAgentGrantGrantedBy")
+  appAgentGrantsRevoked       AppAgentGrant[]         @relation("AppAgentGrantRevokedBy")
+  appAgentAccessDecisions     AppAgentAccessRequest[]
 
   @@map("users")
 }

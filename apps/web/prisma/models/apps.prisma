@@ -34,6 +34,8 @@ model App {
   installations    AppInstallation[]
   authorizationCodes OAuthAuthorizationCode[]
   consents         UserAppConsent[]
+  agentGrants      AppAgentGrant[]
+  agentAccessRequests AppAgentAccessRequest[]
 
   @@index([ownerWorkspaceId])
   @@index([createdByUserId])
