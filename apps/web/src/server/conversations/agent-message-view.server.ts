@@ -45,10 +45,12 @@ type StoredAgentMessage = {
 export function agentMessageView(
   message: StoredAgentMessage,
   readerAgentId?: string,
+  channelCoordination?: string,
 ): { body: AgentReadableBody; mentionsAgent?: true } {
   const text = agentReadableBody(message.body, message.mentions);
+  const content = channelCoordination ? `${channelCoordination}\n${text}` : text;
   const body = (
-    message.actionCard ? `${text} [action card: ${message.actionCard.state}]` : text
+    message.actionCard ? `${content} [action card: ${message.actionCard.state}]` : content
   ) as AgentReadableBody;
   return readerAgentId && deliveryMentionsAgent(message.mentions, readerAgentId)
     ? { body, mentionsAgent: true }

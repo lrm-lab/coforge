@@ -2,6 +2,7 @@ import { userUploadedAttachmentWhere } from "#src/server/attachments/message-att
 import { compareChannelNames } from "#src/features/conversations/channel-signals";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { lockConversation } from "./conversation-lock.server";
+import { changeChannelCoordinator } from "./channel-coordination.server";
 import { lockMemberPins, setConversationPin } from "./conversation-pins.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
@@ -478,26 +479,14 @@ export class PublicChannels {
     const channel = await this.channel(workspaceId, userId, channelId);
     const authority = await resolveChannelAuthority(this.db, workspaceId, { userId }, channel);
     if (!authority.capabilities.update) throw new AppError("ACCESS_DENIED");
-    if (coordinatorAgentId) {
-      const member = await this.db.conversationMember.findFirst({
-        where: {
-          conversationId: channel.id,
-          agentId: coordinatorAgentId,
-          ...ACTIVE_MEMBER_WHERE,
-          agent: { ...ACTIVE_AGENT_WHERE, workspaceId },
-        },
-        select: { agentId: true },
-      });
-      if (!member) throw new AppError("NOT_FOUND");
-    }
-    await this.db.$transaction(async (tx) => {
-      await lockConversation(tx, channel.id);
-      await tx.conversation.update({
-        where: { id: channel.id },
-        data: { coordinatorAgentId },
-      });
-    });
-    return { coordinatorAgentId };
+    return changeChannelCoordinator(
+      this.db,
+      this.publisher ?? createCentrifugoServerApi(),
+      this.realtime,
+      workspaceId,
+      channel.id,
+      coordinatorAgentId,
+    );
   }
 
   async setAgentThreadFollowed(

@@ -182,19 +182,20 @@ function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
     communication: `## CoForge communication
 Execute via shell: text outside an executed \`coforge message send\` command is not delivered. Reply to direct user messages; reply in channels when useful. Reuse exact \`target=\`, including its thread suffix.
 Default: a top-level message gets a top-level reply, a thread message a reply in its thread, and a request you claimed as a Task its Task thread. You may post a new topic or a thread's conclusion at top level, or use the place a human names. This is a default, not a hard rule; decide a thread-mismatch send confirmation by it.
-Send the reply on stdin with \`coforge message send --target '<target>'\`. Prefer a quoted here-document with a delimiter absent from its body; do not reuse shared temporary files. If needed, create a unique file in your Agent workspace; send only after writing it successfully. If preparation fails, stop; never send existing file contents.
+Send the reply on stdin with \`coforge message send --target '<target>'\`. Prefer a quoted here-document with a delimiter absent from its body; do not reuse shared temporary files. Or create a unique file in your Agent workspace; send only after writing it successfully. If preparation fails, stop; never send existing file contents.
 ${CLI_CHANNEL_MESSAGE_EXAMPLE}
 
-Targets: \`'@handle'\` DM, \`'#channel'\` channel; append \`:12345678\` inside quotes for threads. @handles mention members; send lists misses. Trust \`type=human|agent|system\`; system notices are not requests.`,
+Targets: \`'@handle'\` DM, \`'#channel'\` channel; add \`:12345678\` for threads. @handles mention members; send lists misses. Trust \`type=human|agent|system\`; system notices are not requests.`,
     messages: `## Read and send
-Notices list targets, not bodies. Run \`coforge message check --target '<target>'\` for each. Do not announce the notice or read MEMORY.md first. \`check\` without scope finds other targets; marks results read. Older/thread context: \`coforge message search\` then \`read --around\`.
+Notices list targets, not bodies. Run \`coforge message check --target '<target>'\` for each. Do not announce the notice or read MEMORY.md first. Older/thread context: \`coforge message search\` then \`read --around\`.
 If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend automatically. Do not poll for new messages.`,
     execution: `## Work
 Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, claim its original top-level message with \`coforge task claim --target '<channel>' --message-id <root-message-id>\` (existing: \`--number <n>\`); avoid duplicates. Only a successful claimant implements; others may analyze or review in its thread. If a claim fails, do not start conflicting execution. Tracked work: in_review; done after human approval.
 Before using a Memory Hint, call native \`memory_disposition\` with \`hint_id\`, \`decision=adopt|reject|defer\`, reason. Only the call is a receipt; adopt is intent.
-Read MEMORY.md only when this request lacks context; an inbox notice is not missing context. Save useful facts. Before a long task, note where you are in notes/active-context.md to resume.`,
+Read MEMORY.md only when this request lacks context; an inbox notice is not missing context. Before a long task, note where you are in notes/active-context.md to resume.`,
     safety: `## Boundaries
-Never disclose private DM contents or secrets to a public channel. Do not solicit or expose credentials; redact secrets. Server enforces permissions. Follow user preferences.
+Never disclose private DM contents or secrets to a public channel. Do not solicit or expose credentials; redact secrets. Follow user preferences.
+Current channel roles override names, history and memory. Without coordination authority, do not assign, chase or reprioritize peers.
 ${(options.extraCriticalRules ?? []).join("\n")}`.trim(),
   };
 }
