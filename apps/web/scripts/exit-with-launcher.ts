@@ -6,6 +6,8 @@
  * is then sent SIGTERM once, and killed if it is still running after its grace: a Nitro server
  * that has served requests closes its listener on SIGTERM but keeps its Redis sockets open.
  */
+import { constants } from "node:os";
+
 import {
   LAUNCHER_PID_ENV,
   LAUNCHER_POLL_MS,
@@ -27,11 +29,20 @@ if (Number.isInteger(launcher) && launcher > 1) {
   // server; under `nohup` both keep running. Bun does not pass `nohup`'s ignored SIGHUP on to a
   // child, so the server cannot rely on inheriting it.
   process.on("SIGHUP", () => {});
+  // However it is asked to stop (by its launcher, a script replacing it on its port, `kill`), the
+  // server is killed if it is still running once its grace is over: its launcher waits for it.
+  // Without a SIGTERM handler of its own, the server would ignore SIGTERM because of this
+  // listener, so it then exits as SIGTERM's default action would.
+  process.once("SIGTERM", () => {
+    // unref: it does not keep the process alive, and still fires while sockets do.
+    setTimeout(() => process.kill(process.pid, "SIGKILL"), stopGraceMs).unref();
+    if (process.listenerCount("SIGTERM") === 0) process.exit(128 + constants.signals.SIGTERM);
+  });
   const watch = setInterval(() => {
     if (process.ppid === launcher) return;
     clearInterval(watch);
     process.kill(process.pid, "SIGTERM");
-    // unref: it does not keep the process alive, and still fires while sockets do.
+    // Again here, in case the server's own code removed the listener above.
     setTimeout(() => process.kill(process.pid, "SIGKILL"), stopGraceMs).unref();
   }, LAUNCHER_POLL_MS);
   watch.unref();

@@ -65,7 +65,10 @@ if the script is killed outright the server notices within half a second and
 stops itself. A server still running 10 seconds after being asked to stop is
 killed. A closed terminal ends the script, and the server follows it; under
 `nohup` both keep running (give `dev-web-hmr` `< /dev/null` too: Vite exits when
-its stdin ends). Under
+its stdin ends). Ctrl-C is passed on even when the script runs as a background
+job that would otherwise ignore it (`sh -c './scripts/start-server.sh &'`).
+However the server is sent SIGTERM (by its script, a script replacing it on its
+port, or `kill`), it is killed if it is still running 10 seconds later. Under
 `bun run dev:hmr` (or `dev:backend`, `dev:frontend`) the script runs below a
 `bun run` process; killing only that process leaves the script and its server
 running, so stop the process group (`kill -- -<pgid>`) or run the `scripts/*.sh`
