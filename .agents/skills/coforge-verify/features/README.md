@@ -16,7 +16,7 @@ and that slug names its artifact directory `.amp/e2e/<slug>/`.
 | [activity.md](activity.md) | `activity-inbox` |
 | [tasks.md](tasks.md) | `task-board`, `task-create`, `task-status-and-owner`, `agent-task-flow`, `action-card` |
 | [reminders.md](reminders.md) | `reminder-schedule`, `reminders-tab` |
-| [computer.md](computer.md) | `computer-setup`, `computer-lifecycle`, `local-computer-reload`, `computers-page` |
+| [computer.md](computer.md) | `computer-setup`, `computer-lifecycle`, `workspace-crash-relaunch`, `local-computer-reload`, `computers-page` |
 | [agent-runtimes.md](agent-runtimes.md) | runtime table, `agent-turn`, `grok-native`, `kiro-native`, `openrouter-live` |
 
 Not mapped yet: Records and weekly reports, Projects, Search, Members page

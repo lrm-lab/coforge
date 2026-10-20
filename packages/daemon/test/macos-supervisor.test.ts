@@ -378,8 +378,9 @@ test.skipIf(process.platform !== "darwin")(
           .split("\n")
           .filter((line) => line.includes('"daemon:workspace_parked"')).length;
       process.kill(before.gone!, "SIGKILL");
-      // launchd throttles a KeepAlive relaunch (about 10 s), and more under a loaded machine; the
-      // parked log line is the observable condition, the bound only a generous backstop.
+      // The Workspace job's own relaunch throttle is 1 s (`WORKSPACE_RELAUNCH_SECONDS`), and a
+      // loaded machine adds more; the parked log line is the observable condition, the bound only
+      // a generous backstop.
       const deadline = Date.now() + 60_000;
       while ((await parkedExits()) === 0) {
         if (Date.now() >= deadline) throw new Error("Replacement Workspace never parked");

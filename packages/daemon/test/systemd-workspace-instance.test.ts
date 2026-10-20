@@ -4,6 +4,7 @@ import {
   workspaceUnit,
   type WorkspaceInstanceConfig,
 } from "#src/supervisor/systemd-workspace-instance";
+import { WORKSPACE_RELAUNCH_SECONDS } from "#src/supervisor/workspace-instance";
 
 const config: WorkspaceInstanceConfig = {
   stateRoot: "/tmp/coforge-state",
@@ -49,6 +50,7 @@ test("unit puts the Workspace child in a mixed-kill user-manager scope", () => {
   const unit = workspaceUnit(config);
   expect(unit).toContain("KillMode=mixed");
   expect(unit).toContain("Restart=on-failure");
+  expect(unit).toContain(`RestartSec=${WORKSPACE_RELAUNCH_SECONDS}s`);
   expect(unit).toContain("SendSIGKILL=yes");
   expect(unit).toContain("__workspace-daemon");
   expect(unit).toContain(config.workspaceId);

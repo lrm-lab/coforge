@@ -93,6 +93,32 @@ commands.
   `start`. `packages/computer/test/machine-lifecycle.integration.ts` covers the
   lifecycle contract below the native install.
 
+## workspace-crash-relaunch
+
+A Workspace daemon that exits unexpectedly is started again within
+`WORKSPACE_RELAUNCH_SECONDS` (`packages/daemon/src/supervisor/workspace-instance.ts`).
+
+- **Reach**: SIGKILL a running Workspace daemon (its PID from `launchctl list`,
+  `systemctl --user show -p MainPID`, or `coforge-computer status`); never one
+  of a real Workspace you are not allowed to interrupt.
+- **Drive**: wait on the observable relaunch (a new PID for the same launchd
+  label or systemd unit), never a sleep. On macOS let the daemon run a moment
+  first: launchd's throttle counts from the previous launch.
+- **Success**: the macOS Workspace plist carries `ThrottleInterval` equal to the
+  bound and a new PID appears within about that long; the systemd unit has the
+  same `RestartSec`; on Windows the Coordinator's reconcile poll restarts it.
+  Three unexpected exits within 60 s latch the Workspace degraded instead.
+- **Traps**: official builds are bound to production or staging, so a local run
+  without a real Workspace uses the macOS lifecycle fixture build
+  (`packages/daemon/test/fixtures/build-macos-computer.ts`) in a throwaway state
+  directory, started through `scripts/test/isolated-test-run.ts` so it cannot
+  inherit a real Workspace's launchd prefix; boot out its jobs afterwards.
+  An installed Computer picks up a changed plist only when the Workspace job is
+  re-bootstrapped (an upgrade does this).
+- **Covered by**: `packages/daemon/test/macos-supervisor.test.ts` (fixture
+  build; kill-and-relaunch, degraded and parked paths). No Linux or Windows
+  harness exercises a real relaunch.
+
 ## local-computer-reload
 
 The edit-run loop for a Daemon or Computer source change on a machine that

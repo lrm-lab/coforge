@@ -1,9 +1,11 @@
+import { WORKSPACE_RELAUNCH_SECONDS } from "./workspace-instance";
+
 /**
  * How often a Windows Coordinator checks that each enabled Workspace child is still alive.
  * Linux/macOS rely on systemd/launchd `Restart`/`KeepAlive`; Windows has no OS unit, so the
- * Coordinator is the failure-restart agent.
+ * Coordinator is the failure-restart agent, polling at the shared relaunch bound.
  */
-export const WINDOWS_WORKSPACE_RECONCILE_MS = 3_000;
+export const WINDOWS_WORKSPACE_RECONCILE_MS = WORKSPACE_RELAUNCH_SECONDS * 1_000;
 
 export type WindowsWorkspaceReconcileLoop = {
   stop: () => void;

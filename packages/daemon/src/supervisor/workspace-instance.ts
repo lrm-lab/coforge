@@ -2,6 +2,13 @@ import { join } from "node:path";
 
 export type NativeProcessIdentity = { mainPid: number; active: boolean; invocationId: string };
 
+/** The bound, on every platform, within which a Workspace daemon that exited unexpectedly is
+ * started again. It governs Workspace daemons only, never the Computer daemon's own service. It
+ * is launchd's `ThrottleInterval` (minimum seconds between launches of the job), systemd's
+ * `RestartSec` (delay after the exit), and the Windows Coordinator's reconcile poll period. The
+ * crash budget in `workspace-health-journal.ts` still latches a Workspace that keeps crashing. */
+export const WORKSPACE_RELAUNCH_SECONDS = 1;
+
 /** The single source of truth for where a Workspace's own state lives under the Coordinator's
  * state root - the same directory the Coordinator passes as `--state-directory` when it spawns
  * `__workspace-daemon`, and the only path a read-only observer (e.g. `coforge-computer status`)
