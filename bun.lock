@@ -144,6 +144,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@coforge/agent": "workspace:*",
+        "@coforge/web": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
         "@prisma/adapter-pg": "^7.10.0",
         "@prisma/client": "^7.10.0",
@@ -161,6 +162,7 @@
       "name": "@coforge/longmemeval-collab-eval",
       "version": "0.0.0",
       "dependencies": {
+        "@coforge/web": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
         "@prisma/adapter-pg": "^7.10.0",
         "@prisma/client": "^7.10.0",
@@ -177,6 +179,7 @@
       "name": "@coforge/public-channel-memory-eval",
       "version": "0.0.0",
       "dependencies": {
+        "@coforge/web": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
         "@prisma/adapter-pg": "^7.10.0",
         "@prisma/client": "^7.10.0",
@@ -193,6 +196,7 @@
       "name": "@coforge/skillsbench-collab-eval",
       "version": "0.0.0",
       "dependencies": {
+        "@coforge/web": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
         "@prisma/adapter-pg": "^7.10.0",
         "@prisma/client": "^7.10.0",

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@coforge/agent": "workspace:*",
+    "@coforge/web": "workspace:*",
     "@lrm/coforge-sdk": "workspace:*",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0"
