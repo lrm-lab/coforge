@@ -1,4 +1,5 @@
 import { APP_SCOPES } from "#src/features/apps/app-registration";
+import { AUTHORIZATION_ENDPOINT_PATH } from "#src/lib/oidc-paths";
 import { SIGNING_ALGORITHM } from "./signing-keys.server";
 
 /** The issuer's metadata: OpenID Connect Discovery 1.0 §3, served unchanged as RFC 8414 §2
@@ -8,6 +9,7 @@ import { SIGNING_ALGORITHM } from "./signing-keys.server";
 export function discoveryDocument(issuer: string) {
   return {
     issuer,
+    authorization_endpoint: new URL(AUTHORIZATION_ENDPOINT_PATH, issuer).href,
     jwks_uri: `${issuer}/jwks`,
     response_types_supported: ["code"],
     response_modes_supported: ["query"],

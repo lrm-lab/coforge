@@ -8,11 +8,13 @@ import {
 import { publicOrigin } from "#src/server/http/public-origin.server";
 
 export function loginStartHandler({ request }: { request: Request }): Promise<Response> {
+  const query = new URL(request.url).searchParams;
   return withAuthConfig(request, (config, sessionSecret) =>
     handleLoginStart({
       config,
       sessionSecret,
-      returnTo: new URL(request.url).searchParams.get("returnTo"),
+      returnTo: query.get("returnTo"),
+      prompt: query.get("prompt"),
     }),
   );
 }

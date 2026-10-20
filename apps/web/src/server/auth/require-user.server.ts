@@ -1,6 +1,6 @@
 import { redirect } from "@tanstack/react-router";
 
-import { readBrowserSession, type BrowserUser } from "./browser-login.server";
+import { readBrowserSignIn, type BrowserSignIn, type BrowserUser } from "./browser-login.server";
 import { AuthConfigError, readSessionSecret } from "./config.server";
 import { devBrowserUser } from "./dev-skip-auth.server";
 import { safeReturnTo } from "#src/features/auth/return-to";
@@ -13,7 +13,15 @@ export async function requireBrowserUser(
   cookieHeader: string | undefined,
   returnTo?: string,
 ): Promise<BrowserUser> {
-  const skipped = devBrowserUser();
+  return (await requireBrowserSignIn(cookieHeader, returnTo)).user;
+}
+
+/** `requireBrowserUser`, with when the person signed in. */
+export async function requireBrowserSignIn(
+  cookieHeader: string | undefined,
+  returnTo?: string,
+): Promise<BrowserSignIn> {
+  const skipped = devSignIn();
   if (skipped) return skipped;
 
   let sessionSecret: string;
@@ -23,12 +31,9 @@ export async function requireBrowserUser(
     if (error instanceof AuthConfigError) throw redirect({ href: loginHref(returnTo) });
     throw error;
   }
-  const user = readBrowserSession({
-    sessionSecret,
-    cookieHeader: cookieHeader ?? "",
-  });
-  if (!user) throw redirect({ href: loginHref(returnTo) });
-  return user;
+  const signIn = readBrowserSignIn({ sessionSecret, cookieHeader: cookieHeader ?? "" });
+  if (!signIn) throw redirect({ href: loginHref(returnTo) });
+  return signIn;
 }
 
 function loginHref(returnTo: string | undefined): string {
@@ -39,11 +44,18 @@ function loginHref(returnTo: string | undefined): string {
 export async function optionalBrowserUser(
   cookieHeader: string | undefined,
 ): Promise<BrowserUser | null> {
-  const skipped = devBrowserUser();
+  return (await optionalBrowserSignIn(cookieHeader))?.user ?? null;
+}
+
+/** `optionalBrowserUser`, with when the person signed in. */
+export async function optionalBrowserSignIn(
+  cookieHeader: string | undefined,
+): Promise<BrowserSignIn | null> {
+  const skipped = devSignIn();
   if (skipped) return skipped;
 
   try {
-    return readBrowserSession({
+    return readBrowserSignIn({
       sessionSecret: await readSessionSecret(process.env),
       cookieHeader: cookieHeader ?? "",
     });
@@ -51,4 +63,10 @@ export async function optionalBrowserUser(
     if (error instanceof AuthConfigError) return null;
     throw error;
   }
+}
+
+/** The dev user (`COFORGE_DEV_SKIP_AUTH`) never signed in, so counts as signing in now. */
+function devSignIn(): BrowserSignIn | null {
+  const user = devBrowserUser();
+  return user ? { user, authTime: Math.floor(Date.now() / 1000) } : null;
 }

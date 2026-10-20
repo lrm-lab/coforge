@@ -1,10 +1,8 @@
-import { timingSafeEqual } from "node:crypto";
-
-import { utf8Encoder, utf8Decoder } from "@lrm/coforge-sdk/internal";
-
 import { initialDisplayName } from "#src/features/auth/name-prefill";
 import { safeReturnTo } from "#src/features/auth/return-to";
 import { atLoginStage, LoginCallbackError } from "./login-failure.server";
+import { askToSignInAgain, signInTime } from "./sign-in-time.server";
+import { readSignedValue as readSigned, signValue as sign } from "./signed-value.server";
 export type BrowserUser = {
   id: string;
   /** What the provider reported, trimmed and lower-cased. An account made with a phone number
@@ -75,16 +73,9 @@ type SignedState = {
   returnTo?: string;
 };
 
-type SignedSession = BrowserUser & { exp: number; idToken?: string };
+type SignedSession = BrowserUser & { exp: number; idToken?: string; authTime?: number };
 
 type SignedLogoutReturn = { returnTo: string; exp: number };
-
-/**
- * What a signed cookie is for. It is part of what the signature covers, so one cookie's value
- * never reads as another's: all three are signed with the same session secret, and without it a
- * sign-in state cookie replayed as `coforge_session` would pass as a session.
- */
-type SignedPurpose = "session" | "login-state" | "logout-return";
 
 /** What a `state` looks like when this module made it (base64url of random bytes): the only
  * strings that are safe in a cookie name, and the only ones a callback's query can name. */
@@ -122,6 +113,8 @@ export function startBrowserLogin(input: {
   sessionSecret: string;
   /** Kept only when it is a page of this site (`safeReturnTo`). */
   returnTo?: string | null;
+  /** Has Authing ask the person to sign in again, even with a session of its own. */
+  reauthenticate?: boolean;
   now?: () => number;
   randomBytes?: (size: number) => Uint8Array;
 }): { authorizationUrl: string; stateCookie: string } {
@@ -144,6 +137,7 @@ export function startBrowserLogin(input: {
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge", sha256Base64Url(codeVerifier));
   url.searchParams.set("code_challenge_method", "S256");
+  if (input.reauthenticate) askToSignInAgain(url);
   return {
     authorizationUrl: url.toString(),
     stateCookie: serializeCookie(
@@ -221,6 +215,7 @@ export async function completeBrowserLogin(input: {
   };
   const session: SignedSession = {
     ...user,
+    authTime: signInTime(tokens.idToken, Math.floor(now() / 1000)),
     exp: Math.floor(now() / 1000) + SESSION_TTL_SECONDS,
     ...(tokens.idToken ? { idToken: tokens.idToken } : {}),
   };
@@ -283,11 +278,24 @@ function testOnlyStableInternalUserId(provider: string, subject: string): string
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
+/** A signed-in person and when they signed in (epoch seconds, OIDC `auth_time`). */
+export type BrowserSignIn = { user: BrowserUser; authTime: number };
+
 export function readBrowserSession(input: {
   sessionSecret: string;
   cookieHeader: string;
   now?: () => number;
 }): BrowserUser | null {
+  return readBrowserSignIn(input)?.user ?? null;
+}
+
+/** The session's person and sign-in time, or null without a valid session. A session signed
+ * before sign-in times were kept counts from when it was issued. */
+export function readBrowserSignIn(input: {
+  sessionSecret: string;
+  cookieHeader: string;
+  now?: () => number;
+}): BrowserSignIn | null {
   const now = input.now ?? Date.now;
   const session = readSigned<SignedSession>(
     "session",
@@ -295,12 +303,10 @@ export function readBrowserSession(input: {
     input.sessionSecret,
   );
   if (!isSignedSession(session) || session.exp * 1000 <= now()) return null;
+  const { id, email, name, authingSub, username, authTime } = session;
   return {
-    id: session.id,
-    email: session.email,
-    name: session.name,
-    authingSub: session.authingSub,
-    username: session.username,
+    user: { id, email, name, authingSub, username },
+    authTime: typeof authTime === "number" ? authTime : session.exp - SESSION_TTL_SECONDS,
   };
 }
 
@@ -434,25 +440,6 @@ export function createAuthingExchanger(config: AuthingConfig): TokenExchanger {
   };
 }
 
-function sign(purpose: SignedPurpose, payload: object, secret: string): string {
-  const body = toBase64Url(utf8Encoder.encode(JSON.stringify(payload)));
-  return `${body}.${hmacSha256(secret, `${purpose}.${body}`)}`;
-}
-
-function readSigned<T>(purpose: SignedPurpose, value: string | null, secret: string): T | null {
-  if (!value) return null;
-  const [body, signature, ...rest] = value.split(".");
-  if (!body || !signature || rest.length > 0) return null;
-  const expected = utf8Encoder.encode(hmacSha256(secret, `${purpose}.${body}`));
-  const given = utf8Encoder.encode(signature);
-  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
-  try {
-    return JSON.parse(utf8Decoder.decode(fromBase64Url(body))) as T;
-  } catch {
-    return null;
-  }
-}
-
 /** Whether a signed session carries every field a `BrowserUser` needs; `id` goes straight into
  * queries, where `undefined` would match every row. */
 function isSignedSession(value: SignedSession | null): value is SignedSession {
@@ -515,16 +502,6 @@ function sha256Bytes(value: string): Uint8Array {
   return new Uint8Array(hasher.digest());
 }
 
-function hmacSha256(secret: string, value: string): string {
-  const hasher = new Bun.CryptoHasher("sha256", secret);
-  hasher.update(value);
-  return toBase64Url(new Uint8Array(hasher.digest()));
-}
-
 function toBase64Url(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64url");
-}
-
-function fromBase64Url(value: string): Uint8Array {
-  return new Uint8Array(Buffer.from(value, "base64url"));
 }

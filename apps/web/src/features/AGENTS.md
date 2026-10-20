@@ -3,6 +3,7 @@
 The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGENTS.md#module-map). Each line names a directory under `src/` and its single responsibility. Update it before adding or reorganizing a module.
 
 - `features/agents/` — Members page, Agent creation, profile panel, control buttons, and Agent status and Activity display.
+- `features/app-authorization/` — Login with CoForge's page at `/oidc/auth`: the consent an app asks for, the Workspace picker, the refusals, its Continue/Cancel server function, the page's headers, and the GET (sealed query) and POST (form) adapters before the router.
 - `features/apps/` — Settings → Applications (the Installed and My apps lists, the register/edit editor with its danger zone, a new secret shown once) and the client-safe rules for an app's input.
 - `features/auth/` — the sign-in error page, the split shell of the pages before
   sign-in, `returnTo` handling, signing out (`signOut`) and the step `/` takes to resume sign-in

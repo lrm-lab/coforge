@@ -103,6 +103,7 @@ test("discovery advertises the configured issuer and only what this server suppo
   expect(response.headers.get("cache-control")).toBe("public, max-age=300");
   expect(await response.json()).toEqual({
     issuer: "https://coforge.example/oidc",
+    authorization_endpoint: "https://coforge.example/oidc/auth",
     jwks_uri: "https://coforge.example/oidc/jwks",
     response_types_supported: ["code"],
     response_modes_supported: ["query"],

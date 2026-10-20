@@ -1,6 +1,6 @@
 import handler from "@tanstack/react-start/server-entry";
 
-import { isNonLocalizedPath } from "#src/lib/non-localized-path";
+import { isRawHttpPath } from "#src/lib/non-localized-path";
 import { paraglideMiddleware } from "#src/paraglide/server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
 import { assertStartupConfig } from "#src/server/startup-config.server";
@@ -17,10 +17,12 @@ ensureWorkspaceMemoryLifecycle();
 startWeeklyReportScheduleTickFromEnv();
 startWorkspaceAssistantOnboarding();
 
+/** Requests Paraglide never sees: raw HTTP without a locale prefix. The unprefixed pages go
+ * through it to render in the visitor's locale, without a redirect. */
 export function isNonLocalizedRequest(request: Request): boolean {
   const pathname = new URL(request.url).pathname;
   return (
-    isNonLocalizedPath(pathname) ||
+    isRawHttpPath(pathname) ||
     // The two bootstrap installer entry points (`curl .../computer/install.sh | sh`,
     // `irm .../computer/install.ps1 | iex`) must resolve at exactly this path in every
     // environment (docs/release/local-feed-hosting.md). Paraglide's

@@ -1,0 +1,56 @@
+/// An authorization code the authorization endpoint (`server/authorization-server/`) issued to an
+/// app, stored only as its hash with every binding the token endpoint checks a redemption against.
+/// It lives ten minutes and is redeemed once.
+model OAuthAuthorizationCode {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  /// SHA-256 (hex) of the code; the code itself is never stored.
+  codeHash      String    @unique
+  appId         String    @db.Uuid
+  userId        String    @db.Uuid
+  /// The Workspace the person authorized the app in.
+  workspaceId   String    @db.Uuid
+  /// The redirect URI of the request, which the token request must repeat (RFC 6749 §4.1.3).
+  redirectUri   String
+  /// The S256 PKCE challenge (RFC 7636).
+  codeChallenge String
+  nonce         String?
+  scopes        String[]
+  /// When the person last signed in (OIDC `auth_time`).
+  authTime      DateTime
+  expiresAt     DateTime
+  /// When the code was redeemed.
+  consumedAt    DateTime?
+  /// When a redeemed code was presented again (RFC 6749 §4.1.2).
+  replayedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  app           App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([appId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@map("oauth_authorization_codes")
+}
+
+/// A person's remembered consent to an app in one Workspace: a request for scopes it covers skips
+/// the consent page unless the app asks with `prompt=consent`.
+model UserAppConsent {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  userId      String    @db.Uuid
+  appId       String    @db.Uuid
+  workspaceId String    @db.Uuid
+  scopes      String[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  /// Set when the consent is withdrawn; a revoked consent covers nothing.
+  revokedAt   DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  app         App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, appId, workspaceId])
+  @@index([appId])
+  @@index([workspaceId])
+  @@map("user_app_consents")
+}

@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 
-import { localizedReturnHref, safeReturnTo, signInHref } from "#src/features/auth/return-to";
+import {
+  localizedReturnHref,
+  safeReturnTo,
+  signInHref,
+  signOutHref,
+} from "#src/features/auth/return-to";
 
 test("a same-site page path is a place to return to after signing in", () => {
   expect(safeReturnTo("/w/x/channel/1?view=chat")).toBe("/w/x/channel/1?view=chat");
@@ -56,4 +61,25 @@ test("signing in starts at /auth/login and carries the page to come back to", ()
     "/auth/login?returnTo=%2Foauth%2Fverify%3Fuser_code%3DAB-CD",
   );
   expect(signInHref(undefined)).toBe("/auth/login");
+});
+
+test("signing in again asks for prompt=login, and signing out can come back to sign in", () => {
+  expect(signInHref("/oidc/auth?client_id=a", { prompt: "login" })).toBe(
+    "/auth/login?returnTo=%2Foidc%2Fauth%3Fclient_id%3Da&prompt=login",
+  );
+  expect(signOutHref("/oidc/auth?client_id=a")).toBe(
+    "/auth/logout?returnTo=%2Foidc%2Fauth%3Fclient_id%3Da",
+  );
+  expect(signOutHref(undefined)).toBe("/auth/logout");
+});
+
+test("a Login with CoForge authorization request comes back unchanged and unprefixed", () => {
+  const request =
+    "/oidc/auth?client_id=acme-notes&redirect_uri=https%3A%2F%2Fnotes.acme.example%2Fcb" +
+    "&response_type=code&scope=openid+profile&state=a%2Fb&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256";
+  expect(safeReturnTo(request)).toBe(request);
+  expect(localizedReturnHref(request)).toBe(request);
+  // The app's redirect URI travels inside the query; it never becomes where sign-in returns to.
+  expect(safeReturnTo("//notes.acme.example/oidc/auth?client_id=acme-notes")).toBeUndefined();
+  expect(safeReturnTo("/\\notes.acme.example/oidc/auth")).toBeUndefined();
 });

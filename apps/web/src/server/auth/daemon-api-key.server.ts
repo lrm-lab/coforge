@@ -1,5 +1,7 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import { type JWK } from "jose";
+
+import { mintOpaqueToken, sha256Hex } from "./opaque-token.server";
 
 export type DaemonApiKeyClaims = {
   readonly userId: string;
@@ -40,7 +42,7 @@ export function isDaemonApiKey(value: string): boolean {
 }
 
 export function hashDaemonApiKey(value: string): string {
-  return new Bun.CryptoHasher("sha256").update(value).digest("hex");
+  return sha256Hex(value);
 }
 
 export function createDaemonApiKeyFactory(repository: DaemonApiKeyRepository) {
@@ -66,7 +68,7 @@ export function prepareDaemonApiKey({
   workspaceId: string;
   computerId: string;
 }) {
-  const apiKey = `dk_${randomBytes(32).toString("base64url")}`;
+  const apiKey = `dk_${mintOpaqueToken()}`;
   // No explicit id: the Prisma client generates it from the schema's uuid(7)
   // default — API keys keep the project's one id-generation path end to end.
   return {

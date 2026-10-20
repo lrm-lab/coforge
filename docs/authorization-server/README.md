@@ -22,10 +22,9 @@ error that names the variable and never its value, so the health check never pas
 deployment keeps its previous release. The boot log's `startup_config_checked` line reports
 `authorization_server` as `configured` or `disabled`.
 
-Staging and production do not set these variables yet, and must not until the authorization
-and token endpoints exist: OpenID Connect Discovery requires `authorization_endpoint` (and
-`token_endpoint` for the code flow), so until then the metadata is not conformant and strict
-clients reject it.
+Staging and production do not set these variables yet, and must not until the token endpoint
+exists: OpenID Connect Discovery requires `token_endpoint` for the code flow, so until then the
+metadata is not conformant and strict clients reject it.
 
 ## Endpoints
 
@@ -34,6 +33,8 @@ clients reject it.
 | `GET /oidc/.well-known/openid-configuration` | OpenID Connect Discovery 1.0 metadata |
 | `GET /.well-known/oauth-authorization-server/oidc` | The same metadata at the RFC 8414 path for an issuer with a path |
 | `GET /oidc/jwks` | The public keys, in configured order |
+| `GET /oidc/auth` | The authorization endpoint: a redirect back to the app (a code or an error), to sign-in, or the consent page; [the authorization endpoint](authorization-endpoint.md) |
+| `POST /oidc/auth` | The same request sent as a form (OIDC Core §3.1.2.1): a 303 to the GET with its parameters |
 
 The metadata advertises only endpoints that exist. Its fixed policy: the `code` response
 type in the query response mode, PKCE with `S256` only, ES256 ID tokens, public subject

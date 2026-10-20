@@ -34,6 +34,9 @@ These rules apply to `src/server/db/`.
 - `app.repositories.server.ts` persists the app registry: only the apps Workspaces register.
   A read for display never selects `clientSecretHash`, and every write is scoped to an app its
   Workspace owns, so it cannot reach another Workspace's; who may write stays in `server/apps/`.
+- `oauth-authorization.repositories.server.ts` persists the authorization endpoint's rows: apps
+  read as OIDC clients, the Workspaces a person may authorize an app in, consents and authorization
+  codes (only a code's hash). What a request may do stays in `server/authorization-server/`.
 - `reminder.repositories.server.ts` owns PostgreSQL locking and persistence
   only; authorization, recurrence, and fire idempotence stay in
   `server/reminders/`.

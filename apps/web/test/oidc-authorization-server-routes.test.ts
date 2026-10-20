@@ -105,6 +105,7 @@ test("the RFC 8414 issuer path is its own route, not a child of the device flow'
     ],
     ["/oidc/.well-known/openid-configuration", "/oidc/.well-known/openid-configuration"],
     ["/oidc/jwks", "/oidc/jwks"],
+    ["/oidc/auth", "/oidc/auth"],
   ]) {
     expect(routes[id]?.fullPath).toBe(fullPath);
     expect(routes[id]?.parentRoute?.id).toBe("__root__");

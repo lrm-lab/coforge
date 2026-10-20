@@ -50,6 +50,8 @@ model User {
   requestedAgentMigrations    AgentMigration[]
   createdApps                 App[]
   appInstallations            AppInstallation[]
+  oauthAuthorizationCodes     OAuthAuthorizationCode[]
+  appConsents                 UserAppConsent[]
 
   @@map("users")
 }

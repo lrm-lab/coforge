@@ -5,7 +5,7 @@ import { requireWorkspaceIdForRequest } from "#src/server/workspaces/selection.s
 import type { BrowserUser } from "#src/server/auth/browser-login.server";
 import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
 import { workspaceSlugFromPath } from "#src/features/workspaces/workspace-url";
-import { requireBrowserUser } from "#src/server/auth/require-user.server";
+import { requireBrowserSignIn } from "#src/server/auth/require-user.server";
 import { deLocalizeHref } from "#src/paraglide/runtime";
 
 export type WorkspaceUserContext = {
@@ -33,14 +33,12 @@ export const authMiddleware = createMiddleware({ type: "function" })
   .server(async ({ next, context }) => {
     const request = getRequest();
     const page = typeof context.page === "string" ? context.page : ssrPage(request);
-    return next({
-      context: {
-        user: await requireBrowserUser(
-          request.headers.get("cookie") ?? undefined,
-          page === undefined ? undefined : deLocalizeHref(page),
-        ),
-      },
-    });
+    // When the person signed in (`authTime`) comes from the same session read.
+    const { user, authTime } = await requireBrowserSignIn(
+      request.headers.get("cookie") ?? undefined,
+      page === undefined ? undefined : deLocalizeHref(page),
+    );
+    return next({ context: { user, authTime } });
   });
 
 /** The page an SSR render is for; a call from the browser (`/_serverFn/…`) is not a page. */

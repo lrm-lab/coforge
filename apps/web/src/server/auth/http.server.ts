@@ -26,11 +26,14 @@ export function handleLoginStart(input: {
   config: AuthingConfig;
   sessionSecret: string;
   returnTo?: string | null;
+  /** `login` asks the person to sign in again (Login with CoForge's `prompt=login` and `max_age`). */
+  prompt?: string | null;
 }): Response {
   const started = startBrowserLogin({
     config: input.config,
     sessionSecret: input.sessionSecret,
     returnTo: input.returnTo,
+    reauthenticate: input.prompt === "login",
   });
   return redirect(started.authorizationUrl, {
     "set-cookie": started.stateCookie,

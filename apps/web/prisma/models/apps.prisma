@@ -32,6 +32,8 @@ model App {
   ownerWorkspace   Workspace         @relation(fields: [ownerWorkspaceId], references: [id], onDelete: Cascade)
   createdBy        User?             @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   installations    AppInstallation[]
+  authorizationCodes OAuthAuthorizationCode[]
+  consents         UserAppConsent[]
 
   @@index([ownerWorkspaceId])
   @@index([createdByUserId])

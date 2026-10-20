@@ -28,6 +28,7 @@ import { Route as NotificationsOpenRouteImport } from './routes/notifications.op
 import { Route as OauthDeviceRouteImport } from './routes/oauth/device'
 import { Route as OauthTokenRouteImport } from './routes/oauth/token'
 import { Route as OauthVerifyRouteImport } from './routes/oauth/verify'
+import { Route as OidcAuthRouteImport } from './routes/oidc.auth'
 import { Route as OidcJwksRouteImport } from './routes/oidc.jwks'
 import { Route as WWorkspaceSlugRouteImport } from './routes/w.$workspaceSlug'
 import { Route as WorkspacesNewRouteImport } from './routes/workspaces.new'
@@ -221,6 +222,11 @@ const OauthTokenRoute = OauthTokenRouteImport.update({
 const OauthVerifyRoute = OauthVerifyRouteImport.update({
   id: '/oauth/verify',
   path: '/oauth/verify',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OidcAuthRoute = OidcAuthRouteImport.update({
+  id: '/oidc/auth',
+  path: '/oidc/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OidcJwksRoute = OidcJwksRouteImport.update({
@@ -797,6 +803,7 @@ export interface FileRoutesByFullPath {
   '/oauth/device': typeof OauthDeviceRoute
   '/oauth/token': typeof OauthTokenRoute
   '/oauth/verify': typeof OauthVerifyRoute
+  '/oidc/auth': typeof OidcAuthRoute
   '/oidc/jwks': typeof OidcJwksRoute
   '/w/$workspaceSlug': typeof WWorkspaceSlugRouteWithChildren
   '/workspaces/new': typeof WorkspacesNewRoute
@@ -914,6 +921,7 @@ export interface FileRoutesByTo {
   '/oauth/device': typeof OauthDeviceRoute
   '/oauth/token': typeof OauthTokenRoute
   '/oauth/verify': typeof OauthVerifyRoute
+  '/oidc/auth': typeof OidcAuthRoute
   '/oidc/jwks': typeof OidcJwksRoute
   '/w/$workspaceSlug': typeof WWorkspaceSlugChatIndexRoute
   '/workspaces/new': typeof WorkspacesNewRoute
@@ -1030,6 +1038,7 @@ export interface FileRoutesById {
   '/oauth/device': typeof OauthDeviceRoute
   '/oauth/token': typeof OauthTokenRoute
   '/oauth/verify': typeof OauthVerifyRoute
+  '/oidc/auth': typeof OidcAuthRoute
   '/oidc/jwks': typeof OidcJwksRoute
   '/w/$workspaceSlug': typeof WWorkspaceSlugRouteWithChildren
   '/workspaces/new': typeof WorkspacesNewRoute
@@ -1151,6 +1160,7 @@ export interface FileRouteTypes {
     | '/oauth/device'
     | '/oauth/token'
     | '/oauth/verify'
+    | '/oidc/auth'
     | '/oidc/jwks'
     | '/w/$workspaceSlug'
     | '/workspaces/new'
@@ -1268,6 +1278,7 @@ export interface FileRouteTypes {
     | '/oauth/device'
     | '/oauth/token'
     | '/oauth/verify'
+    | '/oidc/auth'
     | '/oidc/jwks'
     | '/w/$workspaceSlug'
     | '/workspaces/new'
@@ -1383,6 +1394,7 @@ export interface FileRouteTypes {
     | '/oauth/device'
     | '/oauth/token'
     | '/oauth/verify'
+    | '/oidc/auth'
     | '/oidc/jwks'
     | '/w/$workspaceSlug'
     | '/workspaces/new'
@@ -1503,6 +1515,7 @@ export interface RootRouteChildren {
   OauthDeviceRoute: typeof OauthDeviceRoute
   OauthTokenRoute: typeof OauthTokenRoute
   OauthVerifyRoute: typeof OauthVerifyRoute
+  OidcAuthRoute: typeof OidcAuthRoute
   OidcJwksRoute: typeof OidcJwksRoute
   WWorkspaceSlugRoute: typeof WWorkspaceSlugRouteWithChildren
   WorkspacesNewRoute: typeof WorkspacesNewRoute
@@ -1701,6 +1714,13 @@ declare module '@tanstack/react-router' {
       path: '/oauth/verify'
       fullPath: '/oauth/verify'
       preLoaderRoute: typeof OauthVerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oidc/auth': {
+      id: '/oidc/auth'
+      path: '/oidc/auth'
+      fullPath: '/oidc/auth'
+      preLoaderRoute: typeof OidcAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/oidc/jwks': {
@@ -2578,6 +2598,7 @@ const rootRouteChildren: RootRouteChildren = {
   OauthDeviceRoute: OauthDeviceRoute,
   OauthTokenRoute: OauthTokenRoute,
   OauthVerifyRoute: OauthVerifyRoute,
+  OidcAuthRoute: OidcAuthRoute,
   OidcJwksRoute: OidcJwksRoute,
   WWorkspaceSlugRoute: WWorkspaceSlugRouteWithChildren,
   WorkspacesNewRoute: WorkspacesNewRoute,

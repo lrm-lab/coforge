@@ -3,7 +3,7 @@ import { localizeHref } from "#src/paraglide/runtime";
 
 /** Longer return paths are dropped: the signed sign-in cookie that carries one must stay under the
  * browser's 4 KB cookie limit. */
-const MAX_RETURN_TO_LENGTH = 2_048;
+export const MAX_RETURN_TO_LENGTH = 2_048;
 const SAME_SITE_BASE = "https://coforge.invalid";
 
 /**
@@ -42,9 +42,27 @@ export function localizedReturnHref(path: string): string {
   return isNonLocalizedPath(pathname) ? path : localizeHref(path);
 }
 
-/** Starts sign-in at Authing, coming back to `returnTo` (a `safeReturnTo` path) afterwards. */
-export function signInHref(returnTo: string | undefined): string {
-  return returnTo ? `/auth/login?returnTo=${encodeURIComponent(returnTo)}` : "/auth/login";
+/** Starts sign-in at Authing, coming back to `returnTo` (a `safeReturnTo` path) afterwards.
+ * `prompt: "login"` has Authing ask the person to sign in again even with a session of its own. */
+export function signInHref(
+  returnTo: string | undefined,
+  { prompt }: { prompt?: "login" } = {},
+): string {
+  const query = new URLSearchParams();
+  if (returnTo) query.set("returnTo", returnTo);
+  if (prompt) query.set("prompt", prompt);
+  return withQuery("/auth/login", query);
+}
+
+/** Signs out through Authing, then straight back to sign-in and `returnTo` (switching account). */
+export function signOutHref(returnTo: string | undefined): string {
+  return withQuery("/auth/logout", new URLSearchParams(returnTo ? { returnTo } : {}));
+}
+
+/** `encodeURIComponent` encoding, as these links have always been written. */
+function withQuery(path: string, query: URLSearchParams): string {
+  const pairs = [...query].map(([name, value]) => `${name}=${encodeURIComponent(value)}`);
+  return pairs.length ? `${path}?${pairs.join("&")}` : path;
 }
 
 /** Where a person lands once a sign-in step is done: the page they were going to (a `safeReturnTo`
