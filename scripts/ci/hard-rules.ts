@@ -20,6 +20,7 @@ import {
   SIZE_FIX,
   sizeViolations,
 } from "../git-hooks/staged-file-size";
+import { commitIdentities, type IdentityMatch, stagedIdentities } from "./commit-identity";
 import { linkPath, markdownLinks } from "./markdown-links";
 
 type Rule = "size-ratchet" | "markdown-links" | "new-suppression" | "author-identity";
@@ -32,35 +33,8 @@ const FIX: Record<Rule, string> = {
   "new-suppression":
     "Fix the underlying code instead. A new lint, type-check or test exemption needs the user's explicit prior approval (AGENTS.md, Decision gates); this check has no inline override.",
   "author-identity":
-    "Commit as the person running the Agent, never as an Agent or bot (AGENTS.md): set `git config user.name` and `git config user.email` to their own identity. Rewrite a listed commit not yet on main with `git rebase --exec 'git commit --amend --no-edit --reset-author' <base>`; one already on main is rewritten only when Frank asks. A Co-authored-by trailer is not checked.",
+    "Commit as the person running the Agent, never as an Agent or bot (AGENTS.md); author and committer both count: set `git config user.name` and `git config user.email` to their own identity. Rewrite a listed commit not yet on main with `git rebase --exec 'git commit --amend --no-edit --reset-author' <base>`; one already on main is rewritten only when Frank asks. A Co-authored-by trailer is not checked.",
 };
-
-// Rule 12: the author identity. Each pattern is matched against the name and the email.
-const AGENT_IDENTITIES = [
-  "coforge-*",
-  "*@anthropic.com",
-  "cursoragent@cursor.com",
-  "*[bot]",
-  "*-agent@*",
-];
-const identityPatterns = AGENT_IDENTITIES.map(
-  (glob) =>
-    new RegExp(
-      `^${glob
-        .split("*")
-        .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-        .join(".*")}$`,
-      "i",
-    ),
-);
-
-/** The Agent or bot pattern `name <email>` matches, or undefined for a person's identity. */
-export function authorViolation(name: string, email: string): string | undefined {
-  const index = identityPatterns.findIndex(
-    (pattern) => pattern.test(name.trim()) || pattern.test(email.trim()),
-  );
-  return index === -1 ? undefined : AGENT_IDENTITIES[index];
-}
 
 // Rule 11: new suppressions. The token alternatives end in a character class so that this file's
 // own lines carry none of the tokens. A directive counts after a comment opener, or, in a file with
@@ -337,22 +311,9 @@ function suppressionViolations(
   });
 }
 
-function identityViolation(location: string, name: string, email: string): Violation[] {
-  const pattern = authorViolation(name, email);
-  if (!pattern) return [];
-  return [
-    { rule: "author-identity", location, found: `author ${name} <${email}> matches ${pattern}` },
-  ];
-}
-
-function authorViolations(revisions: string): Violation[] {
-  return text(["log", "--format=%H%x00%an%x00%ae", revisions])
-    .split("\n")
-    .filter(Boolean)
-    .flatMap((row) => {
-      const [sha, name, email] = row.split("\0");
-      return identityViolation(`commit ${sha!.slice(0, 12)}`, name!, email!);
-    });
+/** Rule 12, the author and committer identity (commit-identity.ts), as violations. */
+function identityViolations(matches: IdentityMatch[]): Violation[] {
+  return matches.map((match) => ({ rule: "author-identity", ...match }));
 }
 
 async function sizeRatchet(
@@ -393,11 +354,9 @@ const USAGE =
 async function check(args: string[]): Promise<Violation[] | string> {
   const [mode, ...rest] = args;
   if (mode === "--staged" && rest.length === 0) {
-    const ident = /^(.*) <(.*)> \d+ [+-]\d{4}$/.exec(text(["var", "GIT_AUTHOR_IDENT"]).trim());
-    if (!ident) throw new Error("git var GIT_AUTHOR_IDENT gave no author");
     return [
       ...(await fileViolations({ kind: "staged" })),
-      ...identityViolation("author", ident[1]!, ident[2]!),
+      ...identityViolations(stagedIdentities()),
     ];
   }
   const authorsSince = rest.length === 4 && rest[2] === "--authors-since";
@@ -414,14 +373,17 @@ async function check(args: string[]): Promise<Violation[] | string> {
     const authorsFrom = before && isCommit(before) ? before : baseRev;
     return [
       ...(await fileViolations({ kind: "range", base, head })),
-      ...authorViolations(`${authorsFrom}..${head}`),
+      ...identityViolations(commitIdentities(`${authorsFrom}..${head}`)),
     ];
   }
   if (mode === "--all" && rest.length === 0) {
     // Only the range's head is read when no changes are given.
     const head = text(["rev-parse", "--verify", "HEAD^{commit}"]).trim();
     const source: ChangeSource = { kind: "range", base: head, head };
-    return [...linkViolations(source, exemption(source)), ...authorViolations(head)];
+    return [
+      ...linkViolations(source, exemption(source)),
+      ...identityViolations(commitIdentities(head)),
+    ];
   }
   throw new Error(USAGE);
 }

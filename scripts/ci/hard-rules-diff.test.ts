@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { authorViolation } from "./hard-rules";
+import { authorViolation } from "./commit-identity";
 import { useTestRepo } from "../git-hooks/test-repo";
 
 // The rules judged on a change: new suppressions, the author identity, and the size ratchet in
@@ -103,11 +103,27 @@ test("the author identity rule matches Agent and bot identities, never a human's
     ["github-actions[bot]", "41898282+github-actions@users.noreply.github.com"],
     ["Builder", "build-agent@example.com"],
     ["CoForge-Pref", "x@example.com"],
+    ["gpt-5-6-sol", "gpt-5-6-sol@users.noreply.github.com"],
+    ["muse-spark-1-3", "muse-spark-1-3@coforge.local"],
+    ["glm-5-3-flash", "me-frankan@gmail.com"],
+    ["Claude-4", "x@example.com"],
+    ["Amp", "amp@ampcode.com"],
   ])
     expect(authorViolation(name!, email!), `${name} <${email}>`).toBeDefined();
   for (const [name, email] of [
     ["me-frankan", "me.frankan@gmail.com"],
+    ["me-frankan", "me-frankan@users.noreply.github.com"],
     ["exp-repair", "65881810+exp-repair@users.noreply.github.com"],
+    ["exp-repair", "lijiannankai@126.com"],
+    ["AIhpJ", "36286344+AIhpJ@users.noreply.github.com"],
+    ["ketsuzhou", "30996024+ketsuzhou@users.noreply.github.com"],
+    ["Jian Jian40 Li", "lijian40@lenovo.com"],
+    // GitHub's web-merge committer: no allowlist, it simply matches no pattern.
+    ["GitHub", "noreply@github.com"],
+    ["GPT4all", "x@example.com"],
+    ["llama3", "x@example.com"],
+    ["claude", "x@example.com"],
+    ["oliver", "x@example.com"],
     ["Ann Coforge", "ann@coforge.dev"],
     ["agent smith", "agent@example.com"],
     ["Robot", "anthropic.com@example.com"],
@@ -389,4 +405,21 @@ test("a NUL byte early in a file does not hide a new suppression", () => {
 
   expect(result.exitCode).not.toBe(0);
   expect(result.stderr).toContain("src/data.ts:2");
+});
+
+test("the committer is checked too: in the hook from the environment, in a range per commit", () => {
+  const base = repo.seed({ "README.md": "# Repo\n" });
+  repo.write({ "a.txt": "a\n" });
+  const committer = { GIT_COMMITTER_NAME: "gpt-5-6-sol", GIT_COMMITTER_EMAIL: "x@example.com" };
+
+  const hook = repo.commitAll(committer);
+  expect(hook.exitCode).not.toBe(0);
+  expect(hook.stderr).toContain("commit being made: committer gpt-5-6-sol <x@example.com> matches");
+  expect(hook.stderr).not.toContain("author Test Person");
+
+  const human = repo.seed({}, { env: committer });
+  const result = repo.range(base);
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain(`commit ${human.slice(0, 12)}: committer gpt-5-6-sol`);
+  expect(result.stderr).not.toContain("author Test Person");
 });

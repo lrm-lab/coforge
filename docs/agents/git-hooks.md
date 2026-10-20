@@ -82,13 +82,12 @@ blocks the commit and says so.
 Rules a machine enforces, with no allowlist and no inline override. One checker,
 `scripts/ci/hard-rules.ts`, runs in two places:
 
-- **pre-commit**, `--staged`: the staged content against HEAD and the author of the commit being
-  made.
+- **pre-commit**, `--staged`: the staged content against HEAD, and the author and the committer.
 - **CI**, `--range "$BASE" "$HEAD" --authors-since "$BEFORE"`: the "Check hard rules" step of the
   always-run Plan checks job, with the same `BASE` and `HEAD` that job diffs (a PR's base, or the
   head of the last successful push run on `main`). The file rules judge the change from their
   merge base, as `git diff BASE...HEAD` does, so a later commit that fixes a violation cures the
-  range. The author rule checks a PR's `BASE..HEAD`, but only the commits a push introduced
+  range. The identity rule checks a PR's `BASE..HEAD`, but only the commits a push introduced
   (`BEFORE`, the push event's `before`): a bot commit on `main` fails its own push's run, not
   every run until `main` is rewritten. A `before` that is not a commit (empty, all zeros, or
   force-pushed away) falls back to `BASE..HEAD`. With no base commit (no successful push run yet,
@@ -104,7 +103,7 @@ one `hard-rules: <message>` line, prefixed `::error::` on GitHub Actions.
 | `size-ratchet` | The change adds a file over the 5,000-token limit, or one crosses or grows beyond it, by the table above (in CI, the range's base in place of HEAD). |
 | `markdown-links` | A relative link `](path)` in a Markdown file the change adds or edits names no tracked file or directory, or a link in any Markdown file names a path the change deletes or renames away. |
 | `new-suppression` | An added line carries a lint, type-check or test suppression (list below). Existing ones are not flagged. |
-| `author-identity` | The author looks like an Agent or bot (patterns below). |
+| `author-identity` | The author or the committer looks like an Agent or bot (patterns below). |
 
 **Links.** Inline links, whose destination may hold balanced parentheses (`foo_(bar).md`), and
 reference definitions: `[label]: path` alone on its line or followed only by a quoted or
@@ -143,15 +142,18 @@ blocked when it is first committed; regenerating it later is not, because that l
 A new exemption needs the user's explicit prior approval (root `AGENTS.md`, Decision gates); fix
 the underlying code instead.
 
-**Author identity.** The author's name or email, case-insensitively, matching `coforge-*`,
-`*@anthropic.com`, `cursoragent@cursor.com`, `*[bot]` or `*-agent@*`.
-Pre-commit reads `git var GIT_AUTHOR_IDENT`, which reflects `--author` and `GIT_AUTHOR_*`; CI
-reads the commits above. The committer and `Co-authored-by` trailers are not checked.
-Commit as the person running the Agent (root `AGENTS.md`).
+**Author identity.** The author's and the committer's name or email, case-insensitively, matching
+`coforge-*`, `*@anthropic.com`, `*@coforge.local`, `cursoragent@cursor.com`, `*[bot]` or
+`*-agent@*`, or a name matching `^(gpt|glm|claude|gemini|qwen|deepseek|kimi|grok|llama|muse)-[0-9]`
+(so `GPT4all`, `llama3` and `claude` alone pass). No allowlist: GitHub's web-merge committer
+`GitHub <noreply@github.com>` matches nothing. Pre-commit reads `git var GIT_AUTHOR_IDENT` and
+`GIT_COMMITTER_IDENT` (`--author`, `GIT_AUTHOR_*` and `GIT_COMMITTER_*` included); CI reads both for
+the commits above. `Co-authored-by` trailers are not checked. Commit as the person running the
+Agent (root `AGENTS.md`).
 
 **The one exemption.** Files under a skill directory registered in `skills-lock.json`
 (`.agents/skills/<name>/`, read from the change's base) are vendored upstream content: the
-file rules (size, links, suppressions) skip them; the author rule does not. Project skills that
+file rules (size, links, suppressions) skip them; the identity rule does not. Project skills that
 are not in the lock are checked like any other file. This is the only exemption the hard rules
 add. The size rule also keeps the two skips it was approved with (task #25): files marked
 `linguist-generated` and binary files, [above](#files-that-are-not-checked).
@@ -167,9 +169,8 @@ add. The size rule also keeps the two skips it was approved with (task #25): fil
 - Merges without conflicts, `git cherry-pick`, `git rebase`, `git revert` and `git am` do not run
   `pre-commit` (see [What is not covered](#what-is-not-covered)), so only CI checks those commits.
 - A CI run without a base commit only warns, so that range is never checked.
-- A push run cancelled by a newer push loses its author check. The newer push's `before` is the
-  cancelled push's head, so the cancelled push's commits are in no run's author range; the file
-  rules still cover them, because the next run diffs from the last successful one.
+- A push run cancelled by a newer push loses its identity check: the newer push's `before` is the
+  cancelled push's head. The file rules still cover it, as the next run diffs from the last pass.
 - A violation in CI fails the Plan checks job, so the checks it would have selected are skipped
   until the violation is fixed.
 - The exemption lists, `skills-lock.json` and `.gitattributes`, are read from the change's base
