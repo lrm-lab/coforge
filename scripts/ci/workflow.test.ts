@@ -3,10 +3,13 @@ import { chmod, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const ci = Bun.YAML.parse(await Bun.file(".github/workflows/ci.yml").text());
+const parse = async (file: string) =>
+  Bun.YAML.parse(await Bun.file(`.github/workflows/${file}`).text());
+const ci = await parse("ci.yml");
+const deploy = await parse("deploy-staging.yml");
+const release = await parse("release-staging.yml");
 
 test("deployment readiness requires a successful WebSocket handshake, rejecting HTTP error pages", async () => {
-  const deploy = Bun.YAML.parse(await Bun.file(".github/workflows/deploy-staging.yml").text());
   const script = deploy.jobs.deploy.steps.find(
     (step: { name: string }) => step.name === "Check realtime endpoint responds",
   ).run;
@@ -33,7 +36,6 @@ test("deployment readiness requires a successful WebSocket handshake, rejecting 
 });
 
 test("the staging image build fixes file timestamps and reads no build cache", async () => {
-  const deploy = Bun.YAML.parse(await Bun.file(".github/workflows/deploy-staging.yml").text());
   const build = deploy.jobs.image.steps.find(
     (step: { name: string }) => step.name === "Build and push Docker image",
   );
@@ -142,8 +144,6 @@ test("a push to main starts no deployment or publication", async () => {
 });
 
 test("release callers select separate tracks and the Web image waits for the main-only gates", async () => {
-  const deploy = Bun.YAML.parse(await Bun.file(".github/workflows/deploy-staging.yml").text());
-  const release = Bun.YAML.parse(await Bun.file(".github/workflows/release-staging.yml").text());
   expect(deploy.jobs.gates.with.track).toBe("web");
   // Web staging deploys only when an operator dispatches it from main; docs/release/github-actions.md.
   expect(Object.keys(deploy.on)).toEqual(["workflow_dispatch"]);
@@ -163,6 +163,7 @@ test("release callers select separate tracks and the Web image waits for the mai
 });
 
 type Step = {
+  id?: string;
   name?: string;
   run?: string;
   uses?: string;
@@ -178,9 +179,7 @@ type Job = {
   strategy?: { matrix: { include: Record<string, string>[] } };
 };
 
-const installerRelease = Bun.YAML.parse(
-  await Bun.file(".github/workflows/release-installer-staging.yml").text(),
-) as {
+const installerRelease = (await parse("release-installer-staging.yml")) as {
   on: Record<string, { inputs?: Record<string, { required?: boolean; type?: string }> }>;
   env: Record<string, string>;
   concurrency: Record<string, unknown>;
@@ -288,10 +287,7 @@ test("no installer release checkout leaves the workflow token in the repository"
 });
 
 test("the installer release signs in exactly as Computer publication does", async () => {
-  const computer = Bun.YAML.parse(
-    await Bun.file(".github/workflows/release-staging.yml").text(),
-  ) as { jobs: { publish: { steps: Step[] } } };
-  const computerSteps = computer.jobs.publish.steps;
+  const computerSteps = (release as { jobs: { publish: { steps: Step[] } } }).jobs.publish.steps;
   const computerOidc = computerSteps.find((step) => step.name === OIDC_STEP)!;
   const computerEnv = computerSteps.find((step) =>
     step.name?.startsWith("Build six platforms"),
@@ -398,6 +394,19 @@ test("the workflow diffs PRs from their merge base and includes both sides of a 
   }
 });
 
+test("Plan checks runs the hard rules after the diff check", () => {
+  const steps = ci.jobs.changes.steps as Step[];
+  const select = steps.findIndex((step) => step.id === "select");
+  const rules = steps[select + 1]!;
+  expect(rules.name).toBe("Check hard rules");
+  // The select step's env.
+  expect(rules.env).toEqual(steps[select]!.env!);
+  expect(rules.env!.BEFORE).toContain("'push' && github.event.before");
+  expect(rules.run).toBe(
+    'bun scripts/ci/hard-rules.ts --range "$BASE" "$HEAD" --authors-since "$BEFORE"',
+  );
+});
+
 test("a push diffs from the last successful run of its workflow, so superseded pushes stay in scope", async () => {
   const steps = ci.jobs.changes.steps as {
     id?: string;
@@ -462,7 +471,6 @@ esac
 });
 
 test("Computer withdrawal shares the publication lock and cannot publish a replacement", async () => {
-  const release = Bun.YAML.parse(await Bun.file(".github/workflows/release-staging.yml").text());
   expect(release.on.workflow_dispatch.inputs.withdraw_version.type).toBe("string");
   expect(release.concurrency).toEqual({ group: "release-staging", "cancel-in-progress": false });
   const steps = release.jobs.publish.steps;
@@ -482,7 +490,6 @@ test("Computer withdrawal shares the publication lock and cannot publish a repla
 });
 
 test("a staging publication is numbered against production's latest, never a hand-kept line", async () => {
-  const release = Bun.YAML.parse(await Bun.file(".github/workflows/release-staging.yml").text());
   expect(release.on.workflow_dispatch.inputs.line).toMatchObject({
     required: false,
     type: "string",
@@ -499,7 +506,6 @@ test("a staging publication is numbered against production's latest, never a han
 });
 
 test("withdrawal inputs cannot accidentally fall through to a publication", async () => {
-  const release = Bun.YAML.parse(await Bun.file(".github/workflows/release-staging.yml").text());
   const guard = release.jobs.publish.steps.find(
     (step: Step) => step.name === "Validate withdrawal inputs",
   );

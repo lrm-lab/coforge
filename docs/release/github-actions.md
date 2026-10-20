@@ -60,10 +60,11 @@ with three scopes selected by `scripts/ci/selection.ts`:
 Shared protocol, global toolchain/configuration, lockfile, CI, and unclassified
 paths select full PR coverage. Only known documentation locations are exempt;
 Markdown assets inside source directories remain code inputs. Documentation-only
-PRs run path selection and changed-line whitespace checks without installing
-workspace dependencies. CI-policy tests and workflow/static lint run as a
-parallel script suite when shared inputs, CI, or unclassified files change.
-No documentation link checker is currently configured.
+PRs run path selection, changed-line whitespace checks and the
+[hard rules](../agents/git-hooks.md#hard-rules) (size ratchet, relative Markdown
+links, new suppressions, author identity) without installing workspace
+dependencies. CI-policy tests and workflow/static lint run as a parallel script
+suite when shared inputs, CI, or unclassified files change.
 PR diffs use the merge base. A push to `main` diffs from the head of CI's last
 successful push run on `main`, so commits whose runs were superseded, cancelled,
 or failed stay in scope until a run passes; with no earlier successful push run

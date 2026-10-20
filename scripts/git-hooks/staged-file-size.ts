@@ -1,30 +1,33 @@
-// The pre-commit size check (`.githooks/pre-commit` runs it from the repository being committed).
-// It blocks a staged file over the token limit unless the file was already over it at HEAD and did
-// not grow: a ratchet that lets oversized files shrink but stops new ones and growth. Sizes are the
-// staged blobs' (the index git is committing from, `GIT_INDEX_FILE` included), never the working
-// tree's. Files the staged `.gitattributes` marks `linguist-generated`, and binary files, are not
-// written by agents and are skipped. See docs/agents/git-hooks.md.
-//
-// usage: bun scripts/git-hooks/staged-file-size.ts   (exit 1 lists the blocked files on stderr)
+// The file size ratchet, and the git change model the hard rules share. scripts/ci/hard-rules.ts
+// runs the ratchet on the commit being made (`.githooks/pre-commit`) and on CI's commit range. It
+// blocks a file over the token limit unless the file was already over it at the base (HEAD, or the
+// range's base) and did not grow: a ratchet that lets oversized files shrink but stops new ones and
+// growth. Sizes are the staged blobs' (the index git is committing from, `GIT_INDEX_FILE`
+// included) or the range head's, never the working tree's. Files the staged (or head)
+// `.gitattributes` marks `linguist-generated`, and binary files, are not written by agents and are
+// skipped. See docs/agents/git-hooks.md.
 
-export const MAX_FILE_TOKENS = 5_000;
+const MAX_FILE_TOKENS = 5_000;
 /** The estimate the limit is stated in: one token per four bytes. */
-export const BYTES_PER_TOKEN = 4;
-export const MAX_FILE_BYTES = MAX_FILE_TOKENS * BYTES_PER_TOKEN;
+const BYTES_PER_TOKEN = 4;
+const MAX_FILE_BYTES = MAX_FILE_TOKENS * BYTES_PER_TOKEN;
 /** Git's own binary heuristic: a NUL byte within the first 8000 bytes. */
 const BINARY_PROBE_BYTES = 8000;
 
-export type StagedFile = {
+type StagedFile = {
   path: string;
   stagedBytes: number;
-  /** The HEAD blob it replaces (for a rename or copy, the source path's); undefined when new. */
+  /** The base blob it replaces (for a rename or copy, the source path's); undefined when new. */
   head?: { path: string; bytes: number };
 };
 
-export type SizeViolation = StagedFile & { reason: "new" | "crossed" | "grew" };
+type SizeViolation = StagedFile & { reason: "new" | "crossed" | "grew" };
 
-/** Why `file` may not be committed, or undefined when it may. */
-export function sizeViolation(file: StagedFile): SizeViolation | undefined {
+/** The change judged: the index against HEAD (a commit being made), or one commit against
+ * another (CI's range, from its merge base). */
+export type ChangeSource = { kind: "staged" } | { kind: "range"; base: string; head: string };
+
+function sizeViolation(file: StagedFile): SizeViolation | undefined {
   if (file.stagedBytes <= MAX_FILE_BYTES) return undefined;
   if (file.head === undefined) return { ...file, reason: "new" };
   if (file.head.bytes <= MAX_FILE_BYTES) return { ...file, reason: "crossed" };
@@ -32,48 +35,65 @@ export function sizeViolation(file: StagedFile): SizeViolation | undefined {
   return undefined;
 }
 
-export function tokens(bytes: number): number {
-  return Math.ceil(bytes / BYTES_PER_TOKEN);
-}
-
 const count = (value: number) => value.toLocaleString("en-US");
 
-export function formatViolations(violations: SizeViolation[]): string {
-  const lines = violations.map((violation) => {
-    const size = `${count(tokens(violation.stagedBytes))} tokens`;
-    const head = violation.head;
-    // Bytes, not tokens: two sizes a few bytes apart can round to the same token count.
-    const growth = head
-      ? `grew from ${count(head.bytes)} to ${count(violation.stagedBytes)} bytes${head.path === violation.path ? "" : ` (${head.path} at HEAD)`}`
-      : "";
-    const why =
-      violation.reason === "new"
-        ? "new file over the limit"
-        : violation.reason === "crossed"
-          ? `crossed the limit: ${growth}`
-          : `already over the limit and ${growth}`;
-    return `  ${violation.path}: ${size}, ${why}`;
-  });
-  return [
-    `Commit blocked: ${violations.length === 1 ? "1 staged file exceeds" : `${violations.length} staged files exceed`} the ${count(MAX_FILE_TOKENS)}-token limit (tokens = bytes / ${BYTES_PER_TOKEN}, so ${count(MAX_FILE_BYTES)} bytes).`,
-    "",
-    ...lines,
-    "",
-    "Split the file into smaller ones. A file already over the limit may be committed only at or below its HEAD size.",
-    "Only if a file is genuinely generated (lockfile, codegen, data), mark it `linguist-generated` in .gitattributes.",
-    "See docs/agents/git-hooks.md.",
-  ].join("\n");
+/** How to resolve a size violation, with the limit it enforces. */
+export const SIZE_FIX = `The limit is ${count(MAX_FILE_TOKENS)} tokens, estimated as bytes / ${BYTES_PER_TOKEN} (${count(MAX_FILE_BYTES)} bytes). Split each file into smaller ones; a file already over the limit may only stay the same size or shrink. Mark a file \`linguist-generated\` in .gitattributes only if a tool genuinely produces it (lockfile, codegen, data).`;
+
+/** What is wrong with a violating file: its size and why; `base` names where a rename's source
+ * path was. */
+export function describeViolation(violation: SizeViolation, base: string): string {
+  const size = `${count(Math.ceil(violation.stagedBytes / BYTES_PER_TOKEN))} tokens`;
+  const head = violation.head;
+  // Bytes, not tokens: two sizes a few bytes apart can round to the same token count.
+  const growth = head
+    ? `grew from ${count(head.bytes)} to ${count(violation.stagedBytes)} bytes${head.path === violation.path ? "" : ` (${head.path} at ${base})`}`
+    : "";
+  const why =
+    violation.reason === "new"
+      ? "new file over the limit"
+      : violation.reason === "crossed"
+        ? `crossed the limit: ${growth}`
+        : `already over the limit and ${growth}`;
+  return `${size}, ${why}`;
 }
 
-function git(args: string[], stdin?: string): string {
-  const result = Bun.spawnSync(["git", ...args], {
+/** Runs git with paths printed verbatim (`core.quotePath=false`) and returns its stdout. */
+export function git(args: string[], stdin?: string): Buffer {
+  const result = Bun.spawnSync(["git", "-c", "core.quotePath=false", ...args], {
     stdin: stdin === undefined ? "ignore" : Buffer.from(stdin),
     stdout: "pipe",
     stderr: "pipe",
   });
   if (result.exitCode !== 0)
     throw new Error(`git ${args.join(" ")} failed: ${result.stderr.toString().trim()}`);
-  return result.stdout.toString();
+  return result.stdout;
+}
+
+/** What staged content is compared with: HEAD, or the empty tree before the first commit. */
+function stagedBase(): string {
+  const hasHead = Bun.spawnSync(["git", "rev-parse", "--verify", "-q", "HEAD^{commit}"], {
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  return hasHead.exitCode === 0
+    ? "HEAD"
+    : git(["hash-object", "-t", "tree", "--stdin"], "").toString().trim();
+}
+
+/** The git command that diffs `source` with `flags`: staged against `stagedBase()`
+ * (`diff-index --cached`), or head against base (`diff-tree -r`). */
+export function diffArgs(source: ChangeSource, ...flags: string[]): string[] {
+  return source.kind === "staged"
+    ? ["diff-index", "--cached", ...flags, stagedBase()]
+    : ["diff-tree", "-r", ...flags, source.base, source.head];
+}
+
+/** Where the change's policy files (`.gitattributes`, `skills-lock.json`) are read from: the
+ * change's own result, the index (undefined) or the range head. Reading them from the base instead
+ * is a change to this function alone. */
+export function policyRevision(source: ChangeSource): string | undefined {
+  return source.kind === "staged" ? undefined : source.head;
 }
 
 const GITLINK_MODE = "160000";
@@ -85,29 +105,14 @@ type RawChange = {
   head?: { path: string; oid: string };
 };
 
-/** The staged additions, modifications, renames and type changes against HEAD (the empty tree
- * before the first commit), from `git diff-index --raw -z`. Rename detection has no limit
- * (`-l0`), so a large commit cannot turn a renamed oversized file into a new one. Copy detection
- * stays off, so a copy is a new file: duplicating an oversized file adds oversized content.
- * Deletions and submodules are not files this check sizes. */
-function stagedChanges(): RawChange[] {
-  const hasHead = Bun.spawnSync(["git", "rev-parse", "--verify", "-q", "HEAD^{commit}"], {
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-  const base =
-    hasHead.exitCode === 0 ? "HEAD" : git(["hash-object", "-t", "tree", "--stdin"], "").trim();
-  const fields = git([
-    "diff-index",
-    "--cached",
-    "--raw",
-    "-z",
-    "-M",
-    "-l0",
-    "--no-abbrev",
-    "--diff-filter=AMRT",
-    base,
-  ]).split("\0");
+/** The additions, modifications, renames and type changes the change makes, from `diffArgs` as
+ * `--raw -z`. Rename detection has no limit (`-l0`), so a large change cannot turn a renamed
+ * oversized file into a new one. Copy detection stays off, so a copy is a new file: duplicating
+ * an oversized file adds oversized content. Deletions and submodules are not files this check
+ * sizes. */
+function changes(source: ChangeSource): RawChange[] {
+  const args = diffArgs(source, "--raw", "-z", "-M", "-l0", "--no-abbrev", "--diff-filter=AMRT");
+  const fields = git(args).toString().split("\0");
   const changes: RawChange[] = [];
   for (let i = 0; i < fields.length; i++) {
     const meta = fields[i]!;
@@ -132,10 +137,8 @@ function blobSizes(oids: string[]): Map<string, number> {
   const unique = [...new Set(oids)];
   const sizes = new Map<string, number>();
   if (unique.length === 0) return sizes;
-  const lines = git(
-    ["cat-file", "--batch-check=%(objectname) %(objectsize)"],
-    `${unique.join("\n")}\n`,
-  );
+  const input = `${unique.join("\n")}\n`;
+  const lines = git(["cat-file", "--batch-check=%(objectname) %(objectsize)"], input).toString();
   for (const line of lines.split("\n")) {
     const [oid, size] = line.split(" ");
     if (oid && size && /^\d+$/.test(size)) sizes.set(oid, Number(size));
@@ -143,14 +146,16 @@ function blobSizes(oids: string[]): Map<string, number> {
   return sizes;
 }
 
-/** Paths the staged `.gitattributes` marks `linguist-generated` (set, or `=true`). */
-function generatedPaths(paths: string[]): Set<string> {
+/** Paths the policy `.gitattributes` (`policyRevision`) marks `linguist-generated` (set, or
+ * `=true`). */
+function generatedPaths(paths: string[], source: ChangeSource): Set<string> {
   const generated = new Set<string>();
   if (paths.length === 0) return generated;
-  const fields = git(
-    ["check-attr", "--cached", "-z", "--stdin", "linguist-generated"],
-    `${paths.join("\0")}\0`,
-  ).split("\0");
+  const revision = policyRevision(source);
+  const from = revision ? `--source=${revision}` : "--cached";
+  const input = `${paths.join("\0")}\0`;
+  const output = git(["check-attr", from, "-z", "--stdin", "linguist-generated"], input);
+  const fields = output.toString().split("\0");
   for (let i = 0; i + 2 < fields.length; i += 3) {
     const value = fields[i + 2];
     if (value === "set" || value === "true") generated.add(fields[i]!);
@@ -178,11 +183,11 @@ async function isBinaryBlob(oid: string): Promise<boolean> {
   }
 }
 
-/** The staged files that may not be committed, in the order git lists them. */
-export async function stagedSizeViolations(): Promise<SizeViolation[]> {
-  const changes = stagedChanges();
+/** The files the change may not add or grow, in the order git lists them. */
+export async function sizeViolations(source: ChangeSource): Promise<SizeViolation[]> {
+  const changed = changes(source);
   const sizes = blobSizes(
-    changes.flatMap((change) => (change.head ? [change.oid, change.head.oid] : [change.oid])),
+    changed.flatMap((change) => (change.head ? [change.oid, change.head.oid] : [change.oid])),
   );
   const sizeOf = (oid: string) => {
     const size = sizes.get(oid);
@@ -190,7 +195,7 @@ export async function stagedSizeViolations(): Promise<SizeViolation[]> {
     return size;
   };
   const candidates: { violation: SizeViolation; oid: string }[] = [];
-  for (const change of changes) {
+  for (const change of changed) {
     const violation = sizeViolation({
       path: change.path,
       stagedBytes: sizeOf(change.oid),
@@ -198,19 +203,14 @@ export async function stagedSizeViolations(): Promise<SizeViolation[]> {
     });
     if (violation) candidates.push({ violation, oid: change.oid });
   }
-  const generated = generatedPaths(candidates.map(({ violation }) => violation.path));
+  const generated = generatedPaths(
+    candidates.map(({ violation }) => violation.path),
+    source,
+  );
   const violations: SizeViolation[] = [];
   for (const { violation, oid } of candidates) {
     if (generated.has(violation.path) || (await isBinaryBlob(oid))) continue;
     violations.push(violation);
   }
   return violations;
-}
-
-if (import.meta.main) {
-  const violations = await stagedSizeViolations();
-  if (violations.length > 0) {
-    console.error(formatViolations(violations));
-    process.exit(1);
-  }
 }
