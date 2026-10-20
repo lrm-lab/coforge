@@ -93,7 +93,7 @@ model Project {
   githubFullName       String?
   githubHtmlUrl        String?
   // Whether an Agent's git commits in this Project's repository get a CoForge
-  // `Co-authored-by` trailer; the server still withholds it when no bot identity is configured.
+  // `Co-authored-by` trailer; withheld unless COFORGE_COMMIT_COAUTHOR is set.
   commitCoAuthor       Boolean        @default(true)
   workspace            Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   conversations        Conversation[] @relation("ProjectConversations")

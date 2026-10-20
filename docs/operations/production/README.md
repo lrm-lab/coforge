@@ -87,7 +87,7 @@ Not yet enabled in production: OpenTelemetry tracing and Server-Timing.
 | `coforge_github_credential_encryption_key` | GitHub credential encryption key, 64 hex characters (`openssl rand -hex 32`). Never replace it. |
 | `coforge_github_app_slug` | GitHub App slug from `https://github.com/apps/<slug>`. |
 | `coforge_github_webhook_secret` | Optional: the GitHub App webhook secret (`openssl rand -hex 32`). |
-| `coforge_github_app_bot_user_id` | Optional: the App's bot user id, for the Agent commit `Co-authored-by` trailer. |
+| `coforge_commit_coauthor` | Optional: the Agent commit co-author, `Name <email>` of a regular GitHub user account ([runbook](github-connection.md)). Absent, Agent commits get no `Co-authored-by` trailer. |
 
 Generate the VAPID pair once in a controlled operator environment and keep it
 in the approved secret store. Do not generate it on each host bootstrap.

@@ -1,6 +1,6 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import {
-  readGitHubAppBotIdentity,
+  readCommitCoAuthor,
   readGitHubConfig,
 } from "#src/server/integrations/github-config.server";
 
@@ -34,26 +34,63 @@ test("GitHub stays unconfigured without secrets and rejects non-HTTPS or mismatc
   ).rejects.toThrow();
 });
 
-test("GitHub App bot identity needs both a valid slug and a positive bot user id", () => {
-  expect(readGitHubAppBotIdentity({})).toBeNull();
-  expect(readGitHubAppBotIdentity({ COFORGE_GITHUB_APP_SLUG: "coforge-staging" })).toBeNull();
-  expect(readGitHubAppBotIdentity({ COFORGE_GITHUB_APP_BOT_USER_ID: "328977087" })).toBeNull();
+test("the commit co-author is one `Name <email>` value; anything else is unset", () => {
+  expect(readCommitCoAuthor({})).toBeNull();
+  expect(readCommitCoAuthor({ COFORGE_COMMIT_COAUTHOR: "CoForge <coforge@example.com>" })).toBe(
+    "CoForge <coforge@example.com>",
+  );
+  expect(readCommitCoAuthor({ COFORGE_COMMIT_COAUTHOR: "  Amp <amp@ampcode.com>\n" })).toBe(
+    "Amp <amp@ampcode.com>",
+  );
   expect(
-    readGitHubAppBotIdentity({
-      COFORGE_GITHUB_APP_SLUG: "Not_Valid",
-      COFORGE_GITHUB_APP_BOT_USER_ID: "328977087",
+    readCommitCoAuthor({
+      COFORGE_COMMIT_COAUTHOR: "Co Forge <123+coforge@users.noreply.github.com>",
     }),
-  ).toBeNull();
+  ).toBe("Co Forge <123+coforge@users.noreply.github.com>");
+  // The GitHub App's bot identity is not a co-author source any more.
   expect(
-    readGitHubAppBotIdentity({
-      COFORGE_GITHUB_APP_SLUG: "coforge-staging",
-      COFORGE_GITHUB_APP_BOT_USER_ID: "not-a-number",
-    }),
-  ).toBeNull();
-  expect(
-    readGitHubAppBotIdentity({
+    readCommitCoAuthor({
       COFORGE_GITHUB_APP_SLUG: "coforge-staging",
       COFORGE_GITHUB_APP_BOT_USER_ID: "328977087",
     }),
-  ).toEqual({ slug: "coforge-staging", botUserId: 328977087 });
+  ).toBeNull();
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    for (const value of [
+      "",
+      "   ",
+      "CoForge",
+      "<coforge@example.com>",
+      "CoForge <>",
+      "CoForge <not-an-email>",
+      "CoForge <coforge@localhost>",
+      "CoForge coforge@example.com",
+      "CoForge  <coforge@example.com>",
+      "CoForge <coforge@example.com> extra",
+      "Co<Forge <coforge@example.com>",
+      "CoForge <co forge@example.com>",
+      "CoForge\n<coforge@example.com>",
+      "CoForge <coforge@example.com>\nSigned-off-by: x <x@example.com>",
+      "Co\tForge <coforge@example.com>",
+      "Co-authored-by: CoForge <coforge@example.com>",
+    ])
+      expect(readCommitCoAuthor({ COFORGE_COMMIT_COAUTHOR: value })).toBeNull();
+    // An empty (or blank) value is simply unset, not logged. Any other rejected value is logged
+    // once per value; the log state is per process, so this uses a value no other test reads.
+    const before = warn.mock.calls.length;
+    expect(readCommitCoAuthor({ COFORGE_COMMIT_COAUTHOR: "" })).toBeNull();
+    expect(readCommitCoAuthor({ COFORGE_COMMIT_COAUTHOR: "   " })).toBeNull();
+    expect(warn.mock.calls.length).toBe(before);
+    const unique = `CoForge ${crypto.randomUUID()}`;
+    expect(readCommitCoAuthor({ COFORGE_COMMIT_COAUTHOR: unique })).toBeNull();
+    expect(readCommitCoAuthor({ COFORGE_COMMIT_COAUTHOR: unique })).toBeNull();
+    expect(warn.mock.calls.length).toBe(before + 1);
+    // The log names the variable, never its value.
+    expect(JSON.parse(String(warn.mock.calls.at(-1)?.[0]))).toEqual({
+      event: "github.commit_coauthor_invalid",
+      variable: "COFORGE_COMMIT_COAUTHOR",
+    });
+  } finally {
+    warn.mockRestore();
+  }
 });

@@ -63,12 +63,12 @@ services:
       COFORGE_SESSION_SECRET_FILE: /run/secrets/coforge_session_secret
       COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE: /run/secrets/coforge_agent_credential_encryption_key
       # Production GitHub App (docs/operations/production/github-connection.md). The App id and
-      # client id are public; the slug, bot user id, and the three secrets come from the host's
-      # secrets directory, and an absent client secret leaves the integration unconfigured.
+      # client id are public; the slug, the commit co-author, and the three secrets come from the
+      # host's secrets directory, and an absent client secret leaves the integration unconfigured.
       COFORGE_GITHUB_APP_ID: "5345306"
       COFORGE_GITHUB_CLIENT_ID: Iv23licriUAnCqt6MlHg
       COFORGE_GITHUB_APP_SLUG: ${COFORGE_GITHUB_APP_SLUG:-}
-      COFORGE_GITHUB_APP_BOT_USER_ID: ${COFORGE_GITHUB_APP_BOT_USER_ID:-}
+      COFORGE_COMMIT_COAUTHOR: ${COFORGE_COMMIT_COAUTHOR:-}
       COFORGE_GITHUB_CALLBACK_URL: https://coforge.cn/api/integrations/github/callback
       COFORGE_GITHUB_CLIENT_SECRET_FILE: /run/secrets/coforge_github_client_secret
       COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY_FILE: /run/secrets/coforge_github_credential_encryption_key

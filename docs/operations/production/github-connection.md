@@ -32,8 +32,10 @@ Generate each value on the host; never paste it into chat or CI logs.
 - `coforge_github_webhook_secret` (optional): `openssl rand -hex 32`, entered
   verbatim as the App's webhook secret. Absent, the webhook route answers 503
   and Settings falls back to background sync.
-- `coforge_github_app_bot_user_id` (optional):
-  `gh api 'users/<slug>[bot]' --jq .id`.
+- `coforge_commit_coauthor` (optional): the Agent commit co-author as one
+  `Name <email>` value of a regular GitHub user account, not the App's `[bot]`
+  account (GitHub shows a bot co-author without a profile or hovercard).
+  Absent or malformed, Agent commits get no `Co-authored-by` trailer.
 
 Write the first three together, then redeploy. Without a client secret or
 encryption key, Settings shows GitHub as not configured; with them but with an

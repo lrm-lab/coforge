@@ -22,10 +22,13 @@ Set these in the repository's **staging Environment** before a reviewed deployme
 
 - Variable `COFORGE_GITHUB_APP_SLUG`: the actual slug from the App's public URL
   (`https://github.com/apps/<slug>`), not its display name or numeric ID.
-- Variable `COFORGE_GITHUB_APP_BOT_USER_ID`: the App's bot *user* id, e.g.
-  `gh api users/<slug>[bot] --jq .id` (the `<slug>[bot]` GitHub account, not the
-  App id from `gh api /apps/<slug>`). Used only to build the Agent commit
-  `Co-authored-by` trailer; optional, absent means no trailer.
+- Variable `COFORGE_COMMIT_COAUTHOR` (optional): the co-author of Agent commits,
+  one `Name <email>` value such as `CoForge <coforge@example.com>`, naming a
+  regular GitHub user account whose email is verified on it. Not the App's
+  `<slug>[bot]` account: GitHub shows a bot co-author without a profile or
+  hovercard. Unset or malformed (logged once as `github.commit_coauthor_invalid`)
+  means Agent commits get no `Co-authored-by` trailer; it is unset until that
+  account exists.
 - Secret `COFORGE_GITHUB_CLIENT_SECRET`: generated in the GitHub App settings.
 - Secret `COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY`: independently generated
   32-byte key encoded as 64 hexadecimal characters. Generate and store securely;

@@ -52,24 +52,39 @@ export async function configuredGitHub() {
   };
 }
 
-export type GitHubAppBotIdentity = { slug: string; botUserId: number };
+/**
+ * `Name <email>`: a name of printable characters without `<`, `>` or edge whitespace, one space,
+ * and an email with no whitespace or angle brackets and a dotted domain. One line only, so the
+ * value can never smuggle a second trailer into the message.
+ */
+const COMMIT_CO_AUTHOR =
+  /^[^\s<>\p{Cc}](?:[^<>\p{Cc}]*[^\s<>\p{Cc}])? <[^\s<>@]+@[^\s<>@.]+(?:\.[^\s<>@.]+)+>$/u;
+const loggedInvalidCoAuthors = new Set<string>();
 
 /**
- * The CoForge GitHub App's own bot identity (its `[bot]` account), used only to build a commit
- * `Co-authored-by` trailer (`github-commit-trailers.ts`). This is independent of `readGitHubConfig`
- * above (no OAuth client secret or encryption key needed) and per-environment, not a secret:
- * `COFORGE_GITHUB_APP_BOT_USER_ID` is the bot *user* id GitHub assigns the App (not the App id
- * itself). Unset or malformed means the feature is unconfigured, not broken: callers get `null`
- * and withhold the trailer rather than throwing.
+ * The co-author an Agent's commit names in its `Co-authored-by` trailer
+ * (`github-commit-trailers.server.ts`), from `COFORGE_COMMIT_COAUTHOR` as one `Name <email>` value,
+ * e.g. `CoForge <coforge@example.com>`. It is a regular GitHub user account, not the GitHub App's
+ * `[bot]` account: GitHub shows a bot co-author without a profile or hovercard. Not a secret, and
+ * per environment. Unset or blank means no trailer; a malformed value is logged once and treated
+ * as unset rather than throwing, so a typo never breaks an Agent's commit.
  */
-export function readGitHubAppBotIdentity(
+export function readCommitCoAuthor(
   env: Record<string, string | undefined> = Bun.env,
-): GitHubAppBotIdentity | null {
-  const slug = env.COFORGE_GITHUB_APP_SLUG?.trim() ?? "";
-  const botUserId = Number(env.COFORGE_GITHUB_APP_BOT_USER_ID);
-  if (!GITHUB_APP_SLUG.test(slug) || !Number.isSafeInteger(botUserId) || botUserId <= 0)
-    return null;
-  return { slug, botUserId };
+): string | null {
+  const value = env.COFORGE_COMMIT_COAUTHOR?.trim() ?? "";
+  if (!value) return null;
+  if (COMMIT_CO_AUTHOR.test(value) && !/^co-authored-by:/i.test(value)) return value;
+  if (!loggedInvalidCoAuthors.has(value)) {
+    loggedInvalidCoAuthors.add(value);
+    console.warn(
+      JSON.stringify({
+        event: "github.commit_coauthor_invalid",
+        variable: "COFORGE_COMMIT_COAUTHOR",
+      }),
+    );
+  }
+  return null;
 }
 
 async function secret(env: Record<string, string | undefined>, name: string) {
