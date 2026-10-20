@@ -43,6 +43,7 @@ function registry({ keyTaken = false } = {}) {
   const app: AppView = {
     ...valid,
     ownerWorkspaceId: actor.workspaceId,
+    logoObjectKey: null,
     secretRotatedAt: null,
     createdAt: new Date("2026-10-20T00:00:00.000Z"),
     updatedAt: new Date("2026-10-20T00:00:00.000Z"),
@@ -53,9 +54,16 @@ function registry({ keyTaken = false } = {}) {
     find: async () => app,
     create: async () => (keyTaken ? undefined : app),
     update: async () => app,
-    delete: async () => true,
+    delete: async () => ({ logoObjectKey: null }),
+    replaceLogo: async () => true,
+    findLogo: async () => undefined,
   };
-  return new AppRegistry(store);
+  return new AppRegistry(store, {
+    storage: async () => {
+      throw new Error("no image store in these tests");
+    },
+    removalFailed: () => {},
+  });
 }
 
 async function refusal(attempt: Promise<unknown>): Promise<unknown> {
@@ -115,7 +123,12 @@ describe("an app form's homepage", () => {
   });
 
   test("of an app without one, opens empty", () => {
-    const app = { ...valid, homepageUrl: null, createdAt: "2026-10-20T00:00:00.000Z" };
+    const app = {
+      ...valid,
+      homepageUrl: null,
+      logoUrl: null,
+      createdAt: "2026-10-20T00:00:00.000Z",
+    };
     expect(draftOf(app).homepageUrl).toBe("");
   });
 });

@@ -92,7 +92,10 @@ test("approving for a Workspace not offered, or an app changed since, mints noth
   expect(await endpoint.decide(handle, SIGNED_IN, { approve: true, workspaceId: BETA.id })).toEqual(
     {
       kind: "page",
-      page: { view: "unavailable", app: { name: "Acme Notes", homepageUrl: APP.homepageUrl } },
+      page: {
+        view: "unavailable",
+        app: { name: "Acme Notes", homepageUrl: APP.homepageUrl },
+      },
     },
   );
   app.allowedScopes = ["openid", "profile"];

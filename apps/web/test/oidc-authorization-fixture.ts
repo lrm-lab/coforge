@@ -19,6 +19,7 @@ export const APP = {
   key: "acme-notes",
   name: "Acme Notes",
   homepageUrl: "https://notes.acme.example/" as string | null,
+  logoUrl: null as string | null,
   redirectUris: ["https://notes.acme.example/cb"],
   allowedScopes: ["openid", "profile", "email", "identity"],
 };

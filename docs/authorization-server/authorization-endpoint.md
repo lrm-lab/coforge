@@ -58,7 +58,8 @@ says the app is not available to them (403) and `prompt=none` answers `access_de
 
 A remembered consent (`user_app_consents`) skips the page when there is exactly one Workspace to
 offer, its unrevoked consent covers every requested scope, and `prompt` has neither `consent` nor
-`select_account`. Otherwise the consent page shows the app, the Workspace picker (preselected when
+`select_account`. Otherwise the consent page shows the app (its logo, or the monogram made from its
+name, its name and homepage), the Workspace picker (preselected when
 there is one), the requested scopes, and Continue and Cancel; `prompt=none` answers
 `interaction_required` when there is a Workspace to choose and `consent_required` otherwise.
 

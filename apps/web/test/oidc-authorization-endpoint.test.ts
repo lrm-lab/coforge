@@ -90,11 +90,26 @@ test("an app that registered no homepage shows on the consent page without one",
   });
 });
 
+test("an app with a logo shows it on the consent page", async () => {
+  const { endpoint, app } = storeWith();
+  app.logoUrl = "/api/workspaces/ws-acme/apps/acme-notes/logo?v=logo-1";
+  expect(await endpoint.begin(search(), SIGNED_IN)).toMatchObject({
+    kind: "page",
+    page: { view: "consent", app: { logoUrl: app.logoUrl } },
+  });
+});
+
 test("an app installed in none of the person's Workspaces is refused on the page", async () => {
-  const { endpoint } = storeWith({ offered: [] });
+  const { endpoint, app } = storeWith({ offered: [] });
+  app.logoUrl = "/api/workspaces/ws-acme/apps/acme-notes/logo?v=logo-1";
   expect(await endpoint.begin(search(), SIGNED_IN)).toEqual({
     kind: "page",
-    page: { view: "unavailable", app: { name: "Acme Notes", homepageUrl: APP.homepageUrl } },
+    page: {
+      view: "unavailable",
+      // Not its logo: the person is in no Workspace where the app is installed, and the logo's
+      // route serves only people who are.
+      app: { name: "Acme Notes", homepageUrl: APP.homepageUrl },
+    },
   });
 });
 

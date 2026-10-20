@@ -17,6 +17,7 @@ const APP_VIEW = {
   redirectUris: true,
   category: true,
   allowedScopes: true,
+  logoObjectKey: true,
   secretRotatedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -101,11 +102,46 @@ export class PrismaAppRegistryStore implements AppRegistryStore {
 
   async delete(workspaceId: string, key: string) {
     try {
-      await this.db.app.delete({ where: owned(workspaceId, key), select: { id: true } });
-      return true;
+      return await this.db.app.delete({
+        where: owned(workspaceId, key),
+        select: { logoObjectKey: true },
+      });
     } catch (error) {
-      if (hasErrorCode(error, "P2025")) return false;
+      if (hasErrorCode(error, "P2025")) return undefined;
       throw error;
     }
+  }
+
+  async replaceLogo(
+    workspaceId: string,
+    key: string,
+    from: string | null,
+    to: { objectKey: string; contentType: string } | null,
+  ) {
+    const { count } = await this.db.app.updateMany({
+      where: { ...owned(workspaceId, key), logoObjectKey: from },
+      data: { logoObjectKey: to?.objectKey ?? null, logoContentType: to?.contentType ?? null },
+    });
+    return count === 1;
+  }
+
+  async findLogo({
+    workspaceId,
+    key,
+    viewerUserId,
+  }: {
+    workspaceId: string;
+    key: string;
+    viewerUserId: string;
+  }) {
+    const row = await this.db.app.findFirst({
+      where: {
+        ...owned(workspaceId, key),
+        installations: { some: { workspace: { members: { some: { userId: viewerUserId } } } } },
+      },
+      select: { logoObjectKey: true, logoContentType: true },
+    });
+    if (!row?.logoObjectKey || !row.logoContentType) return undefined;
+    return { objectKey: row.logoObjectKey, contentType: row.logoContentType };
   }
 }

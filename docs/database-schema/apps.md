@@ -5,7 +5,7 @@ is an OpenID Connect client of CoForge's authorization server, its key the `clie
 marketplace: a registered app is installed only in the Workspace that registered it. Migrations
 `20261020120000_app_registry`, `20261020130000_app_category_identity_scope` (the category, the
 `identity` scope, and no resource URI) and `20261020140000_app_homepage_optional` (an app needs only
-a name).
+a name) and `20261021120000_app_logo` (its uploaded logo).
 
 The built-in Agent Apps (`system.reminder`, `system.cleaner`) are not rows. They are the SDK's
 `BUILT_IN_APPS` (`packages/coforge-sdk/src/internal/app-config.ts`), run by the daemon, and
@@ -25,6 +25,8 @@ The built-in Agent Apps (`system.reminder`, `system.cleaner`) are not rows. They
 | `redirectUris` | TEXT[] | None to 10 (an app with none signs no one in; its Agents can still get tokens), none twice, matched as exact strings (RFC 9700): https, or http on `localhost`, `127.0.0.1` or `[::1]`, no fragment. |
 | `category` | TEXT | `ai-automation`, `communication`, `productivity`, `developer-tools`, `data-analytics`, `business-ops`, `infrastructure`, `content-creative` or `other` (the default), enforced by `apps_category_check`. |
 | `allowedScopes` | TEXT[] | Always `openid`, `profile` and `identity`, and `email` when the app may ask for it; nothing else. |
+| `logoObjectKey` | TEXT | The uploaded logo's object in the image store (`workspaces/<ownerWorkspaceId>/apps/<key>/logos/<uuid>/original`); null shows the monogram made from the name. Bytes never live in PostgreSQL. |
+| `logoContentType` | TEXT | The logo's checked type (`image/jpeg`, `image/png`, `image/gif` or `image/webp`), served with its bytes; set and cleared with `logoObjectKey`. |
 | `clientSecretHash` | TEXT | SHA-256 (hex) of the client secret `cfa_secret_…`, whose plaintext is returned once at registration or rotation. |
 | `secretRotatedAt` | TIMESTAMP(3) | Last rotation. |
 | `createdByUserId` | UUID | Set null when the User is deleted. |
@@ -35,6 +37,18 @@ Every URL column holds a URL in its canonical form, the string a WHATWG URL pars
 shown. A non-canonical spelling is refused, not rewritten (`https:evil.example/cb`,
 `http://0x7f.1/cb`, `https://ACME.example/`), so a bare origin is written with its slash:
 `https://acme.example/`.
+
+An app's logo is set, replaced and reset by its Workspace's owners and admins, as an Agent's avatar
+is: the same image store and checks (at most 5 MB, bytes sniffed), but a GIF (`GIF87a`/`GIF89a`)
+is taken too, as Raft takes one (`APP_LOGO_UPLOAD_TYPES`; avatars and icons still refuse it); the old
+object removed on a replace, a reset or the app's delete (the key the deleted row had, so a logo
+uploaded meanwhile goes too). Settings sets and resets it through the `uploadWorkspaceAppLogo`
+(FormData) and `resetWorkspaceAppLogo` Server Functions. Surfaces show `appLogoUrl`: the image CDN
+at the icon size when the deployment has one (its bucket must allow the logo key shape first:
+[profile image domain](../operations/aliyun-oss-cdn/profile-image-domain.md)), otherwise the GET
+route `/api/workspaces/<ownerWorkspaceId>/apps/<key>/logo`, which serves people of a Workspace where
+the app is installed. The consent page shows the logo; the page for a person with no such Workspace
+does not. A logo that does not load falls back to the monogram.
 
 `app_installations` — an app installed in a Workspace: `appId` (cascade), `workspaceId` (cascade),
 `installedByUserId` (set null), `createdAt`, unique (`appId`, `workspaceId`). Today only the

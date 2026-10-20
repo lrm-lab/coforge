@@ -6,6 +6,7 @@ import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import type { AppAgentAccessStore } from "#src/server/app-agent-access/app-agent-access.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { settleAppGrantCard } from "#src/server/conversations/app-grant-cards.server";
+import { appLogoUrl } from "#src/server/apps/app-logo.server";
 
 const INSTALLED_APP = {
   id: true,
@@ -15,7 +16,23 @@ const INSTALLED_APP = {
   whenToUse: true,
   homepageUrl: true,
   allowedScopes: true,
+  ownerWorkspaceId: true,
+  logoObjectKey: true,
 } as const;
+
+/** An app row's logo, as the one fact about it that leaves the server: its URL. */
+const LOGO = { key: true, ownerWorkspaceId: true, logoObjectKey: true } as const;
+const logoUrlOf = (app: Prisma.AppGetPayload<{ select: typeof LOGO }>) =>
+  appLogoUrl(app.ownerWorkspaceId, app.key, app.logoObjectKey);
+
+const installed = ({
+  ownerWorkspaceId,
+  logoObjectKey,
+  ...app
+}: Prisma.AppGetPayload<{ select: typeof INSTALLED_APP }>) => ({
+  ...app,
+  logoUrl: logoUrlOf({ key: app.key, ownerWorkspaceId, logoObjectKey }),
+});
 
 const PENDING = "pending";
 
@@ -64,12 +81,13 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
     return row ?? undefined;
   }
 
-  listInstalledApps(workspaceId: string) {
-    return this.db.app.findMany({
+  async listInstalledApps(workspaceId: string) {
+    const rows = await this.db.app.findMany({
       where: { installations: { some: { workspaceId } } },
       select: INSTALLED_APP,
       orderBy: [{ name: "asc" }, { key: "asc" }],
     });
+    return rows.map(installed);
   }
 
   async findInstalledApp(workspaceId: string, appKey: string) {
@@ -77,7 +95,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
       where: { key: appKey, installations: { some: { workspaceId } } },
       select: INSTALLED_APP,
     });
-    return row ?? undefined;
+    return row ? installed(row) : undefined;
   }
 
   async listActiveGrants(agentId: string) {
@@ -88,7 +106,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
         scopes: true,
         source: true,
         updatedAt: true,
-        app: { select: { key: true, name: true, description: true, homepageUrl: true } },
+        app: { select: { ...LOGO, name: true, description: true, homepageUrl: true } },
       },
       orderBy: [{ app: { name: "asc" } }, { id: "asc" }],
     });
@@ -98,6 +116,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
       appName: row.app.name,
       appDescription: row.app.description,
       homepageUrl: row.app.homepageUrl,
+      appLogoUrl: logoUrlOf(row.app),
       scopes: row.scopes,
       // `app_agent_grants_source_check` admits only the three sources.
       source: row.source as AgentAppGrantSource,
@@ -112,7 +131,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
         id: true,
         scopes: true,
         createdAt: true,
-        app: { select: { key: true, name: true } },
+        app: { select: { ...LOGO, name: true } },
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
@@ -120,6 +139,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
       id: row.id,
       appKey: row.app.key,
       appName: row.app.name,
+      appLogoUrl: logoUrlOf(row.app),
       scopes: row.scopes,
       createdAt: row.createdAt,
     }));

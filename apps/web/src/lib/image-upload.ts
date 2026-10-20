@@ -4,3 +4,6 @@
  */
 export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const IMAGE_UPLOAD_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
+/** An app logo also takes a GIF, as Raft's does; avatars and icons do not. */
+export const APP_LOGO_UPLOAD_TYPES = [...IMAGE_UPLOAD_TYPES, "image/gif"] as const;

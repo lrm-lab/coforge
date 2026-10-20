@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
 
 import { AppError } from "#src/lib/app-error";
+import { APP_LOGO_UPLOAD_TYPES } from "#src/lib/image-upload";
+import type { FileStorage } from "#src/server/files/file-storage.server";
+import { validateImage } from "#src/server/files/image-upload.server";
 import type { AppCategory } from "#src/features/apps/app-category";
 import {
   APP_INPUT_ERROR_IDS,
@@ -15,6 +18,7 @@ import {
   type WorkspaceMemberRole,
 } from "#src/server/workspaces/member-role.server";
 import { mintAppClientSecret } from "./app-client-secret.server";
+import { appLogoObjectKey } from "./app-logo.server";
 
 /** A registered app as its Workspace's members see it; never its secret or the secret's hash. */
 export type AppView = {
@@ -27,6 +31,8 @@ export type AppView = {
   redirectUris: string[];
   category: AppCategory;
   allowedScopes: string[];
+  /** The logo in the image store; surfaces show `appLogoUrl`, never the key. */
+  logoObjectKey: string | null;
   secretRotatedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -54,8 +60,32 @@ export interface AppRegistryStore {
   /** Both writes touch only the app `key` that `workspaceId` owns, and answer `undefined` /
    * `false` when there is none. */
   update(workspaceId: string, key: string, change: AppChange): Promise<AppView | undefined>;
-  delete(workspaceId: string, key: string): Promise<boolean>;
+  /** Deletes the app `key` that `workspaceId` owns, answering the logo its row had as it went
+   * (so a logo uploaded since it was read is not left behind); `undefined` when there is none. */
+  delete(workspaceId: string, key: string): Promise<{ logoObjectKey: string | null } | undefined>;
+  /** Sets the logo of the app `key` that `workspaceId` owns to `to` (none: the monogram), only
+   * while it is still `from`; `false` when it is not, or there is no such app. */
+  replaceLogo(
+    workspaceId: string,
+    key: string,
+    from: string | null,
+    to: { objectKey: string; contentType: string } | null,
+  ): Promise<boolean>;
+  /** The logo of the app `key` that `workspaceId` owns, when it has one and `viewerUserId` is a
+   * member of a Workspace where it is installed. */
+  findLogo(input: {
+    workspaceId: string;
+    key: string;
+    viewerUserId: string;
+  }): Promise<{ objectKey: string; contentType: string } | undefined>;
 }
+
+/** Where the registry keeps logos (the image store, as for Agent avatars), and who hears of an
+ * old logo's object that could not be removed after its change was committed. */
+export type AppLogoImages = {
+  storage(): Promise<FileStorage>;
+  removalFailed(error: unknown): void;
+};
 
 /** How many keys made from a name are tried before a registration gives up: each
  * has a new random suffix, so a second collision is already unlikely. */
@@ -76,13 +106,16 @@ function checked<Value>(
 
 /**
  * The app registry: the third-party apps Workspaces register. Every member lists their
- * Workspace's apps; its owners and admins register its own apps, change them, rotate their secrets
- * and delete them. Another Workspace's app is NOT_FOUND, and so is a built-in Agent App (the SDK's
- * `BUILT_IN_APPS`): it is not in the registry, and nobody changes it.
+ * Workspace's apps; its owners and admins register its own apps, change them, set or reset their
+ * logos, rotate their secrets and delete them. A logo's bytes are in the image store, the row keeps
+ * its key, and a replaced, reset or deleted app's object is removed (best effort). Another
+ * Workspace's app is NOT_FOUND, and so is a built-in Agent App (the SDK's `BUILT_IN_APPS`): it is
+ * not in the registry, and nobody changes it.
  */
 export class AppRegistry {
   constructor(
     private readonly store: AppRegistryStore,
+    private readonly images: AppLogoImages,
     private readonly now: () => Date = () => new Date(),
     /** The random part of a key made for an app registered without one. */
     private readonly keySuffix: () => string = randomKeySuffix,
@@ -147,10 +180,45 @@ export class AppRegistry {
     return { app, clientSecret: secret };
   }
 
-  /** Deletes the app and its installation; its secret stops verifying. */
+  /** Deletes the app and its installation; its secret stops verifying, and its logo goes. */
   async deleteApp(actor: AppActor, key: string): Promise<void> {
     await this.requireOwnApp(actor, key);
-    if (!(await this.store.delete(actor.workspaceId, key))) throw new AppError("NOT_FOUND");
+    const deleted = await this.store.delete(actor.workspaceId, key);
+    if (!deleted) throw new AppError("NOT_FOUND");
+    await this.removeImage(deleted.logoObjectKey);
+  }
+
+  /** Replaces the app's logo with `file`, a JPEG, PNG, GIF or WebP within the uploaded-image
+   * limit (`validateImage` with `APP_LOGO_UPLOAD_TYPES`), at once; the old logo's object is removed. */
+  async setAppLogo(actor: AppActor, key: string, file: File): Promise<AppView> {
+    const app = await this.requireOwnApp(actor, key);
+    await validateImage(file, APP_LOGO_UPLOAD_TYPES);
+    const objectKey = appLogoObjectKey(actor.workspaceId, key);
+    const images = await this.images.storage();
+    await images.put(objectKey, file, file.type);
+    try {
+      await this.swapLogo(actor, app, { objectKey, contentType: file.type });
+    } catch (error) {
+      await images.remove(objectKey);
+      throw error;
+    }
+    return { ...app, logoObjectKey: objectKey };
+  }
+
+  /** Back to the monogram: the logo's object is removed. */
+  async resetAppLogo(actor: AppActor, key: string): Promise<AppView> {
+    const app = await this.requireOwnApp(actor, key);
+    if (app.logoObjectKey) await this.swapLogo(actor, app, null);
+    return { ...app, logoObjectKey: null };
+  }
+
+  /** The logo's bytes, for a member of a Workspace where the app is installed; NOT_FOUND for
+   * anyone else, as for an app with no logo. */
+  async readAppLogo(viewerUserId: string, workspaceId: string, key: string) {
+    const logo = await this.store.findLogo({ workspaceId, key, viewerUserId });
+    const file = logo ? await (await this.images.storage()).open(logo.objectKey) : null;
+    if (!logo || !file) throw new AppError("NOT_FOUND");
+    return { body: file.body, contentType: logo.contentType };
   }
 
   /**
@@ -159,13 +227,41 @@ export class AppRegistry {
    * another Workspace's app is NOT_FOUND, as is an unknown or built-in key, so another Workspace's
    * app is not confirmed to exist.
    */
-  private async requireOwnApp(actor: AppActor, key: string): Promise<void> {
+  private async requireOwnApp(actor: AppActor, key: string): Promise<AppView> {
     const [role, app] = await Promise.all([
       this.store.findMemberRole(actor.workspaceId, actor.actorUserId),
       this.store.find(key),
     ]);
     assertCanManageApps(role);
     if (!app || app.ownerWorkspaceId !== actor.workspaceId) throw new AppError("NOT_FOUND");
+    return app;
+  }
+
+  /** Moves the app's logo from the one `app` was read with to `to`, then removes the old object;
+   * CONFLICT when another change came first, NOT_FOUND when the app went. */
+  private async swapLogo(
+    actor: AppActor,
+    app: AppView,
+    to: { objectKey: string; contentType: string } | null,
+  ): Promise<void> {
+    const from = app.logoObjectKey;
+    if (!(await this.store.replaceLogo(actor.workspaceId, app.key, from, to))) {
+      const current = await this.store.find(app.key);
+      throw new AppError(
+        current?.ownerWorkspaceId === actor.workspaceId ? "CONFLICT" : "NOT_FOUND",
+      );
+    }
+    await this.removeImage(from);
+  }
+
+  /** The change is already committed, so a failed removal is reported, never thrown. */
+  private async removeImage(objectKey: string | null): Promise<void> {
+    if (!objectKey) return;
+    try {
+      await (await this.images.storage()).remove(objectKey);
+    } catch (error) {
+      this.images.removalFailed(error);
+    }
   }
 
   /** A write's answer; none means the app went in between. */

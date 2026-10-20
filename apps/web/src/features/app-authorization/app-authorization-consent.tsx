@@ -89,7 +89,7 @@ export function AuthorizationConsent({
       <div className="flex flex-col gap-1.5">
         <p className="text-sm font-medium text-secondary">{m.app_authorization_app_label()}</p>
         <div className="flex items-center gap-3 rounded-lg p-3 ring-1 ring-secondary">
-          <AppLogo name={app.name} />
+          <AppLogo name={app.name} url={app.logoUrl} />
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="min-w-0 text-md font-semibold break-words text-primary">

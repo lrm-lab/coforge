@@ -38,7 +38,7 @@ export function AppCard({
       )}
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">
-        <AppLogo name={app.name} size={layout === "grid" ? "md" : "sm"} />
+        <AppLogo name={app.name} url={app.logoUrl} size={layout === "grid" ? "md" : "sm"} />
         <div className="grid min-w-0 flex-1 gap-1">
           <p className="truncate text-sm font-semibold text-primary">{app.name}</p>
           <p className="truncate text-sm text-tertiary">

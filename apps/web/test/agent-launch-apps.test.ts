@@ -13,6 +13,7 @@ type InstalledApp = {
   description: string;
   whenToUse: string;
   homepageUrl: string | null;
+  logoUrl: string | null;
   allowedScopes: string[];
 };
 
@@ -23,6 +24,7 @@ const app = (key: string, patch: Partial<InstalledApp> = {}): InstalledApp => ({
   description: `What ${key} is.`,
   whenToUse: `When ${key} helps.`,
   homepageUrl: "https://app.example/",
+  logoUrl: null,
   allowedScopes: ["openid"],
   ...patch,
 });

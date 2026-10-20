@@ -12,6 +12,7 @@ const CLIENT: AuthorizationClient = {
   key: "acme-notes",
   name: "Acme Notes",
   homepageUrl: "https://notes.acme.example/",
+  logoUrl: null,
   redirectUris: ["https://notes.acme.example/cb", "https://notes.acme.example/cb?tenant=a"],
   allowedScopes: ["openid", "profile", "email", "identity"],
 };

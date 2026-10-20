@@ -4,7 +4,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 
 - `features/agents/` — Members page, Agent creation, profile panel (its Apps tab included), control buttons, and Agent status and Activity display.
 - `features/app-authorization/` — Login with CoForge's page at `/oidc/auth`: the consent an app asks for, the Workspace picker, the refusals, its Continue/Cancel server function, the page's headers, and the GET (sealed query) and POST (form) adapters before the router.
-- `features/apps/` — Settings → Applications (the Installed and My apps lists, the register/edit editor with its danger zone, a new secret shown once) and the client-safe rules for an app's input and for an Agent's grant of an app (`agent-app-access.ts`).
+- `features/apps/` — Settings → Applications (the Installed and My apps lists, the register/edit editor with its logo upload and danger zone, a new secret shown once; `AppLogo` everywhere an app is shown) and the client-safe rules for an app's input and for an Agent's grant of an app (`agent-app-access.ts`).
 - `features/auth/` — the sign-in error page, the split shell of the pages before
   sign-in, `returnTo` handling, signing out (`signOut`) and the step `/` takes to resume sign-in
   after signing out to switch account, the first-sign-in name step (`/welcome`), and the auth middleware for server functions.

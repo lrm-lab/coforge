@@ -36,7 +36,9 @@ import {
   deleteWorkspaceApp,
   loadWorkspaceApps,
   registerWorkspaceApp,
+  resetWorkspaceAppLogo,
   rotateWorkspaceAppSecret,
+  uploadWorkspaceAppLogo,
   updateWorkspaceApp,
   type AppSummary,
 } from "./apps.functions";
@@ -72,6 +74,8 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
   const update = useServerFn(updateWorkspaceApp);
   const rotate = useServerFn(rotateWorkspaceAppSecret);
   const remove = useServerFn(deleteWorkspaceApp);
+  const resetLogo = useServerFn(resetWorkspaceAppLogo);
+  const uploadLogo = useServerFn(uploadWorkspaceAppLogo);
 
   /** Reads the apps again; a failed read keeps what is on screen, and the failure shows inline. */
   const refresh = useCallback(async () => {
@@ -155,6 +159,29 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
       setEditorOpen(false);
       setIssued(null);
       setApps((current) => current?.filter((held) => held.key !== app.key));
+    });
+
+  /** A logo change is made at once: the list and the open editor show it. */
+  function showLogo(key: string, logoUrl: string | null) {
+    setApps((current) => current?.map((held) => (held.key === key ? { ...held, logoUrl } : held)));
+    setEditor((current) =>
+      current?.mode === "edit" && current.app.key === key
+        ? { mode: "edit", app: { ...current.app, logoUrl } }
+        : current,
+    );
+  }
+
+  const uploadAppLogo = (app: AppSummary, file: File) =>
+    refreshingOnNotFound(async () => {
+      const form = new FormData();
+      form.set("key", app.key);
+      form.set("file", file);
+      showLogo(app.key, (await uploadLogo({ data: form })).logoUrl);
+    });
+
+  const resetAppLogo = (app: AppSummary) =>
+    refreshingOnNotFound(async () => {
+      showLogo(app.key, (await resetLogo({ data: { key: app.key } })).logoUrl);
     });
 
   const all = apps ?? [];
@@ -331,6 +358,8 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
           onSubmit={submit}
           onRegenerate={regenerate}
           onDelete={deleteApp}
+          onUploadLogo={uploadAppLogo}
+          onResetLogo={resetAppLogo}
         />
       )}
     </div>

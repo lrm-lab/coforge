@@ -7,6 +7,9 @@ import { createAppRegistry } from "#src/server/apps/app-registry-composition.ser
 import { AppRegistry } from "#src/server/apps/app-registry.server";
 import { PrismaAppRegistryStore } from "#src/server/db/repositories/app.repositories.server";
 import { agentLaunchApps } from "#src/server/app-agent-access/app-agent-access-composition.server";
+import { appLogoUrl } from "#src/server/apps/app-logo.server";
+import { PrismaAuthorizationStore } from "#src/server/db/repositories/oauth-authorization.repositories.server";
+import type { FileStorage } from "#src/server/files/file-storage.server";
 
 /**
  * The app registry against local PostgreSQL with migrations applied: what registering, listing,
@@ -328,8 +331,11 @@ test.skipIf(!db)(
     const taken = `t${fixture.suffix}`;
     const fresh = `f${fixture.suffix}`;
     const suffixes = [taken, fresh];
-    const registry = new AppRegistry(new PrismaAppRegistryStore(db!), undefined, () =>
-      suffixes.shift()!,
+    const registry = new AppRegistry(
+      new PrismaAppRegistryStore(db!),
+      memoryImages().images,
+      undefined,
+      () => suffixes.shift()!,
     );
     try {
       await registry.registerApp(actor, registration(`acme-notes-${taken}`));
@@ -345,6 +351,89 @@ test.skipIf(!db)(
       ]);
     } finally {
       await fixture.cleanup();
+    }
+  },
+);
+
+/** An image store in memory, so a test sees which objects a logo leaves. */
+function memoryImages() {
+  const objects = new Map<string, Blob>();
+  const storage: FileStorage = {
+    put: async (key, file) => {
+      objects.set(key, file);
+    },
+    open: async (key) => {
+      const body = objects.get(key);
+      return body ? { body, contentType: null, sizeBytes: body.size } : null;
+    },
+    remove: async (key) => {
+      objects.delete(key);
+    },
+    head: async () => null,
+  };
+  return { objects, images: { storage: async () => storage, removalFailed: () => {} } };
+}
+
+const png = new File(
+  [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1])],
+  "logo.png",
+  { type: "image/png" },
+);
+
+test.skipIf(!db)(
+  "an app's logo is stored by key, listed and offered on consent as its URL, and read only by its Workspace",
+  async () => {
+    const mine = await workspaceFixture(db!);
+    const theirs = await workspaceFixture(db!);
+    const { objects, images } = memoryImages();
+    const registry = new AppRegistry(new PrismaAppRegistryStore(db!), images);
+    const key = `logo-${mine.suffix}`;
+    try {
+      await registry.registerApp(mine.actor("owner"), registration(key));
+      await expect(registry.setAppLogo(mine.actor("member"), key, png)).rejects.toMatchObject({
+        code: "ACCESS_DENIED",
+      });
+      await expect(registry.setAppLogo(theirs.actor("owner"), key, png)).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+
+      const first = await registry.setAppLogo(mine.actor("admin"), key, png);
+      const second = await registry.setAppLogo(mine.actor("admin"), key, png);
+      const row = await db!.app.findUniqueOrThrow({
+        where: { key },
+        select: { logoObjectKey: true, logoContentType: true },
+      });
+      expect(row).toEqual({ logoObjectKey: second.logoObjectKey, logoContentType: "image/png" });
+      expect([...objects.keys()]).toEqual([second.logoObjectKey!]);
+      expect(first.logoObjectKey).not.toBe(second.logoObjectKey);
+
+      const [listed] = await registry.listWorkspaceApps(mine.actor("member"));
+      expect(listed?.logoObjectKey).toBe(second.logoObjectKey);
+      const client = await new PrismaAuthorizationStore(db!).findClient(key);
+      expect(client?.logoUrl).toBe(appLogoUrl(mine.workspace.id, key, second.logoObjectKey));
+      expect(client?.logoUrl).toEqual(expect.any(String));
+
+      const read = await registry.readAppLogo(
+        mine.actor("member").actorUserId,
+        mine.workspace.id,
+        key,
+      );
+      expect(read.contentType).toBe("image/png");
+      await expect(
+        registry.readAppLogo(theirs.actor("owner").actorUserId, mine.workspace.id, key),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      const reset = await registry.resetAppLogo(mine.actor("owner"), key);
+      expect(reset.logoObjectKey).toBeNull();
+      expect(objects.size).toBe(0);
+      expect((await new PrismaAuthorizationStore(db!).findClient(key))?.logoUrl).toBeNull();
+
+      await registry.setAppLogo(mine.actor("owner"), key, png);
+      await registry.deleteApp(mine.actor("owner"), key);
+      expect(objects.size).toBe(0);
+    } finally {
+      await mine.cleanup();
+      await theirs.cleanup();
     }
   },
 );

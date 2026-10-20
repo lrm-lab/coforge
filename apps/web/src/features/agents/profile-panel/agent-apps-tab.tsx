@@ -108,6 +108,7 @@ export function AgentAppsTab({ agentId, timeZone }: { agentId: string; timeZone:
               <AppRow
                 key={request.id}
                 name={request.appName}
+                logoUrl={request.appLogoUrl}
                 time={<RelativeTime value={request.createdAt} timeZone={timeZone} showExact />}
                 badge={
                   <BadgeWithDot size="sm" color="warning" type="pill-color">
@@ -240,6 +241,7 @@ function GrantRow({
   return (
     <AppRow
       name={grant.appName}
+      logoUrl={grant.appLogoUrl}
       time={<RelativeTime value={grant.grantedAt} timeZone={timeZone} showExact />}
       source={SOURCE_LABELS[grant.source]()}
       badge={
@@ -274,6 +276,7 @@ function GrantRow({
 /** One app on the tab: its name, time and status, what it is, its scopes and its actions. */
 function AppRow({
   name,
+  logoUrl,
   time,
   source,
   badge,
@@ -282,6 +285,7 @@ function AppRow({
   actions,
 }: {
   name: string;
+  logoUrl: string | null;
   time: ReactNode;
   source?: string;
   badge: ReactNode;
@@ -292,7 +296,7 @@ function AppRow({
   return (
     <li className="min-w-0 space-y-3 rounded-xl border border-secondary bg-primary p-4">
       <div className="flex items-start gap-3">
-        <AppLogo name={name} size="sm" />
+        <AppLogo name={name} url={logoUrl} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold break-words text-primary">{name}</p>
           <p className="font-mono text-xs text-tertiary">{time}</p>

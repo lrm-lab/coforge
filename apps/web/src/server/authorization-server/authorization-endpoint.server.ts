@@ -52,7 +52,11 @@ export interface AuthorizationStore {
   saveApproval(consent: ConsentGrant, code: StoredAuthorizationCode): Promise<void>;
 }
 
+/** The app as a page names it. The consent page also shows its logo; the unavailable page does
+ * not, since its viewer is in no Workspace where the app is installed (the logo's route serves only
+ * people who are). */
 type AppSummary = { name: string; homepageUrl: string | null };
+type ConsentApp = AppSummary & { logoUrl: string | null };
 
 /** What the authorization page shows instead of redirecting. */
 export type AuthorizationPage =
@@ -61,7 +65,7 @@ export type AuthorizationPage =
   | { view: "expired" }
   | {
       view: "consent";
-      app: AppSummary;
+      app: ConsentApp;
       workspaces: { id: string; slug: string; name: string }[];
       scopes: string[];
       /** What the page answers with (`decide`): the request it shows, signed by the server. */
@@ -151,7 +155,7 @@ export class AuthorizationEndpoint {
     );
     return page({
       view: "consent",
-      app: summary(app),
+      app: { ...summary(app), logoUrl: app.logoUrl },
       workspaces: workspaces.map(({ id, slug, name }) => ({ id, slug, name })),
       scopes: request.scopes,
       handle,

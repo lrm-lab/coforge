@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { createAppAgentAccess } from "#src/server/app-agent-access/app-agent-access-composition.server";
+import { appLogoUrl } from "#src/server/apps/app-logo.server";
 
 /**
  * An Agent's access to the apps installed in its Workspace, against local PostgreSQL with
@@ -382,3 +383,38 @@ test.skipIf(!db)("approving a request never narrows the Agent's active grant", a
     await fixture.cleanup();
   }
 });
+
+test.skipIf(!db)(
+  "the Apps tab shows each app's logo; the Agent's own list of apps does not carry it",
+  async () => {
+    const fixture = await workspaceFixture(db!);
+    const access = createAppAgentAccess(db!);
+    const agent = { workspaceId: fixture.workspace.id, agentId: fixture.agent.id };
+    const objectKey = `workspaces/${fixture.workspace.id}/apps/${fixture.app.key}/logos/l1/original`;
+    const logoUrl = appLogoUrl(fixture.workspace.id, fixture.app.key, objectKey);
+    try {
+      await db!.app.update({
+        where: { id: fixture.app.id },
+        data: { logoObjectKey: objectKey, logoContentType: "image/png" },
+      });
+      expect(logoUrl).not.toBeNull();
+      await access.resolveAgentAccess(agent, fixture.app.key);
+      const granted = await access.list(fixture.as("member"), agent.agentId);
+      expect(granted.apps).toEqual([expect.objectContaining({ key: fixture.app.key, logoUrl })]);
+      expect(granted.grants).toEqual([expect.objectContaining({ appLogoUrl: logoUrl })]);
+
+      await access.revoke(fixture.as("owner"), {
+        agentId: agent.agentId,
+        grantId: granted.grants[0]!.id,
+      });
+      await access.resolveAgentAccess(agent, fixture.app.key);
+      expect((await access.list(fixture.as("member"), agent.agentId)).pendingRequests).toEqual([
+        expect.objectContaining({ appKey: fixture.app.key, appLogoUrl: logoUrl }),
+      ]);
+      const [own] = await access.listForAgent(agent);
+      expect(own).not.toHaveProperty("logoUrl");
+    } finally {
+      await fixture.cleanup();
+    }
+  },
+);

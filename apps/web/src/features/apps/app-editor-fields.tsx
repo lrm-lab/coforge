@@ -16,7 +16,6 @@ import { APP_CATEGORIES, type AppCategory } from "./app-category";
 import { refusedRedirectRows, type AppDraft } from "./app-draft";
 import { APP_SCOPE_DESCRIPTIONS } from "./app-form";
 import { APP_CATEGORY_LABELS } from "./app-list";
-import { AppLogo } from "./app-logo";
 import {
   APP_FIXED_SCOPES,
   APP_KEY_MAX_LENGTH,
@@ -70,18 +69,21 @@ export function EditorSection({
 /** How many characters of when-to-use an Agent would be shown, counted as the rule counts them. */
 export const whenToUseLength = (draft: AppDraft) => [...draft.whenToUse.trim()].length;
 
-/** Profile: the app's logo preview, name, homepage, category, description, client ID and the line
- * Agents are shown. */
-export function ProfileFields({ draft, change, errors, editing }: FieldsProps) {
+/** Profile: the app's logo (`AppLogoField`, given as `logo`), name, homepage, category,
+ * description, client ID and the line Agents are shown. */
+export function ProfileFields({
+  draft,
+  change,
+  errors,
+  editing,
+  logo,
+}: FieldsProps & { logo: ReactNode }) {
   const length = whenToUseLength(draft);
   const tooLong = length > APP_WHEN_TO_USE_MAX_LENGTH;
   const counterId = useId();
   return (
     <>
-      <div className="flex items-center gap-3">
-        <AppLogo name={draft.name || "?"} />
-        <p className="text-sm text-tertiary">{m.apps_logo_hint()}</p>
-      </div>
+      {logo}
       <Input
         label={m.apps_field_name()}
         placeholder={m.apps_field_name_placeholder()}

@@ -6,6 +6,7 @@ import type {
 } from "#src/server/authorization-server/authorization-endpoint.server";
 import type { StoredAuthorizationCode } from "#src/server/authorization-server/authorization-codes.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { appLogoUrl } from "#src/server/apps/app-logo.server";
 
 /** The authorization endpoint's rows: apps as OIDC clients, the Workspaces each person may
  * authorize them in, consents and authorization codes. What a request may do stays in
@@ -19,13 +20,17 @@ export class PrismaAuthorizationStore implements AuthorizationStore {
       select: {
         id: true,
         key: true,
+        ownerWorkspaceId: true,
         name: true,
         homepageUrl: true,
+        logoObjectKey: true,
         redirectUris: true,
         allowedScopes: true,
       },
     });
-    return app ?? undefined;
+    if (!app) return undefined;
+    const { ownerWorkspaceId, logoObjectKey, ...client } = app;
+    return { ...client, logoUrl: appLogoUrl(ownerWorkspaceId, app.key, logoObjectKey) };
   }
 
   async listOfferedWorkspaces(appId: string, userId: string) {

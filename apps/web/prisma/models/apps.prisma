@@ -23,6 +23,11 @@ model App {
   category         String            @default("other")
   /// Scopes the app may request: always `openid`, `profile` and `identity`, and maybe `email`.
   allowedScopes    String[]
+  /// The uploaded logo in the image store (`server/apps/app-logo.server.ts`): the bytes stay there,
+  /// and surfaces read `appLogoUrl`. Null shows the monogram made from the name.
+  logoObjectKey    String?
+  /// The logo's checked image type, served with its bytes; set and cleared with `logoObjectKey`.
+  logoContentType  String?
   /// SHA-256 (hex) of the client secret, whose plaintext is shown once.
   clientSecretHash String
   secretRotatedAt  DateTime?

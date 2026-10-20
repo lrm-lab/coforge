@@ -309,10 +309,15 @@ export class WorkspaceDeletion {
       where: { workspaceId, avatarObjectKey: { not: null } },
       select: { avatarObjectKey: true },
     });
+    const apps = await tx.app.findMany({
+      where: { ownerWorkspaceId: workspaceId, logoObjectKey: { not: null } },
+      select: { logoObjectKey: true },
+    });
     return [
       workspaceIconKey,
       ...projects.map(({ iconObjectKey }) => iconObjectKey),
       ...agents.map(({ avatarObjectKey }) => avatarObjectKey),
+      ...apps.map(({ logoObjectKey }) => logoObjectKey),
     ].filter((key): key is string => key !== null);
   }
 

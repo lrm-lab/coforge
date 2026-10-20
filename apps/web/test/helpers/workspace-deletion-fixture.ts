@@ -171,7 +171,8 @@ export async function setup() {
   });
   // The channel's coordinator names the Agent without cascading (`NO ACTION`).
   await db.conversation.update({ where: { id: team.id }, data: { coordinatorAgentId: agent.id } });
-  // An app the Workspace registered, installed there; both go with it.
+  // An app the Workspace registered, installed there, with a logo; all of it goes with it.
+  const appLogoKey = `workspaces/${workspace.id}/apps/own-app-${suffix}/logos/${crypto.randomUUID()}/original`;
   await db.app.create({
     data: {
       key: `own-app-${suffix}`,
@@ -181,6 +182,8 @@ export async function setup() {
       redirectUris: ["https://own.example/callback"],
       allowedScopes: ["openid"],
       clientSecretHash: "0".repeat(64),
+      logoObjectKey: appLogoKey,
+      logoContentType: "image/png",
       installations: { create: { workspaceId: workspace.id } },
     },
   });
@@ -349,7 +352,7 @@ export async function setup() {
     team,
     memberRowId: memberRow.id,
     privateKeys: [attachmentKey, uploadKey],
-    imageKeys: [workspaceIconKey, projectIconKey, agentAvatarKey],
+    imageKeys: [workspaceIconKey, projectIconKey, agentAvatarKey, appLogoKey],
     cleanup,
   };
 }

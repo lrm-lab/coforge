@@ -86,7 +86,7 @@ export function AgentAppGrantPanel({
               value={candidate.key}
               label={
                 <span className="inline-flex items-center gap-2">
-                  <AppLogo name={candidate.name} size="sm" />
+                  <AppLogo name={candidate.name} url={candidate.logoUrl} size="sm" />
                   {candidate.name}
                 </span>
               }

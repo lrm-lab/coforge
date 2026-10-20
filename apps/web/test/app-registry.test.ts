@@ -24,9 +24,23 @@ const ownApp: AppView = {
   redirectUris: ["https://notes.acme.example/cb"],
   category: "other",
   allowedScopes: ["openid", "profile", "identity"],
+  logoObjectKey: null,
   secretRotatedAt: null,
   createdAt: new Date("2026-10-20T00:00:00.000Z"),
   updatedAt: new Date("2026-10-20T00:00:00.000Z"),
+};
+
+const LOGO = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], "l.png", {
+  type: "image/png",
+});
+
+/** No image store: these tests never reach one (no app here has a logo, and a refused logo
+ * change is refused before it). */
+const NO_IMAGES = {
+  storage: async () => {
+    throw new Error("no image store in these tests");
+  },
+  removalFailed: () => {},
 };
 
 /** A built-in Agent App's key: never in the registry. */
@@ -61,7 +75,14 @@ function storeWith(roles: Record<string, WorkspaceMemberRole>, { roleAfterApp = 
     },
     async delete() {
       writes.push("delete");
+      return { logoObjectKey: null };
+    },
+    async replaceLogo() {
+      writes.push("logo");
       return true;
+    },
+    async findLogo() {
+      return undefined;
     },
   };
   return { store, writes };
@@ -102,7 +123,7 @@ describe("the app registry's authorization", () => {
 
   test("a plain member, or someone outside the Workspace, changes no app", async () => {
     const { store, writes } = storeWith({ member: "member" });
-    const registry = new AppRegistry(store);
+    const registry = new AppRegistry(store, NO_IMAGES);
     for (const actorUserId of ["member", "outsider"])
       for (const attempt of changes(registry, actorUserId))
         expect(await errorCodeOf(attempt())).toBe("ACCESS_DENIED");
@@ -111,12 +132,14 @@ describe("the app registry's authorization", () => {
 
   test("a plain member is ACCESS_DENIED whichever app they name, before any app is judged", async () => {
     const { store, writes } = storeWith({ member: "member" }, { roleAfterApp: true });
-    const registry = new AppRegistry(store);
+    const registry = new AppRegistry(store, NO_IMAGES);
     const actor = { workspaceId: WORKSPACE, actorUserId: "member" };
     for (const key of [ownApp.key, BUILT_IN_KEY, othersApp.key, "no-such-app"])
       for (const attempt of [
         () => registry.updateApp(actor, key, { name: "Renamed" }),
         () => registry.rotateAppSecret(actor, key),
+        () => registry.setAppLogo(actor, key, LOGO),
+        () => registry.resetAppLogo(actor, key),
         () => registry.deleteApp(actor, key),
       ])
         expect([key, await errorCodeOf(attempt())]).toEqual([key, "ACCESS_DENIED"]);
@@ -125,12 +148,14 @@ describe("the app registry's authorization", () => {
 
   test("an admin finds no built-in app, another Workspace's or an unknown one to change", async () => {
     const { store, writes } = storeWith({ admin: "admin" });
-    const registry = new AppRegistry(store);
+    const registry = new AppRegistry(store, NO_IMAGES);
     const actor = { workspaceId: WORKSPACE, actorUserId: "admin" };
     for (const key of [BUILT_IN_KEY, othersApp.key, "no-such-app"])
       for (const attempt of [
         () => registry.updateApp(actor, key, { name: "Renamed" }),
         () => registry.rotateAppSecret(actor, key),
+        () => registry.setAppLogo(actor, key, LOGO),
+        () => registry.resetAppLogo(actor, key),
         () => registry.deleteApp(actor, key),
       ])
         expect([key, await errorCodeOf(attempt())]).toEqual([key, "NOT_FOUND"]);
@@ -139,7 +164,7 @@ describe("the app registry's authorization", () => {
 
   test("a plain member still lists the Workspace's apps", async () => {
     const { store } = storeWith({ member: "member" });
-    const apps = await new AppRegistry(store).listWorkspaceApps({
+    const apps = await new AppRegistry(store, NO_IMAGES).listWorkspaceApps({
       workspaceId: WORKSPACE,
       actorUserId: "member",
     });
@@ -148,7 +173,7 @@ describe("the app registry's authorization", () => {
 
   test("its owner and admins register, change, rotate and delete its apps", async () => {
     const { store, writes } = storeWith({ owner: "owner", admin: "admin" });
-    const registry = new AppRegistry(store);
+    const registry = new AppRegistry(store, NO_IMAGES);
     for (const actorUserId of ["owner", "admin"])
       for (const attempt of changes(registry, actorUserId))
         expect(await errorCodeOf(attempt())).toBeUndefined();
@@ -159,7 +184,7 @@ describe("the app registry's authorization", () => {
 
   test("an input a rule refuses writes nothing", async () => {
     const { store, writes } = storeWith({ owner: "owner" });
-    const registry = new AppRegistry(store);
+    const registry = new AppRegistry(store, NO_IMAGES);
     const actor = { workspaceId: WORKSPACE, actorUserId: "owner" };
     expect(await errorCodeOf(registry.registerApp(actor, { ...registration, key: "x" }))).toBe(
       "INVALID_INPUT",
@@ -204,7 +229,7 @@ describe("a registration without a key", () => {
 
   test("gets a key made from the app's name", async () => {
     const { store, keys } = recordingStore([]);
-    const registry = new AppRegistry(store, undefined, suffixes("x7k2q9"));
+    const registry = new AppRegistry(store, NO_IMAGES, undefined, suffixes("x7k2q9"));
     const { app } = await registry.registerApp(actor, { ...registration, key: "" });
     expect(keys).toEqual(["acme-two-x7k2q9"]);
     expect(app.key).toBe("acme-two-x7k2q9");
@@ -212,14 +237,19 @@ describe("a registration without a key", () => {
 
   test("tries another suffix when the key it made is taken", async () => {
     const { store, keys } = recordingStore([true, true]);
-    const registry = new AppRegistry(store, undefined, suffixes("aaaaaa", "bbbbbb", "cccccc"));
+    const registry = new AppRegistry(
+      store,
+      NO_IMAGES,
+      undefined,
+      suffixes("aaaaaa", "bbbbbb", "cccccc"),
+    );
     await registry.registerApp(actor, { ...registration, key: "  " });
     expect(keys).toEqual(["acme-two-aaaaaa", "acme-two-bbbbbb", "acme-two-cccccc"]);
   });
 
   test("gives up with CONFLICT when every key it makes is taken", async () => {
     const { store, keys } = recordingStore(Array(20).fill(true));
-    const registry = new AppRegistry(store);
+    const registry = new AppRegistry(store, NO_IMAGES);
     expect(await errorCodeOf(registry.registerApp(actor, { ...registration, key: "" }))).toBe(
       "CONFLICT",
     );
@@ -229,7 +259,7 @@ describe("a registration without a key", () => {
 
   test("a key it was given that is taken is refused at once, never replaced", async () => {
     const { store, keys } = recordingStore([true, false]);
-    const registry = new AppRegistry(store);
+    const registry = new AppRegistry(store, NO_IMAGES);
     await expect(registry.registerApp(actor, registration)).rejects.toMatchObject({
       code: "CONFLICT",
       errorId: "app-key-taken",
@@ -240,7 +270,7 @@ describe("a registration without a key", () => {
   test("a bad name is still refused for the name, not the key made from it", async () => {
     const { store, keys } = recordingStore([]);
     await expect(
-      new AppRegistry(store).registerApp(actor, { ...registration, key: "", name: "" }),
+      new AppRegistry(store, NO_IMAGES).registerApp(actor, { ...registration, key: "", name: "" }),
     ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "app-name-invalid" });
     expect(keys).toEqual([]);
   });

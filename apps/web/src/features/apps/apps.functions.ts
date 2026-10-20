@@ -1,12 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { AppError } from "#src/lib/app-error";
 import {
   workspaceUserMiddleware,
   type WorkspaceUserContext,
 } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
+import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import type { AppActor, AppView } from "#src/server/apps/app-registry.server";
 import { APP_CATEGORIES } from "./app-category";
 import {
@@ -25,19 +27,24 @@ import {
  * shape and size, so a refused value still reaches the registry and comes back naming its field.
  */
 
-/** An app as the Settings page shows it. */
+/** An app as the Settings page shows it: its logo as a URL (none shows the monogram). */
 export type AppSummary = Omit<
   AppView,
-  "ownerWorkspaceId" | "secretRotatedAt" | "createdAt" | "updatedAt"
-> & { createdAt: string };
+  "ownerWorkspaceId" | "logoObjectKey" | "secretRotatedAt" | "createdAt" | "updatedAt"
+> & { logoUrl: string | null; createdAt: string };
 
 const summary = ({
-  ownerWorkspaceId: _owner,
+  ownerWorkspaceId,
+  logoObjectKey,
   secretRotatedAt: _rotated,
   updatedAt: _updated,
   createdAt,
   ...app
-}: AppView): AppSummary => ({ ...app, createdAt: createdAt.toISOString() });
+}: AppView): AppSummary => ({
+  ...app,
+  logoUrl: appLogoUrl(ownerWorkspaceId, app.key, logoObjectKey),
+  createdAt: createdAt.toISOString(),
+});
 
 /** A text the registry counts in code points; zod counts UTF-16 units, at most two per code point. */
 const text = (maxCodePoints: number) => z.string().max(maxCodePoints * 2);
@@ -107,6 +114,35 @@ export const rotateWorkspaceAppSecret = createServerFn({ method: "POST" })
       data.key,
     );
     return { clientSecret };
+  });
+
+const logoFile = z.custom<File>((value) => typeof File !== "undefined" && value instanceof File);
+
+/** Replaces the app's logo, at once, with the `file` of a FormData that also names its `key`. The
+ * registry checks the image (`APP_LOGO_UPLOAD_TYPES`, at most 5 MB, bytes sniffed). */
+export const uploadWorkspaceAppLogo = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator((data: unknown) => {
+    if (!(data instanceof FormData)) throw new AppError("INVALID_INPUT");
+    const key = keyInput.shape.key.safeParse(data.get("key"));
+    const file = logoFile.safeParse(data.get("file"));
+    if (!key.success || !file.success) throw new AppError("INVALID_INPUT");
+    return { key: key.data, file: file.data };
+  })
+  .handler(async ({ data, context }) => {
+    declareNoStore();
+    return summary(
+      await createAppRegistry(context.db).setAppLogo(actorOf(context), data.key, data.file),
+    );
+  });
+
+/** Puts the app back on its monogram; its uploaded logo is removed. */
+export const resetWorkspaceAppLogo = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(keyInput)
+  .handler(async ({ data, context }) => {
+    declareNoStore();
+    return summary(await createAppRegistry(context.db).resetAppLogo(actorOf(context), data.key));
   });
 
 /** Deletes the Workspace's app. */

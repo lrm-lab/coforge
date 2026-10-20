@@ -23,6 +23,8 @@ export type InstalledAppView = {
   description: string;
   whenToUse: string;
   homepageUrl: string | null;
+  /** `appLogoUrl`; none shows the monogram. */
+  logoUrl: string | null;
   allowedScopes: string[];
 };
 
@@ -33,6 +35,7 @@ export type AgentAppGrantView = {
   appName: string;
   appDescription: string;
   homepageUrl: string | null;
+  appLogoUrl: string | null;
   scopes: string[];
   source: AgentAppGrantSource;
   grantedAt: Date;
@@ -43,6 +46,7 @@ export type AgentAppRequestView = {
   id: string;
   appKey: string;
   appName: string;
+  appLogoUrl: string | null;
   scopes: string[];
   createdAt: Date;
 };
@@ -55,8 +59,9 @@ export type AgentAppAccessList = {
   pendingRequests: AgentAppRequestView[];
 };
 
-/** An installed app as the Agent itself lists it, with its access to the app. */
-export type AgentInstalledAppView = Omit<InstalledAppView, "allowedScopes"> & {
+/** An installed app as the Agent itself lists it, with its access to the app; a logo is for
+ * people, so the Agent's list leaves it out. */
+export type AgentInstalledAppView = Omit<InstalledAppView, "allowedScopes" | "logoUrl"> & {
   access: AgentAppAccessState;
 };
 
@@ -180,7 +185,7 @@ export class AppAgentAccess {
       this.store.listGrantStates(agent.agentId),
       this.store.listPendingRequests(agent.agentId),
     ]);
-    return apps.map(({ id, allowedScopes, ...app }) => {
+    return apps.map(({ id, allowedScopes, logoUrl: _logo, ...app }) => {
       const decision = decideAgentAccess({
         installed: true,
         allowedScopes,

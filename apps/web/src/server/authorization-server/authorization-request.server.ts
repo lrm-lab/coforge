@@ -4,6 +4,8 @@ export type AuthorizationClient = {
   name: string;
   /** None (`null`) when the app registered no homepage. */
   homepageUrl: string | null;
+  /** Where the consent page loads its logo (`appLogoUrl`); none shows the monogram. */
+  logoUrl: string | null;
   redirectUris: string[];
   allowedScopes: string[];
 };

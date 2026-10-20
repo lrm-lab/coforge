@@ -21,6 +21,7 @@ import {
 import { EMPTY_APP_DRAFT, draftOf, inputOf, type AppDraft } from "./app-draft";
 import { APP_FIELD_PROBLEMS, appFormProblem } from "./app-form";
 import { AppLogo } from "./app-logo";
+import { AppLogoField } from "./app-logo-field";
 import {
   APP_WHEN_TO_USE_MAX_LENGTH,
   refusedAppFields,
@@ -43,6 +44,8 @@ export function AppEditor({
   onSubmit,
   onRegenerate,
   onDelete,
+  onUploadLogo,
+  onResetLogo,
 }: {
   open: boolean;
   app?: AppSummary;
@@ -53,6 +56,9 @@ export function AppEditor({
   onSubmit: (input: AppRegistrationInput) => Promise<void>;
   onRegenerate: (app: AppSummary) => Promise<void>;
   onDelete: (app: AppSummary) => Promise<void>;
+  /** Replace or reset the app's logo at once, outside Save. Throw when refused. */
+  onUploadLogo: (app: AppSummary, file: File) => Promise<void>;
+  onResetLogo: (app: AppSummary) => Promise<void>;
 }) {
   const [saving, guard] = useSubmitGuard();
   return (
@@ -77,6 +83,8 @@ export function AppEditor({
               onSubmit={onSubmit}
               onRegenerate={onRegenerate}
               onDelete={onDelete}
+              onUploadLogo={onUploadLogo}
+              onResetLogo={onResetLogo}
             />
           )}
         </Dialog>
@@ -96,6 +104,8 @@ function AppEditorForm({
   onSubmit,
   onRegenerate,
   onDelete,
+  onUploadLogo,
+  onResetLogo,
 }: {
   app?: AppSummary;
   issued: IssuedSecret | null;
@@ -105,6 +115,8 @@ function AppEditorForm({
   onSubmit: (input: AppRegistrationInput) => Promise<void>;
   onRegenerate: (app: AppSummary) => Promise<void>;
   onDelete: (app: AppSummary) => Promise<void>;
+  onUploadLogo: (app: AppSummary, file: File) => Promise<void>;
+  onResetLogo: (app: AppSummary) => Promise<void>;
 }) {
   const editing = app !== undefined;
   const [draft, setDraft] = useState<AppDraft>(() => (app ? draftOf(app) : EMPTY_APP_DRAFT));
@@ -167,7 +179,7 @@ function AppEditorForm({
     // would show only the first and in its own words.
     <form noValidate onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-3 border-b border-secondary px-6 py-4">
-        <AppLogo name={draft.name || "?"} size="sm" />
+        <AppLogo name={draft.name || "?"} url={app?.logoUrl} size="sm" />
         <Heading
           slot="title"
           className="min-w-0 flex-1 truncate text-lg font-semibold text-primary"
@@ -230,7 +242,22 @@ function AppEditorForm({
             status={profileComplete ? m.apps_status_complete() : m.apps_status_needs_details()}
             description={m.apps_section_profile_description()}
           >
-            <ProfileFields {...fields} />
+            <ProfileFields
+              {...fields}
+              logo={
+                <AppLogoField
+                  name={draft.name}
+                  isDisabled={saving}
+                  logo={
+                    app && {
+                      url: app.logoUrl,
+                      upload: (file) => onUploadLogo(app, file),
+                      reset: () => onResetLogo(app),
+                    }
+                  }
+                />
+              }
+            />
           </EditorSection>
           <EditorSection
             id={ids.login}
