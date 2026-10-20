@@ -55,7 +55,6 @@ The architecture invariants every change must respect are in
 | [docs/agents/git-hooks.md](docs/agents/git-hooks.md) | Pre-commit file size limit, its ratchet, and marking generated files |
 | [docs/agents/reference-cli-research/](docs/agents/reference-cli-research/README.md) | Studying the latest Raft Computer reference binary, source tree, and installer |
 | [docs/agents/grok-acp.md](docs/agents/grok-acp.md) | Persistent Grok ACP behavior, compatibility and native verification |
-| [.agents/skills/coforge-verify/features/](.agents/skills/coforge-verify/features/README.md) | Feature Map: how to reach, drive and observe each product feature when verifying a change |
 | [docs/research/](docs/research/README.md) | Evidence-backed research reports |
 | [apps/web/README.md](apps/web/README.md) | Web app setup and scripts |
 | [apps/web/src/components/ui/README.md](apps/web/src/components/ui/README.md) | UI component inventory and exceptions |

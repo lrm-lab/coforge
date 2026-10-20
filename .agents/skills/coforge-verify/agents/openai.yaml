@@ -1,4 +1,0 @@
-interface:
-  display_name: "CoForge Verify"
-  short_description: "Prove a change works in the running CoForge product"
-  default_prompt: "Use $coforge-verify to verify this change in the running product and record its evidence before reporting it done."

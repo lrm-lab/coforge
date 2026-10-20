@@ -9,10 +9,7 @@ to add tests or run stress checks.
 
 > 禁止 UI 单元测试，列出本次改动受影响的 UI 并给出测试 Todo list，我自行验证。
 
-UI 改动按两步交付，两步都必须做：
-
-1. Agent 先按 [`coforge-verify`](../../.agents/skills/coforge-verify/SKILL.md) 在真实运行的产品里用浏览器验证改动，并在 commit 或 CR 中引用它记录的证据（`.amp/e2e/<feature>/report.json` 及其结果）。
-2. 然后仍列出本次改动受影响的 UI，并给出测试 Todo list，交给 Frank 自行复验。Agent 的验证不替代这一步。
+UI 改动必须列出本次改动受影响的 UI，并给出测试 Todo list，交给 Frank 自行验证。
 
 本次删除 UI 单元测试后，受影响的 UI 范围包括：
 
