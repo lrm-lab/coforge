@@ -7,7 +7,8 @@
     "eval": "bun src/run.ts",
     "typecheck": "tsc --noEmit",
     "check": "oxfmt --check src test && oxlint src test && bun run typecheck",
-    "format": "oxfmt src test"
+    "format": "oxfmt src test",
+    "test": "bun test"
   },
   "dependencies": {
     "@coforge/eval-harness": "workspace:*",
