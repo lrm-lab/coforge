@@ -6,7 +6,7 @@
   "scripts": {
     "eval": "bun src/run.ts",
     "typecheck": "tsc --noEmit",
-    "check": "oxlint src test && bun run typecheck",
+    "check": "oxfmt --check src test && oxlint src test && bun run typecheck",
     "format": "oxfmt src test"
   },
   "dependencies": {
