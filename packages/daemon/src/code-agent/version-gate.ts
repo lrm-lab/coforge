@@ -16,8 +16,9 @@ const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
  * the two names a person reads (the build's name in the error, the executable to upgrade).
  *
  * The rule that is easy to lose, and the reason one copy helps: a version that cannot be parsed as
- * dotted numbers is *never* gated. A missing, timed-out or unreadable `--version` must not refuse
- * a launch — only a confidently-parsed lower version does.
+ * dotted numbers is *never* gated. A single leading `v` or `V` is still a dotted version
+ * (`opencode --version` prints `opencode v2.1.0`). A missing, timed-out or unreadable `--version`
+ * must not refuse a launch — only a confidently-parsed lower version does.
  */
 export type CliVersionGate = {
   isUnsupported(version: string): boolean;
@@ -29,8 +30,13 @@ export type CliVersionGate = {
 /** How long a `--version` probe may take before it is killed and its version treated as unread. */
 export const VERSION_PROBE_TIMEOUT_MS = 5_000;
 
+/** One leading `v`/`V` belongs to the version. A second `v`, a prerelease, or any other
+ * non-integer segment stays NaN so `isVersionBelow` does not gate it. */
 const dottedNumbers = (value: string) =>
-  value.split(".").map((part) => (/^\d+$/.test(part) ? Number(part) : Number.NaN));
+  value
+    .replace(/^[vV]/, "")
+    .split(".")
+    .map((part) => (/^\d+$/.test(part) ? Number(part) : Number.NaN));
 
 /** Whether `version` is confidently lower than `minimum`; a version that is not dotted numbers is never below. */
 export function isVersionBelow(version: string, minimum: string): boolean {
