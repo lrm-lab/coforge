@@ -229,9 +229,9 @@ async function runWithSupervisorLock(
     return settlement;
   };
   /** Rewrites one already-running Workspace's config file with its binding's current upgrade
-   * state, without restarting it. Best-effort: a Workspace that was never started (no directory
-   * yet) or whose write fails is left for its next real start to pick up instead; a running
-   * child's reconnect recovery is the fallback for a settled receipt it missed. */
+   * state, without restarting it; a running child polls it while it lists a pending operation.
+   * Best-effort: a Workspace never started (no directory yet) or whose write fails picks it up at
+   * its next real start. */
   const refreshChildUpgradeConfig = async (workspaceId: string): Promise<void> => {
     try {
       const binding = (await supervisor.snapshot()).find(
@@ -425,7 +425,7 @@ async function runWithSupervisorLock(
         status: receipt.status,
         ...(receipt.errorCode ? { error_code: receipt.errorCode } : {}),
       });
-      // A new child's first ready pass, or a running child's reconnect, sees the terminal state.
+      // A replacement child reports it on ready; a running child on its next poll.
       await refreshChildUpgradeConfig(workspaceId);
     }
     return recorded;

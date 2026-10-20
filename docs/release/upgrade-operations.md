@@ -98,7 +98,10 @@ The Daemon settles the operation from the receipt, exactly as for any upgrade:
   `upgradeOperations`, and only one operation may be pending per binding;
 - a terminal result is reported to the server as `computer:upgrade_result`
   (`ComputerUpgradeResult`, additive, `protocol_major` unchanged) after the
-  Workspace daemon's ready handshake. A reported failure settles the request with
+  Workspace daemon's ready handshake. A Workspace daemon re-reads its config every
+  5 s while it lists a pending operation, so one still running when its job fails
+  (a failed download) reports the failure within one poll, retried until the server
+  accepts it. A reported failure settles the request with
   reason `reported`; a reported success is corroborating evidence only, and the
   server still requires the Computer's own new identity and matching versions
   before an upgrade counts as complete;

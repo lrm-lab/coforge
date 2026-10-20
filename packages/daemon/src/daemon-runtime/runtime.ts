@@ -185,6 +185,12 @@ import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
 import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-inventory-sync";
+import {
+  UpgradeResultReporter,
+  type RecoveredUpgradeResult,
+  type UpgradeOperationsReading,
+} from "./upgrade-result-reporter";
+import type { UnrefTimerSchedule } from "./unref-timer";
 import { getLogger } from "@logtape/logtape";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import {
@@ -202,16 +208,6 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 /** Per-provider reading deadline supplied by a runtime usage scan. */
 export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
 
-/** A terminal upgrade operation carried forward from the Coordinator's durable record. */
-export type RecoveredUpgradeResult = {
-  requestId: string;
-  status: "succeeded" | "failed";
-  completedAtMs: number;
-  version?: string;
-  error?: string;
-  /** See `UPGRADE_ERROR_CODE`. */
-  errorCode?: string;
-};
 const FULL_THREAD_TARGET = new RegExp(
   `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):(${UUID_LIKE_SOURCE})$`,
 );
@@ -498,6 +494,7 @@ export class DaemonRuntime {
     review: this.#trackPhase("review"),
   };
   readonly #codeAgentInventory: CodeAgentInventorySync;
+  readonly #upgradeResults: UpgradeResultReporter;
 
   constructor(
     connection: DaemonConfig,
@@ -516,11 +513,13 @@ export class DaemonRuntime {
        * at construction time. */
       recoveredUpgradeResults?: RecoveredUpgradeResult[];
       /**
-       * Re-reads terminal operations from durable local config on reconnect. The normal upgrade
-       * path commits and injects terminal state before this process starts; this hook is only the
-       * crash-recovery fallback when a Coordinator settles an older operation later.
+       * Re-reads the upgrade operations in durable local config, which the Coordinator rewrites
+       * whenever it records, settles or acknowledges one; `UpgradeResultReporter` polls it while
+       * one is pending. Absent: `recoveredUpgradeResults` is all there is.
        */
-      refreshUpgradeResults?(): Promise<RecoveredUpgradeResult[]>;
+      readUpgradeOperations?(): Promise<UpgradeOperationsReading>;
+      /** The reporter's poll and retry timer; absent, an unref'd `setTimeout`. */
+      upgradeResultSchedule?: UnrefTimerSchedule;
       /** Called once the server has accepted a reported result. */
       acknowledgeUpgradeResult?(requestId: string): Promise<void>;
       /** The cloud refused this Workspace's running connection for good. Called after every
@@ -565,6 +564,15 @@ export class DaemonRuntime {
       (transport) => !this.#stopping && this.#transport === transport,
     );
     this.#transport = transportFactory.create(connection);
+    const recovered = { results: lifecycle.recoveredUpgradeResults ?? [], pending: false };
+    this.#upgradeResults = new UpgradeResultReporter({
+      workspaceId: connection.workspaceId,
+      computerId: connection.computerId ?? "",
+      readOperations: lifecycle.readUpgradeOperations ?? (async () => recovered),
+      transport: () => this.#transport,
+      acknowledge: lifecycle.acknowledgeUpgradeResult,
+      schedule: lifecycle.upgradeResultSchedule,
+    });
     this.#mentionDeliveries = new MentionDeliveryTracker(connection.computerId, {
       transition: (report) =>
         this.#transport.sendAgentMentionDeliveryTransition?.(report) ?? Promise.resolve(),
@@ -988,6 +996,7 @@ export class DaemonRuntime {
       (request: Request) =>
         handle(request).catch((error) => this.#logAgentOperationFailure(operation, request, error));
     try {
+      this.#upgradeResults.start();
       this.#subscribe(
         this.#transport.onReconnect?.(() => {
           const transport = this.#transport;
@@ -1010,9 +1019,8 @@ export class DaemonRuntime {
                 outcome: "failed",
               });
             });
-          // Normal promotion puts terminal state in this process's initial config. Reconnect
-          // still re-reads config as crash recovery for an older operation settled later.
-          void this.#reportUpgradeResults().catch(() => {});
+          // A result whose send failed while disconnected, or one settled meanwhile.
+          void this.#upgradeResults.report();
         }),
       );
       const transport = this.#transport;
@@ -1237,7 +1245,7 @@ export class DaemonRuntime {
         }),
         signal,
       );
-      await this.#reportUpgradeResults();
+      await this.#upgradeResults.report();
       await Promise.all(
         this.#readyRunningAgentIds().map((agentId) => this.#requestReminderSnapshot(agentId)),
       );
@@ -1264,6 +1272,7 @@ export class DaemonRuntime {
         .catch(() => {});
     } catch (error) {
       this.#unsubscribeAll();
+      this.#upgradeResults.stop();
       this.#started = false;
       // A connection left up keeps reporting this Computer online for a Workspace that never
       // started, so a failed start takes its transport down too.
@@ -1278,21 +1287,17 @@ export class DaemonRuntime {
   }
 
   /**
-   * Wraps `lifecycle.requestUpgrade` (the local call into the Coordinator): when it rejects -
-   * refused (a pending operation, launches paused) or the launch itself failing - this Workspace
-   * still owes the server an immediate, reasoned failure report. Without this, the caller
-   * (`DaemonConnection#acceptLifecycleRequest`) just swallows the rejection and the server is
-   * left waiting until it times out with a generic "did not report in time", even though this
-   * machine knew exactly why. Reported through the same wire
-   * message and dedupe `#reportUpgradeResults` uses (`#transport.sendUpgradeResult`), so a retry
-   * of the same request cannot double-report. Rethrown so the caller's existing
-   * dedupe-clearing behaviour on a rejection is unaffected.
+   * Asks the Coordinator for an upgrade. Accepted: triggers a report. Refused, or the launch
+   * failed: reports that failure with its reason right away, so the server need not wait out its
+   * deadline, and rethrows so `DaemonConnection#acceptLifecycleRequest` clears its dedupe.
+   * `UpgradeResultReporter` owns the reporting rules.
    */
   async #requestUpgrade(requestId: string, expectedVersion?: string): Promise<void> {
     const requestUpgrade = this.lifecycle.requestUpgrade;
     if (!requestUpgrade) throw new Error("upgrade requests are unsupported");
     try {
       await requestUpgrade(requestId, expectedVersion);
+      void this.#upgradeResults.report();
     } catch (error) {
       const message = thrownMessage(error);
       const errorCode = parseUpgradeErrorCode((error as { code?: unknown } | null)?.code);
@@ -1303,65 +1308,14 @@ export class DaemonRuntime {
         error_code: errorCode ?? diagnosticErrorCode(error),
         error_message: message,
       });
-      await this.#transport
-        .sendUpgradeResult?.({
-          protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-          requestId,
-          workspaceId: this.#connection.workspaceId,
-          computerId: this.#connection.computerId ?? "",
-          status: "failed",
-          completedAtMs: Date.now(),
-          error: message,
-          ...(errorCode ? { errorCode } : {}),
-        })
-        .catch((reportError) => {
-          logger.error("Refused Computer upgrade could not be reported", {
-            event: "upgrade:refusal_report_failed",
-            request_id: requestId,
-            workspace_id: this.#connection.workspaceId,
-            error_code: diagnosticErrorCode(reportError),
-          });
-        });
+      await this.#upgradeResults.reportRefused({
+        requestId,
+        status: "failed",
+        completedAtMs: Date.now(),
+        error: message,
+        ...(errorCode ? { errorCode } : {}),
+      });
       throw error;
-    }
-  }
-
-  /**
-   * Reports every terminal upgrade operation this machine has not settled yet. The server's
-   * acceptance is the acknowledgement: only then does the local record become audit history.
-   * A refused or failed report is left alone so the next ready handshake retries it.
-   */
-  async #reportUpgradeResults(): Promise<void> {
-    const results = this.lifecycle.refreshUpgradeResults
-      ? await this.lifecycle
-          .refreshUpgradeResults()
-          .catch(() => this.lifecycle.recoveredUpgradeResults ?? [])
-      : (this.lifecycle.recoveredUpgradeResults ?? []);
-    if (!results.length || !this.#transport.sendUpgradeResult) return;
-    const connection = this.#connection;
-    for (const result of results) {
-      try {
-        await this.#transport.sendUpgradeResult({
-          protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-          requestId: result.requestId,
-          workspaceId: connection.workspaceId,
-          computerId: connection.computerId ?? "",
-          status: result.status,
-          completedAtMs: result.completedAtMs,
-          ...(result.version ? { version: result.version } : {}),
-          ...(result.error ? { error: result.error } : {}),
-          ...(result.errorCode ? { errorCode: result.errorCode } : {}),
-        });
-        await this.lifecycle.acknowledgeUpgradeResult?.(result.requestId);
-      } catch (error) {
-        logger.error("Computer upgrade result report failed", {
-          event: "upgrade:result_report_failed",
-          request_id: result.requestId,
-          workspace_id: connection.workspaceId,
-          error_code: diagnosticErrorCode(error),
-          outcome: "failed",
-        });
-      }
     }
   }
 
@@ -4335,6 +4289,7 @@ export class DaemonRuntime {
     for (const launch of this.#currentActivityLaunches.values()) launch.startup?.dispose();
     this.#disposeAllPhases();
     this.#runtimeErrorHold.disposeAll();
+    this.#upgradeResults.stop();
     this.#lastContextUsage.clear();
     for (const agentId of new Set([
       ...this.#agentInputQueues.keys(),

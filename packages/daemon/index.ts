@@ -9,8 +9,8 @@ import {
   DaemonRuntime,
   type BusyAgentReport,
   type DaemonConfig,
-  type RecoveredUpgradeResult,
 } from "#src/daemon-runtime/runtime";
+import { upgradeOperationsInConfig } from "#src/daemon-runtime/upgrade-result-reporter";
 import { defaultCodeAgentDiscovery } from "#src/daemon-runtime/code-agent-inventory-sync";
 import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
@@ -151,11 +151,7 @@ export {
 export { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 export { AgentAppInbox } from "#src/agent-app-inbox/agent-app-inbox";
 export type { AgentAppItem, MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
-export type {
-  DaemonConfig,
-  WorkspaceConfig,
-  RecoveredUpgradeResult,
-} from "#src/daemon-runtime/runtime";
+export type { DaemonConfig, WorkspaceConfig } from "#src/daemon-runtime/runtime";
 export {
   InMemoryDaemonCredentialStore,
   FileDaemonCredentialStore,
@@ -367,12 +363,10 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
               (config as { restartRequestIds?: string[] } | null)?.restartRequestIds ?? [],
             recoveredUpgradeRequestIds:
               (config as { upgradeRequestIds?: string[] } | null)?.upgradeRequestIds ?? [],
-            recoveredUpgradeResults: terminalUpgradeResults(config),
-            // Re-reads the same per-Workspace config file the Coordinator wrote before starting
-            // this process - and may rewrite again while this process keeps running, once its
-            // continuous upgrade-receipt watch settles an operation - so a result
-            // settled after this process started is still reported on the next reconnect.
-            refreshUpgradeResults: async () => terminalUpgradeResults(await configStore.load()),
+            recoveredUpgradeResults: upgradeOperationsInConfig(config).results,
+            // The per-Workspace config file the Coordinator wrote before starting this process and
+            // rewrites while it runs (an upgrade recorded, settled, or acknowledged).
+            readUpgradeOperations: async () => upgradeOperationsInConfig(await configStore.load()),
             acknowledgeUpgradeResult: supervisorSocket
               ? async (requestId: string) => {
                   if (!config) throw new Error("Workspace is not configured");
@@ -487,42 +481,6 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
       await Promise.all([parked, shutdownRequested]);
     },
   );
-}
-
-/**
- * The Coordinator hands each Workspace daemon the upgrade operations it must still settle with
- * the server. Only terminal ones carry a receipt worth reporting; pending ones stay cloud ready
- * hints until their job leaves a receipt.
- */
-function terminalUpgradeResults(config: unknown): RecoveredUpgradeResult[] {
-  const operations = (
-    config as {
-      upgradeOperations?: {
-        requestId?: unknown;
-        state?: unknown;
-        terminal?: { version?: unknown; error?: unknown; at?: unknown };
-      }[];
-    } | null
-  )?.upgradeOperations;
-  if (!Array.isArray(operations)) return [];
-  return operations.flatMap((operation) => {
-    if (operation.state !== "succeeded" && operation.state !== "failed") return [];
-    if (typeof operation.requestId !== "string" || !operation.requestId) return [];
-    const at = operation.terminal?.at;
-    return [
-      {
-        requestId: operation.requestId,
-        status: operation.state,
-        completedAtMs: Number.isSafeInteger(at) ? (at as number) : Date.now(),
-        ...(typeof operation.terminal?.version === "string" && operation.terminal.version
-          ? { version: operation.terminal.version }
-          : {}),
-        ...(typeof operation.terminal?.error === "string" && operation.terminal.error
-          ? { error: operation.terminal.error }
-          : {}),
-      },
-    ];
-  });
 }
 
 // Standalone source/development harness; releases enter through Computer.

@@ -1,4 +1,5 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { scheduleUnrefTimer, type UnrefTimerSchedule } from "./unref-timer";
 
 type Batch = {
   agentId: string;
@@ -8,16 +9,7 @@ type Batch = {
   flushing?: Promise<boolean | void>;
 };
 
-export type MemoryChannelUpdateSchedule = (
-  callback: () => Promise<void>,
-  milliseconds: number,
-) => () => void;
-
-const schedule: MemoryChannelUpdateSchedule = (callback, milliseconds) => {
-  const timer = setTimeout(callback, milliseconds);
-  timer.unref();
-  return () => clearTimeout(timer);
-};
+export type MemoryChannelUpdateSchedule = UnrefTimerSchedule;
 
 /** Coalesces delivery metadata; message bodies are read only by the Agent's tools.
  * Cloud Message/read boundaries remain the recovery source after a daemon restart. */
@@ -27,7 +19,7 @@ export class MemoryChannelUpdates {
   constructor(
     private readonly notify: (messages: readonly AgentMessageDelivery[]) => Promise<boolean | void>,
     private readonly options: {
-      schedule?: typeof schedule;
+      schedule?: MemoryChannelUpdateSchedule;
       onError?: (error: unknown) => void;
     } = {},
   ) {}
@@ -46,7 +38,7 @@ export class MemoryChannelUpdates {
 
   #arm(key: string, batch: Batch): void {
     if (batch.cancel || !batch.messages.size) return;
-    batch.cancel = (this.options.schedule ?? schedule)(async () => {
+    batch.cancel = (this.options.schedule ?? scheduleUnrefTimer)(async () => {
       batch.cancel = undefined;
       await this.#flush(key, batch).catch((error) => this.options.onError?.(error));
     }, 30_000);
