@@ -11,6 +11,13 @@ afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })));
 });
 
+/** A stub feed on 127.0.0.1, which URLs name: `localhost` may reach another process on ::1. */
+function serveStub(options: { fetch(request: Request): Response | Promise<Response> }) {
+  const server = Bun.serve({ ...options, hostname: "127.0.0.1", port: 0 });
+  servers.push(server);
+  return server;
+}
+
 const script = resolve(import.meta.dir, "../../../scripts/release/install.sh");
 
 /** Bun.spawnSync blocks the whole JS thread, including the fixture Bun.serve running in this
@@ -166,8 +173,7 @@ async function serveFixture(
   for (const [path, bytes] of Object.entries(options.objects ?? {})) files.set(path, bytes);
 
   const requested: string[] = [];
-  const server = Bun.serve({
-    port: 0,
+  const server = serveStub({
     fetch(request) {
       const path = new URL(request.url).pathname;
       requested.push(path);
@@ -181,8 +187,7 @@ async function serveFixture(
       return bytes ? new Response(Buffer.from(bytes)) : new Response("not found", { status: 404 });
     },
   });
-  servers.push(server);
-  return { baseUrl: `http://localhost:${server.port}`, version, target, requested };
+  return { baseUrl: `http://127.0.0.1:${server.port}`, version, target, requested };
 }
 
 test("install.sh prepares cross-target gzip once without executing or configuring PATH", async () => {
@@ -376,8 +381,7 @@ test("install.sh's installer phase downloads only the target's coforge-installer
     const directory = await mkdtemp(join(tmpdir(), "coforge-prepare-"));
     temporaryDirectories.push(directory);
     const requested: string[] = [];
-    const server = Bun.serve({
-      port: 0,
+    const server = serveStub({
       fetch(request) {
         const path = new URL(request.url).pathname;
         requested.push(path);
@@ -386,7 +390,6 @@ test("install.sh's installer phase downloads only the target's coforge-installer
           : new Response("not found", { status: 404 });
       },
     });
-    servers.push(server);
     const child = await run(
       [
         "--prepare-directory",
@@ -416,14 +419,12 @@ test("install.sh's installer phase downloads only the target's coforge-installer
 
 test("install.sh's installer phase needs a preparation directory and refuses redirects", async () => {
   const requested: string[] = [];
-  const server = Bun.serve({
-    port: 0,
+  const server = serveStub({
     fetch(request) {
       requested.push(new URL(request.url).pathname);
       return new Response("installer bytes", { status: 302, headers: { Location: "/elsewhere" } });
     },
   });
-  servers.push(server);
   const environment = {
     ...process.env,
     COFORGE_RELEASE_FEED_URL: `http://127.0.0.1:${server.port}/installer`,
@@ -516,8 +517,7 @@ test("install.ps1's installer phase downloads only the target's coforge-installe
     const directory = await mkdtemp(join(tmpdir(), "coforge-prepare-"));
     temporaryDirectories.push(directory);
     const requested: string[] = [];
-    const server = Bun.serve({
-      port: 0,
+    const server = serveStub({
       fetch(request) {
         const path = new URL(request.url).pathname;
         requested.push(path);
@@ -526,7 +526,6 @@ test("install.ps1's installer phase downloads only the target's coforge-installe
           : new Response("not found", { status: 404 });
       },
     });
-    servers.push(server);
 
     const child = await runPowerShell(
       [
@@ -553,8 +552,7 @@ test("install.ps1's installer phase downloads only the target's coforge-installe
 
 test("install.ps1's installer phase needs a preparation directory and refuses redirects", async () => {
   const requested: string[] = [];
-  const server = Bun.serve({
-    port: 0,
+  const server = serveStub({
     fetch(request) {
       requested.push(new URL(request.url).pathname);
       return new Response("installer bytes", {
@@ -563,7 +561,6 @@ test("install.ps1's installer phase needs a preparation directory and refuses re
       });
     },
   });
-  servers.push(server);
   const feedUrl = `http://127.0.0.1:${server.port}/installer`;
   const common = ["-Version", "0.1.0", "-Target", "linux-x64", "-PreparePhase", "installer"];
 
@@ -635,8 +632,7 @@ for (const object of ["latest", "manifest.json", "coforge-computer.gz", "photon_
     const directory = await mkdtemp(join(tmpdir(), "coforge-prepare-"));
     temporaryDirectories.push(directory);
     const requested: string[] = [];
-    const server = Bun.serve({
-      port: 0,
+    const server = serveStub({
       fetch(request) {
         const path = new URL(request.url).pathname;
         requested.push(path);
@@ -646,10 +642,9 @@ for (const object of ["latest", "manifest.json", "coforge-computer.gz", "photon_
         );
       },
     });
-    servers.push(server);
     const child = await run(["--prepare-directory", directory], {
       ...process.env,
-      COFORGE_RELEASE_FEED_URL: `http://localhost:${server.port}`,
+      COFORGE_RELEASE_FEED_URL: `http://127.0.0.1:${server.port}`,
       COFORGE_INSTALLER_TEST_MODE: "1",
     });
     expect(child.exitCode).not.toBe(0);
@@ -662,16 +657,14 @@ for (const object of ["latest", "manifest.json", "coforge-computer.gz", "photon_
 test("install.sh bounds manifest downloads at 1 MiB", async () => {
   const directory = await mkdtemp(join(tmpdir(), "coforge-prepare-"));
   temporaryDirectories.push(directory);
-  const server = Bun.serve({
-    port: 0,
+  const server = serveStub({
     fetch() {
       return new Response(Buffer.alloc(1048577, 0x20));
     },
   });
-  servers.push(server);
   const child = await run(["--prepare-directory", directory, "--version", "3.2.1"], {
     ...process.env,
-    COFORGE_RELEASE_FEED_URL: `http://localhost:${server.port}`,
+    COFORGE_RELEASE_FEED_URL: `http://127.0.0.1:${server.port}`,
     COFORGE_INSTALLER_TEST_MODE: "1",
   });
   expect(child.exitCode).not.toBe(0);
@@ -690,17 +683,15 @@ test("install.sh bounds photon_rs_bg.wasm downloads at 16 MiB", async () => {
     [`/${version}/${target}/coforge-computer.gz`, Bun.gzipSync(Buffer.from("test"))],
     [`/${version}/photon_rs_bg.wasm`, oversized],
   ]);
-  const server = Bun.serve({
-    port: 0,
+  const server = serveStub({
     fetch(request) {
       const bytes = files.get(new URL(request.url).pathname);
       return bytes ? new Response(Buffer.from(bytes)) : new Response("not found", { status: 404 });
     },
   });
-  servers.push(server);
   const child = await run(["--prepare-directory", directory, "--version", version], {
     ...process.env,
-    COFORGE_RELEASE_FEED_URL: `http://localhost:${server.port}`,
+    COFORGE_RELEASE_FEED_URL: `http://127.0.0.1:${server.port}`,
     COFORGE_INSTALLER_TEST_MODE: "1",
   });
   expect(child.exitCode).not.toBe(0);
@@ -732,7 +723,7 @@ test("install.sh downloads photon_rs_bg.wasm silently, under the existing Downlo
 test("install.sh rejects an unparsable version before making any request", async () => {
   const child = await run(["--version", "../etc/passwd"], {
     ...process.env,
-    COFORGE_RELEASE_FEED_URL: "http://localhost:1",
+    COFORGE_RELEASE_FEED_URL: "http://127.0.0.1:1",
   });
 
   expect(child.exitCode).not.toBe(0);
@@ -743,7 +734,7 @@ test("install.sh rejects '.' and a version starting with '-' before making any r
   for (const invalid of [".", "-rf"]) {
     const child = await run(["--version", invalid], {
       ...process.env,
-      COFORGE_RELEASE_FEED_URL: "http://localhost:1",
+      COFORGE_RELEASE_FEED_URL: "http://127.0.0.1:1",
     });
     expect(child.exitCode).not.toBe(0);
     expect(child.stderr).toContain("version must be");
@@ -753,7 +744,7 @@ test("install.sh rejects '.' and a version starting with '-' before making any r
 test("install.sh refuses a plain-HTTP feed outside test mode", async () => {
   const child = await run(["--version", "latest"], {
     ...process.env,
-    COFORGE_RELEASE_FEED_URL: "http://localhost:1",
+    COFORGE_RELEASE_FEED_URL: "http://127.0.0.1:1",
   });
 
   expect(child.exitCode).not.toBe(0);
@@ -1198,8 +1189,7 @@ test("install.sh renders native curl progress before a gated response completes"
   const releaseBody = Promise.withResolvers<void>();
   let bodyCompleted = false;
   let cancelled = false;
-  const server = Bun.serve({
-    port: 0,
+  const server = serveStub({
     fetch(request) {
       if (new URL(request.url).pathname.endsWith("manifest.json")) return new Response("{}");
       return new Response(
@@ -1221,7 +1211,6 @@ test("install.sh renders native curl progress before a gated response completes"
       );
     },
   });
-  servers.push(server);
   const args = ["--prepare-directory", directory, "--version", "3.2.1", "--quiet-header"];
   const child = Bun.spawn({
     cmd:
@@ -1240,7 +1229,7 @@ test("install.sh renders native curl progress before a gated response completes"
       HOME: directory,
       NO_COLOR: "1",
       COFORGE_INSTALLER_NO_COLOR: "1",
-      COFORGE_RELEASE_FEED_URL: `http://localhost:${server.port}`,
+      COFORGE_RELEASE_FEED_URL: `http://127.0.0.1:${server.port}`,
       COFORGE_INSTALLER_TEST_MODE: "1",
     },
     stdout: "pipe",
