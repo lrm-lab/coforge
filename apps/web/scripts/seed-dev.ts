@@ -23,6 +23,7 @@ import { getDatabaseClient } from "../src/server/db/client.server";
 import { workspaceIdForUser } from "../src/server/workspaces/enrollment.server";
 import { getFileStorage } from "../src/server/files/file-storage.server";
 import { assignMissingSeedSequences, orderSeedMessages, seedTimestamp } from "./seed-dev-time";
+import { seedTasks } from "./seed-dev-tasks";
 
 const dbOrUndefined = getDatabaseClient();
 if (!dbOrUndefined) throw new Error("DATABASE_URL is required to seed development data");
@@ -785,51 +786,13 @@ console.log(
 // message), covering all five statuses plus a second todo to show an
 // unowned vs. owned card.
 // ---------------------------------------------------------------------------
-async function ensureTask(opts: {
-  key: string;
-  conversationId: string;
-  number: number;
-  title: string;
-  status: "todo" | "in_progress" | "in_review" | "done" | "closed";
-  creatorMemberId: string;
-  ownerMemberId?: string;
-  senderMemberId: string;
-  dayOffset: number;
-}) {
-  const messageId = await ensureMessage({
-    key: `task-source:${opts.key}`,
-    conversationId: opts.conversationId,
-    senderMemberId: opts.senderMemberId,
-    body: opts.title,
-    createdAt: daysAgo(opts.dayOffset, 17),
-  });
-  pendingTasks.push({ messageId, ...opts });
-}
-
-const pendingTasks: Array<Parameters<typeof ensureTask>[0] & { messageId: string }> = [];
-
-async function insertPendingTasks() {
-  for (const opts of pendingTasks)
-    await db.task.upsert({
-      where: { messageId: opts.messageId },
-      create: {
-        messageId: opts.messageId,
-        conversationId: opts.conversationId,
-        workspaceId,
-        number: opts.number,
-        title: opts.title,
-        status: opts.status,
-        creatorMemberId: opts.creatorMemberId,
-        ownerMemberId: opts.ownerMemberId,
-        requestId: stableId(`task-request:${opts.key}`),
-      },
-      update: {
-        title: opts.title,
-        status: opts.status,
-        ownerMemberId: opts.ownerMemberId ?? null,
-      },
-    });
-}
+const { ensureTask, insertPendingTasks } = seedTasks({
+  db,
+  workspaceId,
+  stableId,
+  ensureMessage,
+  daysAgo,
+});
 
 await ensureTask({
   key: "todo-unowned",
