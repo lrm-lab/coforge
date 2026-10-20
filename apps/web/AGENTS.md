@@ -95,62 +95,9 @@ Each line names a directory under `src/` (unless noted) and its single responsib
   draws), `ui/` sanctioned primitives, `layout/` app chrome, `foundations/` logos
   and icons, `spell/` and `magicui/` landing-page motion.
 - `lib/` shared browser capabilities (including clipboard copying) and pure helpers; `hooks/` shared React hooks; `utils/` Untitled UI class helpers.
-- `features/agents/` — Members page, Agent creation, profile panel, control buttons, and Agent status and Activity display.
-- `features/auth/` — the sign-in error page, the split shell of the pages before
-  sign-in, `returnTo` handling, signing out (`signOut`) and the step `/` takes to resume sign-in
-  after signing out to switch account, the first-sign-in name step (`/welcome`), and the auth middleware for server functions.
-- `features/cache-persistence/` — the browser's copy of the Query cache in IndexedDB that Chat opens from (what is kept, per person, removed at sign-out).
-- `features/computers/` — Computer list/detail, setup, and Runtime Usage.
-- `features/conversations/` — channels, direct messages, threads, composer, message rendering, action cards, saved messages, and the sidebar lists.
-- `features/device-auth/` — device-code verification page.
-- `features/errors/` — page-level load-error view and the router's 404 page.
-- `features/files/` — what a file is, from its name and media type: extension, size text, kind, preview kind and language, type label, and the icon it is drawn with (`FileTypeIcon`).
-- `features/inbox/` — the Activity page: conversations and threads not yet marked Done, the viewer's pinned conversations above them, and the conversation a row opens beside the list (a thread's alone; full-screen below `lg` for an `open` link).
-- `features/install/` — Computer install command text.
-- `features/integrations/` — Settings → Integrations GitHub view and functions.
-- `features/landing/` — the public homepage.
-- `features/notifications/` — browser push lifecycle and in-page notifications.
-- `features/panel-tabs/` — each member's saved panel tab order.
-- `features/profiles/` — current-user profile read and update, and the one rule for a person's name (`person-name.ts`).
-- `features/projects/` — Projects directory, project detail, file browser, and project settings page.
-- `features/realtime/` — the one browser Centrifuge connection, and its status as the page shows it (`connection-status.ts`).
-- `features/records/` — Workspace Records (see the last section).
-- `features/settings/` — preference pages and device-local preferences, and what the request says
-  about the browser for the server render (phone or desktop).
-- `features/search/` — the Workspace search page (`search`): filters, matching channels, Agents and Computers, message results with their preview, and the browser-local search history and frequently used places.
-- `features/tasks/` — Task board, list, overview, and message task actions.
-- `features/workspaces/` — Workspace switcher and creation (the switcher dialog and the page a signed-in person in no Workspace lands on, `/workspaces/new`), the Workspace a page URL names (`/w/<slug>`) and the one each QueryClient last showed, member directory reads, member presence (`presence:workspace:<workspace_id>`), join links and the invite-link page (`/join/<token>`), human roles, the Settings → Workspace profile Danger zone (leave, or delete for its owner), leaving a page whose Workspace was deleted (`workspace.deleted.v1`), and the last page `/` returns to.
-- `server/agent-migrations/` — moving an Agent and its workspace files to another Computer: state machine, step roles, fencing, stopping and starting the Agent around the transfer, the leases and cancels pushed to each Computer, and the daemons' HTTPS steps with presigned chunk URLs (`/api/daemon/agent-migrations`).
-- `server/agent-app-configs/` — each Agent App's config for an Agent (the keys it overrode; defaults at revision 0 when unstored), the Agent's own read and revision-checked change of it (`coforge app config`), the daemon's snapshot, and pushing a change to a daemon that advertises `app-config:v1`.
-- `server/agents/` — Agent lifecycle, control, sessions, a new Agent's introduction to its creator, display reduction,
-  Activity (Computer lifecycle rows included), visibility, deletion, and the
-  Agent HTTPS API.
-- `server/attachments/` — attachment upload sessions, claiming a sender's uploads for a new message, and delivery.
-- `server/auth/` — login, sessions, username allocation, the first-sign-in name step, device auth, API keys, and auth guards.
-- `server/authorization-server/` — Login with CoForge: OIDC issuer `<origin>/oidc`: keyset, discovery, JWKS.
-- `server/centrifugo/` — Centrifugo proxies, RPC receivers, and short-lived result caches.
-- `server/computers/` — Computer registration, metadata, restart and upgrade
-  operations, runtime visibility, explicit model catalog refresh, and what the server remembers across a
-  daemon's shutdown and return.
-- `server/hosts/` — host-node enrollment, registration, heartbeat, the global online list, and container-computer jobs.
-- `server/conversations/` — public channels, channel authority, stopping and resuming a channel's Agents, direct messages, history, message search, action cards, reactions, tracked @mention delivery outcomes (`mention-deliveries`), and conversation realtime.
-- `server/db/` — the Prisma client, repositories (a DM's list preferences apart from its messages; the Agent attention rule in `agent-attention`), and the shared unique-violation check.
-- `server/errors/` — public error mapping and request error handling.
-- `server/files/` — file storage (per object, and bulk removal by keys or prefix), delivery, and uploaded-image validation.
-- `server/http/`, `server/install/`, `server/observability/` — public origin,
-  response types and request timeouts, install scripts, tracing, and Server-Timing.
-- `server/inbox/` — the Activity inbox read model and its Done and read-all writes.
-- `server/integrations/` — GitHub connection, configuration, and webhooks.
-- `server/notifications/` — Web Push and in-page notification delivery.
-- `server/profiles/` — user avatars.
-- `server/projects/` — project settings, images, and repository file download.
-- `server/records/` — Workspace Records (see the last section).
-- `server/release-catalog/` — each app release's notes (en, zh-CN): the self-contained release catalog, its PostgreSQL store, and its REST contract (`/api/release-catalog/v1`), split-ready for its own service.
-- `server/reminders/` — cloud Agent Reminders.
-- `server/tasks/` — the message-backed TaskBoard, the shape a Task command must have, the Tasks page's overview reads, its Task view, history records, and notice wording.
-- `server/workspace-memory/` — memory profiles, grounded offers, explicit task-requested four-role diagnosis, target-only Hint receipts and source ACL checks.
-- `server/workspaces/` — Workspace catalog (name, icon and URL, with the former slugs that keep naming a Workspace), selection, enrollment, member roles, member directory, join links, admitting a member (`admitWorkspaceMember`, the one step a join link takes), one submitted server connection per Workspace, deleting a Workspace, removing its memory first and its stored files after, and going out of a Workspace (leaving or deleting it) to the next one.
 - `prisma/` (app root) — schema and migrations; `messages/` — UI translations.
+- `features/` — product feature modules, one line each in [`src/features/AGENTS.md`](src/features/AGENTS.md).
+- `server/` — server-only modules, one line each in [`src/server/AGENTS.md`](src/server/AGENTS.md).
 
 ## A changed file ends without a blank line
 
@@ -162,6 +109,8 @@ it, so a deletion trips this as easily as an addition. Reproduce what CI sees be
 
 ## Nested rules
 
+- Module map of `src/features/` → [`src/features/AGENTS.md`](src/features/AGENTS.md)
+- Module map of `src/server/` → [`src/server/AGENTS.md`](src/server/AGENTS.md)
 - Rules for `prisma/` → [`prisma/AGENTS.md`](prisma/AGENTS.md)
 - Rules for `src/routes/` → [`src/routes/AGENTS.md`](src/routes/AGENTS.md)
 - Rules for `src/components/` → [`src/components/AGENTS.md`](src/components/AGENTS.md)
