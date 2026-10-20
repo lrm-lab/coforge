@@ -35,6 +35,7 @@ function row(overrides: {
         agent: null,
       },
       mentions: [],
+      reactionVersion: 0,
       reactions: [],
       ...overrides.message,
     },

@@ -38,6 +38,8 @@ function fakeDb(
   overrides: {
     message?: unknown;
     member?: unknown;
+    /** The message is deleted between its lookup and the write. */
+    gone?: true;
     remaining?: unknown[];
   } = {},
 ) {
@@ -46,7 +48,11 @@ function fakeDb(
     message: {
       findFirst: async (_query: object) => {
         calls.push("message");
-        return "message" in overrides ? overrides.message : { id: "message-1" };
+        return "message" in overrides ? overrides.message : { id: "message-1", threadRootId: null };
+      },
+      updateManyAndReturn: async () => {
+        calls.push("version");
+        return "gone" in overrides ? [] : [{ reactionVersion: 5 }];
       },
     },
     conversationMember: {
@@ -68,7 +74,20 @@ function fakeDb(
       },
     },
   } as unknown as PrismaClient;
-  return { db, calls };
+  Object.assign(db, {
+    $transaction: async (work: (tx: PrismaClient) => Promise<unknown>) => {
+      const result = await work(db);
+      calls.push("commit");
+      return result;
+    },
+  });
+  // The conversation's open pages hear the summary once the write commits (`writeReaction`).
+  const realtime = {
+    reactionChanged: async ({ version }: { version: number }) => {
+      calls.push(`publish v${version}`);
+    },
+  };
+  return { db, calls, realtime };
 }
 
 async function appErrorCode(run: () => Promise<unknown>): Promise<string | undefined> {
@@ -83,38 +102,54 @@ async function appErrorCode(run: () => Promise<unknown>): Promise<string | undef
 
 describe("toggleUserMessageReaction", () => {
   test("rejects an invalid emoji before touching the database", async () => {
-    const { db, calls } = fakeDb();
+    const { db, calls, realtime } = fakeDb();
     const code = await appErrorCode(() =>
-      toggleUserMessageReaction(db, { ...input, emoji: "not an emoji" }),
+      toggleUserMessageReaction(db, realtime, { ...input, emoji: "not an emoji" }),
     );
     expect(code).toBe("INVALID_INPUT");
     expect(calls).toEqual([]);
   });
 
   test("reports a message outside the conversation as not found", async () => {
-    const { db, calls } = fakeDb({ message: null });
-    const code = await appErrorCode(() => toggleUserMessageReaction(db, input));
+    const { db, calls, realtime } = fakeDb({ message: null });
+    const code = await appErrorCode(() => toggleUserMessageReaction(db, realtime, input));
     expect(code).toBe("NOT_FOUND");
     expect(calls).toEqual(["message"]);
   });
 
   test("denies a reader without an active membership", async () => {
-    const { db, calls } = fakeDb({ member: null });
-    const code = await appErrorCode(() => toggleUserMessageReaction(db, input));
+    const { db, calls, realtime } = fakeDb({ member: null });
+    const code = await appErrorCode(() => toggleUserMessageReaction(db, realtime, input));
     expect(code).toBe("ACCESS_DENIED");
     expect(calls).toEqual(["message", "member"]);
   });
 
-  test("upserts on active and returns the fresh summaries in first-reaction order", async () => {
-    const { db, calls } = fakeDb({
+  test("reports a message deleted before the write as not found", async () => {
+    const { db, calls, realtime } = fakeDb({ gone: true });
+    const code = await appErrorCode(() => toggleUserMessageReaction(db, realtime, input));
+    expect(code).toBe("NOT_FOUND");
+    expect(calls).toEqual(["message", "member", "version", "commit"]);
+  });
+
+  test("upserts on active and returns the fresh summaries in first-reaction order, with their version", async () => {
+    const { db, calls, realtime } = fakeDb({
       remaining: [
         reactionRow("🎉", "user-alice", { username: "alice-3f9", displayName: "Alice" }),
         reactionRow("👍", "user-bob", { username: "bob-7q1", displayName: "Bob" }),
         reactionRow("👍", "user-carol", { username: "carol-2xa", displayName: "Carol" }),
       ],
     });
-    const summaries = await toggleUserMessageReaction(db, input);
-    expect(calls).toEqual(["message", "member", "upsert", "summaries"]);
+    const { reactions: summaries, version } = await toggleUserMessageReaction(db, realtime, input);
+    expect(calls).toEqual([
+      "message",
+      "member",
+      "version",
+      "upsert",
+      "summaries",
+      "commit",
+      "publish v5",
+    ]);
+    expect(version).toBe(5);
     expect(summaries).toEqual([
       { emoji: "🎉", count: 1, reactors: [{ id: "user-alice", label: "Alice" }] },
       {
@@ -129,7 +164,7 @@ describe("toggleUserMessageReaction", () => {
   });
 
   test("names a person by their display name, never their username, and an Agent by its @handle", async () => {
-    const { db } = fakeDb({
+    const { db, realtime } = fakeDb({
       remaining: [
         reactionRow("👍", "user-1", {
           username: "frank-an-4k2",
@@ -139,7 +174,7 @@ describe("toggleUserMessageReaction", () => {
         agentReactionRow("👍", "atlas"),
       ],
     });
-    const summaries = await toggleUserMessageReaction(db, input);
+    const { reactions: summaries } = await toggleUserMessageReaction(db, realtime, input);
     expect(summaries?.[0]?.reactors).toEqual([
       { id: "user-1", label: "Frankie" },
       { id: "user-2", label: UNNAMED_PERSON_NAME },
@@ -150,9 +185,17 @@ describe("toggleUserMessageReaction", () => {
   });
 
   test("deletes on inactive and reports no summaries once the last one is gone", async () => {
-    const { db, calls } = fakeDb({ remaining: [] });
-    const summaries = await toggleUserMessageReaction(db, { ...input, active: false });
-    expect(calls).toEqual(["message", "member", "delete", "summaries"]);
-    expect(summaries).toBeUndefined();
+    const { db, calls, realtime } = fakeDb({ remaining: [] });
+    const answer = await toggleUserMessageReaction(db, realtime, { ...input, active: false });
+    expect(calls).toEqual([
+      "message",
+      "member",
+      "version",
+      "delete",
+      "summaries",
+      "commit",
+      "publish v5",
+    ]);
+    expect(answer).toEqual({ reactions: null, version: 5 });
   });
 });

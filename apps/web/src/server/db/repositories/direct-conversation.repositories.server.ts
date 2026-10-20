@@ -70,6 +70,7 @@ import {
 import { readWindowThreads } from "#src/server/conversations/thread-summaries.server";
 import { windowPageFlags } from "#src/lib/conversation-window";
 import { channelTarget } from "#src/server/conversations/agent-delivery.server";
+import { writeReaction, type ReactionPort } from "#src/server/conversations/reaction-write.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import {
   agentAttentionCountSql,
@@ -81,6 +82,8 @@ import {
   type AgentAttentionScope,
 } from "#src/server/db/repositories/agent-attention.repositories.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
+
+const MESSAGE_NOT_VISIBLE = "message not found or not visible to this Agent";
 
 /** The three Agent-visible sender facts, spread onto every Agent-facing message shape
  * in this file so they cannot drift into three different field sets. */
@@ -648,6 +651,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   constructor(
     private readonly db: PrismaClient,
     { oneRequest = false }: { oneRequest?: boolean } = {},
+    private readonly realtime?: ReactionPort,
   ) {
     if (oneRequest) this.#agentChannels = new Map();
   }
@@ -879,7 +883,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       take: 2,
       include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
     });
-    return onlyAnchorMatch(rows, "message not found or not visible to this Agent");
+    return onlyAnchorMatch(rows, MESSAGE_NOT_VISIBLE);
   }
 
   async resolveAgentMessage(workspaceId: string, agentId: string, anchor: string) {
@@ -899,24 +903,17 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       where: { conversationId: row.conversationId, workspaceId, agentId, ...ACTIVE_MEMBER_WHERE },
       select: { id: true },
     });
-    if (!member)
-      throw new AgentMessageValidationError("message not found or not visible to this Agent");
-    if (active)
-      await this.db.messageReaction.upsert({
-        where: { messageId_memberId_emoji: { messageId: row.id, memberId: member.id, emoji } },
-        create: {
-          messageId: row.id,
-          conversationId: row.conversationId,
-          workspaceId,
-          memberId: member.id,
-          emoji,
-        },
-        update: {},
-      });
-    else
-      await this.db.messageReaction.deleteMany({
-        where: { messageId: row.id, memberId: member.id, emoji },
-      });
+    if (!member) throw new AgentMessageValidationError(MESSAGE_NOT_VISIBLE);
+    const written = await writeReaction(this.db, this.realtime, {
+      workspaceId,
+      conversationId: row.conversationId,
+      messageId: row.id,
+      threadRootId: row.threadRootId,
+      memberId: member.id,
+      emoji,
+      active,
+    });
+    if (!written) throw new AgentMessageValidationError(MESSAGE_NOT_VISIBLE);
     return { messageId: row.id };
   }
 

@@ -46,6 +46,10 @@ export const browserMessageFields = {
     },
   },
   mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
+  // The version is a column of the message row, which Prisma reads in the same statement as the
+  // reactions or before them, never after: it may understate the summary beside it, never
+  // overstate it, so the page still shows any newer `message.reaction.v1` it hears.
+  reactionVersion: true,
   reactions: MESSAGE_REACTIONS_SELECT,
 } satisfies Prisma.MessageSelect;
 
@@ -106,6 +110,9 @@ export function mapBrowserMessage(message: BrowserMessageRow, workspaceId: strin
     mentions: message.mentions.map(browserMessageMention),
     attachments: message.attachments.map((attachment) => attachmentView(attachment)),
     reactions: reactionSummaries(message.reactions),
+    /** The `reactionVersion` that `reactions` is at least as new as. Typed optional, like
+     * `senderUserId`, for a message the browser cached before it existed. */
+    ...({ reactionVersion: message.reactionVersion } as { reactionVersion?: number }),
     // Attached by the caller (`conversations.functions.ts`, `ActionCards.viewsFor`) in one
     // batched lookup per page; this function never queries `ActionCard` rows itself.
     actionCard: undefined as ActionCardView | undefined,

@@ -154,6 +154,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
           { id: second.id, fileName: "b.txt", contentType: "text/plain", sizeBytes: 2 },
         ],
         reactions: undefined,
+        reactionVersion: 0,
         actionCard: undefined,
       },
       {
@@ -173,6 +174,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
         mentions: [],
         attachments: [],
         reactions: [{ emoji: "👍", count: 1, reactors: [{ id: bob.id, label: bob.username }] }],
+        reactionVersion: 0,
         actionCard: undefined,
       },
       {
@@ -192,6 +194,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
         mentions: [],
         attachments: [],
         reactions: undefined,
+        reactionVersion: 0,
         actionCard: undefined,
       },
       {
@@ -211,6 +214,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
         mentions: [],
         attachments: [],
         reactions: undefined,
+        reactionVersion: 0,
         actionCard: undefined,
       },
     ];
@@ -266,6 +270,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
           member: { user: { displayName: bob.username }, agent: null },
         },
       ],
+      reactionVersion: 0,
       reactions: [],
       // The Agent is a channel member, so the send delivered to it.
       deliveries: [

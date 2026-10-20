@@ -36,43 +36,5 @@ export function applyReactionToggle(
   return next.length ? next : undefined;
 }
 
-/**
- * Toggles the viewer's reactions optimistically on a loaded conversation: the chip changes at
- * once, the server's summary for that message then replaces the local guess, and a failed call
- * re-reads the conversation (`resync`) before the error reaches the caller. Only the newest
- * toggle on a message settles it, so an older answer arriving late cannot undo a newer click.
- */
-export function createReactionToggler<M extends { reactions?: ReactionSummary[] }>(deps: {
-  /** Replace one loaded message; leaves every other message object as it is. */
-  update: (messageId: string, update: (message: M) => M) => void;
-  resync: () => Promise<unknown>;
-}) {
-  const latest = new Map<string, number>();
-  let issued = 0;
-  return async function toggleReaction(
-    messageId: string,
-    emoji: string,
-    /** The viewer; without one the chip waits for the server's summary. */
-    reactor: Reactor | undefined,
-    active: boolean,
-    send: () => Promise<ReactionSummary[] | undefined>,
-  ) {
-    const token = ++issued;
-    latest.set(messageId, token);
-    if (reactor)
-      deps.update(messageId, (message) => ({
-        ...message,
-        reactions: applyReactionToggle(message.reactions, emoji, reactor, active),
-      }));
-    try {
-      const reactions = await send();
-      if (latest.get(messageId) === token)
-        deps.update(messageId, (message) => ({ ...message, reactions }));
-    } catch (error) {
-      void deps.resync().catch(() => {});
-      throw error;
-    } finally {
-      if (latest.get(messageId) === token) latest.delete(messageId);
-    }
-  };
-}
+/** A message's reactions at one `reactionVersion` (`reaction-sync.ts`); null once none is left. */
+export type VersionedReactions = { reactions: ReactionSummary[] | null; version: number };

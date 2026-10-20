@@ -181,11 +181,9 @@ These rules apply to `src/features/conversations/`.
   action (delete). Hiding `#general` and the way back (the System channels
   section of Settings → Members) are for a Workspace owner or admin only; the
   server decides who that is, the client never re-derives it from a role.
-- A conversation that answers `NOT_FOUND` (such as a channel just hidden from
-  the Workspace or deleted) leaves for Chat through `ConversationLoadError`; do not show
-  it as a load failure.
-- Leaving a channel reuses the never-joined read-only conversation state and
-  `joined: false` in the channel list. Do not add a separate "left" state.
+- A conversation that answers `NOT_FOUND` (such as a channel just hidden from the Workspace or deleted) leaves for Chat
+  through `ConversationLoadError`; do not show it as a load failure.
+- Leaving a channel reuses the never-joined read-only conversation state and `joined: false` in the channel list. Do not add a separate "left" state.
 - A human commits an action card through `CreateChannelDialog`, `AgentCreateDialog`, or
   `ChannelAddMembersDialog` with their preselect/commit props; the sidebar "+" is the create
   dialog's `memberPicker` mode (public Agents only). Do not build card-specific creation forms.
@@ -195,5 +193,7 @@ These rules apply to `src/features/conversations/`.
   panel's members page. Both pickers compose `channel-member-picker.tsx` (the candidate model,
   the picked chips and the ticked rows) and read the one `channelMembersQueryKey` query through
   `channel-members-query.ts`, so neither grows its own candidate list.
-- The browser refreshes only the pending action cards it shows, through
-  `loadActionCardStates` on the `messageAvailable` signal and on window focus.
+- The browser refreshes only the pending action cards it shows, through `loadActionCardStates` on the `messageAvailable` signal and on window focus.
+- A reaction arrives as `message.reaction.v1` (the message's whole summary and its `reactionVersion`) and shows without a
+  read only when newer than the loaded message's version, with the viewer's pending clicks folded over it (`reaction-sync.ts`);
+  after a resubscribe that lost publications the page re-reads all loaded messages' reactions (`loadMessageReactions`).

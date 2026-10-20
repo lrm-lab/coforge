@@ -7,6 +7,7 @@ import {
   type ChannelCreatedEvent,
   type ChannelUpdatedEvent,
   type MessageAvailableEvent,
+  type MessageReactionEvent,
   type MemberChangedEvent,
   type ViewerEvent,
   type ChannelInfo,
@@ -156,6 +157,8 @@ export function channelInfoOf(channel: {
   };
 }
 
+export type ReactionSignal = Omit<MessageReactionEvent, "type">;
+
 export type ConversationRealtime = {
   messageAvailable(input: ConversationRealtimeMessage & { publicationId?: string }): Promise<void>;
   /** A push telling each named channel's open pages that its member list is stale. */
@@ -176,6 +179,8 @@ export type ConversationRealtime = {
   /** A push telling each named person's own pages that their place in a conversation changed
    * (`ViewerEvent`). Optional: a port without it announces nothing. */
   viewerChanged?(input: { userIds: readonly string[]; event: ViewerEvent }): Promise<void>;
+  /** `MessageReactionEvent`; optional, like the above. */
+  reactionChanged?(input: ReactionSignal): Promise<void>;
 };
 
 export class CentrifugoConversationRealtime implements ConversationRealtime {
@@ -238,6 +243,15 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
       input.userIds.map(userConversationChannel),
       input.event,
       crypto.randomUUID(),
+    );
+  }
+
+  async reactionChanged(input: ReactionSignal) {
+    // Only its own channel; a fresh key, as Centrifugo drops a key it saw minutes ago.
+    await this.centrifugo.publishJson(
+      conversationRealtimeChannel(input.conversationId),
+      { type: "message.reaction.v1", ...input } satisfies MessageReactionEvent,
+      `${input.messageId}:reaction:${crypto.randomUUID()}`,
     );
   }
 
@@ -404,6 +418,18 @@ export async function announceChannelUpdated(
   await announceBestEffort(realtime, (port) => port.channelUpdated?.(input), {
     name: "channel_updated",
     workspace_id: input.workspaceId,
+  });
+}
+
+/** A message's reactions after a committed write; best effort, as above. */
+export async function announceReactionChanged(
+  realtime: Pick<ConversationRealtime, "reactionChanged"> | undefined,
+  workspaceId: string,
+  signal: ReactionSignal,
+): Promise<void> {
+  await announceBestEffort(realtime, (port) => port.reactionChanged?.(signal), {
+    name: "reaction_changed",
+    workspace_id: workspaceId,
   });
 }
 

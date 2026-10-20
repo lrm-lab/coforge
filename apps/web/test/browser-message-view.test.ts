@@ -172,6 +172,7 @@ function row(overrides: Partial<BrowserMessageRow>): BrowserMessageRow {
     sender: null,
     attachments: [],
     mentions: [],
+    reactionVersion: 0,
     reactions: [],
     ...overrides,
   };

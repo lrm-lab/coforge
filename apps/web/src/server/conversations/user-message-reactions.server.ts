@@ -2,21 +2,20 @@ import { isValidReactionEmoji } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
-import {
-  MESSAGE_REACTIONS_SELECT,
-  reactionSummaries,
-  type MessageReactionSummary,
-} from "./message-reactions.server";
+import type { ConversationRealtime } from "./conversation-realtime.server";
+import { writeReaction, type VersionedReactions } from "./reaction-write.server";
 
 /**
  * A signed-in user's own emoji reaction on one conversation message. Conversation-scope
  * authorization (DM ownership, channel visibility) stays with the caller — the DM
  * repository and `PublicChannels` own those checks next to their send paths; this only
- * resolves the caller's active membership, toggles the row, and returns the message's
- * fresh reaction summaries for the browser to display.
+ * resolves the caller's active membership, then writes the reaction (`writeReaction`, which tells
+ * the conversation's open pages through `realtime`) and returns the message's fresh reaction
+ * summaries, with their version, for the browser to display.
  */
 export async function toggleUserMessageReaction(
   db: PrismaClient,
+  realtime: Pick<ConversationRealtime, "reactionChanged"> | undefined,
   input: {
     workspaceId: string;
     conversationId: string;
@@ -25,12 +24,12 @@ export async function toggleUserMessageReaction(
     emoji: string;
     active: boolean;
   },
-): Promise<MessageReactionSummary[] | undefined> {
+): Promise<VersionedReactions> {
   const { workspaceId, conversationId, userId, messageId, emoji, active } = input;
   if (!isValidReactionEmoji(emoji)) throw new AppError("INVALID_INPUT");
   const message = await db.message.findFirst({
     where: { id: messageId, conversationId, workspaceId },
-    select: { id: true },
+    select: { id: true, threadRootId: true },
   });
   if (!message) throw new AppError("NOT_FOUND");
   const member = await db.conversationMember.findFirst({
@@ -38,25 +37,16 @@ export async function toggleUserMessageReaction(
     select: { id: true },
   });
   if (!member) throw new AppError("ACCESS_DENIED");
-  if (active)
-    await db.messageReaction.upsert({
-      where: { messageId_memberId_emoji: { messageId: message.id, memberId: member.id, emoji } },
-      create: {
-        messageId: message.id,
-        conversationId,
-        workspaceId,
-        memberId: member.id,
-        emoji,
-      },
-      update: {},
-    });
-  else
-    await db.messageReaction.deleteMany({
-      where: { messageId: message.id, memberId: member.id, emoji },
-    });
-  const rows = await db.messageReaction.findMany({
-    where: { messageId: message.id },
-    ...MESSAGE_REACTIONS_SELECT,
+  const written = await writeReaction(db, realtime, {
+    workspaceId,
+    conversationId,
+    messageId: message.id,
+    threadRootId: message.threadRootId,
+    memberId: member.id,
+    emoji,
+    active,
   });
-  return reactionSummaries(rows);
+  // The message was deleted after it was found.
+  if (!written) throw new AppError("NOT_FOUND");
+  return written;
 }

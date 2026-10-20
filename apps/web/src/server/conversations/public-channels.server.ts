@@ -2457,9 +2457,9 @@ export class PublicChannels {
   }
 
   /**
-   * The browser's own emoji reaction on a channel message. Same visibility scope as the
-   * other per-message writes here; the shared toggle additionally requires the caller's
-   * active membership, so a reader who never joined cannot react.
+   * The browser's own emoji reaction on a channel message: the visibility scope of the other
+   * per-message writes here, and the shared toggle requires active membership, so a reader who
+   * never joined cannot react.
    */
   async toggleUserReaction(
     workspaceId: string,
@@ -2470,7 +2470,7 @@ export class PublicChannels {
     active: boolean,
   ) {
     await this.channel(workspaceId, userId, channelId);
-    return toggleUserMessageReaction(this.db, {
+    return toggleUserMessageReaction(this.db, this.realtime, {
       workspaceId,
       conversationId: channelId,
       userId,

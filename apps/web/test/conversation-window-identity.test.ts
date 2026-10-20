@@ -29,6 +29,7 @@ function row(sequence: number, overrides: Partial<BrowserMessageRow> = {}): Brow
     sender: null,
     attachments: [],
     mentions: [],
+    reactionVersion: 0,
     reactions: [],
     ...overrides,
   };

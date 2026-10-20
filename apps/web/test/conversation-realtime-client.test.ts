@@ -33,10 +33,33 @@ function fakeClient() {
 
 const originals = { document: globalThis.document, window: globalThis.window };
 
+/** The page's `document`: its visibility, and the visibility listeners the subscription added. */
+let page: { visibilityState: string; visibilityListeners: (() => void)[] };
+
+/** The tab becomes hidden or visible again. */
+function setVisibility(state: "hidden" | "visible") {
+  page.visibilityState = state;
+  for (const listener of page.visibilityListeners) listener();
+}
+
 beforeEach(() => {
   const target = { addEventListener() {}, removeEventListener() {} };
+  const visibilityListeners: (() => void)[] = [];
+  page = {
+    visibilityState: "visible",
+    visibilityListeners,
+  };
+  const document = {
+    removeEventListener() {},
+    addEventListener(event: string, listener: () => void) {
+      if (event === "visibilitychange") visibilityListeners.push(listener);
+    },
+    get visibilityState() {
+      return page.visibilityState;
+    },
+  };
   Object.assign(globalThis, {
-    document: { ...target, visibilityState: "visible" },
+    document,
     window: { ...target, setInterval: () => 0, clearInterval() {} },
   });
 });
@@ -153,5 +176,59 @@ describe("subscribeToConversationRealtime", () => {
     publish({ type: "member.changed.v1", conversationId: "conversation-a", workspaceId: "w" });
     expect(memberChanges).toEqual(["page-payload", "all", "all"]);
     expect(reconciled).toBe(2);
+  });
+
+  test("a reaction event reaches the page whether or not the tab is visible, and reads nothing", () => {
+    const { client, publish } = fakeClient();
+    const heard: unknown[] = [];
+    let reconciled = 0;
+    subscribeToConversationRealtime(client, {
+      conversationId: "conversation-a",
+      getToken: async () => "token",
+      reconcile: () => {
+        reconciled += 1;
+      },
+      onReaction: (event) => heard.push(event),
+    });
+    const event = {
+      type: "message.reaction.v1",
+      conversationId: "conversation-a",
+      messageId: "reply-a",
+      threadRootId: "root-a",
+      version: 4,
+      reactions: [{ emoji: "👍", count: 1, reactors: [{ id: "user-a", label: "Ada" }] }],
+    };
+
+    publish(event);
+    page.visibilityState = "hidden";
+    publish({ ...event, version: 5, reactions: null });
+    // Another conversation's, and a malformed one, are not this page's.
+    publish({ ...event, conversationId: "conversation-b" });
+    publish({ ...event, version: "6" });
+
+    expect(heard).toEqual([event, { ...event, version: 5, reactions: null }]);
+    expect(reconciled).toBe(0);
+  });
+
+  test("only a resubscribe that lost publications says reactions may be stale", () => {
+    const { client, subscribed } = fakeClient();
+    let lost = 0;
+    subscribeToConversationRealtime(client, {
+      conversationId: "conversation-a",
+      getToken: async () => "token",
+      reconcile: () => {},
+      onPublicationsLost: () => {
+        lost += 1;
+      },
+    });
+
+    subscribed({ wasRecovering: false, recovered: false });
+    subscribed({ wasRecovering: true, recovered: true });
+    // Events apply while the tab is hidden, so becoming visible again repairs nothing.
+    setVisibility("hidden");
+    setVisibility("visible");
+    expect(lost).toBe(0);
+    subscribed({ wasRecovering: true, recovered: false });
+    expect(lost).toBe(1);
   });
 });

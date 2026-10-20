@@ -603,14 +603,12 @@ model DaemonCredentialRevocation {
   @@map("daemon_credential_revocations")
 }
 
-/// One in-flight RFC 8628 device authorization grant. This is deliberately durable rather than
-/// in-process state: the browser approving a grant and the Computer polling for it are different
-/// requests that need not reach the same web replica, and a deploy between `login` and the user
-/// finishing the approval page must not silently invalidate the grant.
+/// One in-flight RFC 8628 device authorization grant, durable rather than in-process: the browser
+/// approving it and the Computer polling for it may reach different web replicas, and a deploy
+/// between `login` and the user finishing the approval page must not silently invalidate it.
 ///
-/// Neither secret is stored in the clear. The device code is the bearer the Computer polls with,
-/// and the user code is short enough to be typed - and therefore short enough to be guessed - so
-/// both are looked up by hash, the same way daemon API keys are.
+/// Neither secret is stored in the clear: the device code is the Computer's polling bearer, and the
+/// user code is short enough to type, so to guess; both are looked up by hash, like daemon API keys.
 model DeviceAuthorization {
   id             String    @id @default(uuid(7)) @db.Uuid
   deviceCodeHash String    @unique @map("device_code_hash")
@@ -939,6 +937,8 @@ model Message {
   savedBy        SavedMessage[]
   task           Task?
   actionCard     ActionCard?
+  /// Raised in each reaction write's transaction; pages show the newest summary.
+  reactionVersion Int                  @default(0)
 
   @@unique([id, conversationId])
   @@unique([conversationId, sequence])

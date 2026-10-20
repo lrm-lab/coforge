@@ -306,3 +306,34 @@ export type ChannelCreatedEvent = z.infer<typeof channelCreatedEvent>;
 export function decodeChannelCreatedEvent(value: unknown): ChannelCreatedEvent | undefined {
   return decodeJsonPublication(channelCreatedEvent, value);
 }
+
+const messageReactionEvent = z.object({
+  type: z.literal("message.reaction.v1"),
+  conversationId: z.string().min(1),
+  messageId: z.string().min(1),
+  threadRootId: z.string().min(1).optional(),
+  /** The message's `reactionVersion` once the write committed. */
+  version: z.number().int().positive(),
+  /** The message's reactions after the write; null once none is left. */
+  reactions: z
+    .array(
+      z.object({
+        emoji: z.string().min(1),
+        count: z.number().int().positive(),
+        reactors: z.array(z.object({ id: z.string().min(1), label: z.string() })),
+      }),
+    )
+    .nullable(),
+});
+
+/**
+ * A message's reactions changed (Slack's `reaction_added` / `reaction_removed`): the whole summary
+ * and version after a committed write (`reaction-sync.ts`). Only on the conversation's own channel,
+ * whose subscribers may read those reactions anyway; unlike the id-only signals it names reactors.
+ */
+export type MessageReactionEvent = z.infer<typeof messageReactionEvent>;
+
+/** The event, or undefined for any other publication on the conversation's channel. */
+export function decodeMessageReactionEvent(value: unknown): MessageReactionEvent | undefined {
+  return decodeJsonPublication(messageReactionEvent, value);
+}

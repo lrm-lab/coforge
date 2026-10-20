@@ -31,6 +31,7 @@ const BROWSER_MESSAGE_KEYS = [
   "mentions",
   "attachments",
   "reactions",
+  "reactionVersion",
   "actionCard",
 ];
 
@@ -86,7 +87,7 @@ test("a direct conversation's page and poll return the same browser message shap
     const root = await repo.sendMessage(conversationId, senderMemberId, user.id, "release plan", [
       attachment.id,
     ]);
-    await toggleUserMessageReaction(db, {
+    await toggleUserMessageReaction(db, undefined, {
       workspaceId: workspace.id,
       conversationId,
       userId: user.id,
@@ -148,6 +149,8 @@ test("a direct conversation's page and poll return the same browser message shap
           { id: attachment.id, fileName: "notes.txt", contentType: "text/plain", sizeBytes: 12 },
         ],
         reactions: [{ emoji: "👍", count: 1, reactors: [{ id: user.id, label: "Ada Lovelace" }] }],
+        // The one reaction write raised it.
+        reactionVersion: 1,
         actionCard: undefined,
       },
       {
@@ -168,6 +171,7 @@ test("a direct conversation's page and poll return the same browser message shap
         ],
         attachments: [],
         reactions: undefined,
+        reactionVersion: 0,
         actionCard: undefined,
       },
       {
@@ -186,6 +190,7 @@ test("a direct conversation's page and poll return the same browser message shap
         mentions: [],
         attachments: [],
         reactions: undefined,
+        reactionVersion: 0,
         actionCard: undefined,
       },
     ];

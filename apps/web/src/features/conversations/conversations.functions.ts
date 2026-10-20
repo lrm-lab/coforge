@@ -20,6 +20,7 @@ import { announceSentTask } from "#src/server/tasks/browser-task-board.server";
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { userConversationChannel } from "./conversation-realtime";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
+import { toggleDirectReaction } from "#src/server/conversations/reaction-toggles.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { attachActionCardViews } from "#src/server/conversations/action-cards.server";
@@ -281,11 +282,12 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
     );
   });
 
-/** The viewer's own emoji reaction on a DM message; returns the message's fresh summaries. */
+/** The viewer's own emoji reaction on a DM message; returns the message's fresh summaries, for a
+ * tab opened before reactions had versions (`toggleDirectReaction`). */
 export const toggleDirectMessageReaction = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(directConversationInputSchema.extend(toggleMessageReactionInputSchema.shape))
-  .handler(async ({ context: { user, db, workspaceId }, data }) => {
-    const { conversationId, ...reaction } = data;
-    return new DirectConversations(db).react(workspaceId, user.id, conversationId, reaction);
+  .handler(async ({ context, data }) => {
+    const { reactions } = await toggleDirectReaction(context, data);
+    return reactions ?? undefined;
   });

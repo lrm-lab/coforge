@@ -46,7 +46,7 @@ export class DirectConversations {
 
   constructor(
     private readonly db: PrismaClient,
-    private readonly realtime?: Pick<ConversationRealtime, "viewerChanged">,
+    private readonly realtime?: Pick<ConversationRealtime, "viewerChanged" | "reactionChanged">,
   ) {
     this.conversations = new PrismaDirectConversationRepository(db);
     this.preferences = new PrismaDirectConversationPreferences(db);
@@ -294,7 +294,8 @@ export class DirectConversations {
     );
   }
 
-  /** The viewer's own emoji reaction on a message; returns the message's fresh summaries. */
+  /** The viewer's own emoji reaction on a message; returns the message's fresh summaries and
+   * their version. */
   async react(
     workspaceId: string,
     viewerId: string,
@@ -302,7 +303,7 @@ export class DirectConversations {
     reaction: { messageId: string; emoji: string; active: boolean },
   ) {
     await this.authorize(workspaceId, viewerId, conversationId);
-    return toggleUserMessageReaction(this.db, {
+    return toggleUserMessageReaction(this.db, this.realtime, {
       workspaceId,
       conversationId,
       userId: viewerId,

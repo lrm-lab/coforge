@@ -8,7 +8,6 @@ import {
   markPublicChannelThreadRead,
   sendPublicChannelMessage,
   setPublicChannelThreadFollowed,
-  toggleChannelMessageReaction,
 } from "./channels.functions";
 import {
   directConversationQuery,
@@ -25,8 +24,11 @@ import {
   loadOwnConversationMessages,
   markDirectThreadRead,
   sendDirectConversationMessage,
-  toggleDirectMessageReaction,
 } from "./conversations.functions";
+import {
+  toggleChannelMessageReactionVersioned,
+  toggleDirectMessageReactionVersioned,
+} from "./message-reactions.functions";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -46,7 +48,7 @@ export function useChannelConversation(channelId: string) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const send = useServerFn(sendPublicChannelMessage);
-  const toggleReaction = useServerFn(toggleChannelMessageReaction);
+  const toggleReaction = useServerFn(toggleChannelMessageReactionVersioned);
   const join = useServerFn(joinPublicChannel);
   const markRead = useServerFn(markPublicChannelThreadRead);
   const setThreadFollowed = useServerFn(setPublicChannelThreadFollowed);
@@ -135,7 +137,7 @@ export function useChannelConversation(channelId: string) {
  */
 export function useDirectConversation(conversationId: string) {
   const send = useServerFn(sendDirectConversationMessage);
-  const toggleReaction = useServerFn(toggleDirectMessageReaction);
+  const toggleReaction = useServerFn(toggleDirectMessageReactionVersioned);
   const markRead = useServerFn(markDirectThreadRead);
   const loadOwnMessages = useServerFn(loadOwnConversationMessages);
   const page = useConversationQuery({

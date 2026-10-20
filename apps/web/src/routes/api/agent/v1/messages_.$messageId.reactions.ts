@@ -2,6 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { AgentReactionResponse } from "@lrm/coforge-sdk/agent";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   reactToAgentMessage,
   type AgentMessageRepository,
@@ -39,6 +42,12 @@ export async function handleAgentMessageReaction(
   }
 }
 
+/** The repository an Agent reacts through, announcing each reaction to open pages. */
+function agentReactionRepository(db: PrismaClient) {
+  const realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
+  return new PrismaDirectConversationRepository(db, {}, realtime);
+}
+
 export const Route = createFileRoute("/api/agent/v1/messages_/$messageId/reactions")({
   server: {
     middleware: [agentAuthMiddleware],
@@ -49,7 +58,7 @@ export const Route = createFileRoute("/api/agent/v1/messages_/$messageId/reactio
           params.messageId,
           true,
           principal,
-          new PrismaDirectConversationRepository(db),
+          agentReactionRepository(db),
         ),
       DELETE: ({ request, context: { principal, db }, params }) =>
         handleAgentMessageReaction(
@@ -57,7 +66,7 @@ export const Route = createFileRoute("/api/agent/v1/messages_/$messageId/reactio
           params.messageId,
           false,
           principal,
-          new PrismaDirectConversationRepository(db),
+          agentReactionRepository(db),
         ),
     },
   },

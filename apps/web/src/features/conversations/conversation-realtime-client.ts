@@ -12,6 +12,8 @@ import {
   decodeChannelUpdatedEvent,
   decodeMemberChangedEvent,
   decodeMessageAvailableEvent,
+  decodeMessageReactionEvent,
+  type MessageReactionEvent,
 } from "./conversation-realtime";
 import { deviceComposerOutbox } from "./use-message-outbox";
 
@@ -57,6 +59,13 @@ export function subscribeToConversationRealtime<T extends RealtimeSubscription>(
      * id, so the page can swap its greyed pending copy for the real message (see
      * `composer-outbox.ts`). */
     onSentMessage?: (idempotencyKey: string, messageId: string) => void;
+    /** A message's reactions after a write, heard whether or not the tab is visible: applying
+     * it reads nothing. */
+    onReaction?: (event: MessageReactionEvent) => void;
+    /** A resubscribe could not replay every missed publication: the loaded messages' reactions
+     * may be stale. A first subscribe does not count: the page's read carries no stream position
+     * to compare (`streamMovedSince`), so a change between that read and it waits for the next. */
+    onPublicationsLost?: () => void;
   },
 ) {
   const channel = conversationRealtimeChannel(input.conversationId);
@@ -74,6 +83,7 @@ export function subscribeToConversationRealtime<T extends RealtimeSubscription>(
     const gap = subscriptionGap(context);
     if (gap === "none") return;
     requestReconciliation();
+    if (gap === "lost") input.onPublicationsLost?.();
     input.onMemberChanged?.(gap === "unrecovered" ? "page-payload" : "all");
   });
   subscription.on("publication", ({ data }) => {
@@ -84,6 +94,11 @@ export function subscribeToConversationRealtime<T extends RealtimeSubscription>(
       requestReconciliation();
       return;
     } catch {}
+    const reaction = decodeMessageReactionEvent(data);
+    if (reaction) {
+      if (reaction.conversationId === input.conversationId) input.onReaction?.(reaction);
+      return;
+    }
     // Not a message event: the other payloads this channel carries are a membership change,
     // which stale-dates the member directory, and a change to the channel's own facts. Neither
     // touches the message window.
@@ -117,6 +132,8 @@ export function useConversationRealtime(
   reconcile: () => Promise<void>,
   onMemberChanged?: (stale: MemberDirectoryStale) => void,
   onChannelUpdated?: () => void,
+  onReaction?: (event: MessageReactionEvent) => void,
+  onPublicationsLost?: () => void,
 ) {
   const client = useBrowserRealtime();
   const getToken = useServerFn(getConversationRealtimeToken);
@@ -126,6 +143,10 @@ export function useConversationRealtime(
   memberChangedRef.current = onMemberChanged;
   const channelUpdatedRef = useRef(onChannelUpdated);
   channelUpdatedRef.current = onChannelUpdated;
+  const reactionRef = useRef(onReaction);
+  reactionRef.current = onReaction;
+  const publicationsLostRef = useRef(onPublicationsLost);
+  publicationsLostRef.current = onPublicationsLost;
 
   useEffect(() => {
     if (!client || !conversationId) return;
@@ -137,6 +158,8 @@ export function useConversationRealtime(
       onChannelUpdated: () => channelUpdatedRef.current?.(),
       onSentMessage: (idempotencyKey, messageId) =>
         deviceComposerOutbox().acknowledge(idempotencyKey, messageId),
+      onReaction: (event) => reactionRef.current?.(event),
+      onPublicationsLost: () => publicationsLostRef.current?.(),
     });
   }, [client, conversationId, getToken]);
 }

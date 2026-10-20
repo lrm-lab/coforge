@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   applyReactionToggle,
-  createReactionToggler,
+  type VersionedReactions,
 } from "#src/features/conversations/message-reactions";
+import { createReactionSync } from "#src/features/conversations/reaction-sync";
 
 const jordan = { id: "user-jordan", label: "Jordan Lee" };
 const atlas = { id: "agent-atlas", label: "@atlas" };
@@ -52,16 +53,23 @@ describe("applyReactionToggle", () => {
   });
 });
 
-type Message = { id: string; reactions?: ReturnType<typeof applyReactionToggle> };
+type Message = {
+  id: string;
+  sequence: number;
+  reactions?: ReturnType<typeof applyReactionToggle>;
+  reactionVersion?: number;
+};
 
 /** A loaded conversation of one message, with the server call held open until released. */
 function harness(initial: Message["reactions"]) {
-  let message: Message = { id: "m1", reactions: initial };
+  let message: Message = { id: "m1", sequence: 1, reactions: initial, reactionVersion: 1 };
   let resyncs = 0;
-  const toggle = createReactionToggler<Message>({
+  const { toggle } = createReactionSync<Message>({
+    loaded: () => [message],
     update: (messageId, update) => {
       if (messageId === message.id) message = update(message);
     },
+    load: async () => ({}),
     resync: async () => {
       resyncs++;
     },
@@ -78,39 +86,44 @@ function harness(initial: Message["reactions"]) {
   return { toggle, gate, current: () => message.reactions, resyncs: () => resyncs };
 }
 
-describe("createReactionToggler", () => {
+describe("ReactionSync.toggle", () => {
   test("shows the change before the server answers, then settles on the server's summary", async () => {
     const h = harness([thumbs]);
-    const server = h.gate<Message["reactions"]>();
+    const server = h.gate<VersionedReactions>();
     const done = h.toggle("m1", "👍", dev, true, () => server.promise);
     expect(h.current()).toEqual([{ emoji: "👍", count: 3, reactors: [jordan, atlas, dev] }]);
     // The server also saw a concurrent 🎉 from someone else: its answer wins.
     const authoritative = [{ emoji: "👍", count: 3, reactors: [jordan, atlas, dev] }, party];
-    server.release(authoritative);
+    server.release({ reactions: authoritative, version: 2 });
     await done;
     expect(h.current()).toEqual(authoritative);
     expect(h.resyncs()).toBe(0);
   });
 
-  test("an older answer arriving after a newer toggle does not overwrite it", async () => {
+  test("an older answer arriving after a newer one does not overwrite it", async () => {
     const h = harness([thumbs]);
-    const add = h.gate<Message["reactions"]>();
-    const remove = h.gate<Message["reactions"]>();
+    const add = h.gate<VersionedReactions>();
+    const remove = h.gate<VersionedReactions>();
     const first = h.toggle("m1", "👍", dev, true, () => add.promise);
     const second = h.toggle("m1", "👍", dev, false, () => remove.promise);
-    remove.release([thumbs]);
+    remove.release({ reactions: [thumbs], version: 3 });
     await second;
-    add.release([{ emoji: "👍", count: 3, reactors: [jordan, atlas, dev] }]);
+    add.release({
+      reactions: [{ emoji: "👍", count: 3, reactors: [jordan, atlas, dev] }],
+      version: 2,
+    });
     await first;
     expect(h.current()).toEqual([thumbs]);
   });
 
   test("a failed toggle re-reads the conversation and still reports the error", async () => {
     const h = harness([thumbs]);
-    const server = h.gate<Message["reactions"]>();
+    const server = h.gate<VersionedReactions>();
     const done = h.toggle("m1", "👍", dev, true, () => server.promise);
     server.fail(new Error("offline"));
     await expect(done).rejects.toThrow("offline");
     expect(h.resyncs()).toBe(1);
+    // The click is no longer pending: the guess gives way to what the server last said.
+    expect(h.current()).toEqual([thumbs]);
   });
 });

@@ -35,12 +35,14 @@ import {
   loadPublicChannel,
   loadPublicChannelUpdates,
 } from "./channels.functions";
-import { loadActionCardStates } from "./action-cards.functions";
+import { refreshPendingActionCards } from "./action-card-refresh";
+import { loadMessageReactions } from "./message-reactions.functions";
+import { createReactionSync } from "./reaction-sync";
 import { channelMembersQueryKey, channelNamesQueryKey } from "./conversation-query-keys";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
 import { listSavedMessages } from "./saved-messages.functions";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
-import { createReactionToggler, type ReactionSummary } from "./message-reactions";
+import type { ReactionSummary } from "./message-reactions";
 import {
   applyThreadRead,
   conversationThreadsQueryKey,
@@ -376,21 +378,13 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     // `windowKey` changes only with `windowHash`.
     [queryClient, windowHash, reconciliation],
   );
-  /** Refreshes just the pending action cards currently shown, in the window and the open threads,
-   * without re-fetching the whole page; reads the live message list at call time via the closure
-   * captured into `reconcileRef` by `useConversationRealtime`. */
-  const refreshActionCards = async () => {
-    const pendingIds = [
-      ...conversation.messages,
-      ...loadedThreadReplies<M>(queryClient, conversationId),
-    ]
-      .filter((message) => message.actionCard?.state === "pending")
-      .map((message) => message.id);
-    if (!pendingIds.length) return;
-    const states = await loadActionCardStates({ data: { messageIds: pendingIds } });
-    for (const [messageId, state] of Object.entries(states))
-      updateMessageRef.current(messageId, (message) => ({ ...message, actionCard: state }));
-  };
+  /** The loaded messages, in the window and the open threads, read at call time. */
+  const loaded = () => [
+    ...conversation.messages,
+    ...loadedThreadReplies<M>(queryClient, conversationId),
+  ];
+  const loadedRef = useRef(loaded);
+  loadedRef.current = loaded;
   /** Replace one loaded message, in the window or in the open thread that holds it, keeping every
    * other page, thread and message object as it is. */
   const updateMessage = (messageId: string, update: (message: M) => M) => {
@@ -411,10 +405,12 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   };
   const updateMessageRef = useRef(updateMessage);
   updateMessageRef.current = updateMessage;
-  const toggleReaction = useMemo(
+  const reactionSync = useMemo(
     () =>
-      createReactionToggler<M>({
+      createReactionSync<M>({
+        loaded: () => loadedRef.current(),
         update: (messageId, update) => updateMessageRef.current(messageId, update),
+        load: (messageIds) => loadMessageReactions({ data: { conversationId, messageIds } }),
         // A reaction that failed may sit on a reply, which the window does not hold: the open
         // threads are read again with it.
         resync: () =>
@@ -425,7 +421,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
             }),
           ]),
       }),
-    // A new conversation starts a new toggler, like the reconciler above.
+    // A new conversation starts a new one, like the reconciler above.
     [conversationId],
   );
   useConversationRealtime(
@@ -434,7 +430,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
       await Promise.all([
         reconciliation.reconcile(),
         onRealtimeRef.current?.(),
-        refreshActionCards(),
+        refreshPendingActionCards(loadedRef.current(), updateMessageRef.current),
       ]);
     },
     // A membership change stale-dates the composer's @-directory (and plain-@handle
@@ -453,6 +449,8 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     // The channel was renamed, described, archived, unarchived or hidden elsewhere: refetch the
     // page, which carries those facts. Inert for DMs.
     () => void queryClient.invalidateQueries({ queryKey: query.queryKey }).catch(() => {}),
+    (event) => reactionSync.apply(event.messageId, event),
+    () => void reactionSync.repair(),
   );
 
   /** Replace the loaded history with a window around one message. */
@@ -516,7 +514,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     /** Re-read every loaded page after a change the realtime feed does not carry. */
     invalidate: () => queryClient.invalidateQueries({ queryKey: query.queryKey }),
     /** Toggle the viewer's reaction: shown at once, settled by the server's summary for that
-     * message (no page re-read), re-read only when the call fails. */
-    toggleReaction,
+     * message (`reaction-sync.ts`), re-read only when the call fails. */
+    toggleReaction: reactionSync.toggle,
   };
 }

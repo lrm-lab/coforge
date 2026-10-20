@@ -8,6 +8,7 @@ import {
 import { AppError, isAppErrorCode } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { toggleChannelReaction } from "#src/server/conversations/reaction-toggles.server";
 import { ChannelAgentControl } from "#src/server/conversations/channel-agent-control.server";
 import { CHANNEL_AGENT_GUIDANCE_MAX_LENGTH } from "#src/lib/channel-agent-guidance";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
@@ -524,13 +525,6 @@ export const toggleChannelMessageReaction = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    return channels.toggleUserReaction(
-      workspaceId,
-      userId,
-      data.channelId,
-      data.messageId,
-      data.emoji,
-      data.active,
-    );
+    const { reactions } = await toggleChannelReaction(context, data);
+    return reactions ?? undefined;
   });
