@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Archive,
   Check,
-  ChevronRight,
   EyeOff,
   LogOut01 as LogOut,
   RefreshCcw01 as Unarchive,
@@ -22,8 +21,6 @@ import {
 } from "#src/components/application/slideout-menus/slideout-menu";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { Avatar } from "#src/components/base/avatar/avatar";
-import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -31,10 +28,7 @@ import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { Select } from "#src/components/base/select/select";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
-import { Skeleton } from "#src/components/ui/skeleton";
 import { useAppToast } from "#src/components/ui/toast";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
 import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
@@ -47,6 +41,7 @@ import {
   type RosterProfile,
 } from "./channel-members-page";
 import { useChannelMembers } from "./channel-members-query";
+import { MembersStrip } from "./channel-members-strip";
 import {
   deletePublicChannel,
   leavePublicChannel,
@@ -60,8 +55,6 @@ import {
 } from "./channels.functions";
 import { StopChannelAgentsDialog } from "./stop-channel-agents-dialog";
 
-/** How many member avatars the strip shows before the "+N" tile. */
-const MEMBER_STRIP_LIMIT = 14;
 const SAVED_NOTICE_MS = 1500;
 
 /** The channel actions that ask for confirmation first. */
@@ -188,11 +181,11 @@ export function ChannelSettingsPanel({
               </div>
             ) : (
               <>
-                <SlideoutMenu.Header
-                  onClose={() => requestClose()}
-                  className="border-b border-secondary pb-4"
-                >
-                  {membersView ? (
+                {membersView ? (
+                  // A sub-page leads back with its arrow and has no close button; Escape and a
+                  // click outside still close the panel. `SlideoutMenu.Header` always draws one,
+                  // so these classes copy its frame (slideout-menu.tsx); keep the two in sync.
+                  <header className="relative z-1 w-full border-b border-secondary px-4 pt-6 pb-4 md:px-6">
                     <MembersPageHeading
                       key={membersView}
                       channelId={channelId}
@@ -200,27 +193,27 @@ export function ChannelSettingsPanel({
                       takesFocus={!returnFocus}
                       onBack={() => changeMembersView(membersView === "add" ? "members" : null)}
                     />
-                  ) : (
-                    <>
-                      <div className="flex min-w-0 items-center gap-2 pr-8">
-                        <Heading
-                          slot="title"
-                          className="truncate text-lg font-semibold text-primary"
-                        >
-                          #{conversation.name}
-                        </Heading>
-                        <Badge size="sm" color="gray" className="shrink-0">
-                          {m.channel_settings_public()}
-                        </Badge>
-                      </div>
-                      {conversation.description && (
-                        <p className="mt-1 truncate text-sm text-tertiary">
-                          {conversation.description}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </SlideoutMenu.Header>
+                  </header>
+                ) : (
+                  <SlideoutMenu.Header
+                    onClose={() => requestClose()}
+                    className="border-b border-secondary pb-4"
+                  >
+                    <div className="flex min-w-0 items-center gap-2 pr-8">
+                      <Heading slot="title" className="truncate text-lg font-semibold text-primary">
+                        #{conversation.name}
+                      </Heading>
+                      <Badge size="sm" color="gray" className="shrink-0">
+                        {m.channel_settings_public()}
+                      </Badge>
+                    </div>
+                    {conversation.description && (
+                      <p className="mt-1 truncate text-sm text-tertiary">
+                        {conversation.description}
+                      </p>
+                    )}
+                  </SlideoutMenu.Header>
+                )}
                 {membersView ? (
                   <div className="flex min-h-0 w-full flex-1 flex-col">
                     <ChannelMembersPage
@@ -389,7 +382,7 @@ function PanelSection({ title, children }: { title: string; children: ReactNode 
 }
 
 /** The members page's header: Back (to the roster from the add view, else to the settings), its
- * title and, on the roster, the member count. */
+ * title and, on the roster, the member count. No close button: Back is the way out. */
 function MembersPageHeading({
   channelId,
   view,
@@ -405,7 +398,7 @@ function MembersPageHeading({
   const members = useChannelMembers(channelId);
   const count = members.data ? members.data.humans.length + members.data.agents.length : null;
   return (
-    <div className="flex min-w-0 items-center gap-2 pr-8">
+    <div className="flex min-w-0 items-center gap-2">
       <ButtonUtility
         icon={ArrowLeft}
         size="sm"
@@ -425,86 +418,6 @@ function MembersPageHeading({
         </Badge>
       )}
     </div>
-  );
-}
-
-function MembersStrip({
-  channelId,
-  canAdd,
-  onOpenMembers,
-  onAddMembers,
-}: {
-  channelId: string;
-  canAdd: boolean;
-  onOpenMembers: () => void;
-  onAddMembers: () => void;
-}) {
-  const members = useChannelMembers(channelId);
-  const humans = members.data?.humans ?? [];
-  const agents = members.data?.agents ?? [];
-  const entries = [
-    ...humans.map((human) => ({ key: `user:${human.id}`, ...human })),
-    ...agents.map((agent) => ({ key: `agent:${agent.id}`, ...agent })),
-  ];
-  const shown = entries.slice(0, MEMBER_STRIP_LIMIT);
-  const more = entries.length - shown.length;
-  return (
-    <section className="py-5">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-md font-semibold text-primary">{m.channel_settings_members()}</h3>
-        <Button
-          color="link-gray"
-          size="sm"
-          iconTrailing={ChevronRight}
-          className="min-w-0"
-          onPress={onOpenMembers}
-        >
-          {members.data
-            ? `${m.channel_settings_humans({ count: humans.length })} · ${m.channel_settings_agents({ count: agents.length })}`
-            : m.channel_members_loading()}
-        </Button>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2" aria-busy={members.isPending}>
-        {members.isPending &&
-          Array.from({ length: 3 }, (_, index) => (
-            <Skeleton key={index} className="size-8 rounded-full" />
-          ))}
-        {members.isError && (
-          <p role="alert" className="text-sm text-error-primary">
-            {m.channel_members_load_error()}
-          </p>
-        )}
-        {shown.map((entry) => (
-          <Tooltip key={entry.key} title={entry.displayName}>
-            <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
-              <Avatar
-                size="sm"
-                alt=""
-                src={entry.avatarUrl ?? undefined}
-                initials={avatarInitial(entry.displayName)}
-                contentClassName={avatarToneClassName(entry.displayName)}
-              />
-              <span className="sr-only">{entry.displayName}</span>
-            </TooltipTrigger>
-          </Tooltip>
-        ))}
-        {more > 0 && (
-          <Tooltip title={m.channel_settings_members_more({ count: more })}>
-            <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
-              <Avatar size="sm" alt="" initials={`+${more}`} />
-              <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
-            </TooltipTrigger>
-          </Tooltip>
-        )}
-        {canAdd && members.data && (
-          <AvatarAddButton
-            size="sm"
-            title={m.channel_settings_add_members()}
-            onPress={onAddMembers}
-          />
-        )}
-      </div>
-    </section>
   );
 }
 

@@ -75,12 +75,14 @@ export function pickedMemberIds(keys: Iterable<string>, byKey: Map<string, Chann
   };
 }
 
-/** What a picker's rows are inset by: a settings page's own padding, or a dialog's narrower body. */
-type Inset = "page" | "dialog";
+/** What a picker's rows are inset by: a settings page's own padding, a dialog's narrower body, or
+ * a bordered box that already sits inside the page's padding. */
+type Inset = "page" | "dialog" | "box";
 
 const insets: Record<Inset, string> = {
   page: "px-4 md:px-6",
   dialog: "px-2",
+  box: "px-3",
 };
 
 /** The picked people and Agents, each removable without hunting for its row in the list. */

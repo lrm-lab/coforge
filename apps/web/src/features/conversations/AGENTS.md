@@ -164,10 +164,10 @@ These rules apply to `src/features/conversations/`.
   Agent's or a person's, opens that profile inside the sheet too (a person's
   Agents open there as well), and its Back returns to the roster with its
   search kept and focus on that row. The page and the
-  panel's Members strip read one `channelMembersQueryKey` query; a write
+  panel's Members strip (`channel-members-strip.tsx`) read one `channelMembersQueryKey` query; a write
   updates or invalidates it rather than keeping its own copy. Removing a
   member confirms in a dialog: no toast, no browser `confirm()`. The add
-  view's last row creates a public Agent (for a Workspace owner or admin, per
+  view (`channel-add-members-view.tsx`) ends with a row that creates a public Agent (for a Workspace owner or admin, per
   the server's `canCreateAgents`) and then adds it. A join that fails offers
   a retry and disables the entry, so the Agent is not created twice.
 - The header gear opens `channel-settings-panel.tsx`, the one place for a

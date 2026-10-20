@@ -132,16 +132,16 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await waitFor(`${panel}?.querySelector('[aria-label="Add members"]') != null`);
     await browser("eval", `${panel}.querySelector('[aria-label="Add members"]').click()`);
     await waitFor(panelHas("Add selected (0)"));
-    await waitFor(panelHas("Create a new Agent"));
+    await waitFor(panelHas("Create Agent"));
     expect(
       await evaluate<boolean>(
-        panelHas(`Joins #${channel.channelName} automatically after it is created`),
+        panelHas(`Joins #${channel.channelName} automatically after creation`),
       ),
     ).toBe(true);
 
     // A search that matches nobody names the Agent to create.
     await browser("fill", 'input[placeholder="Name"]', agentName);
-    await waitFor(panelHas(`No matches for “${agentName}”`));
+    await waitFor(panelHas(`No members match “${agentName}”`));
     await waitFor(panelHas(`Create Agent “${agentName}”`));
     await browser("screenshot", join(artifacts, "entry.png"));
 
@@ -167,7 +167,7 @@ test("the add view creates an Agent named by the search, and it joins the channe
     // Creating it adds it to the channel and clears the search.
     await clickText(`[role="dialog"] button`, "Create Agent");
     await waitFor(`${agentForm} === undefined`);
-    await waitFor(`!${panelHas(`No matches for “${agentName}”`)}`);
+    await waitFor(`!${panelHas(`No members match “${agentName}”`)}`);
     const created = await db.agent.findFirstOrThrow({ where: { workspaceId, name: agentName } });
     expect(created.visibility).toBe("public");
     expect(
@@ -205,7 +205,7 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await waitFor(panelHas("only a Workspace owner or admin can create Agents"));
     expect(
       await evaluate<boolean>(
-        `[...${panel}.querySelectorAll("button")].some((button) => button.textContent.startsWith("Create a new Agent"))`,
+        `[...${panel}.querySelectorAll("button")].some((button) => button.textContent.startsWith("Create Agent"))`,
       ),
     ).toBe(false);
     await browser("screenshot", join(artifacts, "denied.png"));

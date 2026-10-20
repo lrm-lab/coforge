@@ -1980,7 +1980,7 @@ export class PublicChannels {
       // Only a Workspace owner or admin hides #general (`setGeneralHidden`), whatever their role in it.
       canHideGeneral: canHideGeneralChannel(channel.channelName!, authority.serverRole),
       canDelete: canDeleteChannel(channel.channelName!, authority.serverRole),
-      // The add view's "Create a new Agent" (`ManageAgents.create`'s rule).
+      // The add view's "Create Agent" (`ManageAgents.create`'s rule).
       canCreateAgents: canCreateAgents(authority.serverRole),
       // Any member of a live channel stops its Agents (`ChannelAgentControl.stopAll`).
       canStopAgents: authority.isActiveMember && channel.archivedAt === null,
