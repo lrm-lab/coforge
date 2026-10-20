@@ -273,8 +273,14 @@ export async function startEvalDaemon(input: {
       },
     };
   } catch (error) {
-    await runtime?.stop().catch(() => undefined);
-    proxy.close();
+    // stop() may throw before it returns its promise; the startup error is the one to report.
+    try {
+      await runtime?.stop();
+    } catch {
+      // Ignored: the proxy still closes and `error` is rethrown.
+    } finally {
+      proxy.close();
+    }
     throw error;
   }
 }
