@@ -52,11 +52,16 @@ import {
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
-export type ExternalCodeAgentProbe = CodeAgentProbe;
+export type ExternalCodeAgentProbe = CodeAgentProbe & {
+  /** Provider-specific installer locations are outside PATH; production checks them on disk while
+   * tests declare their own hermetic filesystem boundary. */
+  exists?(executable: string): boolean | Promise<boolean>;
+};
 
 /** Probes the Code Agent CLIs installed on this host: PATH lookups and real `--version` spawns. */
 export const hostCodeAgentProbe: ExternalCodeAgentProbe = {
   which: (name, searchPath) => Bun.which(name, { PATH: searchPath }) ?? undefined,
+  exists: (executable) => Bun.file(executable).exists(),
   spawn: (executable, env) =>
     Bun.spawn({
       cmd: [executable, "--version"],
@@ -80,31 +85,136 @@ export const hostCodeAgentProbe: ExternalCodeAgentProbe = {
     }
     return readVersionWithBun(executable, env);
   },
-  resolve: async (provider, name, searchPath) =>
+  resolve: async (provider, _name, searchPath) =>
     provider === RUNTIME_PROVIDER.CLAUDE_CODE
       ? await resolveClaudeCodeExecutable(
           (value) => Bun.which(value, { PATH: searchPath }) ?? undefined,
         )
-      : (Bun.which(name, { PATH: searchPath }) ?? undefined),
+      : undefined,
 };
 
+type InstalledExecutableCandidates = (
+  environment: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform,
+) => string[];
+
+const noInstalledExecutableCandidates: InstalledExecutableCandidates = () => [];
+
+function homeDirectory(
+  environment: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  return environment.HOME ?? environment.USERPROFILE;
+}
+
+function codexInstalledExecutableCandidates(
+  environment: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform,
+): string[] {
+  const home = homeDirectory(environment);
+  const installDirectory = environment.CODEX_INSTALL_DIR;
+  // Codex's standalone installer can target CODEX_INSTALL_DIR. The macOS Codex and ChatGPT apps
+  // bundle the same CLI under Contents/Resources:
+  // https://developers.openai.com/codex/app/
+  const candidates = installDirectory ? [join(installDirectory, "codex")] : [];
+  if (home) candidates.push(join(home, ".local", "bin", "codex"));
+  if (platform !== "darwin") return candidates;
+  for (const applicationDirectory of [
+    ...(home ? [join(home, "Applications")] : []),
+    "/Applications",
+  ])
+    for (const application of ["ChatGPT.app", "Codex.app"])
+      candidates.push(join(applicationDirectory, application, "Contents", "Resources", "codex"));
+  return candidates;
+}
+
+function openCodeInstalledExecutableCandidates(
+  environment: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform,
+): string[] {
+  const home = homeDirectory(environment);
+  return home
+    ? [join(home, ".opencode", "bin", platform === "win32" ? "opencode.exe" : "opencode")]
+    : [];
+}
+
+function grokInstalledExecutableCandidates(
+  environment: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform,
+): string[] {
+  const executable = platform === "win32" ? "grok.exe" : "grok";
+  const home = homeDirectory(environment);
+  return [
+    ...(environment.GROK_BIN_DIR ? [join(environment.GROK_BIN_DIR, executable)] : []),
+    ...(environment.GROK_HOME ? [join(environment.GROK_HOME, "bin", executable)] : []),
+    ...(home ? [join(home, ".grok", "bin", executable)] : []),
+  ];
+}
+
 const externalCodeAgents = [
-  { provider: RUNTIME_PROVIDER.CODEX, executable: "codex" },
-  { provider: RUNTIME_PROVIDER.CLAUDE_CODE, executable: "claude" },
-  { provider: RUNTIME_PROVIDER.KIRO, executable: "kiro-cli" },
-  { provider: RUNTIME_PROVIDER.CURSOR, executable: "cursor-agent" },
-  { provider: RUNTIME_PROVIDER.OPENCODE, executable: "opencode" },
-  { provider: RUNTIME_PROVIDER.GROK, executable: "grok" },
-  { provider: RUNTIME_PROVIDER.ANTIGRAVITY, executable: "agy" },
+  {
+    provider: RUNTIME_PROVIDER.CODEX,
+    executable: "codex",
+    installedExecutableCandidates: codexInstalledExecutableCandidates,
+  },
+  {
+    provider: RUNTIME_PROVIDER.CLAUDE_CODE,
+    executable: "claude",
+    installedExecutableCandidates: noInstalledExecutableCandidates,
+  },
+  {
+    provider: RUNTIME_PROVIDER.KIRO,
+    executable: "kiro-cli",
+    installedExecutableCandidates: noInstalledExecutableCandidates,
+  },
+  {
+    provider: RUNTIME_PROVIDER.CURSOR,
+    executable: "cursor-agent",
+    installedExecutableCandidates: noInstalledExecutableCandidates,
+  },
+  {
+    provider: RUNTIME_PROVIDER.OPENCODE,
+    executable: "opencode",
+    // The official installer sets INSTALL_DIR=$HOME/.opencode/bin:
+    // https://opencode.ai/v2/install
+    installedExecutableCandidates: openCodeInstalledExecutableCandidates,
+  },
+  {
+    provider: RUNTIME_PROVIDER.GROK,
+    executable: "grok",
+    // The official installer uses GROK_BIN_DIR or $HOME/.grok/bin:
+    // https://x.ai/cli/install.sh
+    installedExecutableCandidates: grokInstalledExecutableCandidates,
+  },
+  {
+    provider: RUNTIME_PROVIDER.ANTIGRAVITY,
+    executable: "agy",
+    installedExecutableCandidates: noInstalledExecutableCandidates,
+  },
 ] as const;
 
 /** The subset of RuntimeProvider backed by an external executable this module probes. */
 type ExternalCodeAgentProvider = (typeof externalCodeAgents)[number]["provider"];
+type ExternalCodeAgent = (typeof externalCodeAgents)[number];
 
 /** `externalCodeAgents`, keyed by provider, for callers that already know which one they want. */
-const externalCodeAgentExecutable: Record<ExternalCodeAgentProvider, string> = Object.fromEntries(
-  externalCodeAgents.map(({ provider, executable }) => [provider, executable]),
-) as Record<ExternalCodeAgentProvider, string>;
+const externalCodeAgent: Record<ExternalCodeAgentProvider, ExternalCodeAgent> = Object.fromEntries(
+  externalCodeAgents.map((agent) => [agent.provider, agent]),
+) as Record<ExternalCodeAgentProvider, ExternalCodeAgent>;
+async function resolveExternalCodeAgentExecutable(
+  agent: ExternalCodeAgent,
+  probe: ExternalCodeAgentProbe,
+  searchPath: string | undefined,
+  environment: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform,
+): Promise<string | undefined> {
+  const resolved = await probe.resolve?.(agent.provider, agent.executable, searchPath);
+  if (resolved) return resolved;
+  const fromPath = probe.which(agent.executable, searchPath);
+  if (fromPath) return fromPath;
+  for (const candidate of agent.installedExecutableCandidates(environment, platform))
+    if (await probe.exists?.(candidate)) return candidate;
+  return undefined;
+}
 
 /** The three probe strategies external providers use to turn a resolved executable into a version. */
 async function probeRuntimeVersion(
@@ -190,11 +300,17 @@ export async function discoverExternalCodeAgents(
   const results = await Promise.all(
     externalCodeAgents
       .filter(({ provider }) => !requestedProvider || requestedProvider === provider)
-      .map(async ({ provider, executable: name }) => {
+      .map(async (agent) => {
+        const { provider, executable: name } = agent;
         let executable: string | undefined;
         try {
-          executable =
-            (await probe.resolve?.(provider, name, searchPath)) ?? probe.which(name, searchPath);
+          executable = await resolveExternalCodeAgentExecutable(
+            agent,
+            probe,
+            searchPath,
+            environment,
+            platform,
+          );
           if (!executable) {
             logger.info("Code Agent executable was not found", {
               event: "code_agent_runtime:not_found",
@@ -359,10 +475,16 @@ async function catalogCacheKeyPaths(
   probe: ExternalCodeAgentProbe,
   searchPath: string | undefined,
   environment: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform,
 ): Promise<string[] | undefined> {
   if (provider === RUNTIME_PROVIDER.PI) return piCacheKeyPaths(environment);
-  const name = externalCodeAgentExecutable[provider];
-  const executable = probe.which(name, searchPath);
+  const executable = await resolveExternalCodeAgentExecutable(
+    externalCodeAgent[provider],
+    probe,
+    searchPath,
+    environment,
+    platform,
+  );
   return executable ? [executable] : undefined;
 }
 
@@ -415,7 +537,13 @@ export async function loadCachedCodeAgentCatalogs(
       provider === RUNTIME_PROVIDER.PI || runtimes.some((runtime) => runtime.provider === provider),
   );
   for (const provider of providers) {
-    const keyPaths = await catalogCacheKeyPaths(provider, probe, searchPath, environment);
+    const keyPaths = await catalogCacheKeyPaths(
+      provider,
+      probe,
+      searchPath,
+      environment,
+      options.platform ?? process.platform,
+    );
     const key = keyPaths ? await fileStatCacheKey(keyPaths) : undefined;
     const cached = key && cache ? cache[provider] : undefined;
     const fresh = key !== undefined && cached?.key === key && cached.catalog !== undefined;
@@ -441,6 +569,14 @@ export async function discoverCodeAgentCatalogs(
   const searchPath = codeAgentExecutableSearchPath(environment, options.platform);
   const cwd = options.cwd ?? process.cwd();
   const commands = options.commands ?? {};
+  const resolveExecutable = (provider: ExternalCodeAgentProvider) =>
+    resolveExternalCodeAgentExecutable(
+      externalCodeAgent[provider],
+      probe,
+      searchPath,
+      environment,
+      options.platform ?? process.platform,
+    );
   type Discovered = {
     provider?: (typeof CACHEABLE_CATALOG_PROVIDERS)[number];
     keyPaths?: string[];
@@ -462,7 +598,7 @@ export async function discoverCodeAgentCatalogs(
     })),
   );
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.CODEX)) {
-    const executable = probe.which(externalCodeAgentExecutable[RUNTIME_PROVIDER.CODEX], searchPath);
+    const executable = await resolveExecutable(RUNTIME_PROVIDER.CODEX);
     if (executable)
       discoveries.push(
         discoverCodexCatalog(
@@ -484,7 +620,7 @@ export async function discoverCodeAgentCatalogs(
     );
   }
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.KIRO)) {
-    const executable = probe.which(externalCodeAgentExecutable[RUNTIME_PROVIDER.KIRO], searchPath);
+    const executable = await resolveExecutable(RUNTIME_PROVIDER.KIRO);
     if (executable)
       discoveries.push(
         discoverKiroCatalog(
@@ -501,10 +637,7 @@ export async function discoverCodeAgentCatalogs(
       );
   }
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.CURSOR)) {
-    const executable = probe.which(
-      externalCodeAgentExecutable[RUNTIME_PROVIDER.CURSOR],
-      searchPath,
-    );
+    const executable = await resolveExecutable(RUNTIME_PROVIDER.CURSOR);
     if (executable)
       discoveries.push(
         discoverCursorCatalog(commands.cursor ?? [executable, "models"], cwd, environment)
@@ -520,7 +653,7 @@ export async function discoverCodeAgentCatalogs(
   // probed: an Agent whose runtime is Grok Build saw an empty model list in the UI even though
   // `grok models` lists models fine on the CLI.
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.GROK)) {
-    const executable = probe.which(externalCodeAgentExecutable[RUNTIME_PROVIDER.GROK], searchPath);
+    const executable = await resolveExecutable(RUNTIME_PROVIDER.GROK);
     if (executable)
       discoveries.push(
         discoverGrokCatalog(commands.grok ?? [executable], cwd, environment)
@@ -533,10 +666,7 @@ export async function discoverCodeAgentCatalogs(
       );
   }
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.ANTIGRAVITY)) {
-    const executable = probe.which(
-      externalCodeAgentExecutable[RUNTIME_PROVIDER.ANTIGRAVITY],
-      searchPath,
-    );
+    const executable = await resolveExecutable(RUNTIME_PROVIDER.ANTIGRAVITY);
     if (executable)
       discoveries.push(
         discoverAntigravityCatalog(
@@ -554,10 +684,7 @@ export async function discoverCodeAgentCatalogs(
   // never probed: an Agent whose runtime is OpenCode saw an empty model list in the UI even
   // though `opencode models` lists models fine on the CLI.
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.OPENCODE)) {
-    const executable = probe.which(
-      externalCodeAgentExecutable[RUNTIME_PROVIDER.OPENCODE],
-      searchPath,
-    );
+    const executable = await resolveExecutable(RUNTIME_PROVIDER.OPENCODE);
     if (executable)
       discoveries.push(
         discoverOpenCodeCatalog(commands.opencode ?? [executable, "models"], cwd, environment)
