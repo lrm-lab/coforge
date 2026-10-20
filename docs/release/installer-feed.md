@@ -68,8 +68,8 @@ applied or verified by this workflow.
   stays invisible to Computers while an edge holds the old copy. The rule is
   tabulated in
   [`cdn-domains.md`](../operations/aliyun-oss-cdn/cdn-domains.md#53-url-signingcache-与-headers)
-  and recorded as pending in
-  [`staging-record.md`](../operations/aliyun-oss-cdn/staging-record.md). Verify it:
+  and recorded as applied in
+  [`staging-record.md`](../operations/aliyun-oss-cdn/staging-record.md) (staging, 2026-10-20). Verify it:
 
   ```sh
   curl -sI https://releases-staging.coforge.cn/installer/latest | grep -iE '^(HTTP|cache-control|age|x-cache)'
