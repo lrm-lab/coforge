@@ -53,6 +53,7 @@ test("dependency changes include downstream consumers, but not unrelated modules
     "computer",
     "daemon",
     "macos-lifecycle",
+    "web",
     "windows-release",
   ]);
   expect(selectChecks(["packages/agent/src/contract.ts"], "changes")).toEqual([
@@ -170,7 +171,7 @@ test("benchmark changes run the Web job, which checks the benchmarks, and deploy
   expect(ci.jobs.web.steps[benchmarks].if).toBe("inputs.track != 'web'");
 });
 
-test("Daemon changes run the Web job, whose tests and benchmarks import Daemon, and deploy nothing", () => {
+test("Daemon and CLI changes run the Web job, whose tests and benchmarks import them, and deploy nothing", () => {
   // apps/web/bunfig.toml preloads a Daemon test helper; Web tests and benchmarks import its source.
   expect(selectChecks(["packages/daemon/index.ts"], "changes")).toContain("web");
   expect(selectChecks(["packages/daemon/test/cli-temp-state.preload.ts"], "changes")).toContain(
@@ -178,6 +179,9 @@ test("Daemon changes run the Web job, whose tests and benchmarks import Daemon, 
   );
   // The image has no Daemon, so a Daemon change selects no Web deployment.
   expect(selectChecks(["packages/daemon/index.ts"], "web")).toEqual([]);
+  // Web's type check compiles CLI source through test/fixtures/channel-thread-e2e-runtime.ts.
+  expect(selectChecks(["packages/coforge/src/local-client.ts"], "changes")).toContain("web");
+  expect(selectChecks(["packages/coforge/src/local-client.ts"], "web")).toEqual([]);
 });
 
 test("deployment validates the exact Web track only when the image or deployment is affected", () => {
