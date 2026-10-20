@@ -29,7 +29,8 @@
     "pretest": "bun run db:generate",
     "precheck": "bun run db:generate",
     "prebuild": "bun run db:generate",
-    "dev:hmr": "bun run ./scripts/dev-web-hmr.ts"
+    "dev:hmr": "bun run ./scripts/dev-web-hmr.ts",
+    "local-servers": "bun run ./scripts/local-servers.ts"
   },
   "dependencies": {
     "@alicloud/credentials": "2.4.7",

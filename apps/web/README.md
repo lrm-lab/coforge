@@ -59,6 +59,14 @@ auto-compile. For Vite HMR while iterating on UI (and for
 
 The scripts find the mise Bun install if `bun` is not on PATH. Re-running a
 script replaces whatever is already listening on that port.
+The server a `start-web`, `start-server` or `dev-web-hmr` script started stops
+with it (`scripts/supervised-bun.ts`): a stop, Ctrl-C or closed terminal is
+passed on to it, and if the script is killed outright the server notices within
+half a second and stops itself. A server still running 10 seconds after being
+asked to stop is killed. `bun run --cwd apps/web local-servers list` shows what
+is running, and `local-servers stop --stale` stops servers whose checkout is gone
+or that listen on no port; when `lsof` shows no listening socket on the machine
+at all, it stops nothing.
 
 Edit `src/routes/index.tsx` to get started. Add route files under
 `src/routes`; TanStack Router updates `src/routeTree.gen.ts` for you.
