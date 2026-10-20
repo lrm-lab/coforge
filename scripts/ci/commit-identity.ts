@@ -1,7 +1,7 @@
 // The hard rules' identity rule (scripts/ci/hard-rules.ts): the author and committer of a commit
 // must not look like an Agent or bot. It reads them for the commit being made (pre-commit) or for
 // every commit in a range (CI), and reports which identity matched which pattern. No allowlist.
-// See docs/agents/git-hooks.md.
+// See docs/agents/git-hooks/hard-rules.md.
 import { git } from "../git-hooks/staged-file-size";
 
 /** Where an Agent or bot identity was found, and which one. */

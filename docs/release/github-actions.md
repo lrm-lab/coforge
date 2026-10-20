@@ -67,7 +67,7 @@ Shared protocol, global toolchain/configuration, lockfile, CI, and unclassified
 paths select full PR coverage. Only known documentation locations are exempt;
 Markdown assets inside source directories remain code inputs. Documentation-only
 PRs run path selection, changed-line whitespace checks and the
-[hard rules](../agents/git-hooks.md#hard-rules) (size ratchet, relative Markdown
+[hard rules](../agents/git-hooks/hard-rules.md) (size ratchet, relative Markdown
 links, new suppressions, author identity) without installing workspace
 dependencies. CI-policy tests and workflow/static lint run as a parallel script
 suite when shared inputs, CI, or unclassified files change.

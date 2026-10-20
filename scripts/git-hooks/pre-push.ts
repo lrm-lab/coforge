@@ -5,7 +5,7 @@
 // remote sha, with only the pushed commits' identities checked, as CI does on a push. A new ref, or
 // one whose remote sha is unknown here, is judged from its merge base with origin/main, as a pull
 // request is; without one it is skipped with a warning. A deletion sends nothing to check.
-// See docs/agents/git-hooks.md.
+// See docs/agents/git-hooks/hard-rules.md.
 import { join } from "node:path";
 
 const checker = join(import.meta.dir, "../ci/hard-rules.ts");

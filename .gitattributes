@@ -1,6 +1,7 @@
 # Files no agent writes (linguist-generated): lockfiles and generated code.
-# The pre-commit file size check (docs/agents/git-hooks.md) skips them; GitHub leaves them out of
-# language statistics and suppresses them in diffs. Mark a file only if it is genuinely generated.
+# The pre-commit file size check (docs/agents/git-hooks/size-limit.md) skips them; GitHub leaves
+# them out of language statistics and suppresses them in diffs. Mark a file only if it is genuinely
+# generated.
 # A pattern without a slash matches that file name in every directory.
 
 # Lockfiles

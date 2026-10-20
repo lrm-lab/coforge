@@ -1,7 +1,7 @@
 #!/bin/sh
 # CoForge pre-push hook: runs the hard rules (scripts/ci/hard-rules.ts --range) on exactly what
 # each pushed ref sends, as CI will judge it (scripts/git-hooks/pre-push.ts reads git's ref lines
-# from stdin: https://git-scm.com/docs/githooks#_pre_push); see docs/agents/git-hooks.md.
+# from stdin: https://git-scm.com/docs/githooks#_pre_push); see docs/agents/git-hooks/hard-rules.md.
 # `bun install` enables it (core.hooksPath=.githooks); `git push --no-verify` skips it, so CI
 # remains the check that cannot be bypassed.
 hooks_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd) || exit 1

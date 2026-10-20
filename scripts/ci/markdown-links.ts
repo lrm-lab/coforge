@@ -1,6 +1,6 @@
 // The Markdown link parser behind the hard rules' link rule (scripts/ci/hard-rules.ts): the
 // relative links a Markdown text holds, outside fenced and inline code and HTML comments, and the
-// repository path each one names. See docs/agents/git-hooks.md.
+// repository path each one names. See docs/agents/git-hooks/hard-rules.md.
 import { dirname, posix } from "node:path";
 
 // Inline links, whose destination may hold balanced parentheses, and reference definitions

@@ -4,7 +4,7 @@
 // them. It only reads: it never
 // changes git config. It does nothing in CI (`CI=true`), which runs the hard rules itself, or
 // outside a git work tree (a Docker build context, an unpacked tarball).
-// See docs/agents/git-hooks.md.
+// See docs/agents/git-hooks/limits.md.
 //
 // usage: bun scripts/ci/local-gate.ts   (from the repository root; exit 1 prints the fix)
 import { join } from "node:path";

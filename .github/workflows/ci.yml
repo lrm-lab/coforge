@@ -91,7 +91,7 @@ jobs:
             printf 'mise.toml\0' > "$files"
           fi
           bun scripts/ci/selection.ts "$TRACK" < "$files" | tee -a "$GITHUB_OUTPUT"
-      # scripts/ci/hard-rules.ts, the same checker as the pre-commit hook; docs/agents/git-hooks.md.
+      # The same checker as the git hooks: docs/agents/git-hooks/hard-rules.md.
       - name: Check hard rules
         env: *plan
         run: bun scripts/ci/hard-rules.ts --range "$BASE" "$HEAD" --authors-since "$BEFORE"

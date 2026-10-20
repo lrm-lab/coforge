@@ -5,7 +5,7 @@
 // growth. Sizes are the staged blobs' (the index git is committing from, `GIT_INDEX_FILE`
 // included) or the range head's, never the working tree's. Files the staged (or head)
 // `.gitattributes` marks `linguist-generated`, and binary files, are not written by agents and are
-// skipped. See docs/agents/git-hooks.md.
+// skipped. See docs/agents/git-hooks/size-limit.md.
 
 const MAX_FILE_TOKENS = 5_000;
 /** The estimate the limit is stated in: one token per four bytes. */

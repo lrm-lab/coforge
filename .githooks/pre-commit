@@ -1,7 +1,7 @@
 #!/bin/sh
 # CoForge pre-commit hook: runs the hard rules on the commit being made
 # (scripts/ci/hard-rules.ts --staged): the 5,000-token file size ratchet, Markdown links, new
-# suppressions and the author identity; see docs/agents/git-hooks.md.
+# suppressions and the author identity; see docs/agents/git-hooks/hard-rules.md.
 # `bun install` enables it (core.hooksPath=.githooks); `git commit --no-verify` skips it.
 # Git runs this from the top of the work tree being committed, which is where the checker
 # reads the index from, so the script is located from this file instead.

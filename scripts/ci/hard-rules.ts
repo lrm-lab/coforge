@@ -2,7 +2,8 @@
 // `.githooks/pre-commit` runs them on the commit being made (`--staged`); CI's Plan checks job runs
 // them over the pushed or proposed range (`--range`; a base that is not a commit skips them with a
 // warning). The one exemption: files under a skill directory registered in skills-lock.json are
-// vendored, and the file rules (size, links, suppressions) skip them. See docs/agents/git-hooks.md.
+// vendored, and the file rules (size, links, suppressions) skip them.
+// See docs/agents/git-hooks/hard-rules.md.
 //
 // usage: bun scripts/ci/hard-rules.ts --staged | --all
 //        bun scripts/ci/hard-rules.ts --range <base> <head> [--authors-since <rev>]
@@ -96,7 +97,7 @@ function formatViolations(violations: Violation[]): string {
     for (const { location, found } of ofRule) lines.push(`  ${location}: ${found}`);
     lines.push(`  Fix: ${FIX[rule]}`, "");
   }
-  lines.push("The hard rules are described in docs/agents/git-hooks.md.");
+  lines.push("The hard rules are described in docs/agents/git-hooks/hard-rules.md.");
   return lines.join("\n");
 }
 

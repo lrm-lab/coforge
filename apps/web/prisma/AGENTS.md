@@ -6,7 +6,7 @@ These rules apply to `apps/web/prisma/`. App-wide database rules are in
 - The schema is this whole directory (`prisma.config.ts` points at `prisma`):
   `schema.prisma` holds only the `generator` and `datasource` blocks, and every
   model lives in `models/<domain>.prisma` with its `///` docs. Keep each file
-  under the 5,000-token commit limit (`docs/agents/git-hooks.md`); add a new
+  under the 5,000-token commit limit (`docs/agents/git-hooks/size-limit.md`); add a new
   domain file rather than growing one past it.
 - Change the schema first, then review the generated SQL migration and
   commit it with the schema change.
