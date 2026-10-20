@@ -1,6 +1,6 @@
 import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
-import { startEvalDaemon, startAgent, type EvalDaemon } from "./eval-daemon";
+import { startEvalDaemon, startAgent, type EvalDaemon } from "@coforge/eval-harness";
 import { evaluateTask } from "./eval-qa";
 import { createEvalDispatcher, ingestTaskSkills } from "./ingest";
 import { loadTask, listTasks } from "./tasks";
@@ -91,7 +91,23 @@ async function runTask(arm: (typeof env.arms)[number], taskName: string) {
     );
     const dispatcher = createEvalDispatcher({ workspace, runtime, accountId, users });
     const ingestedSkills = await ingestTaskSkills({ workspace, task, dispatcher });
-    daemon = await startEvalDaemon({ workspace, env });
+    daemon = await startEvalDaemon({
+      label: "sb",
+      workspace,
+      webUrl: env.webUrl,
+      agents: [
+        {
+          agentId: workspace.memoryAgentId,
+          provider: env.memoryAgentProvider,
+          model: env.memoryAgentModel,
+        },
+        {
+          agentId: workspace.taskAgentId,
+          provider: env.taskAgentProvider,
+          model: env.taskAgentModel,
+        },
+      ],
+    });
     const agentWorkspaceDir = join(
       daemon.workspaceRoot,
       workspace.workspaceId,
