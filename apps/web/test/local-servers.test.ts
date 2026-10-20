@@ -7,6 +7,7 @@ import {
   classifyServers,
   parseListening,
   parsePs,
+  type ServerFacts,
   STOP_GRACE_MS,
   stopExactly,
 } from "../scripts/local-servers";
@@ -23,7 +24,12 @@ const IMPOSSIBLE_PID = 2 ** 22 + 1;
 
 // `ps -axo pid=,ppid=,rss=,etime=,command=` as macOS and Linux print it (macOS has no `etimes`).
 const PS = [
-  "  101     1  70000 4-15:06:40 /bin/bun /x/gone/apps/web/.output/server/index.mjs",
+  "  101     1  70000 4-15:06:40 /bin/bun --preload /x/gone/apps/web/scripts/exit-with-launcher.ts /x/gone/apps/web/.output/server/index.mjs",
+  // A server from a deleted checkout without the launcher's preload: nothing says it was CoForge's.
+  "  102     1  70000 4-15:06:40 /bin/bun /x/gone/apps/web/.output/server/index.mjs",
+  // Another project's `apps/web`, and a Nuxt app (its build is `.output/server/index.mjs` too).
+  "  103   150  70000   02:00:00 /bin/bun /x/other/apps/web/.output/server/index.mjs",
+  "  104   150  70000   02:00:00 /bin/bun .output/server/index.mjs",
   "  200   199  60000      01:40 /bin/bun --preload /x/live/apps/web/scripts/exit-with-launcher.ts /x/live/apps/web/.output/server/index.mjs",
   "  199   150  10000      01:40 /bin/bun run ./scripts/start-server.ts",
   "  300   299  50000   01:23:20 /bin/bun --preload /x/live/apps/web/scripts/exit-with-launcher.ts --bun vite dev --port 8790",
@@ -39,6 +45,11 @@ const PS = [
   // `bun run start` in apps/web: the entry is relative, so the checkout is the cwd.
   "  450   150  30000      03:00 /bin/bun run .output/server/index.mjs",
   "  460     1  30000      03:00 /bin/bun .output/server/index.mjs",
+  // Started from the repository root: the relative path is resolved against its cwd, not ours.
+  "  470   150  30000      03:00 /bin/bun ./apps/web/.output/server/index.mjs",
+  // Its launcher is alive, so it is still starting (waiting for Postgres, say), not stale.
+  "  480   479  30000   02:00:00 /bin/bun --preload /x/live/apps/web/scripts/exit-with-launcher.ts /x/live/apps/web/.output/server/index.mjs",
+  "  479   150  10000   02:00:00 /bin/bun run ./scripts/start-server.ts",
   "  500   150   9000   02:30:00 /bin/zsh -c echo apps/web/.output/server/index.mjs",
   "  600   150   9000   02:30:00 /usr/bin/vim notes.md",
   '  610   150   9000   02:30:00 /bin/zsh -c rg "vite dev" src',
@@ -48,14 +59,16 @@ const PS = [
 test("parsePs reads every process's pid, parent, memory, age and command", () => {
   const rows = parsePs(PS);
   expect(rows.map((row) => row.pid)).toEqual([
-    101, 200, 199, 300, 299, 301, 310, 309, 700, 400, 450, 460, 500, 600, 610, 620,
+    101, 102, 103, 104, 200, 199, 300, 299, 301, 310, 309, 700, 400, 450, 460, 470, 480, 479, 500,
+    600, 610, 620,
   ]);
   expect(rows[0]).toEqual({
     pid: 101,
     ppid: 1,
     rssKb: 70000,
     ageSeconds: 400000,
-    command: "/bin/bun /x/gone/apps/web/.output/server/index.mjs",
+    command:
+      "/bin/bun --preload /x/gone/apps/web/scripts/exit-with-launcher.ts /x/gone/apps/web/.output/server/index.mjs",
   });
 });
 
@@ -66,16 +79,20 @@ test("classifyServers names each local Web server, its launcher, and why it is s
         199: "/x/live/apps/web",
         299: "/x/live/apps/web",
         300: "/x/live/apps/web",
+        104: "/x/nuxt/apps/web",
         450: "/x/live/apps/web",
-        // Linux lsof marks a cwd that was removed, even if the path exists again.
+        // Linux lsof marks a cwd that was removed, even if the path exists again: nothing there
+        // says whose server it was.
         460: "/x/live/apps/web (deleted)",
+        470: "/x/live",
         500: "/x/live/apps/web",
         610: "/x/live/apps/web",
         620: "/x/live/apps/web",
       })[pid],
-    exists: (path) => path.startsWith("/x/live/"),
+    exists: (path) => !path.startsWith("/x/gone/"),
+    webPackage: (webRoot) => (webRoot.startsWith("/x/live/") ? "@coforge/web" : "other"),
     listening: (pid) =>
-      ({ 200: [8789], 301: [8790], 310: [8792], 450: [8788], 460: [8795] })[pid] ?? [],
+      ({ 200: [8789], 301: [8790], 310: [8792], 450: [8788], 460: [8795], 470: [8796] })[pid] ?? [],
   });
   const live = { orphaned: false, stale: [] };
   expect(servers).toEqual([
@@ -161,18 +178,35 @@ test("classifyServers names each local Web server, its launcher, and why it is s
       ...live,
     },
     {
-      pid: 460,
-      pids: [460],
+      pid: 470,
+      pids: [470],
       launcher: undefined,
       kind: "nitro",
       webRoot: "/x/live/apps/web",
       rssKb: 30000,
       ageSeconds: 180,
-      ports: [8795],
-      orphaned: true,
-      stale: ["checkout deleted"],
+      ports: [8796],
+      ...live,
+    },
+    {
+      pid: 480,
+      pids: [480],
+      launcher: 479,
+      kind: "nitro",
+      webRoot: "/x/live/apps/web",
+      rssKb: 30000,
+      ageSeconds: 7200,
+      ports: [],
+      ...live,
     },
   ]);
+});
+
+/** Facts for a live checkout of this package. */
+const liveCheckout = (facts: Pick<ServerFacts, "cwd" | "listening">): ServerFacts => ({
+  exists: () => true,
+  webPackage: () => "@coforge/web",
+  ...facts,
 });
 
 test("a shell or pager that merely names a server is not one", () => {
@@ -184,7 +218,7 @@ test("a shell or pager that merely names a server is not one", () => {
         "  630   150   9000   02:30:00 /bin/zsh -c echo apps/web/.output/server/index.mjs",
       ].join("\n"),
     ),
-    { cwd: () => "/x/live/apps/web", exists: () => true, listening: () => [] },
+    liveCheckout({ cwd: () => "/x/live/apps/web", listening: () => [] }),
   );
   expect(servers).toEqual([]);
 });
@@ -192,7 +226,7 @@ test("a shell or pager that merely names a server is not one", () => {
 test("a server row that is its own parent is classified, not walked forever", () => {
   const [server] = classifyServers(
     parsePs("    0     0   1000   02:00:00 /bin/bun /x/live/apps/web/.output/server/index.mjs"),
-    { cwd: () => undefined, exists: () => true, listening: () => [8788] },
+    liveCheckout({ cwd: () => undefined, listening: () => [8788] }),
   );
   expect(server).toMatchObject({ pid: 0, pids: [0], ports: [8788] });
 });
@@ -200,7 +234,7 @@ test("a server row that is its own parent is classified, not walked forever", ()
 test("an orphaned server that still listens is reported but not stale", () => {
   const [server] = classifyServers(
     parsePs("  800     1 500000   09:00:00 /bin/bun /x/live/apps/web/.output/server/index.mjs"),
-    { cwd: () => undefined, exists: () => true, listening: () => [8788] },
+    liveCheckout({ cwd: () => undefined, listening: () => [8788] }),
   );
   expect(server).toMatchObject({ pid: 800, orphaned: true, ports: [8788], stale: [] });
 });
@@ -260,34 +294,47 @@ async function idleProcess(ignoreSigterm = false) {
 }
 
 test(
-  "stopExactly signals only live pids, and SIGKILLs only those still running the same command",
+  "stopExactly signals only pids still running their command, before SIGTERM and before SIGKILL",
   async () => {
     const children: Bun.Subprocess[] = [];
     try {
-      const [exits, ignores, replaced] = await Promise.all([
+      const [exits, ignores, replaced, reused] = await Promise.all([
         idleProcess(),
         idleProcess(true),
         idleProcess(true),
+        idleProcess(),
       ]);
-      children.push(exits, ignores, replaced);
+      children.push(exits, ignores, replaced, reused);
+      const commandsBySnapshot = [
+        // Before SIGTERM, `reused`'s pid already runs something else.
+        new Map([
+          [exits.pid, "bun exits"],
+          [IMPOSSIBLE_PID, "bun gone"],
+          [ignores.pid, "bun ignores"],
+          [replaced.pid, "bun replaced"],
+          [reused.pid, "an unrelated process"],
+        ]),
+        // By the SIGKILL pass, `replaced`'s pid does.
+        new Map([
+          [ignores.pid, "bun ignores"],
+          [replaced.pid, "an unrelated process"],
+        ]),
+      ];
       const signalled = await stopExactly(
         [
           { pid: exits.pid, command: "bun exits" },
           { pid: IMPOSSIBLE_PID, command: "bun gone" },
           { pid: ignores.pid, command: "bun ignores" },
           { pid: replaced.pid, command: "bun replaced" },
+          { pid: reused.pid, command: "bun reused" },
         ],
-        // By the SIGKILL pass, `replaced`'s pid runs something else: it must be left alone.
-        () =>
-          new Map([
-            [ignores.pid, "bun ignores"],
-            [replaced.pid, "an unrelated process"],
-          ]),
+        () => commandsBySnapshot.shift()!,
         TEST_GRACE_MS,
       );
       expect(signalled).toEqual([exits.pid, ignores.pid, replaced.pid]);
       expect(await waitFor(() => !alive(exits.pid) && !alive(ignores.pid), MARGIN_MS)).toBe(true);
       expect(alive(replaced.pid)).toBe(true);
+      expect(alive(reused.pid)).toBe(true);
     } finally {
       for (const child of children) if (alive(child.pid)) child.kill("SIGKILL");
     }
@@ -307,6 +354,7 @@ async function stopStaleWith(lsof: string) {
     const bin = join(root, "bin");
     await mkdir(bin);
     await mkdir(join(root, "apps/web"), { recursive: true });
+    await writeFile(join(root, "apps/web/package.json"), JSON.stringify({ name: "@coforge/web" }));
     const row = `${server.pid} 1 1000 02:00:00 /bin/bun ${root}/apps/web/.output/server/index.mjs`;
     for (const [name, body] of [
       ["ps", `echo ${JSON.stringify(row)}`],

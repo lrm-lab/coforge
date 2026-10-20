@@ -5,12 +5,19 @@
  *   bun run --cwd apps/web local-servers list
  *   bun run --cwd apps/web local-servers stop --stale
  *
- * A server is stale when its checkout is gone, or when it has listened on no port past its first
- * minute. An orphaned one (its launcher ended, as before supervised-bun.ts) is reported but kept
- * while it still listens: someone may be using it. Uses `ps` and `lsof`, on macOS and Linux. When
- * `lsof` shows no listening socket at all, every server would look idle, so nothing is stopped.
+ * Only servers of CoForge's own Web package count: another project can have an `apps/web`, and a
+ * Nuxt build is `.output/server/index.mjs` too. A server from a deleted checkout counts only when
+ * it carries its launcher's preload. A server is stale when its checkout is gone, or when it has
+ * listened on no port past its first minute with no launcher left waiting for it. An orphaned one
+ * (its launcher ended, as before supervised-bun.ts) is reported but kept while it still listens:
+ * someone may be using it. Uses `ps` and `lsof`, on macOS and Linux. When `lsof` shows no
+ * listening socket at all, every server would look idle, so nothing is stopped.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import webPackage from "../package.json";
+import { LAUNCHER_PRELOAD } from "./launcher-contract";
 
 export type PsRow = {
   pid: number;
@@ -40,15 +47,18 @@ export type LocalServer = {
 export type ServerFacts = {
   cwd(pid: number): string | undefined;
   exists(path: string): boolean;
+  /** The `name` in `<webRoot>/package.json`. */
+  webPackage(webRoot: string): string | undefined;
   listening(pid: number): number[];
 };
 
 const LAUNCHER = /scripts\/(start-server|start-web|dev-web-hmr)\.ts\b/;
+/** The checkout a command names, absolute or relative to the process's cwd. */
+const CHECKOUT =
+  /((?:\S*\/)?apps\/web)\/(?:\.output\/server\/index\.mjs|scripts\/exit-with-launcher\.ts|node_modules\/)/;
 /** A server still starting has not opened its port yet. */
 const STARTUP_GRACE_SECONDS = 60;
 export const STOP_GRACE_MS = 5_000;
-/** How Linux lsof marks a cwd that was removed. */
-const DELETED_SUFFIX = " (deleted)";
 const CANNOT_SEE_SOCKETS = "cannot see listening sockets";
 
 /** `ps` etime: `[[dd-]hh:]mm:ss`. */
@@ -95,7 +105,7 @@ const isVite = (row: PsRow) =>
   RUNTIME.test(row.command) && /\bvite(?:\/bin\/vite\.js)? dev\b/.test(row.command);
 const isNitro = (row: PsRow) =>
   /^\S*\bbun\s/.test(row.command) &&
-  /(?:^|\s)(?:\S*\/apps\/web\/|\.\/)?\.output\/server\/index\.mjs(?:\s|$)/.test(row.command);
+  /(?:^|\s)(?:\S*\/)?\.output\/server\/index\.mjs(?:\s|$)/.test(row.command);
 
 export function classifyServers(rows: PsRow[], facts: ServerFacts): LocalServer[] {
   const byPid = new Map(rows.map((row) => [row.pid, row]));
@@ -111,27 +121,35 @@ export function classifyServers(rows: PsRow[], facts: ServerFacts): LocalServer[
     // `bun --bun vite dev` starts Vite as a node child; the wrapper stands for both.
     if (!(isNitro(row) || isVite(row)) || (parent && isVite(parent))) continue;
     const kind: LocalServer["kind"] = isNitro(row) ? "nitro" : "vite";
-    let webRoot = row.command.match(
-      /(\S*\/apps\/web)\/(?:\.output\/server\/index\.mjs|scripts\/exit-with-launcher\.ts|node_modules\/)/,
-    )?.[1];
-    let cwdDeleted = false;
-    if (!webRoot) {
-      webRoot = facts.cwd(row.pid);
-      cwdDeleted = webRoot?.endsWith(DELETED_SUFFIX) ?? false;
-      if (cwdDeleted) webRoot = webRoot!.slice(0, -DELETED_SUFFIX.length);
+    const named = row.command.match(CHECKOUT)?.[1];
+    let webRoot = named;
+    if (!named?.startsWith("/")) {
+      const cwd = facts.cwd(row.pid);
+      if (!cwd) continue;
+      webRoot = named ? resolve(cwd, named) : cwd;
     }
+    // Linux lsof marks a removed cwd ` (deleted)`, so it is no checkout either.
     if (!webRoot?.endsWith("/apps/web")) continue;
+    const deleted = !facts.exists(webRoot);
+    const ours = deleted
+      ? row.command.includes(` --preload ${webRoot}/scripts/${LAUNCHER_PRELOAD} `)
+      : facts.webPackage(webRoot) === webPackage.name;
+    if (!ours) continue;
+    const launcher = parent && LAUNCHER.test(parent.command) ? parent.pid : undefined;
     const tree = subtree(row);
     const ports = [...new Set(tree.flatMap((process) => facts.listening(process.pid)))].sort(
       (a, b) => a - b,
     );
     const stale: string[] = [];
-    if (cwdDeleted || !facts.exists(webRoot)) stale.push("checkout deleted");
-    if (ports.length === 0 && row.ageSeconds >= STARTUP_GRACE_SECONDS) stale.push("not listening");
+    if (deleted) stale.push("checkout deleted");
+    // A launcher still waiting for its server (on Postgres, say) stops it itself.
+    if (ports.length === 0 && row.ageSeconds >= STARTUP_GRACE_SECONDS && launcher === undefined) {
+      stale.push("not listening");
+    }
     servers.push({
       pid: row.pid,
       pids: tree.map((process) => process.pid),
-      launcher: parent && LAUNCHER.test(parent.command) ? parent.pid : undefined,
+      launcher,
       kind,
       webRoot,
       rssKb: tree.reduce((sum, process) => sum + process.rssKb, 0),
@@ -164,23 +182,28 @@ const signal = (pid: number, name: NodeJS.Signals) => {
 };
 
 /**
- * Sends SIGTERM to each target, then SIGKILL to those still running after `graceMs`, but only
- * while `commands()` still shows the pid running the same command: a pid freed in between may
- * have been reused. Resolves with the pids that were signalled.
+ * Sends SIGTERM to each target, then SIGKILL to those still running after `graceMs`, each time
+ * only while `commands()` still shows the pid running the same command: a pid freed since it was
+ * listed may have been reused. Resolves with the pids that were sent SIGTERM.
  */
 export async function stopExactly(
   targets: { pid: number; command: string }[],
   commands: () => Map<number, string>,
   graceMs: number,
 ): Promise<number[]> {
-  const signalled = targets.filter((target) => signal(target.pid, "SIGTERM"));
+  const unchanged = (running: Map<number, string>, target: { pid: number; command: string }) =>
+    running.get(target.pid) === target.command;
+  const listed = commands();
+  const signalled = targets.filter(
+    (target) => unchanged(listed, target) && signal(target.pid, "SIGTERM"),
+  );
   const deadline = Date.now() + graceMs;
   while (signalled.some((target) => isAlive(target.pid)) && Date.now() < deadline) {
     await Bun.sleep(100);
   }
   const running = commands();
   for (const target of signalled) {
-    if (running.get(target.pid) === target.command) signal(target.pid, "SIGKILL");
+    if (unchanged(running, target)) signal(target.pid, "SIGKILL");
   }
   return signalled.map((target) => target.pid);
 }
@@ -210,6 +233,13 @@ const machineFacts = (listening: Map<number, number[]> | undefined): ServerFacts
       .find((line) => line.startsWith("n"))
       ?.slice(1),
   exists: existsSync,
+  webPackage: (webRoot) => {
+    try {
+      return JSON.parse(readFileSync(resolve(webRoot, "package.json"), "utf8")).name;
+    } catch {
+      return undefined;
+    }
+  },
   listening: (pid) => listening?.get(pid) ?? [],
 });
 

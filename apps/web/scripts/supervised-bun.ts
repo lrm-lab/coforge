@@ -1,20 +1,25 @@
+import { constants } from "node:os";
 import { join } from "node:path";
 
 import {
   LAUNCHER_PID_ENV,
+  LAUNCHER_PRELOAD,
   LAUNCHER_STOP_GRACE_ENV,
   SERVER_STOP_GRACE_MS,
 } from "./launcher-contract";
 import { bunExecutable } from "./local-bun";
 
-/** The signals that end a launcher in practice: a stop, Ctrl-C, and a closed terminal. */
-const FORWARDED_SIGNALS = ["SIGTERM", "SIGINT", "SIGHUP"] as const;
+/**
+ * A stop and Ctrl-C. Not SIGHUP: listening for it would undo `nohup`. A closed terminal ends this
+ * launcher by SIGHUP's default action, and the preloaded watcher then stops the server.
+ */
+const FORWARDED_SIGNALS = ["SIGTERM", "SIGINT"] as const;
 
 /**
  * Runs `bun <args>` as this launcher's child and resolves with its exit code (128 + the signal
  * when a signal ended it). The local Web launchers (start-server, start-web, dev:hmr) wait on the
- * server they start this way, and the server must not outlive them: a stop, Ctrl-C or closed
- * terminal is passed on to it, and a server still running `stopGraceMs` later is killed. The
+ * server they start this way, and the server must not outlive them: a stop or Ctrl-C is passed
+ * on to it, and a server still running `stopGraceMs` later is killed. The
  * preloaded exit-with-launcher.ts stops it when the launcher is killed outright; `watchLauncher:
  * false` leaves that out.
  */
@@ -29,9 +34,7 @@ export async function runSupervisedBun(
 ): Promise<number> {
   const stopGraceMs = options.stopGraceMs ?? SERVER_STOP_GRACE_MS;
   const watcher =
-    options.watchLauncher === false
-      ? []
-      : ["--preload", join(import.meta.dir, "exit-with-launcher.ts")];
+    options.watchLauncher === false ? [] : ["--preload", join(import.meta.dir, LAUNCHER_PRELOAD)];
   const child = Bun.spawn([bunExecutable(), ...watcher, ...args], {
     cwd: options.cwd,
     stdout: "inherit",
@@ -50,7 +53,8 @@ export async function runSupervisedBun(
   };
   for (const signal of FORWARDED_SIGNALS) process.on(signal, forward);
   try {
-    return await child.exited;
+    const exitCode = await child.exited;
+    return child.signalCode ? 128 + constants.signals[child.signalCode] : exitCode;
   } finally {
     clearTimeout(kill);
     for (const signal of FORWARDED_SIGNALS) process.off(signal, forward);

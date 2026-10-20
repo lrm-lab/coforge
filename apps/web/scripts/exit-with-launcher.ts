@@ -22,6 +22,11 @@ const stopGraceMs = Number.isFinite(grace) && grace > 0 ? grace : SERVER_STOP_GR
 delete process.env[LAUNCHER_PID_ENV];
 delete process.env[LAUNCHER_STOP_GRACE_ENV];
 if (Number.isInteger(launcher) && launcher > 1) {
+  // A closed terminal sends SIGHUP to the whole job, server included. The server follows its
+  // launcher instead: without `nohup` SIGHUP ends the launcher and the watch below then stops the
+  // server; under `nohup` both keep running. Bun does not pass `nohup`'s ignored SIGHUP on to a
+  // child, so the server cannot rely on inheriting it.
+  process.on("SIGHUP", () => {});
   const watch = setInterval(() => {
     if (process.ppid === launcher) return;
     clearInterval(watch);

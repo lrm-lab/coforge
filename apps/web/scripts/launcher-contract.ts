@@ -3,6 +3,8 @@
  * exit-with-launcher.ts) agree on. Constants only: importing this module runs nothing.
  */
 
+/** The file the launcher preloads into its server, in apps/web/scripts. */
+export const LAUNCHER_PRELOAD = "exit-with-launcher.ts";
 /** The launcher's pid, set for its server child. */
 export const LAUNCHER_PID_ENV = "WEB_LAUNCHER_PID";
 /** How long the server has to stop after being asked, set for its server child. */

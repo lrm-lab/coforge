@@ -42,7 +42,7 @@ async function waitFor(condition: () => boolean | Promise<boolean>, withinMs: nu
 const exitWithin = (launcher: Bun.Subprocess, withinMs: number) =>
   Promise.race([launcher.exited, Bun.sleep(withinMs).then(() => "still running" as const)]);
 
-type Setup = { ignoreSigterm?: boolean; watchLauncher?: boolean };
+type Setup = { ignoreSigterm?: boolean; watchLauncher?: boolean; nohup?: boolean };
 
 /**
  * Runs `body` with a launcher that runs an idle child through runSupervisedBun, and kills both
@@ -73,11 +73,11 @@ async function withLauncher(
       `import { runSupervisedBun } from ${JSON.stringify(helper)};\n` +
         `process.exit(await runSupervisedBun([${JSON.stringify(join(root, "child.ts"))}], { ...${JSON.stringify(options)}, env: process.env }));\n`,
     );
-    launcher = Bun.spawn([process.execPath, join(root, "launcher.ts")], {
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "ignore",
-    });
+    launcher = Bun.spawn(
+      [...(setup.nohup ? ["nohup"] : []), process.execPath, join(root, "launcher.ts")],
+      // Its own process group, as a terminal's job is: the group can be sent SIGHUP.
+      { stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: true },
+    );
     expect(await waitFor(() => Bun.file(childPidFile).exists(), STARTED_WITHIN_MS)).toBe(true);
     child = Number(await Bun.file(childPidFile).text());
     expect(alive(child)).toBe(true);
@@ -109,7 +109,6 @@ for (const signal of ["SIGTERM", "SIGINT", "SIGHUP", "SIGKILL"] as const) {
 for (const [signal, code] of [
   ["SIGTERM", 143],
   ["SIGINT", 130],
-  ["SIGHUP", 129],
 ] as const) {
   test(
     `${signal} is passed on to the server without the watcher, and the launcher exits with the server's ${code}`,
@@ -123,6 +122,34 @@ for (const [signal, code] of [
     TEST_TIMEOUT_MS,
   );
 }
+
+/** What a closed terminal does: SIGHUP to every process in the job's process group. */
+const hangUp = (launcher: Bun.Subprocess) => process.kill(-launcher.pid, "SIGHUP");
+
+test(
+  "a closed terminal stops the launcher and its server",
+  () =>
+    withLauncher({}, async (launcher, child) => {
+      hangUp(launcher);
+      await launcher.exited;
+      expect(await waitFor(() => !alive(child), STOPPED_WITHIN_MS)).toBe(true);
+    }),
+  TEST_TIMEOUT_MS,
+);
+
+test(
+  "under nohup, a closed terminal leaves the launcher and its server running",
+  () =>
+    withLauncher({ nohup: true }, async (launcher, child) => {
+      hangUp(launcher);
+      // A launcher that SIGHUP ended would exit at once; the poll and grace cover its server.
+      expect(await exitWithin(launcher, LAUNCHER_POLL_MS + TEST_STOP_GRACE_MS)).toBe(
+        "still running",
+      );
+      expect(alive(child)).toBe(true);
+    }),
+  TEST_TIMEOUT_MS,
+);
 
 test(
   "a server that ignores SIGTERM is killed after the grace, and the launcher exits with 137",
