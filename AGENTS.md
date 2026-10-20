@@ -59,9 +59,9 @@ These instructions apply to the entire repository.
   (`#src/code-agent/contract`), and a sibling file through `./`. Do not write
   `../` into the package's own `src/`. Packages declare `#src/*` in their
   `package.json` `imports` (Node subpath imports, so each package resolves its
-  own alias even when another package compiles its source); `apps/web`, which
-  no workspace package imports, declares it in `tsconfig.json` because it has `.tsx`
-  modules. Web's type check applies that mapping to package source it
+  own alias even when another package compiles its source); `apps/web` declares
+  it only in `tsconfig.json` because it has `.tsx` modules, never as a per-file
+  `package.json` `imports` map. Web's type check applies that mapping to package source it
   compiles, so a package `#src/x` must never name a file that also exists in
   `apps/web/src` (`apps/web/test/import-alias-isolation.test.ts` enforces it).
   Another package is imported by its package name (a `workspace:*`
