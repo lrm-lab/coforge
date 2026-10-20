@@ -74,6 +74,10 @@ Rules for the machine Coordinator in `src/supervisor/`. They extend
   `lifecycle_under_way` (never a `cloud_connection` value). The Coordinator's own
   steps keep the serialized `snapshot()`.
 - The snapshot reports a parked Workspace's `park_reason`.
+- Every platform starts a Workspace daemon that exited unexpectedly again
+  within `WORKSPACE_RELAUNCH_SECONDS` (`workspace-instance.ts`); derive each
+  platform's relaunch setting from it, never a literal. It does not apply to
+  the Computer daemon's own service.
 - systemd Workspace units restart on failure after cgroup cleanup.
 - On macOS, `launchd-workspace-instance.ts` implements the instance seam on top
   of `platform/launchd-job.ts`. Workspace startup reconciles only its own Agent

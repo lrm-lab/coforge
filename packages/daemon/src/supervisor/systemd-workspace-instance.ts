@@ -2,7 +2,11 @@ import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writePrivateFile } from "#src/platform/private-file";
 
-import { validateWorkspaceEndpoint, type WorkspaceInstanceConfig } from "./workspace-instance";
+import {
+  validateWorkspaceEndpoint,
+  WORKSPACE_RELAUNCH_SECONDS,
+  type WorkspaceInstanceConfig,
+} from "./workspace-instance";
 export type { WorkspaceInstanceConfig } from "./workspace-instance";
 
 export type SystemdUserCommand = (args: string[]) => Promise<number>;
@@ -126,7 +130,7 @@ Description=CoForge Workspace ${escapeUnit(config.workspaceId)}
 Environment="COFORGE_DAEMON_HOME=${escapeUnit(config.stateDirectory)}"
 ${config.supervisorSocketPath ? `Environment="COFORGE_SUPERVISOR_SOCKET=${escapeUnit(config.supervisorSocketPath)}"\nEnvironment="COFORGE_SUPERVISOR_STATE_PATH=${escapeUnit(join(dirname(config.supervisorSocketPath), "upgrade-request-ids.json"))}"\n` : ""}${config.daemonConnectionEndpoint ? `Environment="COFORGE_DAEMON_CONNECTION_ENDPOINT=${escapeUnit(config.daemonConnectionEndpoint)}"\n` : ""}ExecStart=${escapeUnit(config.executablePath)} __workspace-daemon --socket ${escapeUnit(config.socketPath)} --state-directory ${escapeUnit(config.stateDirectory)}
 Restart=on-failure
-RestartSec=1s
+RestartSec=${WORKSPACE_RELAUNCH_SECONDS}s
 KillMode=mixed
 SendSIGKILL=yes
 TimeoutStopSec=10s

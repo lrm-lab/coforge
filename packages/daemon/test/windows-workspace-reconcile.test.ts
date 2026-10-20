@@ -4,6 +4,11 @@ import {
   startWindowsWorkspaceReconcileLoop,
   WINDOWS_WORKSPACE_RECONCILE_MS,
 } from "#src/supervisor/windows-workspace-reconcile";
+import { WORKSPACE_RELAUNCH_SECONDS } from "#src/supervisor/workspace-instance";
+
+test("the Coordinator checks Windows Workspace children once per shared relaunch bound", () => {
+  expect(WINDOWS_WORKSPACE_RECONCILE_MS).toBe(WORKSPACE_RELAUNCH_SECONDS * 1_000);
+});
 
 test("reconcile loop is null outside win32", () => {
   expect(startWindowsWorkspaceReconcileLoop(async () => {}, { platform: "linux" })).toBeNull();

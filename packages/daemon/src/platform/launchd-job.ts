@@ -21,6 +21,9 @@ export type LaunchdJobConfig = {
   command: string[];
   environment?: Record<string, string>;
   restartOnFailure?: boolean;
+  /** Seconds launchd waits between launches of the job (`ThrottleInterval`). Omit to keep
+   * launchd's default of 10 s. */
+  throttleIntervalSeconds?: number;
   /** stdout and stderr destination for the job, e.g. a Computer log file. Omit to leave launchd's
    * default (discarded) redirection in place. */
   logPath?: string;
@@ -191,6 +194,7 @@ const nativeLaunchd: LaunchdJobPlatform = {
 };
 
 export function jobPlist(config: LaunchdJobConfig): string {
+  const throttle = config.throttleIntervalSeconds;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -203,7 +207,7 @@ export function jobPlist(config: LaunchdJobConfig): string {
     )
     .join("")}</dict>
 <key>RunAtLoad</key><true/>
-${config.restartOnFailure ? "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>" : ""}
+${config.restartOnFailure ? "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>" : ""}${throttle === undefined ? "" : `\n<key>ThrottleInterval</key><integer>${throttle}</integer>`}
 ${config.logPath ? `<key>StandardOutPath</key><string>${escapePlistValue(config.logPath)}</string>\n<key>StandardErrorPath</key><string>${escapePlistValue(config.logPath)}</string>` : ""}
 <key>AbandonProcessGroup</key><false/>
 <key>ExitTimeOut</key><integer>2</integer>

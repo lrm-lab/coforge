@@ -1,7 +1,29 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { LaunchdJob } from "#src/platform/launchd-job";
+import { jobPlist, LaunchdJob } from "#src/platform/launchd-job";
 import { captureDaemonLogs } from "./log-capture";
+
+const keptAlive = {
+  label: "cn.coforge.workspace.abc",
+  directory: "/jobs",
+  command: ["/computer", "__workspace-daemon"],
+  environment: { COFORGE_DAEMON_HOME: "/state" },
+  restartOnFailure: true,
+};
+const KEEP_ALIVE = "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>";
+
+test("a job without a relaunch throttle leaves launchd's default throttle in place", () => {
+  expect(jobPlist(keptAlive)).not.toContain("ThrottleInterval");
+});
+
+test("a relaunch throttle adds only its ThrottleInterval key", () => {
+  expect(jobPlist({ ...keptAlive, throttleIntervalSeconds: 1 })).toBe(
+    jobPlist(keptAlive).replace(
+      KEEP_ALIVE,
+      `${KEEP_ALIVE}\n<key>ThrottleInterval</key><integer>1</integer>`,
+    ),
+  );
+});
 
 // Regression: the 09:17 coordinator crash reported only `exit_code: 125`, because
 // launchctl's own explanation was discarded before it could be logged.

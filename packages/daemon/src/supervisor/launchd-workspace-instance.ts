@@ -1,7 +1,8 @@
 import { dirname, join } from "node:path";
-import { LaunchdJob, stopLaunchdJobs } from "#src/platform/launchd-job";
+import { LaunchdJob, stopLaunchdJobs, type LaunchdJobConfig } from "#src/platform/launchd-job";
 import {
   validateWorkspaceEndpoint,
+  WORKSPACE_RELAUNCH_SECONDS,
   type WorkspaceInstance,
   type WorkspaceInstanceConfig,
 } from "./workspace-instance";
@@ -18,45 +19,60 @@ export function workspaceLaunchdIdentity(stateRoot: string, workspaceId: string)
     .slice(0, 24);
 }
 
+/** Where a Workspace's Agent jobs live: their label prefix and their plist directory. */
+function agentJobScope(config: WorkspaceInstanceConfig): { prefix: string; directory: string } {
+  return {
+    prefix: `cn.coforge.agent.${workspaceLaunchdIdentity(config.stateRoot, config.workspaceId)}.`,
+    directory: join(config.stateDirectory, "launchd-agents"),
+  };
+}
+
+/** The launchd job that runs one Workspace daemon and relaunches it when it exits unexpectedly. */
+export function workspaceLaunchdJob(config: WorkspaceInstanceConfig): LaunchdJobConfig {
+  validateWorkspaceEndpoint(config.daemonConnectionEndpoint);
+  const agents = agentJobScope(config);
+  return {
+    label: `cn.coforge.workspace.${workspaceLaunchdIdentity(config.stateRoot, config.workspaceId)}`,
+    directory: config.unitDirectory,
+    command: [
+      config.executablePath,
+      "__workspace-daemon",
+      "--socket",
+      config.socketPath,
+      "--state-directory",
+      config.stateDirectory,
+    ],
+    restartOnFailure: true,
+    throttleIntervalSeconds: WORKSPACE_RELAUNCH_SECONDS,
+    environment: {
+      COFORGE_DAEMON_HOME: config.stateDirectory,
+      COFORGE_WORKSPACE_AGENT_PREFIX: agents.prefix,
+      COFORGE_WORKSPACE_JOB_DIRECTORY: agents.directory,
+      ...(config.supervisorSocketPath
+        ? {
+            COFORGE_SUPERVISOR_SOCKET: config.supervisorSocketPath,
+            COFORGE_SUPERVISOR_STATE_PATH: join(
+              dirname(config.supervisorSocketPath),
+              "upgrade-request-ids.json",
+            ),
+          }
+        : {}),
+      ...(config.daemonConnectionEndpoint
+        ? { COFORGE_DAEMON_CONNECTION_ENDPOINT: config.daemonConnectionEndpoint }
+        : {}),
+    },
+  };
+}
+
 export class LaunchdWorkspaceInstance implements WorkspaceInstance {
   readonly #job: LaunchdJob;
   readonly #agentPrefix: string;
   readonly #agentDirectory: string;
   constructor(config: WorkspaceInstanceConfig) {
-    validateWorkspaceEndpoint(config.daemonConnectionEndpoint);
-    const identity = workspaceLaunchdIdentity(config.stateRoot, config.workspaceId);
-    this.#agentPrefix = `cn.coforge.agent.${identity}.`;
-    this.#agentDirectory = join(config.stateDirectory, "launchd-agents");
-    this.#job = new LaunchdJob({
-      label: `cn.coforge.workspace.${identity}`,
-      directory: config.unitDirectory,
-      command: [
-        config.executablePath,
-        "__workspace-daemon",
-        "--socket",
-        config.socketPath,
-        "--state-directory",
-        config.stateDirectory,
-      ],
-      restartOnFailure: true,
-      environment: {
-        COFORGE_DAEMON_HOME: config.stateDirectory,
-        COFORGE_WORKSPACE_AGENT_PREFIX: this.#agentPrefix,
-        COFORGE_WORKSPACE_JOB_DIRECTORY: this.#agentDirectory,
-        ...(config.supervisorSocketPath
-          ? {
-              COFORGE_SUPERVISOR_SOCKET: config.supervisorSocketPath,
-              COFORGE_SUPERVISOR_STATE_PATH: join(
-                dirname(config.supervisorSocketPath),
-                "upgrade-request-ids.json",
-              ),
-            }
-          : {}),
-        ...(config.daemonConnectionEndpoint
-          ? { COFORGE_DAEMON_CONNECTION_ENDPOINT: config.daemonConnectionEndpoint }
-          : {}),
-      },
-    });
+    this.#job = new LaunchdJob(workspaceLaunchdJob(config));
+    const agents = agentJobScope(config);
+    this.#agentPrefix = agents.prefix;
+    this.#agentDirectory = agents.directory;
   }
   async ensureStarted(): Promise<number> {
     if (!(await this.#job.identity()))
