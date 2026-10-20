@@ -59,6 +59,11 @@ function refPasses(line: string): boolean {
   console.error(
     `pre-push: ${localRef} -> ${remoteRef} breaks the hard rules (judged from ${base}).`,
   );
+  if (remoteSha && !ZERO.test(remoteSha) && !known)
+    console.error(
+      "pre-push: the remote sha is unknown here, so it was judged from origin/main: run " +
+        "`git fetch origin` and push again if main's commits are listed.",
+    );
   return false;
 }
 

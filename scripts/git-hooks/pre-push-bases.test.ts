@@ -134,6 +134,11 @@ test("a remote sha unknown here falls back to the merge base with origin/main", 
   expect(result.exitCode).not.toBe(0);
   expect(result.stderr).toContain("mine.ts");
   expect(result.stderr).not.toContain("legacy.ts");
+  // origin/main stands in for the unknown remote ref; a stale one can blame main's commits.
+  expect(result.stderr).toContain(
+    "the remote sha is unknown here, so it was judged from origin/main: run `git fetch origin` " +
+      "and push again if main's commits are listed",
+  );
 });
 
 test("a ref with no history in common is skipped with a warning, new or force-pushed", () => {

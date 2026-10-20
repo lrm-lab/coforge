@@ -363,7 +363,10 @@ async function check(args: string[]): Promise<Violation[] | string> {
   }
   const [baseRev, headRev, ...options] = rest;
   const since = options.filter((_, i) => i % 2 === 1);
-  const sinceOnly = options.every((option, i) => i % 2 === 1 || option === "--authors-since");
+  // Flag, value, flag, value: a value may be empty (CI's `before` on a pull request), not a flag.
+  const sinceOnly = options.every((option, i) =>
+    i % 2 === 1 ? !option.startsWith("--") : option === "--authors-since",
+  );
   const pair = baseRev !== undefined && headRev !== undefined;
   if (mode === "--range" && pair && options.length % 2 === 0 && sinceOnly) {
     // No successful run to diff from yet, or a run a deploy or release workflow dispatched.

@@ -423,3 +423,33 @@ test("the committer is checked too: in the hook from the environment, in a range
   expect(result.stderr).toContain(`commit ${human.slice(0, 12)}: committer gpt-5-6-sol`);
   expect(result.stderr).not.toContain("author Test Person");
 });
+
+test("--authors-since given twice checks only the commits reachable from neither rev", () => {
+  const base = repo.seed({ "README.md": "# Repo\n" });
+  repo.ok("switch", "-q", "-c", "a");
+  const botA = repo.seed({ "a.txt": "a\n" }, { env: { GIT_AUTHOR_NAME: "renovate[bot]" } });
+  repo.ok("switch", "-q", "-c", "b", base);
+  const botB = repo.seed({ "b.txt": "b\n" }, { env: { GIT_AUTHOR_NAME: "dependabot[bot]" } });
+  repo.ok("merge", "-q", "--no-edit", "a");
+  repo.seed({ "c.txt": "c\n" });
+
+  const both = repo.range(base, "HEAD", "--authors-since", botA, "--authors-since", botB);
+  expect(both).toMatchObject({ exitCode: 0, stderr: "" });
+  const onlyA = repo.range(base, "HEAD", "--authors-since", botA);
+  expect(onlyA.stderr).toContain("dependabot[bot]");
+  expect(onlyA.stderr).not.toContain("renovate[bot]");
+});
+
+test("a flag where an --authors-since value belongs is bad input: exit 2, one line", () => {
+  const base = repo.seed({ "README.md": "# Repo\n" });
+  for (const options of [
+    ["--authors-since", "--authors-since", base],
+    ["--authors-since", "--authors-since", "--authors-since", base],
+    ["--authors-since"],
+  ]) {
+    const result = repo.check(["--range", base, "HEAD", ...options], { GITHUB_ACTIONS: "false" });
+    expect(result.exitCode, options.join(" ")).toBe(2);
+    expect(result.stderr.trim().split("\n")).toHaveLength(1);
+    expect(result.stderr).toStartWith("hard-rules: usage:");
+  }
+});

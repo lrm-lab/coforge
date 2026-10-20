@@ -12,7 +12,9 @@ Rules a machine enforces, with no allowlist and no inline override. One checker,
   main is not blamed for main's commits. A new ref, or a remote sha unknown locally, falls back to
   the merge base with `origin/main`. Identities are checked for the commits on neither the remote
   ref nor `origin/main` (`--authors-since` both). A ref with no such base, or one the checker
-  rejects as bad input (exit 2), gets a warning and no check; a deletion passes.
+  rejects as bad input (exit 2), gets a warning and no check; a deletion passes. If `main` was
+  rewritten (force-pushed), a branch cut from a stale `origin/main` can pass the hook while CI's
+  pull request check still blocks it.
 - **CI**, `--range "$BASE" "$HEAD" --authors-since "$BEFORE"`: the always-run Plan checks job's
   "Check hard rules" step, with the `BASE` and `HEAD` that job diffs (a PR's base, or the head of
   the last successful push run on `main`). File rules judge from their merge base, as

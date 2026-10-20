@@ -7,7 +7,8 @@
 // See docs/agents/git-hooks/limits.md.
 //
 // usage: bun scripts/ci/local-gate.ts   (from the repository root; exit 1 prints the fix)
-import { join, resolve } from "node:path";
+import { realpathSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 
 const HOOKS_PATH = ".githooks";
 const checker = join(import.meta.dir, "hard-rules.ts");
@@ -17,13 +18,23 @@ function git(...args: string[]): { exitCode: number; stdout: string } {
   return { exitCode: result.exitCode, stdout: result.stdout.toString().trim() };
 }
 
+/** `path` with its symlinks resolved, as far as it exists. */
+function canonical(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    const parent = dirname(path);
+    return parent === path ? path : join(canonical(parent), basename(path));
+  }
+}
+
 /** Whether the repository's hooks are installed: an error when no `core.hooksPath` is set, a
  * warning when it names the user's own hooks directory, which install-hooks-path.ts leaves alone
  * and so does this. A hooks path set by `-c` or `GIT_CONFIG_*` (a CoForge Agent's shim, which
  * forwards to the repository's configuration) is not the repository's choice, as there. Of the
  * rest, the last value git reads wins; git resolves it (`--type=path` expands `~`) relative to the
  * top of the work tree, so `.githooks/`, `./.githooks` or its absolute path all name
- * `.githooks`. */
+ * `.githooks`; symlinks are resolved on both sides (macOS's `/var` is `/private/var`). */
 function hooksStatus(top: string): { error?: string; warning?: string } {
   const configured = git("config", "--type=path", "--show-scope", "--get-all", "core.hooksPath");
   const values = (configured.exitCode === 0 ? configured.stdout : "")
@@ -40,7 +51,7 @@ function hooksStatus(top: string): { error?: string; warning?: string } {
       "pre-commit hook not installed: run `bun install` (sets core.hooksPath=.githooks)";
     return { error };
   }
-  if (resolve(top, effective) === resolve(top, HOOKS_PATH)) return {};
+  if (canonical(resolve(top, effective)) === canonical(resolve(top, HOOKS_PATH))) return {};
   return {
     warning:
       `core.hooksPath is ${effective}, not .githooks: the repository's pre-commit and pre-push ` +

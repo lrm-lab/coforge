@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { useTestRepo } from "../git-hooks/test-repo";
 
@@ -214,4 +214,15 @@ test("any CI value but false or 0 skips the gate", () => {
   for (const value of ["1", "yes"]) expect(runGate({ CI: value }).exitCode, value).toBe(0);
   for (const value of ["0", "false", ""])
     expect(runGate({ CI: value }).stderr, value).toContain("pre-commit hook not installed");
+});
+
+test("a hooks path through a symlink, or written with ~/, names .githooks too", () => {
+  repo.seed({ "README.md": "# Repo\n" });
+  withOrigin();
+  // HOME is the test's home directory, which holds the repository and a link to it.
+  symlinkSync(repo.dir, join(repo.home, "link"));
+  for (const path of [join(repo.home, "link/.githooks"), "~/repo/.githooks", "~/link/.githooks/"]) {
+    repo.ok("config", "core.hooksPath", path);
+    expect(runGate(), path).toMatchObject({ exitCode: 0, stderr: "" });
+  }
 });
