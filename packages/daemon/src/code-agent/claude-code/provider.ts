@@ -16,6 +16,7 @@ import { createPromptFile } from "./prompt-file";
 import { claudeStreamEvents } from "./stream-events";
 import { claudeAssistantEvents, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
+import { claudeRateLimitWindow } from "./rate-limit";
 import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record";
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
@@ -721,33 +722,6 @@ class ClaudeCodeAgentSession implements AgentSession {
     this.#inputFailure ??= error;
     for (const notice of this.#waitingNotices.splice(0)) notice.reject(error);
   }
-}
-
-function claudeRateLimitWindow(info: Record<string, unknown> | undefined):
-  | {
-      key: "primary" | "secondary";
-      window: NonNullable<UsageSnapshot["primary"]>;
-    }
-  | undefined {
-  if (info?.status !== "allowed" && info?.status !== "rejected") return undefined;
-  const key =
-    info.rateLimitType === "five_hour"
-      ? "primary"
-      : info.rateLimitType === "seven_day"
-        ? "secondary"
-        : undefined;
-  if (!key || typeof info.resetsAt !== "number" || !Number.isFinite(info.resetsAt))
-    return undefined;
-  const reset = new Date(info.resetsAt >= 1e12 ? info.resetsAt : info.resetsAt * 1_000);
-  if (Number.isNaN(reset.getTime())) return undefined;
-  return {
-    key,
-    window: {
-      status: info.status === "rejected" ? "limit_reached" : "ok",
-      windowDurationMinutes: key === "primary" ? 300 : 10_080,
-      resetsAt: reset.toISOString(),
-    },
-  };
 }
 
 /**
