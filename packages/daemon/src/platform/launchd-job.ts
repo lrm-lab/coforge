@@ -146,9 +146,16 @@ export async function launchdJobs(): Promise<Map<string, number>> {
   return jobs;
 }
 
+/** Refuses anything but one Workspace's Agent job prefix, `cn.coforge.agent.<identity>.`, and
+ * returns its launchd identity. */
+export function assertAgentJobScope(prefix: string): string {
+  const identity = /^cn\.coforge\.agent\.([a-f0-9]{24})\.$/.exec(prefix)?.[1];
+  if (!identity) throw new Error("invalid Agent job scope");
+  return identity;
+}
+
 export async function stopLaunchdJobs(prefix: string, directory: string): Promise<void> {
-  if (!/^cn\.coforge\.agent\.[a-f0-9]{24}\.$/.test(prefix))
-    throw new Error("invalid Agent job scope");
+  assertAgentJobScope(prefix);
   for (const label of (await launchdJobs()).keys()) {
     if (label.startsWith(prefix)) await new LaunchdJob({ label, directory, command: [] }).stop();
   }

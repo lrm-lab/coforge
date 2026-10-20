@@ -1,11 +1,102 @@
 import { chmodSync, mkdtempSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { lstat, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { getLogger } from "@logtape/logtape";
 import type { Subprocess } from "bun";
-import { LaunchdJob, processGroupExists } from "./launchd-job";
+import {
+  assertAgentJobScope,
+  LaunchdJob,
+  launchdJobs,
+  processGroupExists,
+  stopLaunchdJobs,
+} from "./launchd-job";
 import { ProcessChannel } from "./process-channel";
 import type { OwnedProcessTree, ProcessTreeSpawner } from "./process-tree";
 import { RuntimeExecutableNotFoundError } from "./runtime-executable-not-found";
+
+/** Agent relay sockets stay outside the state tree: a socket path must fit macOS's 104 bytes. */
+export const AGENT_RELAY_ROOT = "/private/tmp";
+
+/** How long an owner waits for its Agent job to start and connect before giving it up. */
+export const AGENT_STARTUP_TIMEOUT_MS = 10_000;
+
+/** A relay directory's name: its Workspace's launchd identity, then `mkdtemp`'s six characters.
+ * The name is the one pattern; the sweep, the plist scan and the runner check derive from it. */
+const RELAY_NAME = "cf-agent-[a-f0-9]{24}-[A-Za-z0-9]{6}";
+// AGENT_RELAY_ROOT holds no regular-expression metacharacter.
+const RELAY_SOCKET = new RegExp(`^${AGENT_RELAY_ROOT}/${RELAY_NAME}/stdio\\.sock$`);
+
+/** `cf-agent-<identity>-`: the name prefix of one Workspace's Agent relay directories. */
+export function agentRelayDirectoryPrefix(prefix: string): string {
+  return `cf-agent-${assertAgentJobScope(prefix)}-`;
+}
+
+/** Stops every Agent job of one Workspace, then removes the relay directories they leave. */
+export async function stopLaunchdAgents(prefix: string, directory: string): Promise<void> {
+  await stopLaunchdJobs(prefix, directory);
+  await sweepAgentRelayDirectories(prefix, directory, { jobs: await launchdJobs() });
+}
+
+/**
+ * Removes this Workspace's relay directories that no loaded Agent job's plist names: an owner
+ * killed before its own cleanup leaves its directory behind. Another Workspace's directories, the
+ * random names of earlier releases, and anything that is not this user's own directory are never
+ * touched. A directory younger than the startup timeout is kept, because its owner creates it
+ * before its job is loaded. One entry that cannot be removed does not stop the rest.
+ */
+export async function sweepAgentRelayDirectories(
+  prefix: string,
+  directory: string,
+  options: { jobs: Map<string, number>; root?: string },
+): Promise<void> {
+  const relayPrefix = agentRelayDirectoryPrefix(prefix);
+  const logger = getLogger(["coforge", "daemon", "launchd"]);
+  const referenced = new Set<string>();
+  for (const label of options.jobs.keys()) {
+    if (!label.startsWith(prefix)) continue;
+    let plist: string;
+    try {
+      plist = await readFile(join(directory, `${label}.plist`), "utf8");
+    } catch (error) {
+      logger.warn("Agent relay sweep skipped: a loaded Agent job's plist is unreadable", {
+        event: "launchd:relay_sweep_skipped",
+        label,
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    for (const [name] of plist.matchAll(new RegExp(RELAY_NAME, "g"))) referenced.add(name);
+  }
+  const root = options.root ?? AGENT_RELAY_ROOT;
+  const relayName = new RegExp(`^${RELAY_NAME}$`);
+  let failure: unknown;
+  let names: string[] = [];
+  try {
+    names = await readdir(root);
+  } catch (error) {
+    failure = error;
+  }
+  for (const name of names) {
+    if (!name.startsWith(relayPrefix) || !relayName.test(name) || referenced.has(name)) continue;
+    try {
+      const entry = await lstat(join(root, name));
+      if (
+        !entry.isDirectory() ||
+        entry.uid !== process.getuid!() ||
+        Date.now() - entry.mtimeMs < AGENT_STARTUP_TIMEOUT_MS
+      )
+        continue;
+      await rm(join(root, name), { recursive: true, force: true });
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  if (failure !== undefined)
+    logger.warn("Agent relay sweep failed", {
+      event: "launchd:relay_sweep_failed",
+      error_message: failure instanceof Error ? failure.message : String(failure),
+    });
+}
 
 /** Provider-neutral stdio over a private socket to an OS-owned job. */
 export class LaunchdProcessOwner implements ProcessTreeSpawner {
@@ -18,7 +109,9 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
   ): OwnedProcessTree {
     const executable = command[0] && Bun.which(command[0], { cwd, PATH: environment.PATH ?? "" });
     if (!executable) throw new RuntimeExecutableNotFoundError(command[0] ?? "");
-    const root = mkdtempSync("/private/tmp/cf-agent-");
+    const root = mkdtempSync(
+      join(AGENT_RELAY_ROOT, agentRelayDirectoryPrefix(this.options.prefix)),
+    );
     chmodSync(root, 0o700);
     const socketPath = join(root, "stdio.sock");
     const job = new LaunchdJob({
@@ -133,7 +226,10 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
       return identity;
     });
     void started.catch(fail);
-    const startupTimeout = setTimeout(() => fail(new Error("Agent job startup timeout")), 10_000);
+    const startupTimeout = setTimeout(
+      () => fail(new Error("Agent job startup timeout")),
+      AGENT_STARTUP_TIMEOUT_MS,
+    );
     void ready.then(
       () => clearTimeout(startupTimeout),
       () => clearTimeout(startupTimeout),
@@ -198,10 +294,14 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
   }
 }
 
+/** The one relay socket shape the owner creates: `/` or `..` cannot enter either name segment. */
+export function isAgentRelaySocket(path: string): boolean {
+  return RELAY_SOCKET.test(path);
+}
+
 /** Internal executable mode. No arguments or credentials are persisted in the plist. */
 export async function runLaunchdAgent(socketPath: string): Promise<void> {
-  if (!/^\/private\/tmp\/cf-agent-[A-Za-z0-9]+\/stdio\.sock$/.test(socketPath ?? ""))
-    throw new Error("invalid Agent relay socket");
+  if (!isAgentRelaySocket(socketPath ?? "")) throw new Error("invalid Agent relay socket");
   let child: Subprocess<"pipe", "pipe", "pipe"> | undefined;
   process.on("SIGTERM", () => {
     if (child) child.kill("SIGTERM");

@@ -25,7 +25,7 @@ import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
 import { configureDaemonLogging } from "#src/platform/daemon-logging";
 import { installerJournalExists } from "#src/platform/installer-journal";
-import { stopLaunchdJobs } from "#src/platform/launchd-job";
+import { stopLaunchdAgents } from "#src/platform/launchd-process";
 import { stopWorkspaceAgentProcesses } from "#src/platform/linux-agent-processes";
 import {
   WorkspaceHealthJournal,
@@ -232,7 +232,7 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
       if (process.platform === "darwin" && Bun.env.COFORGE_WORKSPACE_AGENT_PREFIX) {
         const directory = Bun.env.COFORGE_WORKSPACE_JOB_DIRECTORY;
         if (!directory) throw new Error("Workspace Agent job directory is missing");
-        await stopLaunchdJobs(Bun.env.COFORGE_WORKSPACE_AGENT_PREFIX, directory);
+        await stopLaunchdAgents(Bun.env.COFORGE_WORKSPACE_AGENT_PREFIX, directory);
       }
       const credentials = new FileDaemonCredentialStore();
       const configStore = new DaemonConfigStore(daemonStateDirectory, {

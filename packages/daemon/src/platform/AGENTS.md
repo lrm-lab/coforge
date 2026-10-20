@@ -20,6 +20,11 @@ Rules for OS primitives in `src/platform/`. They extend
 - `launchd-process.ts` runs external Agent stdio and cleanup in a separate
   launchd job behind the process-tree interface. Its internal runner is
   embedded in Computer, never another installed product.
+- An Agent relay lives in `/private/tmp/cf-agent-<identity>-XXXXXX/stdio.sock` (the
+  Workspace's launchd identity). `stopLaunchdAgents` sweeps it with the prefix's Agent jobs;
+  it never touches legacy random names, and keeps directories younger than the startup timeout.
+  The real-launchd cases live in `test/launchd-process.integration.ts`: `bun test` does not pick
+  it up, and the macOS lifecycle CI job runs it.
 - An executable the Agent's PATH cannot resolve fails the spawn with
   `RuntimeExecutableNotFoundError` (`code: "runtime_not_found"`), whether it
   is spawned directly, through launchd, or into a Job Object. Any other
