@@ -19,27 +19,41 @@ test("an @query is found at the start of the text and after a space", () => {
   expect(activeReferenceQuery("hi @", 4)).toEqual({ trigger: "@", start: 3, query: "" });
 });
 
-test("a mention starts only at the start of the text or after whitespace (the strict convention)", () => {
-  // Task #64: typing the message first and then @-mentioning without a space does NOT open the
-  // popup, because that is Slack's and Discord's boundary. The looser rule (fire after any
-  // non-handle character, which would also cover CJK text) was tried and rejected in favour of
-  // aligning with the convention.
-  expect(activeReferenceQuery("写点东西@alice", end("写点东西@alice"))).toBeUndefined();
+test("an @ straight after CJK text or punctuation opens the list (task #49)", () => {
+  // Chinese puts no space between words, so the trigger may follow a CJK character or any
+  // punctuation directly.
+  expect(activeReferenceQuery("你好@", end("你好@"))).toEqual({
+    trigger: "@",
+    start: 2,
+    query: "",
+  });
+  expect(activeReferenceQuery("你好@张", end("你好@张"))).toEqual({
+    trigger: "@",
+    start: 2,
+    query: "张",
+  });
+  expect(activeReferenceQuery("（@", end("（@"))).toEqual({ trigger: "@", start: 1, query: "" });
+  expect(activeReferenceQuery("。@a", end("。@a"))).toEqual({ trigger: "@", start: 1, query: "a" });
+  expect(activeReferenceQuery("写点东西@alice", end("写点东西@alice"))).toEqual({
+    trigger: "@",
+    start: 4,
+    query: "alice",
+  });
   expect(activeReferenceQuery("写点东西 @alice", end("写点东西 @alice"))).toEqual({
     trigger: "@",
     start: 5,
     query: "alice",
   });
-  expect(activeReferenceQuery("done!@al", 7)).toBeUndefined();
-  expect(activeReferenceQuery("done! @al", end("done! @al"))).toEqual({
-    trigger: "@",
-    start: 6,
-    query: "al",
-  });
+  expect(activeReferenceQuery("done!@al", 8)).toEqual({ trigger: "@", start: 5, query: "al" });
+  expect(activeReferenceQuery("：@a", end("：@a"))).toEqual({ trigger: "@", start: 1, query: "a" });
 });
 
-test("a handle-shaped character is not a boundary, so an email or a second @ stays plain text", () => {
+test("an ASCII letter, digit or email-local-part character is not a boundary, so an email or a second @ stays plain text", () => {
   expect(activeReferenceQuery("foo@bar", 7)).toBeUndefined();
+  expect(activeReferenceQuery("a@b", 3)).toBeUndefined();
+  for (const text of ["foo.bar@", "x_y@", "a%b@", "a+b@", "a-b@", "7@"]) {
+    expect(activeReferenceQuery(text, end(text))).toBeUndefined();
+  }
   expect(activeReferenceQuery("@ada@b", 6)).toBeUndefined();
   expect(activeReferenceQuery("no at sign here", 15)).toBeUndefined();
 });
@@ -78,14 +92,27 @@ test("an @query takes any run of non-space characters, so a CJK or capitalized n
   });
 });
 
-test("an @ straight after CJK text still opens nothing: the word-start boundary is kept", () => {
-  expect(activeReferenceQuery("写点东西@张三", end("写点东西@张三"))).toBeUndefined();
+test("an @ straight after a CJK name opens a fresh query on the CJK boundary", () => {
+  expect(activeReferenceQuery("写点东西@张三", end("写点东西@张三"))).toEqual({
+    trigger: "@",
+    start: 4,
+    query: "张三",
+  });
+  // The boundary cannot tell a finished CJK name from CJK prose, so a trigger glued to one opens.
+  expect(activeReferenceQuery("@张三@李四", end("@张三@李四"))).toEqual({
+    trigger: "@",
+    start: 3,
+    query: "李四",
+  });
+  expect(activeReferenceQuery("@张三#random", end("@张三#random"))).toEqual({
+    trigger: "#",
+    start: 3,
+    query: "random",
+  });
 });
 
-test("a space, another @ or a # ends an @query, and a finished name followed by a space opens nothing", () => {
+test("a space ends an @query, and a finished name followed by a space opens nothing", () => {
   expect(activeReferenceQuery("@张三 ", end("@张三 "))).toBeUndefined();
-  expect(activeReferenceQuery("@张三@李四", end("@张三@李四"))).toBeUndefined();
-  expect(activeReferenceQuery("@张三#random", end("@张三#random"))).toBeUndefined();
   expect(activeReferenceQuery("@张三 你好", end("@张三 你好"))).toBeUndefined();
 });
 
@@ -126,7 +153,12 @@ test("the trigger boundary keeps Unicode whitespace and UTF-16 offsets", () => {
     start: 5,
     query: "Ada",
   });
-  expect(activeReferenceQuery("text\u200b@Ada", 9)).toBeUndefined();
+  // A zero-width space is not an ASCII word character, so it is a boundary too.
+  expect(activeReferenceQuery("text\u200b@Ada", 9)).toEqual({
+    trigger: "@",
+    start: 5,
+    query: "Ada",
+  });
 });
 
 test("a trailing line break ends the query even when the preceding token is otherwise valid", () => {
@@ -156,9 +188,39 @@ test("a #query opens at the start of the text and after whitespace, like an @que
   });
 });
 
-test("a # straight after a word, or a second #, opens nothing", () => {
+test("a # straight after CJK text or punctuation opens the list, like an @", () => {
+  expect(activeReferenceQuery("去#ra", end("去#ra"))).toEqual({
+    trigger: "#",
+    start: 1,
+    query: "ra",
+  });
+  expect(activeReferenceQuery("写点东西#random", end("写点东西#random"))).toEqual({
+    trigger: "#",
+    start: 4,
+    query: "random",
+  });
+  expect(activeReferenceQuery("（#", end("（#"))).toEqual({ trigger: "#", start: 1, query: "" });
+});
+
+test("a trigger inside a URL opens nothing", () => {
+  for (const text of [
+    "https://www.youtube.com/@frank",
+    "https://x.com/docs/#install",
+    "a/@b",
+    "?#x",
+    "a:@b",
+    "a=@b",
+    "a&#b",
+    "~@b",
+  ]) {
+    expect(activeReferenceQuery(text, end(text))).toBeUndefined();
+  }
+});
+
+test("a # straight after an ASCII word, or a second #, opens nothing", () => {
   expect(activeReferenceQuery("abc#", 4)).toBeUndefined();
-  expect(activeReferenceQuery("写点东西#random", end("写点东西#random"))).toBeUndefined();
+  expect(activeReferenceQuery("C#", 2)).toBeUndefined();
+  expect(activeReferenceQuery("1#", 2)).toBeUndefined();
   expect(activeReferenceQuery("##", 2)).toBeUndefined();
   expect(activeReferenceQuery("@ada#r", 6)).toBeUndefined();
 });

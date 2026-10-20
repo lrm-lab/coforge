@@ -52,25 +52,31 @@ function caretInCode(beforeCaret: string): boolean {
 }
 
 /** An `@query` (any run without whitespace, `@` or `#`) or a `#query` (channel-name characters),
- * at the text start or after whitespace, running to the caret. */
-// Keep the strict boundary as an assertion so matches can start at the trigger itself.
-const REFERENCE_QUERY = /(?<!\S)(?:@([^\s@#]*)|#([a-z0-9_-]*))$/;
+ * at the text start or after a boundary character (see `activeReferenceQuery`), running to the
+ * caret. */
+// The boundary is an assertion so matches can start at the trigger itself.
+const REFERENCE_QUERY = /(?<![A-Za-z0-9._%+@#/:?=&~-])(?:@([^\s@#]*)|#([a-z0-9_-]*))$/;
 
 /**
  * The completion query at the caret: the in-progress token starts at `@` or `#` (at the text
- * start or after whitespace) and runs to the caret. A `#query` uses channel-name characters only;
- * an `@query` is a person's or Agent's name as it reads, so any run of characters that are not
- * whitespace, `@` or `#` — a CJK or capitalized name opens the list too, while a space still ends
- * it (a name is picked from the list, not typed out with its spaces).
+ * start or after a boundary character, below) and runs to the caret. A `#query` uses
+ * channel-name characters only; an `@query` is a person's or Agent's name as it reads, so any run
+ * of characters that are not whitespace, `@` or `#` — a CJK or capitalized name opens the list
+ * too, while a space still ends it (a name is picked from the list, not typed out with its
+ * spaces).
  * Returns the trigger, the token's start offset (the trigger itself) and the typed query without
- * it. `undefined` when the caret is not inside such a token — e.g. after another word, inside an
- * email address, past a completed reference followed by more name characters, or in code.
+ * it. `undefined` when the caret is not inside such a token — e.g. straight after an ASCII word,
+ * inside an email address or a URL, past a completed reference followed by more name characters,
+ * or in code.
  *
- * The boundary is deliberately the strict one (Slack's and Discord's) for both triggers: the
- * popup opens only at the start of a word, never against the end of one. A looser boundary
- * (which would also fire straight after CJK text) was tried for task #64 and rejected — align
- * with the convention rather than inventing a house rule. The send-time recognizer is looser for
- * `#` (`去#random` still links); completion only decides when to offer help.
+ * Both triggers open at the text start or after any character except an ASCII letter or digit,
+ * the email local-part characters `._%+-`, the URL characters `/:?=&~`, or another `@` or `#`
+ * (Frank's decision in task #49): Chinese puts no space between words, so `你好@`, `（@`, `：@`
+ * and `去#ra` open the list, while `a@b.com`, `foo.bar@`, `C#`, `https://x.com/@frank` and
+ * `https://x.com/docs/#install` stay plain text. The send-time recognizers exclude fewer
+ * characters before a trigger, so they still read whatever completion writes: `mention-pins.ts`'s
+ * `WORD_BEFORE` for a pinned `@label`, the SDK's `MENTION_PATTERN` for an `@handle`, and
+ * `CHANNEL_REFERENCE_PATTERN` for a `#channel`. Completion only decides when to offer help.
  */
 export function activeReferenceQuery(
   value: string,
