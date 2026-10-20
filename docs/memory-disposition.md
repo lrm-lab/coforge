@@ -65,8 +65,3 @@ Run the database cases explicitly after migrations against a disposable database
 MEMORY_DISPOSITION_TEST_DATABASE_URL=postgresql://USER@127.0.0.1:PORT/DATABASE \
   mise run test:file -- ./test/memory-disposition.integration.ts --rerun-each 5
 ```
-
-Design source: `skill-node-design-grill/cycles/002-memory-disposition-receipt.md`
-(Q190–Q216), supplied in the local design archive. This delivery was authorized
-on 2026-10-15 and uses branch `feat/memory-disposition-receipt-20261015`, based on
-`5146d1393bbe1956044d37d9a36cddd8f0dfa77e`.
