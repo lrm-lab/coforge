@@ -1,7 +1,25 @@
 import { expect, test } from "bun:test";
+import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
+import type { AgentRuntimeEvent } from "#src/code-agent/contract";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
+
+const OPENCODE_FIXTURE = new URL("./fixtures/opencode-fixture.ts", import.meta.url).pathname;
+
+function completed(session: {
+  subscribe(listener: (event: AgentRuntimeEvent) => void): () => void;
+}): Promise<void> {
+  return new Promise((resolve) => {
+    const unsubscribe = session.subscribe((event) => {
+      if (event.type !== "completed") return;
+      unsubscribe();
+      resolve();
+    });
+  });
+}
 
 test("code-agent registry exposes every supported Provider", () => {
   expect(createCodeAgentProvider(RUNTIME_PROVIDER.COFORGE).provider).toBe(RUNTIME_PROVIDER.COFORGE);
@@ -12,6 +30,41 @@ test("code-agent registry exposes every supported Provider", () => {
   );
   expect(createCodeAgentProvider(RUNTIME_PROVIDER.KIRO).provider).toBe(RUNTIME_PROVIDER.KIRO);
   expect(createCodeAgentProvider(RUNTIME_PROVIDER.CURSOR).provider).toBe(RUNTIME_PROVIDER.CURSOR);
+});
+
+test("registry launches OpenCode from its installer path when PATH misses it", async () => {
+  const home = await mkdtemp(join(tmpdir(), "coforge-registry-opencode-"));
+  const workspace = join(home, "workspace");
+  const executable = join(home, ".opencode", "bin", "opencode");
+  const launchLog = join(home, "launches.jsonl");
+  await mkdir(join(home, ".opencode", "bin"), { recursive: true });
+  await mkdir(workspace, { recursive: true });
+  const quote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
+  await Bun.write(
+    executable,
+    `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(OPENCODE_FIXTURE)} "$@"\n`,
+  );
+  await chmod(executable, 0o755);
+
+  try {
+    const provider = createCodeAgentProvider(RUNTIME_PROVIDER.OPENCODE, {
+      environment: { HOME: home, PATH: "/usr/bin:/bin" },
+      platform: "darwin",
+    });
+    const session = await provider.createAgentSession({
+      agentWorkspaceDirectory: workspace,
+      instructions: "installer path instructions",
+      environment: { COFORGE_OPENCODE_MODE: "text", COFORGE_OPENCODE_LAUNCH_LOG: launchLog },
+    });
+    try {
+      await completed(session);
+      expect(await Bun.file(launchLog).text()).toContain("installer path instructions");
+    } finally {
+      await session.dispose();
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test("advertised usage scanning matches each registered provider's reader", () => {
