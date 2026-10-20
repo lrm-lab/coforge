@@ -1,17 +1,9 @@
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  Button as AriaButton,
-  Disclosure,
-  DisclosurePanel,
-  Heading,
-  Text,
-} from "react-aria-components";
-import { ChevronDown, DotsHorizontal, Plus, SearchLg } from "@untitledui/icons";
+import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "react-aria-components";
+import { ChevronDown, DotsHorizontal, Plus, SearchLg, Trash01 } from "@untitledui/icons";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
-import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -29,19 +21,15 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { removePublicChannelMember, setPublicChannelMemberRole } from "./channels.functions";
+import { setPublicChannelMemberRole } from "./channels.functions";
+import { RemoveMemberDialog, ServerAdminRoleDialog } from "./channel-member-dialogs";
 import { memberMatchesSearch } from "./channel-member-search";
 import { AddMembersView, useCreatedAgentJoin } from "./channel-add-members-view";
-import { useChannelMembers, type ChannelMembers } from "./channel-members-query";
+import { useChannelMembers, type ChannelMembers, type RosterMember } from "./channel-members-query";
 import type { AgentProfileTab as AgentProfileTabId } from "#src/features/agents/profile-panel/profile-panel-search";
 import { MemberProfileCard } from "./channel-header-people";
 import { channelMembersQueryKey } from "./conversation-query-keys";
 import { mentionKey } from "./mention-text";
-
-type Member = { kind: "user" | "agent" } & (
-  | ChannelMembers["humans"][number]
-  | ChannelMembers["agents"][number]
-);
 
 /** The two views of the members page: the roster, and adding people to it. */
 export type ChannelMembersView = "members" | "add";
@@ -151,8 +139,8 @@ function MembersRoster({
   const displays = useAgentDisplays();
   const [roleTarget, setRoleTarget] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [removing, setRemoving] = useState<Member | null>(null);
-  const [serverAdmin, setServerAdmin] = useState<Member | null>(null);
+  const [removing, setRemoving] = useState<RosterMember | null>(null);
+  const [serverAdmin, setServerAdmin] = useState<RosterMember | null>(null);
   const query = search.trim().toLowerCase();
   const humans = useMemo(
     () =>
@@ -160,7 +148,7 @@ function MembersRoster({
         .filter((human) =>
           memberMatchesSearch(query, { kind: "user", displayName: human.displayName }),
         )
-        .map((human): Member => ({ kind: "user", ...human })),
+        .map((human): RosterMember => ({ kind: "user", ...human })),
     [data.humans, query],
   );
   const agents = useMemo(
@@ -173,7 +161,7 @@ function MembersRoster({
             name: agent.name,
           }),
         )
-        .map((agent): Member => ({ kind: "agent", ...agent })),
+        .map((agent): RosterMember => ({ kind: "agent", ...agent })),
     [data.agents, query],
   );
   const total = data.humans.length + data.agents.length;
@@ -188,7 +176,7 @@ function MembersRoster({
 
   // Stable across renders, so a live status update re-renders only the rows whose display changed.
   const toggleRole = useCallback(
-    async (member: Member) => {
+    async (member: RosterMember) => {
       if (isServerAdmin(member)) {
         setServerAdmin(member);
         return;
@@ -212,7 +200,7 @@ function MembersRoster({
     },
     [channelId, queryClient, setRole],
   );
-  function rowFor(member: Member) {
+  function rowFor(member: RosterMember) {
     const self = member.kind === "user" && member.id === viewerId;
     return (
       <MemberRow
@@ -313,7 +301,7 @@ const MemberRow = memo(function MemberRow({
   onOpenProfile,
   autoFocus,
 }: {
-  member: Member;
+  member: RosterMember;
   display: AgentDisplaySnapshot | undefined;
   canChangeRole: boolean;
   roleBusy: boolean;
@@ -321,8 +309,8 @@ const MemberRow = memo(function MemberRow({
   /** Some row of the roster has actions and they sit behind a menu button; a row without any keeps
    * the button's room, so every badge still ends on one line. */
   actionsInMenu: boolean;
-  onToggleRole: (member: Member) => void;
-  onRemove: (member: Member) => void;
+  onToggleRole: (member: RosterMember) => void;
+  onRemove: (member: RosterMember) => void;
   onOpenProfile: (profile: RosterProfile, tab?: AgentProfileTabId) => void;
   autoFocus: boolean;
 }) {
@@ -332,7 +320,7 @@ const MemberRow = memo(function MemberRow({
   const roleAction = demotes ? m.channel_members_demote() : m.channel_members_promote();
   const actionsLabel = m.channel_members_actions_name({ name: member.displayName });
   const badge = role && (
-    <Badge size="sm" color="gray">
+    <Badge type="modern" size="sm" color="gray" className="font-mono">
       {role}
     </Badge>
   );
@@ -463,7 +451,7 @@ const MemberRow = memo(function MemberRow({
             </span>
           )}
           {hasActions && (
-            <span className="col-start-1 row-start-1 flex items-center gap-2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+            <span className="col-start-1 row-start-1 flex items-center gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
               {canChangeRole && (
                 <Button
                   size="sm"
@@ -480,14 +468,13 @@ const MemberRow = memo(function MemberRow({
                 </Button>
               )}
               {canRemove && (
-                <Button
-                  size="sm"
-                  color="tertiary-destructive"
-                  aria-label={m.channel_members_remove_name({ name: member.displayName })}
-                  onPress={() => onRemove(member)}
-                >
-                  {m.channel_members_remove_action()}
-                </Button>
+                <ButtonUtility
+                  icon={Trash01}
+                  color="tertiary"
+                  className="size-8"
+                  tooltip={m.channel_members_remove_name({ name: member.displayName })}
+                  onClick={() => onRemove(member)}
+                />
               )}
             </span>
           )}
@@ -529,114 +516,5 @@ function MemberGroup({
         <ul className="px-2 md:px-3">{expanded && children}</ul>
       </DisclosurePanel>
     </Disclosure>
-  );
-}
-
-/** A Workspace owner or admin stays a channel admin everywhere; their row explains that instead
- * of demoting them. */
-function ServerAdminRoleDialog({ member, onClose }: { member: Member; onClose: () => void }) {
-  return (
-    <ModalOverlay isOpen onOpenChange={(next) => !next && onClose()}>
-      <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="overflow-hidden text-left">
-          {({ close }) => (
-            <>
-              <DialogHeader title={m.channel_members_server_admin_title()} onClose={close} />
-              <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
-                {m.channel_members_server_admin_message({ name: member.displayName })}
-              </Text>
-              <div className="mt-6 flex justify-end border-t border-secondary px-6 py-4">
-                <Button color="secondary" onPress={close}>
-                  {m.channel_members_ok()}
-                </Button>
-              </div>
-            </>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
-  );
-}
-
-function RemoveMemberDialog({
-  channelId,
-  channelName,
-  member,
-  onClose,
-}: {
-  channelId: string;
-  channelName: string;
-  member: Member;
-  onClose: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const remove = useServerFn(removePublicChannelMember);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function confirm() {
-    setBusy(true);
-    setError("");
-    try {
-      await remove({
-        data: {
-          channelId,
-          ...(member.kind === "user" ? { userId: member.id } : { agentId: member.id }),
-        },
-      });
-      await queryClient.invalidateQueries({ queryKey: channelMembersQueryKey(channelId) });
-      onClose();
-    } catch {
-      setError(m.channel_members_remove_error({ name: member.displayName }));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <ModalOverlay
-      isOpen
-      isDismissable={!busy}
-      onOpenChange={(next) => {
-        if (!next && !busy) onClose();
-      }}
-    >
-      <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="overflow-hidden text-left">
-          {({ close }) => (
-            <>
-              <DialogHeader
-                title={m.channel_members_remove_title()}
-                onClose={busy ? undefined : close}
-              />
-              <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
-                {m.channel_members_remove_message({
-                  name: member.displayName,
-                  channel: channelName,
-                })}
-              </Text>
-              {error && (
-                <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
-                  {error}
-                </p>
-              )}
-              <div className="mt-6 flex justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button color="secondary" isDisabled={busy} onPress={close}>
-                  {m.channel_members_cancel()}
-                </Button>
-                <Button
-                  color="primary-destructive"
-                  isDisabled={busy}
-                  isLoading={busy}
-                  showTextWhileLoading
-                  onPress={() => void confirm()}
-                >
-                  {busy ? m.channel_members_removing() : m.channel_members_remove_action()}
-                </Button>
-              </div>
-            </>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
   );
 }

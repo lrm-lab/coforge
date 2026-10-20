@@ -137,7 +137,10 @@ test("the channel settings panel edits info, preferences, archive and membership
     expect(headerButtons).not.toContain("Members");
 
     await openPanel();
-    await waitFor(`${byText("h3", "Members")} !== undefined`);
+    // The Members heading wraps the row button, so its text runs on into the counts.
+    await waitFor(
+      `[...document.querySelectorAll('[role="dialog"] h3')].some((heading) => heading.textContent.startsWith("Members"))`,
+    );
     const identity = await evaluate<{ title: string; text: string }>(`(() => {
       const panel = document.querySelector('[role="dialog"][aria-label="Channel details and settings"]');
       return { title: panel.querySelector("h2").textContent, text: panel.textContent };

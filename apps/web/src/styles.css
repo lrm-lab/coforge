@@ -207,6 +207,11 @@ html[data-drag-cursor] * {
     border-radius: 9999px;
   }
 
+  /* A small avatar among rounded-rectangle ones (the channel member pickers' rows) keeps their shape. */
+  [data-avatar].size-6.avatar-square {
+    border-radius: calc(var(--avatar-size) / 4);
+  }
+
   /* The Direct messages row's avatar: the "sm" step scaled to 44 × 48px. Its radius and status dot
      still follow `--avatar-size`. */
   [data-avatar].avatar-dm {

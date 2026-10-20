@@ -6,6 +6,12 @@ import { channelMembersQueryKey } from "./conversation-query-keys";
 
 export type ChannelMembers = Awaited<ReturnType<typeof loadPublicChannelMembers>>;
 
+/** One row of the roster: a human or an Agent, tagged with which. */
+export type RosterMember = { kind: "user" | "agent" } & (
+  | ChannelMembers["humans"][number]
+  | ChannelMembers["agents"][number]
+);
+
 /** The members roster every members surface reads: the channel header's face stack, the settings
  * panel's page and strip, and the action card's add dialog share one query per channel, so a
  * write there shows up here. */

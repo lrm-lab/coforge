@@ -190,7 +190,8 @@ These rules apply to `src/features/conversations/`.
   proposal arrives picked and individually removable, with the same search over the Workspace's
   people and Agents outside the channel. It does not show the roster; that is the settings
   panel's members page. Both pickers compose `channel-member-picker.tsx` (the candidate model,
-  the picked chips and the ticked rows) and read the one `channelMembersQueryKey` query through
+  the ticked rows and, in the dialog only, the picked chips; the add view shows its picks as
+  ticked rows alone) and read the one `channelMembersQueryKey` query through
   `channel-members-query.ts`, so neither grows its own candidate list.
 - The browser refreshes only the pending action cards it shows, through `loadActionCardStates` on the `messageAvailable` signal and on window focus.
 - A reaction arrives as `message.reaction.v1` (the message's whole summary and its `reactionVersion`) and shows without a

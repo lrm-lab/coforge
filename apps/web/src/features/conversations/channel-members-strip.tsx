@@ -1,8 +1,8 @@
+import { Button as AriaButton } from "react-aria-components";
 import { ChevronRight } from "@untitledui/icons";
 
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
-import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
@@ -34,24 +34,27 @@ export function MembersStrip({
   const more = entries.length - shown.length;
   return (
     <section className="py-5">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-md font-semibold text-primary">{m.channel_settings_members()}</h3>
-        <Button
-          color="link-gray"
-          size="sm"
-          iconTrailing={ChevronRight}
-          className="min-w-0"
+      {/* One full-width row opens the roster: the section's name, then its counts. */}
+      <h3>
+        <AriaButton
+          className="-mx-2 flex w-[calc(100%+1rem)] cursor-pointer items-center justify-between gap-3 rounded-lg bg-secondary px-2 py-1.5 text-sm outline-focus-ring hover:bg-secondary_hover focus-visible:outline-2"
           onPress={onOpenMembers}
         >
-          {members.data
-            ? `${m.channel_settings_humans({ count: humans.length })} · ${m.channel_settings_agents({ count: agents.length })}`
-            : m.channel_members_loading()}
-        </Button>
-      </div>
+          <span className="font-semibold text-primary">{m.channel_settings_members()}</span>
+          <span className="flex min-w-0 items-center gap-1 text-tertiary">
+            <span className="truncate">
+              {members.data
+                ? `${m.channel_settings_humans({ count: humans.length })} · ${m.channel_settings_agents({ count: agents.length })}`
+                : m.channel_members_loading()}
+            </span>
+            <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
+          </span>
+        </AriaButton>
+      </h3>
       <div className="mt-3 flex flex-wrap items-center gap-2" aria-busy={members.isPending}>
         {members.isPending &&
           Array.from({ length: 3 }, (_, index) => (
-            <Skeleton key={index} className="size-8 rounded-full" />
+            <Skeleton key={index} className="h-10 w-9 rounded-[0.625rem]" />
           ))}
         {members.isError && (
           <p role="alert" className="text-sm text-error-primary">
@@ -60,7 +63,7 @@ export function MembersStrip({
         )}
         {shown.map((entry) => (
           <Tooltip key={entry.key} title={entry.displayName}>
-            <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
+            <TooltipTrigger className="shrink-0 rounded-[0.625rem]" onPress={onOpenMembers}>
               <Avatar
                 size="sm"
                 alt=""
@@ -74,7 +77,7 @@ export function MembersStrip({
         ))}
         {more > 0 && (
           <Tooltip title={m.channel_settings_members_more({ count: more })}>
-            <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
+            <TooltipTrigger className="shrink-0 rounded-[0.625rem]" onPress={onOpenMembers}>
               <Avatar size="sm" alt="" initials={`+${more}`} />
               <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
             </TooltipTrigger>
@@ -83,6 +86,8 @@ export function MembersStrip({
         {canAdd && members.data && (
           <AvatarAddButton
             size="sm"
+            // The member avatars' 36 × 40 rounded rectangle (styles.css), not the official circle.
+            className="h-10 w-9 rounded-[0.625rem]"
             title={m.channel_settings_add_members()}
             onPress={onAddMembers}
           />

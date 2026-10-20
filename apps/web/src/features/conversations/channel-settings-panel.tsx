@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useServerFn } from "@tanstack/react-start";
 import { Heading, Text } from "react-aria-components";
 import {
-  ArrowLeft,
   Archive,
   Check,
   EyeOff,
@@ -23,7 +22,6 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { Toggle } from "#src/components/base/toggle/toggle";
@@ -40,8 +38,8 @@ import {
   type ChannelMembersView,
   type RosterProfile,
 } from "./channel-members-page";
-import { useChannelMembers } from "./channel-members-query";
 import { MembersStrip } from "./channel-members-strip";
+import { MembersPageHeading, SettingsPanelHeader } from "./channel-settings-header";
 import {
   deletePublicChannel,
   leavePublicChannel,
@@ -181,11 +179,8 @@ export function ChannelSettingsPanel({
               </div>
             ) : (
               <>
-                {membersView ? (
-                  // A sub-page leads back with its arrow and has no close button; Escape and a
-                  // click outside still close the panel. `SlideoutMenu.Header` always draws one,
-                  // so these classes copy its frame (slideout-menu.tsx); keep the two in sync.
-                  <header className="relative z-1 w-full border-b border-secondary px-4 pt-6 pb-4 md:px-6">
+                <SettingsPanelHeader>
+                  {membersView ? (
                     <MembersPageHeading
                       key={membersView}
                       channelId={channelId}
@@ -193,27 +188,27 @@ export function ChannelSettingsPanel({
                       takesFocus={!returnFocus}
                       onBack={() => changeMembersView(membersView === "add" ? "members" : null)}
                     />
-                  </header>
-                ) : (
-                  <SlideoutMenu.Header
-                    onClose={() => requestClose()}
-                    className="border-b border-secondary pb-4"
-                  >
-                    <div className="flex min-w-0 items-center gap-2 pr-8">
-                      <Heading slot="title" className="truncate text-lg font-semibold text-primary">
-                        #{conversation.name}
-                      </Heading>
-                      <Badge size="sm" color="gray" className="shrink-0">
-                        {m.channel_settings_public()}
-                      </Badge>
-                    </div>
-                    {conversation.description && (
-                      <p className="mt-1 truncate text-sm text-tertiary">
-                        {conversation.description}
-                      </p>
-                    )}
-                  </SlideoutMenu.Header>
-                )}
+                  ) : (
+                    <>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Heading
+                          slot="title"
+                          className="truncate text-lg font-semibold text-primary"
+                        >
+                          #{conversation.name}
+                        </Heading>
+                        <Badge size="sm" color="gray" className="shrink-0">
+                          {m.channel_settings_public()}
+                        </Badge>
+                      </div>
+                      {conversation.description && (
+                        <p className="mt-1 truncate text-sm text-tertiary">
+                          {conversation.description}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </SettingsPanelHeader>
                 {membersView ? (
                   <div className="flex min-h-0 w-full flex-1 flex-col">
                     <ChannelMembersPage
@@ -240,7 +235,10 @@ export function ChannelSettingsPanel({
                       onAddMembers={() => setMembersView("add")}
                     />
                     {(capabilities.update || conversation.project) && (
-                      <PanelSection title={m.channel_settings_info()}>
+                      <PanelSection
+                        title={m.channel_settings_info()}
+                        description={m.channel_settings_info_description()}
+                      >
                         {capabilities.update && (
                           <InfoForm
                             form={info}
@@ -372,52 +370,21 @@ function CoordinatorSection({
   );
 }
 
-function PanelSection({ title, children }: { title: string; children: ReactNode }) {
+function PanelSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
   return (
     <section className="border-t border-secondary py-5 first:border-t-0">
       <h3 className="text-md font-semibold text-primary">{title}</h3>
+      {description && <p className="mt-1 text-sm text-tertiary">{description}</p>}
       <div className="mt-3">{children}</div>
     </section>
-  );
-}
-
-/** The members page's header: Back (to the roster from the add view, else to the settings), its
- * title and, on the roster, the member count. No close button: Back is the way out. */
-function MembersPageHeading({
-  channelId,
-  view,
-  takesFocus,
-  onBack,
-}: {
-  channelId: string;
-  view: ChannelMembersView;
-  /** False when the roster returns focus to a row instead. */
-  takesFocus: boolean;
-  onBack: () => void;
-}) {
-  const members = useChannelMembers(channelId);
-  const count = members.data ? members.data.humans.length + members.data.agents.length : null;
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      <ButtonUtility
-        icon={ArrowLeft}
-        size="sm"
-        color="tertiary"
-        // Focus follows the view switch (the add view's search takes it instead).
-        autoFocus={takesFocus && view === "members"}
-        tooltip={view === "add" ? m.channel_members_back_to_members() : m.channel_members_back()}
-        aria-label={view === "add" ? m.channel_members_back_to_members() : m.channel_members_back()}
-        onClick={onBack}
-      />
-      <Heading slot="title" className="truncate text-lg font-semibold text-primary">
-        {view === "add" ? m.channel_members_add_member() : m.channel_members_page_title()}
-      </Heading>
-      {view === "members" && count !== null && (
-        <Badge size="sm" color="gray" className="shrink-0">
-          {count}
-        </Badge>
-      )}
-    </div>
   );
 }
 

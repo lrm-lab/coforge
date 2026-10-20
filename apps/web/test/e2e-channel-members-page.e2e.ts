@@ -67,6 +67,12 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     );
     if (!clicked.includes("true")) throw new Error(`"${text}" disappeared before it was clicked`);
   }
+  /** The settings' Members row: its name, then the counts this channel's two members give. */
+  async function openMembers() {
+    const row = `[...document.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent.includes("1 human · 1 agent"))`;
+    await waitFor(`${row} !== undefined`);
+    await browser("eval", `${row}.click()`);
+  }
   const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
   const panelHas = (text: string) => `${panel}?.textContent.includes(${JSON.stringify(text)})`;
   const onRoster = `${panel}?.querySelector('input[placeholder="Search members…"]') != null`;
@@ -143,7 +149,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await openChannel(`${workspacePath}/channel/${channel.id}`);
 
     // The Members summary opens the page in place of the settings.
-    await clickText(`[role="dialog"] button`, "1 human · 1 agent");
+    await openMembers();
     await waitFor(`${onRoster} && !${panelHas("Preferences")}`);
     await waitFor(panelHas(inside.displayName));
     await browser("screenshot", join(artifacts, "members.png"));
@@ -246,7 +252,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await waitFor(panelHas("Preferences"));
 
     // Close from the profile closes the whole panel; the next opening starts on the settings.
-    await clickText(`[role="dialog"] button`, "1 human · 1 agent");
+    await openMembers();
     await waitFor(`${search}?.value === ""`);
     await browser("eval", `${panel}.querySelector(${JSON.stringify(openProfile)}).click()`);
     await waitFor(`${panel}?.querySelector('[role="tablist"]') != null`);
@@ -259,7 +265,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     // the name keeps its width, and the menu makes the member a channel admin.
     await browser("set", "viewport", "390", "844");
     await openChannel(`${workspacePath}/channel/${channel.id}`);
-    await clickText(`[role="dialog"] button`, "1 human · 1 agent");
+    await openMembers();
     const actions = `[aria-label="Actions for ${inside.displayName}"]`;
     await waitFor(`${onRoster} && document.querySelector(${JSON.stringify(actions)}) !== null`);
     expect(

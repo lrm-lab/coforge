@@ -21,7 +21,6 @@ import {
   buildChannelCandidates,
   candidateKey,
   candidateSearchTerm,
-  ChannelCandidateChips,
   ChannelCandidateGroups,
   filterChannelCandidates,
   pickedMemberIds,
@@ -49,7 +48,7 @@ export function AddMembersView({
   const add = useServerFn(addPublicChannelMembersReportingRefusals);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
-  // Picks that failed to join, kept so their chips and a retry still find them once the fresh
+  // Picks that failed to join, kept so their rows and a retry still find them once the fresh
   // roster no longer offers them (a private Agent or someone who left the Workspace is no
   // candidate). One the roster lists as a member by now (added before a failed request) drops out.
   const [retained, setRetained] = useState<ChannelCandidate[]>([]);
@@ -59,16 +58,19 @@ export function AddMembersView({
     () => buildChannelCandidates(data.candidates),
     [data.candidates],
   );
-  const byKey = useMemo(() => {
-    const memberKeys = new Set([
+  // The selection shows only as ticked rows, so a retained pick the roster no longer offers is
+  // listed ahead of the candidates, where its row can still be unticked.
+  const listed = useMemo(() => {
+    const listedKeys = new Set([
       ...data.humans.map((human) => candidateKey("user", human.id)),
       ...data.agents.map((agent) => candidateKey("agent", agent.id)),
+      ...candidates.map((entry) => entry.key),
     ]);
-    const pending = retained.filter((entry) => !memberKeys.has(entry.key));
-    return new Map([...pending, ...candidates].map((entry) => [entry.key, entry]));
+    return [...retained.filter((entry) => !listedKeys.has(entry.key)), ...candidates];
   }, [retained, candidates, data.humans, data.agents]);
+  const byKey = useMemo(() => new Map(listed.map((entry) => [entry.key, entry])), [listed]);
   const term = candidateSearchTerm(search);
-  const shown = useMemo(() => filterChannelCandidates(candidates, term), [candidates, term]);
+  const shown = useMemo(() => filterChannelCandidates(listed, term), [listed, term]);
   const { joining, failure, notStarted } = createdAgentJoin;
   // Joined some other way meanwhile (a refetch, another member): nothing left to retry.
   const unjoined =
@@ -162,12 +164,6 @@ export function AddMembersView({
             {m.agent_deferred_start_notice()}
           </p>
         )}
-        <ChannelCandidateChips
-          keys={[...selected]}
-          byKey={byKey}
-          disabled={busy}
-          onRemove={(key) => toggle(key, false)}
-        />
         <Input
           size="sm"
           label={m.channel_members_search()}
@@ -183,7 +179,7 @@ export function AddMembersView({
       <div className="mx-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-secondary md:mx-6">
         <div className="min-h-0 flex-1 overflow-y-auto py-2">
           <ChannelCandidateGroups
-            candidates={candidates}
+            candidates={listed}
             shown={shown}
             term={term}
             selected={selected}
@@ -209,6 +205,7 @@ export function AddMembersView({
           </p>
         )}
         <Button
+          color="secondary"
           iconLeading={Plus}
           className="w-full"
           isDisabled={busy || joining || selected.size === 0}

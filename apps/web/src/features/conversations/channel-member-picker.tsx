@@ -220,6 +220,8 @@ function ChannelCandidateRow({
             <CheckboxBase isSelected={on} isDisabled={isDisabled} isFocusVisible={isFocusVisible} />
             <Avatar
               size="xs"
+              // A rounded square, as the roster's member avatars (styles.css), in both pickers.
+              className="avatar-square"
               alt=""
               src={entry.avatarUrl ?? undefined}
               initials={avatarInitial(entry.displayName)}
