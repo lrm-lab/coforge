@@ -6,11 +6,12 @@
 // See docs/agents/git-hooks/hard-rules.md.
 //
 // usage: bun scripts/ci/hard-rules.ts --staged | --all
-//        bun scripts/ci/hard-rules.ts --range <base> <head> [--authors-since <rev>]
-//   --authors-since: a push checks the authors of only the commits it introduced (`<rev>..<head>`),
-//   so a pushed bot commit fails one run, not every run until main is rewritten; a <rev> that is
-//   not a commit falls back to the range. --all checks the rules that hold for a whole tree:
-//   HEAD's Markdown links and every author in HEAD's history. Exit 1 lists violations on stderr.
+//        bun scripts/ci/hard-rules.ts --range <base> <head> [--authors-since <rev>]...
+//   --authors-since: a push checks the authors of only the commits it introduced (`<rev>..<head>`;
+//   given more than once, those reachable from none of the revs), so a pushed bot commit fails one
+//   run, not every run until main is rewritten; revs that are not commits fall back to the range.
+//   --all checks the rules that hold for a whole tree: HEAD's Markdown links and every author in
+//   HEAD's history. Exit 1 lists violations on stderr.
 import { dirname } from "node:path";
 import {
   type ChangeSource,
@@ -349,7 +350,7 @@ async function fileViolations(source: ChangeSource): Promise<Violation[]> {
 }
 
 const USAGE =
-  "usage: hard-rules.ts --staged | --range <base> <head> [--authors-since <rev>] | --all";
+  "usage: hard-rules.ts --staged | --range <base> <head> [--authors-since <rev>]... | --all";
 
 /** The violations of the mode `args` selects, or a warning when there is nothing to judge. */
 async function check(args: string[]): Promise<Violation[] | string> {
@@ -360,9 +361,11 @@ async function check(args: string[]): Promise<Violation[] | string> {
       ...identityViolations(stagedIdentities()),
     ];
   }
-  const authorsSince = rest.length === 4 && rest[2] === "--authors-since";
-  if (mode === "--range" && (rest.length === 2 || authorsSince)) {
-    const [baseRev, headRev, , before] = rest as [string, string, string?, string?];
+  const [baseRev, headRev, ...options] = rest;
+  const since = options.filter((_, i) => i % 2 === 1);
+  const sinceOnly = options.every((option, i) => i % 2 === 1 || option === "--authors-since");
+  const pair = baseRev !== undefined && headRev !== undefined;
+  if (mode === "--range" && pair && options.length % 2 === 0 && sinceOnly) {
     // No successful run to diff from yet, or a run a deploy or release workflow dispatched.
     if (!isCommit(baseRev)) return NO_BASE;
     const head = text(["rev-parse", "--verify", `${headRev}^{commit}`]).trim();
@@ -371,10 +374,11 @@ async function check(args: string[]): Promise<Violation[] | string> {
     if (mergeBase.exitCode !== 0) throw new Error(`${baseRev} and ${headRev} have no merge base`);
     const base = mergeBase.stdout.toString().trim();
     // A push's own commits; with no usable `before` (a new branch, a force push), the whole range.
-    const authorsFrom = before && isCommit(before) ? before : baseRev;
+    const usable = since.filter(isCommit);
+    const authorsFrom = usable.length > 0 ? usable : [baseRev];
     return [
       ...(await fileViolations({ kind: "range", base, head })),
-      ...identityViolations(commitIdentities(`${authorsFrom}..${head}`)),
+      ...identityViolations(commitIdentities([head, ...authorsFrom.map((rev) => `^${rev}`)])),
     ];
   }
   if (mode === "--all" && rest.length === 0) {
@@ -383,7 +387,7 @@ async function check(args: string[]): Promise<Violation[] | string> {
     const source: ChangeSource = { kind: "range", base: head, head };
     return [
       ...linkViolations(source, exemption(source)),
-      ...identityViolations(commitIdentities(head)),
+      ...identityViolations(commitIdentities([head])),
     ];
   }
   throw new Error(USAGE);

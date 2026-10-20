@@ -133,3 +133,85 @@ test("outside a git work tree the gate does nothing", () => {
     stderr: "",
   });
 });
+
+test("a hooks path set by -c or GIT_CONFIG_* (an Agent's shim) is not the repository's choice", () => {
+  installed();
+  repo.seed({ "README.md": "# Repo\n" });
+  withOrigin();
+  const shim = {
+    ...local,
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "core.hooksPath",
+    GIT_CONFIG_VALUE_0: "/agent/shims",
+  };
+  expect(runGate(shim)).toMatchObject({ exitCode: 0, stderr: "" });
+
+  repo.ok("config", "--unset", "core.hooksPath");
+  expect(runGate(shim).stderr).toContain("pre-commit hook not installed");
+});
+
+test("with several hooks paths, the last one git reads wins", () => {
+  repo.seed({ "README.md": "# Repo\n" });
+  withOrigin();
+  repo.ok("config", "--global", "core.hooksPath", "my-hooks");
+  installed();
+  expect(runGate()).toMatchObject({ exitCode: 0, stderr: "" });
+
+  repo.ok("config", "--global", "core.hooksPath", ".githooks");
+  repo.ok("config", "core.hooksPath", "my-hooks");
+  expect(runGate().stderr).toContain("core.hooksPath is my-hooks, not .githooks");
+});
+
+test("a hooks path naming .githooks another way counts as installed", () => {
+  repo.seed({ "README.md": "# Repo\n" });
+  withOrigin();
+  for (const path of [".githooks/", "./.githooks", join(repo.dir, ".githooks")]) {
+    repo.ok("config", "core.hooksPath", path);
+    expect(runGate(), path).toMatchObject({ exitCode: 0, stderr: "" });
+  }
+});
+
+test("a custom hooks path whose pre-commit is a directory only warns", () => {
+  repo.seed({ "README.md": "# Repo\n" });
+  withOrigin();
+  mkdirSync(join(repo.dir, "my-hooks/pre-commit"), { recursive: true });
+  repo.ok("config", "core.hooksPath", "my-hooks");
+
+  const result = runGate();
+  expect(result.exitCode).toBe(0);
+  expect(result.stderr).toContain("core.hooksPath is my-hooks, not .githooks");
+});
+
+test("a branch with no history shared with origin/main is reported in one line, not judged", () => {
+  installed();
+  repo.seed({ "README.md": "# Repo\n" });
+  withOrigin();
+  repo.ok("switch", "-q", "--orphan", "other");
+  repo.seed({ "big.ts": "x".repeat(20_001) });
+
+  const result = runGate();
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("shares no history with origin/main");
+});
+
+test("a branch that forked before origin/main advanced is not blamed for main's newer commits", () => {
+  installed();
+  repo.seed({ "README.md": "# Repo\n" });
+  withOrigin();
+  repo.ok("switch", "-q", "-c", "feat");
+  repo.seed({ "feat.md": "# Feat\n" });
+  repo.ok("switch", "-q", "main");
+  repo.seed({ "vendor.ts": "x".repeat(20_001) }, { env: { GIT_AUTHOR_NAME: "renovate[bot]" } });
+  repo.ok("push", "-q", "--no-verify", "origin", "main");
+  repo.ok("switch", "-q", "feat");
+
+  expect(runGate()).toMatchObject({ exitCode: 0, stderr: "" });
+});
+
+test("any CI value but false or 0 skips the gate", () => {
+  repo.ok("config", "--unset", "core.hooksPath");
+  repo.seed({ "README.md": "# Repo\n" });
+  for (const value of ["1", "yes"]) expect(runGate({ CI: value }).exitCode, value).toBe(0);
+  for (const value of ["0", "false", ""])
+    expect(runGate({ CI: value }).stderr, value).toContain("pre-commit hook not installed");
+});

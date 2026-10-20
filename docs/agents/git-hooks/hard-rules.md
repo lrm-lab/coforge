@@ -6,9 +6,13 @@ Rules a machine enforces, with no allowlist and no inline override. One checker,
 `scripts/ci/hard-rules.ts`, runs in three places:
 
 - **pre-commit**, `--staged`: the staged content against HEAD, and the author and the committer.
-- **pre-push** ([githooks](https://git-scm.com/docs/githooks#_pre_push)): per pushed ref,
-  `--range <remote sha> <local sha> --authors-since <remote sha>`; a new ref from its merge base
-  with `origin/main` (without one, a warning and no check); a deletion passes.
+- **pre-push** ([githooks](https://git-scm.com/docs/githooks#_pre_push)): per pushed ref, the file
+  rules from the later of its fork points from the remote sha and from `origin/main` (the
+  `origin/main` one when neither descends from the other), so a branch that merged or rebased onto
+  main is not blamed for main's commits. A new ref, or a remote sha unknown locally, falls back to
+  the merge base with `origin/main`. Identities are checked for the commits on neither the remote
+  ref nor `origin/main` (`--authors-since` both). A ref with no such base, or one the checker
+  rejects as bad input (exit 2), gets a warning and no check; a deletion passes.
 - **CI**, `--range "$BASE" "$HEAD" --authors-since "$BEFORE"`: the always-run Plan checks job's
   "Check hard rules" step, with the `BASE` and `HEAD` that job diffs (a PR's base, or the head of
   the last successful push run on `main`). File rules judge from their merge base, as

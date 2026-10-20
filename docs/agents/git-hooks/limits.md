@@ -6,13 +6,15 @@ Part of [Git hooks](README.md): what the [hooks](README.md), the `mise run check
 - The hooks are local: `git commit --no-verify` and `git push --no-verify` skip them, and a clone
   or worktree has none until `bun install`. `mise run check` (`bun run check`), which root
   `AGENTS.md` requires before every push, starts with `scripts/ci/local-gate.ts`. It fails when
-  `core.hooksPath` is unset, and only warns when it names your own hooks directory: the
+  `core.hooksPath` is unset, and only warns when it names your own hooks directory (the last value
+  git reads, resolved from the work tree's top, so `./.githooks` or an absolute path count): the
   repository's pre-commit and pre-push then do not run unless your hooks call them, but the gate
   still range-checks the commits not yet on your local `origin/main`, so a violation is reported
   before a push that follows the check. Without `origin` or `origin/main` it says so and skips
   that part; a stale `origin/main` can list others' commits, so a failure names its base and asks
-  for `git fetch origin`. It changes no config, and does nothing with `CI=true` or outside a work
-  tree. It is a convention, and `--no-verify` bypasses the hooks: only CI cannot be skipped.
+  for `git fetch origin`. It changes no config, and does nothing when `CI` is set to anything but
+  `false` or `0`, or outside a work tree. It is a convention, and `--no-verify` bypasses the
+  hooks: only CI cannot be skipped.
 - A maintainer or an Agent may push directly to `main` (root `AGENTS.md`); CI validates a push only
   afterwards, so a violation that got past the hook and the gate is reported once on `main`, and
   its author fixes it before pushing anything else. A PR cannot merge without "CI passed".

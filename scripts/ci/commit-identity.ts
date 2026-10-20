@@ -48,9 +48,10 @@ function identityMatch(location: string, role: string, [name, email]: string[]):
   return [{ location, found: `${role} ${name} <${email}> matches ${pattern}` }];
 }
 
-/** The author and committer of every commit in `revisions` (CI's range, or `--all`'s history). */
-export function commitIdentities(revisions: string): IdentityMatch[] {
-  return text(["log", "--format=%H%x00%an%x00%ae%x00%cn%x00%ce", revisions])
+/** The author and committer of every commit `git log <revisions>` lists (CI's range, or `--all`'s
+ * history). */
+export function commitIdentities(revisions: string[]): IdentityMatch[] {
+  return text(["log", "--format=%H%x00%an%x00%ae%x00%cn%x00%ce", ...revisions, "--"])
     .split("\n")
     .filter(Boolean)
     .flatMap((row) => {

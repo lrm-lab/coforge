@@ -1,13 +1,13 @@
 // The local gate `bun run check` (and so `mise run check`) runs first, before a push: the hooks
 // must be installed (a hooks path of the user's own only warns), and the commits not yet on
 // origin/main must pass the hard rules (scripts/ci/hard-rules.ts) as CI's Plan checks job judges
-// them. It only reads: it never
-// changes git config. It does nothing in CI (`CI=true`), which runs the hard rules itself, or
-// outside a git work tree (a Docker build context, an unpacked tarball).
+// them. It only reads: it never changes git config. It does nothing in CI (`CI` set to anything
+// but `false` or `0`), which runs the hard rules itself, or outside a git work tree (a Docker
+// build context, an unpacked tarball).
 // See docs/agents/git-hooks/limits.md.
 //
 // usage: bun scripts/ci/local-gate.ts   (from the repository root; exit 1 prints the fix)
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const HOOKS_PATH = ".githooks";
 const checker = join(import.meta.dir, "hard-rules.ts");
@@ -20,9 +20,12 @@ function git(...args: string[]): { exitCode: number; stdout: string } {
 /** Whether the repository's hooks are installed: an error when no `core.hooksPath` is set, a
  * warning when it names the user's own hooks directory, which install-hooks-path.ts leaves alone
  * and so does this. A hooks path set by `-c` or `GIT_CONFIG_*` (a CoForge Agent's shim, which
- * forwards to the repository's configuration) is not the repository's choice, as there. */
-function hooksStatus(): { error?: string; warning?: string } {
-  const configured = git("config", "--show-scope", "--get-all", "core.hooksPath");
+ * forwards to the repository's configuration) is not the repository's choice, as there. Of the
+ * rest, the last value git reads wins; git resolves it (`--type=path` expands `~`) relative to the
+ * top of the work tree, so `.githooks/`, `./.githooks` or its absolute path all name
+ * `.githooks`. */
+function hooksStatus(top: string): { error?: string; warning?: string } {
+  const configured = git("config", "--type=path", "--show-scope", "--get-all", "core.hooksPath");
   const values = (configured.exitCode === 0 ? configured.stdout : "")
     .split("\n")
     .filter(Boolean)
@@ -37,7 +40,7 @@ function hooksStatus(): { error?: string; warning?: string } {
       "pre-commit hook not installed: run `bun install` (sets core.hooksPath=.githooks)";
     return { error };
   }
-  if (effective === HOOKS_PATH) return {};
+  if (resolve(top, effective) === resolve(top, HOOKS_PATH)) return {};
   return {
     warning:
       `core.hooksPath is ${effective}, not .githooks: the repository's pre-commit and pre-push ` +
@@ -77,10 +80,12 @@ function rangeFails(): boolean {
 }
 
 function main(): number {
-  if (process.env.CI === "true") return 0;
-  const location = git("rev-parse", "--is-inside-work-tree");
-  if (location.exitCode !== 0 || location.stdout !== "true") return 0;
-  const hooks = hooksStatus();
+  const ci = process.env.CI;
+  if (ci && ci !== "false" && ci !== "0") return 0;
+  const location = git("rev-parse", "--is-inside-work-tree", "--show-toplevel");
+  const [inside, top] = location.stdout.split("\n");
+  if (location.exitCode !== 0 || inside !== "true" || !top) return 0;
+  const hooks = hooksStatus(top);
   if (hooks.warning) console.warn(`local gate: ${hooks.warning}`);
   if (hooks.error) console.error(`local gate: ${hooks.error}`);
   const failed = rangeFails();
