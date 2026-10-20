@@ -1,18 +1,36 @@
 import { hasControlOrBidiCharacter, isInvisibleText } from "#src/features/profiles/person-name";
+import { nameToSlug } from "#src/lib/slug";
+import { APP_CATEGORIES, type AppCategory } from "./app-category";
 
 /**
  * What a Workspace may register as a third-party app, and the change it may make to one later.
  * Pure and client-safe; the app registry (`server/apps/`) enforces it.
  */
 
-/** A third-party app's key, which is also its OIDC `client_id`. Never dotted, so it never names a
- * built-in app (`system.cleaner`). */
-const APP_KEY = /^[a-z][a-z0-9-]{2,63}$/;
+/** The longest key, name, description and when-to-use text, counted as code points. */
+export const APP_KEY_MAX_LENGTH = 64;
+export const APP_NAME_MAX_LENGTH = 80;
+export const APP_DESCRIPTION_MAX_LENGTH = 500;
+export const APP_WHEN_TO_USE_MAX_LENGTH = 160;
+/** The longest URL an app may give: what browsers and proxies reliably carry through a redirect
+ * (the de facto 2,048-character limit). */
+export const APP_URL_MAX_LENGTH = 2048;
 
-/** The scopes an app may be allowed to request; `openid` is required. */
-const APP_SCOPES: readonly string[] = ["openid", "profile", "email", "workspace"];
+/** A third-party app's key, which is also its OIDC `client_id`: 3 to `APP_KEY_MAX_LENGTH`
+ * characters. Never dotted, so it never names a built-in app (`system.cleaner`). */
+const APP_KEY = new RegExp(`^[a-z][a-z0-9-]{2,${APP_KEY_MAX_LENGTH - 1}}$`);
 
-const MAX_REDIRECT_URIS = 10;
+/** The scopes an app may be allowed to request. */
+export const APP_SCOPES = ["openid", "profile", "identity", "email"] as const;
+export type AppScope = (typeof APP_SCOPES)[number];
+/** The scopes every app has: signing a person in, their name, and who they are in the Workspace. */
+export const APP_FIXED_SCOPES = [
+  "openid",
+  "profile",
+  "identity",
+] as const satisfies readonly AppScope[];
+
+export const MAX_REDIRECT_URIS = 10;
 /** The hosts a redirect URI may reach over plain http: a native or development client on the
  * user's own machine (RFC 8252 §7.3). */
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -25,9 +43,10 @@ export type AppRegistrationInput = {
   name: string;
   description: string;
   whenToUse: string;
-  homepageUrl: string;
+  /** None (`null`) or an https URL: only the name is required. */
+  homepageUrl: string | null;
   redirectUris: string[];
-  resourceUri: string | null;
+  category: AppCategory;
   allowedScopes: string[];
 };
 
@@ -35,7 +54,7 @@ export type AppRegistrationInput = {
 export type AppPatch = Partial<Omit<AppRegistrationInput, "key">>;
 
 /** The input field a refusal names, for a form to show the problem beside it. */
-type AppInputField = keyof AppRegistrationInput;
+export type AppInputField = keyof AppRegistrationInput;
 
 type AppInputCheck<Value> = { ok: true; value: Value } | { ok: false; field: AppInputField };
 
@@ -70,7 +89,8 @@ const text =
  * (`https://acme.example/`).
  */
 function canonicalUrl(value: unknown): URL | undefined {
-  if (typeof value !== "string" || UNSAFE_URI_CHARACTER.test(value)) return undefined;
+  if (typeof value !== "string" || value.length > APP_URL_MAX_LENGTH) return undefined;
+  if (UNSAFE_URI_CHARACTER.test(value)) return undefined;
   let url: URL;
   try {
     url = new URL(value);
@@ -80,17 +100,16 @@ function canonicalUrl(value: unknown): URL | undefined {
   return url.href === value && !url.username && !url.password ? url : undefined;
 }
 
-const homepageUrl: FieldCheck<string> = (value) =>
-  canonicalUrl(value)?.protocol === "https:" ? accept(value as string) : REFUSE;
+/** An https URL, or `null` for an app with no homepage. A blank string is refused: a form sends a
+ * blank field as `null`. */
+const homepageUrl: FieldCheck<string | null> = (value) =>
+  value === null || canonicalUrl(value)?.protocol === "https:"
+    ? accept(value as string | null)
+    : REFUSE;
 
-const resourceUri: FieldCheck<string | null> = (value) => {
-  if (value === null) return accept(value);
-  const url = canonicalUrl(value);
-  return url?.protocol === "https:" && !url.href.includes("#") ? accept(url.href) : REFUSE;
-};
-
-/** Compared later by exact string match (RFC 9700 §2.1), so only accepted as written. */
-function isRedirectUri(value: unknown): boolean {
+/** Whether one redirect URI passes the rule the list applies to each of its URIs. Compared later
+ * by exact string match (RFC 9700 §2.1), so only accepted as written. */
+export function isRedirectUri(value: unknown): boolean {
   const url = canonicalUrl(value);
   if (!url || url.href.includes("#")) return false;
   return (
@@ -98,9 +117,10 @@ function isRedirectUri(value: unknown): boolean {
   );
 }
 
-/** 1 to `MAX_REDIRECT_URIS`, none twice: a repeat is a mistake, never silently merged. */
+/** None to `MAX_REDIRECT_URIS`, none twice: a repeat is a mistake, never silently merged. An app
+ * with none signs no one in; its Agents can still get tokens for it. */
 const redirectUris: FieldCheck<string[]> = (value) => {
-  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_REDIRECT_URIS) return REFUSE;
+  if (!Array.isArray(value) || value.length > MAX_REDIRECT_URIS) return REFUSE;
   return new Set(value).size === value.length && value.every(isRedirectUri)
     ? accept(value as string[])
     : REFUSE;
@@ -109,7 +129,9 @@ const redirectUris: FieldCheck<string[]> = (value) => {
 const allowedScopes: FieldCheck<string[]> = (value) => {
   if (!Array.isArray(value) || !value.every((scope) => typeof scope === "string")) return REFUSE;
   const unique = [...new Set(value as string[])];
-  return unique.includes("openid") && unique.every((scope) => APP_SCOPES.includes(scope))
+  const scopes: readonly string[] = APP_SCOPES;
+  return APP_FIXED_SCOPES.every((scope) => unique.includes(scope)) &&
+    unique.every((scope) => scopes.includes(scope))
     ? accept(unique)
     : REFUSE;
 };
@@ -117,16 +139,54 @@ const allowedScopes: FieldCheck<string[]> = (value) => {
 /** Every field an app's input has, each with its rule: the one list of what a caller may set. */
 const FIELD_CHECKS: { [Field in AppInputField]: FieldCheck<AppRegistrationInput[Field]> } = {
   key: (value) => (typeof value === "string" && APP_KEY.test(value) ? accept(value) : REFUSE),
-  name: text(1, 80),
-  description: text(0, 500, { lines: true }),
-  whenToUse: text(0, 160),
+  name: text(1, APP_NAME_MAX_LENGTH),
+  description: text(0, APP_DESCRIPTION_MAX_LENGTH, { lines: true }),
+  whenToUse: text(0, APP_WHEN_TO_USE_MAX_LENGTH),
   homepageUrl,
   redirectUris,
-  resourceUri,
+  category: (value) => {
+    const categories: readonly unknown[] = APP_CATEGORIES;
+    return categories.includes(value) ? accept(value as AppCategory) : REFUSE;
+  },
   allowedScopes,
 };
 
 const FIELDS = Object.keys(FIELD_CHECKS) as AppInputField[];
+
+/** The `errorId` the registry refuses each field with, and the form reads back. */
+export const APP_INPUT_ERROR_IDS: Record<AppInputField, string> = {
+  key: "app-key-invalid",
+  name: "app-name-invalid",
+  description: "app-description-invalid",
+  whenToUse: "app-when-to-use-invalid",
+  homepageUrl: "app-homepage-url-invalid",
+  redirectUris: "app-redirect-uris-invalid",
+  category: "app-category-invalid",
+  allowedScopes: "app-allowed-scopes-invalid",
+};
+
+/** The field an `APP_INPUT_ERROR_IDS` id names, or `undefined` for any other id. */
+export function appInputFieldOf(errorId: string | undefined): AppInputField | undefined {
+  return FIELDS.find((field) => APP_INPUT_ERROR_IDS[field] === errorId);
+}
+
+/** Every field's rule over `input`, in field order: the values as stored, and the fields refused.
+ * A field the input does not carry is refused when `requireAll`, else left out. */
+function checkFields(input: Partial<Record<AppInputField, unknown>>, requireAll: boolean) {
+  const value: Partial<Record<AppInputField, unknown>> = {};
+  const refused: AppInputField[] = [];
+  for (const field of FIELDS) {
+    const given = input[field];
+    if (given === undefined) {
+      if (requireAll) refused.push(field);
+      continue;
+    }
+    const outcome = FIELD_CHECKS[field](given);
+    if (outcome.ok) value[field] = outcome.value;
+    else refused.push(field);
+  }
+  return { value: value as Partial<AppRegistrationInput>, refused };
+}
 
 /**
  * The input as stored, holding only the fields `FIELD_CHECKS` names, or the first field refused.
@@ -142,17 +202,26 @@ export function checkAppInput(
   input: Partial<AppRegistrationInput>,
   kind: "registration" | "patch",
 ): AppInputCheck<Partial<AppRegistrationInput>> {
-  const value: Partial<Record<AppInputField, unknown>> = {};
-  for (const field of FIELDS) {
-    if (kind === "patch" && field === "key") continue;
-    const given: unknown = input[field];
-    if (given === undefined) {
-      if (kind === "registration") return { ok: false, field };
-      continue;
-    }
-    const outcome = FIELD_CHECKS[field](given);
-    if (!outcome.ok) return { ok: false, field };
-    value[field] = outcome.value;
-  }
-  return { ok: true, value: value as Partial<AppRegistrationInput> };
+  const { value, refused } =
+    kind === "registration"
+      ? checkFields(input, true)
+      : checkFields({ ...input, key: undefined }, false);
+  const [field] = refused;
+  return field ? { ok: false, field } : { ok: true, value };
+}
+
+/** Every field `input` carries that its rule refuses, in field order: what a form marks at once,
+ * where `checkAppInput` stops at the first. A change leaves the key out. */
+export function refusedAppFields(input: Partial<AppRegistrationInput>): AppInputField[] {
+  return checkFields(input, false).refused;
+}
+
+/** A key for an app registered without one: its name as a slug, then `suffix`. A name with no
+ * slug-able letters (`笔记`), or one that starts with a digit, starts with `app-` instead, so the
+ * key always matches the key rule. */
+export function appKeyFromName(name: string, suffix: string): string {
+  const room = APP_KEY_MAX_LENGTH - suffix.length - 1;
+  const slug = nameToSlug(name, room);
+  const stem = /^[a-z]/.test(slug) ? slug : nameToSlug(`app-${slug}`, room);
+  return `${stem}-${suffix}`;
 }

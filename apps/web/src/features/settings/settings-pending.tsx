@@ -3,6 +3,7 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { SettingsNavigationGroup } from "./settings-navigation-group";
+import { SETTINGS_SECTION_GROUPS } from "./settings-sections";
 
 export function SettingsPending() {
   return (
@@ -17,30 +18,11 @@ export function SettingsPending() {
       <nav className="flex w-full min-w-0 flex-col overflow-hidden border-r border-secondary bg-primary md:w-60 md:shrink-0 lg:rounded-xl lg:border-r-0">
         <PageHeader heading={m.settings_title()} />
         <div className="space-y-5 overflow-y-auto p-3">
-          {[
-            {
-              label: m.settings_personal_group(),
-              items: [
-                m.settings_account(),
-                m.settings_language_region(),
-                m.settings_preferences(),
-                m.settings_notifications(),
-                m.settings_integrations(),
-              ],
-            },
-            {
-              label: m.settings_workspace_group(),
-              items: [m.settings_workspace_profile(), m.settings_members()],
-            },
-            {
-              label: m.settings_system_group(),
-              items: [m.settings_server_connection()],
-            },
-          ].map((group) => (
-            <SettingsNavigationGroup key={group.label} label={group.label}>
-              {group.items.map((label) => (
-                <li key={label} className="flex h-9 items-center gap-3 px-3 text-sm font-medium">
-                  <span>{label}</span>
+          {SETTINGS_SECTION_GROUPS.map((group) => (
+            <SettingsNavigationGroup key={group.label()} label={group.label()}>
+              {group.sections.map((item) => (
+                <li key={item.id} className="flex h-9 items-center gap-3 px-3 text-sm font-medium">
+                  <span>{item.label()}</span>
                 </li>
               ))}
             </SettingsNavigationGroup>

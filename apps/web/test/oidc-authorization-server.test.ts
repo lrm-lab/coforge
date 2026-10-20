@@ -111,7 +111,7 @@ test("discovery advertises the configured issuer and only what this server suppo
     id_token_signing_alg_values_supported: ["ES256"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post"],
-    scopes_supported: ["openid", "profile", "email", "workspace"],
+    scopes_supported: ["openid", "profile", "identity", "email"],
     claims_supported: ["sub", "name", "email", "workspace_id", "workspace_slug", "workspace_role"],
     authorization_response_iss_parameter_supported: true,
     // Discovery §3 defaults this to true when omitted; this server takes no `request_uri`.

@@ -38,4 +38,8 @@ describe("the Workspace role matrix", () => {
     expect(holders("deleteAgents")).toEqual(["owner", "admin"]);
     expect(holders("manageMembers")).toEqual(["owner", "admin"]);
   });
+
+  test("registering and managing the Workspace's apps is an owner and admin right", () => {
+    expect(holders("manageApps")).toEqual(["owner", "admin"]);
+  });
 });

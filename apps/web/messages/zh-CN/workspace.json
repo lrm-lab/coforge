@@ -141,6 +141,7 @@
   "workspace_roles_can_delete_agents": "删除 Agent、完全重置 Agent",
   "workspace_roles_can_manage_members": "邀请成员、更改角色、移除成员",
   "workspace_roles_can_manage_channels": "管理或删除任意频道、隐藏 #general",
+  "workspace_roles_can_manage_apps": "注册和管理工作区的应用",
   "workspace_roles_can_workspace_profile": "修改 Workspace 名称和图标",
   "workspace_roles_can_change_url": "修改 Workspace 地址",
   "workspace_roles_can_delete_workspace": "删除 Workspace",

@@ -3,7 +3,7 @@
 The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGENTS.md#module-map). Each line names a directory under `src/` and its single responsibility. Update it before adding or reorganizing a module.
 
 - `features/agents/` — Members page, Agent creation, profile panel, control buttons, and Agent status and Activity display.
-- `features/apps/` — the client-safe rules for an app's registration and changes.
+- `features/apps/` — Settings → Applications (the Installed and My apps lists, the register/edit editor with its danger zone, a new secret shown once) and the client-safe rules for an app's input.
 - `features/auth/` — the sign-in error page, the split shell of the pages before
   sign-in, `returnTo` handling, signing out (`signOut`) and the step `/` takes to resume sign-in
   after signing out to switch account, the first-sign-in name step (`/welcome`), and the auth middleware for server functions.

@@ -1,3 +1,4 @@
+import { APP_SCOPES } from "#src/features/apps/app-registration";
 import { SIGNING_ALGORITHM } from "./signing-keys.server";
 
 /** The issuer's metadata: OpenID Connect Discovery 1.0 §3, served unchanged as RFC 8414 §2
@@ -15,7 +16,8 @@ export function discoveryDocument(issuer: string) {
     id_token_signing_alg_values_supported: [SIGNING_ALGORITHM],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post"],
-    scopes_supported: ["openid", "profile", "email", "workspace"],
+    // The scopes an app may be allowed (`features/apps/app-registration.ts`).
+    scopes_supported: [...APP_SCOPES],
     claims_supported: ["sub", "name", "email", "workspace_id", "workspace_slug", "workspace_role"],
     authorization_response_iss_parameter_supported: true,
     // Discovery §3 defaults this to true when omitted; this server takes no `request_uri`.

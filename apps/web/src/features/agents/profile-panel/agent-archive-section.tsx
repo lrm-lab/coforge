@@ -7,10 +7,8 @@ import {
   deleteArchivedAgentWorkspace,
   scanArchivedAgentWorkspace,
 } from "#src/features/agents/agent-workspace-files.functions";
-import {
-  DeleteConfirmDialog,
-  formatWorkspaceSize,
-} from "#src/features/computers/confirm-delete-dialog";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { formatWorkspaceSize } from "#src/features/computers/workspace-size";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { m } from "#src/paraglide/messages";
@@ -135,7 +133,7 @@ function ManagedWorkspace({
           </Button>
         </dd>
       )}
-      <DeleteConfirmDialog
+      <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
         title={m.computer_agent_workspace_delete_title({ name: agentName })}

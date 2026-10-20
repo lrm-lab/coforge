@@ -3,8 +3,9 @@
 /// `system.cleaner`) are not rows: they are the SDK's `BUILT_IN_APPS`.
 model App {
   id               String            @id @default(uuid(7)) @db.Uuid
-  /// Chosen at registration and never changed: `^[a-z][a-z0-9-]{2,63}$`, never dotted, so never a
-  /// built-in app's key. It is the app's OIDC `client_id`.
+  /// Chosen at registration (or made from the name, with a random suffix) and never changed:
+  /// `^[a-z][a-z0-9-]{2,63}$`, never dotted, so never a built-in app's key. It is the app's OIDC
+  /// `client_id`, and the audience of the tokens Agents get for the app.
   key              String            @unique
   /// The Workspace that registered the app; it is installed there.
   ownerWorkspaceId String            @db.Uuid
@@ -12,13 +13,15 @@ model App {
   description      String            @default("")
   /// One line telling an Agent when to use the app, at most 160 characters.
   whenToUse        String            @default("")
-  /// An absolute https URL, in canonical form.
-  homepageUrl      String
+  /// An absolute https URL, in canonical form; null when the app gave none.
+  homepageUrl      String?
   /// OAuth redirect URIs, matched as exact strings (RFC 9700).
   redirectUris     String[]
-  /// The audience of Agent tokens for this app; an app without one gets no Agent tokens.
-  resourceUri      String?
-  /// Scopes the app may request: a subset of `openid`, `profile`, `email`, `workspace`.
+  /// What the app is for: `ai-automation`, `communication`, `productivity`, `developer-tools`,
+  /// `data-analytics`, `business-ops`, `infrastructure`, `content-creative` or `other`
+  /// (`apps_category_check`).
+  category         String            @default("other")
+  /// Scopes the app may request: always `openid`, `profile` and `identity`, and maybe `email`.
   allowedScopes    String[]
   /// SHA-256 (hex) of the client secret, whose plaintext is shown once.
   clientSecretHash String

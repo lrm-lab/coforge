@@ -8,6 +8,8 @@ import { SettingsContent } from "#src/components/settings-content";
 import { useAppToast } from "#src/components/ui/toast";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { SettingsPending } from "#src/features/settings/settings-pending";
+import { SETTINGS_SECTIONS } from "#src/features/settings/settings-sections";
+import { APPS_SETTINGS_SEARCH } from "#src/features/apps/apps-settings-search";
 import { chooseAvatarPreset, saveUserProfile } from "#src/features/profiles/profile.functions";
 import { MEMBER_DIRECTORY_KEY } from "#src/features/agents/member-directory-queries";
 import {
@@ -63,25 +65,15 @@ type Theme = "system" | "light" | "dark";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-const settingsSections = [
-  "account",
-  "language-region",
-  "workspace-profile",
-  "members",
-  "preferences",
-  "notifications",
-  "integrations",
-  "server-connection",
-] as const;
-
 export const Route = createFileRoute("/w/$workspaceSlug/settings")({
   // The section lives in the URL so it survives the full reload a locale
   // switch triggers and so a settings link can open a specific section.
   validateSearch: z.object({
-    section: z.enum(settingsSections).optional().catch(undefined),
+    section: z.enum(SETTINGS_SECTIONS).optional().catch(undefined),
     github: z.enum(["connected", "error", "wrong_account"]).optional().catch(undefined),
     // Settings → Account shows the platform avatar picker instead of the profile.
     avatar: z.literal("choose").optional().catch(undefined),
+    ...APPS_SETTINGS_SEARCH,
   }),
   loader: async () => {
     const [preferences, members, generalChannel, archivedChannels, archivedAgents, createdAgents] =

@@ -4,6 +4,8 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import type { AppRegistrationInput } from "#src/features/apps/app-registration";
 import { hashAppClientSecret } from "#src/server/apps/app-client-secret.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
+import { AppRegistry } from "#src/server/apps/app-registry.server";
+import { PrismaAppRegistryStore } from "#src/server/db/repositories/app.repositories.server";
 
 /**
  * The app registry against local PostgreSQL with migrations applied: what registering, listing,
@@ -65,8 +67,8 @@ const registration = (key: string): AppRegistrationInput => ({
   whenToUse: "Read or write the team's notes.",
   homepageUrl: "https://notes.acme.example/",
   redirectUris: ["https://notes.acme.example/oauth/callback"],
-  resourceUri: "https://api.notes.acme.example/",
-  allowedScopes: ["openid", "profile"],
+  category: "productivity",
+  allowedScopes: ["openid", "profile", "identity"],
 });
 
 test.skipIf(!db)(
@@ -140,7 +142,7 @@ test.skipIf(!db)(
       await registry.registerApp(actor, registration(key));
       const changed = await registry.updateApp(actor, key, {
         name: " Acme Notes 2 ",
-        resourceUri: null,
+        category: "developer-tools",
         redirectUris: ["http://127.0.0.1:8080/cb"],
         // An untyped caller's extra fields reach nothing.
         ...({ key: "renamed", ownerWorkspaceId: null, clientSecretHash: "x" } as object),
@@ -150,7 +152,7 @@ test.skipIf(!db)(
         ownerWorkspaceId: fixture.workspace.id,
         name: "Acme Notes 2",
         description: "Notes for the team.",
-        resourceUri: null,
+        category: "developer-tools",
         redirectUris: ["http://127.0.0.1:8080/cb"],
       });
       await expect(
@@ -164,6 +166,27 @@ test.skipIf(!db)(
     }
   },
 );
+
+test.skipIf(!db)("an app may have no homepage, and a change can add or remove it", async () => {
+  const fixture = await workspaceFixture(db!);
+  const registry = createAppRegistry(db!);
+  const actor = fixture.actor("owner");
+  const key = `bare-${fixture.suffix}`;
+  try {
+    const { app } = await registry.registerApp(actor, { ...registration(key), homepageUrl: null });
+    expect(app.homepageUrl).toBeNull();
+    expect((await db!.app.findUniqueOrThrow({ where: { key } })).homepageUrl).toBeNull();
+
+    const added = await registry.updateApp(actor, key, {
+      homepageUrl: "https://bare.acme.example/",
+    });
+    expect(added.homepageUrl).toBe("https://bare.acme.example/");
+    const removed = await registry.updateApp(actor, key, { homepageUrl: null });
+    expect(removed.homepageUrl).toBeNull();
+  } finally {
+    await fixture.cleanup();
+  }
+});
 
 test.skipIf(!db)(
   "a Workspace lists the apps it registered, never another Workspace's, a built-in one or a secret",
@@ -249,6 +272,36 @@ test.skipIf(!db)(
     } finally {
       await mine.cleanup();
       await theirs.cleanup();
+    }
+  },
+);
+
+test.skipIf(!db)(
+  "an app registered without a key gets one made from its name, past a key already taken",
+  async () => {
+    const fixture = await workspaceFixture(db!);
+    const actor = fixture.actor("owner");
+    // A suffix made of the fixture's own, so runs never collide with each other.
+    const taken = `t${fixture.suffix}`;
+    const fresh = `f${fixture.suffix}`;
+    const suffixes = [taken, fresh];
+    const registry = new AppRegistry(new PrismaAppRegistryStore(db!), undefined, () =>
+      suffixes.shift()!,
+    );
+    try {
+      await registry.registerApp(actor, registration(`acme-notes-${taken}`));
+      const { app } = await registry.registerApp(actor, {
+        ...registration(""),
+        name: "Acme Notes",
+      });
+      expect(app).toMatchObject({ key: `acme-notes-${fresh}`, category: "productivity" });
+      expect((await db!.app.findUniqueOrThrow({ where: { key: app.key } })).allowedScopes).toEqual([
+        "openid",
+        "profile",
+        "identity",
+      ]);
+    } finally {
+      await fixture.cleanup();
     }
   },
 );

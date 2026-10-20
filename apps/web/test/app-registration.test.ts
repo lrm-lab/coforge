@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
 import { BUILT_IN_APPS } from "@lrm/coforge-sdk/internal";
-import { checkAppInput, type AppRegistrationInput } from "#src/features/apps/app-registration";
+import { APP_CATEGORIES } from "#src/features/apps/app-category";
+import {
+  APP_URL_MAX_LENGTH,
+  appKeyFromName,
+  checkAppInput,
+  isRedirectUri,
+  refusedAppFields,
+  type AppRegistrationInput,
+} from "#src/features/apps/app-registration";
 
 /** A registration every rule accepts; each test changes one field. */
 const valid: AppRegistrationInput = {
@@ -11,8 +19,8 @@ const valid: AppRegistrationInput = {
   whenToUse: "Read or write the team's notes.",
   homepageUrl: "https://notes.acme.example/",
   redirectUris: ["https://notes.acme.example/oauth/callback"],
-  resourceUri: "https://api.notes.acme.example/",
-  allowedScopes: ["openid", "profile"],
+  category: "productivity",
+  allowedScopes: ["openid", "profile", "identity"],
 };
 
 const refusedField = (change: Partial<AppRegistrationInput>) => {
@@ -85,7 +93,7 @@ describe("an app's texts", () => {
 });
 
 describe("an app's URLs", () => {
-  test("its homepage and resource are canonical, with no user info", () => {
+  test("its homepage is canonical, with no user info", () => {
     for (const homepageUrl of [
       "https://acme.example",
       "https:acme.example/",
@@ -93,8 +101,18 @@ describe("an app's URLs", () => {
       "https://ACME.example/",
     ])
       expect([homepageUrl, refusedField({ homepageUrl })]).toEqual([homepageUrl, "homepageUrl"]);
-    for (const resourceUri of ["https://api.acme.example", "https://u@api.acme.example/"])
-      expect([resourceUri, refusedField({ resourceUri })]).toEqual([resourceUri, "resourceUri"]);
+  });
+
+  test("its homepage may be left out, as none", () => {
+    expect(refusedField({ homepageUrl: null })).toBeUndefined();
+    expect(checkAppInput({ ...valid, homepageUrl: null }, "registration")).toMatchObject({
+      ok: true,
+      value: { homepageUrl: null },
+    });
+    expect(checkAppInput({ homepageUrl: null }, "patch")).toEqual({
+      ok: true,
+      value: { homepageUrl: null },
+    });
   });
 
   test("its homepage is an absolute https URL", () => {
@@ -107,19 +125,6 @@ describe("an app's URLs", () => {
       "",
     ])
       expect([homepageUrl, refusedField({ homepageUrl })]).toEqual([homepageUrl, "homepageUrl"]);
-  });
-
-  test("its resource is an absolute https URI without a fragment, or none", () => {
-    expect(refusedField({ resourceUri: null })).toBeUndefined();
-    expect(refusedField({ resourceUri: "https://api.acme.example/v1" })).toBeUndefined();
-    for (const resourceUri of [
-      "http://api.acme.example",
-      "https://api.acme.example/#v1",
-      "https://api.acme.example/#",
-      "api.acme.example",
-      "",
-    ])
-      expect([resourceUri, refusedField({ resourceUri })]).toEqual([resourceUri, "resourceUri"]);
   });
 });
 
@@ -173,8 +178,9 @@ describe("an app's redirect URIs", () => {
     expect(redirectRefused(["https://acme.example/"])).toBeUndefined();
   });
 
-  test("are 1 to 10, kept as written, and none twice", () => {
-    expect(redirectRefused([])).toBe("redirectUris");
+  test("are none to 10, kept as written, and none twice", () => {
+    // An app whose Agents only get tokens never sends people back anywhere.
+    expect(redirectRefused([])).toBeUndefined();
     const ten = Array.from({ length: 10 }, (_, index) => `https://acme.example/cb/${index}`);
     expect(redirectRefused(ten)).toBeUndefined();
     expect(redirectRefused([...ten, "https://acme.example/cb/10"])).toBe("redirectUris");
@@ -187,21 +193,62 @@ describe("an app's redirect URIs", () => {
 });
 
 describe("an app's scopes", () => {
-  test("are among openid, profile, email and workspace, and include openid", () => {
-    expect(refusedField({ allowedScopes: ["openid"] })).toBeUndefined();
+  test("always include openid, profile and identity, and may add email", () => {
+    expect(refusedField({ allowedScopes: ["openid", "profile", "identity"] })).toBeUndefined();
     expect(
-      refusedField({ allowedScopes: ["openid", "profile", "email", "workspace"] }),
+      refusedField({ allowedScopes: ["openid", "profile", "identity", "email"] }),
     ).toBeUndefined();
-    expect(refusedField({ allowedScopes: [] })).toBe("allowedScopes");
-    expect(refusedField({ allowedScopes: ["profile"] })).toBe("allowedScopes");
-    expect(refusedField({ allowedScopes: ["openid", "admin"] })).toBe("allowedScopes");
-    expect(refusedField({ allowedScopes: ["openid", "OpenID"] })).toBe("allowedScopes");
+    for (const allowedScopes of [
+      [],
+      ["openid"],
+      ["openid", "profile"],
+      ["openid", "profile", "email"],
+      ["openid", "profile", "identity", "workspace"],
+      ["openid", "profile", "identity", "OpenID"],
+    ])
+      expect([allowedScopes, refusedField({ allowedScopes })]).toEqual([
+        allowedScopes,
+        "allowedScopes",
+      ]);
   });
 
   test("are stored once each", () => {
     expect(
-      checkAppInput({ ...valid, allowedScopes: ["openid", "email", "openid"] }, "registration"),
-    ).toMatchObject({ ok: true, value: { allowedScopes: ["openid", "email"] } });
+      checkAppInput(
+        { ...valid, allowedScopes: ["openid", "profile", "identity", "email", "openid"] },
+        "registration",
+      ),
+    ).toMatchObject({
+      ok: true,
+      value: { allowedScopes: ["openid", "profile", "identity", "email"] },
+    });
+  });
+});
+
+describe("an app's category", () => {
+  test("is one of the nine, `other` among them", () => {
+    expect(APP_CATEGORIES).toHaveLength(9);
+    expect(APP_CATEGORIES).toContain("other");
+    for (const category of APP_CATEGORIES) expect(refusedField({ category })).toBeUndefined();
+    for (const category of ["", "Other", "games", 3])
+      expect([category, refusedField({ category } as never)]).toEqual([category, "category"]);
+  });
+});
+
+describe("a key made from an app's name", () => {
+  const KEY = /^[a-z][a-z0-9-]{2,63}$/;
+
+  test("is the name's slug and the suffix", () => {
+    expect(appKeyFromName("Acme Notes", "x7k2q9")).toBe("acme-notes-x7k2q9");
+  });
+
+  test("is a valid key for any name, however long or written in any script", () => {
+    for (const name of ["Acme Notes", "笔记", "42 Things", "a", "x".repeat(200), "--Hi--"]) {
+      const key = appKeyFromName(name, "x7k2q9");
+      expect([name, KEY.test(key), refusedField({ key })]).toEqual([name, true, undefined]);
+    }
+    expect(appKeyFromName("笔记", "x7k2q9")).toBe("app-x7k2q9");
+    expect(appKeyFromName("42 Things", "x7k2q9")).toBe("app-42-things-x7k2q9");
   });
 });
 
@@ -211,9 +258,9 @@ describe("a change to an app", () => {
       ok: true,
       value: { name: "Renamed" },
     });
-    expect(checkAppInput({ resourceUri: null }, "patch")).toEqual({
+    expect(checkAppInput({ category: "other" }, "patch")).toEqual({
       ok: true,
-      value: { resourceUri: null },
+      value: { category: "other" },
     });
     expect(checkAppInput({}, "patch")).toEqual({ ok: true, value: {} });
     expect(checkAppInput({ redirectUris: ["http://acme.example/cb"] }, "patch")).toEqual({
@@ -244,6 +291,39 @@ describe("a registration", () => {
   });
 });
 
+describe("the fields a form shows a problem beside", () => {
+  test("are every field a rule refuses, in the input's order", () => {
+    const input = { ...valid, key: "Acme", homepageUrl: "http://notes.acme.example/", name: "" };
+    expect(refusedAppFields(input)).toEqual(["key", "name", "homepageUrl"]);
+    expect(refusedAppFields(valid)).toEqual([]);
+  });
+
+  test("are only among the fields the input carries, as a change without the key", () => {
+    expect(refusedAppFields({ name: "", whenToUse: "fine" })).toEqual(["name"]);
+  });
+});
+
+describe("one redirect URI", () => {
+  test("is judged on its own by the rule the list applies", () => {
+    expect(isRedirectUri("http://localhost:3000/cb")).toBe(true);
+    expect(isRedirectUri("https://notes.acme.example/cb")).toBe(true);
+    expect(isRedirectUri("http://evil.example/cb")).toBe(false);
+    expect(isRedirectUri("https://notes.acme.example/cb#x")).toBe(false);
+  });
+});
+
+describe("an app's URL", () => {
+  test("is at most APP_URL_MAX_LENGTH characters, wherever it is used", () => {
+    const longest = (prefix: string) => prefix + "a".repeat(APP_URL_MAX_LENGTH - prefix.length);
+    const tooLong = (prefix: string) => `${longest(prefix)}a`;
+    expect(refusedField({ homepageUrl: longest("https://acme.example/") })).toBeUndefined();
+    expect(refusedField({ homepageUrl: tooLong("https://acme.example/") })).toBe("homepageUrl");
+    expect(refusedField({ redirectUris: [tooLong("https://acme.example/cb/")] })).toBe(
+      "redirectUris",
+    );
+  });
+});
+
 describe("an input of the wrong type", () => {
   test("is refused naming the field, not thrown", () => {
     const wrong: [keyof AppRegistrationInput, unknown][] = [
@@ -254,7 +334,7 @@ describe("an input of the wrong type", () => {
       ["homepageUrl", {}],
       ["redirectUris", "https://acme.example/cb"],
       ["redirectUris", [1]],
-      ["resourceUri", 1],
+      ["category", null],
       ["allowedScopes", "openid"],
       ["allowedScopes", ["openid", null]],
     ];

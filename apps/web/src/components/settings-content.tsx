@@ -4,7 +4,6 @@ import { useHydrated } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
 import { Button as AriaButton, FileTrigger } from "react-aria-components";
 import {
-  BellRinging01 as BellRing,
   Building07 as Building,
   Camera01,
   Check,
@@ -15,14 +14,10 @@ import {
   Mail01,
   MessageSquare01 as MessagesSquare,
   Moon01 as Moon,
-  Server01 as Server,
   Share01,
-  Sliders01 as SlidersHorizontal,
   Sun,
   SunSetting01 as SunMoon,
   Type01 as TypeIcon,
-  UserCircle as UserRound,
-  Users01 as Users,
 } from "@untitledui/icons";
 
 import { PageHeader } from "#src/components/layout/page-header";
@@ -56,6 +51,7 @@ import { WORKSPACE_NAME_MAX_LENGTH } from "#src/features/workspaces/workspace.sc
 import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
 import { IMAGE_MAX_BYTES, IMAGE_UPLOAD_TYPES } from "#src/lib/image-upload";
 import { GitHubSettings } from "#src/features/integrations/github-settings";
+import { AppsSettings } from "#src/features/apps/apps-settings";
 import { ServerConnectionSettings } from "#src/features/settings/server-connection-settings";
 import {
   MESSAGE_FONT_SIZES,
@@ -66,6 +62,11 @@ import {
 import { MessageFontSizePreview } from "#src/features/settings/message-font-size-preview";
 import { useShowAgentModel } from "#src/features/settings/show-agent-model";
 import { SettingsNavigationGroup } from "#src/features/settings/settings-navigation-group";
+import {
+  SETTINGS_SECTION_GROUPS,
+  settingsSection,
+  type SettingsSection,
+} from "#src/features/settings/settings-sections";
 import {
   isConversationOpenMode,
   type ConversationOpenMode,
@@ -79,15 +80,6 @@ import { m } from "#src/paraglide/messages";
 
 type Locale = "en" | "zh-CN";
 type Theme = "system" | "light" | "dark";
-type SettingsSection =
-  | "account"
-  | "language-region"
-  | "workspace-profile"
-  | "members"
-  | "preferences"
-  | "notifications"
-  | "integrations"
-  | "server-connection";
 
 interface SettingsContentProps {
   /** Controlled section; falls back to internal state when omitted (tests, previews). */
@@ -170,27 +162,8 @@ export function SettingsContent(props: SettingsContentProps) {
   const [internalSection, setInternalSection] = useState<SettingsSection>("account");
   const section = props.section ?? internalSection;
   const [showList, setShowList] = useState(props.section !== "integrations");
-  const sectionLabels: Record<SettingsSection, string> = {
-    account: m.settings_account(),
-    "language-region": m.settings_language_region(),
-    "workspace-profile": m.settings_workspace_profile(),
-    members: m.settings_members(),
-    preferences: m.settings_preferences(),
-    notifications: m.settings_notifications(),
-    integrations: m.settings_integrations(),
-    "server-connection": m.settings_server_connection(),
-  };
-  const sectionLabel = sectionLabels[section];
-  const sectionIcons: Record<SettingsSection, typeof UserRound> = {
-    account: UserRound,
-    "language-region": Languages,
-    "workspace-profile": Building,
-    members: Users,
-    preferences: SlidersHorizontal,
-    notifications: BellRing,
-    integrations: Share01,
-    "server-connection": Server,
-  };
+  const current = settingsSection(section);
+  const sectionLabel = current.label();
 
   function selectSection(next: SettingsSection) {
     setInternalSection(next);
@@ -209,60 +182,19 @@ export function SettingsContent(props: SettingsContentProps) {
       >
         <PageHeader heading={m.settings_title()} />
         <div className="space-y-5 overflow-y-auto p-3">
-          <SettingsNavigationGroup label={m.settings_personal_group()}>
-            <SettingsNavigationButton
-              active={section === "account"}
-              icon={UserRound}
-              label={m.settings_account()}
-              onClick={() => selectSection("account")}
-            />
-            <SettingsNavigationButton
-              active={section === "language-region"}
-              icon={Languages}
-              label={m.settings_language_region()}
-              onClick={() => selectSection("language-region")}
-            />
-            <SettingsNavigationButton
-              active={section === "preferences"}
-              icon={SlidersHorizontal}
-              label={m.settings_preferences()}
-              onClick={() => selectSection("preferences")}
-            />
-            <SettingsNavigationButton
-              active={section === "notifications"}
-              icon={BellRing}
-              label={m.settings_notifications()}
-              onClick={() => selectSection("notifications")}
-            />
-            <SettingsNavigationButton
-              active={section === "integrations"}
-              icon={Share01}
-              label={m.settings_integrations()}
-              onClick={() => selectSection("integrations")}
-            />
-          </SettingsNavigationGroup>
-          <SettingsNavigationGroup label={m.settings_workspace_group()}>
-            <SettingsNavigationButton
-              active={section === "workspace-profile"}
-              icon={Building}
-              label={m.settings_workspace_profile()}
-              onClick={() => selectSection("workspace-profile")}
-            />
-            <SettingsNavigationButton
-              active={section === "members"}
-              icon={Users}
-              label={m.settings_members()}
-              onClick={() => selectSection("members")}
-            />
-          </SettingsNavigationGroup>
-          <SettingsNavigationGroup label={m.settings_system_group()}>
-            <SettingsNavigationButton
-              active={section === "server-connection"}
-              icon={Server}
-              label={m.settings_server_connection()}
-              onClick={() => selectSection("server-connection")}
-            />
-          </SettingsNavigationGroup>
+          {SETTINGS_SECTION_GROUPS.map((group) => (
+            <SettingsNavigationGroup key={group.label()} label={group.label()}>
+              {group.sections.map((item) => (
+                <SettingsNavigationButton
+                  key={item.id}
+                  active={section === item.id}
+                  icon={item.icon}
+                  label={item.label()}
+                  onClick={() => selectSection(item.id)}
+                />
+              ))}
+            </SettingsNavigationGroup>
+          ))}
         </div>
       </nav>
       <section
@@ -273,7 +205,7 @@ export function SettingsContent(props: SettingsContentProps) {
       >
         <div>
           <PageHeader
-            icon={sectionIcons[section]}
+            icon={current.icon}
             heading={
               section === "account" && props.avatarPicker
                 ? m.settings_avatar_choose()
@@ -346,6 +278,8 @@ export function SettingsContent(props: SettingsContentProps) {
                   )
                 }
               />
+            ) : section === "applications" ? (
+              <AppsSettings actorRole={props.members.actorRole} />
             ) : section === "preferences" ? (
               <Preferences {...props} />
             ) : section === "server-connection" ? (

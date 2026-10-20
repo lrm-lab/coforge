@@ -9,9 +9,9 @@ import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 
-/** Confirms an irreversible delete; a refusal stays in the dialog. Used by the Computer page and an
- * archived Agent's profile. */
-export function DeleteConfirmDialog({
+/** Confirms an irreversible change (a delete, or rotating an app's secret); a refusal stays in the
+ * dialog. Used by the Computer page, an archived Agent's profile and Settings → Applications. */
+export function ConfirmDialog({
   open,
   onOpenChange,
   title,
@@ -25,18 +25,19 @@ export function DeleteConfirmDialog({
   title: string;
   description: string;
   confirmLabel: string;
-  errorMessage: string;
-  /** Performs the delete; throws when it is refused. */
+  /** What a refusal says: one text, or one chosen by what was thrown. */
+  errorMessage: string | ((cause: unknown) => string);
+  /** Performs the change; throws when it is refused. */
   onConfirm: () => Promise<void>;
 }) {
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [deleting, guard] = useSubmitGuard();
   return (
     <ModalOverlay
       isOpen={open}
       onOpenChange={(nextOpen: boolean) => {
         if (deleting) return;
-        setError(false);
+        setError(null);
         onOpenChange(nextOpen);
       }}
     >
@@ -68,7 +69,7 @@ export function DeleteConfirmDialog({
               </div>
               {error && (
                 <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
-                  {errorMessage}
+                  {error}
                 </p>
               )}
               <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
@@ -81,12 +82,14 @@ export function DeleteConfirmDialog({
                   showTextWhileLoading
                   onPress={() => {
                     if (deleting) return;
-                    setError(false);
+                    setError(null);
                     void guard(async () => {
                       try {
                         await onConfirm();
-                      } catch {
-                        setError(true);
+                      } catch (cause) {
+                        setError(
+                          typeof errorMessage === "string" ? errorMessage : errorMessage(cause),
+                        );
                       }
                     });
                   }}
@@ -100,12 +103,4 @@ export function DeleteConfirmDialog({
       </Modal>
     </ModalOverlay>
   );
-}
-
-/** An Agent workspace's size as the Computer page and an archived Agent's profile show it. */
-export function formatWorkspaceSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }

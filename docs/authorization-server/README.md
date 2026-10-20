@@ -40,3 +40,22 @@ type in the query response mode, PKCE with `S256` only, ES256 ID tokens, public 
 identifiers, `client_secret_basic` and `client_secret_post` client authentication, and the
 `iss` authorization response parameter (RFC 9207). It states `request_uri_parameter_supported:
 false`, because Discovery defaults that field to true.
+
+## For app developers
+
+A Workspace's owners and admins register an app in Settings → Applications; only its name is
+required (its homepage, description and redirect URIs may be left out). Registering returns
+the app's client ID (its key: the one given, or one made from its name) and its client secret,
+which is shown once; a lost secret is replaced by regenerating it, which stops the old one at once.
+
+An app finds this server from the issuer, `<public origin>/oidc`, through its discovery document
+at `<issuer>/.well-known/openid-configuration` (also served at
+`/.well-known/oauth-authorization-server/oidc`). It authenticates with its client ID and secret
+(`client_secret_basic` or `client_secret_post`) and may send people back only to the redirect URIs
+it registered, compared as exact strings. Redirect URIs are optional: an app whose Agents only get
+tokens registers none, so no authorization request for it can name a redirect URI it accepts.
+
+Every app may ask for `openid`, `profile` and `identity`, and for `email` when the Workspace
+allowed it. `identity` is accepted and stored, but releases no claims until the Workspace claims
+(`workspace_id`, `workspace_slug`, `workspace_role`) are issued under it. The tokens Agents get for
+an app carry the app's client ID as their audience.

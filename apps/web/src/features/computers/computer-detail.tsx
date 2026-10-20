@@ -15,14 +15,13 @@ import {
 } from "@untitledui/icons";
 import { useHydrated } from "@tanstack/react-router";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { Heading, Text } from "react-aria-components";
+import { Checkbox as AriaCheckbox, Heading, Text } from "react-aria-components";
 import type { RuntimeProvider, AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
-import { Checkbox as AriaCheckbox } from "react-aria-components";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
@@ -31,12 +30,13 @@ import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { formatCalendarDate, formatDateForDisplay } from "#src/lib/dates";
 import { getLocale } from "#src/paraglide/runtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { useAppToast } from "#src/components/ui/toast";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { BackToComputers } from "./back-to-computers";
-import { DeleteConfirmDialog, formatWorkspaceSize } from "./confirm-delete-dialog";
+import { formatWorkspaceSize } from "./workspace-size";
 import {
   computerKind,
   computerLabel,
@@ -714,7 +714,7 @@ export function ComputerDetail({
         }}
       />
       {onDeleteComputer && (
-        <DeleteConfirmDialog
+        <ConfirmDialog
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
           title={m.computer_delete_dialog_title({ name: label })}
@@ -1121,7 +1121,7 @@ function WorkspaceInventory({
       ) : (
         <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_none()}</p>
       )}
-      <DeleteConfirmDialog
+      <ConfirmDialog
         open={deleteTarget !== undefined}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(undefined);

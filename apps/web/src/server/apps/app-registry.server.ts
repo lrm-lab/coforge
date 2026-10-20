@@ -1,6 +1,12 @@
+import { randomBytes } from "node:crypto";
+
 import { AppError } from "#src/lib/app-error";
+import type { AppCategory } from "#src/features/apps/app-category";
 import {
+  APP_INPUT_ERROR_IDS,
+  appKeyFromName,
   checkAppInput,
+  type AppInputField,
   type AppPatch,
   type AppRegistrationInput,
 } from "#src/features/apps/app-registration";
@@ -17,9 +23,9 @@ export type AppView = {
   name: string;
   description: string;
   whenToUse: string;
-  homepageUrl: string;
+  homepageUrl: string | null;
   redirectUris: string[];
-  resourceUri: string | null;
+  category: AppCategory;
   allowedScopes: string[];
   secretRotatedAt: Date | null;
   createdAt: Date;
@@ -53,11 +59,21 @@ export interface AppRegistryStore {
   delete(workspaceId: string, key: string): Promise<boolean>;
 }
 
+/** How many keys made from a name are tried before a registration gives up: each
+ * has a new random suffix, so a second collision is already unlikely. */
+const MADE_KEY_ATTEMPTS = 5;
+
+/** Six random lowercase letters and digits. */
+function randomKeySuffix(): string {
+  return randomBytes(4).readUInt32BE(0).toString(36).padStart(6, "0").slice(-6);
+}
+
 /** The checked input, or INVALID_INPUT naming the field (`app-redirect-uris-invalid`). */
-function checked<Value>(outcome: { ok: true; value: Value } | { ok: false; field: string }): Value {
+function checked<Value>(
+  outcome: { ok: true; value: Value } | { ok: false; field: AppInputField },
+): Value {
   if (outcome.ok) return outcome.value;
-  const field = outcome.field.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-  throw new AppError("INVALID_INPUT", { errorId: `app-${field}-invalid` });
+  throw new AppError("INVALID_INPUT", { errorId: APP_INPUT_ERROR_IDS[outcome.field] });
 }
 
 /**
@@ -70,6 +86,8 @@ export class AppRegistry {
   constructor(
     private readonly store: AppRegistryStore,
     private readonly now: () => Date = () => new Date(),
+    /** The random part of a key made for an app registered without one. */
+    private readonly keySuffix: () => string = randomKeySuffix,
   ) {}
 
   async listWorkspaceApps(actor: AppActor): Promise<AppView[]> {
@@ -79,22 +97,32 @@ export class AppRegistry {
   }
 
   /** Registers the app in the actor's Workspace; its client secret is in the answer and nowhere
-   * else. */
+   * else. A blank key asks for one made from the app's name; a key the caller chose that is taken
+   * is refused, never replaced. */
   async registerApp(
     actor: AppActor,
     input: AppRegistrationInput,
   ): Promise<{ app: AppView; clientSecret: string }> {
     assertCanManageApps(await this.store.findMemberRole(actor.workspaceId, actor.actorUserId));
-    const app = checked(checkAppInput(input, "registration"));
+    const chosen = typeof input.key === "string" ? input.key.trim() : input.key;
     const { secret, hash } = mintAppClientSecret();
-    const created = await this.store.create({
-      app,
-      workspaceId: actor.workspaceId,
-      userId: actor.actorUserId,
-      clientSecretHash: hash,
-    });
-    if (!created) throw new AppError("CONFLICT", { errorId: "app-key-taken" });
-    return { app: created, clientSecret: secret };
+    const create = (app: AppRegistrationInput) =>
+      this.store.create({
+        app,
+        workspaceId: actor.workspaceId,
+        userId: actor.actorUserId,
+        clientSecretHash: hash,
+      });
+    const attempts = chosen === "" ? MADE_KEY_ATTEMPTS : 1;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const key =
+        chosen === ""
+          ? appKeyFromName(typeof input.name === "string" ? input.name : "", this.keySuffix())
+          : chosen;
+      const created = await create(checked(checkAppInput({ ...input, key }, "registration")));
+      if (created) return { app: created, clientSecret: secret };
+    }
+    throw new AppError("CONFLICT", { errorId: "app-key-taken" });
   }
 
   /** Changes the fields `patch` names; never the app's key or owner. */

@@ -57,6 +57,11 @@ export function canManageMembers(role: string | undefined): boolean {
   return roleCan(role, "manageMembers");
 }
 
+/** Whether a Workspace member's role registers the Workspace's apps, changes them and deletes them. */
+export function canManageApps(role: string | undefined): boolean {
+  return roleCan(role, "manageApps");
+}
+
 /** Whether a Workspace member may leave it: anyone but its owner. */
 export function canLeaveWorkspace(role: string | undefined): boolean {
   return role !== undefined && role !== "owner";

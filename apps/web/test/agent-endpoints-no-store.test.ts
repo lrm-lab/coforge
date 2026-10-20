@@ -23,6 +23,8 @@ const EXTRA_GUARDED_FILES = [
   "auth/logout-return.functions.ts",
   "workspaces/last-location.functions.ts",
   "integrations/github.functions.ts",
+  // An app's client secret is in the register and rotate answers.
+  "apps/apps.functions.ts",
 ];
 
 /** Files still missing a declaration, with the call that owns them. */

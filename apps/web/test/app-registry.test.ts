@@ -22,8 +22,8 @@ const ownApp: AppView = {
   whenToUse: "",
   homepageUrl: "https://notes.acme.example/",
   redirectUris: ["https://notes.acme.example/cb"],
-  resourceUri: null,
-  allowedScopes: ["openid"],
+  category: "other",
+  allowedScopes: ["openid", "profile", "identity"],
   secretRotatedAt: null,
   createdAt: new Date("2026-10-20T00:00:00.000Z"),
   updatedAt: new Date("2026-10-20T00:00:00.000Z"),
@@ -87,8 +87,8 @@ const registration = {
   whenToUse: "",
   homepageUrl: "https://two.acme.example/",
   redirectUris: ["https://two.acme.example/cb"],
-  resourceUri: null,
-  allowedScopes: ["openid"],
+  category: "other" as const,
+  allowedScopes: ["openid", "profile", "identity"],
 };
 
 describe("the app registry's authorization", () => {
@@ -181,5 +181,70 @@ describe("the app registry's authorization", () => {
       { code: "INVALID_INPUT", errorId: "app-name-invalid" },
     );
     expect(writes).toEqual([]);
+  });
+});
+
+describe("a registration without a key", () => {
+  /** A store that records the key of every create, and answers each with `taken` in turn (a
+   * taken key is `undefined`), then with the app. */
+  function recordingStore(taken: boolean[]) {
+    const keys: string[] = [];
+    const { store } = storeWith({ owner: "owner" });
+    const recording: AppRegistryStore = {
+      ...store,
+      async create(input) {
+        keys.push(input.app.key);
+        return taken[keys.length - 1] ? undefined : { ...ownApp, key: input.app.key };
+      },
+    };
+    return { store: recording, keys };
+  }
+  const suffixes =
+    (...values: string[]) =>
+    () =>
+      values.shift() ?? "zzzzzz";
+  const actor = { workspaceId: WORKSPACE, actorUserId: "owner" };
+
+  test("gets a key made from the app's name", async () => {
+    const { store, keys } = recordingStore([]);
+    const registry = new AppRegistry(store, undefined, suffixes("x7k2q9"));
+    const { app } = await registry.registerApp(actor, { ...registration, key: "" });
+    expect(keys).toEqual(["acme-two-x7k2q9"]);
+    expect(app.key).toBe("acme-two-x7k2q9");
+  });
+
+  test("tries another suffix when the key it made is taken", async () => {
+    const { store, keys } = recordingStore([true, true]);
+    const registry = new AppRegistry(store, undefined, suffixes("aaaaaa", "bbbbbb", "cccccc"));
+    await registry.registerApp(actor, { ...registration, key: "  " });
+    expect(keys).toEqual(["acme-two-aaaaaa", "acme-two-bbbbbb", "acme-two-cccccc"]);
+  });
+
+  test("gives up with CONFLICT when every key it makes is taken", async () => {
+    const { store, keys } = recordingStore(Array(20).fill(true));
+    const registry = new AppRegistry(store);
+    expect(await errorCodeOf(registry.registerApp(actor, { ...registration, key: "" }))).toBe(
+      "CONFLICT",
+    );
+    expect(keys.length).toBeGreaterThan(1);
+    expect(keys.length).toBeLessThan(20);
+  });
+
+  test("a key it was given that is taken is refused at once, never replaced", async () => {
+    const { store, keys } = recordingStore([true, false]);
+    const registry = new AppRegistry(store);
+    await expect(registry.registerApp(actor, registration)).rejects.toMatchObject({
+      code: "CONFLICT",
+      errorId: "app-key-taken",
+    });
+    expect(keys).toEqual(["acme-two"]);
+  });
+
+  test("a bad name is still refused for the name, not the key made from it", async () => {
+    const { store, keys } = recordingStore([]);
+    await expect(
+      new AppRegistry(store).registerApp(actor, { ...registration, key: "", name: "" }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "app-name-invalid" });
+    expect(keys).toEqual([]);
   });
 });

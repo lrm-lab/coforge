@@ -1,7 +1,8 @@
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import type { AppCategory } from "#src/features/apps/app-category";
 import type { AppRegistrationInput } from "#src/features/apps/app-registration";
-import type { AppChange, AppRegistryStore } from "#src/server/apps/app-registry.server";
+import type { AppChange, AppRegistryStore, AppView } from "#src/server/apps/app-registry.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { isWorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 
@@ -14,12 +15,18 @@ const APP_VIEW = {
   whenToUse: true,
   homepageUrl: true,
   redirectUris: true,
-  resourceUri: true,
+  category: true,
   allowedScopes: true,
   secretRotatedAt: true,
   createdAt: true,
   updatedAt: true,
 } as const;
+
+/** A row as the registry sees it: `apps_category_check` admits only the nine categories. */
+const view = (row: Omit<AppView, "category"> & { category: string }): AppView => ({
+  ...row,
+  category: row.category as AppCategory,
+});
 
 /** The one app `key` that `workspaceId` owns: every write is scoped by it, so none can reach
  * another Workspace's. */
@@ -38,15 +45,17 @@ export class PrismaAppRegistryStore implements AppRegistryStore {
   }
 
   async listForWorkspace(workspaceId: string) {
-    return this.db.app.findMany({
+    const rows = await this.db.app.findMany({
       where: { installations: { some: { workspaceId } } },
       select: APP_VIEW,
       orderBy: [{ name: "asc" }, { key: "asc" }],
     });
+    return rows.map(view);
   }
 
   async find(key: string) {
-    return (await this.db.app.findUnique({ where: { key }, select: APP_VIEW })) ?? undefined;
+    const row = await this.db.app.findUnique({ where: { key }, select: APP_VIEW });
+    return row ? view(row) : undefined;
   }
 
   async findSecretHash(key: string) {
@@ -64,7 +73,7 @@ export class PrismaAppRegistryStore implements AppRegistryStore {
     clientSecretHash: string;
   }) {
     try {
-      return await this.db.app.create({
+      const row = await this.db.app.create({
         data: {
           ...input.app,
           ownerWorkspaceId: input.workspaceId,
@@ -76,6 +85,7 @@ export class PrismaAppRegistryStore implements AppRegistryStore {
         },
         select: APP_VIEW,
       });
+      return view(row);
     } catch (error) {
       if (isUniqueViolation(error)) return undefined;
       throw error;
@@ -84,11 +94,12 @@ export class PrismaAppRegistryStore implements AppRegistryStore {
 
   async update(workspaceId: string, key: string, change: AppChange) {
     try {
-      return await this.db.app.update({
+      const row = await this.db.app.update({
         where: owned(workspaceId, key),
         data: change,
         select: APP_VIEW,
       });
+      return view(row);
     } catch (error) {
       // P2025: no such app of this Workspace.
       if (hasErrorCode(error, "P2025")) return undefined;

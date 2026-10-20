@@ -141,6 +141,7 @@
   "workspace_roles_can_delete_agents": "Delete Agents, and fully reset them",
   "workspace_roles_can_manage_members": "Invite members, change roles, remove members",
   "workspace_roles_can_manage_channels": "Manage or delete any channel, hide #general",
+  "workspace_roles_can_manage_apps": "Register and manage the Workspace's apps",
   "workspace_roles_can_workspace_profile": "Rename the Workspace, change its icon",
   "workspace_roles_can_change_url": "Change the Workspace's URL",
   "workspace_roles_can_delete_workspace": "Delete the Workspace",

@@ -42,6 +42,7 @@ export const WORKSPACE_ROLE_CAPABILITIES: {
       row("deleteAgents", () => m.workspace_roles_can_delete_agents()),
       row("manageMembers", () => m.workspace_roles_can_manage_members()),
       row("manageChannels", () => m.workspace_roles_can_manage_channels()),
+      row("manageApps", () => m.workspace_roles_can_manage_apps()),
       row("manageWorkspaceSettings", () => m.workspace_roles_can_workspace_profile()),
       row("changeWorkspaceSlug", () => m.workspace_roles_can_change_url()),
       row("deleteWorkspace", () => m.workspace_roles_can_delete_workspace()),
