@@ -1,0 +1,9 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "conversation_send": "发送",
+  "conversation_send_as_task": "作为任务发送",
+  "conversation_send_as_task_description": "同时加入本会话的任务看板",
+  "conversation_send_plain_description": "只发消息，不加入任务看板",
+  "conversation_send_options": "更多发送方式",
+  "conversation_sending": "发送中…"
+}

@@ -14,22 +14,11 @@ import {
 import { useHydrated } from "@tanstack/react-router";
 
 import { useAppToast } from "#src/components/ui/toast";
-import {
-  AlertCircle,
-  CheckSquare,
-  ChevronDown,
-  Plus,
-  Send01,
-  UploadCloud02,
-  XClose,
-} from "@untitledui/icons";
+import { AlertCircle, Plus, UploadCloud02, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useResizeObserver } from "#src/hooks/use-resize-observer";
-import { isApplePlatform } from "#src/lib/platform";
 import {
   dragCarriesFiles,
   filesFromDrop,
@@ -39,6 +28,7 @@ import {
   shouldSendOnEnter,
   forcesStackedLayout,
 } from "./composer-behavior";
+import { ComposerSendButton } from "./composer-send-button";
 import { AttachmentTile, uploadAttachment, type PendingAttachment } from "./composer-attachments";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
@@ -91,9 +81,6 @@ const MAX_ATTACHMENTS = 10;
 /** What sets the width of a line of draft text: shared by the textarea and its hidden one-line
  * copy, which measures whether the draft fits the one-line text column. */
 const DRAFT_LINE_CLASS = "px-3 text-md";
-
-/** The send buttons' icons stay white instead of the primary button's dimmed default. */
-const SEND_BUTTON_CLASS = "*:data-icon:text-white hover:*:data-icon:text-white";
 
 /**
  * The message form at the foot of a conversation or thread. Owns the draft, the pending
@@ -523,7 +510,6 @@ export function MessageComposer({
     if (files.length > 0) void addFiles(files);
   }
 
-  const sendLabel = asTask ? m.conversation_send_as_task() : m.conversation_send();
   return (
     <form
       onSubmit={(event) => {
@@ -717,60 +703,17 @@ export function MessageComposer({
           }}
           className="sr-only"
         />
-        {/* "As task" is a one-shot choice in the send button's menu (Cmd/Ctrl+Shift+Enter is its
-            keyboard twin), so the one-line row has no room-taking toggle. */}
-        <div className={cx("col-start-3 flex items-center gap-px", barRow, stacked && "mt-1")}>
-          <Tooltip title={sendLabel} isDisabled={sendDisabled}>
-            <Button
-              type="submit"
-              color="primary"
-              size="xs"
-              iconLeading={asTask ? CheckSquare : Send01}
-              aria-label={sendLabel}
-              className={cx(SEND_BUTTON_CLASS, taskMode && "rounded-r-none before:rounded-r-none")}
-              isDisabled={sendDisabled}
-            />
-          </Tooltip>
-          {taskMode && (
-            <Dropdown.Root>
-              <Tooltip title={m.conversation_send_options()} isDisabled={sendDisabled}>
-                <Button
-                  color="primary"
-                  size="xs"
-                  iconLeading={ChevronDown}
-                  aria-label={m.conversation_send_options()}
-                  className={cx(SEND_BUTTON_CLASS, "rounded-l-none before:rounded-l-none")}
-                  isDisabled={sendDisabled}
-                />
-              </Tooltip>
-              <Dropdown.Popover placement="top end" className="w-56">
-                <Dropdown.Menu
-                  aria-label={m.conversation_send_options()}
-                  onAction={(key) => {
-                    submit(key === "task");
-                    // The closing menu hands focus back to its trigger; take it back after.
-                    requestAnimationFrame(focusComposer);
-                  }}
-                >
-                  {/* Enter sends an edited-back Task as a Task, so it is not "Send"'s key then. The
-                      popover renders only in the browser, where the platform is known. */}
-                  <Dropdown.Item
-                    id="send"
-                    label={m.conversation_send()}
-                    icon={Send01}
-                    addon={asTask ? undefined : "Enter"}
-                  />
-                  <Dropdown.Item
-                    id="task"
-                    label={m.conversation_send_as_task()}
-                    icon={CheckSquare}
-                    addon={isApplePlatform() ? "⌘⇧Enter" : "Ctrl+Shift+Enter"}
-                  />
-                </Dropdown.Menu>
-              </Dropdown.Popover>
-            </Dropdown.Root>
-          )}
-        </div>
+        <ComposerSendButton
+          asTask={asTask}
+          taskMode={taskMode}
+          isDisabled={sendDisabled}
+          onChoose={(wantTask) => {
+            submit(wantTask);
+            // The closing menu hands focus back to its trigger; take it back after.
+            requestAnimationFrame(focusComposer);
+          }}
+          className={cx("col-start-3", barRow, stacked && "mt-1")}
+        />
       </div>
       {completion.open && completion.trigger && (
         <ReferenceSuggestionList
