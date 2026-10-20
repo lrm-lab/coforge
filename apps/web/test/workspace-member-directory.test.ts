@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 
 import { AppError } from "#src/lib/app-error";
 import { humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
@@ -91,6 +91,50 @@ test("leaving or being removed tells each of the person's channels that its memb
   ]);
 });
 
+test("leaving or being removed succeeds without Centrifugo, and tells only a member with Computers' daemons, best effort", async () => {
+  const store = memoryStore();
+  store.seedMember({ workspaceId, userId: ownerId, role: "owner", username: "ada" });
+  store.seedMember({ workspaceId, userId: adminId, role: "admin", username: "admin" });
+  store.seedMember({
+    workspaceId,
+    userId: memberId,
+    role: "member",
+    username: "bob",
+    computerIds: ["computer-1"],
+  });
+  // The production reconnect port, with no Centrifugo server API configured.
+  const directory = new WorkspaceMemberDirectory(store, { memberChanged: async () => {} });
+  const saved = {
+    url: process.env.COFORGE_CENTRIFUGO_API_URL,
+    key: process.env.COFORGE_CENTRIFUGO_API_KEY,
+  };
+  delete process.env.COFORGE_CENTRIFUGO_API_URL;
+  delete process.env.COFORGE_CENTRIFUGO_API_KEY;
+  const warnings: unknown[] = [];
+  const warn = spyOn(console, "warn").mockImplementation((line: unknown) => {
+    warnings.push(JSON.parse(String(line)));
+  });
+  try {
+    await directory.leave({ workspaceId, userId: adminId });
+    expect(warnings).toEqual([]);
+    await directory.removeMember({ workspaceId, actorUserId: ownerId, targetUserId: memberId });
+    expect(warnings).toEqual([
+      {
+        event: "workspace_member:daemon_reconnect_failed",
+        workspace_id: workspaceId,
+        computer_count: 1,
+        error_type: "Error",
+      },
+    ]);
+    expect(store.members.has(`${workspaceId}:${adminId}`)).toBe(false);
+    expect(store.members.has(`${workspaceId}:${memberId}`)).toBe(false);
+  } finally {
+    warn.mockRestore();
+    if (saved.url !== undefined) process.env.COFORGE_CENTRIFUGO_API_URL = saved.url;
+    if (saved.key !== undefined) process.env.COFORGE_CENTRIFUGO_API_KEY = saved.key;
+  }
+});
+
 test("ordinary members can list peers", async () => {
   const store = memoryStore();
   store.seedMember({ workspaceId, userId: ownerId, role: "owner", username: "ada" });
@@ -159,16 +203,19 @@ function memoryStore(): WorkspaceMemberDirectoryStore & {
     username: string;
     displayName?: string;
     channelIds?: string[];
+    computerIds?: string[];
   }): void;
 } {
   const members = new Map<string, WorkspaceMemberRecord>();
   const channels = new Map<string, string[]>();
+  const computers = new Map<string, string[]>();
 
   return {
     members,
     channels,
     seedMember(input) {
       channels.set(`${input.workspaceId}:${input.userId}`, input.channelIds ?? []);
+      computers.set(`${input.workspaceId}:${input.userId}`, input.computerIds ?? []);
       members.set(`${input.workspaceId}:${input.userId}`, {
         workspaceId: input.workspaceId,
         userId: input.userId,
@@ -198,7 +245,9 @@ function memoryStore(): WorkspaceMemberDirectoryStore & {
       members.delete(key);
       const leftChannelIds = channels.get(key) ?? [];
       channels.delete(key);
-      return { leftChannelIds };
+      const computerIds = computers.get(key) ?? [];
+      computers.delete(key);
+      return { leftChannelIds, computerIds };
     },
   };
 }

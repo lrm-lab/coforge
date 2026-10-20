@@ -87,9 +87,11 @@ is the durable binding and contains the workspace/computer foreign keys. Its
 database `id` is an internal storage primary key; the business identity is the
 composite `(workspaceId, computerId)` key. That unique constraint makes
 repeated setup converge on the same binding. `DaemonApiKey` stores only the
-hash of the long-lived, revocable Daemon API key and its Workspace/Computer
-binding; the plaintext key is returned once and persisted only in the native
-credential store.
+hash of the long-lived, revocable Daemon API key, its owner, and its
+Workspace/Computer binding; the plaintext key is returned once and persisted
+only in the native credential store. A key is valid only while its owner is a
+member of its Workspace; leaving or being removed revokes the keys the person
+owns there and removes their Computers' `WorkspaceComputer` links to it.
 
 `AgentApiKey` stores only the SHA-256 `apiKeyHash` plus its Agent, Workspace,
 owner, and Computer binding; plaintext `sk_agent_...` values are returned once

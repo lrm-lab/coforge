@@ -11,7 +11,7 @@ const repository = (): DaemonApiKeyRepository & { token?: string } => {
   const records = new Map<string, any>();
   return {
     async replaceActive(record) {
-      records.set(record.apiKeyHash, record);
+      records.set(record.apiKeyHash, { ...record, ownerIsMember: true });
     },
     async findByHash(hash) {
       return records.get(hash);
@@ -68,6 +68,34 @@ describe("Centrifugo Connect Proxy", () => {
       {
         daemonApiKeys: keys,
         computerBelongsToWorkspace: async () => false,
+        revocationReason: async () => undefined,
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      disconnect: { code: 4502, reason: "computer_unlinked" },
+    });
+  });
+
+  test("refuses a live key whose owner is no longer a member of its Workspace for good", async () => {
+    const keys = repository();
+    keys.token = await createDaemonApiKeyFactory(keys).create({
+      principal: { userId: "user-1" },
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+    });
+    const departed: DaemonApiKeyRepository = {
+      ...keys,
+      findByHash: async (hash) => {
+        const record = await keys.findByHash(hash);
+        return record && { ...record, ownerIsMember: false };
+      },
+    };
+    const response = await authenticateCentrifugoConnect(
+      connectRequest({ daemonApiKey: keys.token }),
+      {
+        daemonApiKeys: departed,
+        computerBelongsToWorkspace: async () => true,
         revocationReason: async () => undefined,
       },
     );

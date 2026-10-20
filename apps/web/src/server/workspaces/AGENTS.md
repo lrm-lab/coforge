@@ -35,6 +35,16 @@ These rules apply to `src/server/workspaces/`.
   returns. That record is the only way a Computer learns its Workspace is gone
   and parks the binding; without it the Computer retries forever. A soft delete
   that keeps the keys valid never parks a Computer.
+- Leaving a Workspace and being removed from it are one store write,
+  `PrismaWorkspaceMemberDirectoryStore.removeMember`, the only place a
+  membership row is deleted (a Workspace or User delete cascades it). In the
+  same transaction it calls `unlinkDepartingMemberComputers`
+  (`server/computers/computer-membership.server.ts`): the person's live daemon
+  keys for that Workspace are recorded as `computer_unlinked` and revoked, and
+  their Computers' links to it removed; their keys and links for every other
+  Workspace stay. After the commit `WorkspaceMemberDirectory` reconnects those
+  daemons, best effort, so each parks its binding now. A new path that ends a
+  membership goes through that store write.
 - `create-workspace.server.ts` starts the account's default cloud computer for a
   Workspace, including after a Workspace is created, and binds that User's
   weekly-report assistant to it. A deployment without a cluster still returns

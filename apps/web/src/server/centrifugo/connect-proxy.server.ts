@@ -5,6 +5,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
+  DaemonApiKeyOwnerNotMemberError,
   hashDaemonApiKey,
   isDaemonApiKey,
   verifyDaemonApiKey,
@@ -90,6 +91,9 @@ export async function authenticateCentrifugoConnect(
     try {
       principal = await verifyDaemonApiKey(key, dependencies.daemonApiKeys);
     } catch (error) {
+      // A live key whose owner left the Workspace: its Computer has no place there any more.
+      if (error instanceof DaemonApiKeyOwnerNotMemberError)
+        return refuse("computer_unlinked", error.claims);
       // Only the holder of a formerly valid key learns why it stopped working; any other key is
       // an ordinary, retryable authentication failure.
       const reason = isDaemonApiKey(key)

@@ -10,6 +10,11 @@ import {
   announceMemberChanged,
   type ConversationRealtime,
 } from "#src/server/conversations/conversation-realtime.server";
+import {
+  createCentrifugoServerApi,
+  reconnectDaemon,
+} from "#src/server/centrifugo/server-api.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 export type WorkspaceMemberRecord = {
   workspaceId: string;
@@ -33,9 +38,31 @@ export type WorkspaceMemberDirectoryStore = {
     role: WorkspaceMemberRole,
   ): Promise<WorkspaceMemberRecord>;
   /** Removes the person from the Workspace and leaves every conversation in it for them (their
-   * rows stay, so what they wrote keeps its sender); reports the channels they were an active
-   * member of, whose member lists now changed. */
-  removeMember(workspaceId: string, userId: string): Promise<{ leftChannelIds: string[] }>;
+   * rows stay, so what they wrote keeps its sender), and takes their Computers out of it (their
+   * daemon keys for it revoked, their links to it removed); reports the channels they were an
+   * active member of, whose member lists now changed, and the Computers whose daemons must
+   * reconnect. */
+  removeMember(
+    workspaceId: string,
+    userId: string,
+  ): Promise<{ leftChannelIds: string[]; computerIds: string[] }>;
+};
+
+/** Who tells a departed member's Computers, after the commit, that their key is gone. */
+export type WorkspaceMemberDaemons = {
+  /** Each Computer's daemon connection for the Workspace reconnects at once, so the connect proxy
+   * refuses it with `computer_unlinked` and it parks the binding now. */
+  reconnectDaemons(workspaceId: string, computerIds: readonly string[]): Promise<void>;
+};
+
+/** Over Centrifugo, built only when there is a Computer to tell. */
+const centrifugoMemberDaemons: WorkspaceMemberDaemons = {
+  async reconnectDaemons(workspaceId, computerIds) {
+    const api = createCentrifugoServerApi();
+    await Promise.all(
+      computerIds.map((computerId) => reconnectDaemon(api, workspaceId, computerId)),
+    );
+  },
 };
 
 /** Human Workspace membership directory: list, role changes, remove, leave. */
@@ -43,6 +70,7 @@ export class WorkspaceMemberDirectory {
   constructor(
     private readonly store: WorkspaceMemberDirectoryStore,
     private readonly realtime?: Pick<ConversationRealtime, "memberChanged">,
+    private readonly daemons: WorkspaceMemberDaemons = centrifugoMemberDaemons,
   ) {}
 
   async listMembers(input: { workspaceId: string; actorUserId: string }) {
@@ -79,10 +107,31 @@ export class WorkspaceMemberDirectory {
     await this.removeFromWorkspace(input.workspaceId, input.userId);
   }
 
-  /** Removes the person, then tells the channels they were in that their member lists changed. */
+  /** Removes the person, then tells the channels they were in that their member lists changed
+   * and their Computers' daemons to reconnect. Both are best effort: the removal has committed. */
   private async removeFromWorkspace(workspaceId: string, userId: string) {
-    const { leftChannelIds } = await this.store.removeMember(workspaceId, userId);
-    await announceMemberChanged(this.realtime, { workspaceId, conversationIds: leftChannelIds });
+    const { leftChannelIds, computerIds } = await this.store.removeMember(workspaceId, userId);
+    await Promise.all([
+      announceMemberChanged(this.realtime, { workspaceId, conversationIds: leftChannelIds }),
+      this.reconnectDaemons(workspaceId, computerIds),
+    ]);
+  }
+
+  private async reconnectDaemons(workspaceId: string, computerIds: readonly string[]) {
+    if (computerIds.length === 0) return;
+    try {
+      await this.daemons.reconnectDaemons(workspaceId, computerIds);
+    } catch (error) {
+      // The keys are already revoked: the daemon is refused at its next reconnect instead.
+      console.warn(
+        JSON.stringify({
+          event: "workspace_member:daemon_reconnect_failed",
+          workspace_id: workspaceId,
+          computer_count: computerIds.length,
+          error_type: errorType(error),
+        }),
+      );
+    }
   }
 
   private async requireMembership(workspaceId: string, userId: string) {

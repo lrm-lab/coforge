@@ -15,11 +15,13 @@ export type DaemonApiKeyRecord = {
   ownerId: string;
   revokedAt: Date | null;
   lastUsedAt?: Date | null;
+  /** Whether the key's owner is still a member of the key's Workspace, read with the key. */
+  ownerIsMember: boolean;
 };
 
 /** What minting supplies for `replaceActive`: the Prisma client generates the id
  * from the schema default (`uuid(7)`), keeping one id-generation path for the project. */
-export type DaemonApiKeyMint = Omit<DaemonApiKeyRecord, "id">;
+export type DaemonApiKeyMint = Omit<DaemonApiKeyRecord, "id" | "ownerIsMember">;
 
 export interface DaemonApiKeyRepository {
   replaceActive(record: DaemonApiKeyMint): Promise<void>;
@@ -79,6 +81,18 @@ export function prepareDaemonApiKey({
   };
 }
 
+/**
+ * A live key whose owner is no longer a member of its Workspace. The message is the ordinary one;
+ * the type lets the connect proxy refuse the holder of that exact key for good.
+ */
+export class DaemonApiKeyOwnerNotMemberError extends Error {
+  constructor(readonly claims: DaemonApiKeyClaims) {
+    super("invalid Daemon API key");
+    this.name = "DaemonApiKeyOwnerNotMemberError";
+  }
+}
+
+/** The key's claims while it is live and its owner is still a member of its Workspace. */
 export async function verifyDaemonApiKey(
   apiKey: string,
   repository: DaemonApiKeyRepository,
@@ -91,13 +105,15 @@ export async function verifyDaemonApiKey(
   const expected = Buffer.from(record.apiKeyHash);
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual))
     throw new Error("invalid Daemon API key");
-  if (!record.lastUsedAt || now.getTime() - record.lastUsedAt.getTime() >= LAST_USED_RESOLUTION_MS)
-    await repository.markUsed(record.id, now);
-  return {
+  const claims = {
     userId: record.ownerId,
     workspaceId: record.workspaceId,
     computerId: record.computerId,
   };
+  if (!record.ownerIsMember) throw new DaemonApiKeyOwnerNotMemberError(claims);
+  if (!record.lastUsedAt || now.getTime() - record.lastUsedAt.getTime() >= LAST_USED_RESOLUTION_MS)
+    await repository.markUsed(record.id, now);
+  return claims;
 }
 
 /** User-authorized Computer registration still uses the existing JWT issuer. */

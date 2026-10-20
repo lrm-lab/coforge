@@ -18,9 +18,18 @@ These rules apply to `src/server/computers/`.
   keys, so the Computer parks that binding with `computer_unlinked`. After the
   commit it calls `reconnectDaemon` for that binding: the open connection is
   not re-checked until it reconnects, and the reconnect meets the refusal.
+  A member leaving or being removed is such a flow for every Computer they own
+  there: `unlinkDepartingMemberComputers` (`computer-membership.server.ts`)
+  records and revokes the daemon keys they own in that Workspace, by owner, and
+  removes their Computers' links to it, never touching another Workspace's.
   Deleting a Computer row or its owner cascades the keys without a record:
   those Computers get the ordinary retryable failure. Add a record there too
   when such a delete path is built.
+- A daemon key is valid only while its owner is a member of its Workspace:
+  `verifyDaemonApiKey` (`server/auth/daemon-api-key.server.ts`) reads the key
+  and that membership in one statement (`PrismaDaemonApiKeyRepository.findByHash`)
+  for every caller, the connect proxy, the RPC proxy and the daemon's HTTPS
+  routes. Keep the check there, never in one caller.
 - `computer-lifecycle-memory.server.ts` is the only store of a shutdown
   reason and of the last daemon instance whose return was announced.
 - `computer-agent-workspaces.server.ts` summarizes the Daemon's existing

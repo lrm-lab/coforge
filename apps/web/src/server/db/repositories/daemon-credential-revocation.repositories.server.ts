@@ -12,6 +12,7 @@ export const DAEMON_CREDENTIAL_REVOCATION_RETENTION_MS = 90 * 24 * 60 * 60 * 100
  * Remembers why daemon credentials stopped being valid, keyed by the credential's hash, so the
  * connect proxy can tell the holder of that exact key, and nobody else, that its Workspace is
  * gone. A revocation outlives the Workspace, Computer, and key rows it was recorded from.
+ * A member leaving the Workspace records the keys they own there (`recordForMember`).
  * Deleting a Computer row or its owner cascades the keys without a record; those Computers get
  * the ordinary retryable failure until such a delete path records one too.
  */
@@ -45,6 +46,21 @@ export class DaemonCredentialRevocations {
     return record(tx, scope, "computer_unlinked", now);
   }
 
+  /** `computer_unlinked` for the live keys a person owns in the Workspace, on the same terms,
+   * inside the transaction that ends their membership and unlinks their Computers from it. */
+  static recordForMember(
+    tx: Prisma.TransactionClient,
+    scope: { workspaceId: string; userId: string },
+    now: Date = new Date(),
+  ): Promise<number> {
+    return record(
+      tx,
+      { workspaceId: scope.workspaceId, ownerId: scope.userId },
+      "computer_unlinked",
+      now,
+    );
+  }
+
   /** The reason recorded for this key hash, while it is still retained. */
   async reasonFor(apiKeyHash: string): Promise<DaemonConnectRejectionReason | undefined> {
     const revocation = await this.db.daemonCredentialRevocation.findFirst({
@@ -61,7 +77,7 @@ export class DaemonCredentialRevocations {
  * authentication failure. Expired revocations are pruned in the same write. */
 async function record(
   tx: Prisma.TransactionClient,
-  scope: { workspaceId: string; computerId?: string },
+  scope: { workspaceId: string; computerId?: string; ownerId?: string },
   reason: DaemonConnectRejectionReason,
   now: Date,
 ): Promise<number> {

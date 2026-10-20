@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
 
 /**
  * Whether the Computer is connected to the Workspace and the User is a member of that Workspace.
@@ -18,4 +19,47 @@ export async function isWorkspaceMemberComputer(
     select: { id: true },
   });
   return Boolean(connection);
+}
+
+/**
+ * Takes a person's Computers out of a Workspace they no longer belong to, inside the transaction
+ * that ends their membership: records `computer_unlinked` for the live daemon keys they own there,
+ * revokes those keys, and removes the links between the Workspace and the Computers they own.
+ * Their keys and links for any other Workspace stay. Resolves with the Computers whose daemon
+ * connection for this Workspace must reconnect after the commit (`reconnectDaemon`), so the
+ * connect proxy refuses it now rather than at its next reconnect.
+ */
+export async function unlinkDepartingMemberComputers(
+  tx: Prisma.TransactionClient,
+  scope: { workspaceId: string; userId: string },
+  now: Date = new Date(),
+): Promise<{ computerIds: string[] }> {
+  const liveKeys: Prisma.DaemonApiKeyWhereInput = {
+    workspaceId: scope.workspaceId,
+    ownerId: scope.userId,
+    revokedAt: null,
+  };
+  const ownLinks: Prisma.WorkspaceComputerWhereInput = {
+    workspaceId: scope.workspaceId,
+    computer: { ownerId: scope.userId },
+  };
+  const keyed = await tx.daemonApiKey.findMany({ where: liveKeys, select: { computerId: true } });
+  const linked = await tx.workspaceComputer.findMany({
+    where: ownLinks,
+    select: { computerId: true },
+  });
+  // Recorded before the revoke: only live keys are recorded.
+  const revocations = await DaemonCredentialRevocations.recordForMember(tx, scope, now);
+  await tx.daemonApiKey.updateMany({ where: liveKeys, data: { revokedAt: now } });
+  await tx.workspaceComputer.deleteMany({ where: ownLinks });
+  const computerIds = [...new Set([...keyed, ...linked].map(({ computerId }) => computerId))];
+  console.info(
+    JSON.stringify({
+      event: "workspace_member:computers_unlinked",
+      workspace_id: scope.workspaceId,
+      computer_count: computerIds.length,
+      revocations,
+    }),
+  );
+  return { computerIds };
 }

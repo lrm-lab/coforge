@@ -7,6 +7,7 @@ import {
 } from "./member-directory.server";
 import { isWorkspaceMemberRole, type WorkspaceMemberRole } from "./member-role.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
+import { unlinkDepartingMemberComputers } from "#src/server/computers/computer-membership.server";
 import {
   ACTIVE_CHANNEL_MEMBER_WHERE,
   ACTIVE_MEMBER_WHERE,
@@ -89,7 +90,8 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
         where: { workspaceId, userId, ...ACTIVE_MEMBER_WHERE },
         data: { leftAt: new Date() },
       });
-      return { leftChannelIds: activeChannels.map((row) => row.conversationId) };
+      const { computerIds } = await unlinkDepartingMemberComputers(tx, { workspaceId, userId });
+      return { leftChannelIds: activeChannels.map((row) => row.conversationId), computerIds };
     });
   }
 }

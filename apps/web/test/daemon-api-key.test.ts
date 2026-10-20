@@ -12,16 +12,24 @@ import {
 
 class MemoryDaemonApiKeys implements DaemonApiKeyRepository {
   records = new Map<string, DaemonApiKeyRecord>();
+  /** `<workspaceId>:<userId>` of every owner who has left that Workspace. */
+  departed = new Set<string>();
   async replaceActive(record: DaemonApiKeyMint) {
     // Emulate the Prisma client generating the uuid(7) default at create time.
-    const stored: DaemonApiKeyRecord = { id: crypto.randomUUID(), ...record };
+    const stored: DaemonApiKeyRecord = { id: crypto.randomUUID(), ...record, ownerIsMember: true };
     for (const [hash, value] of this.records)
       if (value.computerId === record.computerId)
         this.records.set(hash, { ...value, revokedAt: new Date() });
     this.records.set(stored.apiKeyHash, stored);
   }
   async findByHash(hash: string) {
-    return this.records.get(hash);
+    const record = this.records.get(hash);
+    return (
+      record && {
+        ...record,
+        ownerIsMember: !this.departed.has(`${record.workspaceId}:${record.ownerId}`),
+      }
+    );
   }
   markedUsed = 0;
   async markUsed(id: string, at: Date) {
@@ -83,6 +91,29 @@ describe("Daemon API key", () => {
       computerId: "c",
     });
     expect(hashDaemonApiKey(second)).toBeTruthy();
+  });
+
+  test("rejects a live key whose owner is no longer a member of its Workspace, and only that one", async () => {
+    const repository = new MemoryDaemonApiKeys();
+    const factory = createDaemonApiKeyFactory(repository);
+    const left = await factory.create({
+      principal: { userId: "u" },
+      workspaceId: "left",
+      computerId: "c",
+    });
+    const stayed = await factory.create({
+      principal: { userId: "u" },
+      workspaceId: "stayed",
+      computerId: "other-computer",
+    });
+    repository.departed.add("left:u");
+
+    await expect(verifyDaemonApiKey(left, repository)).rejects.toThrow("invalid Daemon API key");
+    expect(repository.markedUsed).toBe(0);
+    expect(await verifyDaemonApiKey(stayed, repository)).toMatchObject({
+      workspaceId: "stayed",
+      computerId: "other-computer",
+    });
   });
 
   test("records a key's last use at most once per minute, not on every request", async () => {
