@@ -2,6 +2,7 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
+import { COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { ConversationBackHeader } from "./conversation-list-button";
 
 /**
@@ -76,12 +77,12 @@ export function ConversationPending({ label = m.conversation_loading() }: { labe
           ))}
         </div>
       </div>
-      {/* The composer's frame, in the same column as the stream above. */}
+      {/* The composer's frame, in the same column as the stream above, around one row as tall as
+          its buttons. */}
       <div className={MESSAGE_COLUMN_CLASS}>
-        <div
-          aria-hidden="true"
-          className="mx-4 mt-2 mb-3 h-16 shrink-0 rounded-xl border border-primary md:mx-6"
-        />
+        <div aria-hidden="true" className={COMPOSER_FRAME_CLASS}>
+          <div className="h-8" />
+        </div>
       </div>
     </div>
   );
