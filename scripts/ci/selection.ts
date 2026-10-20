@@ -57,6 +57,9 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       affected = ["computer", "release", "web"];
     } else if (path.startsWith("apps/web/")) {
       affected = ["web"];
+    } else if (path.startsWith("benchmark/")) {
+      // The Web job checks the benchmarks, which import Web source; they are not in the image.
+      affected = track === "web" ? [] : ["web"];
     } else if (
       /^packages\/(computer|daemon)\/test\/.*\.test\.ts$/.test(path) ||
       path === "packages/daemon/test/launchd-process.integration.ts"

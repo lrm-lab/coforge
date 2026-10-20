@@ -152,6 +152,22 @@ test("documentation skips application checks, while shared and unknown inputs fa
   ]);
 });
 
+test("benchmark changes run the Web job, which checks the benchmarks, and deploy nothing", async () => {
+  // The benchmarks import Web source and its generated client, so the Web job checks them after
+  // Web's own checks; they are not in the image, so the Web track does not select them.
+  for (const path of ["benchmark/skillsbench-collab/src/verify.ts", "benchmark/x/package.json"]) {
+    expect(selectChecks([path], "changes")).toEqual(["web"]);
+    expect(selectChecks([path], "web")).toEqual([]);
+  }
+  const ci = Bun.YAML.parse(await Bun.file(".github/workflows/ci.yml").text());
+  const steps = ci.jobs.web.steps.map((step: { run?: string }) => step.run);
+  const web = steps.indexOf("mise run check:web");
+  const benchmarks = steps.indexOf("bun run --filter './benchmark/*' check");
+  expect(web).toBeGreaterThan(-1);
+  expect(benchmarks).toBeGreaterThan(web);
+  expect(ci.jobs.web.steps[benchmarks].if).toBe("inputs.track != 'web'");
+});
+
 test("deployment validates the exact Web track only when the image or deployment is affected", () => {
   for (const path of [
     "docs/release/README.md",

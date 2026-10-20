@@ -42,6 +42,9 @@ with three scopes selected by `scripts/ci/selection.ts`:
   Web's frozen image install; lockfile changes still select full coverage.
   PowerShell installer changes run both PowerShell parsers and lint. Both
   installers are embedded in the Web image, so changing either also validates Web.
+  The benchmark packages import Web source, so the Web job also checks them
+  (`bun run --filter './benchmark/*' check`) and a benchmark change runs the Web
+  job; benchmarks are not in the image, so they never select a Web deployment.
 - A dispatched Web deployment runs the complete Web track for its exact selected
   main commit: Web, protocol, CI-policy, and deploy-script gates, then builds and
   deploys the image.
