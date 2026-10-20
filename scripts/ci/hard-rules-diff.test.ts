@@ -156,10 +156,11 @@ test("range mode checks the author of every commit in the range", () => {
 
 test("range mode applies the size ratchet to the range as a whole", () => {
   const big = (bytes: number) => "x".repeat(bytes);
-  const base = repo.seed({ "legacy.ts": big(30_000), "small.ts": big(100) });
+  const attributes = { ".gitattributes": "*.lock linguist-generated\n" };
+  const base = repo.seed({ "legacy.ts": big(30_000), "small.ts": big(100), ...attributes });
   repo.seed({ "legacy.ts": big(29_000) });
   repo.ok("mv", "legacy.ts", "renamed.ts");
-  repo.seed({ ".gitattributes": "*.lock linguist-generated\n", "deps.lock": big(90_000) });
+  repo.seed({ "deps.lock": big(90_000) });
   expect(repo.range(base).stderr).toBe("");
 
   repo.seed({ "small.ts": big(20_001), "fresh.ts": big(25_000), "renamed.ts": big(30_001) });
@@ -352,7 +353,9 @@ test("a directive on its own line in a block comment is blocked, with or without
 test("a malformed skills-lock.json is reported in one line, with exit 2 and no stack", () => {
   repo.seed({ "README.md": "# Repo\n" });
   for (const lock of ["{ not json", "null"]) {
-    repo.write({ "skills-lock.json": lock, "docs/a.md": `[readme](../README.md) ${lock}\n` });
+    // The lock is read from the base, HEAD.
+    repo.seed({ "skills-lock.json": lock });
+    repo.write({ "docs/a.md": `[readme](../README.md) ${lock}\n` });
     repo.ok("add", "-A");
     // The checker as the hook runs it; `git commit` itself exits 1 for any failing hook.
     const result = repo.check(["--staged"], { GITHUB_ACTIONS: "false" });

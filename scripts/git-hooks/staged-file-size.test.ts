@@ -162,9 +162,12 @@ test("a copy of a file already over the limit is blocked as new, even when the s
   expect(lines.find((line) => line.includes("big.ts:"))).toContain("grew");
 });
 
-test("a file the staged .gitattributes marks linguist-generated passes at any size", () => {
-  repo.seed({ "README.md": "hello\n" });
-  repo.write({ ".gitattributes": "*.lock linguist-generated\ngen/** linguist-generated=true\n" });
+test("a file the HEAD .gitattributes marks linguist-generated passes at any size", () => {
+  // The mark is read from the base, so it is committed before the files it exempts.
+  repo.seed({
+    "README.md": "hello\n",
+    ".gitattributes": "*.lock linguist-generated\ngen/** linguist-generated=true\n",
+  });
   repo.write({ "deps.lock": text(500_000) });
   repo.write({ "gen/routes.ts": text(80_000) });
   repo.ok("add", "-A");

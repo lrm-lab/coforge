@@ -47,12 +47,12 @@ crossed the limit or grew. Split the file into smaller ones.
 
 ### Files that are not checked
 
-- **Generated files.** A file whose `linguist-generated` attribute is set in the staged root
-  `.gitattributes` is skipped: lockfiles and generated code. On
+- **Generated files.** A file whose `linguist-generated` attribute is set in the base's root
+  `.gitattributes` ([read from the base](#limits)) is skipped: lockfiles and generated code. On
   GitHub the same attribute also excludes the file from language statistics and suppresses it in
   diffs. Mark a file only if a tool genuinely produces it, never to get an agent-written file past
   the limit. Translation files under `apps/web/messages/` are agent-written and stay checked.
-  `git check-attr --cached linguist-generated -- <path>` shows the staged value.
+  `git check-attr --source=HEAD linguist-generated -- <path>` shows the value a commit is judged by.
 - **Binary files.** A file with a NUL byte in its first 8,000 bytes, the test git's own
   `buffer_is_binary` applies.
 - **Vendored skills.** Files under a skill directory registered in `skills-lock.json`, the
@@ -150,7 +150,7 @@ reads the commits above. The committer and `Co-authored-by` trailers are not che
 Commit as the person running the Agent (root `AGENTS.md`).
 
 **The one exemption.** Files under a skill directory registered in `skills-lock.json`
-(`.agents/skills/<name>/`, read from the change's own result) are vendored upstream content: the
+(`.agents/skills/<name>/`, read from the change's base) are vendored upstream content: the
 file rules (size, links, suppressions) skip them; the author rule does not. Project skills that
 are not in the lock are checked like any other file. This is the only exemption the hard rules
 add. The size rule also keeps the two skips it was approved with (task #25): files marked
@@ -172,8 +172,11 @@ add. The size rule also keeps the two skips it was approved with (task #25): fil
   rules still cover them, because the next run diffs from the last successful one.
 - A violation in CI fails the Plan checks job, so the checks it would have selected are skipped
   until the violation is fixed.
-- The exemption lists, `skills-lock.json` and `.gitattributes`, are read from the change itself,
-  so a change can add its own exemption; only review catches that.
+- The exemption lists, `skills-lock.json` and `.gitattributes`, are read from the change's base
+  (a commit's HEAD, nothing before the first commit; in CI the merge base), so a change cannot
+  exempt itself. Exempting new files takes two steps: commit the list change, push it and let its
+  CI run pass, then commit the files. Locally two commits pass the hook, but both in one push or
+  PR are a red CI run, because that range's base lacks the entry.
 - A line inside a template string that starts with a suppression directive is flagged.
 
 ## Sources
@@ -185,8 +188,7 @@ add. The size rule also keeps the two skips it was approved with (task #25): fil
 - [`core.hooksPath`](https://git-scm.com/docs/git-config#Documentation/git-config.txt-corehooksPath)
   in git-config.
 - [gitattributes](https://git-scm.com/docs/gitattributes) (`text`, `eol`, pattern matching) and
-  [git-check-attr](https://git-scm.com/docs/git-check-attr) (`--cached`, and `--source` for CI's
-  head commit).
+  [git-check-attr](https://git-scm.com/docs/git-check-attr) (`--source`, to read the base).
 - [Linguist overrides](https://github.com/github-linguist/linguist/blob/main/docs/overrides.md)
   (`linguist-generated`).
 - [`bun install`](https://bun.com/docs/pm/cli/install) (the project's lifecycle scripts,

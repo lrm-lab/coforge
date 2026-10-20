@@ -89,11 +89,11 @@ export function diffArgs(source: ChangeSource, ...flags: string[]): string[] {
     : ["diff-tree", "-r", ...flags, source.base, source.head];
 }
 
-/** Where the change's policy files (`.gitattributes`, `skills-lock.json`) are read from: the
- * change's own result, the index (undefined) or the range head. Reading them from the base instead
- * is a change to this function alone. */
-export function policyRevision(source: ChangeSource): string | undefined {
-  return source.kind === "staged" ? undefined : source.head;
+/** Where the exemption lists (`.gitattributes`, `skills-lock.json`) are read from: the change's
+ * base, so a change cannot exempt itself. Staged, that is HEAD, or the empty tree before the first
+ * commit (no exemptions); in a range, the merge base it is judged from. */
+export function policyRevision(source: ChangeSource): string {
+  return source.kind === "staged" ? stagedBase() : source.base;
 }
 
 const GITLINK_MODE = "160000";
@@ -146,13 +146,12 @@ function blobSizes(oids: string[]): Map<string, number> {
   return sizes;
 }
 
-/** Paths the policy `.gitattributes` (`policyRevision`) marks `linguist-generated` (set, or
+/** Paths the base's `.gitattributes` (`policyRevision`) marks `linguist-generated` (set, or
  * `=true`). */
 function generatedPaths(paths: string[], source: ChangeSource): Set<string> {
   const generated = new Set<string>();
   if (paths.length === 0) return generated;
-  const revision = policyRevision(source);
-  const from = revision ? `--source=${revision}` : "--cached";
+  const from = `--source=${policyRevision(source)}`;
   const input = `${paths.join("\0")}\0`;
   const output = git(["check-attr", from, "-z", "--stdin", "linguist-generated"], input);
   const fields = output.toString().split("\0");

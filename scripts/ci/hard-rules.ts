@@ -178,7 +178,7 @@ function lockedSkills(lock: string): string[] {
 }
 
 /** Whether a path is under a skill directory skills-lock.json registers
- * (`.agents/skills/<name>/`), read from `policyRevision` once, when first asked. */
+ * (`.agents/skills/<name>/`), read from the change's base (`policyRevision`) once, when asked. */
 function exemption(source: ChangeSource): (path: string) => boolean {
   let directories: string[] | undefined;
   return (path) => {
