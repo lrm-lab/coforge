@@ -27,6 +27,8 @@ import { AgentControl } from "../../../apps/web/src/server/agents/agent-control.
 import { getAgentControlSignal } from "../../../apps/web/src/server/agents/agent-control-signal.server";
 import { getAgentRuntimeLock } from "../../../apps/web/src/server/agents/agent-runtime-lock.server";
 import { PrismaAgentControlStore } from "../../../apps/web/src/server/db/repositories/agent-control.repositories.server";
+import { MentionDeliveryReports } from "../../../apps/web/src/server/conversations/mention-deliveries.server";
+import { PrismaMentionDeliveryRepository } from "../../../apps/web/src/server/db/repositories/mention-delivery.repositories.server";
 import { createAgentSessions } from "../../../apps/web/src/server/db/repositories/agent-session.repositories.server";
 import { PrismaDirectConversationRepository } from "../../../apps/web/src/server/db/repositories/direct-conversation.repositories.server";
 import { createCentrifugoServerApi } from "../../../apps/web/src/server/centrifugo/server-api.server";
@@ -171,7 +173,7 @@ export async function startEvalDaemon(input: {
       agentMessage: (context, request, agentApiKey) =>
         runtimeApi().agentMessage(context, request, agentApiKey),
       agentAttachment: (context, attachmentId, agentApiKey) =>
-        runtimeApi().agentAttachment(context, attachmentId, agentApiKey),
+        runtimeApi().agentRequests.agentAttachment(context, attachmentId, agentApiKey),
       inbox: (context, request) => runtimeApi().inbox(context, request),
       issueAgentContext: (agentId, context) => runtimeApi().issueAgentContext(agentId, context),
       agentTask: (context, request, agentApiKey) =>
@@ -291,14 +293,21 @@ export async function startAgent(
   agentId: string,
   fence?: MemoryAgentToolProfile,
 ): Promise<void> {
+  const centrifugo = centrifugoApiWithFence(fence);
+  const conversations = new PrismaDirectConversationRepository(workspace.db);
+  const mentions = new MentionDeliveryReports(
+    new PrismaMentionDeliveryRepository(workspace.db),
+    centrifugo,
+    conversations,
+  );
   const control = new AgentControl(
     new PrismaAgentControlStore(workspace.db),
-    centrifugoApiWithFence(fence),
+    centrifugo,
     getAgentRuntimeLock(),
     { timeoutMs: 90_000, fallbackMs: 1_000 },
-    createAgentSessions(workspace.db),
+    createAgentSessions(workspace.db, mentions),
     getAgentControlSignal(),
-    new PrismaDirectConversationRepository(workspace.db),
+    conversations,
   );
   const result = await control.execute({
     userId: workspace.evalUserId,
