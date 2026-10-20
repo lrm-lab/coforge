@@ -56,4 +56,27 @@ describe("cloud computer service access", () => {
     expect(attempts.allowed("user-2", now)).toBe(true);
     expect(attempts.allowed("user-1", new Date(now.getTime() + 60_000))).toBe(true);
   });
+
+  // A failed Web Crypto key import leaves an error on the thread's OpenSSL error queue (Bun 1.4.3);
+  // sealing and checking must not read it as their own failure.
+  test("an unlock still seals and checks after a Web Crypto key import failed", async () => {
+    await failWebCryptoKeyImport();
+    const token = sealCloudServiceUnlock(now, secret);
+    await failWebCryptoKeyImport();
+    expect(cloudServiceUnlockValid(token, now, secret)).toBe(true);
+  });
+
+  test("the password still checks after a Web Crypto key import failed", async () => {
+    await failWebCryptoKeyImport();
+    expect(cloudServicePasswordAccepted(password, password)).toBe(true);
+  });
 });
+
+async function failWebCryptoKeyImport() {
+  const algorithm = { name: "ECDSA", namedCurve: "P-256" };
+  const { privateKey } = await crypto.subtle.generateKey(algorithm, true, ["sign"]);
+  const jwk = await crypto.subtle.exportKey("jwk", privateKey);
+  await expect(
+    crypto.subtle.importKey("jwk", { ...jwk, d: "AA" }, algorithm, false, ["sign"]),
+  ).rejects.toThrow();
+}

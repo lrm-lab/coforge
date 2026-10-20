@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 /** How long one correct password keeps the cloud computer service page operable. */
 export const CLOUD_SERVICE_UNLOCK_SECONDS = 15 * 60;
@@ -107,8 +107,8 @@ function sha256(value: string): Uint8Array {
   return new Uint8Array(new Bun.CryptoHasher("sha256").update(value).digest());
 }
 
+/** `node:crypto`, not `Bun.CryptoHasher`: Bun 1.4.3's HMAC constructor throws an error a failed Web
+ * Crypto key import left on the thread's OpenSSL queue (`test/cloud-service-access`). */
 function hmac(secret: string, value: string): string {
-  const hasher = new Bun.CryptoHasher("sha256", secret);
-  hasher.update(value);
-  return Buffer.from(hasher.digest()).toString("base64url");
+  return createHmac("sha256", secret).update(value, "utf8").digest("base64url");
 }
