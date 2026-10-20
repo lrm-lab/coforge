@@ -16,6 +16,7 @@ import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { addPublicChannelMembers } from "./channels.functions";
+import { addPublicChannelMembersReportingRefusals } from "./channel-member-additions.functions";
 import {
   buildChannelCandidates,
   candidateKey,
@@ -45,16 +46,27 @@ export function AddMembersView({
   onDone: () => void;
 }) {
   const queryClient = useQueryClient();
-  const add = useServerFn(addPublicChannelMembers);
+  const add = useServerFn(addPublicChannelMembersReportingRefusals);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  // Picks that failed to join, kept so their chips and a retry still find them once the fresh
+  // roster no longer offers them (a private Agent or someone who left the Workspace is no
+  // candidate). One the roster lists as a member by now (added before a failed request) drops out.
+  const [retained, setRetained] = useState<ChannelCandidate[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const candidates = useMemo<ChannelCandidate[]>(
     () => buildChannelCandidates(data.candidates),
     [data.candidates],
   );
-  const byKey = useMemo(() => new Map(candidates.map((entry) => [entry.key, entry])), [candidates]);
+  const byKey = useMemo(() => {
+    const memberKeys = new Set([
+      ...data.humans.map((human) => candidateKey("user", human.id)),
+      ...data.agents.map((agent) => candidateKey("agent", agent.id)),
+    ]);
+    const pending = retained.filter((entry) => !memberKeys.has(entry.key));
+    return new Map([...pending, ...candidates].map((entry) => [entry.key, entry]));
+  }, [retained, candidates, data.humans, data.agents]);
   const term = candidateSearchTerm(search);
   const shown = useMemo(() => filterChannelCandidates(candidates, term), [candidates, term]);
   const { joining, failure, notStarted } = createdAgentJoin;
@@ -88,12 +100,23 @@ export function AddMembersView({
     setBusy(true);
     setError("");
     try {
-      const fresh = await add({
-        data: { channelId, ...pickedMemberIds(selected, byKey) },
-      });
-      queryClient.setQueryData(channelMembersQueryKey(channelId), fresh);
-      onDone();
+      const picked = pickedMemberIds(selected, byKey);
+      const { members, failed } = await add({ data: { channelId, ...picked } });
+      queryClient.setQueryData(channelMembersQueryKey(channelId), members);
+      if (failed.length === 0) return onDone();
+      // The ones that joined leave the selection; the rest stay picked so Add retries them.
+      const failedKeys = new Set(failed.map((entry) => candidateKey(entry.kind, entry.id)));
+      setRetained([...failedKeys].flatMap((key) => byKey.get(key) ?? []));
+      setSelected(failedKeys);
+      setError(
+        failed.length === picked.userIds.length + picked.agentIds.length
+          ? m.channel_members_add_none()
+          : m.channel_members_add_partial(),
+      );
     } catch (cause) {
+      // The request may have failed after the batch fell back to one pick at a time, with some
+      // already added: reread the roster so they show as members and leave the selection.
+      void queryClient.invalidateQueries({ queryKey: channelMembersQueryKey(channelId) });
       setError(
         isAppErrorCode(cause, "ACCESS_DENIED")
           ? m.channel_members_access_denied()

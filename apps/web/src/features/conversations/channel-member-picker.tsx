@@ -65,8 +65,8 @@ export function filterChannelCandidates(candidates: ChannelCandidate[], term: st
   return candidates.filter((entry) => memberMatchesSearch(query, entry.search));
 }
 
-/** The picked candidates as the `addPublicChannelMembers` and action-card commit inputs. A key a
- * refetch no longer lists (added meanwhile) drops out of the selection. */
+/** The picked candidates as the add-members and action-card commit inputs. A key `byKey` no
+ * longer holds (the person or Agent was added meanwhile) drops out of the selection. */
 export function pickedMemberIds(keys: Iterable<string>, byKey: Map<string, ChannelCandidate>) {
   const picked = [...keys].flatMap((key) => byKey.get(key) ?? []);
   return {

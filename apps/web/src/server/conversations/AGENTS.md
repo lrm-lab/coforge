@@ -134,6 +134,10 @@ These rules apply to `src/server/conversations/`.
 - Active-membership reads filter through `ACTIVE_MEMBER_WHERE`
   (`active-member.server.ts`). Adding a soft-left member clears `leftAt`
   instead of skipping the row.
+- `addMembers` is all-or-nothing (one invalid target refuses the batch). Only the Web add view
+  reports refused targets, through `addMembersReportingRefusals`
+  (`channel-member-additions.server.ts`): batch first, one target at a time after INVALID_INPUT,
+  each refusal with a stable reason; a refusal of the channel itself still rejects the request.
 - Any active member may leave a channel. Removing a member requires the
   `remove_member` capability; changing a stored `channelRole` requires
   `manage_roles`.
