@@ -75,6 +75,10 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
     avatar: z.literal("choose").optional().catch(undefined),
     ...APPS_SETTINGS_SEARCH,
   }),
+  // The loader reads nothing from the search. A navigation that stays on Settings (a section, the
+  // Applications tab or category, clicking the one already open) does not re-run it; entering the
+  // page and `router.invalidate()` after a save still do.
+  shouldReload: ({ cause }) => cause !== "stay",
   loader: async () => {
     const [preferences, members, generalChannel, archivedChannels, archivedAgents, createdAgents] =
       await Promise.all([
