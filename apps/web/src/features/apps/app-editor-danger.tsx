@@ -17,6 +17,7 @@ const CONFIRM_COPY: Record<
     title: (app: AppSummary) => string;
     description: (app: AppSummary) => string;
     confirmLabel: () => string;
+    pendingLabel: () => string;
     failed: () => string;
   }
 > = {
@@ -24,12 +25,14 @@ const CONFIRM_COPY: Record<
     title: (app) => m.apps_regenerate_title({ name: app.name }),
     description: (app) => m.apps_regenerate_description({ key: app.key }),
     confirmLabel: m.apps_regenerate_secret,
+    pendingLabel: m.apps_regenerating,
     failed: m.apps_regenerate_error,
   },
   delete: {
     title: (app) => m.apps_delete_title({ name: app.name }),
     description: (app) => m.apps_delete_description({ key: app.key }),
     confirmLabel: m.apps_delete_submit,
+    pendingLabel: m.apps_deleting,
     failed: m.apps_delete_error,
   },
 };
@@ -97,6 +100,7 @@ export function DangerZoneRows({
         title={copy.title(app)}
         description={copy.description(app)}
         confirmLabel={copy.confirmLabel()}
+        pendingLabel={copy.pendingLabel()}
         errorMessage={(cause) =>
           isAppErrorCode(cause, "ACCESS_DENIED", "NOT_FOUND")
             ? appFormProblem(cause).message

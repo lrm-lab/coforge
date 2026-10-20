@@ -168,11 +168,19 @@ export function AgentAppsTab({ agentId, timeZone }: { agentId: string; timeZone:
       <section className="px-6 py-5">
         <div className="flex min-h-8 items-center justify-between gap-3">
           <p className={SECTION_CAPTION_CLASS}>{m.agent_apps_section()}</p>
-          {data.canManage && !granting && (
-            <Button size="sm" color="secondary" onPress={() => setGranting(true)}>
-              {m.agent_apps_grant()}
-            </Button>
-          )}
+          <div className="flex shrink-0 items-center gap-3">
+            {/* The first read shows the skeleton above; this marks every later one. */}
+            {query.isFetching && (
+              <p role="status" className="text-sm text-tertiary">
+                {m.apps_loading()}
+              </p>
+            )}
+            {data.canManage && !granting && (
+              <Button size="sm" color="secondary" onPress={() => setGranting(true)}>
+                {m.agent_apps_grant()}
+              </Button>
+            )}
+          </div>
         </div>
         <p className="mt-1 text-sm text-tertiary">{m.agent_apps_section_description()}</p>
         {granting && (

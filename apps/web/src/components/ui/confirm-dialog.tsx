@@ -17,6 +17,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  pendingLabel,
   errorMessage,
   onConfirm,
 }: {
@@ -25,18 +26,20 @@ export function ConfirmDialog({
   title: string;
   description: string;
   confirmLabel: string;
+  /** What the confirm button says while the change runs ("Deleting…"); without it, `confirmLabel`. */
+  pendingLabel?: string;
   /** What a refusal says: one text, or one chosen by what was thrown. */
   errorMessage: string | ((cause: unknown) => string);
   /** Performs the change; throws when it is refused. */
   onConfirm: () => Promise<void>;
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [deleting, guard] = useSubmitGuard();
+  const [pending, guard] = useSubmitGuard();
   return (
     <ModalOverlay
       isOpen={open}
       onOpenChange={(nextOpen: boolean) => {
-        if (deleting) return;
+        if (pending) return;
         setError(null);
         onOpenChange(nextOpen);
       }}
@@ -57,7 +60,7 @@ export function ConfirmDialog({
                   icon={X}
                   size="sm"
                   color="tertiary"
-                  isDisabled={deleting}
+                  isDisabled={pending}
                   onClick={close}
                 />
               </div>
@@ -73,15 +76,15 @@ export function ConfirmDialog({
                 </p>
               )}
               <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button color="secondary" isDisabled={deleting} onPress={close}>
+                <Button color="secondary" isDisabled={pending} onPress={close}>
                   {m.controls_cancel()}
                 </Button>
                 <Button
                   color="primary-destructive"
-                  isLoading={deleting}
+                  isLoading={pending}
                   showTextWhileLoading
                   onPress={() => {
-                    if (deleting) return;
+                    if (pending) return;
                     setError(null);
                     void guard(async () => {
                       try {
@@ -94,7 +97,7 @@ export function ConfirmDialog({
                     });
                   }}
                 >
-                  {confirmLabel}
+                  {pending && pendingLabel ? pendingLabel : confirmLabel}
                 </Button>
               </div>
             </>
