@@ -48,9 +48,11 @@ export async function loadLocomoSample(
   path: string,
   sampleId: string,
   qaLimit: number,
+  pin = LOCOMO10_SHA256,
+  categories: readonly number[] = QUESTION_CATEGORIES,
 ): Promise<LocomoSample> {
   const raw = await Bun.file(path).text();
-  assertLocomoPin(raw);
+  assertLocomoPin(raw, pin);
   const parsed = JSON.parse(raw) as RawSample[];
   const row = parsed.find((item) => item.sample_id === sampleId);
   if (!row?.conversation) throw new Error(`locomo sample ${sampleId} not found`);
@@ -82,7 +84,7 @@ export async function loadLocomoSample(
     if (!item || typeof item !== "object") continue;
     const qa = item as Record<string, unknown>;
     const category = Number(qa.category);
-    if (!QUESTION_CATEGORIES.includes(category)) continue;
+    if (!categories.includes(category)) continue;
     const answer = qa.answer;
     questions.push({
       sampleId,

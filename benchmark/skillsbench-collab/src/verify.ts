@@ -5,7 +5,7 @@ import type { SkillsBenchTask, Verification } from "./types";
 
 const TEST_PY_PATTERN = /^test_.*\.py$/;
 /** Matches the skillsbench task schema's verifier timeout (900s). */
-const PYTEST_TIMEOUT_MS = Number(Bun.env.COFORGE_EVAL_PYTEST_TIMEOUT_MS ?? "900000");
+export const PYTEST_TIMEOUT_MS = Number(Bun.env.COFORGE_EVAL_PYTEST_TIMEOUT_MS ?? "900000");
 
 function pythonBinary(): string {
   return Bun.env.COFORGE_EVAL_PYTHON ?? "python3";
