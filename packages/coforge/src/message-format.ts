@@ -1,3 +1,4 @@
+import { channelSummaryBody } from "./message-summary";
 import {
   renderMessageSender,
   UUID_LIKE_PATTERN,
@@ -60,25 +61,6 @@ export const TASK_WORKFLOW_HINT = "Tracked Tasks: coforge manual get tasks";
 
 export function formatTaskWorkflowHint(messages: readonly AgentMessageRecord[]): string {
   return messages.some((message) => message.task) ? TASK_WORKFLOW_HINT : "";
-}
-
-/** Channel check/resolve lines longer than this are cut; the agent can `read --around` for the rest. */
-const CHANNEL_SUMMARY_CHARS = 200;
-
-/** A parent channel (`#name`), not a thread (`#name:rootId`) and not a DM. */
-function isPlainChannelTarget(target: string): boolean {
-  return target.startsWith("#") && !isThreadTarget(target);
-}
-
-/** Truncate a plain-channel body so check does not dump the full post into the transcript. */
-function channelSummaryBody(message: AgentMessageRecord): string {
-  if (!isPlainChannelTarget(message.target) || message.mentionsAgent || message.nonMemberMention)
-    return message.body;
-  const points = Array.from(message.body);
-  if (points.length <= CHANNEL_SUMMARY_CHARS) return message.body;
-  const shown = points.slice(0, CHANNEL_SUMMARY_CHARS).join("");
-  const hidden = points.length - CHANNEL_SUMMARY_CHARS;
-  return `${shown}…(+${hidden} chars, read: coforge message read --target "${message.target}" --around ${shortId(message.id)})`;
 }
 
 /** The message line shared by `message check`, `message resolve`, and held Task context. */

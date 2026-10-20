@@ -24,6 +24,13 @@ test("only a server-designated platform assistant receives the full platform pla
   expect(instructions).not.toContain("## CoForge platform assistant");
 });
 
+test("coordination follows current channel settings rather than names, memory or past sessions", () => {
+  expect(instructions).toContain("Current channel roles override names, history and memory");
+  expect(instructions).toContain(
+    "Without coordination authority, do not assign, chase or reprioritize peers",
+  );
+});
+
 test("ordinary requests do not require task creation or per-turn memory bookkeeping", () => {
   expect(instructions).toContain("Answer ordinary questions freely");
   expect(instructions).toContain("Before implementing a shared channel request");

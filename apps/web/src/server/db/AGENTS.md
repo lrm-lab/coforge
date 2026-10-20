@@ -25,6 +25,7 @@ These rules apply to `src/server/db/`.
   requested page size.
 - Agent repositories persist only the completed runtime configuration;
   runtime selection and credential encryption stay in `server/agents/`.
+- `direct-conversation-agent-message.server.ts` owns Agent message projections and their Prisma include shapes, target names and Task metadata. The conversation repository owns authorization, reads and cursor advances.
 - `agent-app-config.repositories.server.ts` reads Agent App config rows and a live Agent's
   placement, and writes a row only as a compare-and-set on its revision (never deleting one);
   which Apps exist, their defaults and validation stay in

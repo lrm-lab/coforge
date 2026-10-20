@@ -1,5 +1,15 @@
 import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
 import { WorkspaceAssistantCommands } from "#src/server/agents/workspace-assistant-commands.server";
+import {
+  AGENT_MESSAGE_INCLUDE,
+  AGENT_MESSAGE_WITH_TARGET_INCLUDE,
+  CONVERSATION_TARGET_MEMBERS,
+  conversationTarget,
+  deliveryTarget,
+  messageDeliveryTarget,
+  toAgentMessage,
+  type DirectConversationMessageRow,
+} from "./direct-conversation-agent-message.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import {
@@ -15,14 +25,13 @@ import {
   type AgentMessageValidationMessage,
   type MessageSenderKind,
   type MessageTaskMetadata,
-  type TaskStatus,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentTargetFreshness } from "#src/server/agents/agent-messages.server";
 import { agentHistoryModelSeenBoundary } from "#src/server/agents/agent-history-boundary.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
-import { humanLabel, type HumanNames } from "#src/lib/human-label";
+import { humanLabel } from "#src/lib/human-label";
 import { STORED_USERNAME_SOURCE } from "#src/lib/username-grammar";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
@@ -71,7 +80,7 @@ import {
 } from "#src/server/conversations/conversation-history.server";
 import { readWindowThreads } from "#src/server/conversations/thread-summaries.server";
 import { windowPageFlags } from "#src/lib/conversation-window";
-import { channelTarget } from "#src/server/conversations/agent-delivery.server";
+import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
 import { writeReaction, type ReactionPort } from "#src/server/conversations/reaction-write.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import {
@@ -184,38 +193,6 @@ const PUBLIC_USERNAME_TARGET = new RegExp(`^@${STORED_USERNAME_SOURCE}$`);
  * Message. */
 const MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`);
 
-const TASK_METADATA_SELECT = {
-  select: {
-    number: true,
-    status: true,
-    owner: {
-      select: {
-        user: { select: { username: true, displayName: true } },
-        agent: { select: { name: true, displayName: true, deletedAt: true } },
-      },
-    },
-  },
-} satisfies NonNullable<Prisma.MessageInclude["task"]>;
-
-/** Just the state an Agent needs to know whether a card it prepared has been acted on. */
-const ACTION_CARD_STATE_SELECT = {
-  select: { state: true },
-} satisfies NonNullable<Prisma.MessageInclude["actionCard"]>;
-
-/** Message projection sent to an Agent. */
-const AGENT_MESSAGE_INCLUDE = {
-  memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
-  sender: MESSAGE_SENDER_SELECT,
-  attachments: { orderBy: { position: "asc" } },
-  task: TASK_METADATA_SELECT,
-  actionCard: ACTION_CARD_STATE_SELECT,
-  mentions: MESSAGE_MENTIONS_SELECT,
-} satisfies Prisma.MessageInclude;
-
-type DirectConversationMessageRow = Prisma.MessageGetPayload<{
-  include: typeof AGENT_MESSAGE_INCLUDE;
-}>;
-
 /** The `consumption_scope` of an Agent history read: which conversation it consumed, for
  * a direct conversation or a thread, whose target has more than one spelling. None for a channel's
  * top level. */
@@ -227,43 +204,6 @@ function agentHistoryConsumptionScope(
     return { agentId, conversationId, channelType: "thread", target: canonicalTarget };
   if (!isChannel) return { agentId, conversationId, channelType: "dm", target: canonicalTarget };
   return undefined;
-}
-
-/** A delivery target is the conversation target, suffixed with the thread root when replying. */
-function deliveryTarget(parent: string, rootId?: string | null) {
-  if (!rootId) return parent;
-  return `${parent}:${rootId}`;
-}
-
-/** `#channel` for a public channel, otherwise `@username` of the conversation's user member. */
-function conversationTarget(conversation: {
-  channelName: string | null;
-  members: { user: { username: string } | null }[];
-}) {
-  return conversation.channelName
-    ? channelTarget(conversation.channelName)
-    : `@${conversation.members[0]?.user?.username}`;
-}
-
-/** The one member `conversationTarget` names a direct conversation by: its user member. */
-const CONVERSATION_TARGET_MEMBERS = {
-  where: { userId: { not: null } },
-  select: { user: { select: { username: true } } },
-  take: 1,
-} satisfies Prisma.Conversation$membersArgs;
-
-/** `AGENT_MESSAGE_INCLUDE` plus what `messageDeliveryTarget` reads from the conversation. */
-const AGENT_MESSAGE_WITH_TARGET_INCLUDE = {
-  ...AGENT_MESSAGE_INCLUDE,
-  conversation: { include: { members: CONVERSATION_TARGET_MEMBERS } },
-} satisfies Prisma.MessageInclude;
-
-/** Where a Message is delivered: its conversation's target, with its thread root if it has one. */
-function messageDeliveryTarget(message: {
-  threadRootId: string | null;
-  conversation: Parameters<typeof conversationTarget>[0];
-}) {
-  return deliveryTarget(conversationTarget(message.conversation), message.threadRootId);
 }
 
 function assertMessageAnchor(anchor: string) {
@@ -280,40 +220,6 @@ function onlyAnchorMatch<T>(rows: T[], notFound: AgentMessageValidationMessage):
   const row = rows[0];
   if (!row) throw new AgentMessageValidationError(notFound);
   return row;
-}
-
-function toAgentMessage(
-  row: Pick<DirectConversationMessageRow, "id" | "sequence" | "body" | "createdAt"> & {
-    sender: Parameters<typeof agentMessageSender>[0];
-    task: Parameters<typeof messageTask>[0];
-    attachments: AttachmentMetadata[];
-    actionCard?: { state: string } | null;
-    memoryHint?: { id: string; targetAgentId: string; deliveredAt: Date | null } | null;
-    mentions?: MessageMentionRef[];
-  },
-  target: string,
-  readerAgentId?: string,
-) {
-  const task = messageTask(row.task);
-  const sender = agentMessageSender(row.sender);
-  return {
-    id: row.id,
-    sequence: row.sequence,
-    senderKind: sender.kind,
-    senderHandle: sender.handle,
-    senderDescription: sender.description,
-    ...agentMessageView(
-      { body: row.body, mentions: row.mentions ?? [], actionCard: row.actionCard },
-      readerAgentId,
-    ),
-    createdAt: row.createdAt,
-    target,
-    attachments: row.attachments,
-    ...(task ? { task } : {}),
-    ...(row.memoryHint?.deliveredAt && row.memoryHint.targetAgentId === readerAgentId
-      ? { memoryHint: { hint_id: row.memoryHint.id, tool: "memory_disposition" as const } }
-      : {}),
-  };
 }
 
 /**
@@ -370,50 +276,6 @@ type AgentRecoveryRow = {
   /** The Agent is not in the channel: it was notified of this one message by the sender. */
   nonMemberMention: boolean;
 };
-
-function taskStatus(value: string): TaskStatus {
-  switch (value) {
-    case "todo":
-    case "in_progress":
-    case "in_review":
-    case "done":
-    case "closed":
-      return value;
-    default:
-      throw new Error("invalid persisted Task status");
-  }
-}
-
-function messageTask(
-  task: {
-    number: number;
-    status: string;
-    owner: {
-      user: HumanNames | null;
-      agent: { name: string; displayName: string; deletedAt: Date | null } | null;
-    } | null;
-  } | null,
-): MessageTaskMetadata | undefined {
-  if (!task) return undefined;
-  const agent = task.owner?.agent;
-  const user = task.owner?.user;
-  const handle = agent ? agent.name : user?.username;
-  const displayName = agent ? agent.displayName || handle : user && humanLabel(user);
-  return {
-    number: task.number,
-    status: taskStatus(task.status),
-    ...(displayName && handle
-      ? {
-          owner: {
-            displayName,
-            handle,
-            // A deleted Agent keeps the Task; the reading Agent must not take it for a live owner.
-            ...(agent?.deletedAt ? { deleted: true } : {}),
-          },
-        }
-      : {}),
-  };
-}
 
 /** What an Agent's message did not reach: see `agentMentionReport`. */
 export type AgentMentionReport = {
@@ -912,7 +774,20 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       take: limit,
       include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
     });
-    return rows.map((message) => toAgentMessage(message, messageDeliveryTarget(message), agentId));
+    const coordination = await readChannelCoordination(
+      this.db,
+      workspaceId,
+      agentId,
+      rows.filter((row) => row.conversation.channelName !== null).map((row) => row.conversationId),
+    );
+    return rows.map((message) =>
+      toAgentMessage(
+        message,
+        messageDeliveryTarget(message),
+        agentId,
+        coordination.get(message.conversationId),
+      ),
+    );
   }
 
   /** Looks a Message up by anchor across every conversation the Agent is a member of. */
@@ -935,7 +810,18 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
 
   async resolveAgentMessage(workspaceId: string, agentId: string, anchor: string) {
     const row = await this.resolveAgentScopedMessage(workspaceId, agentId, anchor);
-    return toAgentMessage(row, messageDeliveryTarget(row), agentId);
+    const coordination = await readChannelCoordination(
+      this.db,
+      workspaceId,
+      agentId,
+      row.conversation.channelName !== null ? [row.conversationId] : [],
+    );
+    return toAgentMessage(
+      row,
+      messageDeliveryTarget(row),
+      agentId,
+      coordination.get(row.conversationId),
+    );
   }
 
   async setAgentMessageReaction(
@@ -1586,6 +1472,14 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         })
       ).map((member) => member.conversationId),
     );
+    const coordination = await readChannelCoordination(
+      this.db,
+      workspaceId,
+      agentId,
+      deliveries
+        .filter((delivery) => delivery.conversation.channelName !== null)
+        .map((delivery) => delivery.conversationId),
+    );
     return deliveries.map((delivery) => {
       // agentMessageSender handles both human and Agent authors and validates the handle;
       // reading sender.user alone produces a bare @ for Agent messages.
@@ -1603,7 +1497,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         latestSenderKind: sender.kind,
         latestSenderHandle: sender.handle,
         latestSenderDescription: sender.description,
-        ...agentMessageView(delivery.message, agentId),
+        ...agentMessageView(delivery.message, agentId, coordination.get(delivery.conversationId)),
         ...(delivery.message.memoryHint?.deliveredAt &&
         delivery.message.memoryHint.targetAgentId === agentId
           ? {
@@ -1671,8 +1565,13 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       ? (threadRead?.readThroughSequence ?? 0)
       : agentMember.agentReadThroughSequence;
     const include = AGENT_MESSAGE_INCLUDE;
+    const coordination = isChannel
+      ? (await readChannelCoordination(this.db, workspaceId, agentId, [conversationId])).get(
+          conversationId,
+        )
+      : undefined;
     const map = (rows: DirectConversationMessageRow[]) =>
-      rows.map((row) => toAgentMessage(row, canonicalTarget, agentId));
+      rows.map((row) => toAgentMessage(row, canonicalTarget, agentId, coordination));
     if (page.around && anchor) {
       const beforeCount = Math.floor((limit - 1) / 2);
       const afterCount = limit - 1 - beforeCount;
@@ -1832,6 +1731,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         })
       : [];
     const hintsByMessage = new Map(hints.map((hint) => [hint.messageId, hint.id]));
+    const coordination = await readChannelCoordination(
+      this.db,
+      workspaceId,
+      agentId,
+      rows.filter((row) => row.channelName !== null).map((row) => row.conversationId),
+    );
     for (const row of rows) {
       if (!row.channelName && !row.otherUsername)
         throw new Error("Agent conversation has no other member to target");
@@ -1869,7 +1774,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         latestSenderKind: sender.kind,
         latestSenderHandle: sender.handle,
         latestSenderDescription: sender.description,
-        ...agentMessageView({ body: row.body, mentions: mentionsByMessage.get(row.id) ?? [] }),
+        ...agentMessageView(
+          { body: row.body, mentions: mentionsByMessage.get(row.id) ?? [] },
+          agentId,
+          coordination.get(row.conversationId),
+        ),
         ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
         ...(hintsByMessage.has(row.id)
           ? {
@@ -1927,11 +1836,24 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
       });
       const rowById = new Map(messageRows.map((row) => [row.id, row]));
+      const coordination = await readChannelCoordination(
+        tx,
+        workspaceId,
+        agentId,
+        messageRows
+          .filter((row) => row.conversation.channelName !== null)
+          .map((row) => row.conversationId),
+      );
       const messages = page.map((row) => {
         const message = rowById.get(row.id);
         if (!message) throw new Error(`drained Agent message is missing: ${row.id}`);
         return {
-          ...toAgentMessage(message, messageDeliveryTarget(message), agentId),
+          ...toAgentMessage(
+            message,
+            messageDeliveryTarget(message),
+            agentId,
+            coordination.get(row.conversationId),
+          ),
           // Reached the Agent outside the channel: readable, but it cannot reply there.
           ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
         };
@@ -2062,6 +1984,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             ),
           ),
           canonicalTarget,
+          { workspaceId, agentId },
         ),
       countPending: async (afterSequence?: number, excludingSequences?: readonly number[]) => {
         const scope = {
@@ -2097,6 +2020,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           unseen: await this.#agentMessagesByIds(
             window.filter((row) => !row.seen),
             canonicalTarget,
+            { workspaceId, agentId },
           ),
           maxSequence: window[0]?.sequence,
         };
@@ -2158,7 +2082,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   /** These messages, oldest first, as Agent-facing records. */
-  async #agentMessagesByIds(ids: readonly { id: string }[], canonicalTarget: string) {
+  async #agentMessagesByIds(
+    ids: readonly { id: string }[],
+    canonicalTarget: string,
+    reader: { workspaceId: string; agentId: string },
+  ) {
     if (!ids.length) return [];
     const rows = await this.db.message.findMany({
       where: { id: { in: ids.map((row) => row.id) } },
@@ -2169,7 +2097,15 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         mentions: MESSAGE_MENTIONS_SELECT,
       },
     });
-    return rows.map((m) => this.#agentContextRecord(m, canonicalTarget));
+    const coordination = await readChannelCoordination(
+      this.db,
+      reader.workspaceId,
+      reader.agentId,
+      canonicalTarget.startsWith("#") ? rows.map((row) => row.conversationId) : [],
+    );
+    return rows.map((m) =>
+      this.#agentContextRecord(m, canonicalTarget, coordination.get(m.conversationId)),
+    );
   }
 
   /** One row of the Agent-facing context window, shared by the pending and recent readers so both
@@ -2184,7 +2120,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       createdAt: Date;
       attachments: { id: string; fileName: string; contentType: string; sizeBytes: number }[];
     },
-  >(m: Row, canonicalTarget: string) {
+  >(m: Row, canonicalTarget: string, channelCoordination?: string) {
     const sender = agentMessageSender(m.sender);
     return {
       id: m.id,
@@ -2192,7 +2128,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       senderKind: sender.kind,
       senderHandle: sender.handle,
       senderDescription: sender.description,
-      ...agentMessageView(m),
+      ...agentMessageView(m, undefined, channelCoordination),
       createdAt: m.createdAt,
       target: canonicalTarget,
       attachments: m.attachments,

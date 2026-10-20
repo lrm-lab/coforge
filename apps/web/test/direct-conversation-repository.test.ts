@@ -1,3 +1,4 @@
+import { flattenSqlValues } from "./helpers/prisma-sql";
 import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
@@ -9,23 +10,11 @@ import {
 } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { AgentMessageRecord } from "#src/server/agents/agent-messages.server";
 
-/**
- * The real Prisma `$queryRaw` tag flattens a nested `Prisma.sql` fragment's own bind values into
- * the parent statement's parameter list; this test's hand-rolled mock only sees the raw tagged
- * template arguments, so it must flatten the same way to assert on the resulting parameter order.
- */
-function flattenSqlValues(values: unknown[]): unknown[] {
-  return values.flatMap((value) =>
-    value && typeof value === "object" && "values" in value && "strings" in value
-      ? flattenSqlValues((value as { values: unknown[] }).values)
-      : [value],
-  );
-}
-
 describe("PrismaDirectConversationRepository", () => {
   test("searches only canonical messages in the Agent's Workspace and readable conversations", async () => {
     const queries: object[] = [];
     const db = {
+      conversation: { findMany: async () => [] },
       $queryRaw: async () => [{ query: "'release' & 'plan'" }],
       message: {
         findMany: async (input: object) => {
@@ -906,6 +895,7 @@ describe("PrismaDirectConversationRepository", () => {
 
   test("names channel senders individually and direct senders by the conversation user", async () => {
     const db = {
+      conversation: { findMany: async () => [] },
       messageMention: { findMany: async () => [] },
       memoryHintRecord: { findMany: async () => [] },
       $queryRaw: async () => [
@@ -1152,6 +1142,7 @@ describe("PrismaDirectConversationRepository", () => {
 
   test("reads Agent-authored pending deliveries with the Agent handle", async () => {
     const db = {
+      conversation: { findMany: async () => [] },
       conversationMember: { findMany: async () => [] },
       agentMessageDelivery: {
         findMany: async () => [

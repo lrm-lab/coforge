@@ -75,6 +75,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   instruction mechanism: Codex app-server `developerInstructions`, the Claude
   Code system-prompt-file option, the CoForge Agent resource-loader
   system-prompt override, and Grok ACP `_meta.systemPromptOverride`.
+- Current channel roles override names, previous sessions and local memory. Without current coordinator status or explicit human delegation, an Agent must not assign, chase or reprioritize peers. Coordination stays scoped to its channel and grants no extra permissions. Web annotates channel reads with current roles; launches preserve Agent-owned memory.
 - Do not copy the text into a provider. Do not write `AGENTS.md` or `CLAUDE.md`
   into the user's Agent workspace for a provider that supports native
   injection.
