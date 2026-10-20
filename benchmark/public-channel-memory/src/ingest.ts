@@ -26,7 +26,12 @@ export function createEvalDispatcher(input: {
   const sessions = createOpenVikingTypedSessionExtract({
     runtime: input.runtime,
     authorizedOwner: "pcm-sink",
-    sinkIdentity: userIdentity(input.accountId, input.users.adminUserId, input.users.adminKey, "admin"),
+    sinkIdentity: userIdentity(
+      input.accountId,
+      input.users.adminUserId,
+      input.users.adminKey,
+      "admin",
+    ),
   });
   return createAdmissionDispatcher({
     admission,
@@ -106,7 +111,8 @@ export async function ingestSample(input: {
       now: new Date(),
       quietAfterMs: WORKSPACE_MEMORY_QUIET_WINDOW_MS,
     });
-    if (detected.length === 0) throw new Error(`quiet window not detected for session ${session.sessionNumber}`);
+    if (detected.length === 0)
+      throw new Error(`quiet window not detected for session ${session.sessionNumber}`);
     for (const segment of detected) {
       let outcome = await input.dispatcher.dispatch({ profile, detected: segment });
       for (let attempt = 1; outcome.outcome === "retryable_failure" && attempt <= 2; attempt += 1) {

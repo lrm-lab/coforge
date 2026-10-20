@@ -7,9 +7,7 @@ describe("parseJudgeVerdict", () => {
       "<judge_thinking>The response matches the gold answer.</judge_thinking>\n\nyes",
     );
     expect(yes.label).toBe("CORRECT");
-    const no = parseJudgeVerdict(
-      "<judge_thinking>Wrong number of trips.</judge_thinking>\n\nno",
-    );
+    const no = parseJudgeVerdict("<judge_thinking>Wrong number of trips.</judge_thinking>\n\nno");
     expect(no.label).toBe("WRONG");
   });
 

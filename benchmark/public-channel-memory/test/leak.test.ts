@@ -2,14 +2,25 @@ import { expect, test } from "bun:test";
 import { classifyMechanism } from "../src/leak";
 
 test("missing reply, offer, or citations are mechanism failures", () => {
-  expect(classifyMechanism({ reply: null, offerMessageId: "o", citationCount: 1, toolsUsed: ["ov_find"] }).mechanism).toBe(
-    "no_reply",
-  );
-  expect(classifyMechanism({ reply: "Seattle", offerMessageId: null, citationCount: 0, toolsUsed: [] }).mechanism).toBe(
-    "no_offer",
-  );
   expect(
-    classifyMechanism({ reply: "Seattle", offerMessageId: "o", citationCount: 0, toolsUsed: ["ov_find"] }).mechanism,
+    classifyMechanism({
+      reply: null,
+      offerMessageId: "o",
+      citationCount: 1,
+      toolsUsed: ["ov_find"],
+    }).mechanism,
+  ).toBe("no_reply");
+  expect(
+    classifyMechanism({ reply: "Seattle", offerMessageId: null, citationCount: 0, toolsUsed: [] })
+      .mechanism,
+  ).toBe("no_offer");
+  expect(
+    classifyMechanism({
+      reply: "Seattle",
+      offerMessageId: "o",
+      citationCount: 0,
+      toolsUsed: ["ov_find"],
+    }).mechanism,
   ).toBe("uncited_offer");
 });
 

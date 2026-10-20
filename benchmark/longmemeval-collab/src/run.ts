@@ -43,7 +43,11 @@ console.log(
 Bun.env.OPENVIKING_PROTOTYPE_ENABLED = "1";
 Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE ??= "/tmp/pcm-eval-ov-keys.json";
 
-const samples = await loadLongMemEvalSamples(env.dataPath, env.sampleIndexes, env.dataPin ?? undefined);
+const samples = await loadLongMemEvalSamples(
+  env.dataPath,
+  env.sampleIndexes,
+  env.dataPin ?? undefined,
+);
 const runtime = createEvalRuntime(env.ovUrl);
 const rootKey = await readSecretRootKey(env.ovConfPath);
 const root = rootIdentity(rootKey);

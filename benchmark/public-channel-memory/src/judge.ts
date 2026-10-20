@@ -56,13 +56,16 @@ export function parseJudgeResult(content: string): { label: JudgeLabel; reason: 
   if (!stripped) return { label: "UNJUDGED", reason: "empty judge response" };
   const start = stripped.indexOf("{");
   const end = stripped.lastIndexOf("}");
-  if (start === -1 || end === -1) return { label: "UNJUDGED", reason: "judge response was not JSON" };
+  if (start === -1 || end === -1)
+    return { label: "UNJUDGED", reason: "judge response was not JSON" };
   try {
     const parsed = JSON.parse(stripped.slice(start, end + 1)) as {
       label?: unknown;
       reasoning?: unknown;
     };
-    const label = String(parsed.label ?? "").trim().toUpperCase();
+    const label = String(parsed.label ?? "")
+      .trim()
+      .toUpperCase();
     const reason = String(parsed.reasoning ?? stripped).trim();
     if (label === "CORRECT" || label === "WRONG") return { label, reason };
   } catch {

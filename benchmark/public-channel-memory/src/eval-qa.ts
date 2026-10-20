@@ -23,7 +23,10 @@ export async function postMemoryQuestion(input: {
   if (input.redisUrl) {
     const redis = new RedisClient(input.redisUrl);
     try {
-      const channels = new PublicChannels(input.workspace.db, new RedisMessageRequestIdempotency(redis));
+      const channels = new PublicChannels(
+        input.workspace.db,
+        new RedisMessageRequestIdempotency(redis),
+      );
       const sent = await channels.send({
         workspaceId: input.workspace.workspaceId,
         userId: input.workspace.evalUserId,
@@ -94,7 +97,8 @@ async function pollAnswer(input: {
         reply: reply?.body ?? null,
         offerMessageId: offer?.messageId ?? null,
         citationCount: offer?.citations.length ?? 0,
-        toolsUsed: offer && offer.citations.length > 0 ? inferToolsFromCitations(offer.citations) : [],
+        toolsUsed:
+          offer && offer.citations.length > 0 ? inferToolsFromCitations(offer.citations) : [],
         timedOut: false,
       };
     }

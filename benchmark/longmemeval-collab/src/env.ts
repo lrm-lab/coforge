@@ -43,11 +43,14 @@ function required(env: Record<string, string | undefined>, key: string): string 
 }
 
 function parseIndexes(env: Record<string, string | undefined>): number[] {
-  const list = env.COFORGE_EVAL_SAMPLES?.split(",").map((part) => Number(part.trim())).filter(Number.isInteger);
+  const list = env.COFORGE_EVAL_SAMPLES?.split(",")
+    .map((part) => Number(part.trim()))
+    .filter(Number.isInteger);
   if (list && list.length > 0) return list;
   const index = Number(env.COFORGE_EVAL_SAMPLE_INDEX ?? "0");
   const count = Math.max(1, Number(env.COFORGE_EVAL_SAMPLE_COUNT ?? "1"));
-  if (!Number.isInteger(index) || index < 0) throw new Error("COFORGE_EVAL_SAMPLE_INDEX must be a non-negative integer");
+  if (!Number.isInteger(index) || index < 0)
+    throw new Error("COFORGE_EVAL_SAMPLE_INDEX must be a non-negative integer");
   return Array.from({ length: count }, (_, offset) => index + offset);
 }
 
@@ -58,7 +61,8 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     .filter((arm): arm is EvalArm => (EVAL_ARMS as readonly string[]).includes(arm));
   if (arms.length === 0) throw new Error("COFORGE_EVAL_ARMS has no recognized arm");
   const judgeModel = env.COFORGE_EVAL_JUDGE_MODEL ?? "grok-4.6";
-  const memoryAgentProvider = env.COFORGE_EVAL_MEMORY_AGENT_PROVIDER ?? PI_DEEPSEEK_V4_FLASH_PROVIDER;
+  const memoryAgentProvider =
+    env.COFORGE_EVAL_MEMORY_AGENT_PROVIDER ?? PI_DEEPSEEK_V4_FLASH_PROVIDER;
   const memoryAgentModel = env.COFORGE_EVAL_MEMORY_AGENT_MODEL ?? PI_DEEPSEEK_V4_FLASH_MODEL;
   const taskAgentProvider = env.COFORGE_EVAL_TASK_AGENT_PROVIDER ?? memoryAgentProvider;
   const taskAgentModel = env.COFORGE_EVAL_TASK_AGENT_MODEL ?? memoryAgentModel;

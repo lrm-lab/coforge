@@ -222,9 +222,15 @@ export async function resetAgentSessions(workspace: EvalWorkspace): Promise<void
 }
 
 export async function destroyEvalWorkspace(workspace: EvalWorkspace): Promise<void> {
-  await workspace.db.workspace.delete({ where: { id: workspace.workspaceId } }).catch(() => undefined);
-  await workspace.db.computer.delete({ where: { id: workspace.computerId } }).catch(() => undefined);
+  await workspace.db.workspace
+    .delete({ where: { id: workspace.workspaceId } })
+    .catch(() => undefined);
+  await workspace.db.computer
+    .delete({ where: { id: workspace.computerId } })
+    .catch(() => undefined);
   if (workspace.userIds.length > 0) {
-    await workspace.db.user.deleteMany({ where: { id: { in: workspace.userIds } } }).catch(() => undefined);
+    await workspace.db.user
+      .deleteMany({ where: { id: { in: workspace.userIds } } })
+      .catch(() => undefined);
   }
 }

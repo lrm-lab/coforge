@@ -44,7 +44,8 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     .filter((arm): arm is EvalArm => (EVAL_ARMS as readonly string[]).includes(arm));
   if (arms.length === 0) throw new Error("COFORGE_EVAL_ARMS has no recognized arm");
   const judgeModel = env.COFORGE_EVAL_JUDGE_MODEL ?? "grok-4.6";
-  const memoryAgentProvider = env.COFORGE_EVAL_MEMORY_AGENT_PROVIDER ?? PI_DEEPSEEK_V4_FLASH_PROVIDER;
+  const memoryAgentProvider =
+    env.COFORGE_EVAL_MEMORY_AGENT_PROVIDER ?? PI_DEEPSEEK_V4_FLASH_PROVIDER;
   const memoryAgentModel = env.COFORGE_EVAL_MEMORY_AGENT_MODEL ?? PI_DEEPSEEK_V4_FLASH_MODEL;
   if (memoryAgentModel === judgeModel) {
     throw new Error("judge model must differ from Memory Agent model");

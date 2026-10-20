@@ -41,7 +41,8 @@ const taskNames =
   env.taskNames.length > 0
     ? env.taskNames
     : available.slice(0, Number(Bun.env.COFORGE_EVAL_TASK_COUNT ?? "1"));
-if (taskNames.length === 0) throw new Error(`no tasks found under ${env.tasksDir} (run prepare first)`);
+if (taskNames.length === 0)
+  throw new Error(`no tasks found under ${env.tasksDir} (run prepare first)`);
 for (const name of taskNames) {
   if (!available.includes(name)) throw new Error(`task ${name} not found under ${env.tasksDir}`);
 }
@@ -112,7 +113,11 @@ async function runTask(arm: (typeof env.arms)[number], taskName: string) {
       task,
       env,
       verify: (current) =>
-        runVerification({ task: current, agentWorkspaceDir, verifyBaseDir: join(daemon!.workspaceRoot, workspace!.workspaceId) }),
+        runVerification({
+          task: current,
+          agentWorkspaceDir,
+          verifyBaseDir: join(daemon!.workspaceRoot, workspace!.workspaceId),
+        }),
     });
     attempts.push(attempt);
     console.log(

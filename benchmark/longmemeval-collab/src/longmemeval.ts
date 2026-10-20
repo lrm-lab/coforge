@@ -96,7 +96,8 @@ export async function loadLongMemEvalSamples(
   const samples: LongMemEvalSample[] = [];
   for (const index of wanted) {
     const item = parsed[index];
-    if (!item) throw new Error(`longmemeval sample index ${index} out of range (0-${parsed.length - 1})`);
+    if (!item)
+      throw new Error(`longmemeval sample index ${index} out of range (0-${parsed.length - 1})`);
     const sessions = buildSessions(item);
     if (sessions.length === 0) throw new Error(`longmemeval sample index ${index} has no sessions`);
     samples.push({

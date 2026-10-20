@@ -36,8 +36,11 @@ export function summarizeArm(
     headlineCorrect: headline.filter((row) => row.judge === "CORRECT").length,
     headlineTotal: headline.length,
     leaks: attempts.filter((row) => row.mechanism === "leak").length,
-    mechanismFails: attempts.filter((row) => row.mechanism !== "ok" && row.mechanism !== "leak").length,
-    byQuestionType: [...byType.values()].sort((left, right) => left.questionType.localeCompare(right.questionType)),
+    mechanismFails: attempts.filter((row) => row.mechanism !== "ok" && row.mechanism !== "leak")
+      .length,
+    byQuestionType: [...byType.values()].sort((left, right) =>
+      left.questionType.localeCompare(right.questionType),
+    ),
   };
 }
 
@@ -50,7 +53,11 @@ export async function writeResults(input: {
   const stamp = new Date().toISOString().replaceAll(":", "").replaceAll(".", "");
   const jsonl = join(input.resultDir, `attempts-${stamp}.jsonl`);
   const summary = join(input.resultDir, `summary-${stamp}.txt`);
-  await Bun.write(jsonl, input.attempts.map((row) => JSON.stringify(row)).join("\n") + (input.attempts.length ? "\n" : ""));
+  await Bun.write(
+    jsonl,
+    input.attempts.map((row) => JSON.stringify(row)).join("\n") +
+      (input.attempts.length ? "\n" : ""),
+  );
   const lines: string[] = [];
   for (const row of input.summaries) {
     lines.push(

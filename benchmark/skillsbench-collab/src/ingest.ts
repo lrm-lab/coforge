@@ -27,7 +27,12 @@ export function createEvalDispatcher(input: {
   const sessions = createOpenVikingTypedSessionExtract({
     runtime: input.runtime,
     authorizedOwner: "sb-sink",
-    sinkIdentity: userIdentity(input.accountId, input.users.adminUserId, input.users.adminKey, "admin"),
+    sinkIdentity: userIdentity(
+      input.accountId,
+      input.users.adminUserId,
+      input.users.adminKey,
+      "admin",
+    ),
   });
   return createAdmissionDispatcher({
     admission,
@@ -125,13 +130,20 @@ async function ingestSkill(input: {
     now: new Date(),
     quietAfterMs: WORKSPACE_MEMORY_QUIET_WINDOW_MS,
   });
-  if (detected.length === 0) throw new Error(`quiet window not detected for skill ${input.skill.name}`);
+  if (detected.length === 0)
+    throw new Error(`quiet window not detected for skill ${input.skill.name}`);
   let ingested = 0;
   for (const segment of detected) {
-    let outcome = await input.dispatcher.dispatch({ profile: await profileFor(input.workspace), detected: segment });
+    let outcome = await input.dispatcher.dispatch({
+      profile: await profileFor(input.workspace),
+      detected: segment,
+    });
     for (let attempt = 1; outcome.outcome === "retryable_failure" && attempt <= 2; attempt += 1) {
       console.log(`ingest skill ${input.skill.name} retry ${attempt}`);
-      outcome = await input.dispatcher.dispatch({ profile: await profileFor(input.workspace), detected: segment });
+      outcome = await input.dispatcher.dispatch({
+        profile: await profileFor(input.workspace),
+        detected: segment,
+      });
     }
     if (outcome.outcome !== "dispatched" && outcome.outcome !== "replayed") {
       const detail = outcome.outcome === "skipped" ? outcome.reason : outcome.sanitizedError;

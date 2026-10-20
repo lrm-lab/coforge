@@ -4,13 +4,14 @@ import { parseLocomoDateTime, turnBody } from "./locomo-time";
 
 // Eval-side knob: which QA categories to enumerate (default keeps the original
 // headline scope 1-4; set COFORGE_EVAL_LOCOMO_CATEGORIES=5 for adversarial-only).
-const QUESTION_CATEGORIES: readonly number[] = (process.env.COFORGE_EVAL_LOCOMO_CATEGORIES ?? "1,2,3,4")
+const QUESTION_CATEGORIES: readonly number[] = (
+  process.env.COFORGE_EVAL_LOCOMO_CATEGORIES ?? "1,2,3,4"
+)
   .split(",")
   .map((value) => Number(value.trim()))
   .filter((value) => Number.isFinite(value));
 
-export const LOCOMO10_SHA256 =
-  "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4";
+export const LOCOMO10_SHA256 = "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4";
 
 export const DEFAULT_LOCOMO_PATH =
   "/home/zhoujie22/river2_0/evol_bench/LoCoMo/data/locomo/locomo10.json";
@@ -97,6 +98,9 @@ export async function loadLocomoSample(
   return { sampleId, speakerA, speakerB, sessions, questions };
 }
 
-export function formatTurnLine(speaker: string, turn: LocomoSample["sessions"][number]["turns"][number]) {
+export function formatTurnLine(
+  speaker: string,
+  turn: LocomoSample["sessions"][number]["turns"][number],
+) {
   return `${speaker}: ${turnBody(turn)}`;
 }

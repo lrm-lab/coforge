@@ -13,7 +13,10 @@ function escapeRegExp(value: string): string {
 
 /** `(^|(?<=[\s'"`(\[]))SRC(?=($|[\s'"`)\]]))` — whole-token absolute path match. */
 export function replaceAbsToken(text: string, src: string, dst: string): string {
-  const pattern = new RegExp(`(^|(?<=[\\s'"\\\`(\[]))${escapeRegExp(src)}(?=($|[\\s'"\\\`)\\]]))`, "gm");
+  const pattern = new RegExp(
+    `(^|(?<=[\\s'"\\\`(\[]))${escapeRegExp(src)}(?=($|[\\s'"\\\`)\\]]))`,
+    "gm",
+  );
   return text.replace(pattern, (_match, leading: string) => `${leading}${dst}`);
 }
 

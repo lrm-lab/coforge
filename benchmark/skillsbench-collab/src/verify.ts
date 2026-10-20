@@ -11,7 +11,12 @@ function pythonBinary(): string {
   return Bun.env.COFORGE_EVAL_PYTHON ?? "python3";
 }
 
-function parseTestCounts(output: string): { total: number | null; passed: number; failed: number; skipped: number } {
+function parseTestCounts(output: string): {
+  total: number | null;
+  passed: number;
+  failed: number;
+  skipped: number;
+} {
   const collected = output.match(/collected\s+(\d+)\s+items/);
   const passed = (output.match(/\bPASSED\s+\[/g) ?? []).length;
   const failed = (output.match(/\bFAILED\s+\[/g) ?? []).length;
@@ -39,15 +44,17 @@ export async function runVerification(input: {
 
   // The agent's execution root becomes the pytest root. Dot-directories
   // (.builtin-runtime, .builtin-sessions, ...) hold runtime state, not outputs.
-  for (const entry of await readdir(input.agentWorkspaceDir, { withFileTypes: true }).catch(() => [])) {
+  for (const entry of await readdir(input.agentWorkspaceDir, { withFileTypes: true }).catch(
+    () => [],
+  )) {
     if (entry.name.startsWith(".")) continue;
     await cp(join(input.agentWorkspaceDir, entry.name), join(verifyDir, entry.name), {
       recursive: true,
     });
   }
 
-  const testPyFiles = input.task.testFiles.filter(
-    (file) => TEST_PY_PATTERN.test(file.relPath.split("/").pop() ?? ""),
+  const testPyFiles = input.task.testFiles.filter((file) =>
+    TEST_PY_PATTERN.test(file.relPath.split("/").pop() ?? ""),
   );
   if (testPyFiles.length === 0) {
     return {

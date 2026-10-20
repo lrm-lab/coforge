@@ -61,7 +61,10 @@ function attempt(overrides: Partial<EvalAttempt>): EvalAttempt {
 describe("summarizeArm", () => {
   test("aggregates pass rate and score like the OV summary", () => {
     const summary = summarizeArm("openviking", [
-      attempt({ taskName: "a", verification: { verified: true, passed: true, testScore: 1, output: "", error: null } }),
+      attempt({
+        taskName: "a",
+        verification: { verified: true, passed: true, testScore: 1, output: "", error: null },
+      }),
       attempt({
         taskName: "b",
         verification: { verified: true, passed: false, testScore: 0.5, output: "", error: null },
@@ -72,7 +75,13 @@ describe("summarizeArm", () => {
         reply: null,
         mechanism: "no_offer",
         offerMessageId: null,
-        verification: { verified: true, passed: false, testScore: null, output: "no pytest files, skipping verification", error: null },
+        verification: {
+          verified: true,
+          passed: false,
+          testScore: null,
+          output: "no pytest files, skipping verification",
+          error: null,
+        },
       }),
     ]);
     expect(summary.tasks).toEqual(["a", "b", "c"]);

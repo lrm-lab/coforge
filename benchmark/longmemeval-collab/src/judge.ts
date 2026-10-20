@@ -113,7 +113,9 @@ export function parseJudgeVerdict(content: string): { label: JudgeLabel; reason:
   if (start !== -1 && end > start) {
     try {
       const parsed = JSON.parse(stripped.slice(start, end + 1)) as { is_correct?: unknown };
-      const label = String(parsed.is_correct ?? "").trim().toUpperCase();
+      const label = String(parsed.is_correct ?? "")
+        .trim()
+        .toUpperCase();
       if (label === "CORRECT" || label === "YES" || label === "TRUE") {
         return { label: "CORRECT", reason: stripped };
       }
@@ -128,7 +130,10 @@ export function parseJudgeVerdict(content: string): { label: JudgeLabel; reason:
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-  const last = lines.at(-1)?.replace(/[.。]+$/, "").toLowerCase();
+  const last = lines
+    .at(-1)
+    ?.replace(/[.。]+$/, "")
+    .toLowerCase();
   if (last === "yes") return { label: "CORRECT", reason: stripped };
   if (last === "no") return { label: "WRONG", reason: stripped };
   return { label: "UNJUDGED", reason: "judge response missing yes/no verdict" };

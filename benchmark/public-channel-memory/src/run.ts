@@ -97,9 +97,7 @@ async function runArm(arm: (typeof env.arms)[number]) {
     daemon = await startEvalDaemon({ workspace, arm, env });
     await resetMemoryAgentSession(workspace);
     await startMemoryAgent(workspace, workspaceProfileToToolFence(arm));
-    console.log(
-      sanitizeDiagnostic(`${arm} eval daemon computer=${daemon.computerId}`),
-    );
+    console.log(sanitizeDiagnostic(`${arm} eval daemon computer=${daemon.computerId}`));
     const armAttempts: EvalAttempt[] = [];
     for (const question of sample.questions) {
       const attempt = await evaluateQuestion({ arm, workspace, question, env });
@@ -127,7 +125,9 @@ async function runArm(arm: (typeof env.arms)[number]) {
         ),
       );
     }
-    summaries.push(summarizeArm(arm, workspace.workspaceId, sample.sampleId, ingested, armAttempts));
+    summaries.push(
+      summarizeArm(arm, workspace.workspaceId, sample.sampleId, ingested, armAttempts),
+    );
   } finally {
     if (daemon) await daemon.stop().catch(() => undefined);
     if (workspace) await destroyEvalWorkspace(workspace);

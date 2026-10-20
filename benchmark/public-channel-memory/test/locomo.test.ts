@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 import { parseLocomoDateTime, turnBody } from "../src/locomo-time";
-import { assertLocomoPin, loadLocomoSample, LOCOMO10_SHA256, DEFAULT_LOCOMO_PATH } from "../src/locomo";
+import {
+  assertLocomoPin,
+  loadLocomoSample,
+  LOCOMO10_SHA256,
+  DEFAULT_LOCOMO_PATH,
+} from "../src/locomo";
 
 test("parses LoCoMo session stamps into UTC instants", () => {
   expect(parseLocomoDateTime("9:36 am on 2 April, 2023", 0).toISOString()).toBe(

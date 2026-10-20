@@ -28,7 +28,11 @@ export function instructionFromBody(text: string): string {
   const lines = text.split("\n");
   for (const [index, line] of lines.entries()) {
     if (index === 0) continue;
-    if (line.trim() === "---") return lines.slice(index + 1).join("\n").trim();
+    if (line.trim() === "---")
+      return lines
+        .slice(index + 1)
+        .join("\n")
+        .trim();
   }
   return text.trim();
 }

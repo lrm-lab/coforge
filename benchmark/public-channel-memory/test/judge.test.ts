@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { buildJudgePrompt, cursorJudgeArgv, parseJudgeResult, preprocessAnswer } from "../src/judge";
+import {
+  buildJudgePrompt,
+  cursorJudgeArgv,
+  parseJudgeResult,
+  preprocessAnswer,
+} from "../src/judge";
 
 test("category 3 gold answers keep only the clause before a semicolon", () => {
   expect(preprocessAnswer(3, "Paris; also Lyon")).toBe("Paris");
@@ -11,9 +16,7 @@ test("parses LoCoMo judge JSON and rejects empty or unlabeled text", () => {
     label: "CORRECT",
     reason: "same fact",
   });
-  expect(parseJudgeResult("prefix {\"label\":\"WRONG\",\"reasoning\":\"no\"} suffix").label).toBe(
-    "WRONG",
-  );
+  expect(parseJudgeResult('prefix {"label":"WRONG","reasoning":"no"} suffix').label).toBe("WRONG");
   expect(parseJudgeResult("").label).toBe("UNJUDGED");
   expect(parseJudgeResult("not json").label).toBe("UNJUDGED");
 });

@@ -124,9 +124,8 @@ export async function startEvalDaemon(input: {
 
   const stateDirectory = join(tmpdir(), `pcm-daemon-${input.workspace.workspaceId.slice(0, 8)}`);
   process.env.COFORGE_DAEMON_HOME = stateDirectory;
-  const { configureDaemonLogging } = await import(
-    "../../../packages/daemon/src/platform/daemon-logging"
-  );
+  const { configureDaemonLogging } =
+    await import("../../../packages/daemon/src/platform/daemon-logging");
   await configureDaemonLogging(stateDirectory);
   const workspaceRoot = join(stateDirectory, "workspaces");
   const credentials = new FileDaemonCredentialStore(stateDirectory);
@@ -291,8 +290,6 @@ export async function startMemoryAgent(
     action: "start",
   });
   if (result.phase !== "completed") {
-    throw new Error(
-      `Memory Agent start ${result.phase}${result.error ? `: ${result.error}` : ""}`,
-    );
+    throw new Error(`Memory Agent start ${result.phase}${result.error ? `: ${result.error}` : ""}`);
   }
 }

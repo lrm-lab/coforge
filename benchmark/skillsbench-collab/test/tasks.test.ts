@@ -11,7 +11,17 @@ async function write(path: string, content: string): Promise<void> {
 
 describe("instructionFromBody", () => {
   test("strips YAML frontmatter and keeps the instruction body", () => {
-    const task = ["---", "metadata:", "  difficulty: hard", "verifier:", "  type: test-script", "---", "", "You need to do X with /root/input.csv.", ""].join("\n");
+    const task = [
+      "---",
+      "metadata:",
+      "  difficulty: hard",
+      "verifier:",
+      "  type: test-script",
+      "---",
+      "",
+      "You need to do X with /root/input.csv.",
+      "",
+    ].join("\n");
     expect(instructionFromBody(task)).toBe("You need to do X with /root/input.csv.");
   });
 
@@ -26,12 +36,20 @@ describe("loadTask", () => {
     const dir = join(root, "demo");
     await write(
       join(dir, "task.md"),
-      ["---", "verifier:", "  type: test-script", "---", "", "Produce /root/out.json.", ""].join("\n"),
+      ["---", "verifier:", "  type: test-script", "---", "", "Produce /root/out.json.", ""].join(
+        "\n",
+      ),
     );
     await write(join(dir, "verifier", "test_outputs.py"), "def test_x():\n    assert True\n");
     await write(join(dir, "verifier", "test.sh"), "#!/bin/bash\nexit 0\n");
-    await write(join(dir, "environment", "skills", "demo-skill", "SKILL.md"), "# Demo skill\nUse it well.\n");
-    await write(join(dir, "environment", "skills", "demo-skill", "scripts", "run.py"), "print('hi')\n");
+    await write(
+      join(dir, "environment", "skills", "demo-skill", "SKILL.md"),
+      "# Demo skill\nUse it well.\n",
+    );
+    await write(
+      join(dir, "environment", "skills", "demo-skill", "scripts", "run.py"),
+      "print('hi')\n",
+    );
     await write(join(dir, "environment", "input.dat"), "data");
     await write(join(dir, "environment", "Dockerfile"), "FROM python:3.12\n");
 
@@ -43,7 +61,10 @@ describe("loadTask", () => {
       "SKILL.md",
     ]);
     expect(task.envFiles.map((file) => file.relPath)).toEqual(["input.dat"]);
-    expect(task.testFiles.map((file) => file.relPath).sort()).toEqual(["test.sh", "test_outputs.py"]);
+    expect(task.testFiles.map((file) => file.relPath).sort()).toEqual([
+      "test.sh",
+      "test_outputs.py",
+    ]);
   });
 
   test("listTasks skips excluded tasks", async () => {

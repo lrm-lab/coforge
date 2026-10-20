@@ -46,7 +46,8 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     .map((arm) => arm.trim())
     .filter((arm): arm is EvalArm => (EVAL_ARMS as readonly string[]).includes(arm));
   if (arms.length === 0) throw new Error("COFORGE_EVAL_ARMS has no recognized arm");
-  const memoryAgentProvider = env.COFORGE_EVAL_MEMORY_AGENT_PROVIDER ?? PI_DEEPSEEK_V4_FLASH_PROVIDER;
+  const memoryAgentProvider =
+    env.COFORGE_EVAL_MEMORY_AGENT_PROVIDER ?? PI_DEEPSEEK_V4_FLASH_PROVIDER;
   const memoryAgentModel = env.COFORGE_EVAL_MEMORY_AGENT_MODEL ?? PI_DEEPSEEK_V4_FLASH_MODEL;
   const taskAgentProvider = env.COFORGE_EVAL_TASK_AGENT_PROVIDER ?? memoryAgentProvider;
   const taskAgentModel = env.COFORGE_EVAL_TASK_AGENT_MODEL ?? memoryAgentModel;

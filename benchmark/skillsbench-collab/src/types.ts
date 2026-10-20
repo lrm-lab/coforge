@@ -32,13 +32,7 @@ export type Verification = {
   error: string | null;
 };
 
-export type Mechanism =
-  | "ok"
-  | "no_reply"
-  | "no_offer"
-  | "uncited_offer"
-  | "leak"
-  | "timeout";
+export type Mechanism = "ok" | "no_reply" | "no_offer" | "uncited_offer" | "leak" | "timeout";
 
 export type EvalAttempt = {
   arm: EvalArm;

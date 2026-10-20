@@ -2,11 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  loadLongMemEvalSamples,
-  parseLongMemEvalDateTime,
-  sha256Hex,
-} from "../src/longmemeval";
+import { loadLongMemEvalSamples, parseLongMemEvalDateTime, sha256Hex } from "../src/longmemeval";
 
 const SAMPLE_JSON = JSON.stringify([
   {

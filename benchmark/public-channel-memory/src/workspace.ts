@@ -198,7 +198,9 @@ export async function insertHistoricalSession(input: {
   const messageIds: string[] = [];
   let sequence = input.nextSequence;
   for (const [index, turn] of input.session.turns.entries()) {
-    const member = byHandle.get(turn.speaker) ?? members.find((row) => row.userId !== input.workspace.evalUserId);
+    const member =
+      byHandle.get(turn.speaker) ??
+      members.find((row) => row.userId !== input.workspace.evalUserId);
     if (!member) throw new Error(`no conversation member for speaker ${turn.speaker}`);
     const created = await input.db.message.create({
       data: {
@@ -226,9 +228,15 @@ export async function resetMemoryAgentSession(workspace: EvalWorkspace): Promise
 }
 
 export async function destroyEvalWorkspace(workspace: EvalWorkspace): Promise<void> {
-  await workspace.db.workspace.delete({ where: { id: workspace.workspaceId } }).catch(() => undefined);
-  await workspace.db.computer.delete({ where: { id: workspace.computerId } }).catch(() => undefined);
+  await workspace.db.workspace
+    .delete({ where: { id: workspace.workspaceId } })
+    .catch(() => undefined);
+  await workspace.db.computer
+    .delete({ where: { id: workspace.computerId } })
+    .catch(() => undefined);
   if (workspace.userIds.length > 0) {
-    await workspace.db.user.deleteMany({ where: { id: { in: workspace.userIds } } }).catch(() => undefined);
+    await workspace.db.user
+      .deleteMany({ where: { id: { in: workspace.userIds } } })
+      .catch(() => undefined);
   }
 }
