@@ -164,6 +164,9 @@ export async function startEvalDaemon(input: {
     registration.daemonApiKey,
   );
 
+  // Every Agent's key is read, and its runtime config sealed, before the daemon starts: a missing
+  // key must fail the run before a runtime is running that the caller has no `stop` for.
+  const apiKeys = input.agents.map((agent) => memoryApiKey(agent.provider));
   const isolatedPiHost = join(stateDirectory, "pi-host");
   mkdirSync(isolatedPiHost, { recursive: true });
   copyFileSync(`${process.env.HOME}/.pi/agent/models.json`, join(isolatedPiHost, "models.json"));
@@ -189,6 +192,20 @@ export async function startEvalDaemon(input: {
     where: { workspaceId: input.workspace.workspaceId },
     data: { computerId: null },
   });
+  const runtimeConfigs = [];
+  for (const [index, agent] of input.agents.entries()) {
+    runtimeConfigs.push({
+      runtime: RUNTIME_PROVIDER.COFORGE,
+      provider: {
+        kind: "coforge" as const,
+        providerId: agent.provider,
+        apiKey: await encryptApiKey(agent.agentId, agent.provider, apiKeys[index]!),
+      },
+      model: agent.model,
+      modelProvider: agent.provider,
+      reasoning: "",
+    });
+  }
 
   let runtime: DaemonRuntime | undefined;
   const runtimeApi = (): DaemonRuntime => {
@@ -240,25 +257,13 @@ export async function startEvalDaemon(input: {
     await runtime.stop().catch(() => undefined);
     throw new Error(error instanceof Error ? error.message : String(error));
   }
-  // Every Agent's key is read before any is stored, so a missing key changes nothing in the db.
-  const apiKeys = input.agents.map((agent) => memoryApiKey(agent.provider));
   for (const [index, agent] of input.agents.entries()) {
     await input.workspace.db.agent.update({
       where: { id: agent.agentId },
       data: {
         computerId: registration.computerId,
         stoppedAt: null,
-        runtimeConfig: {
-          runtime: RUNTIME_PROVIDER.COFORGE,
-          provider: {
-            kind: "coforge" as const,
-            providerId: agent.provider,
-            apiKey: await encryptApiKey(agent.agentId, agent.provider, apiKeys[index]!),
-          },
-          model: agent.model,
-          modelProvider: agent.provider,
-          reasoning: "",
-        },
+        runtimeConfig: runtimeConfigs[index],
       },
     });
   }
