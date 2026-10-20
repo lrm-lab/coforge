@@ -1,13 +1,13 @@
-// The local gate `bun run check` (and so `mise run check`) runs first, before a push: the
-// pre-commit hook must be installed, and the commits not yet on origin/main must pass the hard
-// rules (scripts/ci/hard-rules.ts) as CI's Plan checks job judges them. It only reads: it never
+// The local gate `bun run check` (and so `mise run check`) runs first, before a push: the hooks
+// must be installed (a hooks path of the user's own only warns), and the commits not yet on
+// origin/main must pass the hard rules (scripts/ci/hard-rules.ts) as CI's Plan checks job judges
+// them. It only reads: it never
 // changes git config. It does nothing in CI (`CI=true`), which runs the hard rules itself, or
 // outside a git work tree (a Docker build context, an unpacked tarball).
 // See docs/agents/git-hooks.md.
 //
 // usage: bun scripts/ci/local-gate.ts   (from the repository root; exit 1 prints the fix)
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 const HOOKS_PATH = ".githooks";
 const checker = join(import.meta.dir, "hard-rules.ts");
@@ -17,12 +17,11 @@ function git(...args: string[]): { exitCode: number; stdout: string } {
   return { exitCode: result.exitCode, stdout: result.stdout.toString().trim() };
 }
 
-/** Why the pre-commit hook does not run here, with the fix, or undefined when it does. A hooks
- * path set by `-c` or `GIT_CONFIG_*` (a CoForge Agent's shim, which forwards to the repository's
- * configuration) is not the repository's choice, as in install-hooks-path.ts. A hooks path of
- * someone's own passes only when its pre-commit runs ours: install-hooks-path.ts leaves it alone,
- * so the hook would otherwise be missing without notice. */
-function hookProblem(top: string): string | undefined {
+/** Whether the repository's hooks are installed: an error when no `core.hooksPath` is set, a
+ * warning when it names the user's own hooks directory, which install-hooks-path.ts leaves alone
+ * and so does this. A hooks path set by `-c` or `GIT_CONFIG_*` (a CoForge Agent's shim, which
+ * forwards to the repository's configuration) is not the repository's choice, as there. */
+function hooksStatus(): { error?: string; warning?: string } {
   const configured = git("config", "--show-scope", "--get-all", "core.hooksPath");
   const values = (configured.exitCode === 0 ? configured.stdout : "")
     .split("\n")
@@ -32,19 +31,18 @@ function hookProblem(top: string): string | undefined {
       return { scope, value: value.join("\t") };
     })
     .filter(({ scope }) => scope !== "command");
-  const effective = values.at(-1);
-  if (!effective)
-    return "pre-commit hook not installed: run `bun install` (sets core.hooksPath=.githooks)";
-  if (effective.value === HOOKS_PATH) return undefined;
-  const directory = effective.value.replace(/^~(?=\/)/, process.env.HOME ?? "~");
-  const hook = join(resolve(top, directory), "pre-commit");
-  if (existsSync(hook) && readFileSync(hook, "utf8").includes(`${HOOKS_PATH}/pre-commit`))
-    return undefined;
-  return (
-    `core.hooksPath is "${effective.value}" (${effective.scope} config), so CoForge's pre-commit ` +
-    `hook does not run: have ${hook} run .githooks/pre-commit, or unset core.hooksPath and run ` +
-    "`bun install`."
-  );
+  const effective = values.at(-1)?.value;
+  if (effective === undefined) {
+    const error =
+      "pre-commit hook not installed: run `bun install` (sets core.hooksPath=.githooks)";
+    return { error };
+  }
+  if (effective === HOOKS_PATH) return {};
+  return {
+    warning:
+      `core.hooksPath is ${effective}, not .githooks: the repository's pre-commit and pre-push ` +
+      "run only if your hooks call them",
+  };
 }
 
 /** The commits not yet on origin/main, judged as CI judges a pull request; exit 1 on violations. */
@@ -80,13 +78,13 @@ function rangeFails(): boolean {
 
 function main(): number {
   if (process.env.CI === "true") return 0;
-  const location = git("rev-parse", "--is-inside-work-tree", "--show-toplevel");
-  if (location.exitCode !== 0 || !location.stdout.startsWith("true")) return 0;
-  const top = location.stdout.split("\n")[1]!;
-  const problem = hookProblem(top);
-  if (problem) console.error(`local gate: ${problem}`);
+  const location = git("rev-parse", "--is-inside-work-tree");
+  if (location.exitCode !== 0 || location.stdout !== "true") return 0;
+  const hooks = hooksStatus();
+  if (hooks.warning) console.warn(`local gate: ${hooks.warning}`);
+  if (hooks.error) console.error(`local gate: ${hooks.error}`);
   const failed = rangeFails();
-  return problem || failed ? 1 : 0;
+  return hooks.error || failed ? 1 : 0;
 }
 
 if (import.meta.main) process.exit(main());

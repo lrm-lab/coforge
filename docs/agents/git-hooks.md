@@ -5,8 +5,8 @@ script, `scripts/git-hooks/install-hooks-path.ts`, which sets the repository-loc
 to `.githooks`. Git resolves a relative hooks path from the root of the work tree, so the one
 setting serves every worktree. The installer does nothing outside a git work tree (a Docker build
 context, an unpacked tarball). It leaves an existing `core.hooksPath` of yours alone and prints one
-line; point that hooks directory at `.githooks/pre-commit` yourself. A CoForge Agent's own hook
-shims forward to the repository's hooks directory, so Agents run these hooks too.
+line; have your hooks call `.githooks/pre-commit` and `.githooks/pre-push` yourself. A CoForge
+Agent's own hook shims forward to the repository's hooks directory, so Agents run these too.
 
 In a fresh clone or worktree, no hook runs until the first `bun install` (`--ignore-scripts` skips
 `prepare`); `mise run check` [reports that](#limits). `.gitattributes` keeps `.githooks/*` at
@@ -155,13 +155,14 @@ add. The size rule also keeps the two skips it was approved with (task #25): fil
 
 - The hooks are local: `git commit --no-verify` and `git push --no-verify` skip them, and a clone
   or worktree has none until `bun install`. `mise run check` (`bun run check`), which root
-  `AGENTS.md` requires before every push, starts with `scripts/ci/local-gate.ts`: it fails unless
-  `core.hooksPath` is `.githooks`, which enables both hooks (a hooks path of your own passes only if
-  its `pre-commit` runs `.githooks/pre-commit`), and range-checks the commits not yet on your local
-  `origin/main`. Without `origin` or `origin/main` it says so and skips that part; a stale
-  `origin/main` can list others' commits, so a failure names its base and asks for
-  `git fetch origin`. It changes no config, and does nothing with `CI=true` or outside a work tree.
-  It is a convention, and `--no-verify` bypasses the hooks: only CI cannot be skipped.
+  `AGENTS.md` requires before every push, starts with `scripts/ci/local-gate.ts`. It fails when
+  `core.hooksPath` is unset, and only warns when it names your own hooks directory: the
+  repository's pre-commit and pre-push then do not run unless your hooks call them, but the gate
+  still range-checks the commits not yet on your local `origin/main`, so a violation is reported
+  before a push that follows the check. Without `origin` or `origin/main` it says so and skips
+  that part; a stale `origin/main` can list others' commits, so a failure names its base and asks
+  for `git fetch origin`. It changes no config, and does nothing with `CI=true` or outside a work
+  tree. It is a convention, and `--no-verify` bypasses the hooks: only CI cannot be skipped.
 - A maintainer or an Agent may push directly to `main` (root `AGENTS.md`); CI validates a push only
   afterwards, so a violation that got past the hook and the gate is reported once on `main`, and
   its author fixes it before pushing anything else. A PR cannot merge without "CI passed".

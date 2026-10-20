@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { useTestRepo } from "../git-hooks/test-repo";
 
@@ -104,20 +104,23 @@ test("with no origin remote, or no origin/main, the range part is skipped in one
   expect(unfetched.stdout).toContain("git fetch origin");
 });
 
-test("a custom hooks path passes only when its pre-commit runs .githooks/pre-commit", () => {
+test("a custom hooks path is the user's: one warning, no failure, and the range still checked", () => {
   repo.seed({ "README.md": "# Repo\n" });
   withOrigin();
-  mkdirSync(join(repo.dir, "my-hooks"));
   repo.ok("config", "core.hooksPath", "my-hooks");
-  writeFileSync(join(repo.dir, "my-hooks/pre-commit"), "#!/bin/sh\necho mine\n");
+  const warning =
+    "core.hooksPath is my-hooks, not .githooks: the repository's pre-commit and pre-push run only " +
+    "if your hooks call them";
 
-  const result = runGate();
-  expect(result.exitCode).not.toBe(0);
-  expect(result.stderr).toContain('core.hooksPath is "my-hooks"');
-  expect(result.stderr).toContain(".githooks/pre-commit");
+  const clean = runGate();
+  expect(clean.exitCode).toBe(0);
+  expect(clean.stderr.trim()).toBe(`local gate: ${warning}`);
 
-  writeFileSync(join(repo.dir, "my-hooks/pre-commit"), "#!/bin/sh\nexec .githooks/pre-commit\n");
-  expect(runGate()).toMatchObject({ exitCode: 0, stderr: "" });
+  repo.seed({ "big.ts": "x".repeat(20_001) });
+  const violation = runGate();
+  expect(violation.exitCode).not.toBe(0);
+  expect(violation.stderr).toContain(warning);
+  expect(violation.stderr).toContain("big.ts: 5,001 tokens, new file over the limit");
 });
 
 test("outside a git work tree the gate does nothing", () => {
