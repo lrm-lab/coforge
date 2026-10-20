@@ -12,7 +12,6 @@ import type { Editor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Fragment } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
-import { columnResizingPluginKey } from "@tiptap/pm/tables";
 import {
   ArrowDown,
   ArrowLeft,
@@ -24,6 +23,7 @@ import {
 import { Button as AriaButton } from "react-aria-components";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { cn } from "#src/lib/utils";
 import { useT } from "./i18n";
 import {
@@ -32,17 +32,10 @@ import {
   deleteTableAt,
   insertColumnAt,
   insertRowAt,
+  isColumnResizeDragging,
   selectColumnAt,
   selectRowAt,
 } from "./table-ops";
-
-function isColumnResizeDragging(editor: Editor): boolean {
-  const state = columnResizingPluginKey.getState(editor.state) as
-    | { dragging?: unknown }
-    | undefined
-    | null;
-  return Boolean(state?.dragging);
-}
 
 type ActiveTable = {
   node: ProseMirrorNode;
@@ -232,6 +225,7 @@ export function TableControls({
     columnResizing: false,
   });
   const [drag, setDrag] = useState<DragState | null>(null);
+  useDocumentDragCursor(drag?.dragging === true);
   const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null);
   const activeTableRef = useRef<ActiveTable | null>(null);
   const openMenuRef = useRef<OpenMenu | null>(null);

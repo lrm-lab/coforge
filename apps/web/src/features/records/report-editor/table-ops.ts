@@ -6,11 +6,20 @@ import {
   type TableRect,
   addColumn,
   addRow,
+  columnResizingPluginKey,
   removeColumn,
   removeRow,
 } from "@tiptap/pm/tables";
 
 export type TableContext = TableRect & { tablePos: number };
+
+export function isColumnResizeDragging(editor: Editor): boolean {
+  const state = columnResizingPluginKey.getState(editor.state) as
+    | { dragging?: unknown }
+    | undefined
+    | null;
+  return Boolean(state?.dragging);
+}
 
 export function findTablePos(doc: ProseMirrorNode, hintPos?: number | null): number | null {
   if (typeof hintPos === "number") {

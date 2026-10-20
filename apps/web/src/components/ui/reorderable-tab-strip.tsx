@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 
 import { Tab, TabList, Tabs } from "#src/components/application/tabs/tabs";
+import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { cx } from "#src/utils/cx";
 
 export type ReorderableTabMeta = { label: () => string; icon?: FC<{ className?: string }> };
@@ -121,6 +122,7 @@ function SortableTab({
   onPress: () => void;
 }) {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  useDocumentDragCursor(isDragging);
   // The official Tab takes no ref, so the sortable node is the tab element around its label.
   const labelRef = useCallback(
     (label: HTMLSpanElement | null) =>
@@ -138,7 +140,7 @@ function SortableTab({
       onPressStart={onPressStart}
       onPress={onPress}
       data-dragging={isDragging || undefined}
-      className="shrink-0 select-none [-webkit-touch-callout:none] data-dragging:z-20 data-dragging:cursor-grabbing data-dragging:transition-none"
+      className="shrink-0 select-none [-webkit-touch-callout:none] data-dragging:z-20 data-dragging:transition-none"
       style={{
         transform: transform ? `translate3d(${transform.x}px, 0, 0)` : undefined,
         transition,

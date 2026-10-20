@@ -25,6 +25,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { ChevronRight, Pin01 } from "@untitledui/icons";
+import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import type { DirectorySectionId } from "./directory-sections";
@@ -65,6 +66,8 @@ export function useDirectoryDrag({
   const [active, setActive] = useState<DirectoryDragActive | null>(null);
   const [hoveredSection, setHoveredSection] = useState<DirectorySectionId | null>(null);
   const start = useRef<DirectoryLayout | null>(null);
+  const isDragging = active !== null;
+  useDocumentDragCursor(isDragging);
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
@@ -167,7 +170,7 @@ export function useDirectoryDrag({
   return {
     layout,
     context,
-    dragging: active !== null,
+    dragging: isDragging,
     active,
     hoveredSection,
     sortingSections: active?.group === true,

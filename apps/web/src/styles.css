@@ -137,6 +137,13 @@ input[type="search"]::-webkit-search-cancel-button {
   }
 }
 
+/* A dnd-kit drag in progress (`hooks/use-document-drag-cursor.ts`): drag overlays take no pointer
+   events, so without this the cursor would flicker between whatever lies under the pointer. */
+html[data-drag-cursor],
+html[data-drag-cursor] * {
+  cursor: grabbing !important;
+}
+
 @import "./styles/coforge-theme.css";
 
 /* Product avatar treatment; the official Avatar source stays unmodified. */

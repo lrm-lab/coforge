@@ -380,7 +380,11 @@ export function ReportTabsEditor({
                 aria-selected={name === activeTab}
                 onPress={() => setSelectedTab(name)}
                 onDoubleClick={() => startEditingTab(name)}
-                className={tabButtonClass(name === activeTab)}
+                // The tab itself is the native drag source (the browser draws the cursor mid-drag).
+                className={cn(
+                  tabButtonClass(name === activeTab),
+                  editableTabs && "cursor-grab active:cursor-grabbing",
+                )}
               >
                 {name}
               </Button>

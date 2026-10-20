@@ -19,6 +19,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getTaskMoveCommand } from "./task-move";
@@ -86,6 +87,7 @@ export function TaskWorkflow<T extends TaskView>({
 }) {
   const id = useId();
   const [active, setActive] = useState<T>();
+  useDocumentDragCursor(active !== undefined);
   const [pending, setPending] = useState<{
     messageId: string;
     revision: number;
