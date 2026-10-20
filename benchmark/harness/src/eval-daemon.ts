@@ -227,54 +227,66 @@ export async function startEvalDaemon(input: {
       memoryFence: (agentId) => runtimeApi().memoryFence(agentId),
     },
   });
-  const providerFactory: CodeAgentProviderFactory = (provider) => createCodeAgentProvider(provider);
-  const daemonConfig = {
-    workspaceId: input.workspace.workspaceId,
-    computerId: registration.computerId,
-    workspaceRoot,
-    serverHttpUrl: webUrl,
-  };
-  runtime = new DaemonRuntime(
-    daemonConfig,
-    providerFactory,
-    credentials,
-    {
-      create: () => new DaemonConnection(centrifugoWs, defaultCentrifugeWorkspaceClientFactory),
-    },
-    proxy,
-    {
-      runtimes: async () => [
-        { provider: RUNTIME_PROVIDER.COFORGE, version: "eval", displayName: "CoForge (Pi)" },
-      ],
-      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
-    },
-    stateDirectory,
-  );
+  // runtime.stop() only revokes the proxy's tokens; the proxy's server ends with proxy.close().
+  // Any failure from here on stops both, since the caller gets no EvalDaemon to stop them with.
   try {
-    await runtime.start(daemonConfig);
-  } catch (error) {
-    await runtime.stop().catch(() => undefined);
-    throw new Error(error instanceof Error ? error.message : String(error));
-  }
-  for (const [index, agent] of input.agents.entries()) {
-    await input.workspace.db.agent.update({
-      where: { id: agent.agentId },
-      data: {
-        computerId: registration.computerId,
-        stoppedAt: null,
-        runtimeConfig: runtimeConfigs[index],
+    const providerFactory: CodeAgentProviderFactory = (provider) =>
+      createCodeAgentProvider(provider);
+    const daemonConfig = {
+      workspaceId: input.workspace.workspaceId,
+      computerId: registration.computerId,
+      workspaceRoot,
+      serverHttpUrl: webUrl,
+    };
+    runtime = new DaemonRuntime(
+      daemonConfig,
+      providerFactory,
+      credentials,
+      {
+        create: () => new DaemonConnection(centrifugoWs, defaultCentrifugeWorkspaceClientFactory),
       },
-    });
+      proxy,
+      {
+        runtimes: async () => [
+          { provider: RUNTIME_PROVIDER.COFORGE, version: "eval", displayName: "CoForge (Pi)" },
+        ],
+        cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
+        catalogs: async () => [],
+      },
+      stateDirectory,
+    );
+    try {
+      await runtime.start(daemonConfig);
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : String(error));
+    }
+    for (const [index, agent] of input.agents.entries()) {
+      await input.workspace.db.agent.update({
+        where: { id: agent.agentId },
+        data: {
+          computerId: registration.computerId,
+          stoppedAt: null,
+          runtimeConfig: runtimeConfigs[index],
+        },
+      });
+    }
+    input.workspace.computerId = registration.computerId;
+    return {
+      computerId: registration.computerId,
+      workspaceRoot,
+      async stop() {
+        try {
+          await runtime?.stop();
+        } finally {
+          proxy.close();
+        }
+      },
+    };
+  } catch (error) {
+    await runtime?.stop().catch(() => undefined);
+    proxy.close();
+    throw error;
   }
-  input.workspace.computerId = registration.computerId;
-  return {
-    computerId: registration.computerId,
-    workspaceRoot,
-    async stop() {
-      await runtime?.stop();
-    },
-  };
 }
 
 /** Product Start: server publishes AgentStart over Centrifugo. Message delivery cannot wake an
