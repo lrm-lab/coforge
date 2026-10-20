@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type DragEvent,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
@@ -20,6 +19,7 @@ import { cn } from "#src/lib/utils";
 import type { UploadResult } from "#src/features/records/report-editor/types";
 import { isReportImageZoomOpen } from "./report-image-zoom";
 import { ReportPresentMode } from "./report-present-mode";
+import { ReportTabDrag, ReportTabDragItem, type ReportTabPress } from "./report-tab-drag";
 import { RecordsReadingColumn } from "./records-reading-column";
 import {
   clearReadingEdge,
@@ -76,7 +76,6 @@ export function ReportTabsEditor({
   const [selectedTab, setSelectedTab] = useState(tabNames[0] ?? trailing[0]?.id ?? "");
   const [editingTab, setEditingTab] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const [draggedTab, setDraggedTab] = useState<string | null>(null);
   const [presenting, setPresenting] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const bodyScrollerRef = useRef<HTMLDivElement>(null);
@@ -263,19 +262,6 @@ export function ReportTabsEditor({
     onChange({ tabs: Object.fromEntries(remaining) });
   }
 
-  function handleDragStart(event: DragEvent<HTMLDivElement>, name: string) {
-    setDraggedTab(name);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", name);
-  }
-
-  function handleDrop(event: DragEvent<HTMLDivElement>, target: string) {
-    event.preventDefault();
-    const source = draggedTab ?? event.dataTransfer.getData("text/plain");
-    if (source) moveTab(source, target);
-    setDraggedTab(null);
-  }
-
   function removeTab(name: string) {
     if (tabNames.length <= 1) return;
     const nextTabs = Object.fromEntries(
@@ -320,6 +306,52 @@ export function ReportTabsEditor({
 
   const chevronClass = cn("size-6 shrink-0 p-1 text-fg-quaternary", editableTabs ? "" : "mb-2");
 
+  /** A page tab and, on an editable report, its delete button; `press` wires a draggable tab. */
+  const renderTab = (name: string, press?: ReportTabPress) => (
+    <>
+      {editingTab === name ? (
+        <input
+          autoFocus
+          value={editingName}
+          aria-label={`${m.records_template_dimension()}: ${name}`}
+          onChange={handleEditChange}
+          onBlur={commitEditingTab}
+          onKeyDown={handleEditKeyDown}
+          className={cn(
+            "h-8 w-28 min-w-0 bg-transparent px-0.5 text-sm font-semibold text-primary outline-none",
+            editableTabs ? "rounded-lg border border-brand px-2" : "mb-2 border-b-2 border-brand",
+          )}
+        />
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          color="link-gray"
+          aria-selected={name === activeTab}
+          onPressStart={press?.pressStart}
+          onPress={() => {
+            if (!press?.dragged()) setSelectedTab(name);
+          }}
+          onDoubleClick={() => startEditingTab(name)}
+          className={tabButtonClass(name === activeTab)}
+        >
+          {name}
+        </Button>
+      )}
+      {editableTabs ? (
+        <ButtonUtility
+          size="xs"
+          color="tertiary"
+          icon={X}
+          aria-label={`${m.records_template_delete()}: ${name}`}
+          isDisabled={tabNames.length <= 1}
+          onClick={() => removeTab(name)}
+          className="size-5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+        />
+      ) : null}
+    </>
+  );
+
   const tabBar = (
     <>
       {tabOverflow.left ? (
@@ -342,66 +374,26 @@ export function ReportTabsEditor({
           readingTabs ? "gap-8 sm:gap-10" : "gap-2",
         )}
       >
-        {tabNames.map((name) => (
-          <div
-            key={name}
-            draggable={editableTabs}
-            onDragStart={(event) => handleDragStart(event, name)}
-            onDragOver={(event) => {
-              if (editableTabs) event.preventDefault();
-            }}
-            onDrop={(event) => handleDrop(event, name)}
-            onDragEnd={() => setDraggedTab(null)}
-            className={cn(
-              "group flex shrink-0 items-center gap-0.5",
-              draggedTab === name && "opacity-50",
-            )}
-          >
-            {editingTab === name ? (
-              <input
-                autoFocus
-                value={editingName}
-                aria-label={`${m.records_template_dimension()}: ${name}`}
-                onChange={handleEditChange}
-                onBlur={commitEditingTab}
-                onKeyDown={handleEditKeyDown}
-                className={cn(
-                  "h-8 w-28 min-w-0 bg-transparent px-0.5 text-sm font-semibold text-primary outline-none",
-                  editableTabs
-                    ? "rounded-lg border border-brand px-2"
-                    : "mb-2 border-b-2 border-brand",
-                )}
-              />
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                color="link-gray"
-                aria-selected={name === activeTab}
-                onPress={() => setSelectedTab(name)}
-                onDoubleClick={() => startEditingTab(name)}
-                // The tab itself is the native drag source (the browser draws the cursor mid-drag).
-                className={cn(
-                  tabButtonClass(name === activeTab),
-                  editableTabs && "cursor-grab active:cursor-grabbing",
-                )}
+        {editableTabs ? (
+          <ReportTabDrag onMove={moveTab}>
+            {tabNames.map((name) => (
+              <ReportTabDragItem
+                key={name}
+                name={name}
+                disabled={editingTab === name}
+                className="group flex shrink-0 items-center gap-0.5"
               >
-                {name}
-              </Button>
-            )}
-            {editableTabs ? (
-              <ButtonUtility
-                size="xs"
-                color="tertiary"
-                icon={X}
-                aria-label={`${m.records_template_delete()}: ${name}`}
-                isDisabled={tabNames.length <= 1}
-                onClick={() => removeTab(name)}
-                className="size-5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-              />
-            ) : null}
-          </div>
-        ))}
+                {(press) => renderTab(name, press)}
+              </ReportTabDragItem>
+            ))}
+          </ReportTabDrag>
+        ) : (
+          tabNames.map((name) => (
+            <div key={name} className="group flex shrink-0 items-center gap-0.5">
+              {renderTab(name)}
+            </div>
+          ))
+        )}
         {trailing.map((tab) => (
           <div key={tab.id} className="flex shrink-0 items-center gap-0.5">
             <Button
