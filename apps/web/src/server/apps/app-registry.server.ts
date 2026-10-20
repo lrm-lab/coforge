@@ -14,7 +14,7 @@ import {
   assertCanManageApps,
   type WorkspaceMemberRole,
 } from "#src/server/workspaces/member-role.server";
-import { appClientSecretMatches, mintAppClientSecret } from "./app-client-secret.server";
+import { mintAppClientSecret } from "./app-client-secret.server";
 
 /** A registered app as its Workspace's members see it; never its secret or the secret's hash. */
 export type AppView = {
@@ -43,8 +43,6 @@ export interface AppRegistryStore {
   /** The apps installed in the Workspace. */
   listForWorkspace(workspaceId: string): Promise<AppView[]>;
   find(key: string): Promise<AppView | undefined>;
-  /** The app's client secret hash; `undefined` for an unknown app. */
-  findSecretHash(key: string): Promise<string | undefined>;
   /** Creates the app and installs it in its Workspace, atomically; `undefined` when the key is
    * taken. */
   create(input: {
@@ -153,12 +151,6 @@ export class AppRegistry {
   async deleteApp(actor: AppActor, key: string): Promise<void> {
     await this.requireOwnApp(actor, key);
     if (!(await this.store.delete(actor.workspaceId, key))) throw new AppError("NOT_FOUND");
-  }
-
-  /** Whether `presented` is the current client secret of the app `key`. */
-  async verifyClientSecret(key: string, presented: string): Promise<boolean> {
-    const hash = await this.store.findSecretHash(key);
-    return hash !== undefined && appClientSecretMatches(hash, presented);
   }
 
   /**

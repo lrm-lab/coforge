@@ -1,5 +1,9 @@
 import { APP_SCOPES } from "#src/features/apps/app-registration";
-import { AUTHORIZATION_ENDPOINT_PATH } from "#src/lib/oidc-paths";
+import {
+  AUTHORIZATION_ENDPOINT_PATH,
+  TOKEN_ENDPOINT_PATH,
+  USERINFO_ENDPOINT_PATH,
+} from "#src/lib/oidc-paths";
 import { SIGNING_ALGORITHM } from "./signing-keys.server";
 
 /** The issuer's metadata: OpenID Connect Discovery 1.0 §3, served unchanged as RFC 8414 §2
@@ -10,6 +14,8 @@ export function discoveryDocument(issuer: string) {
   return {
     issuer,
     authorization_endpoint: new URL(AUTHORIZATION_ENDPOINT_PATH, issuer).href,
+    token_endpoint: new URL(TOKEN_ENDPOINT_PATH, issuer).href,
+    userinfo_endpoint: new URL(USERINFO_ENDPOINT_PATH, issuer).href,
     jwks_uri: `${issuer}/jwks`,
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
@@ -20,7 +26,27 @@ export function discoveryDocument(issuer: string) {
     token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post"],
     // The scopes an app may be allowed (`features/apps/app-registration.ts`).
     scopes_supported: [...APP_SCOPES],
-    claims_supported: ["sub", "name", "email", "workspace_id", "workspace_slug", "workspace_role"],
+    // The ID token's claims, then what the scopes release at UserInfo (`scopeClaims` in
+    // grants.server.ts).
+    claims_supported: [
+      "iss",
+      "sub",
+      "aud",
+      "exp",
+      "iat",
+      "auth_time",
+      "nonce",
+      "at_hash",
+      "name",
+      "preferred_username",
+      "picture",
+      "email",
+      "email_verified",
+      "type",
+      "workspace_id",
+      "workspace_slug",
+      "workspace_role",
+    ],
     authorization_response_iss_parameter_supported: true,
     // Discovery §3 defaults this to true when omitted; this server takes no `request_uri`.
     request_uri_parameter_supported: false,

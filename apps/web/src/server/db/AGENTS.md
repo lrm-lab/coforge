@@ -37,6 +37,9 @@ These rules apply to `src/server/db/`.
 - `oauth-authorization.repositories.server.ts` persists the authorization endpoint's rows: apps
   read as OIDC clients, the Workspaces a person may authorize an app in, consents and authorization
   codes (only a code's hash). What a request may do stays in `server/authorization-server/`.
+- `oauth-grant.repositories.server.ts` persists the token and UserInfo endpoints' rows: apps read
+  with their secret hash to authenticate, a code redeemed by one conditional update, and the
+  person, app, membership, installation and consent a code names, as they are now.
 - `reminder.repositories.server.ts` owns PostgreSQL locking and persistence
   only; authorization, recurrence, and fire idempotence stay in
   `server/reminders/`.

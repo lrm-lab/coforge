@@ -51,9 +51,6 @@ function storeWith(roles: Record<string, WorkspaceMemberRole>, { roleAfterApp = 
       for (const resolve of waitingForApp.splice(0)) resolve();
       return [ownApp, othersApp].find((app) => app.key === key);
     },
-    async findSecretHash() {
-      return undefined;
-    },
     async create() {
       writes.push("create");
       return ownApp;

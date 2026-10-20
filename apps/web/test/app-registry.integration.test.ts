@@ -101,11 +101,6 @@ test.skipIf(!db)(
           installedByUserId: fixture.actor("admin").actorUserId,
         },
       ]);
-
-      expect(await registry.verifyClientSecret(key, clientSecret)).toBe(true);
-      expect(await registry.verifyClientSecret(key, `${clientSecret.slice(0, -1)}x`)).toBe(false);
-      expect(await registry.verifyClientSecret("acme-unknown-app", clientSecret)).toBe(false);
-      expect(await registry.verifyClientSecret("system.cleaner", clientSecret)).toBe(false);
     } finally {
       await fixture.cleanup();
     }
@@ -124,8 +119,13 @@ test.skipIf(!db)("rotating a secret retires the old one", async () => {
     const rotated = await registry.rotateAppSecret(fixture.actor("owner"), key);
     expect(rotated.clientSecret).not.toBe(first);
     expect(rotated.app.secretRotatedAt).toBeInstanceOf(Date);
-    expect(await registry.verifyClientSecret(key, first)).toBe(false);
-    expect(await registry.verifyClientSecret(key, rotated.clientSecret)).toBe(true);
+    // Only the new secret's hash is stored; the token endpoint authenticates against it.
+    const stored = await db!.app.findUniqueOrThrow({
+      where: { key },
+      select: { clientSecretHash: true },
+    });
+    expect(stored.clientSecretHash).toBe(hashAppClientSecret(rotated.clientSecret));
+    expect(stored.clientSecretHash).not.toBe(hashAppClientSecret(first));
   } finally {
     await fixture.cleanup();
   }
@@ -246,7 +246,7 @@ test.skipIf(!db)(
     const mineKey = `mine-${mine.suffix}`;
     const theirsKey = `theirs-${theirs.suffix}`;
     try {
-      const { clientSecret } = await registry.registerApp(actor, registration(mineKey));
+      await registry.registerApp(actor, registration(mineKey));
       const theirsApp = await registry.registerApp(theirs.actor("owner"), registration(theirsKey));
 
       for (const attempt of [
@@ -255,7 +255,14 @@ test.skipIf(!db)(
         () => registry.rotateAppSecret(actor, theirsKey),
       ])
         await expect(attempt()).rejects.toMatchObject({ code: "NOT_FOUND" });
-      expect(await registry.verifyClientSecret(theirsKey, theirsApp.clientSecret)).toBe(true);
+      expect(
+        (
+          await db!.app.findUniqueOrThrow({
+            where: { key: theirsKey },
+            select: { clientSecretHash: true },
+          })
+        ).clientSecretHash,
+      ).toBe(hashAppClientSecret(theirsApp.clientSecret));
 
       for (const builtIn of ["system.cleaner", "system.reminder"])
         for (const attempt of [
@@ -267,7 +274,6 @@ test.skipIf(!db)(
 
       await registry.deleteApp(actor, mineKey);
       expect(await db!.app.findUnique({ where: { key: mineKey } })).toBeNull();
-      expect(await registry.verifyClientSecret(mineKey, clientSecret)).toBe(false);
       await expect(registry.deleteApp(actor, mineKey)).rejects.toMatchObject({ code: "NOT_FOUND" });
     } finally {
       await mine.cleanup();

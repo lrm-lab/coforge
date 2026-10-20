@@ -30,6 +30,8 @@ import { Route as OauthTokenRouteImport } from './routes/oauth/token'
 import { Route as OauthVerifyRouteImport } from './routes/oauth/verify'
 import { Route as OidcAuthRouteImport } from './routes/oidc.auth'
 import { Route as OidcJwksRouteImport } from './routes/oidc.jwks'
+import { Route as OidcMeRouteImport } from './routes/oidc.me'
+import { Route as OidcTokenRouteImport } from './routes/oidc.token'
 import { Route as WWorkspaceSlugRouteImport } from './routes/w.$workspaceSlug'
 import { Route as WorkspacesNewRouteImport } from './routes/workspaces.new'
 import { Route as DotwellKnownOauthAuthorizationServerOidcRouteImport } from './routes/[.]well-known.oauth-authorization-server_.oidc'
@@ -232,6 +234,16 @@ const OidcAuthRoute = OidcAuthRouteImport.update({
 const OidcJwksRoute = OidcJwksRouteImport.update({
   id: '/oidc/jwks',
   path: '/oidc/jwks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OidcMeRoute = OidcMeRouteImport.update({
+  id: '/oidc/me',
+  path: '/oidc/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OidcTokenRoute = OidcTokenRouteImport.update({
+  id: '/oidc/token',
+  path: '/oidc/token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WWorkspaceSlugRoute = WWorkspaceSlugRouteImport.update({
@@ -805,6 +817,8 @@ export interface FileRoutesByFullPath {
   '/oauth/verify': typeof OauthVerifyRoute
   '/oidc/auth': typeof OidcAuthRoute
   '/oidc/jwks': typeof OidcJwksRoute
+  '/oidc/me': typeof OidcMeRoute
+  '/oidc/token': typeof OidcTokenRoute
   '/w/$workspaceSlug': typeof WWorkspaceSlugRouteWithChildren
   '/workspaces/new': typeof WorkspacesNewRoute
   '/.well-known/oauth-authorization-server/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
@@ -923,6 +937,8 @@ export interface FileRoutesByTo {
   '/oauth/verify': typeof OauthVerifyRoute
   '/oidc/auth': typeof OidcAuthRoute
   '/oidc/jwks': typeof OidcJwksRoute
+  '/oidc/me': typeof OidcMeRoute
+  '/oidc/token': typeof OidcTokenRoute
   '/w/$workspaceSlug': typeof WWorkspaceSlugChatIndexRoute
   '/workspaces/new': typeof WorkspacesNewRoute
   '/.well-known/oauth-authorization-server/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
@@ -1040,6 +1056,8 @@ export interface FileRoutesById {
   '/oauth/verify': typeof OauthVerifyRoute
   '/oidc/auth': typeof OidcAuthRoute
   '/oidc/jwks': typeof OidcJwksRoute
+  '/oidc/me': typeof OidcMeRoute
+  '/oidc/token': typeof OidcTokenRoute
   '/w/$workspaceSlug': typeof WWorkspaceSlugRouteWithChildren
   '/workspaces/new': typeof WorkspacesNewRoute
   '/.well-known/oauth-authorization-server_/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
@@ -1162,6 +1180,8 @@ export interface FileRouteTypes {
     | '/oauth/verify'
     | '/oidc/auth'
     | '/oidc/jwks'
+    | '/oidc/me'
+    | '/oidc/token'
     | '/w/$workspaceSlug'
     | '/workspaces/new'
     | '/.well-known/oauth-authorization-server/oidc'
@@ -1280,6 +1300,8 @@ export interface FileRouteTypes {
     | '/oauth/verify'
     | '/oidc/auth'
     | '/oidc/jwks'
+    | '/oidc/me'
+    | '/oidc/token'
     | '/w/$workspaceSlug'
     | '/workspaces/new'
     | '/.well-known/oauth-authorization-server/oidc'
@@ -1396,6 +1418,8 @@ export interface FileRouteTypes {
     | '/oauth/verify'
     | '/oidc/auth'
     | '/oidc/jwks'
+    | '/oidc/me'
+    | '/oidc/token'
     | '/w/$workspaceSlug'
     | '/workspaces/new'
     | '/.well-known/oauth-authorization-server_/oidc'
@@ -1517,6 +1541,8 @@ export interface RootRouteChildren {
   OauthVerifyRoute: typeof OauthVerifyRoute
   OidcAuthRoute: typeof OidcAuthRoute
   OidcJwksRoute: typeof OidcJwksRoute
+  OidcMeRoute: typeof OidcMeRoute
+  OidcTokenRoute: typeof OidcTokenRoute
   WWorkspaceSlugRoute: typeof WWorkspaceSlugRouteWithChildren
   WorkspacesNewRoute: typeof WorkspacesNewRoute
   DotwellKnownOauthAuthorizationServerOidcRoute: typeof DotwellKnownOauthAuthorizationServerOidcRoute
@@ -1728,6 +1754,20 @@ declare module '@tanstack/react-router' {
       path: '/oidc/jwks'
       fullPath: '/oidc/jwks'
       preLoaderRoute: typeof OidcJwksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oidc/me': {
+      id: '/oidc/me'
+      path: '/oidc/me'
+      fullPath: '/oidc/me'
+      preLoaderRoute: typeof OidcMeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oidc/token': {
+      id: '/oidc/token'
+      path: '/oidc/token'
+      fullPath: '/oidc/token'
+      preLoaderRoute: typeof OidcTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/w/$workspaceSlug': {
@@ -2600,6 +2640,8 @@ const rootRouteChildren: RootRouteChildren = {
   OauthVerifyRoute: OauthVerifyRoute,
   OidcAuthRoute: OidcAuthRoute,
   OidcJwksRoute: OidcJwksRoute,
+  OidcMeRoute: OidcMeRoute,
+  OidcTokenRoute: OidcTokenRoute,
   WWorkspaceSlugRoute: WWorkspaceSlugRouteWithChildren,
   WorkspacesNewRoute: WorkspacesNewRoute,
   DotwellKnownOauthAuthorizationServerOidcRoute:

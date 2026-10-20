@@ -2,6 +2,7 @@ import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
+import { avatarPresetUrl, isAvatarPresetReference } from "#src/features/profiles/avatar-presets";
 import {
   PROFILE_IMAGE_STYLES,
   publicImageUrl,
@@ -77,6 +78,21 @@ export function avatarUrl(
     (key) => versionedImagePath(`/api/me/avatar`, key),
     publicUrl,
   );
+}
+
+/**
+ * Where an app with no session on this deployment can read this user's avatar (Login with
+ * CoForge's `picture`): the image CDN's URL, or a platform picture the app serves publicly (a path
+ * on this origin). Null without one, and for an upload only this deployment's authenticated route
+ * serves.
+ */
+export function publicAvatarUrl(
+  objectKey: string | null,
+  publicUrl: PublicImageUrlResolver = publicImageUrl,
+): string | null {
+  if (!objectKey) return null;
+  if (isAvatarPresetReference(objectKey)) return avatarPresetUrl(objectKey);
+  return publicUrl(objectKey, PROFILE_IMAGE_STYLES.avatar);
 }
 
 export function workspaceUserAvatarUrl(

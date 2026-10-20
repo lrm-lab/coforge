@@ -5,6 +5,8 @@ import { Route as DeviceFlowDiscoveryRoute } from "#src/routes/[.]well-known.oau
 import { Route as AuthorizationServerMetadataRoute } from "#src/routes/[.]well-known.oauth-authorization-server_.oidc";
 import { Route as OpenIdConfigurationRoute } from "#src/routes/oidc.[.]well-known.openid-configuration";
 import { Route as JwksRoute } from "#src/routes/oidc.jwks";
+import { Route as UserInfoRoute } from "#src/routes/oidc.me";
+import { Route as TokenRoute } from "#src/routes/oidc.token";
 import { isNonLocalizedRequest } from "#src/server";
 import {
   readAuthorizationServerConfiguration,
@@ -73,6 +75,34 @@ test("the issuer's JWKS is served at its jwks_uri", async () => {
   ).toEqual(["current"]);
 });
 
+test("the token and UserInfo endpoints answer at their paths, before any database read", async () => {
+  // Both answers below are decided before a query; a query would fail against this address.
+  Bun.env.DATABASE_URL = "postgresql://coforge:coforge@127.0.0.1:1/unused";
+  type Handlers = Record<string, Handler>;
+  const handlers = (route: { options: { server?: unknown } }) =>
+    (route.options.server as { handlers: Handlers }).handlers;
+
+  const token = await handlers(TokenRoute).POST!({
+    request: new Request("https://coforge.example/oidc/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "grant_type=authorization_code&code=x",
+    }),
+  });
+  expect(token.status).toBe(401);
+  expect(await token.json()).toMatchObject({ error: "invalid_client" });
+
+  for (const method of ["GET", "POST"]) {
+    const userInfo = await handlers(UserInfoRoute)[method]!({
+      request: new Request("https://coforge.example/oidc/me", { method }),
+    });
+    expect(userInfo.status).toBe(401);
+    expect(userInfo.headers.get("www-authenticate")).toBe(
+      'Bearer realm="https://coforge.example/oidc"',
+    );
+  }
+});
+
 test("the device flow's discovery is unchanged beside the issuer's", async () => {
   const response = await get(DeviceFlowDiscoveryRoute, "/.well-known/oauth-authorization-server");
   expect(response.status).toBe(200);
@@ -106,6 +136,8 @@ test("the RFC 8414 issuer path is its own route, not a child of the device flow'
     ["/oidc/.well-known/openid-configuration", "/oidc/.well-known/openid-configuration"],
     ["/oidc/jwks", "/oidc/jwks"],
     ["/oidc/auth", "/oidc/auth"],
+    ["/oidc/token", "/oidc/token"],
+    ["/oidc/me", "/oidc/me"],
   ]) {
     expect(routes[id]?.fullPath).toBe(fullPath);
     expect(routes[id]?.parentRoute?.id).toBe("__root__");

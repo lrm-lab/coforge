@@ -85,5 +85,5 @@ over a GET; a form POST is a 303 to the same GET.
 
 A code is 32 bytes from the CSPRNG, base64url (43 characters). Only its SHA-256 is stored, with the
 app, the person, the Workspace, the redirect URI, the PKCE challenge, the nonce, the scopes and
-`auth_time`. It expires ten minutes after it is issued. Redeeming it, once, is the token
-endpoint's, which does not exist yet; no refresh tokens are issued.
+`auth_time`. It expires ten minutes after it is issued. It is redeemed once at
+[the token endpoint](token-and-userinfo.md); no refresh tokens are issued.

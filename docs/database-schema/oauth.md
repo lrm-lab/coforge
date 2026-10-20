@@ -20,9 +20,12 @@ Workspace removes its codes and consents.
 | `scopes` | TEXT[] | The scopes granted. |
 | `authTime` | TIMESTAMP(3) | When the person last signed in (`auth_time`). |
 | `expiresAt` | TIMESTAMP(3) | Ten minutes after issue. |
-| `consumedAt` | TIMESTAMP(3) | When the code was redeemed; null until then. |
-| `replayedAt` | TIMESTAMP(3) | When a redeemed code was presented again. |
+| `consumedAt` | TIMESTAMP(3) | When the code was redeemed at the token endpoint; null until then. |
+| `replayedAt` | TIMESTAMP(3) | When a redeemed code was first presented again; set, it ends the code's grant. |
 | `createdAt` | TIMESTAMP(3) | |
+
+A redeemed code is its grant: the access token it yielded carries the row's `id` as `jti`, and
+UserInfo reads the row to answer it ([the token and UserInfo endpoints](../authorization-server/token-and-userinfo.md)).
 
 `user_app_consents` — a person's remembered consent to an app in one Workspace: `id` (UUIDv7),
 `userId`, `appId`, `workspaceId`, `scopes` TEXT[] (everything granted so far), `createdAt`,

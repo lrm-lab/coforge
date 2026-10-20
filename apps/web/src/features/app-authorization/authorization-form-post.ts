@@ -1,3 +1,4 @@
+import { isFormRequest } from "#src/lib/form-request";
 import { AUTHORIZATION_ENDPOINT_PATH } from "#src/lib/oidc-paths";
 import { AUTHORIZATION_PAGE_HEADERS } from "./authorization-page-headers";
 
@@ -7,8 +8,7 @@ import { AUTHORIZATION_PAGE_HEADERS } from "./authorization-page-headers";
  * cookie; the GET it is turned into does.
  */
 export async function answerAuthorizationForm(request: Request): Promise<Response> {
-  const type = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (type !== "application/x-www-form-urlencoded")
+  if (!isFormRequest(request))
     return Response.json(
       { error: "invalid_request" },
       { status: 400, headers: AUTHORIZATION_PAGE_HEADERS },

@@ -22,9 +22,7 @@ error that names the variable and never its value, so the health check never pas
 deployment keeps its previous release. The boot log's `startup_config_checked` line reports
 `authorization_server` as `configured` or `disabled`.
 
-Staging and production do not set these variables yet, and must not until the token endpoint
-exists: OpenID Connect Discovery requires `token_endpoint` for the code flow, so until then the
-metadata is not conformant and strict clients reject it.
+Staging and production do not set these variables yet; setting them turns on every endpoint below.
 
 ## Endpoints
 
@@ -35,11 +33,14 @@ metadata is not conformant and strict clients reject it.
 | `GET /oidc/jwks` | The public keys, in configured order |
 | `GET /oidc/auth` | The authorization endpoint: a redirect back to the app (a code or an error), to sign-in, or the consent page; [the authorization endpoint](authorization-endpoint.md) |
 | `POST /oidc/auth` | The same request sent as a form (OIDC Core §3.1.2.1): a 303 to the GET with its parameters |
+| `POST /oidc/token` | The token endpoint: redeems a code once for an access token and an ID token; [the token and UserInfo endpoints](token-and-userinfo.md) |
+| `GET`, `POST /oidc/me` | The UserInfo endpoint: the signed-in person's claims for an access token |
 
 The metadata advertises only endpoints that exist. Its fixed policy: the `code` response
 type in the query response mode, PKCE with `S256` only, ES256 ID tokens, public subject
 identifiers, `client_secret_basic` and `client_secret_post` client authentication, and the
-`iss` authorization response parameter (RFC 9207). It states `request_uri_parameter_supported:
+`iss` authorization response parameter (RFC 9207); `claims_supported` lists the ID token's own
+claims and every claim a scope releases. It states `request_uri_parameter_supported:
 false`, because Discovery defaults that field to true.
 
 ## For app developers
@@ -57,6 +58,14 @@ it registered, compared as exact strings. Redirect URIs are optional: an app who
 tokens registers none, so no authorization request for it can name a redirect URI it accepts.
 
 Every app may ask for `openid`, `profile` and `identity`, and for `email` when the Workspace
-allowed it. `identity` is accepted and stored, but releases no claims until the Workspace claims
-(`workspace_id`, `workspace_slug`, `workspace_role`) are issued under it. The tokens Agents get for
-an app carry the app's client ID as their audience.
+allowed it. The code flow needs PKCE (`S256`). A code lives ten minutes and is redeemed once at
+`<issuer>/token`, which answers an access token and an ID token, each valid for an hour, and no
+refresh token. The ID token carries only who signed in (`sub`, the person's CoForge user id) and
+when (`auth_time`, `nonce`, `at_hash`); the profile comes from UserInfo at `<issuer>/me` with the
+access token: `sub` and, per scope: `profile` — `name`, `preferred_username`, `picture`;
+`email` — `email`, `email_verified` (always false); `identity` — `type: "user"`, `workspace_id`,
+`workspace_slug`, `workspace_role`. UserInfo reads them fresh, releases only the scopes the app may
+still ask for and the consent still covers, and refuses the token once the person
+left the Workspace, the consent was revoked, the app uninstalled, or the code was presented twice.
+The access token's audience is `<issuer>/me`; the tokens Agents get for an app carry the app's
+client ID as their audience.

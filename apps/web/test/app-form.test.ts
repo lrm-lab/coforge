@@ -51,7 +51,6 @@ function registry({ keyTaken = false } = {}) {
     findMemberRole: async () => "owner",
     listForWorkspace: async () => [],
     find: async () => app,
-    findSecretHash: async () => undefined,
     create: async () => (keyTaken ? undefined : app),
     update: async () => app,
     delete: async () => true,

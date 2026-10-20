@@ -58,14 +58,6 @@ export class PrismaAppRegistryStore implements AppRegistryStore {
     return row ? view(row) : undefined;
   }
 
-  async findSecretHash(key: string) {
-    const row = await this.db.app.findUnique({
-      where: { key },
-      select: { clientSecretHash: true },
-    });
-    return row?.clientSecretHash ?? undefined;
-  }
-
   async create(input: {
     app: AppRegistrationInput;
     workspaceId: string;

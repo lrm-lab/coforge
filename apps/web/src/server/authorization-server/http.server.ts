@@ -3,9 +3,10 @@ import {
   type AuthorizationServerConfiguration,
 } from "./configuration.server";
 import { discoveryDocument } from "./discovery.server";
+import { NO_STORE } from "./http-headers.server";
 import { publicJwks } from "./signing-keys.server";
+import { currentTokenEndpoints } from "./token-endpoint-composition.server";
 
-const NO_STORE = { "cache-control": "no-store" } as const;
 const PUBLIC_METADATA = { "cache-control": "public, max-age=300" } as const;
 
 /** OpenID Connect Discovery 1.0 for the CoForge issuer. */
@@ -22,6 +23,18 @@ export function oidcJwks(
 ): Response {
   if (configuration.status === "disabled") return notFound();
   return Response.json(publicJwks(configuration.signingKeys), { headers: PUBLIC_METADATA });
+}
+
+/** The token endpoint (`TOKEN_ENDPOINT_PATH`). */
+export async function oidcToken(request: Request): Promise<Response> {
+  const endpoints = currentTokenEndpoints();
+  return endpoints ? endpoints.token.exchange(request) : notFound();
+}
+
+/** The UserInfo endpoint (`USERINFO_ENDPOINT_PATH`), for GET and POST alike. */
+export async function oidcUserInfo(request: Request): Promise<Response> {
+  const endpoints = currentTokenEndpoints();
+  return endpoints ? endpoints.userInfo.answer(request) : notFound();
 }
 
 /** No issuer configured: this deployment runs no authorization server. */
