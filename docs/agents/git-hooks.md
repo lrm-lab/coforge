@@ -48,7 +48,7 @@ crossed the limit or grew. Split the file into smaller ones.
 ### Files that are not checked
 
 - **Generated files.** A file whose `linguist-generated` attribute is set in the staged root
-  `.gitattributes` is skipped: lockfiles, generated code, and benchmark or evaluation data. On
+  `.gitattributes` is skipped: lockfiles and generated code. On
   GitHub the same attribute also excludes the file from language statistics and suppresses it in
   diffs. Mark a file only if a tool genuinely produces it, never to get an agent-written file past
   the limit. Translation files under `apps/web/messages/` are agent-written and stay checked.
