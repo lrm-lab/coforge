@@ -198,6 +198,7 @@
       "name": "@coforge/public-channel-memory-eval",
       "version": "0.0.0",
       "dependencies": {
+        "@coforge/eval-harness": "workspace:*",
         "@coforge/web": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
         "@prisma/adapter-pg": "^7.10.0",

@@ -1,6 +1,6 @@
 import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
-import { startEvalDaemon, startMemoryAgent, type EvalDaemon } from "./eval-daemon";
+import { startEvalDaemon, startAgent, type EvalDaemon } from "@coforge/eval-harness";
 import { evaluateQuestion } from "./eval-qa";
 import { createEvalDispatcher, ingestSample } from "./ingest";
 import { gradeReply } from "./judge";
@@ -94,9 +94,20 @@ async function runArm(arm: (typeof env.arms)[number]) {
       dispatcher,
       fromSession: Number.isFinite(fromSession) && fromSession > 0 ? fromSession : 1,
     });
-    daemon = await startEvalDaemon({ workspace, arm, env });
+    daemon = await startEvalDaemon({
+      label: "pcm",
+      workspace,
+      webUrl: env.webUrl,
+      agents: [
+        {
+          agentId: workspace.memoryAgentId,
+          provider: env.memoryAgentProvider,
+          model: env.memoryAgentModel,
+        },
+      ],
+    });
     await resetMemoryAgentSession(workspace);
-    await startMemoryAgent(workspace, workspaceProfileToToolFence(arm));
+    await startAgent(workspace, workspace.memoryAgentId, workspaceProfileToToolFence(arm));
     console.log(sanitizeDiagnostic(`${arm} eval daemon computer=${daemon.computerId}`));
     const armAttempts: EvalAttempt[] = [];
     for (const question of sample.questions) {
