@@ -162,9 +162,10 @@
       "name": "@coforge/eval-harness",
       "version": "0.0.0",
       "dependencies": {
+        "@coforge/agent": "workspace:*",
         "@coforge/web": "workspace:*",
+        "@lrm/coforge-daemon": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
-        "@prisma/client": "^7.10.0",
       },
       "devDependencies": {
         "@types/bun": "1.4.0",

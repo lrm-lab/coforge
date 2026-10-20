@@ -21,8 +21,9 @@
     "check": "oxfmt --check src test && oxlint src test && bun run typecheck"
   },
   "dependencies": {
+    "@coforge/agent": "workspace:*",
     "@coforge/web": "workspace:*",
-    "@lrm/coforge-sdk": "workspace:*",
-    "@prisma/client": "^7.10.0"
+    "@lrm/coforge-daemon": "workspace:*",
+    "@lrm/coforge-sdk": "workspace:*"
   }
 }

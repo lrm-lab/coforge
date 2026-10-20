@@ -14,13 +14,13 @@ import {
   defaultCentrifugeWorkspaceClientFactory,
   FileDaemonCredentialStore,
   type CodeAgentProviderFactory,
-} from "../../../packages/daemon/index.ts";
+} from "@lrm/coforge-daemon";
 import {
   decodeAgentStartIntent,
   encodeAgentStartIntent,
   RUNTIME_PROVIDER,
-} from "../../../packages/coforge-sdk/src/internal/index.ts";
-import { type MemoryAgentToolProfile } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
+} from "@lrm/coforge-sdk/internal";
+import { type MemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
 import { EVAL_DISABLE_HOST_PI_INJECTION } from "../../../packages/agent/src/runner.ts";
 import { AgentControl } from "../../../apps/web/src/server/agents/agent-control.server";
 import { getAgentControlSignal } from "../../../apps/web/src/server/agents/agent-control-signal.server";
@@ -145,7 +145,7 @@ export async function startEvalDaemon(input: {
   const stateDirectory = identity.stateDirectory;
   process.env.COFORGE_DAEMON_HOME = stateDirectory;
   const { configureDaemonLogging } =
-    await import("../../../packages/daemon/src/platform/daemon-logging");
+    await import("@lrm/coforge-daemon/src/platform/daemon-logging");
   await configureDaemonLogging(stateDirectory);
   const workspaceRoot = join(stateDirectory, "workspaces");
   const credentials = new FileDaemonCredentialStore(stateDirectory);
