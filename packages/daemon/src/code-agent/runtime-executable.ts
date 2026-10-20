@@ -32,15 +32,17 @@ function codexInstalledExecutableCandidates(
   // Codex's standalone installer can target CODEX_INSTALL_DIR. The macOS Codex and ChatGPT apps
   // bundle the same CLI under Contents/Resources:
   // https://developers.openai.com/codex/app/
-  const candidates = installDirectory ? [join(installDirectory, "codex")] : [];
-  if (home) candidates.push(join(home, ".local", "bin", "codex"));
+  const candidates = installDirectory ? [join(installDirectory, RUNTIME_PROVIDER.CODEX)] : [];
+  if (home) candidates.push(join(home, ".local", "bin", RUNTIME_PROVIDER.CODEX));
   if (platform !== "darwin") return candidates;
   for (const applicationDirectory of [
     ...(home ? [join(home, "Applications")] : []),
     "/Applications",
   ])
     for (const application of ["ChatGPT.app", "Codex.app"])
-      candidates.push(join(applicationDirectory, application, "Contents", "Resources", "codex"));
+      candidates.push(
+        join(applicationDirectory, application, "Contents", "Resources", RUNTIME_PROVIDER.CODEX),
+      );
   return candidates;
 }
 
@@ -50,7 +52,14 @@ function openCodeInstalledExecutableCandidates(
 ): string[] {
   const home = homeDirectory(environment);
   return home
-    ? [join(home, ".opencode", "bin", platform === "win32" ? "opencode.exe" : "opencode")]
+    ? [
+        join(
+          home,
+          ".opencode",
+          "bin",
+          platform === "win32" ? "opencode.exe" : RUNTIME_PROVIDER.OPENCODE,
+        ),
+      ]
     : [];
 }
 
@@ -58,7 +67,7 @@ function grokInstalledExecutableCandidates(
   environment: Readonly<Record<string, string | undefined>>,
   platform: NodeJS.Platform,
 ): string[] {
-  const executable = platform === "win32" ? "grok.exe" : "grok";
+  const executable = platform === "win32" ? "grok.exe" : RUNTIME_PROVIDER.GROK;
   const home = homeDirectory(environment);
   return [
     ...(environment.GROK_BIN_DIR ? [join(environment.GROK_BIN_DIR, executable)] : []),
@@ -70,7 +79,7 @@ function grokInstalledExecutableCandidates(
 export const externalCodeAgents = [
   {
     provider: RUNTIME_PROVIDER.CODEX,
-    executable: "codex",
+    executable: RUNTIME_PROVIDER.CODEX,
     installedExecutableCandidates: codexInstalledExecutableCandidates,
   },
   {
@@ -90,14 +99,14 @@ export const externalCodeAgents = [
   },
   {
     provider: RUNTIME_PROVIDER.OPENCODE,
-    executable: "opencode",
+    executable: RUNTIME_PROVIDER.OPENCODE,
     // The official installer sets INSTALL_DIR=$HOME/.opencode/bin:
     // https://opencode.ai/v2/install
     installedExecutableCandidates: openCodeInstalledExecutableCandidates,
   },
   {
     provider: RUNTIME_PROVIDER.GROK,
-    executable: "grok",
+    executable: RUNTIME_PROVIDER.GROK,
     // The official installer uses GROK_BIN_DIR or $HOME/.grok/bin:
     // https://x.ai/cli/install.sh
     installedExecutableCandidates: grokInstalledExecutableCandidates,
