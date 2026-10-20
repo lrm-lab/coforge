@@ -1,6 +1,5 @@
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { ComputerRegistrar } from "../../../apps/web/src/server/computers/registration.server";
 import {
   PrismaComputerRegistrationRepository,
@@ -33,6 +32,9 @@ import { createAgentSessions } from "../../../apps/web/src/server/db/repositorie
 import { PrismaDirectConversationRepository } from "../../../apps/web/src/server/db/repositories/direct-conversation.repositories.server";
 import { createCentrifugoServerApi } from "../../../apps/web/src/server/centrifugo/server-api.server";
 import type { PrismaClient } from "../../../apps/web/src/generated/prisma/client";
+import { evalHostIdentity } from "./eval-host-identity";
+
+export { evalHostIdentity };
 
 /** The workspace fields the eval daemon reads; every benchmark's EvalWorkspace has them. */
 export type EvalHostWorkspace = {
@@ -54,17 +56,6 @@ export type EvalDaemon = {
   workspaceRoot: string;
   stop: () => Promise<void>;
 };
-
-/** The names one benchmark's eval computer registers and keeps its daemon state under, derived
- * from the benchmark's short label (`lme`, `sb`, `pcm`). */
-export function evalHostIdentity(label: string, workspaceId: string) {
-  return {
-    name: `${label}-eval-host`,
-    displayName: `${label.toUpperCase()} Eval Host`,
-    registrationIdempotencyKey: `${label}-eval-${workspaceId}`,
-    stateDirectory: join(tmpdir(), `${label}-daemon-${workspaceId.slice(0, 8)}`),
-  };
-}
 
 function memoryApiKey(provider: string): string {
   const inline = Bun.env.DEV_MEMORY_API_KEY?.trim();
@@ -166,7 +157,7 @@ export async function startEvalDaemon(input: {
 
   // Every Agent's key is read, and its runtime config sealed, before the daemon starts: a missing
   // key must fail the run before a runtime is running that the caller has no `stop` for.
-  const apiKeys = input.agents.map((agent) => memoryApiKey(agent.provider));
+  const keyed = input.agents.map((agent) => ({ ...agent, apiKey: memoryApiKey(agent.provider) }));
   const isolatedPiHost = join(stateDirectory, "pi-host");
   mkdirSync(isolatedPiHost, { recursive: true });
   copyFileSync(`${process.env.HOME}/.pi/agent/models.json`, join(isolatedPiHost, "models.json"));
@@ -192,18 +183,21 @@ export async function startEvalDaemon(input: {
     where: { workspaceId: input.workspace.workspaceId },
     data: { computerId: null },
   });
-  const runtimeConfigs = [];
-  for (const [index, agent] of input.agents.entries()) {
-    runtimeConfigs.push({
-      runtime: RUNTIME_PROVIDER.COFORGE,
-      provider: {
-        kind: "coforge" as const,
-        providerId: agent.provider,
-        apiKey: await encryptApiKey(agent.agentId, agent.provider, apiKeys[index]!),
+  const sealed = [];
+  for (const agent of keyed) {
+    sealed.push({
+      agentId: agent.agentId,
+      runtimeConfig: {
+        runtime: RUNTIME_PROVIDER.COFORGE,
+        provider: {
+          kind: "coforge" as const,
+          providerId: agent.provider,
+          apiKey: await encryptApiKey(agent.agentId, agent.provider, agent.apiKey),
+        },
+        model: agent.model,
+        modelProvider: agent.provider,
+        reasoning: "",
       },
-      model: agent.model,
-      modelProvider: agent.provider,
-      reasoning: "",
     });
   }
 
@@ -260,14 +254,10 @@ export async function startEvalDaemon(input: {
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : String(error));
     }
-    for (const [index, agent] of input.agents.entries()) {
+    for (const { agentId, runtimeConfig } of sealed) {
       await input.workspace.db.agent.update({
-        where: { id: agent.agentId },
-        data: {
-          computerId: registration.computerId,
-          stoppedAt: null,
-          runtimeConfig: runtimeConfigs[index],
-        },
+        where: { id: agentId },
+        data: { computerId: registration.computerId, stoppedAt: null, runtimeConfig },
       });
     }
     input.workspace.computerId = registration.computerId;
