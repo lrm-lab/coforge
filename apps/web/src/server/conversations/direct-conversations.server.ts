@@ -1,3 +1,4 @@
+import { workspaceAssistantWelcome } from "#src/server/agents/workspace-assistant-welcome.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
@@ -228,12 +229,14 @@ export class DirectConversations {
     window?: HistoryWindow,
   ) {
     await this.authorize(workspaceId, viewerId, conversationId);
-    return this.conversations.openConversationForUser(
+    const page = await this.conversations.openConversationForUser(
       workspaceId,
       viewerId,
       conversationId,
       window,
     );
+    const welcome = await workspaceAssistantWelcome(this.db, workspaceId, viewerId, conversationId);
+    return { ...page, ...(welcome ? { workspaceAssistantWelcome: true } : {}) };
   }
 
   /** What arrived after `afterSequence`, and of the replies only those after `afterReplySequence`

@@ -1,3 +1,5 @@
+import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AGENT_MENTION_ACTION_MAX_IDS,
@@ -65,10 +67,28 @@ export const Route = createFileRoute("/api/agent/v1/mention-actions_/execute")({
     handlers: {
       POST: ({ request, context: { principal, db } }) =>
         handleAgentMentionExecutePost(request, principal, {
-          notifyAgentMentionTargets: (workspaceId, agentId, resolutionIds) =>
-            notifyAgentMentionTargets(db, workspaceId, agentId, resolutionIds),
-          refuseAgentMentionAdds: (workspaceId, agentId, resolutionIds) =>
-            refuseAgentMentionAdds(db, workspaceId, agentId, resolutionIds),
+          notifyAgentMentionTargets: async (workspaceId, agentId, resolutionIds) => {
+            const user = await workspaceAssistantUser(db, workspaceId, agentId);
+            return user
+              ? new PublicChannels(db).executeMentionActions(
+                  workspaceId,
+                  user.userId,
+                  "notify",
+                  resolutionIds,
+                )
+              : notifyAgentMentionTargets(db, workspaceId, agentId, resolutionIds);
+          },
+          refuseAgentMentionAdds: async (workspaceId, agentId, resolutionIds) => {
+            const user = await workspaceAssistantUser(db, workspaceId, agentId);
+            return user
+              ? new PublicChannels(db).executeMentionActions(
+                  workspaceId,
+                  user.userId,
+                  "add",
+                  resolutionIds,
+                )
+              : refuseAgentMentionAdds(db, workspaceId, agentId, resolutionIds);
+          },
         }),
     },
   },

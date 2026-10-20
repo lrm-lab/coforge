@@ -215,9 +215,18 @@ export class PrismaMentionDeliveryRepository {
    * the message wrote for it (from its mention, or its non-member mention action), and the
    * outcome as stored.
    */
-  async readSenderDeliveries(workspaceId: string, agentId: string, anchor: string) {
+  async readSenderDeliveries(
+    workspaceId: string,
+    senderId: string,
+    anchor: string,
+    senderKind: "agent" | "user" = "agent",
+  ) {
     const messages = await this.db.message.findMany({
-      where: { workspaceId, sender: { agentId }, id: messageAnchorWhere(anchor) },
+      where: {
+        workspaceId,
+        sender: senderKind === "user" ? { userId: senderId } : { agentId: senderId },
+        id: messageAnchorWhere(anchor),
+      },
       take: SENDER_ANCHOR_READ_LIMIT,
       select: {
         id: true,

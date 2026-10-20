@@ -1,4 +1,9 @@
+import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
+import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
+import { WorkspaceAssistantCommands } from "#src/server/agents/workspace-assistant-commands.server";
+import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
+import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
 import {
   REMINDER_SYNC_MESSAGE_TYPE,
   WORKSPACE_PROTOCOL_MAJOR,
@@ -152,9 +157,8 @@ type NoticeInput = {
 /** The Task fields a notice quotes; `messageId` is also the root of the Task's thread. */
 type NoticeSubject = { messageId: string; number: number; title: string };
 /**
- * Writes the notices of one Task change, inside the transaction `withNotices` opened under the
- * conversation lock. Ordinary notices are signalled to open pages after the commit; a receipt is
- * the caller's to publish (`publishAssignmentReceipt`), because it is delivered and pushed.
+ * Write notices under the withNotices conversation lock; signal after commit. Assignment
+ * receipts are delivered/pushed separately by the caller through publishAssignmentReceipt.
  */
 type NoticeWriter = {
   /** The Tasks as notices quote them: clean titles, in the given order. */
@@ -164,11 +168,9 @@ type NoticeWriter = {
   /** A reply in the Task's own thread. */
   inThread(task: NoticeSubject, body: (task: QuotedTask) => string): Promise<PostedNotice>;
   /**
-   * The assignee's receipt: its fixed id, its one mention row naming the assignee (so it reaches a
-   * human assignee who muted the channel, and an Agent assignee reads it as its mention), and its
-   * one delivery to an Agent assignee other than the acting member (an Agent that assigns itself
-   * already holds the receipt in its command result and never wakes itself). The body stays the
-   * server-built `@handle` text.
+   * Fixed-id receipt with an assignee mention (overrides human mute) and one delivery to an
+   * Agent assignee other than the actor. Self-assigned Agents already hold it in the result.
+   * The body is server-built @handle text.
    */
   receipt(input: {
     id: string;
@@ -185,11 +187,10 @@ const AGENT_OWN_TASK_READ = {
 };
 
 /**
- * The conversations an Agent's own Task list reads, and the coverage the list reports. Both come
- * from `AGENT_OWN_TASK_READ`, so the reported coverage is the query's and cannot drift from it.
- * The list reads every match without a page limit.
+ * AGENT_OWN_TASK_READ supplies both query scope and reported coverage; read every match
+ * without pagination so the two cannot drift.
  */
-function agentOwnTaskScope(agentId: string): {
+function ownTaskScope(actor: { agentId: string } | { userId: string }): {
   conversations: Prisma.ConversationWhereInput;
   coverage: TaskListCoverage;
 } {
@@ -198,8 +199,11 @@ function agentOwnTaskScope(agentId: string): {
     conversations: {
       ...VISIBLE_CONVERSATION_WHERE,
       ...(includesArchived ? {} : { archivedAt: null }),
-      OR: kinds.map((kind) => CONVERSATION_KIND_WHERE[kind]),
-      members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
+      OR:
+        "agentId" in actor
+          ? kinds.map((kind) => CONVERSATION_KIND_WHERE[kind])
+          : [{ channelName: { not: null } }, viewerDirectConversationWhere(actor.userId)],
+      members: { some: { ...actor, ...ACTIVE_MEMBER_WHERE } },
     },
     coverage: {
       status: "incomplete",
@@ -373,12 +377,34 @@ export class TaskBoard {
 
   async execute(principal: TaskPrincipal, command: TaskCommand): Promise<TaskResult> {
     validateTaskCommand(command);
-    if (command.operation === "list" && command.mine && principal.agentId) {
-      const scope = agentOwnTaskScope(principal.agentId);
+    if (principal.agentId) {
+      const user = await workspaceAssistantUser(this.db, principal.workspaceId, principal.agentId);
+      if (user) {
+        const target = command.target
+          ? await new WorkspaceAssistantCommands(this.db).target(
+              { workspaceId: principal.workspaceId, agentId: principal.agentId },
+              command.target,
+            )
+          : undefined;
+        return this.execute(
+          { workspaceId: principal.workspaceId, userId: user.userId },
+          target
+            ? { ...command, target: undefined, conversationId: target.conversationId }
+            : command,
+        );
+      }
+    }
+    if (command.operation === "list" && command.mine && (principal.agentId || principal.userId)) {
+      if (principal.userId)
+        await requireWorkspaceMember(this.db, principal.workspaceId, principal.userId);
+      const actor = principal.agentId
+        ? { agentId: principal.agentId }
+        : { userId: principal.userId! };
+      const scope = ownTaskScope(actor);
       const tasks = await this.db.task.findMany({
         where: {
           workspaceId: principal.workspaceId,
-          owner: { agentId: principal.agentId },
+          owner: actor,
           status:
             command.status === "all"
               ? undefined
@@ -573,10 +599,8 @@ export class TaskBoard {
   }
 
   /**
-   * The conversation member an assignee names. A browser pick is bound by id (`user:<id>` or
-   * `agent:<id>`), so it is always the one picked. A bare `@handle` (the Agent CLI) may match a
-   * person and an Agent at once, since usernames are global and Agent names per Workspace; the
-   * person is then the one meant, as a mention without a binding resolves.
+   * Browser assignees bind user:<id>/agent:<id>. Bare CLI @handles resolve human-first
+   * when global usernames and Workspace Agent names clash, like unbound mentions.
    */
   private async assigneeMember(
     tx: Transaction,
@@ -641,9 +665,8 @@ export class TaskBoard {
   }
 
   /**
-   * Apply one optimistic Task change and record it in history: `before` is the row the caller
-   * read, and it (plus `guard`) must still match — revision included — or the change is a
-   * CONFLICT. The guarded write holds the Task row, so history numbering cannot race.
+   * Guard the Task write by the caller's row, revision and guard; mismatch is CONFLICT.
+   * The row lock also serializes history numbering.
    */
   private async commitTaskChange(
     tx: Transaction,
@@ -702,9 +725,10 @@ export class TaskBoard {
     return { task, events };
   }
 
-  /** Creates the durable, idempotent hand-off record. The daemon will consume this record in the
-   * follow-up delivery phase; keeping creation under the Task write lock prevents duplicate
-   * execution sessions when two claim/assign requests race. */
+  /**
+   * Create the idempotent handoff under the Task write lock; the daemon consumes it during
+   * follow-up delivery, without duplicate execution sessions from racing claims/assignments.
+   */
   private async ensureTaskExecutionSession(tx: Transaction, task: SelectedTask, agentId: string) {
     const existing = await tx.taskExecutionSession.findUnique({
       where: { taskMessageId_agentId: { taskMessageId: task.messageId, agentId } },
@@ -871,7 +895,7 @@ export class TaskBoard {
             id: command.attachmentId,
             conversationId: scope.conversationId,
             workspaceId: scope.workspaceId,
-            uploaderId: principal.userId,
+            ...userUploadedAttachmentWhere(principal.userId),
             messageId: null,
           },
         });
@@ -891,10 +915,8 @@ export class TaskBoard {
       const firstTaskNumber = allocated[0]?.first;
       if (firstTaskNumber === undefined) throw new AppError("NOT_FOUND");
       const firstSequence = (lastMessage?.sequence ?? 0) + 1;
-      // A human's Task wakes the conversation's Agents: in a DM its Agent, in a channel every
-      // unmuted Agent (only the coordinator, when the channel has one) plus each muted Agent the
-      // Task's own title mentions. An Agent's Task wakes nobody. Never deliver a Task to a deleted
-      // Agent.
+      // Human Tasks wake live Agents: the DM Agent, or unmuted channel Agents (coordinator only
+      // when configured), plus muted Agents mentioned in the title. Agent Tasks wake nobody.
       const agentMembers = member.userId
         ? await tx.conversationMember.findMany({
             where: {
@@ -963,9 +985,8 @@ export class TaskBoard {
             .filter((mention) => mention.type === "agent")
             .map((mention) => mention.id),
         );
-        // A mention adds its Agent to the audience and never narrows it. The assignee is not
-        // added for being the assignee: a muted assignee is reached by the assignment receipt
-        // below, once per create however many Tasks it holds.
+        // Mentions broaden the audience. A muted assignee gets one assignment receipt below,
+        // regardless of how many created Tasks it holds.
         const recipients = agentMembers.filter(
           ({ agentId, channelMuted }) =>
             mentionedAgentIds.has(agentId!) ||
@@ -1064,10 +1085,8 @@ export class TaskBoard {
       };
     });
     if (result.created) {
-      // PostgreSQL is canonical: a missed notification, realtime event or daemon push is
-      // repaired by the normal recovery paths, so none of these may fail the committed Tasks.
-      // Each effect swallows its own failure as soon as it is created, so a rejection
-      // while the delivery rows are still being read is never left unhandled.
+      // Committed Tasks survive notification/realtime/daemon failure through normal recovery.
+      // Catch each effect immediately, including while delivery rows are still being read.
       const attempt = (effect: () => unknown) =>
         Promise.resolve()
           .then(effect)
@@ -1141,10 +1160,8 @@ export class TaskBoard {
   }
 
   /**
-   * Run one Task change in a transaction that holds the conversation row lock (shared with
-   * ordinary sends, since a notice takes the next message sequence), then tell open pages about
-   * the notices it posted. Every Task write that posts a notice goes through here, so neither the
-   * lock nor the signal can be left out.
+   * Task notice writes share the ordinary-send conversation lock to allocate sequences.
+   * withNotices always locks, commits, then signals the posted notices.
    */
   private async withNotices<T>(
     conversation: ConversationRef,
@@ -1240,9 +1257,8 @@ export class TaskBoard {
   }
 
   /**
-   * Tell the conversation's open pages about committed notices. Only that per-conversation
-   * signal: notices never count as unread, so the Workspace/user channel that drives sidebar
-   * badges is left out, and they wake and push no one.
+   * Signal committed notices only to this conversation; they count no unread, change no
+   * sidebar badge and wake/push nobody.
    */
   private async signalNotices(notices: readonly PostedNotice[]) {
     const realtime = this.dependencies.realtime;
@@ -1279,9 +1295,8 @@ export class TaskBoard {
         deliveries: { include: { agent: { select: { computerId: true } } } },
       },
     });
-    // A receipt is a server notice, which nobody counts unread: like `signalNotices`, only the
-    // conversation's own channel hears of it, never a sidebar's badge channel. A person assigned
-    // finds it under Mentions in their Activity, told through `activity.changed.v1`.
+    // Receipts count no unread: signal only the conversation, never sidebar badges. Human
+    // assignees receive a Mentions Activity item and activity.changed.v1.
     const assignedPerson = message.mentions.find((mention) => mention.kind === "user")?.actorId;
     // A failed notification never rolls back or misreports a committed assignment.
     await Promise.allSettled([
@@ -1329,9 +1344,8 @@ export class TaskBoard {
   }
 
   /**
-   * Announces a Task a person's send made of its message (`sentMessageBecomesTask`): the created
-   * notice and the change to open Tasks pages, as `create` announces one. Its notice has a fixed
-   * id, so announcing again after a retried send writes nothing new.
+   * Publish a sentMessageBecomesTask notice and Task change like create; its fixed notice id
+   * makes retries idempotent.
    */
   async announceSentTask(conversation: ConversationRef, messageId: string) {
     const noticeId = await indexedRequestId(`${messageId}:sent-as-task`, 1);
@@ -1923,10 +1937,9 @@ export class TaskBoard {
   }
 
   /**
-   * Tells open Tasks pages the new copies of the Tasks a write changed, or the ids of those it
-   * deleted, where `route` says (nowhere when it names no scope). Its own publication key: the
-   * message signal on the same channel has another, since Centrifugo drops a repeated key.
-   * Never fails the write, the route's read included.
+   * Publish changed Task copies or deleted ids to route scopes (none means no publication).
+   * Use a key distinct from message signals; Centrifugo deduplicates keys. Never fail the write,
+   * including if the route read fails.
    */
   private async announceTasks(
     conversation: { conversationId: string; workspaceId: string },

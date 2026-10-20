@@ -59,6 +59,11 @@ class MemoryFleet {
 
 class MemoryJobs implements ClusterJobs {
   readonly records: HostJobRecord[] = [];
+  async findLatestCreate(computerId: string) {
+    return [...this.records]
+      .reverse()
+      .find((job) => job.computerId === computerId && job.operation === "create");
+  }
   async findByIdempotency(ownerId: string, idempotencyKey: string) {
     return this.records.find(
       (job) => job.ownerId === ownerId && job.idempotencyKey === idempotencyKey,
@@ -220,6 +225,68 @@ describe("cloud computer quota", () => {
     expect(attach?.operation).toBe("attach");
     expect(attach?.workspaceSlug).toBe("beta");
   });
+
+  test.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ])(
+    "link during creation is attached (report races: %p, format: %p)",
+    async (raceReport, format) => {
+      const { hosts, fleet, jobs } = harness();
+      const created = await hosts.ensureDefault(request);
+      const beta = new HostJobs({
+        workspaces: { findMember: async () => ({ id: "workspace-2", slug: "beta" }) },
+        fleet,
+        jobs,
+        cluster: {
+          id: async () => "cluster-1",
+          authenticate: async () => ({ id: "cluster-1", accepting: true }),
+        },
+        keys: { issue: async () => daemonKey },
+      });
+      const betaRequest = { ...request, workspaceId: "workspace-2" };
+      if (format) {
+        const first = await hosts.claim({ token: "host-token" });
+        await hosts.report({
+          token: "host-token",
+          jobId: first!.jobId,
+          containerId: "old-service",
+          now,
+        });
+        await beta.ensureDefault(betaRequest);
+        const oldAttach = await hosts.claim({ token: "host-token" });
+        await hosts.report({ token: "host-token", jobId: oldAttach!.jobId, now });
+        fleet.links = fleet.links.filter((link) => link.workspaceId !== "workspace-2");
+        await hosts.format({ ...request, computerId: created.computerId, confirmName: "Cloud" });
+        const removal = await hosts.claim({ token: "host-token" });
+        await hosts.report({ token: "host-token", jobId: removal!.jobId, now });
+      }
+      const before = jobs.records.length;
+      const claimed = await hosts.claim({ token: "host-token" });
+      const report = () =>
+        hosts.report({ token: "host-token", jobId: claimed!.jobId, containerId: "service-1", now });
+      const link = fleet.link.bind(fleet);
+      fleet.link = async (computerId, workspaceId, slug) => {
+        if (raceReport && workspaceId === "workspace-2") await report();
+        await link(computerId, workspaceId, slug);
+      };
+      expect((await beta.ensureDefault(betaRequest)).computerId).toBe(created.computerId);
+      await beta.ensureDefault(betaRequest);
+      expect(await fleet.isLinked(created.computerId, "workspace-2")).toBe(true);
+      if (!raceReport) {
+        expect(jobs.records).toHaveLength(before);
+        await report();
+      }
+      const attach = await hosts.claim({ token: "host-token" });
+      expect(attach).toMatchObject({
+        operation: "attach",
+        workspaceId: "workspace-2",
+        computerId: created.computerId,
+      });
+    },
+  );
 
   test("one extra computer is allowed only after the default container exists, and a second extra is refused", async () => {
     const { hosts } = harness();

@@ -236,7 +236,7 @@ export const getAgentActivitySubscriptionToken = createServerFn({
 async function agentVisibilityRow(db: Database, agentId: string) {
   return db.agent.findUnique({
     where: { id: agentId },
-    select: { workspaceId: true, ownerId: true, visibility: true },
+    select: { workspaceId: true, ownerId: true, visibility: true, systemKind: true },
   });
 }
 
@@ -288,11 +288,8 @@ export const listAgentModels = createServerFn({ method: "GET" })
   });
 
 /**
- * Realtime gap: the viewer's own `listAgents` roster (their owned Agents) is narrower
- * than what they are authorized to see — an owner/admin, or a private Agent's creator viewing it
- * from outside their own roster, can still see other private Agents. This returns exactly the
- * ids the browser needs to subscribe the matching per-Agent realtime channels for, never a full
- * row (the profile panel's own authorized fetch supplies details for any id it is given).
+ * Realtime subscriptions need all authorized private Agent ids, beyond the viewer's own roster.
+ * Return ids only; the profile panel fetches each row through its authorized detail endpoint.
  */
 export const listVisiblePrivateAgentIds = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])

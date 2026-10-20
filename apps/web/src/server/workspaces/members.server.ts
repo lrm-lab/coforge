@@ -184,6 +184,7 @@ export class WorkspaceMembers {
             },
           },
           weeklyReportAssistant: { select: { id: true } },
+          workspaceAssistantSession: { select: { id: true } },
           computer: {
             select: {
               id: true,
@@ -221,7 +222,7 @@ export class WorkspaceMembers {
         },
         // A weekly-report assistant is protected from deletion (AgentDeletion refuses it), so the
         // directory never offers a Delete that is certain to fail.
-        deletable: !agent.weeklyReportAssistant,
+        deletable: !agent.weeklyReportAssistant && !agent.workspaceAssistantSession,
       })),
       nextCursor: meta.hasNextPage ? meta.endCursor : null,
     };

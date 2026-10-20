@@ -6,31 +6,10 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 ## Create, edit, and delete
 
 - Creating an Agent requires Workspace owner/admin (`assertCanCreateAgents`), including when a human commits an `agent:create` action card, and starts it. Its name cannot be the username of a current member of the Workspace: `PrismaAgentRepository.create` refuses it as `agent-name-taken`, so `@name` never names a person and an Agent. A member who joins later can still share an existing Agent's name.
-- `manage-agents.server.ts` owns create/edit orchestration: runtime selection,
-  credential-aware restart decisions, and public response redaction.
-  `AgentRuntimeCredentials` owns Agent/provider-bound encryption; repositories
-  persist only the completed runtime config, and Server Function composition
-  supplies encryption lazily.
-- `agent-environment.server.ts` persists only user-declared environment
-  overrides and applies them by restart. Never collect or upload the local
-  inherited environment.
-- Only an Agent's creator replaces or removes its avatar; Workspace members
-  read it. The image store keeps the bytes, and `avatarObjectKey` is the only
-  PostgreSQL fact. Surfaces read `agentAvatarUrl`. A new Agent gets a random
-  picture from `features/agents/avatar-pictures/v1/` copied into the image store
-  as its own avatar (`AgentAvatars.storeInitial`), so retiring or replacing a
-  picture never changes an existing Agent. The copy's object key records its
-  origin (`platform-v1-ai-NN-<uuid>`, read by `parsePlatformAvatarKey`; an
-  upload's is a bare uuid): keep that shape stable, it is how a future
-  replacement of every platform avatar finds them. A new pool gets a new version
-  and directory. The pictures are embedded in the server build with Vite
-  `?inline` (the production image has no source tree); a build that leaves one
-  as a bare path makes `decodeInlinedPicture` throw. A picture that cannot be
-  stored leaves the Agent with initials; system Agents (weekly-report assistant
-  and Collector) are created in a transaction and get none.
-- Deleting an Agent requires Workspace owner/admin. It takes the runtime lock,
-  writes `deletedAt` durably, then attempts a best-effort Stop. Deletion is
-  soft: Messages, Tasks, and Action cards are preserved, and an Agent row is
+- `manage-agents.server.ts` owns create/edit orchestration: runtime selection, credential-aware restart decisions, and public response redaction. `AgentRuntimeCredentials` owns Agent/provider-bound encryption; repositories persist only the completed runtime config, and Server Function composition supplies encryption lazily.
+- `agent-environment.server.ts` persists only user-declared environment overrides and applies them by restart. Never collect or upload the local inherited environment.
+- Only an Agent's creator replaces or removes its avatar; Workspace members read it. The image store keeps the bytes, and `avatarObjectKey` is the only PostgreSQL fact. Surfaces read `agentAvatarUrl`. A new Agent gets a random picture from `features/agents/avatar-pictures/v1/` copied into the image store as its own avatar (`AgentAvatars.storeInitial`), so retiring or replacing a picture never changes an existing Agent. The copy's object key records its origin (`platform-v1-ai-NN-<uuid>`, read by `parsePlatformAvatarKey`; an upload's is a bare uuid): keep that shape stable, it is how a future replacement of every platform avatar finds them. A new pool gets a new version and directory. The pictures are embedded in the server build with Vite `?inline` (the production image has no source tree); a build that leaves one as a bare path makes `decodeInlinedPicture` throw. A picture that cannot be stored leaves the Agent with initials; system Agents (weekly-report assistant and Collector) are created in a transaction and get none.
+- Deleting an Agent requires Workspace owner/admin. It takes the runtime lock, writes `deletedAt` durably, then attempts a best-effort Stop. Deletion is soft: Messages, Tasks, and Action cards are preserved, and an Agent row is
   never hard-deleted.
 - Every live-view Agent query applies `ACTIVE_AGENT_WHERE`
   (`active-agent.server.ts`), and every mutation and control path calls
@@ -129,7 +108,7 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 - A user `start` carries the same recovery context
   (`conversations.readAgentRecoveryContext`) as a Daemon-ready recovery start.
 - Starts carry `introductionPrompt` up to 7 days after `introductionDueAt`,
-  which only a person's create sets and the next Start settles once the Agent
+  which a person's create sets and the next Start settles once the Agent
   has a message in its creator's DM.
 - Ready recovery reconciles a stopped Agent the Daemon still runs with a Stop
   through `AgentControl.publishStop`, without blocking the rest of recovery.
@@ -209,3 +188,12 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 - `agent-reminders.server.ts` is an owner-only, Workspace-scoped browser read
   model of bounded, scheduled Reminders. Reminder lifecycle stays in
   `server/reminders/`.
+
+## Workspace platform assistants
+
+- `workspace-assistant-onboarding.server.ts` starts new and backfilled assistants on the default cloud Computer using Pi/provider defaults. Web boot reaches old memberships; stopped Agents stay stopped. Platform introductions remain due until their first canonical DM reply; ordinary introductions retain their seven-day window.
+- `workspace-assistants.server.ts` owns the Workspace singleton and each member's private execution Agent and DM. Only this provisioning path writes `systemKind = workspace-assistant`; ordinary create/edit APIs never accept it.
+- A platform assistant is visible only to its member, including against Workspace admins. Its native sessions, credentials, files and delegated read cursors belong to that member. It cannot become public or be deleted through ordinary Agent controls.
+- `workspace-assistant-authority.server.ts` resolves a trusted binding and current membership. Delegated commands use the member's existing use cases and current permissions; leaving invalidates existing credentials. Ordinary Agents retain their own roles and membership rules.
+- `workspace-assistant-commands.server.ts` owns delegated conversation commands; `workspace-assistant-http.server.ts` adapts their native CLI wire contracts. Own-assistant DM operations retain normal Agent delivery and attention. Delegated event consumption never advances human unread state.
+- Migration targets for a platform assistant must belong to its member. Workspace admins cannot inspect or migrate another member's assistant.

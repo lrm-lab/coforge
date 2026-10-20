@@ -1,3 +1,4 @@
+import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -153,5 +154,10 @@ export class PrismaWorkspaceJoinLinkStore implements WorkspaceJoinLinkStore {
 }
 
 export function workspaceJoinLinks(db: PrismaClient) {
-  return new WorkspaceJoinLinks(new PrismaWorkspaceJoinLinkStore(db));
+  return new WorkspaceJoinLinks(
+    new PrismaWorkspaceJoinLinkStore(db),
+    undefined,
+    undefined,
+    (workspaceId, userId) => workspaceAssistantOnboarding(db).ensure(workspaceId, userId),
+  );
 }

@@ -45,12 +45,9 @@ export type PendingMentionActionView = {
 };
 
 /**
- * Records, in the send's transaction, one pending mention action for every `@handle` of the stored
- * body that names someone outside the conversation: a Workspace human, or a public Agent, who is
- * not an active member. The send turned every member's mention into a token, so a handle still
- * written as text never names a member. A private Agent is never a channel member, so it gets no
- * row. When a human and a public Agent share the handle, the Agent is the one named, as in mention
- * resolution. A replay of the same message writes nothing new.
+ * In the send transaction, record each non-member human/public-Agent @handle left after
+ * member mentions became tokens. Private Agents get none; a public Agent wins a name clash.
+ * Message replay creates no duplicates.
  */
 export async function recordPendingMentionActions(
   tx: Pick<Prisma.TransactionClient, "workspaceMembership" | "agent" | "pendingMentionAction">,
@@ -409,11 +406,9 @@ export async function claimMentionActions(
 export type NonMemberDelivery = { deliveryId: string; agentId: string; messageId: string };
 
 /**
- * Has each requested mention's target notified without adding them: the target's reading of that
- * one message, not of the channel. An Agent target gets the message as a delivery marked as
- * reaching it from outside the channel; a person finds it in their Activity inbox. The mention
- * stays pending, so the target can still be added; a repeat is `queued` with `already_queued`.
- * Returns the results in request order, and the new deliveries for the caller to publish.
+ * Notify a target of this message only, without channel access: Agents get a non-member
+ * delivery, humans an Activity item. Keep the action pending for later add; repeat notify
+ * is queued/already_queued. Return ordered results and deliveries for publication.
  */
 export async function notifyMentionTargets(
   db: Pick<PrismaClient, "pendingMentionAction" | "conversationMember" | "agentMessageDelivery">,
@@ -497,14 +492,28 @@ export async function releaseMentionActions(
  * expired, oldest message first and, within a message, in the order its body names them, each with
  * what it still allows.
  */
-export async function pendingMentionActionsForAgent(
+export function pendingMentionActionsForAgent(
   db: Pick<PrismaClient, "pendingMentionAction" | "conversationMember">,
   workspaceId: string,
   agentId: string,
+  now = new Date(),
+) {
+  return pendingMentionActionsForActor(db, workspaceId, { agentId }, now);
+}
+
+export async function pendingMentionActionsForActor(
+  db: Pick<PrismaClient, "pendingMentionAction" | "conversationMember">,
+  workspaceId: string,
+  sender: MentionActor,
   now: Date = new Date(),
 ): Promise<PendingMentionActionView[]> {
   const rows = await db.pendingMentionAction.findMany({
-    where: { workspaceId, sender: { agentId }, resolvedAt: null, expiresAt: { gt: now } },
+    where: {
+      workspaceId,
+      sender: "userId" in sender ? { userId: sender.userId } : { agentId: sender.agentId },
+      resolvedAt: null,
+      expiresAt: { gt: now },
+    },
     select: {
       ...PENDING_MENTION_ACTION_SELECT,
       conversationId: true,

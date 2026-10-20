@@ -1,3 +1,4 @@
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { AGENT_PROFILE_DESCRIPTION_MAX_LENGTH } from "#src/features/agents/agent.schemas";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
 import { errorType } from "#src/server/errors/error-type.server";
@@ -8,8 +9,9 @@ export const AGENT_INTRODUCTION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** What the introduction decision and its prompt read about the Agent: read-model fields that
  * `AgentControlAgent` carries too. */
 export type AgentIntroductionFacts = {
-  /** Set by a person's create; null once settled, and for an Agent that owes none. */
+  /** Set by creation/provisioning; null once settled or when none is owed. */
   introductionDueAt?: Date | null;
+  systemKind?: string | null;
   deletedAt?: Date | null;
   description?: string;
   /** The creator's (`Agent.ownerId`) username. */
@@ -18,13 +20,27 @@ export type AgentIntroductionFacts = {
 
 /**
  * The prompt a Start carries while the Agent owes its creator an introduction by DM, else
- * undefined. Past the window it never does: no "I'm ready" weeks later, and no Start retries it
- * forever.
+ * undefined. Ordinary introductions expire; the platform assistant keeps owing its first welcome.
  */
 export function introductionPromptFor(facts: AgentIntroductionFacts, now: Date) {
   const { introductionDueAt, deletedAt, ownerUsername: creator } = facts;
   if (!introductionDueAt || deletedAt || !creator) return undefined;
-  if (now.getTime() - introductionDueAt.getTime() > AGENT_INTRODUCTION_WINDOW_MS) return undefined;
+  const platformAssistant = facts.systemKind === WORKSPACE_ASSISTANT_KIND;
+  if (
+    !platformAssistant &&
+    now.getTime() - introductionDueAt.getTime() > AGENT_INTRODUCTION_WINDOW_MS
+  )
+    return undefined;
+  if (platformAssistant)
+    return [
+      "You are this member’s private CoForge platform assistant, ready for your first conversation.",
+      `Proactively send @${creator} a short friendly welcome in their DM using \`coforge message send --target '@${creator}'\`.`,
+      "Introduce yourself as 通用助手 and explain that you can help with platform features, messages/channels, Tasks/Projects, reminders and weekly reports, within this member’s permissions.",
+      "The browser supplies five clickable starter choices below your welcome; do not print a second menu or claim email/calendar integrations that are unavailable.",
+      `If @${creator} has already written, answer their request and introduce yourself in the same reply; do not interrupt with an onboarding questionnaire.`,
+      "Send just one welcome; never post it in a channel. If you already welcomed this member, take no further action.",
+      "Use the member’s language, or Chinese when unknown.",
+    ].join(" ");
   // Create and edit cap a description; a row older than the cap is cut to it.
   const description = (facts.description ?? "")
     .trim()

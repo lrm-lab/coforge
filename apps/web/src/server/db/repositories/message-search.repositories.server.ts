@@ -15,6 +15,7 @@ export type MessageSearchCriteria = {
   senderKind?: "user" | "agent";
   mentionsViewer?: boolean;
   conversationId?: string;
+  threadRootId?: string;
   after?: Date;
   before?: Date;
   sort: MessageSearchSort;
@@ -70,6 +71,8 @@ export async function findMessageSearchIds(
   if (criteria.conversationId) {
     conditions.push(Prisma.sql`m."conversationId" = ${criteria.conversationId}::uuid`);
   }
+  if (criteria.threadRootId)
+    conditions.push(Prisma.sql`m."threadRootId" = ${criteria.threadRootId}::uuid`);
   if (criteria.after) conditions.push(Prisma.sql`m."createdAt" >= ${criteria.after}`);
   if (criteria.before) conditions.push(Prisma.sql`m."createdAt" < ${criteria.before}`);
 

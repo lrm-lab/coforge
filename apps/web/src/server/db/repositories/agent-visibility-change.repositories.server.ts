@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
@@ -35,6 +36,15 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
     visibility: string;
   }): Promise<{ changed: boolean; leftChannelIds: string[]; joinedChannelIds: string[] }> {
     return this.db.$transaction(async (tx) => {
+      const assistant = await tx.agent.findFirst({
+        where: {
+          id: input.agentId,
+          workspaceId: input.workspaceId,
+          systemKind: WORKSPACE_ASSISTANT_KIND,
+        },
+        select: { id: true },
+      });
+      if (assistant) throw new AppError("ACCESS_DENIED");
       if (input.visibility === AGENT_VISIBILITY.PRIVATE) {
         const memoryAgent = await tx.workspaceMemoryAgent.findUnique({
           where: { workspaceId: input.workspaceId },

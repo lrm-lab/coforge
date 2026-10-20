@@ -1,3 +1,4 @@
+import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { humanLabel } from "#src/lib/human-label";
@@ -21,6 +22,8 @@ import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-
 import { userConversationChannel } from "./conversation-realtime";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { toggleDirectReaction } from "#src/server/conversations/reaction-toggles.server";
+import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
+import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { attachActionCardViews } from "#src/server/conversations/action-cards.server";
@@ -201,6 +204,7 @@ export const setDirectConversationHidden = createServerFn({ method: "POST" })
 export const loadDirectConversationPreferences = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
+    await workspaceAssistantOnboarding(db).ensure(workspaceId, user.id);
     const { streamPositions, data } = await readAfterStreamPositions(
       [userConversationChannel(user.id)],
       () => new DirectConversations(db).list(workspaceId, user.id),
@@ -213,6 +217,15 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
   .validator(sendConversationMessageInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
+    await new DirectConversations(db).authorize(workspaceId, user.id, data.conversationId, {
+      canSend: true,
+    });
+    await new WorkspaceAssistants(db).prepareConversation(
+      workspaceId,
+      user.id,
+      data.conversationId,
+      (input) => productionCloudComputers(db).ensureDefault(input),
+    );
     return withMessageSendTrace(
       data.idempotencyKey,
       { "coforge.conversation_id": data.conversationId },

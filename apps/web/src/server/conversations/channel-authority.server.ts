@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import type { ChannelActor } from "./public-channels.server";
 import { roleCan } from "#src/features/workspaces/workspace-roles";
@@ -123,9 +124,24 @@ export async function resolveActorServerRole(
   }
   const agent = await db.agent.findFirst({
     where: { id: actor.agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+    select: { role: true, ownerId: true, systemKind: true },
+  });
+  return agent ? effectiveAgentServerRole(db, workspaceId, agent) : undefined;
+}
+
+/** An ordinary Agent keeps its own role. A platform assistant delegates only its member's
+ * current authority; no role snapshot survives a demotion or departure. */
+export async function effectiveAgentServerRole(
+  db: Pick<PrismaClient, "workspaceMembership">,
+  workspaceId: string,
+  agent: { ownerId: string; role: string; systemKind?: string | null },
+): Promise<string | undefined> {
+  if (agent.systemKind !== WORKSPACE_ASSISTANT_KIND) return agent.role;
+  const membership = await db.workspaceMembership.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId: agent.ownerId } },
     select: { role: true },
   });
-  return agent?.role;
+  return membership?.role;
 }
 
 export type ChannelAuthority = {

@@ -218,10 +218,19 @@ describe("WorkspaceMembers", () => {
       workspaceId: "workspace-1",
       deletedAt: null,
       OR: [{ visibility: "public" }, { ownerId: "viewer" }],
+      AND: [
+        {
+          OR: [
+            { systemKind: null },
+            { systemKind: { not: "workspace-assistant" } },
+            { ownerId: "viewer" },
+          ],
+        },
+      ],
     });
   });
 
-  test("an owner/admin's directory query has nothing to hide", async () => {
+  test("an owner/admin directory excludes other people's platform assistants", async () => {
     let agentQuery: object | undefined;
     const db = withFakePagination({
       workspaceMembership: {
@@ -243,7 +252,15 @@ describe("WorkspaceMembers", () => {
     });
 
     const [visible] = (agentQuery as { where: { AND: object[] } }).where.AND;
-    expect(visible).toEqual({ workspaceId: "workspace-1", deletedAt: null });
+    expect(visible).toEqual({
+      workspaceId: "workspace-1",
+      deletedAt: null,
+      OR: [
+        { systemKind: null },
+        { systemKind: { not: "workspace-assistant" } },
+        { ownerId: "viewer" },
+      ],
+    });
   });
   describe("directory", () => {
     const directoryOf = (people: object[]) =>
@@ -374,6 +391,15 @@ describe("WorkspaceMembers", () => {
                   workspaceId: "workspace-1",
                   deletedAt: null,
                   OR: [{ visibility: "public" }, { ownerId: "viewer" }],
+                  AND: [
+                    {
+                      OR: [
+                        { systemKind: null },
+                        { systemKind: { not: "workspace-assistant" } },
+                        { ownerId: "viewer" },
+                      ],
+                    },
+                  ],
                 },
               },
             },

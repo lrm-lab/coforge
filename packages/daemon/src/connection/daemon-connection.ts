@@ -2561,17 +2561,17 @@ function parseIdentityRuntimeContext(
 }
 
 /**
- * Decodes the launch-config response's optional `identity` field defensively: every field is
- * optional and string-only on the wire, so an older Web (no `identity` at all) or a newer Web
- * (fields this Daemon does not understand yet) both still launch normally. Unlike
- * `parseAgentRuntimeProviderConfig`/`parseAgentApiKey`, an invalid shape never throws — it
- * degrades to `undefined` (or drops just the invalid sub-field) so a malformed or missing
- * identity never fails the launch, only the standing prompt's identity-derived text.
+ * Decode optional launch identity fields defensively for older/newer Web compatibility.
+ * Invalid shapes drop the identity or sub-field instead of failing launch; only identity-derived
+ * standing instructions degrade. Unlike runtime provider config/API keys, this parser never throws.
  */
 function parseAgentLaunchIdentity(value: unknown): AgentLaunchIdentity | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
   const identity: AgentLaunchIdentity = {
+    ...(record.systemKind === "workspace-assistant"
+      ? { systemKind: "workspace-assistant" as const }
+      : {}),
     name: parseIdentityString(record.name, IDENTITY_NAME_MAX_LENGTH),
     displayName: parseIdentityString(record.displayName, IDENTITY_NAME_MAX_LENGTH),
     description: parseIdentityString(record.description, IDENTITY_DESCRIPTION_MAX_LENGTH),

@@ -22,6 +22,7 @@ export type MessageSearchInput = {
   mentionsViewer?: boolean;
   /** Only messages in this channel or direct conversation. */
   conversationId?: string;
+  threadRootId?: string;
   after?: Date;
   before?: Date;
   sort: MessageSearchSort;
@@ -95,6 +96,7 @@ export async function searchMessages(
     senderKind: input.senderKind,
     mentionsViewer: input.mentionsViewer,
     conversationId: input.conversationId,
+    threadRootId: input.threadRootId,
     after: input.after,
     before: searchedAt,
     sort: input.sort,

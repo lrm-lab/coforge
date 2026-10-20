@@ -9,6 +9,21 @@ const AGENT_WORKSPACES: [string, string] = [
 ];
 const instructions = buildCoforgeAgentInstructions({ agentWorkspaceDirectory: directory });
 
+test("only a server-designated platform assistant receives the full platform playbook", () => {
+  const assistant = buildCoforgeAgentInstructions({
+    agentWorkspaceDirectory: directory,
+    identity: { systemKind: "workspace-assistant", displayName: "通用助手" },
+  });
+  expect(assistant).toContain("## CoForge platform assistant");
+  expect(assistant).toContain("coforge manual get index");
+  expect(assistant).toContain("coforge workspace info --full");
+  expect(assistant).toContain("coforge action prepare");
+  expect(assistant).toContain("coforge task");
+  expect(assistant).toContain("coforge reminder");
+  expect(assistant).toContain("Only this member's session");
+  expect(instructions).not.toContain("## CoForge platform assistant");
+});
+
 test("ordinary requests do not require task creation or per-turn memory bookkeeping", () => {
   expect(instructions).toContain("Answer ordinary questions freely");
   expect(instructions).toContain("Before implementing a shared channel request");

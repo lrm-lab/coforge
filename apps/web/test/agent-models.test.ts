@@ -36,6 +36,15 @@ describe("listVisibleAgentModels", () => {
       workspaceId: WORKSPACE_ID,
       deletedAt: null,
       OR: [{ visibility: "public" }, { ownerId: "user-member" }],
+      AND: [
+        {
+          OR: [
+            { systemKind: null },
+            { systemKind: { not: "workspace-assistant" } },
+            { ownerId: "user-member" },
+          ],
+        },
+      ],
     });
   });
 
@@ -83,13 +92,21 @@ describe("listVisibleAgentModels", () => {
     expect(list.readAt).toBe(1_000);
   });
 
-  test("an owner or admin reads every live Agent in the Workspace", async () => {
+  test("an owner or admin reads ordinary Agents but only their own platform assistant", async () => {
     const { db, calls } = fakeDb([]);
     await listVisibleAgentModels(db, WORKSPACE_ID, {
       kind: "user",
       userId: "user-admin",
       role: "admin",
     });
-    expect(calls[0]?.where).toEqual({ workspaceId: WORKSPACE_ID, deletedAt: null });
+    expect(calls[0]?.where).toEqual({
+      workspaceId: WORKSPACE_ID,
+      deletedAt: null,
+      OR: [
+        { systemKind: null },
+        { systemKind: { not: "workspace-assistant" } },
+        { ownerId: "user-admin" },
+      ],
+    });
   });
 });

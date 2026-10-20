@@ -376,13 +376,9 @@ export class ActionCards {
   }
 
   /**
-   * Shared commit/cancel guard: the card must exist in the caller's Workspace, the viewer must be
-   * able to read the conversation it was posted in (reuses `ConversationHistory.authorize`), it
-   * must be the expected kind, and it must still be `pending`. `commit*`/`cancel` re-check the
-   * `pending` state atomically via a conditional `updateMany` *after* executing the underlying
-   * operation — see `markExecuted`/`cancel`'s doc comments for why that ordering is safe against a
-   * double click (the operation's own uniqueness rule, or `addMembers`'s `skipDuplicates`, absorbs
-   * the race; this early check only produces a fast, friendly error for the common case).
+   * Require the Workspace, readable conversation, expected kind and pending state.
+   * After the real operation, commit/cancel conditionally update pending; resource uniqueness
+   * and addMembers skipDuplicates absorb races. This early check gives a friendly error.
    */
   private async loadPendingCard(
     workspaceId: string,
@@ -743,7 +739,7 @@ export class ActionCards {
         workspaceId,
         ...ACTIVE_AGENT_WHERE,
       },
-      select: { id: true, ownerId: true, visibility: true },
+      select: { id: true, ownerId: true, visibility: true, systemKind: true },
     });
     if (!agent) throw unknownHandle("agent", value, field);
     // Every Agent an action card names becomes a channel member, and a private Agent never is one.

@@ -108,6 +108,7 @@ export type AgentControlAgent = {
    * `?? "public"` fallback, so a select that ever forgot to fetch it fails a type check instead
    * of silently failing open and treating an unseen private Agent as visible. */
   visibility: string;
+  systemKind?: string | null;
   runtimeConfig: AgentRuntimeConfig;
   /** Opaque persisted representation used only for compare-and-swap. */
   storedRuntimeConfig?: unknown;
@@ -596,14 +597,9 @@ export class AgentControl {
       if (old.action !== action || !current(agent, old)) throw new Error("Operation scope changed");
       return old;
     }
-    // Latest command wins: a different requestId always supersedes whatever the
-    // current state is — terminal or not, any action, any phase (including a Full Reset caught
-    // mid `clearing`) — exactly the same shape a terminal `old` was already superseded with:
-    // epoch + 1, identity retained by the existing `computerId`/`provider` rule, `launchId`/
-    // `launchIdentityBound` dropped because the new `state` literal never copies them forward.
-    // The latest command wins: a newer start/stop/reset simply takes effect and epochs only
-    // cancel superseded work — so there is neither a "pending" rejection nor an "abandoned"
-    // concept here; supersede is normal behaviour, logged at info, once per occurrence.
+    // Latest requestId supersedes every state, including Full Reset clearing: increment epoch,
+    // retain identity under the Computer/provider rule, and drop launchId/launchIdentityBound.
+    // Supersession is normal, logged once at info; there is no pending refusal or abandoned state.
     if (old)
       console.info(
         JSON.stringify({

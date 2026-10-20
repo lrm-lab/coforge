@@ -1,3 +1,4 @@
+import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
 import { createFileRoute } from "@tanstack/react-router";
 import type {
   AgentMentionDeliveryErrorResponse,
@@ -53,11 +54,13 @@ export const Route = createFileRoute("/api/agent/v1/messages_/$messageId/mention
     handlers: {
       GET: ({ context: { principal, db }, params }) =>
         handleAgentMentionDeliveriesGet(principal, params.messageId, {
-          mentionDeliveries: (scope, messageId) =>
-            new MentionDeliveryLookup(new PrismaMentionDeliveryRepository(db)).forSender(
-              scope,
+          mentionDeliveries: async (scope, messageId) => {
+            const user = await workspaceAssistantUser(db, scope.workspaceId, scope.agentId);
+            return new MentionDeliveryLookup(new PrismaMentionDeliveryRepository(db)).forSender(
+              user ? { workspaceId: scope.workspaceId, userId: user.userId } : scope,
               messageId,
-            ),
+            );
+          },
         }),
     },
   },

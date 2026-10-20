@@ -151,6 +151,7 @@ export async function readAuthorizedAttachment(
   db: PrismaClient,
   input: {
     attachmentId: string;
+    workspaceId?: string;
     userId?: string;
     agentId?: string;
     conversationId?: string;
@@ -160,7 +161,8 @@ export async function readAuthorizedAttachment(
   const attachment = await db.attachment.findUnique({
     where: { id: input.attachmentId },
   });
-  if (!attachment) throw new AppError("NOT_FOUND");
+  if (!attachment || (input.workspaceId && attachment.workspaceId !== input.workspaceId))
+    throw new AppError("NOT_FOUND");
   const isOwnUpload = Boolean(input.agentId) && attachment.uploaderAgentId === input.agentId;
   if (!attachment.messageId && !isOwnUpload) throw new AppError("NOT_FOUND");
   const allowed = input.userId

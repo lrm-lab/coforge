@@ -1,3 +1,4 @@
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import {
@@ -98,13 +99,15 @@ export function agentMigrationRequests(db: PrismaClient) {
   return new AgentMigrationRequests({
     migrations,
     orchestrator: () => agentMigrationOrchestrator(db, migrations),
-    agentOwner: async (workspaceId, agentId) =>
-      (
-        await db.agent.findFirst({
-          where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-          select: { ownerId: true },
-        })
-      )?.ownerId,
+    agentOwner: async (workspaceId, agentId, viewerUserId) => {
+      const agent = await db.agent.findFirst({
+        where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+        select: { ownerId: true, systemKind: true },
+      });
+      if (agent?.systemKind === WORKSPACE_ASSISTANT_KIND && agent.ownerId !== viewerUserId)
+        return undefined;
+      return agent?.ownerId;
+    },
     isWorkspaceAdmin: async (workspaceId, userId) => {
       const membership = await db.workspaceMembership.findUnique({
         where: { workspaceId_userId: { workspaceId, userId } },
@@ -123,10 +126,18 @@ export function agentMigrationRequests(db: PrismaClient) {
     runtimeRefusal: async (workspaceId, agentId, computerId) => {
       const agent = await db.agent.findFirst({
         where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-        select: { ownerId: true, runtimeConfig: true },
+        select: { ownerId: true, runtimeConfig: true, systemKind: true },
       });
       // No live Agent, or no runtime it could name: nothing the target could run.
       if (!agent) return "runtime_missing";
+      if (
+        agent.systemKind === WORKSPACE_ASSISTANT_KIND &&
+        !(await db.computer.findFirst({
+          where: { id: computerId, ownerId: agent.ownerId, deletedAt: null },
+          select: { id: true },
+        }))
+      )
+        return "runtime_not_shared";
       let config: AgentRuntimeConfig;
       try {
         config = parseAgentRuntimeConfig(agent.runtimeConfig);

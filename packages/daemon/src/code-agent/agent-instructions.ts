@@ -5,6 +5,7 @@ import {
   toolsForMemoryFence,
   type MemoryAgentToolProfile,
 } from "@lrm/coforge-sdk/agent";
+import { WORKSPACE_ASSISTANT_INSTRUCTIONS } from "./workspace-assistant-instructions";
 
 /** Set only by the collaboration evaluation's daemon assembly. */
 export const EVAL_MEMORY_OFFER_ONLY = "COFORGE_EVAL_MEMORY_OFFER_ONLY";
@@ -15,6 +16,7 @@ export function evalMemoryOfferOnly(): boolean {
 
 /** Minimal transport instructions; feature workflows belong in event output or the Manual. */
 export type AgentLaunchIdentity = {
+  systemKind?: "workspace-assistant";
   name?: string;
   displayName?: string;
   description?: string;
@@ -118,6 +120,8 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
     );
   } else {
     sections.push(...Object.values(guide));
+    if (context.identity?.systemKind === "workspace-assistant")
+      sections.push(WORKSPACE_ASSISTANT_INSTRUCTIONS);
   }
   return sections.join("\n\n");
 }

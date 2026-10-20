@@ -1,3 +1,4 @@
+import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { compareChannelNames } from "#src/features/conversations/channel-signals";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { lockConversation } from "./conversation-lock.server";
@@ -766,7 +767,7 @@ export class PublicChannels {
       },
       select: {
         id: true,
-        agent: { select: { visibility: true, ownerId: true } },
+        agent: { select: { visibility: true, systemKind: true, ownerId: true } },
       },
     });
     const viewer = await agentVisibilityViewerForUser(this.db, workspaceId, userId);
@@ -1100,19 +1101,11 @@ export class PublicChannels {
   }
 
   /**
-   * The viewer's own recent @-mentions in one channel, newest first, for `mentionAffinityScores`.
-   * Keyed by their member row (one per user per channel, kept after leaving), and read from the
-   * viewer's own messages newest first (`messages(senderMemberId, sequence)`) until 50 of them
-   * carry a mention. Reading `message_mentions` filtered by sender instead let PostgreSQL walk every
-   * mention in the channel newest first, so a viewer who writes often but seldom mentions anyone
-   * paid for every mention the channel's Agents ever wrote. A mention row is written with its
-   * message, so message order is mention order. `memberId` is the viewer's member row, left or
-   * not (someone who left still ranks by what they wrote); a reader with no member row has
-   * mentioned no one here.
-   *
-   * Each message's mentions are a LATERAL read by its key, so the walk stops at the 50th mention.
-   * A relation filter (`mentions: { some: {} }`) let the planner hash every `message_mentions`
-   * row in the database to semi-join the viewer's messages against them.
+   * Read the viewer's latest 50 messages carrying mentions for mentionAffinityScores, keyed by
+   * their membership (including soft-left rows). No membership means no prior mentions.
+   * Walk messages(senderMemberId, sequence) with LATERAL mention lookups by message key;
+   * filtering mention rows or using a relation filter makes PostgreSQL scan/hash the channel's
+   * whole mention set. Message ordering is mention ordering because both are written together.
    */
   private async viewerRecentMentions(memberId: string | undefined): Promise<RecentMentionRow[]> {
     if (!memberId) return [];
@@ -2241,7 +2234,7 @@ export class PublicChannels {
                   id: { in: [...new Set(requestedAttachmentIds)] },
                   conversationId: channelId,
                   workspaceId,
-                  uploaderId: userId,
+                  ...userUploadedAttachmentWhere(userId),
                   messageId: null,
                 },
                 select: { id: true },

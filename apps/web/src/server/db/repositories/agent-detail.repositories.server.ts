@@ -29,6 +29,7 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
         description: true,
         role: true,
         visibility: true,
+        systemKind: true,
         createdAt: true,
         computerId: true,
         computer: {
@@ -59,7 +60,11 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
     // An existing-but-invisible Agent answers a stable "not visible" result, never its details —
     // distinct from the plain absence above so the profile panel can render the specific
     // "not visible" copy instead of a generic "not found".
-    assertAgentVisible(this.viewer, { visibility: agent.visibility, ownerId: agent.owner.id });
+    assertAgentVisible(this.viewer, {
+      visibility: agent.visibility,
+      ownerId: agent.owner.id,
+      systemKind: agent.systemKind,
+    });
     return agent;
   }
 }

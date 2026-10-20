@@ -13,6 +13,7 @@ import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoRpcAuthenticationError } from "#src/server/centrifugo/rpc-handler.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { PrismaReminderRepository } from "#src/server/db/repositories/reminder.repositories.server";
 import { Reminders } from "#src/server/reminders/reminders.server";
 import { getReminderCapabilityLease } from "#src/server/reminders/reminder-capability.server";
@@ -86,12 +87,18 @@ export async function authenticateAgentHttpRequest(request: Request, db: PrismaC
           select: { id: true },
         }),
       ),
-    agentIsActive: async (workspaceId, agentId) =>
-      Boolean(
-        await db.agent.findFirst({
-          where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-          select: { id: true },
-        }),
-      ),
+    agentIsActive: async (workspaceId, agentId) => {
+      const agent = await db.agent.findFirst({
+        where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+        select: {
+          systemKind: true,
+          owner: { select: { memberships: { where: { workspaceId }, select: { userId: true } } } },
+        },
+      });
+      return Boolean(
+        agent &&
+        (agent.systemKind !== WORKSPACE_ASSISTANT_KIND || agent.owner.memberships.length > 0),
+      );
+    },
   });
 }

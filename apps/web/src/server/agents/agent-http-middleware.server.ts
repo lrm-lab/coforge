@@ -2,6 +2,7 @@ import { textResponse } from "#src/server/http/text-response.server";
 import { createMiddleware } from "@tanstack/react-start";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { authenticateAgentHttpRequest } from "./agent-api-http.server";
+import { handleWorkspaceAssistantCommand } from "./workspace-assistant-http.server";
 
 /**
  * Authentication boundary for the Agent HTTP API. The daemon presents its own
@@ -40,6 +41,8 @@ export const agentAuthMiddleware = createMiddleware().server(async ({ next, requ
   if (!db) return textResponse("unauthorized", { status: 401, headers: NO_STORE });
   try {
     const principal = await authenticateAgentHttpRequest(request, db);
+    const delegated = await handleWorkspaceAssistantCommand(request, principal, db);
+    if (delegated) return noStore(delegated);
     const result = await next({ context: { principal, db } });
     result.response = noStore(result.response);
     return result;

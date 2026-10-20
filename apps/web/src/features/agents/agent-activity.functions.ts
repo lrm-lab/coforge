@@ -37,7 +37,7 @@ export const getAgentActivityFeed = createServerFn({ method: "GET" })
         workspace: { members: { some: { userId: user.id } } },
         ...ACTIVE_AGENT_WHERE,
       },
-      select: { id: true, ownerId: true, visibility: true },
+      select: { id: true, ownerId: true, visibility: true, systemKind: true },
     });
     if (!agent) throw new Error("Agent not found");
     // Reached directly (not only through the profile panel that normally gated this

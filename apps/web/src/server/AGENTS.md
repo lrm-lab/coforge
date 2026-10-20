@@ -6,7 +6,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/agent-app-configs/` — each Agent App's config for an Agent (the keys it overrode; defaults at revision 0 when unstored), the Agent's own read and revision-checked change of it (`coforge app config`), the daemon's snapshot, and pushing a change to a daemon that advertises `app-config:v1`.
 - `server/agents/` — Agent lifecycle, control, sessions, a new Agent's introduction to its creator, display reduction,
   Activity (Computer lifecycle rows included), visibility, deletion, and the
-  Agent HTTPS API.
+  Agent HTTPS API, and platform assistants with private execution per member.
 - `server/attachments/` — attachment upload sessions, claiming a sender's uploads for a new message, and delivery.
 - `server/auth/` — login, sessions, username allocation, the first-sign-in name step, device auth, API keys, and auth guards.
 - `server/authorization-server/` — Login with CoForge: the OpenID Connect authorization server for third-party apps (issuer `<origin>/oidc`), its own signing keyset, discovery and JWKS. The Computer device flow stays in `server/auth/`.
