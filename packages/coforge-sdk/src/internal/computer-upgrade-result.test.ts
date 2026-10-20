@@ -37,7 +37,11 @@ test("round-trips a well-formed but not-yet-known error code without rejecting i
 });
 
 test("the installer's failure codes are known and round-trip on the wire", () => {
-  for (const errorCode of ["UPGRADE_INSTALLER_UNAVAILABLE", "UPGRADE_INSTALLER_INCOMPATIBLE"]) {
+  for (const errorCode of [
+    "UPGRADE_INSTALLER_UNAVAILABLE",
+    "UPGRADE_INSTALLER_INCOMPATIBLE",
+    "UPDATE_DOWNLOAD_FAILED",
+  ]) {
     expect(parseUpgradeErrorCode(errorCode)).toBe(errorCode as never);
     const value = { ...base, error: "the installer could not run", errorCode };
     expect(decodeComputerUpgradeResult(encodeComputerUpgradeResult(value))).toEqual(value);

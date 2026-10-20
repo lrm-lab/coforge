@@ -179,7 +179,8 @@ function renderPending(pending: PendingRequest): string {
 }
 
 function renderUnsettledUpgrade(operation: UnsettledUpgradeOperation): string {
-  return `${terminalText(operation.requestId)} -> ${terminalText(operation.expectedVersion)}  state=${operation.state}  age=${Math.round(operation.ageMs / 1000)}s`;
+  const error = operation.errorCode ? `  error=${terminalText(operation.errorCode)}` : "";
+  return `${terminalText(operation.requestId)} -> ${terminalText(operation.expectedVersion)}  state=${operation.state}${error}  age=${Math.round(operation.ageMs / 1000)}s`;
 }
 
 function renderAgents(report: ComputerStatusReport): string[] {

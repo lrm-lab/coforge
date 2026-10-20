@@ -23,8 +23,10 @@ module: its file and single responsibility. Update it before adding or reorganiz
   unique names of those temporaries. Tests in `src/private_fs/tests.rs` (real
   files).
 - `src/update_error.rs`: the failures of preparing a version, carrying the
-  product's `UPDATE_FEED_INVALID`, `UPDATE_INTEGRITY_FAILED`, and
-  `UPDATE_UNSUPPORTED_TARGET` codes (`upgrade-error-codes.json`).
+  product's `UPDATE_FEED_INVALID` (content), `UPDATE_DOWNLOAD_FAILED` (a transfer
+  the feed could not complete: unreachable, reset, idle timeout, non-2xx status),
+  `UPDATE_INTEGRITY_FAILED`, and `UPDATE_UNSUPPORTED_TARGET` codes
+  (`upgrade-error-codes.json`).
 - `src/manifest.rs`: what a valid release manifest is. Pure validation of
   `<version>/manifest.json` and the choice of one target's artifact; no I/O.
 - `src/feed.rs`: the release feed client. Resolves `latest`, fetches and

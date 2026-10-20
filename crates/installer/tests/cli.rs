@@ -156,6 +156,31 @@ fn an_unfinished_journal_refuses_upgrade_and_install_before_any_download() {
     assert!(!install.join("upgrade-results").exists());
 }
 
+#[test]
+fn a_failed_receipt_prints_its_error_code_before_its_message() {
+    let scratch = Scratch::new("failed-receipt");
+    let package = scratch.0.join("empty-package");
+    fs::create_dir_all(&package).unwrap();
+
+    let output = installer(
+        &scratch.home(),
+        &[
+            "install",
+            "--version",
+            "0.2.0",
+            "--from-directory",
+            package.to_str().unwrap(),
+        ],
+    );
+
+    assert_eq!(exit_code(&output), 1);
+    let stderr = text(&output.stderr);
+    assert!(
+        stderr.starts_with("coforge-installer: UPDATE_FEED_INVALID: manifest.json cannot be read"),
+        "{stderr}"
+    );
+}
+
 /// A release directory for this machine's target: a shell stand-in for `coforge-computer` that
 /// answers `__lifecycle protocol` with `version`, gzipped, with a manifest that describes it.
 #[cfg(unix)]

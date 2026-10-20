@@ -180,6 +180,9 @@ function unsettledUpgradesFor(binding: StatusBinding, now: Date): UnsettledUpgra
       requestId: operation.requestId,
       expectedVersion: operation.expectedVersion,
       state: operation.state as "pending" | "succeeded" | "failed",
+      ...(operation.state === "failed" && operation.terminal?.errorCode
+        ? { errorCode: operation.terminal.errorCode }
+        : {}),
       ageMs: Math.max(0, now.getTime() - operation.requestedAt),
     }));
 }

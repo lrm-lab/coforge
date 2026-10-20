@@ -6,8 +6,9 @@
 //! manifest by the same functions the feed client uses ([`crate::feed`]), so a directory is
 //! accepted or refused exactly as the feed would be. The directory only supplies bytes.
 
+use std::fmt;
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::contract::{ArtifactIdentity, ComputerArtifact, NamedArtifact, ReleaseManifest};
@@ -15,7 +16,7 @@ use crate::feed::{
     COMPUTER_GZIP, MAX_MANIFEST_BYTES, PHOTON_WASM, computer_request, computer_result,
     photon_request, photon_result, transfer_error,
 };
-use crate::fetch;
+use crate::fetch::{self, FetchErrorCode};
 use crate::manifest::parse_release_manifest;
 use crate::prepare::ReleaseSource;
 use crate::update_error::UpdateError;
@@ -38,11 +39,11 @@ impl ReleaseDirectory {
     /// feed problem that names the directory.
     fn read_capped(&self, name: &str, max_bytes: u64) -> Result<Vec<u8>, UpdateError> {
         let path = self.directory.join(name);
-        let file = File::open(&path).map_err(|error| self.missing(name, &error))?;
+        let file = File::open(&path).map_err(|error| self.unreadable(name, &error))?;
         let mut bytes = Vec::new();
         file.take(max_bytes.saturating_add(1))
             .read_to_end(&mut bytes)
-            .map_err(|error| self.missing(name, &error))?;
+            .map_err(|error| self.unreadable(name, &error))?;
         if bytes.len() as u64 > max_bytes {
             return Err(UpdateError::FeedInvalid(format!(
                 "{name} in {} is more than {max_bytes} bytes",
@@ -52,14 +53,16 @@ impl ReleaseDirectory {
         Ok(bytes)
     }
 
-    fn missing(&self, name: &str, error: &io::Error) -> UpdateError {
+    /// An object that is missing, cannot be opened, or fails while it is read.
+    fn unreadable(&self, name: &str, error: &impl fmt::Display) -> UpdateError {
         UpdateError::FeedInvalid(format!(
             "{name} cannot be read from {}: {error}",
             self.directory.display()
         ))
     }
 
-    /// Streams `name` through the same verified transfer the feed uses, writing `out`.
+    /// Streams `name` through the same verified transfer the feed uses, writing `out`. A file that
+    /// fails while it is read is unreadable, as one that cannot be opened; nothing was downloaded.
     fn transfer(
         &self,
         name: &str,
@@ -67,8 +70,11 @@ impl ReleaseDirectory {
         request: &fetch::FetchRequest,
     ) -> Result<fetch::FetchReceipt, UpdateError> {
         let file =
-            File::open(self.directory.join(name)).map_err(|error| self.missing(name, &error))?;
-        fetch::install(file, gzip, request).map_err(|error| transfer_error(error, name))
+            File::open(self.directory.join(name)).map_err(|error| self.unreadable(name, &error))?;
+        fetch::install(file, gzip, request).map_err(|error| match error.code {
+            FetchErrorCode::Download => self.unreadable(name, &error.message),
+            _ => transfer_error(error, name),
+        })
     }
 }
 

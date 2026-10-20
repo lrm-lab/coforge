@@ -50,6 +50,8 @@ export type UnsettledUpgradeOperation = {
   requestId: string;
   expectedVersion: string;
   state: "pending" | "succeeded" | "failed";
+  /** A failed operation's `UPGRADE_ERROR_CODE`, when its terminal state names one. */
+  errorCode?: string;
   /** How long ago this machine opened the operation, in milliseconds. */
   ageMs: number;
 };
@@ -141,6 +143,7 @@ export type StatusBinding = {
     expectedVersion: string;
     state: "pending" | "succeeded" | "failed" | "acknowledged";
     requestedAt: number;
+    terminal?: { errorCode?: string };
   }[];
   lastFailure?: LifecycleFailure;
 };

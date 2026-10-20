@@ -67,7 +67,8 @@ The module map is in [`src/AGENTS.md`](src/AGENTS.md), next to the modules it de
 
 Output: each stage line is `==> <stage>` on stdout, flushed as it happens. A succeeded install or
 upgrade ends with `CoForge Computer <version> is active.`. A refusal or a failed receipt's message
-goes to stderr as `coforge-installer: <message>`.
+goes to stderr as `coforge-installer: <message>`, or `coforge-installer: <CODE>: <message>` when the
+receipt has an `errorCode`.
 
 Exit status (`contract.rs`): 0 succeeded, 1 failed (a receipt, or a usage error that wrote
 nothing), 2 held (another run holds the lock, or the request id belongs to something else), 3

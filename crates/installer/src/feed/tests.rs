@@ -8,14 +8,14 @@ use crate::digest::measure_bytes;
 use crate::manifest::{computer_artifact, parse_release_manifest};
 use crate::test_support::{Release, Response, Scratch, Server, gzip};
 
-const VERSION: &str = "0.2.0";
-const TARGET: &str = "linux-x64";
+pub(super) const VERSION: &str = "0.2.0";
+pub(super) const TARGET: &str = "linux-x64";
 
 fn serve(release: &Release) -> Server {
     Server::start(release.routes())
 }
 
-fn feed(server: &Server) -> Feed {
+pub(super) fn feed(server: &Server) -> Feed {
     Feed::new(
         &server.base_url(),
         crate::fetch::agent(crate::fetch::Transport::LoopbackHttp),
@@ -30,6 +30,13 @@ fn feed_invalid(error: UpdateError) -> String {
     match error {
         UpdateError::FeedInvalid(message) => message,
         other => panic!("expected UPDATE_FEED_INVALID, got {other:?}"),
+    }
+}
+
+pub(super) fn download_failed(error: UpdateError) -> String {
+    match error {
+        UpdateError::DownloadFailed(message) => message,
+        other => panic!("expected UPDATE_DOWNLOAD_FAILED, got {other:?}"),
     }
 }
 
@@ -98,19 +105,6 @@ fn a_pointer_over_4096_bytes_is_rejected() {
     let message = feed_invalid(feed(&server).resolve_version("latest").unwrap_err());
 
     assert!(message.contains("4096"), "{message}");
-}
-
-#[test]
-fn a_pointer_that_redirects_or_is_missing_is_rejected() {
-    let release = Release::new(VERSION, TARGET);
-    let mut routes = release.routes();
-    routes.insert("/latest".into(), Response::redirect("/0.2.0/manifest.json"));
-    let server = Server::start(routes);
-    feed_invalid(feed(&server).resolve_version("latest").unwrap_err());
-    assert_eq!(server.requests(), ["/latest"], "the redirect was followed");
-
-    let empty = Server::start(Default::default());
-    feed_invalid(feed(&empty).resolve_version("latest").unwrap_err());
 }
 
 #[test]
@@ -222,25 +216,6 @@ fn a_manifest_over_one_mebibyte_is_rejected() {
     routes.insert("/0.2.0/manifest.json".into(), Response::ok(padded));
     let server = Server::start(routes);
     feed(&server).manifest(VERSION).unwrap();
-}
-
-#[test]
-fn a_manifest_that_redirects_or_is_missing_is_rejected() {
-    let release = Release::new(VERSION, TARGET);
-    let mut routes = release.routes();
-    let elsewhere = "/0.2.0/elsewhere.json".to_string();
-    routes.insert(elsewhere.clone(), routes["/0.2.0/manifest.json"].clone());
-    routes.insert(
-        "/0.2.0/manifest.json".into(),
-        Response::redirect(&elsewhere),
-    );
-    let server = Server::start(routes);
-
-    feed_invalid(feed(&server).manifest(VERSION).unwrap_err());
-    assert_eq!(server.requests(), ["/0.2.0/manifest.json"]);
-
-    let empty = Server::start(Default::default());
-    feed_invalid(feed(&empty).manifest(VERSION).unwrap_err());
 }
 
 // ---- the executable -----------------------------------------------------------------------
@@ -382,10 +357,9 @@ fn a_corrupt_gzip_stream_with_the_recorded_checksum_is_an_integrity_failure() {
 }
 
 #[test]
-fn a_body_cut_short_is_an_integrity_failure_without_a_length_and_a_feed_error_with_one() {
-    // What TS does: install.sh's curl accepts a close-delimited body as complete, so the size
-    // check in `#verifyArtifact` reports an integrity failure; a body shorter than its
-    // Content-Length makes curl itself fail, which the updater reports as a feed error.
+fn a_body_cut_short_is_an_integrity_failure_without_a_length_and_a_download_failure_with_one() {
+    // install.sh's curl accepts a close-delimited body as complete, so the size check reports an
+    // integrity failure; a body shorter than its Content-Length is a transfer that failed.
     let release = Release::new(VERSION, TARGET);
     let cut = release.computer_gzip[..release.computer_gzip.len() / 2].to_vec();
     let out = Scratch::new("feed-cut-short");
@@ -406,7 +380,9 @@ fn a_body_cut_short_is_an_integrity_failure_without_a_length_and_a_feed_error_wi
         Response::ok(cut).declaring(release.computer_gzip.len()),
     );
     let server = Server::start(routes);
-    feed_invalid(download_computer(&release, &server, &manifest_of(&release), &out).unwrap_err());
+    download_failed(
+        download_computer(&release, &server, &manifest_of(&release), &out).unwrap_err(),
+    );
     assert!(fs::read_dir(out.path()).unwrap().next().is_none());
 }
 
@@ -503,18 +479,22 @@ fn a_failure_to_write_the_download_has_no_product_code() {
 }
 
 #[test]
-fn a_missing_or_redirected_executable_is_a_feed_error() {
+fn a_missing_or_redirected_executable_is_a_download_failure() {
     let release = Release::new(VERSION, TARGET);
     let out = Scratch::new("feed-computer-404");
     let mut routes = release.routes();
     routes.remove(&release.computer_path());
     let server = Server::start(routes);
-    feed_invalid(download_computer(&release, &server, &manifest_of(&release), &out).unwrap_err());
+    download_failed(
+        download_computer(&release, &server, &manifest_of(&release), &out).unwrap_err(),
+    );
 
     let mut routes = release.routes();
     routes.insert(release.computer_path(), Response::redirect("/elsewhere.gz"));
     let server = Server::start(routes);
-    feed_invalid(download_computer(&release, &server, &manifest_of(&release), &out).unwrap_err());
+    download_failed(
+        download_computer(&release, &server, &manifest_of(&release), &out).unwrap_err(),
+    );
     assert_eq!(server.requests(), [release.computer_path()]);
 }
 
@@ -617,13 +597,13 @@ fn a_wrong_size_or_checksum_for_the_image_library_is_an_integrity_failure() {
 }
 
 #[test]
-fn a_missing_image_library_is_a_feed_error_and_an_oversized_record_is_refused() {
+fn a_missing_image_library_is_a_download_failure_and_an_oversized_record_is_refused() {
     let release = Release::new(VERSION, TARGET);
     let out = Scratch::new("feed-wasm-404");
     let mut routes = release.routes();
     routes.remove(&release.photon_wasm_path());
     let server = Server::start(routes);
-    feed_invalid(download_wasm(&release, &server, &manifest_of(&release), &out).unwrap_err());
+    download_failed(download_wasm(&release, &server, &manifest_of(&release), &out).unwrap_err());
 
     let server = serve(&release);
     let mut manifest = release.manifest();

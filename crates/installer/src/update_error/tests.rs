@@ -21,6 +21,10 @@ fn the_codes_are_the_ones_the_product_names() {
             UpdateError::FeedInvalid(String::new()),
         ),
         (
+            "UPDATE_DOWNLOAD_FAILED",
+            UpdateError::DownloadFailed(String::new()),
+        ),
+        (
             "UPDATE_INTEGRITY_FAILED",
             UpdateError::IntegrityFailed(String::new()),
         ),

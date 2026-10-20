@@ -75,8 +75,8 @@ const REASON_COPY: Record<ComputerUpgradeFailure["reason"], () => UpgradeFailure
 /**
  * Every code a Daemon-reported failure (`reason: "reported"`) can carry, exhaustively - a new
  * `UpgradeErrorCode` value fails `tsc` here rather than silently falling back to generic copy.
- * See `packages/coforge-sdk/src/internal/index.ts`'s `UPGRADE_ERROR_CODE` for each one's owner
- * and real throw site.
+ * See `UPGRADE_ERROR_CODE` (`packages/coforge-sdk/src/internal/upgrade-error-code.ts`) for each
+ * one's owner and real throw site.
  */
 const CODE_COPY: Record<UpgradeErrorCode, () => UpgradeFailureView> = {
   [UPGRADE_ERROR_CODE.OPERATION_PENDING]: () => ({
@@ -125,6 +125,10 @@ const CODE_COPY: Record<UpgradeErrorCode, () => UpgradeFailureView> = {
       { text: m.computer_upgrade_step_retry_upgrade(), command: COMMAND.upgrade },
     ],
   }),
+  // The feed could not be reached or answered with an error status. The network reason is for
+  // whoever troubleshoots on the machine (`coforge-computer status`, its logs); the page shows
+  // the generic reported copy.
+  [UPGRADE_ERROR_CODE.UPDATE_DOWNLOAD_FAILED]: REASON_COPY.reported,
   [UPGRADE_ERROR_CODE.UPDATE_INTEGRITY_FAILED]: () => ({
     headline: m.computer_upgrade_code_update_integrity_failed(),
     steps: [

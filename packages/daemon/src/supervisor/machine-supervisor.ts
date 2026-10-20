@@ -582,10 +582,9 @@ export class MachineSupervisor {
       }
       const pending = operations.find((entry) => entry.state === "pending");
       if (pending) {
-        // A pending slot that is already settle-able (its job left a receipt, or it aged past
-        // the TTL) must not refuse a new request forever: only a genuinely in-flight operation
-        // still blocks. `settlePendingUpgrade` only reads; this call applies its answer itself,
-        // inside the same mutation, rather than re-entering `completeUpgrade`.
+        // A settle-able pending slot (its job left a receipt, or it aged past the TTL) must not
+        // refuse a new request forever; only an in-flight operation blocks. `settlePendingUpgrade`
+        // only reads; this applies it in the same mutation, not via `completeUpgrade`.
         const settlement = await this.settlePendingUpgrade?.(
           workspaceId,
           pending.requestId,
@@ -612,6 +611,7 @@ export class MachineSupervisor {
           request_id: pending.requestId,
           workspace_id: workspaceId,
           status,
+          ...(terminal.errorCode ? { error_code: terminal.errorCode } : {}),
         });
       }
       await this.#saveBinding({

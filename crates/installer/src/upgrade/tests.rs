@@ -396,13 +396,13 @@ fn a_feed_failure_is_a_failed_receipt_before_any_change() {
     let lifecycle = FakeLifecycle::default();
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
-    // No such version on the feed: the manifest is a 404.
+    // No such version: the manifest is a 404.
     let (outcome, _) = run(&ports, REQUEST, "0.9.9", None);
 
     assert_eq!(exit_of(&outcome), 1);
     let receipt = receipt(&outcome);
     assert_eq!(receipt.status(), ReceiptStatus::Failed);
-    assert_eq!(receipt.error_code(), Some("UPDATE_FEED_INVALID"));
+    assert_eq!(receipt.error_code(), Some("UPDATE_DOWNLOAD_FAILED"));
     assert!(receipt.error().is_some_and(|error| !error.is_empty()));
     assert_eq!(active(&fixture), active_state(OLD, None));
     assert_eq!(Journal::new(fixture.root()).read().unwrap(), None);

@@ -359,6 +359,7 @@ test("unsettled Computer upgrade operations are surfaced with their age, and ack
                 expectedVersion: "1.4.0",
                 state: "failed",
                 requestedAt: NOW.getTime() - 10_000,
+                terminal: { errorCode: "UPDATE_DOWNLOAD_FAILED" },
               },
             ],
           }),
@@ -373,7 +374,13 @@ test("unsettled Computer upgrade operations are surfaced with their age, and ack
       {
         unsettledUpgrades: [
           { requestId: "req-1", expectedVersion: "1.5.0", state: "pending", ageMs: 5_000 },
-          { requestId: "req-0", expectedVersion: "1.4.0", state: "failed", ageMs: 10_000 },
+          {
+            requestId: "req-0",
+            expectedVersion: "1.4.0",
+            state: "failed",
+            errorCode: "UPDATE_DOWNLOAD_FAILED",
+            ageMs: 10_000,
+          },
         ],
       },
     ],

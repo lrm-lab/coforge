@@ -91,6 +91,20 @@ test("a refused downgrade tells the person to run the upgrade on that machine wi
   ]);
 });
 
+test("a release feed the Computer could not download from shows the generic reported copy, never the network reason", () => {
+  const view = describeComputerUpgradeFailure({
+    reason: "reported",
+    error: "http://feed.example/0.2.0/manifest.json: Connection reset by peer (os error 104)",
+    errorCode: "UPDATE_DOWNLOAD_FAILED",
+  });
+
+  expect(view.headline).toBe(m.computer_upgrade_failed_reported());
+  expect(view.steps).toEqual([
+    { text: m.computer_upgrade_step_check_logs(), command: "coforge-computer logs" },
+    { text: m.computer_upgrade_step_retry_upgrade(), command: "coforge-computer upgrade" },
+  ]);
+});
+
 test("an unknown or not-yet-understood error code falls back to the generic reported copy plus the Computer's own text", () => {
   const view = describeComputerUpgradeFailure({
     reason: "reported",

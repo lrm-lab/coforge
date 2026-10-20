@@ -251,17 +251,26 @@ pub(crate) fn photon_result(
     Ok(recorded.clone())
 }
 
-/// A metadata object that could not be fetched is a feed problem, whatever went wrong.
+/// A metadata object the feed could not deliver is a download failure; one that arrived larger
+/// than its ceiling is a feed that breaks its rules.
 pub(crate) fn feed_error(error: FetchError) -> UpdateError {
-    UpdateError::FeedInvalid(error.message)
+    match error.code {
+        FetchErrorCode::Download | FetchErrorCode::HttpStatus => {
+            UpdateError::DownloadFailed(error.message)
+        }
+        FetchErrorCode::SizeLimit
+        | FetchErrorCode::ChecksumMismatch
+        | FetchErrorCode::GzipInvalid
+        | FetchErrorCode::Write => UpdateError::FeedInvalid(error.message),
+    }
 }
 
-/// The updater reports a failed transfer as a feed problem and a bad object as an integrity
-/// failure.
+/// A transfer the feed could not complete is a download failure, never a judgement of the
+/// object; a bad object is an integrity failure.
 pub(crate) fn transfer_error(error: FetchError, object: &str) -> UpdateError {
     match error.code {
         FetchErrorCode::Download | FetchErrorCode::HttpStatus => {
-            UpdateError::FeedInvalid(error.message)
+            UpdateError::DownloadFailed(error.message)
         }
         FetchErrorCode::SizeLimit => UpdateError::IntegrityFailed(format!(
             "{object} is larger than its recorded size ({})",
@@ -279,5 +288,7 @@ pub(crate) fn transfer_error(error: FetchError, object: &str) -> UpdateError {
     }
 }
 
+#[cfg(test)]
+mod download_failure_tests;
 #[cfg(test)]
 mod tests;

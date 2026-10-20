@@ -34,7 +34,13 @@ const REPORT: ComputerStatusReport = {
         pidSource: "daemon-snapshot",
         pending: [{ kind: "upgrade", requestId: "req-1", expectedVersion: "1.5.0" }],
         unsettledUpgrades: [
-          { requestId: "req-2", expectedVersion: "1.6.0", state: "failed", ageMs: 65_000 },
+          {
+            requestId: "req-2",
+            expectedVersion: "1.6.0",
+            state: "failed",
+            errorCode: "UPDATE_DOWNLOAD_FAILED",
+            ageMs: 65_000,
+          },
         ],
         health: { status: "ok" },
         cloudConnection: { state: "connected" },
@@ -82,7 +88,9 @@ test("renderStatusHuman prints short aligned sections, one fact per line", () =>
   expect(text).toContain("ws-1");
   expect(text).toContain("pid=111 (daemon-snapshot)  cloud=connected");
   expect(text).toContain("pending: upgrade req-1 -> 1.5.0");
-  expect(text).toContain("unsettled upgrade: req-2 -> 1.6.0  state=failed  age=65s");
+  expect(text).toContain(
+    "unsettled upgrade: req-2 -> 1.6.0  state=failed  error=UPDATE_DOWNLOAD_FAILED  age=65s",
+  );
   expect(text).toContain("Agents");
   expect(text).toContain("1 job(s)  (workspace job pid=333)");
   expect(text).toContain("cn.coforge.agent.abc.1  pid=222");

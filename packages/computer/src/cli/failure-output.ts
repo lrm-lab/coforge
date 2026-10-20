@@ -1,11 +1,13 @@
 import { CliError, loginError, safeErrorDetail, setupError } from "#src/errors";
+import { UpgradeFailedError } from "#src/release/upgrade-receipt";
 import { UpdateError } from "#src/updater";
 
 /**
  * Reports a command failure that is not a Commander parse outcome. A `CliError`, or any failure
  * of `login` or `setup` (wrapped in their own error), prints its code, message and hint, as one
- * JSON result on stdout when `--json` was given. Any other `UpdateError` prints its code and
- * message, and anything else only its message.
+ * JSON result on stdout when `--json` was given. Any other `UpdateError`, or an
+ * `UpgradeFailedError` whose receipt names an `errorCode`, prints its code and message, and
+ * anything else only its message.
  */
 export function writeCliFailure(
   io: { stdout: (line: string) => void; stderr: (line: string) => void },
@@ -36,6 +38,8 @@ export function writeCliFailure(
     io.stderr(`${failure.code}: ${failure.message}\nHint: ${failure.hint}`);
   } else if (error instanceof UpdateError) {
     io.stderr(`${error.code}: ${error.message}`);
+  } else if (error instanceof UpgradeFailedError && error.result.errorCode) {
+    io.stderr(`${error.result.errorCode}: ${error.message}`);
   } else {
     io.stderr(error instanceof Error ? error.message : "coforge-computer failed");
   }

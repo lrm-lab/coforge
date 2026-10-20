@@ -31,8 +31,9 @@ export function reportStoppedWorkspaces(
 
 /**
  * The next command a caller should run after `coforge-computer upgrade` itself fails - `runCli`'s
- * catch already prints the reason (an `UpdateError`'s `code: message`, or an
- * `UpgradeFailedError`'s message, or a bare Error's message); this only names what to run
+ * catch already prints the reason (an `UpdateError`'s `code: message`, an
+ * `UpgradeFailedError`'s receipt `errorCode: message` or bare message, or a bare Error's
+ * message); this only names what to run
  * next, and never changes what is thrown or its exit code.
  */
 export function nextUpgradeCommandHint(error: unknown): string {

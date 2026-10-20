@@ -145,10 +145,14 @@ fn report_receipt(receipt: &UpgradeReceipt) -> ExitCode {
         (ReceiptStatus::Succeeded, Some(version)) => {
             println!("CoForge Computer {version} is active.")
         }
-        _ => eprintln!(
-            "coforge-installer: {}",
-            receipt.error().unwrap_or("the upgrade did not succeed")
-        ),
+        _ => {
+            let error = receipt.error().unwrap_or("the upgrade did not succeed");
+            // `CODE: message`, as the Computer prints an `UpdateError`.
+            match receipt.error_code() {
+                Some(code) => eprintln!("coforge-installer: {code}: {error}"),
+                None => eprintln!("coforge-installer: {error}"),
+            }
+        }
     }
     ExitCode::from(receipt.exit_code())
 }

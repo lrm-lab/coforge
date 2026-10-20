@@ -213,7 +213,7 @@ fn a_failed_download_installs_nothing_and_removes_its_staging_directory() {
 }
 
 #[test]
-fn a_manifest_missing_from_the_feed_is_a_feed_error() {
+fn a_manifest_missing_from_the_feed_is_a_download_failure() {
     let release = Release::new(VERSION, "linux-x64");
     let mut routes = release.routes();
     routes.remove("/0.2.0/manifest.json");
@@ -224,7 +224,7 @@ fn a_manifest_missing_from_the_feed_is_a_feed_error() {
 
     let error = prepare_version(&lock, &feed(&server), &store, "latest", None).unwrap_err();
 
-    assert!(matches!(error, UpdateError::FeedInvalid(_)), "{error:?}");
+    assert!(matches!(error, UpdateError::DownloadFailed(_)), "{error:?}");
     assert!(!root.path().join("versions").exists());
 }
 

@@ -423,9 +423,9 @@ async function runWithSupervisorLock(
         request_id: requestId,
         workspace_id: workspaceId,
         status: receipt.status,
+        ...(receipt.errorCode ? { error_code: receipt.errorCode } : {}),
       });
-      // So the first ready/report pass of a replacement child sees the terminal state. Safe for an
-      // already-running child too: its next reconnect recovery reads the same config.
+      // A new child's first ready pass, or a running child's reconnect, sees the terminal state.
       await refreshChildUpgradeConfig(workspaceId);
     }
     return recorded;

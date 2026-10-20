@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { writeCliFailure } from "#src/cli/failure-output";
 import { CliError, LOGIN_HINTS, SETUP_HINTS } from "#src/errors";
+import { UpgradeFailedError } from "#src/release/upgrade-receipt";
 import { UpdateError } from "#src/updater";
 
 function capture(
@@ -64,5 +65,21 @@ describe("writeCliFailure", () => {
       stderr: ["disk full"],
     });
     expect(capture("not an error").stderr).toEqual(["coforge-computer failed"]);
+  });
+
+  test("a failed upgrade prints its receipt's error code with its message, when it has one", () => {
+    const result = {
+      schema_version: 1,
+      request_id: "0b7d2c9e-3a1f-4c8e-9d2b-5f6a7b8c9d0e",
+      operation: "upgrade",
+      status: "failed",
+      error: "manifest.json: Connection reset by peer (os error 104)",
+    } as const;
+    expect(
+      capture(
+        new UpgradeFailedError(result.error, { ...result, errorCode: "UPDATE_DOWNLOAD_FAILED" }),
+      ).stderr,
+    ).toEqual(["UPDATE_DOWNLOAD_FAILED: manifest.json: Connection reset by peer (os error 104)"]);
+    expect(capture(new UpgradeFailedError(result.error, result)).stderr).toEqual([result.error]);
   });
 });
