@@ -59,7 +59,7 @@ function proposedCandidates(proposed: {
 /**
  * Commits an Agent-prepared `channel:add_member` action card: the proposed people and Agents
  * arrive picked and individually removable, and the same search the settings panel's add view
- * uses adds anyone else the Workspace has outside the channel (ADR 0027 "Commit and cancel").
+ * uses adds anyone else the Workspace has outside the channel.
  * The channel's current roster belongs to that panel, not here: this dialog answers one
  * question, who joins #channel now.
  */

@@ -23,7 +23,7 @@
 
 This pin is the prototype contract revision for later C1/C3/V1 work. Bumping it requires a new inventory, not a silent `main` follow.
 
-ADR 0060 already records that AGPL use is unapproved for a distributable product. This inventory confirms the local tree is AGPL-3.0; it does not change that gate.
+AGPL use is not approved for a distributable product. This inventory confirms the local tree is AGPL-3.0; it does not change that gate.
 
 ## 2. Runtime compatibility
 
@@ -36,7 +36,7 @@ ADR 0060 already records that AGPL use is unapproved for a distributable product
 | Readiness | `GET /ready` (AGFS, VectorDB, API Key manager), unauthenticated | official `docs/zh/api/01-overview.md` |
 | Studio UI | `/studio` on the same origin when the bundle exists | official `docs/zh/guides/03-deployment.md`; source `openviking/server/app.py` |
 | Vector backends | pluggable `CollectionAdapter` (`Local`, `Http`, `CuVS`, `VikingDBPrivate`, `Volcengine`) | source `openviking/storage/vectordb_adapters/` |
-| LanceDB | not present as a first-class CoForge seam; later LanceDB belongs behind `CollectionAdapter` | source adapters above; ADR 0060 |
+| LanceDB | not present as a first-class CoForge seam; later LanceDB belongs behind `CollectionAdapter` | source adapters above |
 
 Official deployment docs also mention a compatibility Caddy listener on `1934` and hosted `ghcr.io/volcengine/openviking:latest`. Those are upstream operations notes, not CoForge default Compose. CoForge must not add OpenViking to default Compose, release, staging, or production while the license gate is open.
 
@@ -64,7 +64,7 @@ Official HTTP identity headers (`docs/zh/api/01-overview.md`, `docs/zh/concepts/
 | `X-OpenViking-Role` | trusted-mode `user` or `admin` assertion | `root` is rejected; requires configured `root_api_key` |
 | `X-OpenViking-Actor-Peer` | peer-collection filter inside the current user | does not change tenant/user |
 
-Source `openviking/server/auth/__init__.py` states that when an API key is present, spoofed `X-OpenViking-Account/User` headers are ignored. ADR 0061's gateway must still strip client-supplied identity/account headers and inject only the server-owned mapped identity.
+Source `openviking/server/auth/__init__.py` states that when an API key is present, spoofed `X-OpenViking-Account/User` headers are ignored. The policy gateway must still strip client-supplied identity/account headers and inject only the server-owned mapped identity.
 
 Trusted mode can asynchronously register asserted account/user pairs (`docs/zh/guides/04-authentication.md`). CoForge typed provisioning should not rely on that side effect as the account/user source of truth.
 
@@ -72,7 +72,7 @@ Trusted mode can asynchronously register asserted account/user pairs (`docs/zh/g
 
 ### 4.1 Can causal retrieval be deterministic without modifying OpenViking?
 
-**Yes, for the ADR 0059 meaning of deterministic candidate retrieval, using public APIs only.**
+**Yes, for deterministic candidate retrieval, using public APIs only.**
 
 Official `docs/zh/api/06-retrieval.md` and `docs/zh/concepts/07-retrieval.md`:
 
@@ -352,15 +352,15 @@ Official `docs/zh/guides/11-oauth.md` documents MCP OAuth discovery. Extra OAuth
 
 Return these to `#coforge`; do not silently turn them into code.
 
-1. **Official overview is not the complete mount table.** Source additionally mounts MCP, OAuth JSON helpers, `/api/v1/debug/*`, `/api/v1/console/*`, `/api/v1/stats/*`, `/api/v1/user-settings/*`, and hidden `/api/v1/admin/.../bot/*`. ADR 0061 still holds: unsupported or newly introduced routes remain denied until classified.
+1. **Official overview is not the complete mount table.** Source additionally mounts MCP, OAuth JSON helpers, `/api/v1/debug/*`, `/api/v1/console/*`, `/api/v1/stats/*`, `/api/v1/user-settings/*`, and hidden `/api/v1/admin/.../bot/*`. Unsupported or newly introduced routes still remain denied at the gateway until classified.
 2. **No OpenViking watermark field.** Causal watermark-plus-local-delta cannot be implemented as an upstream query parameter; it stays a Causal Memory merge after `find()`.
 3. **L0/L1 generation is asynchronous and sampled.** Official freshness rules (`docs/zh/concepts/03-context-layers.md`) allow parent abstracts to lag. That matches eventually-consistent projection, not a second source of truth.
 4. **Unknown metadata is dropped.** Stable adapter identifiers must use documented tags/`filter`, not unofficial frontmatter.
-5. **`search()` defaults are unsafe for causal recall.** `query_expansion="auto"` and optional `session_id` would violate ADR 0059 if used as the Fact Index path. `find()` is sufficient without an OpenViking patch.
+5. **`search()` defaults are unsafe for causal recall.** `query_expansion="auto"` and optional `session_id` would break deterministic candidate retrieval if used as the Fact Index path. `find()` is sufficient without an OpenViking patch.
 6. **Trusted-mode auto-registration** can create users as a side effect. CoForge typed provisioning should remain the account/user authority.
-7. **Alpha + AGPL.** Runtime is explicitly Alpha and AGPL-3.0. This reinforces the prototype/license gate; it is not a conflict with ADR 0060.
-8. **CollectionAdapter exists; LanceDB does not need a CoForge seam.** Aligns with ADR 0060.
-9. **Account/user model aligns with ADR 0060** (one Workspace → one account; humans/Agents → users; projection worker → restricted identity). Directory naming is not isolation.
+7. **Alpha + AGPL.** Runtime is explicitly Alpha and AGPL-3.0. This reinforces the prototype/license gate.
+8. **CollectionAdapter exists; LanceDB does not need a CoForge seam.**
+9. **Account/user model aligns with CoForge's mapping** (one Workspace → one account; humans/Agents → users; projection worker → restricted identity). Directory naming is not isolation.
 10. **No OpenViking source change is required** for: complete authorized access through a gateway, tag-backed fact identifiers, and deterministic `find()` against a managed subtree. A patch would only become necessary if later conformance proved tags/`filter` cannot round-trip fact id + version, or if `find()` cannot stay inside a namespace without leaking other account content.
 
 ## 8. Recommended prototype binding (non-normative)

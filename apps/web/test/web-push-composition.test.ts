@@ -10,8 +10,8 @@ const db = {} as PrismaClient;
 
 describe("createWebPushNotifications", () => {
   test("degrades Web Push delivery to an ordinary failure when VAPID is not configured, instead of throwing", async () => {
-    // Local dev without a VAPID key pair must still be able to show in-page notifications (ADR
-    // 0065); only Web Push delivery itself should degrade, and as `failed` (not the
+    // Local dev without a VAPID key pair must still be able to show in-page notifications;
+    // only Web Push delivery itself should degrade, and as `failed` (not the
     // `unreachable`/PUSH_SERVICE_UNREACHABLE bucket `deliver()` reserves for a real send attempt
     // that could not connect).
     const fakeDb = {

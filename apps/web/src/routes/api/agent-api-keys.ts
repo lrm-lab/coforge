@@ -45,9 +45,8 @@ type LaunchIdentityComputer = AgentRuntimeContextComputer;
 /**
  * The Agent's server-authored identity for the Daemon's standing prompt (`agent-instructions.ts`
  * on the Daemon side). It travels in this launch-config response because that is where the Agent's
- * other per-launch server data (`apiKey`/`providerConfig`/`envVars`) already travels; see ADR
- * 0036's "Prompt versus Manual placement" table. Every field is omitted rather than sent empty
- * so an older Daemon's defensive decoder degrades cleanly.
+ * other per-launch server data (`apiKey`/`providerConfig`/`envVars`) already travels. Every field
+ * is omitted rather than sent empty so an older Daemon's defensive decoder degrades cleanly.
  */
 function buildAgentLaunchIdentity(agent: {
   name: string;

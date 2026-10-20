@@ -20,7 +20,7 @@ test("collector Agent names stay stable and User-Computer scoped", () => {
   expect(weeklyReportCollectorDisplayName("Pi (ubuntu)")).toBe("采集 · Pi (ubuntu)");
 });
 
-test("collect slot settle helpers match ADR 0032 terminal and partial-success rules", () => {
+test("collect slot settle helpers match terminal and partial-success rules", () => {
   expect(allSlotsTerminal([])).toBe(true);
   expect(
     allSlotsTerminal([

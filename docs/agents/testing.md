@@ -2,7 +2,7 @@
 
 Read and follow this guidance when writing or modifying tests, investigating
 test failures, or reviewing test changes. Apply the sections relevant to the task.
-It supplements the existing `tdd` workflow; it does not require unrelated tasks
+It supplements the test-driven workflow in the root `AGENTS.md`; it does not require unrelated tasks
 to add tests or run stress checks.
 
 ## UI verification policy
@@ -60,7 +60,7 @@ UI 改动按两步交付，两步都必须做：
 ## General principles
 
 - Test observable behavior through the owning module's public contract rather than private implementation details.
-- For bug fixes, first demonstrate the failure with a regression test, then make the smallest implementation change that passes it. Follow the existing `tdd` guidance for behavioral changes.
+- For bug fixes, first demonstrate the failure with a regression test, then make the smallest implementation change that passes it. Behavioral changes follow the test-driven workflow in the root `AGENTS.md`.
 - Keep assertions specific to the behavior under test. A test should fail when that behavior breaks, not pass because unrelated output happens to contain the expected value.
 - Distinguish production defects, incorrect test assumptions, and environment failures using evidence before changing code or expectations. Preserve valid assertions and report unresolved failures honestly.
 

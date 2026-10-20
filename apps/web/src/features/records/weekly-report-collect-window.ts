@@ -1,4 +1,4 @@
-/** Collect plan time windows (ADR 0032 period-brief window semantics). */
+/** Collect plan time windows: the period a weekly-report Collect Run covers. */
 
 export type CollectWindowKind = "week" | "month" | "quarter" | "year" | "custom";
 

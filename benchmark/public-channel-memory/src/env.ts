@@ -1,7 +1,7 @@
 import { DEFAULT_LOCOMO_PATH } from "./locomo";
 import { EVAL_ARMS, type EvalArm } from "./types";
 
-/** Same pin as Pi `~/.pi/agent/models.json` and ADR 0053 memory-explorer smoke. */
+/** Same pin as Pi `~/.pi/agent/models.json` and the memory-explorer smoke. */
 export const PI_DEEPSEEK_V4_FLASH_PROVIDER = "lenovo-deepseek-v4-flash";
 export const PI_DEEPSEEK_V4_FLASH_MODEL = "DeepSeek";
 

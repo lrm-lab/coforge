@@ -1,8 +1,7 @@
 /**
  * Wire contract for `coforge user info <name>`: narrow visible facts about one human or Agent in
  * the caller's Workspace, plus the public channels both the caller and the target belong to.
- * Uses the same `{ ok: false, errorCode, error }` error envelope as the Agent Manual routes (ADR
- * 0036), per that record's convention for a small, single-purpose Agent-facing lookup.
+ * Uses the same `{ ok: false, errorCode, error }` error envelope as the Agent Manual routes.
  */
 
 export type AgentUserKind = "human" | "agent";

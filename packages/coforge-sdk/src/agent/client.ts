@@ -133,7 +133,7 @@ export function decodeGitHubCredentialResponse(value: unknown): GitHubCredential
 
 /**
  * `repository` is the `owner/name` github.com slug parsed from the Agent's `origin` remote, or
- * `null` when the remote is missing or not a github.com URL (ADR: commit co-author trailer). The
+ * `null` when the remote is missing or not a github.com URL. The
  * server, never the CLI, decides which trailers (if any) apply — see `git prepare-commit-msg`.
  */
 export type GitHubCommitTrailersRequest = { repository: string | null };

@@ -108,7 +108,7 @@ export type WeeklyReportAssistantRecord = {
  * WeeklyReportAssistant link missing) so Members loader does not die on
  * `agents_workspaceId_name_key`.
  *
- * New and reclaimed assistants are always private (ADR 0059): they work on one
+ * New and reclaimed assistants are always private: they work on one
  * User's Records and must not appear Workspace-wide.
  */
 export async function ensureWeeklyReportAssistant(

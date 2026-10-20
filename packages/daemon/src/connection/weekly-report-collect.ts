@@ -1,6 +1,6 @@
 import { RFC_UUID_PATTERN, WEEKLY_REPORT_MARKDOWN_MAX_CHARS } from "@lrm/coforge-sdk/internal";
 
-/** Local proxy / CLI body for Collect Run pack submit (ADR 0032 HTTPS return path). */
+/** Local proxy / CLI body for Collect Run pack submit (HTTPS return path). */
 export type WeeklyReportCollectCommand = {
   idempotencyKey: string;
   runId: string;

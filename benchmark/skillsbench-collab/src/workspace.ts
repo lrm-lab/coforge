@@ -140,7 +140,7 @@ export async function provisionEvalWorkspace(input: {
     throw new Error("openviking binding was not saved");
   }
 
-  // OpenViking-only designation (ADR 0062): the Memory Agent route authorizes
+  // OpenViking-only designation: the Memory Agent route authorizes
   // through a memory_agent mapped identity, mirroring mapMemoryActor().
   await input.db.openVikingMappedIdentity.create({
     data: {

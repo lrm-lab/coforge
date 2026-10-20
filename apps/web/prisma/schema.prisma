@@ -343,7 +343,7 @@ model AgentAppConfig {
   @@map("agent_app_configs")
 }
 
-/// One User's durable weekly-report Collector Agent on one owned Computer (ADR 0032).
+/// One User's durable weekly-report Collector Agent on one owned Computer.
 model WeeklyReportCollectorBinding {
   id               String    @id @default(uuid(7)) @db.Uuid
   workspaceId      String    @db.Uuid
@@ -365,7 +365,7 @@ model WeeklyReportCollectorBinding {
   @@map("weekly_report_collector_bindings")
 }
 
-/// One Collect Run for a member weekly report (ADR 0032). Not a generic job.
+/// One Collect Run for a member weekly report. Not a generic job.
 model WeeklyReportCollectRun {
   id          String                  @id @default(uuid(7)) @db.Uuid
   workspaceId String                  @db.Uuid
@@ -462,7 +462,7 @@ model WeeklyReportAssistantChatSession {
 }
 
 /// Agent-session reservation for one WeeklyReportAssistant and one Records
-/// page subject (ADR 0060). Not the side-chat thread and not Agent.currentSessionId.
+/// page subject. Not the side-chat thread and not Agent.currentSessionId.
 model WeeklyReportAssistantRuntimeSession {
   id          String   @id @default(uuid(7)) @db.Uuid
   workspaceId String   @db.Uuid

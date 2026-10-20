@@ -118,7 +118,7 @@ export function looksLikeMemberGenerateOfferAccept(body: string): boolean {
   return /需要.*(生成|帮忙)|帮我.*(生成|写周报)|直接生成/i.test(text);
 }
 
-/** User asks to open / re-open the Collect plan card (ADR 0032 E2). */
+/** User asks to open / re-open the Collect plan card. */
 export function looksLikeCollectAgainRequest(body: string): boolean {
   const text = body.trim();
   if (!text) return false;

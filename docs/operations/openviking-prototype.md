@@ -3,9 +3,8 @@
 > **NON-PRODUCTION / LICENSE-REVIEW-REQUIRED**
 >
 > The local OpenViking source is AGPL-3.0 and has **not** received project-level
-> approval for a distributable product integration (ADR 0060, retired to git
-> history with the repository's ADR directory;
-> approval ledger `AGPL license / shipping` is still **pending** and user-owned).
+> approval for a distributable product integration (approval ledger
+> `AGPL license / shipping` is still **pending** and user-owned).
 > This runbook is an isolated, synthetic-data-only prototype. It is not a
 > release, staging, or production procedure. Do not add OpenViking to default
 > Compose, release manifests, staging, or production. Do not present this
@@ -244,7 +243,7 @@ Unset `OPENVIKING_PROTOTYPE_ENABLED` on Web. Default `docker compose -f infra/do
 must keep working without this override.
 
 Deleting the volume is destruction of the synthetic workspace, not a profile
-`off` transition. Profile `off` retains data (ADR 0060, retired to git history).
+`off` transition. Profile `off` retains data.
 
 ## First initialization
 

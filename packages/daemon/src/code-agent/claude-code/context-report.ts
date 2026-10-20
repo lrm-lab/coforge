@@ -3,8 +3,8 @@ import { AgentContextReportTimeoutError } from "#src/code-agent/contract";
 import { claudeCliEnvironment, runClaudeCli } from "./process";
 
 /**
- * Reads a one-shot breakdown of the Agent's current Claude Code context-window composition (ADR
- * 0051): `claude -p "/context" --output-format json --resume <sessionId>`, against the Agent's
+ * Reads a one-shot breakdown of the Agent's current Claude Code context-window composition:
+ * `claude -p "/context" --output-format json --resume <sessionId>`, against the Agent's
  * own already-running session — verified empirically (Claude Code 2.1.276, 2026-09-18) to work
  * headless, read the session transcript on disk with no model call, in roughly 6 seconds. This is
  * not documented `-p` behavior (the headless docs list only `/model`, `/effort`, `/fast`,

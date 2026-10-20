@@ -462,7 +462,7 @@ export class DaemonRuntime {
   readonly #agentContexts = new Map<string, string>();
   readonly #agentProxyTokens = new Map<string, string>();
   readonly #agentApiKeys = new Map<string, string>();
-  /** Agents launched with the weekly-report-collect skill pack (ADR 0032). */
+  /** Agents launched with the weekly-report-collect skill pack. */
   readonly #collectSkillAgents = new Set<string>();
   readonly #agentLaunches = new Map<string, Promise<AgentRuntime>>();
   readonly #sessionReferences = new Map<string, SessionReference>();
@@ -2878,7 +2878,7 @@ export class DaemonRuntime {
   }
 
   /**
-   * ADR 0032: a collector turn that dies before HTTPS submit (e.g. model 405) must
+   * A collector turn that dies before HTTPS submit (e.g. model 405) must
    * still settle Collect Run slots — Activity alone is not a completion boundary.
    */
   async #failCollectorRunningSlots(agentId: string, failureReason: string): Promise<void> {

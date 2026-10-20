@@ -326,7 +326,7 @@ export class AgentRequestForwarder {
     );
   }
 
-  /** Forwards Collect Run pack submit over Agent HTTPS (ADR 0032 return path). */
+  /** Forwards Collect Run pack submit over Agent HTTPS (return path). */
   async agentWeeklyReportCollect(
     context: string,
     command:

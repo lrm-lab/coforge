@@ -53,7 +53,7 @@ export function collectorRuntimeConfigured(runtimeConfig: unknown): boolean {
 /**
  * Creates the User's durable Collector Agent for one owned Computer, or returns
  * the existing binding. Paths are not stored here — Computer-local collect-roots
- * remain authoritative (ADR 0032).
+ * remain authoritative.
  */
 export async function ensureCollector(
   db: PrismaClient,
@@ -125,7 +125,7 @@ export async function ensureCollector(
             name: agentName,
             displayName: weeklyReportCollectorDisplayName(label),
             description: "",
-            // ADR 0059: a Collector works on its owning User's own records and should not appear
+            // A Collector works on its owning User's own records and should not appear
             // to the rest of the Workspace at all.
             visibility: AGENT_VISIBILITY.PRIVATE,
             runtimeConfig: {

@@ -31,7 +31,7 @@ import {
   parseStoredWeeklyReportMemory,
 } from "./weekly-report-memory.server";
 
-/** Wake text for a per-Computer collector Agent (ADR 0032). */
+/** Wake text for a per-Computer collector Agent. */
 export function buildCollectorWakeBody(input: {
   runId: string;
   reportId: string;
@@ -74,7 +74,7 @@ export function buildCollectorWakeBody(input: {
   ].join("\n");
 }
 
-/** Platform→WeeklyReportAssistant synthesizer turn (ADR 0032 §6). */
+/** Platform→WeeklyReportAssistant synthesizer turn. */
 export function buildCollectSynthesizerWakeText(input: {
   reportId: string;
   runId: string;

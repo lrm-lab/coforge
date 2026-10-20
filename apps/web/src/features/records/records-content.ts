@@ -41,7 +41,7 @@ export function keyPointHistoryIndexOf(
   );
 }
 
-/** One prompt slot (team or personal) with history (ADR 0013 shape). */
+/** One prompt slot (team or personal) with history. */
 export type KeyPointPromptState = {
   text: string;
   updatedAt?: string;

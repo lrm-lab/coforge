@@ -995,7 +995,7 @@ export class RecordCatalog {
 
   /**
    * Create a member assignment under a Leader weekly parent (send path).
-   * Drafts are not listed as children until submitted; see ADR 0011.
+   * Drafts are not listed as children until submitted.
    */
   async createSubmissionUnderTemplate(input: {
     workspaceId: string;
@@ -1093,7 +1093,7 @@ export class RecordCatalog {
 
   /**
    * Leader manual send: persist source content, create a new weekly parent for the
-   * current cycle, and open unread assignments for configured recipients (ADR 0011).
+   * current cycle, and open unread assignments for configured recipients.
    */
   async sendWeeklyAssignments(input: {
     workspaceId: string;
@@ -1419,7 +1419,7 @@ export class RecordCatalog {
    * unlinked from this parent so they leave the Leader's member-week tree.
    * The live format template in the same cycle is not this node.
    * Stamps auto-send cancelled for this ISO week on the live format so cron
-   * does not recreate the week (ADR 0012); manual send remains available.
+   * does not recreate the week; manual send remains available.
    */
   async deleteOverviewReport(input: { workspaceId: string; userId: string; reportId: string }) {
     await requireMembership(this.db, input.workspaceId, input.userId);
@@ -1472,7 +1472,7 @@ export class RecordCatalog {
    * template parents in that cycle and member submissions under those parents.
    * Other leaders' templates/submissions are left alone. The cycle row is
    * removed only when nothing remains.
-   * Cancels auto-send for each deleted settings stream's ISO week (ADR 0012).
+   * Cancels auto-send for each deleted settings stream's ISO week.
    */
   async deleteMemberWeek(input: { workspaceId: string; userId: string; cycleId: string }) {
     await requireMembership(this.db, input.workspaceId, input.userId);
@@ -1538,7 +1538,7 @@ export class RecordCatalog {
 
   /**
    * After a Leader deletes a sent week, stamp the live format so cron skips
-   * that ISO week (ADR 0012). No-op when there is no settings stream or live
+   * that ISO week. No-op when there is no settings stream or live
    * format yet; ensureFormat will still see a later cancel only if stamped.
    */
   private async cancelScheduledSendForWeek(input: {
@@ -3065,7 +3065,7 @@ export class RecordCatalog {
     });
   }
 
-  /** Platform-owned assistant bubble for collect progress / packs (ADR 0032). */
+  /** Platform-owned assistant bubble for collect progress / packs. */
   async postAssistantCollectComment(input: {
     workspaceId: string;
     userId: string;

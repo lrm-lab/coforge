@@ -3,8 +3,7 @@
  * context to the Agent itself: the launch-config response's `identity.runtimeContext`
  * (`apps/web/src/routes/api/agent-api-keys.ts`) and the workspace-info response's
  * `runtimeContext` (`apps/web/src/routes/api/agent/v1/workspace.ts`). Extracted so the two
- * surfaces can never disagree about what a Computer's name, hostname, or OS string is; see ADR
- * 0036's "Prompt versus Manual placement" table, step 3.
+ * surfaces can never disagree about what a Computer's name, hostname, or OS string is.
  */
 
 export type AgentRuntimeContextComputer = {

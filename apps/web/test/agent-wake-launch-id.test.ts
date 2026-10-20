@@ -119,9 +119,9 @@ test("authorizeLaunch refuses a wake for a user-stopped Agent even under its exa
 
 test("a session report after a wake is accepted by AgentSessionReceiver.authorize by exact launchId match", async () => {
   // agent-session.server.ts's authorize() already accepts phase "completed" (unchanged by this
-  // branch) as long as launchId matches exactly -- no server-side change was needed here (ADR
-  // 0042 research question 4). This proves the reused-launchId wake's own session report clears
-  // it without any code change to AgentSessionReceiver.
+  // branch) as long as launchId matches exactly -- no server-side change was needed here. This
+  // proves the reused-launchId wake's own session report clears it without any code change to
+  // AgentSessionReceiver.
   const agent = completedManagedAgent();
   const store: AgentControlStore = {
     get: async () => structuredClone(agent),

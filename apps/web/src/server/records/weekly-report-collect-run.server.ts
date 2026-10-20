@@ -20,7 +20,7 @@ export const COLLECT_SLOT_STATUS = {
   cancelled: "cancelled",
 } as const;
 
-/** ADR 0032 platform settle ceiling for one collect wave. */
+/** Platform settle ceiling for one collect wave. */
 export const COLLECT_SLOT_STALL_MS = 15 * 60_000;
 
 export const COLLECT_SLOT_STALL_REASON =
@@ -75,7 +75,7 @@ export function allSlotsTerminal(slots: Array<{ status: string }>): boolean {
   return slots.every((slot) => TERMINAL_SLOT_STATUSES.has(slot.status));
 }
 
-/** ADR 0032: synthesize only when every slot is terminal and at least one is ready. */
+/** Synthesize only when every slot is terminal and at least one is ready. */
 export function canSynthesizeFromSlots(slots: Array<{ status: string }>): boolean {
   if (!allSlotsTerminal(slots) || slots.length === 0) return false;
   return slots.some((slot) => slot.status === COLLECT_SLOT_STATUS.ready);
@@ -273,7 +273,7 @@ export type AcceptCollectSlotReportResult = {
 /**
  * Accepts a collector pack or terminal failure for one slot (Agent HTTPS).
  * Idempotent on requestId. When every slot is terminal and ≥1 is ready, advances
- * the run from collecting → synthesizing (ADR 0032 settle). When every slot is
+ * the run from collecting → synthesizing. When every slot is
  * terminal with no ready pack, advances collecting → cancelled so the UI leaves
  * the endless「采集中」state (e.g. model-provider 405 with submit-failure).
  */
@@ -376,7 +376,7 @@ export async function acceptCollectSlotReport(
 }
 
 /**
- * ADR 0032 safety ceiling: overdue `running` slots become `stalled`, then an
+ * Safety ceiling: overdue `running` slots become `stalled`, then an
  * empty wave leaves `collecting`. A computer whose runtime is already offline
  * fails immediately — the collector never starts, so the card must not stay on
  * 「采集中」 until the stall ceiling. Called from the User-facing load path so

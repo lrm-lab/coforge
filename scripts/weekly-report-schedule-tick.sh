@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot or looping tick for weekly-report scheduled send (ADR 0011).
+# One-shot or looping tick for weekly-report scheduled send.
 # Calls the same HTTP entry as an external production cron.
 #
 # Usage:

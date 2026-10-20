@@ -5,7 +5,7 @@ import { recordCatalog } from "./record-catalog.server";
 export const WEEKLY_REPORT_SCHEDULE_TICK_ENV = "COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS";
 
 /**
- * Optional in-process clock for ADR 0011 scheduled send. When set to a positive
+ * Optional in-process clock for weekly-report scheduled send. When set to a positive
  * millisecond interval, the web process periodically runs the same due-send path
  * as `POST /api/internal/weekly-report-schedule`. Leave unset in deployments that
  * already use an external cron against that HTTP endpoint.
