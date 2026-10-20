@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
-import { LaunchdJob, stopLaunchdJobs, type LaunchdJobConfig } from "#src/platform/launchd-job";
+import { LaunchdJob, type LaunchdJobConfig } from "#src/platform/launchd-job";
+import { stopLaunchdAgents } from "#src/platform/launchd-process";
 import {
   validateWorkspaceEndpoint,
   WORKSPACE_RELAUNCH_SECONDS,
@@ -76,12 +77,12 @@ export class LaunchdWorkspaceInstance implements WorkspaceInstance {
   }
   async ensureStarted(): Promise<number> {
     if (!(await this.#job.identity()))
-      await stopLaunchdJobs(this.#agentPrefix, this.#agentDirectory);
+      await stopLaunchdAgents(this.#agentPrefix, this.#agentDirectory);
     return (await this.#job.ensureStarted()).mainPid;
   }
   async stop(): Promise<void> {
     await this.#job.stop();
-    await stopLaunchdJobs(this.#agentPrefix, this.#agentDirectory);
+    await stopLaunchdAgents(this.#agentPrefix, this.#agentDirectory);
   }
   identity() {
     return this.#job.identity();

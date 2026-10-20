@@ -57,9 +57,13 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       affected = ["computer", "release", "web"];
     } else if (path.startsWith("apps/web/")) {
       affected = ["web"];
-    } else if (/^packages\/(computer|daemon)\/test\/.*\.test\.ts$/.test(path)) {
+    } else if (
+      /^packages\/(computer|daemon)\/test\/.*\.test\.ts$/.test(path) ||
+      path === "packages/daemon/test/launchd-process.integration.ts"
+    ) {
       affected = [path.split("/")[1]!];
-      const nativeTest = /\/(launchd-job|launchd-process|macos-supervisor)\.test\.ts$/;
+      const nativeTest =
+        /\/(launchd-job\.test|launchd-process\.integration|macos-supervisor\.test)\.ts$/;
       if (path.startsWith("packages/daemon/") && nativeTest.test(path)) {
         affected.push("macos-lifecycle");
       }

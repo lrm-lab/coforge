@@ -3,8 +3,8 @@ import { readFile, readdir } from "node:fs/promises";
 /**
  * Reap this Workspace's detached Agent processes left behind by a previous daemon instance.
  *
- * macOS reaps its per-Agent launchd jobs on daemon boot (`stopLaunchdJobs`,
- * `platform/launchd-job.ts`). Linux has no per-Agent service: an Agent process is a
+ * macOS reaps its per-Agent launchd jobs on daemon boot (`stopLaunchdAgents`,
+ * `platform/launchd-process.ts`). Linux has no per-Agent service: an Agent process is a
  * `Bun.spawn({ detached: true })` process group (`platform/process-tree.ts`), and the only thing
  * that kills them is the workspace systemd unit's `KillMode=mixed` — which does not apply when the
  * daemon was started any other way (a hand-run `bun run`, a `su`/SSH session without the user bus).

@@ -20,6 +20,14 @@ test("test-only client changes validate their owner without rebuilding native ex
     "daemon",
     "macos-lifecycle",
   ]);
+  // The real-launchd Agent relay cases; launchd-process.test.ts keeps only portable ones.
+  expect(selectChecks(["packages/daemon/test/launchd-process.integration.ts"], "changes")).toEqual([
+    "daemon",
+    "macos-lifecycle",
+  ]);
+  expect(selectChecks(["packages/daemon/test/launchd-process.test.ts"], "changes")).toEqual([
+    "daemon",
+  ]);
 });
 
 test("workspace manifests validate their consumers and the image that copies them", () => {
