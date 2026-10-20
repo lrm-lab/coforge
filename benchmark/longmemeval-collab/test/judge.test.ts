@@ -1,3 +1,4 @@
+import { describe, expect, test } from "bun:test";
 import { buildJudgePrompt, parseJudgeVerdict } from "../src/judge";
 
 describe("parseJudgeVerdict", () => {

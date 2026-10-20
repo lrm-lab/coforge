@@ -123,7 +123,7 @@ export async function gradeReply(input: {
     cwd: workspace,
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...Bun.env, CURSOR_API_KEY: input.apiKey },
+    env: { ...process.env, CURSOR_API_KEY: input.apiKey },
   });
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),

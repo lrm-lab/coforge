@@ -1,3 +1,4 @@
+import { describe, expect, test } from "bun:test";
 import { classifyMechanism } from "../src/leak";
 import { summarizeArm } from "../src/report";
 import type { EvalAttempt } from "../src/types";

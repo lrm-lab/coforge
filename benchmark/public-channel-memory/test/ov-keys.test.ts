@@ -21,7 +21,7 @@ test(
               `import {rememberEvalAccountKey} from ${JSON.stringify(modulePath)}; await Bun.write(${JSON.stringify(dir)}+'/'+${JSON.stringify(arm)},'ready'); while(!await Bun.file(${JSON.stringify(dir)}+'/warm').exists()||!await Bun.file(${JSON.stringify(dir)}+'/cold').exists())await Bun.sleep(1); for(let i=0;i<30;i++)await rememberEvalAccountKey(${JSON.stringify(arm)}+i,'fixture-key');`,
             ],
             {
-              env: { ...Bun.env, COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE: path },
+              env: { ...process.env, COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE: path },
               stdout: "pipe",
               stderr: "pipe",
               timeout: EVAL_ACCOUNT_KEY_LOCK_WAIT_MS + 1_000,

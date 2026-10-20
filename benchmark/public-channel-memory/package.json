@@ -4,11 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "eval": "bun src/run.ts"
+    "eval": "bun src/run.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "oxlint src test && bun run typecheck"
   },
   "dependencies": {
     "@lrm/coforge-sdk": "workspace:*",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "@types/node": "26.4.0",
+    "oxlint": "1.80.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
   }
 }

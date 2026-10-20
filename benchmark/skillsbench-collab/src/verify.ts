@@ -117,7 +117,7 @@ export async function runVerification(input: {
     cwd: verifyDir,
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...Bun.env, PYTHONPATH: verifyDir },
+    env: { ...process.env, PYTHONPATH: verifyDir },
   });
   const timer = setTimeout(() => child.kill("SIGKILL"), PYTEST_TIMEOUT_MS);
   timer.unref?.();
