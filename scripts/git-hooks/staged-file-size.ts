@@ -90,10 +90,20 @@ export function diffArgs(source: ChangeSource, ...flags: string[]): string[] {
 }
 
 /** Where the exemption lists (`.gitattributes`, `skills-lock.json`) are read from: the change's
- * base, so a change cannot exempt itself. Staged, that is HEAD, or the empty tree before the first
- * commit (no exemptions); in a range, the merge base it is judged from. */
+ * base, so a change cannot exempt itself. In a range, the merge base it is judged from. Staged,
+ * the base CI will judge it from: HEAD's merge base with origin/main, else with its upstream, else
+ * HEAD, so neither `--amend` nor a list committed locally just before exempts anything early (with
+ * no origin/main and no upstream, they can until CI); before the first commit, the empty tree. */
 export function policyRevision(source: ChangeSource): string {
-  return source.kind === "staged" ? stagedBase() : source.base;
+  if (source.kind === "range") return source.base;
+  const base = stagedBase();
+  if (base !== "HEAD") return base;
+  // origin/main first: a pull request is judged from main, not from its branch's upstream.
+  for (const upstream of ["origin/main", "@{upstream}"]) {
+    const mergeBase = Bun.spawnSync(["git", "merge-base", "HEAD", upstream], { stderr: "ignore" });
+    if (mergeBase.exitCode === 0) return mergeBase.stdout.toString().trim();
+  }
+  return base;
 }
 
 const GITLINK_MODE = "160000";

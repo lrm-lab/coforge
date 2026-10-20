@@ -75,3 +75,61 @@ test("a range whose base lacks the list entry blocks the files, even in a later 
   // Once a range that holds the lists has passed, the next range's base has them.
   expect(repo.range("HEAD~1")).toMatchObject({ exitCode: 0, stderr: "" });
 });
+
+/** Gives the repository a bare `origin` and pushes HEAD to its branch `as`, tracking it as
+ * HEAD's upstream unless `track` is false. */
+function pushToOrigin({ as = "main", track = true } = {}) {
+  const remote = `${repo.home}/origin.git`;
+  repo.ok("init", "-q", "--bare", remote);
+  repo.ok("remote", "add", "origin", remote);
+  repo.ok("push", "-q", ...(track ? ["-u"] : []), "origin", `HEAD:${as}`);
+}
+
+test("pre-commit reads the lists from origin/main's merge base, so --amend cannot exempt itself", () => {
+  repo.seed({ "README.md": "# Repo\n" });
+  pushToOrigin();
+  repo.write(lockWith("mine"));
+  expect(repo.commitAll()).toMatchObject({ exitCode: 0, stderr: "" });
+
+  repo.write(skillFiles);
+
+  expectBlockedSkill(repo.commitAll({}, "--amend"));
+});
+
+test("a list committed locally but not yet on origin/main exempts nothing", () => {
+  repo.seed({ "README.md": "# Repo\n" });
+  pushToOrigin({ track: false });
+  repo.write(lockWith("mine"));
+  expect(repo.commitAll()).toMatchObject({ exitCode: 0, stderr: "" });
+  repo.write(skillFiles);
+  expectBlockedSkill(repo.commitAll());
+
+  // Once the list is on origin/main, the files pass.
+  repo.ok("push", "-q", "origin", "HEAD:main");
+  expect(repo.commitAll()).toMatchObject({ exitCode: 0, stderr: "" });
+});
+
+test("on a feature branch, a list pushed only to its upstream exempts nothing: PRs judge from main", () => {
+  repo.seed({ "README.md": "# Repo\n" });
+  pushToOrigin();
+  repo.ok("switch", "-q", "-c", "feat");
+  repo.write(lockWith("mine"));
+  expect(repo.commitAll()).toMatchObject({ exitCode: 0, stderr: "" });
+  repo.ok("push", "-q", "-u", "origin", "feat");
+
+  repo.write(skillFiles);
+
+  expectBlockedSkill(repo.commitAll());
+});
+
+test("with no origin/main, the upstream's merge base is the base", () => {
+  repo.seed({ "README.md": "# Repo\n" });
+  pushToOrigin({ as: "trunk" });
+  repo.write(lockWith("mine"));
+  expect(repo.commitAll()).toMatchObject({ exitCode: 0, stderr: "" });
+  repo.write(skillFiles);
+  expectBlockedSkill(repo.commitAll());
+
+  repo.ok("push", "-q", "origin", "HEAD:trunk");
+  expect(repo.commitAll()).toMatchObject({ exitCode: 0, stderr: "" });
+});

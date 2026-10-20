@@ -52,7 +52,7 @@ crossed the limit or grew. Split the file into smaller ones.
   GitHub the same attribute also excludes the file from language statistics and suppresses it in
   diffs. Mark a file only if a tool genuinely produces it, never to get an agent-written file past
   the limit. Translation files under `apps/web/messages/` are agent-written and stay checked.
-  `git check-attr --source=HEAD linguist-generated -- <path>` shows the value a commit is judged by.
+  `git check-attr --source=<base> linguist-generated -- <path>` shows the value at a base.
 - **Binary files.** A file with a NUL byte in its first 8,000 bytes, the test git's own
   `buffer_is_binary` applies.
 - **Vendored skills.** Files under a skill directory registered in `skills-lock.json`, the
@@ -67,10 +67,9 @@ crossed the limit or grew. Split the file into smaller ones.
   commit runs `pre-commit`, so it is checked, against its first parent (HEAD): what the merged
   branch brings in counts as added.
 - `git am` runs `pre-applypatch`, which this repository does not provide.
-- Commits that `git cherry-pick`, `git rebase` and `git revert` create themselves did not run
-  `pre-commit` when this was tested with git 2.54 (githooks documents `pre-commit` for
-  `git commit` only). A step that stopped on conflicts and was concluded with `git commit` or
-  `--continue` did run it.
+- Tested with git 2.54 (githooks documents `pre-commit` for `git commit` only): `git cherry-pick`,
+  `git rebase` and `git revert` skip `pre-commit`, as does `git rebase --continue` after a
+  conflict; a conflicted cherry-pick concluded with `--continue` or `git commit` runs it.
 - `git commit --amend` compares against the commit being amended, so a file that commit added
   without the hook counts as existing.
 
@@ -143,8 +142,8 @@ A new exemption needs the user's explicit prior approval (root `AGENTS.md`, Deci
 the underlying code instead.
 
 **Author identity.** The author's and the committer's name or email, case-insensitively, matching
-`coforge-*`, `*@anthropic.com`, `*@coforge.local`, `cursoragent@cursor.com`, `*[bot]` or
-`*-agent@*`, or a name matching `^(gpt|glm|claude|gemini|qwen|deepseek|kimi|grok|llama|muse)-[0-9]`
+`coforge-*`, `*@anthropic.com`, `*@ampcode.com`, `*@coforge.local`, `cursoragent@cursor.com`,
+`*[bot]` or `*-agent@*`, or a name matching `^(gpt|glm|claude|gemini|qwen|deepseek|kimi|grok|llama|muse)-[0-9]`
 (so `GPT4all`, `llama3` and `claude` alone pass). No allowlist: GitHub's web-merge committer
 `GitHub <noreply@github.com>` matches nothing. Pre-commit reads `git var GIT_AUTHOR_IDENT` and
 `GIT_COMMITTER_IDENT` (`--author`, `GIT_AUTHOR_*` and `GIT_COMMITTER_*` included); CI reads both for
@@ -166,18 +165,19 @@ add. The size rule also keeps the two skips it was approved with (task #25): fil
   only afterwards: it blocks nothing, so a violation is reported once it is already on `main`. Its
   author fixes it before pushing anything else, as for any red run on `main`. A PR cannot merge
   without the "CI passed" check, so there the step blocks.
-- Merges without conflicts, `git cherry-pick`, `git rebase`, `git revert` and `git am` do not run
-  `pre-commit` (see [What is not covered](#what-is-not-covered)), so only CI checks those commits.
+- Merges without conflicts, `git rebase` (`--continue` included), `git revert`, `git am` and a
+  conflict-free `git cherry-pick` do not run `pre-commit` ([details](#what-is-not-covered)).
 - A CI run without a base commit only warns, so that range is never checked.
 - A push run cancelled by a newer push loses its identity check: the newer push's `before` is the
   cancelled push's head. The file rules still cover it, as the next run diffs from the last pass.
 - A violation in CI fails the Plan checks job, so the checks it would have selected are skipped
   until the violation is fixed.
-- The exemption lists, `skills-lock.json` and `.gitattributes`, are read from the change's base
-  (a commit's HEAD, nothing before the first commit; in CI the merge base), so a change cannot
-  exempt itself. Exempting new files takes two steps: commit the list change, push it and let its
-  CI run pass, then commit the files. Locally two commits pass the hook, but both in one push or
-  PR are a red CI run, because that range's base lacks the entry.
+- The exemption lists, `skills-lock.json` and `.gitattributes`, are read from the change's base,
+  so a change cannot exempt itself: in CI the merge base; in pre-commit HEAD's merge base with
+  `origin/main`, else with its upstream, else HEAD (nothing before the first commit). With neither
+  (no remote, or one not named `origin`), an `--amend` or a local list commit can exempt files from
+  the hook until CI checks them. Exempting new files takes two steps: commit and push the list
+  change and let its CI run pass, then commit the files; both in one push or PR is a red CI run.
 - A line inside a template string that starts with a suppression directive is flagged.
 
 ## Sources
