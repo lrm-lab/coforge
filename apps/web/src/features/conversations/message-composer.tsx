@@ -1,33 +1,35 @@
 import {
+  useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ClipboardEvent,
   type CompositionEvent,
   type DragEvent,
-  type FormEvent,
   type KeyboardEvent,
 } from "react";
 import { useHydrated } from "@tanstack/react-router";
 
 import { useAppToast } from "#src/components/ui/toast";
-import { AlertCircle, Download01, Plus, Send01, Trash01, XClose } from "@untitledui/icons";
-import { Popover as AriaPopover } from "react-aria-components";
-
-import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
-import { Button } from "#src/components/base/buttons/button";
-import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import {
-  ProgressBar,
-  ProgressBarBase,
-} from "#src/components/base/progress-indicators/progress-indicators";
-import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
-import { FileTypeIcon } from "#src/features/files/file-type-icon";
-import { fileTypeLabel } from "#src/features/files/file-meta";
+  AlertCircle,
+  CheckSquare,
+  ChevronDown,
+  Plus,
+  Send01,
+  UploadCloud02,
+  XClose,
+} from "@untitledui/icons";
+
+import { Button } from "#src/components/base/buttons/button";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useResizeObserver } from "#src/hooks/use-resize-observer";
+import { isApplePlatform } from "#src/lib/platform";
 import {
   dragCarriesFiles,
   filesFromDrop,
@@ -35,7 +37,9 @@ import {
   localId,
   shouldSendAsTaskOnEnter,
   shouldSendOnEnter,
+  forcesStackedLayout,
 } from "./composer-behavior";
+import { AttachmentTile, uploadAttachment, type PendingAttachment } from "./composer-attachments";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
 import { useComposerRequests, useMessageOutbox } from "./use-message-outbox";
@@ -84,210 +88,18 @@ const NO_NAMES: ReadonlySet<string> = new Set();
  * (`conversation.schemas.ts`'s `attachmentIdsSchema`, the Agent API's `AgentMessagesSendRequest`). */
 const MAX_ATTACHMENTS = 10;
 
-export type PendingAttachment = {
-  /** Stable key across renders and across the file's own upload lifecycle; independent of
-   * `file` identity so two same-named files can coexist. */
-  localId: string;
-  file: File;
-  /** Set once the server has accepted the upload. */
-  id?: string;
-  /** 0 to 100 while uploading. */
-  progress: number;
-  failed: boolean;
-};
+/** What sets the width of a line of draft text: shared by the textarea and its hidden one-line
+ * copy, which measures whether the draft fits the one-line text column. */
+const DRAFT_LINE_CLASS = "px-3 text-md";
 
-/** Upload a composer attachment, reporting progress, and resolve with its id. */
-function uploadAttachment(
-  conversationId: string,
-  file: File,
-  onProgress: (percent: number) => void,
-) {
-  return new Promise<string>((resolve, reject) => {
-    const form = new FormData();
-    form.set("conversationId", conversationId);
-    form.set("file", file);
-    const request = new XMLHttpRequest();
-    request.open("POST", "/api/attachments");
-    request.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-    };
-    request.onload = () => {
-      if (request.status >= 200 && request.status < 300) {
-        try {
-          resolve((JSON.parse(request.responseText) as { id: string }).id);
-        } catch (cause) {
-          reject(cause);
-        }
-      } else reject(new Error(request.responseText || `upload failed (${request.status})`));
-    };
-    request.onerror = () => reject(new Error("upload failed"));
-    request.send(form);
-  });
-}
-
-/**
- * One chosen file in the tray under the text, as Slack shows them: an image
- * is a 4rem thumbnail, any other file a card with its type icon, name and size, so a chosen
- * file is visible at a glance. While it uploads it is dimmed with a progress bar along its
- * foot; a failed upload rings it red. Clicking the tile opens the preview with the file's details, download, remove, and retry for a failed upload.
- */
-function AttachmentTile({
-  attachment,
-  uploading,
-  onRemove,
-  onRetry,
-}: {
-  attachment: PendingAttachment;
-  uploading: boolean;
-  onRemove: () => void;
-  onRetry: () => void;
-}) {
-  const { file } = attachment;
-  const isImage = file.type.startsWith("image/");
-  const [previewUrl, setPreviewUrl] = useState<string>();
-  useEffect(() => {
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-  const typeLabel = fileTypeLabel(file.name, file.type);
-  const typeAndSize = `${typeLabel ? `${typeLabel} · ` : ""}${getReadableFileSize(file.size)}`;
-  const status = attachment.failed
-    ? m.conversation_attachment_failed()
-    : uploading
-      ? m.conversation_attachment_uploading({ progress: attachment.progress })
-      : typeAndSize;
-  return (
-    <li className="relative">
-      <DialogTrigger>
-        <Button
-          color="tertiary"
-          size="sm"
-          noTextPadding
-          aria-label={`${file.name} · ${status}`}
-          className={cx(
-            "overflow-hidden rounded-lg border border-primary bg-primary p-0 shadow-xs hover:bg-primary_hover",
-            isImage ? "size-16" : "h-16 w-[13rem] justify-start px-3",
-            attachment.failed && "border-error",
-          )}
-        >
-          {isImage ? (
-            previewUrl ? (
-              <img
-                src={previewUrl}
-                alt=""
-                className={cx("size-full object-cover", uploading && "opacity-60")}
-              />
-            ) : (
-              <span className="flex size-full items-center justify-center bg-secondary">
-                <FileTypeIcon fileName={file.name} contentType={file.type} className="size-8" />
-              </span>
-            )
-          ) : (
-            <span className="flex min-w-0 items-center gap-2.5 text-left">
-              <span className="flex size-9 shrink-0 items-center justify-center">
-                <FileTypeIcon fileName={file.name} contentType={file.type} className="size-9" />
-              </span>
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-sm font-medium text-secondary">{file.name}</span>
-                <span
-                  className={cx(
-                    "truncate text-xs",
-                    attachment.failed ? "text-error-primary" : "text-tertiary",
-                  )}
-                >
-                  {status}
-                </span>
-              </span>
-            </span>
-          )}
-        </Button>
-        <AriaPopover
-          placement="top start"
-          offset={8}
-          className="w-[min(24rem,calc(100vw-2rem))] rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
-        >
-          <Dialog className="flex flex-col outline-none">
-            {({ close }) => (
-              <>
-                {isImage && previewUrl && (
-                  <div className="flex justify-center rounded-t-xl bg-secondary p-3">
-                    <img
-                      src={previewUrl}
-                      alt=""
-                      className="max-h-56 max-w-full rounded-md object-contain"
-                    />
-                  </div>
-                )}
-                <div className="flex items-center gap-3 p-3">
-                  {!isImage && (
-                    <span className="flex size-10 shrink-0 items-center justify-center">
-                      <FileTypeIcon
-                        fileName={file.name}
-                        contentType={file.type}
-                        className="size-10"
-                      />
-                    </span>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-primary">{file.name}</p>
-                    <p className="truncate text-sm text-tertiary">
-                      {uploading
-                        ? `${attachment.progress}% · ${getReadableFileSize(file.size)}`
-                        : typeAndSize}
-                    </p>
-                    {uploading && <ProgressBar value={attachment.progress} className="mt-1.5" />}
-                    {attachment.failed && (
-                      <Button color="link-color" size="sm" onPress={onRetry} className="mt-1">
-                        {m.controls_retry()}
-                      </Button>
-                    )}
-                  </div>
-                  <ButtonUtility
-                    icon={Download01}
-                    size="sm"
-                    color="tertiary"
-                    tooltip={m.conversation_attachment_download()}
-                    href={previewUrl}
-                    download={file.name}
-                  />
-                  <ButtonUtility
-                    icon={Trash01}
-                    size="sm"
-                    color="tertiary"
-                    tooltip={m.conversation_attachment_remove()}
-                    onClick={() => {
-                      close();
-                      onRemove();
-                    }}
-                  />
-                </div>
-              </>
-            )}
-          </Dialog>
-        </AriaPopover>
-      </DialogTrigger>
-      {uploading && (
-        <ProgressBarBase
-          value={attachment.progress}
-          className="pointer-events-none absolute inset-x-2 bottom-1.5 h-1 w-auto"
-        />
-      )}
-      {attachment.failed && isImage && (
-        <AlertCircle
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary text-fg-error-primary"
-        />
-      )}
-    </li>
-  );
-}
+/** The send buttons' icons stay white instead of the primary button's dimmed default. */
+const SEND_BUTTON_CLASS = "*:data-icon:text-white hover:*:data-icon:text-white";
 
 /**
  * The message form at the foot of a conversation or thread. Owns the draft, the pending
  * attachments (each uploaded sequentially as soon as it is chosen, so its progress is
- * visible), the "as task" toggle and the retry idempotency key, so typing never re-renders the
- * history above it.
+ * visible), whether an edited-back Task goes out as one, and the retry idempotency key, so typing
+ * never re-renders the history above it.
  */
 export function MessageComposer({
   conversationId,
@@ -437,7 +249,10 @@ export function MessageComposer({
     },
   });
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  // Set only by editing an unsent Task back into the composer: Send then sends it as a Task again.
   const [asTask, setAsTask] = useState(false);
+  // The edited-back Task belongs to its draft; another conversation's Send is a plain send again.
+  useEffect(() => setAsTask(false), [draftKey]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The last quote this composer consumed. Held by id so a re-render (or an unrelated state
   // change) never re-inserts a quote the reader already has in the draft.
@@ -467,6 +282,30 @@ export function MessageComposer({
   const anyFailed = attachments.some((item) => item.failed);
   const composerDisabled = !hydrated;
   const dropDisabled = composerDisabled || uploading;
+  const taskMode = !inThread && Boolean(canSendAsTask);
+  const sendDisabled =
+    composerDisabled ||
+    uploading ||
+    anyFailed ||
+    attachments.length > MAX_ATTACHMENTS ||
+    (!body.trim() && attachments.length === 0);
+  // Whether the draft would wrap in the one-line text column, read from a hidden copy of it that
+  // always sits in that column (see `forcesStackedLayout`). Once a newline or an attachment
+  // stacks the composer anyway, the copy stays empty rather than laying out the draft twice.
+  const stacksAnyway = forcesStackedLayout(body, attachments.length);
+  const lineMirrorText = stacksAnyway ? "" : body;
+  const lineMirrorRef = useRef<HTMLSpanElement>(null);
+  const [overflowsLine, setOverflowsLine] = useState(false);
+  const measureLine = useCallback(() => {
+    const mirror = lineMirrorRef.current;
+    if (mirror) setOverflowsLine(mirror.scrollWidth > mirror.clientWidth);
+  }, []);
+  // Before paint, so a restored long draft never shows a frame on one line.
+  useLayoutEffect(measureLine, [lineMirrorText, measureLine]);
+  useResizeObserver({ ref: lineMirrorRef, onResize: measureLine });
+  const stacked = stacksAnyway || overflowsLine;
+  // Stacked, `+` and send sit on the bottom bar (row 3, under the attachments).
+  const barRow = stacked ? "row-start-3" : "row-start-1";
 
   /** Uploads one already-added pending attachment, tracking it by `localId` regardless of
    * later reordering or removal of the others in `attachments`. */
@@ -531,13 +370,12 @@ export function MessageComposer({
     if (hydrated && window.matchMedia("(pointer: fine)").matches) focusComposer();
   }, [draftKey, hydrated]);
 
-  /** Sends the draft; `forceAsTask` (the Cmd/Ctrl+Shift+Enter shortcut) sends it as a Task
-   * whether or not "As task" is ticked, as Raft's composer does. */
-  function submit(event?: FormEvent<HTMLFormElement>, forceAsTask = false) {
-    event?.preventDefault();
+  /** Sends the draft, as a Task when `wantTask` (the send menu, Cmd/Ctrl+Shift+Enter) or, by
+   * default, when it is an unsent Task edited back. */
+  function submit(wantTask = asTask) {
+    if (sendDisabled) return;
     const text = body.trim() || attachments[0]?.file.name || "";
-    if (!text || uploading || anyFailed || attachments.length > MAX_ATTACHMENTS) return;
-    const sendAsTask = (asTask || forceAsTask) && !inThread && Boolean(canSendAsTask);
+    const sendAsTask = taskMode && wantTask;
     const idempotencyKey =
       retryRef.current?.body === text && retryRef.current.asTask === sendAsTask
         ? retryRef.current.idempotencyKey
@@ -603,7 +441,7 @@ export function MessageComposer({
     };
     if (taskMode && shouldSendAsTaskOnEnter(key, composition)) {
       event.preventDefault();
-      submit(undefined, true);
+      submit(true);
       return;
     }
     if (shouldSendOnEnter(key, composition)) {
@@ -685,21 +523,22 @@ export function MessageComposer({
     if (files.length > 0) void addFiles(files);
   }
 
-  const taskMode = !inThread && Boolean(canSendAsTask);
+  const sendLabel = asTask ? m.conversation_send_as_task() : m.conversation_send();
   return (
     <form
-      onSubmit={submit}
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
       onDragEnter={dragEnter}
       onDragOver={dragOver}
       onDragLeave={dragLeave}
       onDrop={drop}
-      className={cx(
-        "relative mx-4 mt-2 mb-3 flex shrink-0 flex-col gap-1 rounded-xl border border-primary bg-primary p-2 transition-shadow focus-within:border-fg-quaternary focus-within:shadow-xs md:mx-6",
-        draggingFile && "ring-2 ring-brand",
-      )}
+      className="relative mx-4 mt-2 mb-3 flex shrink-0 flex-col gap-1 rounded-xl border border-primary bg-primary p-2 transition-shadow focus-within:border-fg-quaternary focus-within:shadow-xs md:mx-6"
     >
       {draggingFile && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-brand-secondary text-sm font-medium text-brand-primary">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-secondary text-sm font-medium text-secondary">
+          <UploadCloud02 aria-hidden="true" className="size-5 text-fg-quaternary" />
           {m.conversation_drop_to_upload()}
         </div>
       )}
@@ -772,77 +611,91 @@ export function MessageComposer({
       <label htmlFor={composerId} className="sr-only">
         {m.conversation_message_label()}
       </label>
-      <textarea
-        id={composerId}
-        ref={completion.textareaRef}
-        rows={1}
-        value={body}
-        disabled={composerDisabled}
-        onChange={(event) => {
-          setBody(event.target.value);
-          completion.track(event.target.value, event.target.selectionStart);
-          if (retryRef.current && event.target.value.trim() !== retryRef.current.body)
-            retryRef.current = undefined;
-        }}
-        onSelect={(event) =>
-          completion.track(event.currentTarget.value, event.currentTarget.selectionStart)
-        }
-        onBlur={completion.close}
-        onKeyDown={keyDown}
-        onCompositionStart={compositionStart}
-        onCompositionEnd={compositionEnd}
-        onPaste={paste}
-        aria-expanded={completion.open || undefined}
-        aria-controls={completion.open ? completion.listboxId : undefined}
-        aria-activedescendant={
-          completion.open ? completion.optionId(completion.activeIndex) : undefined
-        }
-        placeholder={
-          inThread
-            ? m.conversation_thread_message_placeholder()
-            : target
-              ? m.conversation_message_placeholder_to({ target })
-              : m.conversation_message_placeholder()
-        }
-        className="max-h-40 min-h-8 w-full resize-none bg-transparent px-3 py-1 text-md outline-none [field-sizing:content] placeholder:text-placeholder disabled:opacity-50"
-      />
-      {completion.open && completion.trigger && (
-        <ReferenceSuggestionList
-          id={completion.listboxId}
-          trigger={completion.trigger}
-          items={completion.items}
-          activeIndex={completion.activeIndex}
-          optionId={completion.optionId}
-          onChoose={completion.choose}
-          onHighlight={completion.setActiveIndex}
+      {/* One grid for both shapes: on one line `+`, the text and send share a row; stacked, the
+          text spans the top, the attachments sit under it, and `+` and send drop to a bar whose
+          middle cell is the one-line text column (so neither may change width between shapes).
+          Only classes change, so the textarea (focus, caret, IME state) is never remounted. */}
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1">
+        <textarea
+          id={composerId}
+          ref={completion.textareaRef}
+          rows={1}
+          value={body}
+          disabled={composerDisabled}
+          onChange={(event) => {
+            setBody(event.target.value);
+            completion.track(event.target.value, event.target.selectionStart);
+            if (retryRef.current && event.target.value.trim() !== retryRef.current.body)
+              retryRef.current = undefined;
+          }}
+          onSelect={(event) =>
+            completion.track(event.currentTarget.value, event.currentTarget.selectionStart)
+          }
+          onBlur={completion.close}
+          onKeyDown={keyDown}
+          onCompositionStart={compositionStart}
+          onCompositionEnd={compositionEnd}
+          onPaste={paste}
+          aria-expanded={completion.open || undefined}
+          aria-controls={completion.open ? completion.listboxId : undefined}
+          aria-activedescendant={
+            completion.open ? completion.optionId(completion.activeIndex) : undefined
+          }
+          placeholder={
+            inThread
+              ? m.conversation_thread_message_placeholder()
+              : target
+                ? m.conversation_message_placeholder_to({ target })
+                : m.conversation_message_placeholder()
+          }
+          // While the placeholder shows, the box stays one row: a long "Message #channel" would
+          // otherwise wrap in the narrow one-line column and grow the empty composer.
+          className={cx(
+            "row-start-1 max-h-40 min-h-8 w-full resize-none bg-transparent py-1 outline-none [field-sizing:content] placeholder:text-placeholder placeholder-shown:[field-sizing:fixed] disabled:opacity-50",
+            DRAFT_LINE_CLASS,
+            stacked ? "col-span-full" : "col-start-2",
+          )}
         />
-      )}
-      {attachments.length > 0 && (
-        <ul
-          aria-label={m.conversation_attachment_tray()}
-          className="flex flex-wrap gap-2 px-3 pt-1 pb-1"
+        {/* The draft on one unwrapped line in the one-line text column: wider than its box means
+            the text would wrap there. */}
+        <span
+          ref={lineMirrorRef}
+          aria-hidden="true"
+          className={cx(
+            "invisible col-start-2 h-0 min-w-0 overflow-hidden whitespace-pre",
+            DRAFT_LINE_CLASS,
+            barRow,
+          )}
         >
-          {attachments.map((item) => (
-            <AttachmentTile
-              key={item.localId}
-              attachment={item}
-              uploading={!item.id && !item.failed}
-              onRemove={() =>
-                setAttachments((current) =>
-                  current.filter((other) => other.localId !== item.localId),
-                )
-              }
-              onRetry={() => void uploadOne(item)}
-            />
-          ))}
-        </ul>
-      )}
-      {attachments.length > MAX_ATTACHMENTS && (
-        <p className="px-2 text-sm text-error-primary">
-          {m.conversation_attachment_limit({ max: MAX_ATTACHMENTS })}
-        </p>
-      )}
-      <div className="flex items-center gap-2 px-1 pb-0.5">
+          {lineMirrorText}
+        </span>
+        {attachments.length > 0 && (
+          <div className="col-span-full row-start-2 flex flex-col gap-1">
+            <ul
+              aria-label={m.conversation_attachment_tray()}
+              className="flex flex-wrap gap-2 px-3 pt-1 pb-1"
+            >
+              {attachments.map((item) => (
+                <AttachmentTile
+                  key={item.localId}
+                  attachment={item}
+                  uploading={!item.id && !item.failed}
+                  onRemove={() =>
+                    setAttachments((current) =>
+                      current.filter((other) => other.localId !== item.localId),
+                    )
+                  }
+                  onRetry={() => void uploadOne(item)}
+                />
+              ))}
+            </ul>
+            {attachments.length > MAX_ATTACHMENTS && (
+              <p className="px-2 text-sm text-error-primary">
+                {m.conversation_attachment_limit({ max: MAX_ATTACHMENTS })}
+              </p>
+            )}
+          </div>
+        )}
         <Button
           color="tertiary"
           size="xs"
@@ -850,6 +703,7 @@ export function MessageComposer({
           aria-label={m.conversation_attachment_label()}
           isDisabled={composerDisabled}
           onPress={() => fileInputRef.current?.click()}
+          className={cx("col-start-1", barRow, stacked && "mt-1")}
         />
         <input
           ref={fileInputRef}
@@ -863,42 +717,72 @@ export function MessageComposer({
           }}
           className="sr-only"
         />
-        {/* "As task" sits directly left of Send (the boss's ruling, #137), as a labelled checkbox
-            that is always shown, as Raft's composer has it: the label says what it does, and one
-            control holds both states. No hairline between the checkbox and Send (task #265). */}
-        <div className="ml-auto flex items-center gap-3">
+        {/* "As task" is a one-shot choice in the send button's menu (Cmd/Ctrl+Shift+Enter is its
+            keyboard twin), so the one-line row has no room-taking toggle. */}
+        <div className={cx("col-start-3 flex items-center gap-px", barRow, stacked && "mt-1")}>
+          <Tooltip title={sendLabel} isDisabled={sendDisabled}>
+            <Button
+              type="submit"
+              color="primary"
+              size="xs"
+              iconLeading={asTask ? CheckSquare : Send01}
+              aria-label={sendLabel}
+              className={cx(SEND_BUTTON_CLASS, taskMode && "rounded-r-none before:rounded-r-none")}
+              isDisabled={sendDisabled}
+            />
+          </Tooltip>
           {taskMode && (
-            // A toggle with the shortcut in its tooltip, as Raft's "As Task" is: the official
-            // Tooltip needs a pressable trigger, which a Checkbox's label is not.
-            <Tooltip title={m.tasks_send_as_task_shortcut()}>
-              <TooltipTrigger
-                aria-pressed={asTask}
-                isDisabled={composerDisabled}
-                onPress={() => setAsTask((current) => !current)}
-                className="flex items-center gap-2 text-sm font-medium text-secondary disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <CheckboxBase size="sm" isSelected={asTask} isDisabled={composerDisabled} />
-                {m.tasks_as_task()}
-              </TooltipTrigger>
-            </Tooltip>
+            <Dropdown.Root>
+              <Tooltip title={m.conversation_send_options()} isDisabled={sendDisabled}>
+                <Button
+                  color="primary"
+                  size="xs"
+                  iconLeading={ChevronDown}
+                  aria-label={m.conversation_send_options()}
+                  className={cx(SEND_BUTTON_CLASS, "rounded-l-none before:rounded-l-none")}
+                  isDisabled={sendDisabled}
+                />
+              </Tooltip>
+              <Dropdown.Popover placement="top end" className="w-56">
+                <Dropdown.Menu
+                  aria-label={m.conversation_send_options()}
+                  onAction={(key) => {
+                    submit(key === "task");
+                    // The closing menu hands focus back to its trigger; take it back after.
+                    requestAnimationFrame(focusComposer);
+                  }}
+                >
+                  {/* Enter sends an edited-back Task as a Task, so it is not "Send"'s key then. The
+                      popover renders only in the browser, where the platform is known. */}
+                  <Dropdown.Item
+                    id="send"
+                    label={m.conversation_send()}
+                    icon={Send01}
+                    addon={asTask ? undefined : "Enter"}
+                  />
+                  <Dropdown.Item
+                    id="task"
+                    label={m.conversation_send_as_task()}
+                    icon={CheckSquare}
+                    addon={isApplePlatform() ? "⌘⇧Enter" : "Ctrl+Shift+Enter"}
+                  />
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown.Root>
           )}
-          <Button
-            type="submit"
-            color="primary"
-            size="xs"
-            iconLeading={Send01}
-            aria-label={m.conversation_send()}
-            className="*:data-icon:text-white hover:*:data-icon:text-white"
-            isDisabled={
-              composerDisabled ||
-              uploading ||
-              anyFailed ||
-              attachments.length > MAX_ATTACHMENTS ||
-              (!body.trim() && attachments.length === 0)
-            }
-          />
         </div>
       </div>
+      {completion.open && completion.trigger && (
+        <ReferenceSuggestionList
+          id={completion.listboxId}
+          trigger={completion.trigger}
+          items={completion.items}
+          activeIndex={completion.activeIndex}
+          optionId={completion.optionId}
+          onChoose={completion.choose}
+          onHighlight={completion.setActiveIndex}
+        />
+      )}
     </form>
   );
 }

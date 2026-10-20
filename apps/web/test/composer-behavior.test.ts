@@ -7,12 +7,25 @@ import {
   IME_ENTER_GUARD_MS,
   shouldSendAsTaskOnEnter,
   shouldSendOnEnter,
+  forcesStackedLayout,
 } from "#src/features/conversations/composer-behavior";
 import { localId } from "#src/features/conversations/composer-behavior";
 import { INLINE_IMAGE_TYPES, imageUrlsFromPaste } from "#src/features/conversations/paste-image";
 
 const baseEnter = { key: "Enter", shiftKey: false, isComposing: false, keyCode: 13 };
 const noComposition = { lastCompositionEndAt: null, now: 0 };
+
+describe("forcesStackedLayout", () => {
+  test("stacks for a newline or an attachment", () => {
+    expect(forcesStackedLayout("a\nb", 0)).toBe(true);
+    expect(forcesStackedLayout("", 1)).toBe(true);
+  });
+
+  test("leaves one line of text to the measurement, never to the text's length", () => {
+    expect(forcesStackedLayout("", 0)).toBe(false);
+    expect(forcesStackedLayout("x".repeat(400), 0)).toBe(false);
+  });
+});
 
 describe("shouldSendAsTaskOnEnter", () => {
   test("sends as a task on Cmd+Shift+Enter and Ctrl+Shift+Enter, as Raft's composer does", () => {

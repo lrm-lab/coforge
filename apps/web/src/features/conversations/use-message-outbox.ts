@@ -9,7 +9,8 @@ import {
   type SendOptions,
 } from "./composer-outbox";
 import { rewriteMentionPins } from "./mention-pins";
-import type { PendingAttachment, SentMessage } from "./message-composer";
+import type { PendingAttachment } from "./composer-attachments";
+import type { SentMessage } from "./message-composer";
 
 let deviceOutbox: ComposerOutbox | undefined;
 

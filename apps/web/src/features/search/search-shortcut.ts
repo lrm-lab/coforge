@@ -3,6 +3,7 @@ import { useRouter } from "@tanstack/react-router";
 
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { splitWorkspacePath } from "#src/features/workspaces/workspace-url";
+import { isApplePlatform } from "#src/lib/platform";
 import { readLastSearch } from "./search-memory";
 
 /**
@@ -26,14 +27,6 @@ export function lastPageBeforeSearch(): string | undefined {
 
 /** Asks an open search page to put the caret back in its box. */
 export const SEARCH_FOCUS_EVENT = "coforge:search-focus";
-
-function isApplePlatform() {
-  if (typeof navigator === "undefined") return false;
-  const platform =
-    (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ||
-    navigator.platform;
-  return /Mac|iPhone|iPad|iPod|macOS|iOS/i.test(platform);
-}
 
 /**
  * Cmd+K on Apple platforms, Ctrl+K elsewhere; no other modifier. The key that types "k" counts;

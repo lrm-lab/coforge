@@ -44,7 +44,7 @@ export async function createMessageTask(
 }
 
 /**
- * "As task" in the composer: the message being sent is a Task from the moment it exists, with
+ * "Send as task" from the composer: the message being sent is a Task from the moment it exists, with
  * every upload it carries, as Raft's composer sends it (`/v2/messages` with `asTask`). Only a
  * top-level message can be a Task, as `convert` holds. The caller announces it once the send has
  * committed (`TaskBoard.announceSentTask`).

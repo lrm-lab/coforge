@@ -268,6 +268,8 @@
   "conversation_message_placeholder": "输入消息…",
   "conversation_message_placeholder_to": "发消息到 {target}",
   "conversation_send": "发送",
+  "conversation_send_as_task": "作为任务发送",
+  "conversation_send_options": "更多发送方式",
   "conversation_sending": "发送中…",
   "conversation_menu_label": "会话操作",
   "conversation_menu_mark_unread": "标记为未读",
@@ -374,8 +376,6 @@
       }
     }
   ],
-  "tasks_as_task": "作为任务",
-  "tasks_send_as_task_shortcut": "作为任务发送（⌘/Ctrl-Shift-Enter）",
   "tasks_loading": "正在加载任务…",
   "tasks_empty": "此会话暂无任务",
   "tasks_group_empty": "暂无任务",

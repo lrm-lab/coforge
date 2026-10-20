@@ -61,8 +61,8 @@ export function shouldSendOnEnter(
 
 /**
  * Whether a keydown on the composer textarea is "send as task": Cmd/Ctrl+Shift+Enter, as Raft's
- * composer binds it. It sends as a task whether or not the composer's "As task" box is ticked, and
- * stays ignored while (or just after) an IME composition is being confirmed, as Enter does.
+ * composer binds it. It is the keyboard twin of "Send as task" in the send button's menu, and stays
+ * ignored while (or just after) an IME composition is being confirmed, as Enter does.
  */
 export function shouldSendAsTaskOnEnter(
   event: EnterKeyLikeEvent,
@@ -70,6 +70,16 @@ export function shouldSendAsTaskOnEnter(
 ): boolean {
   if (event.key !== "Enter" || !event.shiftKey || !(event.metaKey || event.ctrlKey)) return false;
   return shouldSendOnEnter({ ...event, shiftKey: false }, composition);
+}
+
+/**
+ * Whether the composer stacks (the text across the top, the attachments under it, the buttons on
+ * a bar below) whatever the text's width: for a newline or any attachment. Otherwise it stacks
+ * only when the text would not fit the one-line text column, which the composer measures there,
+ * never at the current width: stacking widens the text, and measuring that would collapse it again.
+ */
+export function forcesStackedLayout(body: string, attachmentCount: number): boolean {
+  return body.includes("\n") || attachmentCount > 0;
 }
 
 export type ClipboardDataLike = {

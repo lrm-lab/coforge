@@ -14,7 +14,7 @@ import { sentMessageBecomesTask } from "#src/server/tasks/sent-as-task.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 
 /**
- * "As task" in the composer sends the message, as Raft's composer does (`/v2/messages` with
+ * "Send as task" from the composer sends the message, as Raft's composer does (`/v2/messages` with
  * `asTask`): one message, with every upload it carries, that is a Task from the moment it exists.
  */
 test("a message sent as a task is one message that is a Task and keeps all its uploads", async () => {
