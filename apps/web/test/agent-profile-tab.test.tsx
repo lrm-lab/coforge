@@ -62,6 +62,11 @@ function render(node: ReactNode) {
   );
 }
 
+/** The markup's text with its tags removed: the pill splits "Context 12% used" across spans. */
+function visibleText(markup: string) {
+  return markup.replace(/<[^>]+>/g, "");
+}
+
 function controlsFixture(isOnline: boolean): AgentRuntimeControls {
   return {
     agentName: "Builder",
@@ -243,10 +248,10 @@ test("hides the context-usage badge entirely when there is no reading", () => {
 
 test("shows the rounded, clamped percentage next to the Runtime badge when a reading is present", () => {
   for (const [usedTokens, windowTokens, expected] of [
-    [27_908, 200_000, "Context 14%"],
-    [0, 200_000, "Context 0%"],
+    [27_908, 200_000, "Context 14% used"],
+    [0, 200_000, "Context 0% used"],
     // Never guessed above 100% even if a stale window makes usedTokens exceed it.
-    [250_000, 200_000, "Context 100%"],
+    [250_000, 200_000, "Context 100% used"],
   ] as const) {
     const markup = render(
       <AgentProfileTab
@@ -264,7 +269,7 @@ test("shows the rounded, clamped percentage next to the Runtime badge when a rea
         }}
       />,
     );
-    expect(markup).toContain(expected);
+    expect(visibleText(markup)).toContain(expected);
   }
 });
 
@@ -348,10 +353,9 @@ test("a non-Claude-Code Agent's context badge stays a tooltip trigger, not a pop
       }}
     />,
   );
-  expect(markup).toContain("Context 12%");
+  expect(visibleText(markup)).toContain("Context 12% used");
   // No popover trigger/label for a runtime without a composition to read.
-  expect(markup).not.toContain(m.agent_context_title());
-  expect(markup).not.toContain(`"${m.agent_context_usage_badge({ percent: 12 })}"`);
+  expect(markup).not.toContain('aria-label="Context 12% used');
 });
 
 test("a Claude Code Agent's context badge becomes the breakdown popover trigger", () => {
@@ -379,11 +383,11 @@ test("a Claude Code Agent's context badge becomes the breakdown popover trigger"
       }}
     />,
   );
-  expect(markup).toContain("Context 12%");
-  // The popover trigger's accessible label IS the badge's own tooltip line (used / window · time),
-  // which is also the popover's header line — the runtime-usage twin's pattern.
+  expect(visibleText(markup)).toContain("Context 12% used");
+  // The popover trigger's accessible name is its visible text, then the tooltip's line
+  // (used / window · time).
   expect(markup).toContain(
-    `aria-label="${m.agent_context_usage_tooltip({
+    `aria-label="Context 12% used · ${m.agent_context_usage_tooltip({
       used: "24,900",
       window: "200,000",
       time: formatDateForDisplay(new Date("2026-09-18T12:00:00.000Z"), "UTC", "en"),

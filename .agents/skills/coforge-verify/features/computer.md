@@ -152,7 +152,10 @@ already has a local binding.
 - **Success**: the tile's status dot is `role="img"` named "Online" or
   "Offline" (`computer-tile.tsx`, `status-dot.tsx`); there is no Online text
   badge. Restart toasts "Restart requested." then "Computer restarted." or
-  "Restart did not complete before the deadline. Try again."
+  "Restart did not complete before the deadline. Try again." A runtime's usage
+  peek states every share as used: "63% used · resets in 5d" ("已用 63% ·
+  5天后重置"), "… · reset time unavailable" when a quota window has no reset,
+  with the bar green under 70%, yellow from 70%, red from 90% or at its limit.
 - **Traps**: Usage appears only for runtimes that support it; Pi, CoForge,
   Cursor and OpenCode show no health dot. A successful upgrade only changes the
   Version row and shows a toast. No upgrade offer shows when the Web's read of

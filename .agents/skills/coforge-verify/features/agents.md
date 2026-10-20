@@ -60,7 +60,13 @@ For what happens inside a turn see [Agent runtimes](agent-runtimes.md).
   description cut off with an ellipsis, and pressing the row expands the full
   description, `agent-skills.tsx`); "Visibility" with "Make private"/"Make
   public"; "Archive agent" under Actions (`agent-profile-tab.tsx`,
-  `agent-runtime-config-dialog.tsx`).
+  `agent-runtime-config-dialog.tsx`). The Runtime field is one pill: the
+  runtime part (hover or keyboard focus opens its usage peek; a click does
+  not; its health dot follows the name, the state also in its name
+  "<Runtime> · Usage · Usage OK") and, once the Agent has reported
+  context, a thin divider then "Context <n>% used" ("上下文 已用 <n>%"; the
+  used share turns yellow from 70% and red from 90%), which opens the
+  context peek for Claude Code and a tooltip otherwise.
 - **Success**: the Profile tab shows the saved values after reload, and the
   next turn uses them (check the model in Activity, or ask the Agent).
 - **Traps**: only user-entered overrides are stored in the cloud; inherited

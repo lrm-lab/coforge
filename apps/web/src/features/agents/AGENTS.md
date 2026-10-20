@@ -159,5 +159,7 @@ These rules apply to `src/features/agents/`.
 - The environment editor edits only user-declared Agent environment overrides.
 - The Skills tab displays Global/Workspace metadata only, never skill bodies
   or a claim that a running session has loaded each entry.
-- The context popover is display-only: no thresholds and no toast; every
-  non-available Daemon status is shown inline with what to do.
+- The context popover is display-only: no toast and nothing triggers on a
+  threshold; its row and the Context item are coloured by the shared
+  `usageRisk` rule (`features/computers/usage-risk.ts`), like a usage bar.
+  Every non-available Daemon status is one short inline line with what to do.

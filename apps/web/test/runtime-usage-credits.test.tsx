@@ -46,8 +46,8 @@ function render(data: UsageReadResult) {
 test("a credit plan's header line is the label and its percentage; the amounts sit under the bar", () => {
   const html = render(kiroUsage({ used: 7517.29, limit: 10_000, overage: 0 }));
   const header = html.indexOf("Monthly credits");
-  // 75.17% reads as a whole percentage; the exact amounts are under the bar.
-  const percent = html.indexOf("75%");
+  // 75.17% reads as a whole used share; the exact amounts are under the bar.
+  const percent = html.indexOf("75% used");
   const bar = html.indexOf('role="progressbar"');
   const amounts = html.indexOf("7,517.29 / 10,000 credits used");
   expect(header).toBeGreaterThan(-1);

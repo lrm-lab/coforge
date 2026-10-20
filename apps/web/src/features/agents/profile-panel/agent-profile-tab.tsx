@@ -8,7 +8,7 @@ import {
   Stop,
   Archive,
 } from "@untitledui/icons";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
 import { AgentAvatarDialog } from "#src/features/agents/agent-avatar-dialog";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
@@ -28,9 +28,17 @@ import { getLocale } from "#src/paraglide/runtime";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { computerIcon } from "#src/features/computers/computer-identity";
-import { RuntimeUsage, UsageHealthDot } from "#src/features/computers/runtime-usage";
+import {
+  RuntimeUsage,
+  UsageHealthDot,
+  usedPercentText,
+} from "#src/features/computers/runtime-usage";
+import { type UsageRisk, usageRisk } from "#src/features/computers/usage-risk";
 import { useAgentContextReport } from "#src/features/agents/agent-context-report";
-import { AgentContextPopoverContent } from "#src/features/agents/agent-context-popover";
+import {
+  AgentContextPopoverContent,
+  contextUsedPercent,
+} from "#src/features/agents/agent-context-popover";
 import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
 import { AgentSkills, type AgentSkillsLoadResult } from "#src/features/agents/agent-skills";
@@ -64,18 +72,31 @@ function FactBadge({
   );
 }
 
+/** A part of the Runtime pill that opens its own peek: a button with no chrome of its own, so the
+ * pill reads as one, and a focus ring of its own for the keyboard. */
+const RUNTIME_PILL_PART_CLASS =
+  "inline-flex items-center gap-1.5 rounded-sm outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
+
+/** The used share's text colour inside the Runtime pill: the pill's own text while fine, then the
+ * semantic warning and error text tokens, by the same `usageRisk` rule as a usage bar. */
+const CONTEXT_USED_TEXT_CLASS: Record<UsageRisk, string | undefined> = {
+  success: undefined,
+  warning: "text-warning-primary",
+  error: "text-error-primary",
+};
+
 /**
- * The Agent's current context-window usage, next to the Runtime badge — display only:
- * nothing here triggers on any threshold, and it never colors by how full the window is. Hidden
- * entirely by the caller when there is no reading. The tooltip's observed time uses the same
- * `formatDateForDisplay` helper (workspace time zone, viewer locale) the Runtime usage popover's
- * `RelativeTime` already renders through.
+ * The Agent's current context-window usage, the Runtime pill's second part: "Context 44% used",
+ * its used share coloured by the same risk rule as a usage bar (`usageRisk`). Display only: nothing triggers
+ * on a threshold. Hidden by the caller when there is no reading. The tooltip's observed time uses
+ * the same `formatDateForDisplay` helper (workspace time zone, viewer locale) the Runtime usage
+ * popover's `RelativeTime` already renders through.
  *
- * For a Claude Code Agent the badge is also the trigger of the context-breakdown popover:
- * hover shows the last stored report with the same auto-refresh-once/Refresh pattern the
- * Runtime usage popover uses. Other runtimes keep the plain badge + tooltip.
+ * For a Claude Code Agent the item opens the context popover: hover shows the last stored report
+ * with the same auto-refresh-once/Refresh pattern the Runtime usage popover uses. Other runtimes
+ * keep the item + tooltip.
  */
-function ContextUsageBadge({
+function ContextUsageItem({
   agentId,
   contextUsage,
   timeZone,
@@ -92,12 +113,16 @@ function ContextUsageBadge({
 }) {
   const locale = getLocale();
   const timeFormat = useTimeFormat();
-  const percent = Math.min(
-    100,
-    Math.max(0, Math.round((contextUsage.usedTokens / contextUsage.windowTokens) * 100)),
-  );
+  const percent = contextUsedPercent(contextUsage.usedTokens, contextUsage.windowTokens);
   const numberFormat = new Intl.NumberFormat(locale);
-  const badge = <FactBadge>{m.agent_context_usage_badge({ percent })}</FactBadge>;
+  const used = usedPercentText(percent);
+  const text = `${m.agent_context_title()} ${used}`;
+  const item = (
+    <span>
+      {m.agent_context_title()}{" "}
+      <span className={CONTEXT_USED_TEXT_CLASS[usageRisk(percent)]}>{used}</span>
+    </span>
+  );
   const tooltipText = m.agent_context_usage_tooltip({
     used: numberFormat.format(contextUsage.usedTokens),
     window: numberFormat.format(contextUsage.windowTokens),
@@ -116,31 +141,22 @@ function ContextUsageBadge({
   if (!supportsContextReport) {
     return (
       <Tooltip title={tooltipText}>
-        <TooltipTrigger>{badge}</TooltipTrigger>
+        <TooltipTrigger className={RUNTIME_PILL_PART_CLASS}>{item}</TooltipTrigger>
       </Tooltip>
     );
   }
 
   return (
     <HoverPopover
-      label={m.agent_context_usage_tooltip({
-        used: numberFormat.format(contextUsage.usedTokens),
-        window: numberFormat.format(contextUsage.windowTokens),
-        time: formatDateForDisplay(
-          new Date(contextUsage.observedAtMs),
-          timeZone,
-          locale,
-          timeFormat,
-        ),
-      })}
-      trigger={badge}
-      triggerClassName="-m-1 inline-flex rounded-lg p-1 outline-none hover:bg-primary_hover data-focus-visible:ring-2 data-focus-visible:ring-brand"
+      label={`${text} · ${tooltipText}`}
+      trigger={item}
+      triggerClassName={RUNTIME_PILL_PART_CLASS}
       className="text-sm"
       working={context.scanning}
       onOpen={() => setOpenCount((count) => count + 1)}
     >
       <AgentContextPopoverContent
-        header={tooltipText}
+        usage={contextUsage}
         data={context.data}
         scanning={context.scanning}
         scanFailed={context.scanFailed}
@@ -183,7 +199,7 @@ export function AgentProfileTab({
   profile: NonNullable<AgentProfile>;
   timeZone: string | null;
   /** The Agent's current context-window usage, or `null` when there is no reading —
-   * hidden entirely in that case. Display only; nothing triggers on it. */
+   * hidden entirely in that case. Display only: coloured by risk, but nothing triggers on it. */
   contextUsage?: { usedTokens: number; windowTokens: number; observedAtMs: number } | null;
   /** The Agent's moves between Computers (`AgentMigrationSection`), shown under ACTIONS. */
   migration?: ReactNode;
@@ -383,37 +399,58 @@ export function AgentProfileTab({
         <div className={`flex flex-wrap gap-x-8 gap-y-4 ${needsComputerSetup ? "mt-4" : "mt-3"}`}>
           <div>
             <p className={SUBFIELD_LABEL_CLASS}>{m.agent_runtime_field()}</p>
-            <p className="mt-1 flex flex-wrap items-center gap-2">
-              {profile.runtimeUsageVisible && profile.computer ? (
-                <RuntimeUsage
-                  computerId={profile.computer.id}
-                  runtime={{
-                    provider: runtime,
-                    displayName: runtimeLabel,
-                    version: profile.runtimeVersion,
-                  }}
-                  computerOnline={profile.computer.online}
-                  timeZone={timeZone}
-                  trigger={(health) => (
-                    <FactBadge icon={runtimeIcon}>
-                      {runtimeLabel}
-                      <UsageHealthDot health={health} />
-                    </FactBadge>
-                  )}
-                  triggerClassName="-m-1 inline-flex rounded-lg p-1 outline-none hover:bg-primary_hover data-focus-visible:ring-2 data-focus-visible:ring-brand"
-                />
-              ) : (
-                <FactBadge icon={runtimeIcon}>{runtimeLabel}</FactBadge>
-              )}
-              {contextUsage && !profile.deletedAt && (
-                <ContextUsageBadge
-                  agentId={profile.id}
-                  contextUsage={contextUsage}
-                  timeZone={timeZone}
-                  supportsContextReport={runtime === RUNTIME_PROVIDER.CLAUDE_CODE}
-                  computerOnline={profile.computer?.online}
-                />
-              )}
+            {/* One pill: the runtime (its usage peek) and, once reported, its context (the
+                context peek). Each part stays its own button inside it. */}
+            <p className="mt-1">
+              <FactBadge>
+                {/* A runtime without a usage reader has no peek: RuntimeUsage would hand back the
+                  bare trigger content, not a button. */}
+                {profile.runtimeUsageVisible &&
+                profile.computer &&
+                RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime] ? (
+                  <RuntimeUsage
+                    computerId={profile.computer.id}
+                    runtime={{
+                      provider: runtime,
+                      displayName: runtimeLabel,
+                      version: profile.runtimeVersion,
+                    }}
+                    computerOnline={profile.computer.online}
+                    timeZone={timeZone}
+                    trigger={(health) => (
+                      <>
+                        {runtimeIcon}
+                        {runtimeLabel}
+                        {/* Trailing, like the Computer page's runtime chips. */}
+                        <UsageHealthDot health={health} />
+                      </>
+                    )}
+                    triggerClassName={RUNTIME_PILL_PART_CLASS}
+                  />
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    {runtimeIcon}
+                    {runtimeLabel}
+                  </span>
+                )}
+                {contextUsage && !profile.deletedAt && (
+                  <>
+                    {/* A hairline, not a "·": beside the health dot a dot separator reads as a
+                        second status dot. */}
+                    <span
+                      aria-hidden="true"
+                      className="mx-0.5 h-3 w-px shrink-0 bg-border-secondary"
+                    />
+                    <ContextUsageItem
+                      agentId={profile.id}
+                      contextUsage={contextUsage}
+                      timeZone={timeZone}
+                      supportsContextReport={runtime === RUNTIME_PROVIDER.CLAUDE_CODE}
+                      computerOnline={profile.computer?.online}
+                    />
+                  </>
+                )}
+              </FactBadge>
             </p>
           </div>
           <div>

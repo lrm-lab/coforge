@@ -5,8 +5,8 @@ import { type RefObject } from "react";
 
 import { type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { Button } from "#src/components/base/buttons/button";
-import { RelativeTime } from "#src/components/ui/relative-time";
 import { cn } from "#src/lib/utils";
+import { TimeMessage, UsageWindow } from "#src/features/computers/runtime-usage";
 import { getLocale } from "#src/paraglide/runtime";
 import { m } from "#src/paraglide/messages";
 
@@ -34,8 +34,8 @@ export type AgentContextPopoverData = {
 };
 
 /** The categorical swatches for the stacked bar and table dots (`bg-avatar-1..6`, `lib/
- * avatar-tone.ts`'s palette), plus a neutral for Free space. No red/amber: nothing here signals
- * a threshold. */
+ * avatar-tone.ts`'s palette), plus a neutral for Free space. No red/amber: a category is not a
+ * threshold; the context row above them carries the risk colour. */
 const CATEGORY_TONES = [
   "bg-avatar-1",
   "bg-avatar-2",
@@ -45,18 +45,26 @@ const CATEGORY_TONES = [
   "bg-avatar-6",
 ] as const;
 
+/** The share of the context window in use, as a whole percent clamped to 0–100: the Context
+ * badge and the popover's row read the same number. */
+export function contextUsedPercent(usedTokens: number, windowTokens: number): number {
+  if (windowTokens <= 0) return 0;
+  return Math.min(100, Math.max(0, Math.round((usedTokens / windowTokens) * 100)));
+}
+
 function isFreeSpace(name: string) {
   return /free\s+space/i.test(name);
 }
 
 /**
- * The context-composition popover's pure body: everything `useAgentContextReport` fetches,
- * rendered without touching a query client itself, so a test can render it directly with a plain
- * `data` fixture (same split as `RuntimeUsagePopoverContent`). Loading / stale / refreshing /
- * failed states mirror the runtime usage popover; every non-available scan result is shown
- * inline with its reason and what to do — never a toast.
+ * The context popover's pure body: everything `useAgentContextReport` fetches, rendered without
+ * touching a query client itself, so a test can render it directly with a plain `data` fixture
+ * (same split as `RuntimeUsagePopoverContent`, whose bands it follows): the title and Refresh, one
+ * usage row for the context window with the composition under it, and when it was read. A
+ * failed or missing composition is one short line under the row, never a toast.
  */
 export function AgentContextPopoverContent({
+  usage,
   data,
   scanning,
   scanFailed = false,
@@ -64,12 +72,10 @@ export function AgentContextPopoverContent({
   timeZone = null,
   onRefresh,
   refreshButtonWrapRef,
-  /** The trigger badge's own tooltip line (`used / window tokens · time`); shown as the popover's
-   * header line, exactly the runtime-usage twin's header pattern. */
-  header = m.agent_context_title(),
 }: {
-  /** The trigger badge's own tooltip line; shown as the popover's header. */
-  header?: string;
+  /** The reading the Context item shows, so the row says what the item said, before a
+   * composition is read and when it cannot be. */
+  usage?: { usedTokens: number; windowTokens: number; observedAtMs: number };
   data?: AgentContextPopoverData;
   scanning: boolean;
   scanFailed?: boolean;
@@ -80,17 +86,24 @@ export function AgentContextPopoverContent({
 }) {
   const report = data?.result?.report;
   const reading = !data || (data.state === "missing" && (scanning || data.pendingScanId));
-  const status = footerStatusText(data, scanning, computerOnline, scanFailed);
-  // RelativeTime is blank until hydration; the "updated" line waits with it, so the footer band
-  // never collapses to nothing (the runtime-usage twin's version line does the same).
+  const status = reading
+    ? m.agent_context_reading()
+    : statusText(data, scanning, computerOnline, scanFailed);
+  // The row repeats the reading the Context item that opened it shows, so the two never disagree;
+  // the composition's figures stand in only when the popover has no such reading.
+  const figures = usage ?? report;
+  const readAt = usage ? new Date(usage.observedAtMs) : data?.result?.collectedAt;
+  // RelativeTime is blank until hydration; the "Updated" line waits with it, like the runtime
+  // usage popover's read time.
   const hydrated = useHydrated();
+  const numberFormat = new Intl.NumberFormat(getLocale());
 
   return (
     <div className="text-sm divide-y divide-secondary">
-      {/* Identity row, the runtime-usage twin's shape: title over the read line at the left, and
-          an icon-only Refresh at the right. */}
       <div className="flex items-center gap-3 px-4 py-3">
-        <h2 className="min-w-0 flex-1 font-semibold text-primary">{header}</h2>
+        <h2 className="min-w-0 flex-1 truncate font-semibold text-primary">
+          {m.agent_context_title()}
+        </h2>
         <span ref={refreshButtonWrapRef} className="shrink-0">
           {/* React Aria's isPending keeps focus through a refresh, so the peek survives it;
               isDisabled only for a Computer known offline. No Tooltip: PreviewTrigger shares the
@@ -109,32 +122,45 @@ export function AgentContextPopoverContent({
         </span>
       </div>
 
-      <section className="px-4 py-3">
-        {reading ? (
-          <p className="text-tertiary">{m.agent_context_reading()}</p>
-        ) : (
-          <>
-            {data?.state === "stale" && (
-              <p className="text-xs text-warning-primary">
-                {scanning ? m.agent_context_stale_refreshing() : m.agent_context_stale()}
-              </p>
-            )}
-            {report && <AgentContextReportBody report={report} />}
-            {/* A failed status's reason is stated once, in the footer, like the runtime-usage twin. */}
-          </>
-        )}
-      </section>
-
-      {(status || (data?.result && hydrated)) && (
-        <div className="px-4 py-2 text-xs text-tertiary">
-          {data?.result && hydrated && (
-            <p>
-              {m.agent_context_updated()}{" "}
-              <RelativeTime value={data.result.collectedAt} timeZone={timeZone} plain />
+      {(figures || status || data?.state === "stale") && (
+        <section className="space-y-3 px-4 py-3">
+          {data?.state === "stale" && (
+            <p className="text-xs text-warning-primary">
+              {scanning ? m.agent_context_stale_refreshing() : m.agent_context_stale()}
             </p>
           )}
-          {status && <p className={data?.result ? "mt-1" : undefined}>{status}</p>}
-        </div>
+          {figures && (
+            <UsageWindow
+              label={m.agent_context_window()}
+              window={{
+                usedPercent: contextUsedPercent(figures.usedTokens, figures.windowTokens),
+              }}
+              note={[
+                m.agent_context_tokens_of({
+                  tokens: numberFormat.format(figures.usedTokens),
+                  window: numberFormat.format(figures.windowTokens),
+                }),
+                report?.model,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              timeZone={timeZone}
+              resetExpected={false}
+            />
+          )}
+          {status && <p className="text-xs text-tertiary">{status}</p>}
+          {report && !reading && <AgentContextReportBody report={report} />}
+        </section>
+      )}
+
+      {hydrated && readAt && (
+        <p className="px-4 py-2 text-xs text-tertiary">
+          <TimeMessage
+            message={(time) => m.agent_context_updated({ time })}
+            value={readAt}
+            timeZone={timeZone}
+          />
+        </p>
       )}
     </div>
   );
@@ -142,23 +168,11 @@ export function AgentContextPopoverContent({
 
 type PopoverReport = NonNullable<NonNullable<AgentContextPopoverData["result"]>["report"]>;
 
-function AgentContextReportBody({ report }: { report: PopoverReport; timeZone?: string | null }) {
-  if (!report) return null;
-  const locale = navigatorLocale();
-  const numberFormat = new Intl.NumberFormat(locale);
-  const percent = (tokens: number) =>
-    report.windowTokens > 0
-      ? Math.min(100, Math.max(0, Math.round((tokens / report.windowTokens) * 100)))
-      : 0;
+function AgentContextReportBody({ report }: { report: PopoverReport }) {
+  const numberFormat = new Intl.NumberFormat(getLocale());
+  const percent = (tokens: number) => contextUsedPercent(tokens, report.windowTokens);
   return (
     <div>
-      <p className="font-medium text-primary">
-        {m.agent_context_tokens_of({
-          tokens: numberFormat.format(report.usedTokens),
-          window: numberFormat.format(report.windowTokens),
-        })}
-        {report.model ? ` · ${report.model}` : ""}
-      </p>
       <StackedCategoryBar report={report} />
       <div className="mt-3">
         <p className={SECTION_LABEL_CLASS}>{m.agent_context_categories()}</p>
@@ -304,7 +318,7 @@ function CATEGORY_TONE_AT(index: number): string {
   return CATEGORY_TONES[index % CATEGORY_TONES.length]!;
 }
 
-function footerStatusText(
+function statusText(
   data: Parameters<typeof AgentContextPopoverContent>[0]["data"],
   scanning: boolean,
   computerOnline: boolean | undefined,
@@ -325,9 +339,4 @@ function contextFailureDescription(status: string): string {
   if (status === "timeout") return m.agent_context_status_timeout();
   if (status === "error") return m.agent_context_status_error();
   return m.agent_context_status_error();
-}
-
-function navigatorLocale(): string {
-  // Same viewer locale the profile tab's Context badge formats its tooltip through.
-  return getLocale();
 }

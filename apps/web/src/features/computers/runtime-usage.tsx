@@ -18,6 +18,7 @@ import { getLocale } from "#src/paraglide/runtime";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { useRuntimeUsage } from "./use-runtime-usage";
 import { byDuration, usageWindowLabel } from "./runtime-usage-windows";
+import { USAGE_RISK_FILL_CLASS, usageRisk } from "./usage-risk";
 import type { UsageReadResult, UsageResultRecord } from "#src/server/centrifugo/usage-cache.server";
 
 export type Runtime = {
@@ -132,8 +133,19 @@ export function RuntimeUsage({
       footer={footer}
     />
   );
+  // The health is named here too: the trigger's aria-label replaces the health dot's own name.
   const label = supportsUsage
-    ? `${runtime.displayName} · ${m.computer_usage_title()}`
+    ? [
+        runtime.displayName,
+        m.computer_usage_title(),
+        health === "ok"
+          ? m.computer_usage_health_ok()
+          : health === "attention"
+            ? m.computer_usage_health_attention()
+            : undefined,
+      ]
+        .filter(Boolean)
+        .join(" · ")
     : runtime.displayName;
 
   return (
@@ -202,21 +214,25 @@ function usageFailureDescription(result: UsageResultRecord | undefined) {
 const RAW_WINDOW_LABELS: Record<string, () => string> = {
   onDemand: () => m.computer_usage_pay_as_you_go(),
   prepaidBalance: () => m.computer_usage_prepaid_balance(),
-  individualLimit: () => m.computer_usage_spend_limit_remaining(),
+  individualLimit: () => m.computer_usage_spend_limit(),
   bonus: () => m.computer_usage_bonus(),
   freeTrial: () => m.computer_usage_free_trial(),
   currentPeriod: () => m.computer_usage_current_period(),
 };
 
-/** The row label for one official bucket. A provider name wins. A stored window key is
- * localized, then a real window length, then a week or month named by the official type. */
+/** The row label for one official bucket. A provider name wins, except on a bucket the provider
+ * counts as a share left (`remainingFraction`): its name says so ("Weekly Limit Remaining") while
+ * the row shows the share used. A stored window key is localized, then a real window length, then
+ * a week or month named by the official type. */
 function officialBucketLabel(bucket: {
   name?: string;
   window?: string;
+  remainingFraction?: number;
   windowDurationMinutes?: number;
 }): string {
-  if (bucket.name && !RAW_WINDOW_LABELS[bucket.name]) return bucket.name;
-  const key = bucket.window ?? bucket.name;
+  const remainingType = bucket.remainingFraction !== undefined;
+  if (bucket.name && !remainingType && !RAW_WINDOW_LABELS[bucket.name]) return bucket.name;
+  const key = remainingType ? bucket.window : (bucket.window ?? bucket.name);
   const known = key ? RAW_WINDOW_LABELS[key] : undefined;
   if (known) return known();
   if (bucket.windowDurationMinutes)
@@ -373,7 +389,7 @@ export function RuntimeUsagePopoverContent({
             <>
               {reason && <p className="mt-2 text-sm text-tertiary">{reason}</p>}
               {snapshot?.officialGroups && snapshot.officialGroups.length > 0 ? (
-                // Default rows are the group name, window, remaining share, and reset. The
+                // Default rows are the group name, window, used share, and reset. The
                 // provider's notes stay on the snapshot and open from this button: a tooltip
                 // inside the peek would close it (task #258). Per-bucket sentences are not
                 // painted; they repeat the reset already on the row.
@@ -392,9 +408,9 @@ export function RuntimeUsagePopoverContent({
                             key={bucket.id ?? `${bucket.window ?? "bucket"}-${bucketIndex}`}
                             label={officialBucketLabel(bucket)}
                             window={{
-                              // A remaining fraction wins, because that bucket's official number
-                              // is the share left. A used percent stays a used percent.
-                              ...officialMeter(bucket),
+                              ...(bucket.usedPercent !== undefined
+                                ? { usedPercent: bucket.usedPercent }
+                                : {}),
                               ...(bucket.status ? { status: bucket.status } : {}),
                               ...(bucket.resetsAt ? { resetsAt: bucket.resetsAt } : {}),
                             }}
@@ -470,25 +486,51 @@ export function RuntimeUsagePopoverContent({
   );
 }
 
-/** Percent the meter draws for one official bucket. A remaining fraction wins, because the
- * provider's bucket name is the remaining label (`Weekly Limit Remaining`). */
-function officialMeter(bucket: { remainingFraction?: number; usedPercent?: number }): {
-  usedPercent?: number;
-} {
-  if (bucket.remainingFraction === undefined) {
-    return bucket.usedPercent !== undefined ? { usedPercent: bucket.usedPercent } : {};
-  }
-  const remaining = Math.min(1, Math.max(0, bucket.remainingFraction));
-  return { usedPercent: Math.round(remaining * 10_000) / 100 };
+/** Stands in for `{time}` while a message is split around the `RelativeTime` that replaces it. */
+const TIME_SLOT = "\u0000";
+
+/**
+ * A message with a live `RelativeTime` where its `{time}` goes: "resets in 5d" / "5天后重置",
+ * "Updated 6m ago" / "6分钟前更新". The message decides the word order, so each locale keeps its
+ * own. Callers render it only once hydrated, as `RelativeTime` is blank before that.
+ */
+export function TimeMessage({
+  message,
+  value,
+  timeZone,
+}: {
+  message: (time: string) => string;
+  value: string | Date;
+  timeZone: string | null;
+}) {
+  const [before = "", after = ""] = message(TIME_SLOT).split(TIME_SLOT);
+  return (
+    <>
+      {before}
+      <RelativeTime value={value} timeZone={timeZone} plain />
+      {after}
+    </>
+  );
 }
 
-function UsageWindow({
+/** "63% used" / "已用 63%": the one wording for a used share, a usage window's or a context's. */
+export function usedPercentText(usedPercent: number): string {
+  return m.computer_usage_percent_used({ percent: formatPercent(usedPercent) });
+}
+
+/**
+ * One usage meter row: the label, then the value and its reset on the same line, then a bar
+ * coloured by `usageRisk` on the used share. The Agent context popover draws its context window
+ * with the same row (`resetExpected={false}`: a context window has no reset).
+ */
+export function UsageWindow({
   label,
   window,
   creditUsage,
   detail,
   note,
   timeZone,
+  resetExpected = true,
 }: {
   label: string;
   window: {
@@ -502,14 +544,19 @@ function UsageWindow({
   /** Official amount kept beside a meter, such as a spend limit's used and limit strings. */
   note?: string;
   timeZone: string | null;
+  /** False for a meter that never resets. Otherwise a used share whose reset the provider did not
+   * report says so; a row without a share (a balance, a trial) never claims a reset. */
+  resetExpected?: boolean;
 }) {
   // The header line is label + a short value + reset, kept on one line: a credit plan's amounts
   // ("7,517.29 / 10,000 credits used") would squeeze the label onto two lines in the popover, so
-  // they move under the bar and the header shows the percentage, like a session window (task #109).
+  // they move under the bar and the header shows the used share, like a session window (task #109).
   const hydrated = useHydrated();
+  const resetUnknown =
+    resetExpected && window.usedPercent !== undefined && window.resetsAt === undefined;
   const value =
     window.usedPercent !== undefined
-      ? formatPercent(window.usedPercent)
+      ? usedPercentText(window.usedPercent)
       : creditUsage
         ? creditAmounts(creditUsage)
         : detail
@@ -529,9 +576,14 @@ function UsageWindow({
           {hydrated && window.resetsAt !== undefined && (
             <>
               {" · "}
-              <RelativeTime value={window.resetsAt} timeZone={timeZone} plain />
+              <TimeMessage
+                message={(time) => m.computer_usage_resets({ time })}
+                value={window.resetsAt}
+                timeZone={timeZone}
+              />
             </>
           )}
+          {resetUnknown && ` · ${m.computer_usage_reset_unavailable()}`}
         </p>
       </div>
       {window.usedPercent !== undefined && (
@@ -543,7 +595,9 @@ function UsageWindow({
             className="h-1.5 rounded-full"
             progressClassName={cn(
               "rounded-full",
-              window.status === "limit_reached" ? "bg-warning-solid" : "bg-brand-solid",
+              USAGE_RISK_FILL_CLASS[
+                usageRisk(window.usedPercent, window.status === "limit_reached")
+              ],
             )}
           />
         </div>
@@ -561,8 +615,8 @@ function UsageWindow({
   );
 }
 
-/** A window's share as a whole percentage ("76%"): the exact credit amounts, when there are
- * any, sit under the bar, so the header does not need decimals. */
+/** A used share as a whole percentage ("76%"): the exact credit amounts, when there are any, sit
+ * under the bar, so the header does not need decimals. */
 function formatPercent(value: number) {
   return new Intl.NumberFormat(getLocale(), { style: "percent", maximumFractionDigits: 0 }).format(
     value / 100,
