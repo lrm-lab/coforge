@@ -1,5 +1,8 @@
+import { tmpdir } from "node:os";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import type { AgentSession } from "#src/code-agent/contract";
+
+export const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
 
 /** The Claude Code adapter over the stream-json fixture (`claude-stream-json.ts`), launched with
  * the fixture's own arguments. */
@@ -33,6 +36,9 @@ export function claudeEventFeed() {
   let serial = 0;
   const markers = new Map<string, () => void>();
   const initialInput = Promise.withResolvers<void>();
+  // The fixture answers every input it reads with a `fixture-input-observed` text block.
+  let readCount = 0;
+  const inputWaiters: Array<{ count: number; resolve: () => void }> = [];
 
   /** Hands the records to the fixture without waiting for the session to read them. */
   function write(...records: Record<string, unknown>[]): void {
@@ -64,8 +70,12 @@ export function claudeEventFeed() {
     attach(next: AgentSession): void {
       session = next;
       next.subscribe((event) => {
-        if (event.type === "text-delta" && event.text === "fixture-input-observed")
+        if (event.type === "text-delta" && event.text === "fixture-input-observed") {
           initialInput.resolve();
+          readCount += 1;
+          for (const waiter of inputWaiters.filter(({ count }) => count <= readCount))
+            waiter.resolve();
+        }
         if (event.type === "text-delta") markers.get(event.text)?.();
         if (event.type === "usage" && event.snapshot.primary?.resetsAt)
           markers.get(event.snapshot.primary.resetsAt)?.();
@@ -78,6 +88,12 @@ export function claudeEventFeed() {
       return identity.sessionId;
     },
     write,
+    /** Resolves once the fixture has read `count` inputs in all. A written input (`sendMessage`,
+     * `notify`) is not yet read, and the fixture's answer to it can still start a turn. */
+    async inputsRead(count: number): Promise<void> {
+      if (readCount >= count) return;
+      await new Promise<void>((resolve) => inputWaiters.push({ count, resolve }));
+    },
     /** After the fixture has seen its first input, writes the records and waits until the
      * attached session has read them all. */
     async emit(...records: Record<string, unknown>[]): Promise<void> {
@@ -136,4 +152,34 @@ export function backgroundBash(id: string): Record<string, unknown>[] {
       },
     },
   ];
+}
+
+/** A session of the fixture fed by its own `claudeEventFeed`: `emit` hands it records and waits
+ * until the session has read them. */
+export async function controlledClaude(
+  sessionId?: string,
+  onSessionId?: (id: string) => Promise<void>,
+  ...args: string[]
+) {
+  const feed = claudeEventFeed();
+  const session = await claudeFixtureProvider(...args).createAgentSession({
+    agentWorkspaceDirectory: tmpdir(),
+    instructions: TEST_AGENT_INSTRUCTIONS,
+    sessionId,
+    onSessionId,
+    environment: feed.environment,
+  });
+  feed.attach(session);
+  return {
+    session,
+    sessionId: await feed.sessionId(),
+    emit: feed.emit,
+    emitBeforeInput: feed.emitBeforeInput,
+    inputsRead: feed.inputsRead,
+    write: feed.write,
+    async dispose() {
+      await session.dispose();
+      feed.stop();
+    },
+  };
 }

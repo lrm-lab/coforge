@@ -14,9 +14,12 @@ import {
   type AgentSession,
 } from "#src/code-agent/contract";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
-import { backgroundBash, claudeEventFeed, claudeFixtureProvider } from "./fixtures/claude-feed";
-
-const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
+import {
+  backgroundBash,
+  claudeFixtureProvider,
+  controlledClaude,
+  TEST_AGENT_INSTRUCTIONS,
+} from "./fixtures/claude-feed";
 
 test.each(["missing-resume", "missing-before-initialize"])(
   "Claude %s closes before fresh launch and reports replacement without losing first input",
@@ -1331,7 +1334,7 @@ test("Claude Code reports a raw error event, not a classified activity, when the
 
 test("Claude Code holds later text-only turns and delivers all waiting notices once", async () => {
   const fixture = await controlledClaude();
-  const { session, emit } = fixture;
+  const { session, emit, inputsRead } = fixture;
   try {
     await session.sendMessage("wait");
     await emit({ type: "result", subtype: "success" });
@@ -1360,6 +1363,9 @@ test("Claude Code holds later text-only turns and delivers all waiting notices o
     await emit({ type: "result", subtype: "success" });
     await Promise.all([first, second]);
     expect(accepted).toBe(2);
+    // Accepted is written, not read. Claude Code reads both notices before it ends their turn; a
+    // fixture answer read after that result would start one more turn.
+    await inputsRead(4);
     await emit({ type: "result", subtype: "success" });
     await session.sendMessage("wait");
     expect(accepted).toBe(2);
@@ -1825,33 +1831,6 @@ test("Claude makes a subagent's type single-line and capped where its lineage is
     await fixture.dispose();
   }
 });
-
-async function controlledClaude(
-  sessionId?: string,
-  onSessionId?: (id: string) => Promise<void>,
-  ...args: string[]
-) {
-  const feed = claudeEventFeed();
-  const session = await claudeFixtureProvider(...args).createAgentSession({
-    agentWorkspaceDirectory: tmpdir(),
-    instructions: TEST_AGENT_INSTRUCTIONS,
-    sessionId,
-    onSessionId,
-    environment: feed.environment,
-  });
-  feed.attach(session);
-  return {
-    session,
-    sessionId: await feed.sessionId(),
-    emit: feed.emit,
-    emitBeforeInput: feed.emitBeforeInput,
-    write: feed.write,
-    async dispose() {
-      await session.dispose();
-      feed.stop();
-    },
-  };
-}
 
 async function waitForEvent(
   events: AgentRuntimeEvent[],
