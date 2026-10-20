@@ -9,9 +9,10 @@ import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import type { AgentRuntimeEvent, AgentSession, CodeAgentProvider } from "#src/code-agent/contract";
 import { KiroProvider } from "#src/code-agent/kiro/provider";
 import { AgentSessionRecoveryError } from "#src/code-agent/contract";
-import { AGENT_STARTUP_TIMEOUT_MS } from "#src/agent-runtime/agent-startup";
+import { AGENT_STARTUP_TIMEOUT_MS, AgentStartup } from "#src/agent-runtime/agent-startup";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
 import type { AgentActivity } from "@lrm/coforge-sdk/internal";
+import { captureDaemonLogs } from "./log-capture";
 
 const workspaceRoot = join(realpathSync(tmpdir()), `coforge-startup-${crypto.randomUUID()}`);
 afterAll(() => rm(workspaceRoot, { recursive: true, force: true }));
@@ -23,6 +24,7 @@ async function harness(provider?: CodeAgentProvider, input?: () => Promise<void>
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
   const activities: AgentActivity[] = [];
   const notices: string[] = [];
+  const statuses: string[] = [];
   const inactive = Promise.withResolvers<void>();
   const idle = Promise.withResolvers<void>();
   const inputStarted = Promise.withResolvers<void>();
@@ -76,6 +78,7 @@ async function harness(provider?: CodeAgentProvider, input?: () => Promise<void>
           if (activity.detailKind === "idle") idle.resolve();
         },
         sendAgentStatus(status) {
+          statuses.push(status.status);
           if (status.status === "inactive") inactive.resolve();
         },
       }),
@@ -88,6 +91,7 @@ async function harness(provider?: CodeAgentProvider, input?: () => Promise<void>
     runtime,
     activities,
     notices,
+    statuses,
     inactive: inactive.promise,
     idle: idle.promise,
     inputStarted: inputStarted.promise,
@@ -398,3 +402,89 @@ test.each(["agent", "daemon"] as const)(
     }
   },
 );
+
+type ProviderLimit = NonNullable<Extract<AgentRuntimeEvent, { type: "error" }>["providerLimit"]>;
+const usageLimitError = (providerLimit: ProviderLimit): AgentRuntimeEvent => ({
+  type: "error",
+  message: "You've hit your session limit · resets 9:30pm",
+  providerErrorCode: "rate_limit",
+  providerLimit,
+});
+
+test.each<ProviderLimit>([
+  { kind: "quota_exhausted", resetsAt: "2026-10-20T13:30:00.000Z" },
+  { kind: "transient_rate_limit" },
+])(
+  "a provider usage limit ($kind) after admission is readiness, not a startup failure",
+  async (providerLimit) => {
+    const startup = new AgentStartup(() => {});
+    try {
+      startup.admitted();
+      // Input the provider holds for the whole turn: only readiness settles it.
+      const ran = startup.run(new Promise<void>(() => {}));
+      expect(startup.observe(usageLimitError(providerLimit))).toBe(false);
+      expect(startup.failureObserved).toBe(false);
+      expect(startup.waiting).toBe(false);
+      await ran;
+      expect(startup.observe({ type: "completed", status: "failed" })).toBe(false);
+      expect(startup.failureObserved).toBe(false);
+    } finally {
+      startup.dispose();
+    }
+  },
+);
+
+test("a provider usage limit before input admission settles the launch input as ready", async () => {
+  const startup = new AgentStartup(() => {});
+  try {
+    const input = Promise.withResolvers<void>();
+    const ran = startup.run(input.promise);
+    expect(startup.observe(usageLimitError({ kind: "transient_rate_limit" }))).toBe(false);
+    await ran;
+    expect(startup.failureObserved).toBe(false);
+    expect(startup.waiting).toBe(false);
+    input.resolve();
+    await input.promise;
+    // Late admission after readiness carries no startup failure to rethrow.
+    expect(startup.admitted()).toBe(false);
+  } finally {
+    startup.dispose();
+  }
+});
+
+test("an admitted startup error without a provider limit still fails startup", () => {
+  const startup = new AgentStartup(() => {});
+  try {
+    startup.admitted();
+    expect(startup.observe({ type: "error", message: "Provider authentication failed" })).toBe(
+      true,
+    );
+    expect(startup.failureObserved).toBe(true);
+    expect(startup.waiting).toBe(true);
+  } finally {
+    startup.dispose();
+  }
+});
+
+test("a usage limit on the startup turn leaves the Agent's launch running", async () => {
+  const h = await harness();
+  try {
+    const { records } = await captureDaemonLogs(async () => {
+      await h.start();
+      h.emit(usageLimitError({ kind: "quota_exhausted", resetsAt: "2026-10-20T13:30:00.000Z" }));
+      h.emit({ type: "completed", status: "failed" });
+    });
+    // Startup failure logs synchronously from the event, before tearing the launch down.
+    expect(records.map((record) => record.properties.event)).not.toContain(
+      "agent_runtime:startup_input_rejected",
+    );
+    expect(h.disposed()).toBe(false);
+    // The limit takes the ordinary runtime-error path (the provider-limit hold) instead.
+    const errors = h.activities.filter((activity) => activity.detailKind === "runtime_error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.runtimeError?.errorReason).toBe("quota_exhausted");
+    expect(h.statuses).not.toContain("inactive");
+  } finally {
+    await h.runtime.stop();
+  }
+});

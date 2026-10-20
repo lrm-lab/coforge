@@ -30,7 +30,9 @@ export const AGENT_STARTUP_TIMEOUT_MS = 120_000;
 
 /** Launch-local readiness. Transport/session bookkeeping is not evidence that the model can
  * work. A real turn observation or outcome closes the startup window; later silence belongs
- * to the ordinary runtime liveness policy, not this timer. */
+ * to the ordinary runtime liveness policy, not this timer. A provider usage or rate limit
+ * (`providerLimit`) closes it too: the runtime reached the provider's API, so the limit takes
+ * the ordinary runtime-error path instead of tearing the launch down. */
 export class AgentStartup {
   #timer: ReturnType<typeof setTimeout> | undefined;
   readonly #ready = Promise.withResolvers<void>();
@@ -69,11 +71,14 @@ export class AgentStartup {
     return this.waiting && this.failureObserved;
   }
 
-  /** True when an already-admitted startup failed before the model became ready. */
+  /** True when an already-admitted startup failed before the model became ready. An error
+   * carrying `providerLimit` is readiness, never a startup failure, and closes the window even
+   * when marked retryable. */
   observe(event: AgentRuntimeEvent): boolean {
     if (this.#timer === undefined) return false;
+    const limited = event.type === "error" && event.providerLimit !== undefined;
     if (
-      (event.type === "error" && !event.retryable) ||
+      (event.type === "error" && !event.retryable && !limited) ||
       (event.type === "completed" && event.status === "failed") ||
       (event.type === "activity" && event.activity.level === "error")
     ) {
@@ -91,7 +96,7 @@ export class AgentStartup {
       event.type === "notice-undelivered"
     )
       return false;
-    if (event.type === "error") return false;
+    if (event.type === "error" && !limited) return false;
     if (
       event.type === "activity" &&
       (event.activity.detailKind === "starting" || event.activity.detailKind === "runtime_progress")
