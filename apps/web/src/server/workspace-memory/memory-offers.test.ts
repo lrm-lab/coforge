@@ -3,7 +3,7 @@ import { OPENVIKING_CITATION_KIND } from "@lrm/coforge-sdk/agent";
 import type {
   MemoryOfferRecord,
   OpenVikingCitationRecord,
-} from "../db/repositories/workspace-memory-citation.repositories.server";
+} from "#src/server/db/repositories/workspace-memory-citation.repositories.server";
 import { createMemoryCitationBindings, MemoryCitationUngroundedError } from "./memory-citations";
 import { createMemoryOffers } from "./memory-offers";
 

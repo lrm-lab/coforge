@@ -1,10 +1,10 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { ACTIVE_AGENT_WHERE } from "../../agents/active-agent.server";
-import type { CoforgeMemoryActor } from "../../openviking/contract";
+import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import type { CoforgeMemoryActor } from "#src/server/openviking/contract";
 import type {
   MappedIdentityWriter,
   WorkspaceIdentityDirectory,
-} from "../../workspace-memory/runtime-provisioner";
+} from "#src/server/workspace-memory/runtime-provisioner";
 
 export class PrismaWorkspaceMemoryIdentityDirectory
   implements WorkspaceIdentityDirectory, MappedIdentityWriter

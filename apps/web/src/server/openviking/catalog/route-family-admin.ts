@@ -1,10 +1,13 @@
-import type { CoforgeMemoryActor, GatewayRouteClassification } from "../contract";
+import type {
+  CoforgeMemoryActor,
+  GatewayRouteClassification,
+} from "#src/server/openviking/contract";
 import {
   DEFAULT_OPENVIKING_TRANSPORT_LIMITS,
   type GatewayCapability,
   type OpenVikingTransportLimits,
   templateMatches,
-} from "../route-policy";
+} from "#src/server/openviking/route-policy";
 
 export const ADMIN_FAMILY_PINNED_FAMILIES = ["acl", "admin", "privacy"] as const;
 export type AdminFamilyId = (typeof ADMIN_FAMILY_PINNED_FAMILIES)[number];

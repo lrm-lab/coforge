@@ -14,11 +14,11 @@ import {
 import {
   MemoryCitationUngroundedError,
   type MemoryCitationBindings,
-} from "../workspace-memory/memory-citations";
+} from "#src/server/workspace-memory/memory-citations";
 import {
   assertDiscoveryServable,
   isRetiredFromMemoryDiscovery,
-} from "../workspace-memory/memory-discovery-eligibility";
+} from "#src/server/workspace-memory/memory-discovery-eligibility";
 import type { OpenVikingMemoryReadClient } from "./memory-agent-reads";
 
 export { MemoryAgentMutationError } from "./memory-agent-reads";

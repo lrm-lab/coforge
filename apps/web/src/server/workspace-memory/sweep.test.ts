@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type {
   OpenVikingAdmittedSessionWrite,
   OpenVikingTypedSessionExtract,
-} from "../openviking/typed-session-extract.server";
+} from "#src/server/openviking/typed-session-extract.server";
 import { createInMemoryWorkspaceMemoryCatalog } from "./catalog";
 import { detectAdmittedPublicChannelSegments, ingestOperationId } from "./detect-segments";
 import {

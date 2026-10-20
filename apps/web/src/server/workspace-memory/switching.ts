@@ -2,7 +2,7 @@
  * F2 composition: non-destructive profile switching observed through one public seam.
  * Consumes frozen P1 profile/reconciler, F1 dispatcher, and the G2 ready gate.
  */
-import type { OpenVikingBinding } from "../openviking/contract";
+import type { OpenVikingBinding } from "#src/server/openviking/contract";
 import {
   createDefaultWorkspaceMemoryProfile,
   type DesiredWorkspaceMemoryProfile,

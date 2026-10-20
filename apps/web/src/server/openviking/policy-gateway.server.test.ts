@@ -2,18 +2,18 @@ import { expect, test } from "bun:test";
 import {
   applyWorkspaceMemoryCommand,
   createDefaultWorkspaceMemoryProfile,
-} from "../workspace-memory/profile";
-import { createWorkspaceMemoryProfiles } from "../workspace-memory/profiles";
-import { createWorkspaceMemoryProfileReconciler } from "../workspace-memory/reconciler";
+} from "#src/server/workspace-memory/profile";
+import { createWorkspaceMemoryProfiles } from "#src/server/workspace-memory/profiles";
+import { createWorkspaceMemoryProfileReconciler } from "#src/server/workspace-memory/reconciler";
 import {
   createInMemoryWorkspaceIdentityDirectory,
   createProductionMemoryRuntimeProvisioner,
   createPrototypeMemoryRuntimeReadiness,
-} from "../workspace-memory/runtime-provisioner";
+} from "#src/server/workspace-memory/runtime-provisioner";
 import {
   createInMemoryWorkspaceMemoryProfileStore,
   saveProfileTransition,
-} from "../workspace-memory/stores";
+} from "#src/server/workspace-memory/stores";
 import type { CoforgeMemoryActor } from "./contract";
 import { PINNED_OPENVIKING_ROUTES } from "./route-catalog";
 import { sanitizeOpenVikingTransportFailure } from "./route-policy";

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { OPENVIKING_CITATION_KIND } from "@lrm/coforge-sdk/agent";
-import type { OpenVikingCitationRecord } from "../db/repositories/workspace-memory-citation.repositories.server";
-import { createMemoryCitationBindings } from "../workspace-memory/memory-citations";
-import { RetiredFromMemoryDiscoveryError } from "../workspace-memory/memory-discovery-eligibility";
+import type { OpenVikingCitationRecord } from "#src/server/db/repositories/workspace-memory-citation.repositories.server";
+import { createMemoryCitationBindings } from "#src/server/workspace-memory/memory-citations";
+import { RetiredFromMemoryDiscoveryError } from "#src/server/workspace-memory/memory-discovery-eligibility";
 import { createOpenVikingMemoryReads } from "./openviking-memory-reads";
 import type { OpenVikingMemoryReadInvocation } from "./memory-agent-reads";
 

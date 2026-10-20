@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import type { CoforgeMemoryActor } from "../contract";
-import { PINNED_OPENVIKING_ROUTES } from "../route-catalog";
+import type { CoforgeMemoryActor } from "#src/server/openviking/contract";
+import { PINNED_OPENVIKING_ROUTES } from "#src/server/openviking/route-catalog";
 import {
   DEFAULT_OPENVIKING_TRANSPORT_LIMITS,
   decideTransportSize,
   sanitizeOpenVikingTransportFailure,
-} from "../route-policy";
+} from "#src/server/openviking/route-policy";
 import {
   CONTENT_FAMILY_GATEWAY_CATALOG,
   CONTENT_FAMILY_NAMES,

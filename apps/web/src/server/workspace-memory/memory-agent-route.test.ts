@@ -8,11 +8,11 @@ import {
 import type {
   MemoryOfferRecord,
   OpenVikingCitationRecord,
-} from "../db/repositories/workspace-memory-citation.repositories.server";
+} from "#src/server/db/repositories/workspace-memory-citation.repositories.server";
 import { createMemoryCitationBindings } from "./memory-citations";
 import { createMemoryAgentBudgetLedger } from "./memory-agent-budget";
 import { createMemoryOffers } from "./memory-offers";
-import { createOpenVikingMemoryReads } from "../openviking/openviking-memory-reads";
+import { createOpenVikingMemoryReads } from "#src/server/openviking/openviking-memory-reads";
 import { createMemoryAgentCommands } from "./memory-agent-route";
 
 const ovHit = {

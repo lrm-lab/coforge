@@ -13,7 +13,7 @@ import {
   type OpenVikingAgentResponse,
   type OpenVikingCitation,
 } from "@lrm/coforge-sdk/agent";
-import { WorkspaceMemoryScopeError } from "../db/repositories/workspace-memory-errors.server";
+import { WorkspaceMemoryScopeError } from "#src/server/db/repositories/workspace-memory-errors.server";
 import { MemoryCitationUngroundedError, type MemoryCitationBindings } from "./memory-citations";
 import { RetiredFromMemoryDiscoveryError } from "./memory-discovery-eligibility";
 import { MemoryAgentBudgetError, type MemoryAgentBudgetLedger } from "./memory-agent-budget";
@@ -22,7 +22,7 @@ import {
   MemoryAgentMutationError,
   MemoryReadCapabilityError,
   type OpenVikingMemoryReads,
-} from "../openviking/openviking-memory-reads";
+} from "#src/server/openviking/openviking-memory-reads";
 import { DEFAULT_OFFER_RATIONALE, MemoryOfferTargetError } from "./explicit-memory-answer";
 
 export const MEMORY_AGENT_TRIGGER_HEADER = "x-coforge-trigger-message-id";

@@ -3,7 +3,7 @@ import {
   decodeAdmittedPublicChannelSegment,
   sameAdmittedSegmentLineage,
   type AdmittedPublicChannelSegment,
-} from "../../workspace-memory/admission";
+} from "#src/server/workspace-memory/admission";
 import {
   isUniqueConstraintError,
   WorkspaceMemoryReplayConflictError,

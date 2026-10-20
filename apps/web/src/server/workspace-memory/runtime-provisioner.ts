@@ -6,8 +6,8 @@ import {
   mapMemoryActor,
   type CoforgeMemoryActor,
   type OpenVikingBinding,
-} from "../openviking/contract";
-import type { OpenVikingBindingStore, OpenVikingProvisioner } from "../openviking/stores";
+} from "#src/server/openviking/contract";
+import type { OpenVikingBindingStore, OpenVikingProvisioner } from "#src/server/openviking/stores";
 import type {
   MemoryRuntimeHealth,
   MemoryRuntimeKind,

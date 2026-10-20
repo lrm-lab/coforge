@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { CLEANUP_TARGETS } from "../db/repositories/workspace-memory-cleanup.repositories.server";
+import { CLEANUP_TARGETS } from "#src/server/db/repositories/workspace-memory-cleanup.repositories.server";
 import { createWorkspaceMemoryProfiles } from "./profiles";
 import {
   createFakeMemoryRuntimeProvisioner,

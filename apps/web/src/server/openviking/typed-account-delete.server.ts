@@ -1,6 +1,6 @@
 import type { ServerOpenVikingIdentity } from "./route-policy";
 import type { OpenVikingRuntimeClient } from "./runtime-client.server";
-import type { CleanupRemoteResult } from "../workspace-memory/cleanup.server";
+import type { CleanupRemoteResult } from "#src/server/workspace-memory/cleanup.server";
 
 export const OPENVIKING_TYPED_ACCOUNT_DELETE_ROUTE = {
   method: "DELETE",

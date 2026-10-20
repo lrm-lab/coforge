@@ -3,7 +3,7 @@ import {
   type GatewayRouteClassification,
   type GatewayRoutePolicy,
   type OpenVikingAccess,
-} from "../contract";
+} from "#src/server/openviking/contract";
 import {
   DEFAULT_OPENVIKING_TRANSPORT_LIMITS,
   actorHasCapability,
@@ -14,7 +14,7 @@ import {
   type RoutePolicyDecision,
   templateMatches,
   toFamilyGatewayPolicies,
-} from "../route-policy";
+} from "#src/server/openviking/route-policy";
 
 export const MEMORY_SKILL_FAMILY_KINDS = ["skill", "session", "compile", "evolution"] as const;
 export type MemorySkillFamilyKind = (typeof MEMORY_SKILL_FAMILY_KINDS)[number];

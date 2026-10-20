@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import {
   applyWorkspaceMemoryCommand,
   createDefaultWorkspaceMemoryProfile,
-} from "../workspace-memory/profile";
+} from "#src/server/workspace-memory/profile";
 import {
   createInMemoryWorkspaceMemoryProfileStore,
   saveProfileTransition,
-} from "../workspace-memory/stores";
+} from "#src/server/workspace-memory/stores";
 import { lookupAggregatedRoute } from "./catalog/aggregated-catalog";
 import { createOpenVikingPolicyGateway } from "./policy-gateway.server";
 import { classifyOpenVikingRoute } from "./route-policy";

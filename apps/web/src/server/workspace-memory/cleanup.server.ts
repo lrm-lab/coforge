@@ -3,8 +3,8 @@ import {
   type CleanupTarget,
   type WorkspaceMemoryCleanupStore,
   type WorkspaceMemoryCleanupWork,
-} from "../db/repositories/workspace-memory-cleanup.repositories.server";
-import { WorkspaceMemoryScopeError } from "../db/repositories/workspace-memory-errors.server";
+} from "#src/server/db/repositories/workspace-memory-cleanup.repositories.server";
+import { WorkspaceMemoryScopeError } from "#src/server/db/repositories/workspace-memory-errors.server";
 
 export const WORKSPACE_DELETION_CLEANUP_TARGETS = CLEANUP_TARGETS;
 

@@ -5,11 +5,11 @@ import { PrismaMemoryDispositionStore } from "#src/server/db/repositories/memory
 
 import { readFileSync } from "node:fs";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { PrismaOpenVikingBindingStore } from "../db/repositories/openviking-binding.repositories.server";
-import { PrismaWorkspaceMemoryCitationStore } from "../db/repositories/workspace-memory-citation.repositories.server";
-import { PrismaWorkspaceMemoryProfileStore } from "../db/repositories/workspace-memory-profile.repositories.server";
-import { createOpenVikingPolicyGateway } from "../openviking/policy-gateway.server";
-import { createOpenVikingRuntimeClient } from "../openviking/runtime-client.server";
+import { PrismaOpenVikingBindingStore } from "#src/server/db/repositories/openviking-binding.repositories.server";
+import { PrismaWorkspaceMemoryCitationStore } from "#src/server/db/repositories/workspace-memory-citation.repositories.server";
+import { PrismaWorkspaceMemoryProfileStore } from "#src/server/db/repositories/workspace-memory-profile.repositories.server";
+import { createOpenVikingPolicyGateway } from "#src/server/openviking/policy-gateway.server";
+import { createOpenVikingRuntimeClient } from "#src/server/openviking/runtime-client.server";
 import { createMemoryAgentFenceLookup } from "./memory-agent-fence";
 import { resolveUnansweredMemoryOfferTarget } from "./explicit-memory-answer";
 import { createMemoryCitationBindings } from "./memory-citations";
@@ -30,8 +30,8 @@ import {
 import {
   createCatalogOpenVikingMemoryReadClient,
   type OpenVikingMemoryReadClient,
-} from "../openviking/memory-agent-reads";
-import { createOpenVikingMemoryReads } from "../openviking/openviking-memory-reads";
+} from "#src/server/openviking/memory-agent-reads";
+import { createOpenVikingMemoryReads } from "#src/server/openviking/openviking-memory-reads";
 
 const budgets = createMemoryAgentBudgetLedger();
 

@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { createOpenVikingRuntimeClient } from "../openviking/runtime-client.server";
+import { createOpenVikingRuntimeClient } from "#src/server/openviking/runtime-client.server";
 import {
   createOpenVikingTypedSessionExtract,
   type OpenVikingAdmittedSessionWrite,
   type OpenVikingTypedSessionExtract,
-} from "../openviking/typed-session-extract.server";
+} from "#src/server/openviking/typed-session-extract.server";
 import { detectAdmittedPublicChannelSegments } from "./detect-segments";
 import {
   createAdmissionDispatcher,

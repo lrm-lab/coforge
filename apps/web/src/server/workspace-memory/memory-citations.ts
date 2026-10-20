@@ -14,7 +14,7 @@ import type {
   MemoryOfferCitationRef,
   OpenVikingCitationRecord,
   WorkspaceMemoryCitationStore,
-} from "../db/repositories/workspace-memory-citation.repositories.server";
+} from "#src/server/db/repositories/workspace-memory-citation.repositories.server";
 import { assertDiscoveryServable } from "./memory-discovery-eligibility";
 
 export class MemoryCitationUngroundedError extends Error {

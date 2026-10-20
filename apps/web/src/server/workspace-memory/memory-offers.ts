@@ -7,9 +7,9 @@ import type { MemoryCitation, MemoryHintDelivery } from "@lrm/coforge-sdk/agent"
 import type {
   MemoryOfferRecord,
   WorkspaceMemoryCitationStore,
-} from "../db/repositories/workspace-memory-citation.repositories.server";
-import { WorkspaceMemoryCitationKindError } from "../db/repositories/workspace-memory-errors.server";
-import { WorkspaceMemoryScopeError } from "../db/repositories/workspace-memory-errors.server";
+} from "#src/server/db/repositories/workspace-memory-citation.repositories.server";
+import { WorkspaceMemoryCitationKindError } from "#src/server/db/repositories/workspace-memory-errors.server";
+import { WorkspaceMemoryScopeError } from "#src/server/db/repositories/workspace-memory-errors.server";
 import type { MemoryOfferPublisher } from "./offer-delivery.server";
 import { MemoryCitationUngroundedError, type MemoryCitationBindings } from "./memory-citations";
 

@@ -1,7 +1,7 @@
 import type {
   OpenVikingAdmittedSessionWrite,
   OpenVikingTypedSessionExtract,
-} from "../openviking/typed-session-extract.server";
+} from "#src/server/openviking/typed-session-extract.server";
 import type { AdmissionSink, AdmissionSinkDelivery, AdmissionSinkResult } from "./dispatch";
 
 export const OPENVIKING_ADMITTED_SESSION_ID_PREFIX = "coforge-";

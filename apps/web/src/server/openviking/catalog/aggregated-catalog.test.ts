@@ -1,17 +1,23 @@
 import { expect, test } from "bun:test";
-import type { CoforgeMemoryActor } from "../contract";
-import { PINNED_OPENVIKING_ROUTES } from "../route-catalog";
-import { classifyOpenVikingRoute, sanitizeOpenVikingTransportFailure } from "../route-policy";
-import { createOpenVikingPolicyGateway } from "../policy-gateway.server";
-import { createFakeOpenVikingProvisioner, createInMemoryOpenVikingBindingStore } from "../stores";
-import { createWorkspaceMemoryProfiles } from "../../workspace-memory/profiles";
-import { createWorkspaceMemoryProfileReconciler } from "../../workspace-memory/reconciler";
+import type { CoforgeMemoryActor } from "#src/server/openviking/contract";
+import { PINNED_OPENVIKING_ROUTES } from "#src/server/openviking/route-catalog";
+import {
+  classifyOpenVikingRoute,
+  sanitizeOpenVikingTransportFailure,
+} from "#src/server/openviking/route-policy";
+import { createOpenVikingPolicyGateway } from "#src/server/openviking/policy-gateway.server";
+import {
+  createFakeOpenVikingProvisioner,
+  createInMemoryOpenVikingBindingStore,
+} from "#src/server/openviking/stores";
+import { createWorkspaceMemoryProfiles } from "#src/server/workspace-memory/profiles";
+import { createWorkspaceMemoryProfileReconciler } from "#src/server/workspace-memory/reconciler";
 import {
   createInMemoryWorkspaceIdentityDirectory,
   createProductionMemoryRuntimeProvisioner,
   createPrototypeMemoryRuntimeReadiness,
-} from "../../workspace-memory/runtime-provisioner";
-import { createInMemoryWorkspaceMemoryProfileStore } from "../../workspace-memory/stores";
+} from "#src/server/workspace-memory/runtime-provisioner";
+import { createInMemoryWorkspaceMemoryProfileStore } from "#src/server/workspace-memory/stores";
 import {
   AGGREGATED_OPENVIKING_GATEWAY_CATALOG,
   AGGREGATED_OPENVIKING_ROUTE_CATALOG,

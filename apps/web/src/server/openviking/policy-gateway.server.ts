@@ -1,8 +1,8 @@
-import type { ObservedWorkspaceMemoryState } from "../workspace-memory/profile";
-import type { SanitizedFailure } from "../workspace-memory/errors";
-import type { WorkspaceMemoryProfile } from "../workspace-memory/profile";
-import type { WorkspaceMemoryProfileStore } from "../workspace-memory/stores";
-import { observeWorkspaceMemoryAccess } from "../workspace-memory/switching";
+import type { ObservedWorkspaceMemoryState } from "#src/server/workspace-memory/profile";
+import type { SanitizedFailure } from "#src/server/workspace-memory/errors";
+import type { WorkspaceMemoryProfile } from "#src/server/workspace-memory/profile";
+import type { WorkspaceMemoryProfileStore } from "#src/server/workspace-memory/stores";
+import { observeWorkspaceMemoryAccess } from "#src/server/workspace-memory/switching";
 import {
   AGGREGATED_OPENVIKING_GATEWAY_CATALOG,
   aggregatedRouteAllowsActor,

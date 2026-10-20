@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { OPENVIKING_CITATION_KIND, type OpenVikingCitation } from "@lrm/coforge-sdk/agent";
-import type { OpenVikingCitationRecord } from "../db/repositories/workspace-memory-citation.repositories.server";
+import type { OpenVikingCitationRecord } from "#src/server/db/repositories/workspace-memory-citation.repositories.server";
 import { createMemoryCitationBindings, MemoryCitationUngroundedError } from "./memory-citations";
 import { RetiredFromMemoryDiscoveryError } from "./memory-discovery-eligibility";
 

@@ -23,15 +23,18 @@ import type {
   GatewayRouteClassification,
   GatewayRoutePolicy,
   OpenVikingAccess,
-} from "../contract";
-import { PINNED_OPENVIKING_ROUTES, type PinnedOpenVikingRoute } from "../route-catalog";
+} from "#src/server/openviking/contract";
+import {
+  PINNED_OPENVIKING_ROUTES,
+  type PinnedOpenVikingRoute,
+} from "#src/server/openviking/route-catalog";
 import {
   DEFAULT_OPENVIKING_TRANSPORT_LIMITS,
   type GatewayCapability,
   type OpenVikingTransportLimits,
   templateMatches,
   isParam,
-} from "../route-policy";
+} from "#src/server/openviking/route-policy";
 import { ADMIN_FAMILY_ROUTES, type AdminFamilyRoutePolicy } from "./route-family-admin";
 import { CONTENT_FAMILY_ROUTES, type ContentFamilyRoutePolicy } from "./route-family-content";
 import {

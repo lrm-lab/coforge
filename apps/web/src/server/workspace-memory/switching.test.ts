@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import type { CoforgeMemoryActor } from "../openviking/contract";
-import { createOpenVikingPolicyGateway } from "../openviking/policy-gateway.server";
-import { createInMemoryOpenVikingBindingStore } from "../openviking/stores";
+import type { CoforgeMemoryActor } from "#src/server/openviking/contract";
+import { createOpenVikingPolicyGateway } from "#src/server/openviking/policy-gateway.server";
+import { createInMemoryOpenVikingBindingStore } from "#src/server/openviking/stores";
 import { detectAdmittedPublicChannelSegments } from "./detect-segments";
 import {
   createAdmissionDispatcher,

@@ -3,14 +3,14 @@ import {
   mapMemoryActor,
   type CoforgeMemoryActor,
   type GatewayRouteClassification,
-} from "../contract";
-import { PINNED_OPENVIKING_ROUTES } from "../route-catalog";
+} from "#src/server/openviking/contract";
+import { PINNED_OPENVIKING_ROUTES } from "#src/server/openviking/route-catalog";
 import {
   DEFAULT_OPENVIKING_TRANSPORT_LIMITS,
   actorHasCapability,
   decideRoutePolicy,
   type GatewayCapability,
-} from "../route-policy";
+} from "#src/server/openviking/route-policy";
 import {
   ADMIN_FAMILY_PINNED_FAMILIES,
   ADMIN_FAMILY_ROUTES,

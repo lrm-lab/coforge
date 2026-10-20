@@ -1,15 +1,15 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import type { WorkspaceMemoryCatalog } from "../../workspace-memory/catalog";
+import type { WorkspaceMemoryCatalog } from "#src/server/workspace-memory/catalog";
 import type {
   AdmissionConversation,
   AdmissionMessage,
   AdmissionTask,
-} from "../../workspace-memory/detect-segments";
+} from "#src/server/workspace-memory/detect-segments";
 import {
   DISPATCH_SINK_PROFILES,
   DISPATCH_STATES,
   type AdmittedSegmentDispatchRecord,
-} from "../../workspace-memory/dispatch";
+} from "#src/server/workspace-memory/dispatch";
 import { readMemoryOfferMessageIds } from "./workspace-memory-citation.repositories.server";
 import { WorkspaceMemoryScopeError } from "./workspace-memory-errors.server";
 

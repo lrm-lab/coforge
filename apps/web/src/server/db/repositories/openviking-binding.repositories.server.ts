@@ -1,6 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { decodeOpenVikingBinding, type OpenVikingBinding } from "../../openviking/contract";
-import type { OpenVikingBindingStore } from "../../openviking/stores";
+import { decodeOpenVikingBinding, type OpenVikingBinding } from "#src/server/openviking/contract";
+import type { OpenVikingBindingStore } from "#src/server/openviking/stores";
 import {
   isUniqueConstraintError,
   WorkspaceMemoryBindingError,

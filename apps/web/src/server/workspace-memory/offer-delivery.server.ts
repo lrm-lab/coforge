@@ -3,7 +3,7 @@ import { AgentDeliveryPublisher } from "#src/server/conversations/agent-delivery
 import { deliveryMentionsAgent } from "#src/server/conversations/mentions.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { PrismaDirectConversationRepository } from "../db/repositories/direct-conversation.repositories.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 
 export type MemoryOfferPublisher = {
   publish(input: {

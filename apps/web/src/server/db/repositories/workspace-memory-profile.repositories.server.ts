@@ -5,14 +5,14 @@ import {
   type ActivationCursor,
   type ReconcileKind,
   type WorkspaceMemoryProfile,
-} from "../../workspace-memory/profile";
+} from "#src/server/workspace-memory/profile";
 import {
   sanitizeWorkspaceMemoryFailure,
   type SanitizedFailure,
   type WorkspaceMemoryFailureCode,
   WORKSPACE_MEMORY_FAILURE_CODES,
-} from "../../workspace-memory/errors";
-import type { WorkspaceMemoryProfileStore } from "../../workspace-memory/stores";
+} from "#src/server/workspace-memory/errors";
+import type { WorkspaceMemoryProfileStore } from "#src/server/workspace-memory/stores";
 import {
   isUniqueConstraintError,
   WorkspaceMemoryScopeError,

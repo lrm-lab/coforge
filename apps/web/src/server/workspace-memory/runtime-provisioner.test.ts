@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import {
   createFakeOpenVikingProvisioner,
   createInMemoryOpenVikingBindingStore,
-} from "../openviking/stores";
+} from "#src/server/openviking/stores";
 import { createWorkspaceMemoryProfiles } from "./profiles";
 import { createWorkspaceMemoryProfileReconciler } from "./reconciler";
 import {
