@@ -13,12 +13,14 @@ import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile
 /**
  * The browser shape of a direct-conversation message, as `openForUser` (a page of roots),
  * `updatesSince` (the poll past a cursor) and `loadThread` (a thread's replies) return it: every
- * field, the field order, and no `senderMemberId` (the pane then decides "own" by `senderKind`).
+ * field and the field order, `senderMemberId` included as in a channel: the pane tells the viewer's
+ * own messages by it (`own-message.ts`).
  */
 const BROWSER_MESSAGE_KEYS = [
   "id",
   "sequence",
   "threadRootId",
+  "senderMemberId",
   "senderKind",
   "senderName",
   "senderHandle",
@@ -135,6 +137,7 @@ test("a direct conversation's page and poll return the same browser message shap
         id: root.id,
         sequence: root.sequence,
         threadRootId: undefined,
+        senderMemberId,
         senderKind: "user" as const,
         senderName: "Ada Lovelace",
         senderHandle: username,
@@ -157,6 +160,7 @@ test("a direct conversation's page and poll return the same browser message shap
         id: reply.id,
         sequence: reply.sequence,
         threadRootId: root.id,
+        senderMemberId: agentMember.id,
         senderKind: "agent" as const,
         senderName: "Helper",
         senderHandle: "helper",
@@ -178,6 +182,7 @@ test("a direct conversation's page and poll return the same browser message shap
         id: system.id,
         sequence: system.sequence,
         threadRootId: undefined,
+        senderMemberId: null,
         senderKind: "system" as const,
         senderName: "System",
         senderHandle: undefined,

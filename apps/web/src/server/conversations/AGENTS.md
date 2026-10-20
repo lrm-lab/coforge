@@ -62,8 +62,8 @@ These rules apply to `src/server/conversations/`.
 - `conversation-history.server.ts` owns browser message index, around-window and
   thread reads, scoped by `conversationId` for channels and direct conversations
   alike, with their visibility checks. Its `browserMessageFields` and
-  `mapBrowserMessage` are the one browser-facing message shape (pages, updates,
-  saved messages, search, the Activity inbox). A window read returns top-level
+  `mapBrowserMessage` are the one browser-facing message shape, DMs included (pages, updates, threads, saved messages,
+  search, the Activity inbox); never strip its `senderMemberId`, the pane's only own-message test. A window read returns top-level
   messages only, each thread a summary (`thread-summaries.server.ts`).
 - `message-search.server.ts` owns human message search: a Workspace member
   searches every channel (joined or not, archived too, never one hidden from the

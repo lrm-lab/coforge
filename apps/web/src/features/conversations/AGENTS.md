@@ -157,7 +157,7 @@ These rules apply to `src/features/conversations/`.
   rewrites the name to the handle, so the composer, the unsent row and an edited draft stay readable.
   A channel send carries the pinned members as `mentions`; a direct conversation gets the rewritten
   text only. A member's name typed by hand offers `UnpinnedMentionHint`. Whether the viewer is
-  mentioned, and which reaction is theirs, is decided by `viewerId`.
+  mentioned, and which reaction is theirs, is decided by `viewerId`; which messages are theirs ("You"), by `senderMemberId` alone (`own-message.ts`), in a DM too.
 - A channel's members are a page of its settings panel
   (`channel-members-page.tsx`): the Members summary opens the roster and its
   "+" the add view, both in place of the settings, with Back. A member row, an

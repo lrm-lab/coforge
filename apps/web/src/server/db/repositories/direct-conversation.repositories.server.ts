@@ -64,7 +64,7 @@ import { workspaceUserAvatarUrl } from "./user-profile.repositories.server";
 import { attachmentView } from "#src/server/attachments/attachment-view.server";
 import {
   browserMessageFields,
-  mapDirectBrowserMessage,
+  mapBrowserMessage,
   messagesArrivedWhere,
 } from "#src/server/conversations/conversation-history.server";
 import { readWindowThreads } from "#src/server/conversations/thread-summaries.server";
@@ -1250,7 +1250,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         .sort((left, right) => left.handle.localeCompare(right.handle)),
       hasOlder,
       hasNewer,
-      messages: messages.map((message) => mapDirectBrowserMessage(message, workspaceId)),
+      messages: messages.map((message) => mapBrowserMessage(message, workspaceId)),
     };
   }
 
@@ -1268,7 +1268,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       take: 100,
       select: browserMessageFields,
     });
-    return messages.map((message) => mapDirectBrowserMessage(message, workspaceId));
+    return messages.map((message) => mapBrowserMessage(message, workspaceId));
   }
 
   /** Advances the person's DM read cursor (`markHumanRead`): where it left them, or undefined

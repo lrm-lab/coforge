@@ -339,3 +339,21 @@ test("a person's message names its sender's user id, which opens their profile; 
   );
   expect(agent.senderUserId).toBeUndefined();
 });
+
+test("an Agent's message carries its own member row and no user id, so it is never the viewer's", () => {
+  const view = mapBrowserMessage(
+    row({
+      senderMemberId: "member-agent",
+      sender: {
+        userId: null,
+        agentId: "agent-helper",
+        agent: { name: "helper", displayName: "Helper", deletedAt: null, avatarObjectKey: null },
+        user: null,
+      },
+    }),
+    WORKSPACE_ID,
+  );
+  expect(view.senderMemberId).toBe("member-agent");
+  expect(view.senderUserId).toBeUndefined();
+  expect(mapBrowserMessage(row({ senderMemberId: null }), WORKSPACE_ID).senderMemberId).toBeNull();
+});

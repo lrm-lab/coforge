@@ -352,4 +352,61 @@ describe("ConversationHistory", () => {
     expect(queries.map((query) => query.where?.sequence)).toEqual([{ lte: 10 }, { gt: 10 }]);
     expect(page.anchorThreadRootId).toBe("root-10");
   });
+  test("a thread read in a DM between people names each reply's sender member", async () => {
+    const reply = (id: string, sequence: number, memberId: string, userId: string) => ({
+      id,
+      sequence,
+      threadRootId: "root-1",
+      senderMemberId: memberId,
+      body: id,
+      createdAt: new Date(sequence),
+      attachments: [],
+      sender: {
+        userId,
+        agentId: null,
+        user: { username: userId, displayName: userId, avatarObjectKey: null },
+        agent: null,
+      },
+      mentions: [],
+      reactionVersion: 0,
+      reactions: [],
+    });
+    const db = {
+      workspaceMembership: { findUnique: async () => membership },
+      conversation: {
+        findFirst: async () => ({
+          directKey: "user:user-1|user:user-2",
+          channelName: null,
+          members: [{ id: "member-1", leftAt: null }],
+        }),
+      },
+      message: {
+        findFirst: async () => ({ id: "root-1" }),
+        findMany: async () => [
+          reply("reply-2", 2, "member-1", "user-1"),
+          reply("reply-3", 3, "member-2", "user-2"),
+        ],
+      },
+    } as unknown as PrismaClient;
+
+    const { replies } = await new ConversationHistory(db).loadThread(
+      "workspace-1",
+      "user-1",
+      "direct-conversation-1",
+      "root-1",
+    );
+
+    // Both are people's messages; only the member id tells the viewer's (member-1) from the other's.
+    expect(
+      replies.map(({ id, senderKind, senderMemberId, senderUserId }) => ({
+        id,
+        senderKind,
+        senderMemberId,
+        senderUserId,
+      })),
+    ).toEqual([
+      { id: "reply-2", senderKind: "user", senderMemberId: "member-1", senderUserId: "user-1" },
+      { id: "reply-3", senderKind: "user", senderMemberId: "member-2", senderUserId: "user-2" },
+    ]);
+  });
 });

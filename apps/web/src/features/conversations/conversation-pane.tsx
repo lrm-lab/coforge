@@ -37,6 +37,7 @@ import { SystemMessageGroup } from "./system-message-group";
 import { groupSystemMessages } from "./system-message-groups";
 import { useMessageOutbox, useOutboxEntries } from "./use-message-outbox";
 import { OwnMessagesMenu, useOwnMessagesIndex } from "./own-messages-menu";
+import { isViewerMessage } from "./own-message";
 import { positionJumpDecision } from "./conversation-thread-search";
 import { replyCountLabel } from "./conversation-labels";
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
@@ -277,10 +278,8 @@ export function ConversationPane({
     }
     return handles;
   }, [conversation.messages]);
-  const isOwn = (message: DirectConversationView["messages"][number]) =>
-    message.senderMemberId != null
-      ? message.senderMemberId === conversation.senderMemberId
-      : message.senderKind === "user";
+  const isOwn = (message: { senderMemberId?: string | null }) =>
+    isViewerMessage(message, conversation.senderMemberId);
   // Only derived from the loaded page when no indexed own-message source is wired up.
   const loadedOwnMessages = useMemo(
     () =>

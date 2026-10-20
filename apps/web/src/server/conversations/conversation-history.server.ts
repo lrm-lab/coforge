@@ -57,7 +57,8 @@ export type BrowserMessageRow = Prisma.MessageGetPayload<{
   select: typeof browserMessageFields;
 }>;
 
-/** Exported for a pure unit test of this projection (no database needed). */
+/** Exported for a pure unit test of this projection (no database needed). Channels and direct
+ * conversations share it whole: `senderMemberId` is how a pane tells the viewer's own messages. */
 export function mapBrowserMessage(message: BrowserMessageRow, workspaceId: string) {
   const suggestion = message.sender?.agentId
     ? parseWeeklyReportAssistantSuggestion(message.body)
@@ -138,14 +139,6 @@ export function messagesArrivedWhere(
       { threadRootId: { not: null }, sequence: { gt: afterReplySequence } },
     ],
   };
-}
-
-/** A direct conversation's message for the browser: the shared projection without
- * `senderMemberId`, which a direct conversation's stream does not send; its pane then tells the
- * viewer's own messages by `senderKind`. */
-export function mapDirectBrowserMessage(message: BrowserMessageRow, workspaceId: string) {
-  const { senderMemberId: _senderMemberId, ...view } = mapBrowserMessage(message, workspaceId);
-  return view;
 }
 
 /** Bounded browser history reads shared by direct conversations and public channels. */
@@ -329,7 +322,7 @@ export class ConversationHistory {
     conversationId: string,
     threadRootId: string,
   ) {
-    const { direct } = await this.authorize(workspaceId, userId, conversationId);
+    await this.authorize(workspaceId, userId, conversationId);
     // The replies are read beside the check that their root is a top-level message here: nothing
     // is returned before it passes.
     const [root, replies] = await Promise.all([
@@ -344,12 +337,6 @@ export class ConversationHistory {
       }),
     ]);
     if (!root) throw new AppError("NOT_FOUND");
-    return {
-      replies: replies.map((reply) =>
-        direct
-          ? mapDirectBrowserMessage(reply, workspaceId)
-          : mapBrowserMessage(reply, workspaceId),
-      ),
-    };
+    return { replies: replies.map((reply) => mapBrowserMessage(reply, workspaceId)) };
   }
 }

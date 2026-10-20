@@ -73,8 +73,6 @@ const message = {
   reactions: [{ emoji: "👍", count: 1, reactors: [{ id: "user-1", label: "Ada" }] }],
   actionCard: undefined,
 };
-// A direct conversation's stream does not send `senderMemberId`.
-const { senderMemberId: _senderMemberId, ...directMessage } = message;
 const windowFields = {
   senderMemberId: "member-1",
   readThroughSequence: 1,
@@ -162,7 +160,7 @@ const fixtures = [
           avatarUrl: null,
         },
         dmWritable: true,
-        messages: [directMessage],
+        messages: [message],
       },
     ],
     pageParams: [undefined],
@@ -174,7 +172,7 @@ const fixtures = [
         conversationId: "d2",
         kind: "people",
         peer: { id: "user-2", username: "grace", displayName: "Grace", avatarUrl: null },
-        messages: [directMessage],
+        messages: [message],
       },
     ],
     pageParams: [undefined],
@@ -359,6 +357,20 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "saved messages": "af3437c73adfddaa",
     "agent workspace scan": "d45d053aa4368e73",
     // A member's sections and their order were added as kinds.
+    "chat sections": "4c7716ab24622fdc",
+    "chat section order": "89829726781b01aa",
+  },
+  // A direct conversation's message carries `senderMemberId`, as a channel's does: it alone tells
+  // the viewer's own messages, so a stored DM page without it would read nobody's as theirs.
+  6: {
+    "channel window": "e7aded67e38ffb44",
+    "direct window with an Agent": "dd470007a536e5b0",
+    "direct window with a person": "4b31a9f0b0c38386",
+    "sidebar channels": "91afa2f21eb4ec87",
+    "sidebar directs": "5205999212e744be",
+    "channel names": "331d221481674004",
+    "saved messages": "af3437c73adfddaa",
+    "agent workspace scan": "d45d053aa4368e73",
     "chat sections": "4c7716ab24622fdc",
     "chat section order": "89829726781b01aa",
   },

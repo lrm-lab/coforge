@@ -56,6 +56,8 @@ export type DirectConversationView = {
     sequence: number;
     threadRootId?: string;
     senderKind: "user" | "agent" | "system";
+    /** The sender's member row here (none for a system message): the viewer wrote the message
+     * exactly when it is the view's `senderMemberId` (`own-message.ts`), in a channel and a DM. */
     senderMemberId?: string | null;
     senderName: string;
     /** The handle behind `senderName`: what you type to mention this sender. Absent for a
