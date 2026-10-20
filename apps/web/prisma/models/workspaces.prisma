@@ -54,6 +54,8 @@ model Workspace {
   workspaceMemoryAgent   WorkspaceMemoryAgent?
   formerSlugs            WorkspaceFormerSlug[]
   agentMigrations        AgentMigration[]
+  ownedApps              App[]
+  appInstallations       AppInstallation[]
 
   @@map("workspaces")
 }

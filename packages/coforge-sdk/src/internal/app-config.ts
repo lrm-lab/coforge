@@ -20,7 +20,45 @@ export const APP_CONFIG_SYNC_MESSAGE_TYPE = "coforge.rpc.v1.AppConfigSync" as co
 export const APP_CONFIG_CAPABILITY = "app-config:v1" as const;
 export const APP_CONFIG_PROTOCOL_MAJOR = 1 as const;
 
+export const REMINDER_APP_ID = "system.reminder" as const;
 export const CLEANER_APP_ID = "system.cleaner" as const;
+
+/**
+ * The Agent Apps CoForge ships, installed in every Workspace: the one catalog of them. The daemon
+ * runs them (its App Inbox registry), `APP_CONFIG_DEFINITIONS` holds the settings of those that
+ * have any, and the Web's app registry holds only the apps a Workspace registers, whose keys are
+ * never dotted and so never one of these.
+ */
+export type BuiltInApp = Readonly<{
+  key: string;
+  name: string;
+  description: string;
+  /** One line telling an Agent when to use the app, at most 160 characters. */
+  whenToUse: string;
+}>;
+
+export const BUILT_IN_APPS = [
+  {
+    key: REMINDER_APP_ID,
+    name: "Reminders",
+    description:
+      "Lets an Agent schedule one-off or recurring reminders. When one is due, the Agent that scheduled it gets an App Inbox item until it acknowledges it.",
+    whenToUse: "Schedule a reminder for later work instead of sleeping or polling.",
+  },
+  {
+    key: CLEANER_APP_ID,
+    name: "System Cleaner",
+    description:
+      "Watches the size of an Agent's MEMORY.md and the free disk space for Agent workspaces, and leaves the Agent an App Inbox hint when either needs attention. It never deletes files.",
+    whenToUse:
+      "Act on its hint to keep MEMORY.md and your workspace small; tune it with coforge app config.",
+  },
+] as const satisfies readonly BuiltInApp[];
+
+export type BuiltInAppKey = (typeof BUILT_IN_APPS)[number]["key"];
+
+/** Only a built-in app has a config: a key that is not one fails to compile here. */
+type BuiltInAppKeyOf<Key extends BuiltInAppKey> = Key;
 
 /** The System Cleaner's settings: whether it runs, the workspace size that triggers it, and how
  * often it looks. */
@@ -97,7 +135,7 @@ export function validateCleanerAppConfig(value: unknown): CleanerAppConfig {
 /** Every Agent App with configuration, by App ID: its settings type. Add an App here, give it a
  * definition below and a case in `AppConfig.effective` in `app_config.proto`. */
 export type AppConfigSettings = { [CLEANER_APP_ID]: CleanerAppConfig };
-export type AppConfigAppId = keyof AppConfigSettings;
+export type AppConfigAppId = BuiltInAppKeyOf<keyof AppConfigSettings>;
 
 type AppConfigDefinition<Settings> = {
   /** The App's config keys as an Agent reads and sets them, each with its type and bounds. */

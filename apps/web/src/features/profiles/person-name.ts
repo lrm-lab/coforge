@@ -34,6 +34,17 @@ const CONTROL_OR_BIDI = /[\p{Cc}‪-‮⁦-⁩]/u;
 // combining grapheme joiner, the Hangul fillers).
 const INVISIBLE = /[\p{Cf}\p{Z}\s͏ᅟᅠ⠀ㅤﾠ]/gu;
 
+/** Whether `text` holds a control character, or a bidirectional embedding, override or isolate.
+ * Shared with other names people read, such as an app's (`features/apps/`). */
+export function hasControlOrBidiCharacter(text: string): boolean {
+  return CONTROL_OR_BIDI.test(text);
+}
+
+/** Whether `text` draws nothing: empty, or only invisible characters. */
+export function isInvisibleText(text: string): boolean {
+  return !text.replace(INVISIBLE, "");
+}
+
 /**
  * A person's name as it is stored, or the problem with it. It is normalized (`normalizePersonName`)
  * and 1 to `PERSON_NAME_MAX_LENGTH` characters. Refused: control and bidirectional characters, a
@@ -49,8 +60,8 @@ export function checkPersonName(input: string): PersonNameCheck {
   // two comparisons use the folded form; the name is stored as written.
   const folded = name.normalize("NFKC").replace(INVISIBLE, "");
   if (
-    CONTROL_OR_BIDI.test(name) ||
-    !name.replace(INVISIBLE, "") ||
+    hasControlOrBidiCharacter(name) ||
+    isInvisibleText(name) ||
     folded.toLowerCase() === SYSTEM_SENDER_LABEL.toLowerCase() ||
     folded.startsWith("@")
   ) {

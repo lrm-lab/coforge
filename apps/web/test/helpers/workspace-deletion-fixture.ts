@@ -171,6 +171,19 @@ export async function setup() {
   });
   // The channel's coordinator names the Agent without cascading (`NO ACTION`).
   await db.conversation.update({ where: { id: team.id }, data: { coordinatorAgentId: agent.id } });
+  // An app the Workspace registered, installed there; both go with it.
+  await db.app.create({
+    data: {
+      key: `own-app-${suffix}`,
+      ownerWorkspaceId: workspace.id,
+      name: "Own app",
+      homepageUrl: "https://own.example/",
+      redirectUris: ["https://own.example/callback"],
+      allowedScopes: ["openid"],
+      clientSecretHash: "0".repeat(64),
+      installations: { create: { workspaceId: workspace.id } },
+    },
+  });
   const memberRow = await db.conversationMember.findUniqueOrThrow({
     where: { conversationId_userId: { conversationId: team.id, userId: member.id } },
   });

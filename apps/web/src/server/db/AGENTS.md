@@ -27,9 +27,13 @@ These rules apply to `src/server/db/`.
   runtime selection and credential encryption stay in `server/agents/`.
 - `direct-conversation-agent-message.server.ts` owns Agent message projections and their Prisma include shapes, target names and Task metadata. The conversation repository owns authorization, reads and cursor advances.
 - `agent-app-config.repositories.server.ts` reads Agent App config rows and a live Agent's
-  placement, and writes a row only as a compare-and-set on its revision (never deleting one);
-  which Apps exist, their defaults and validation stay in
-  `server/agent-app-configs/` and the SDK's `APP_CONFIG_DEFINITIONS`.
+  placement, and writes a row only as a compare-and-set on its revision (never deleting one).
+  Its `appId` names a built-in Agent App (the SDK's `BUILT_IN_APPS`, no table); the App's config
+  defaults and validation are the SDK's `APP_CONFIG_DEFINITIONS`, applied in
+  `server/agent-app-configs/`.
+- `app.repositories.server.ts` persists the app registry: only the apps Workspaces register.
+  A read for display never selects `clientSecretHash`, and every write is scoped to an app its
+  Workspace owns, so it cannot reach another Workspace's; who may write stays in `server/apps/`.
 - `reminder.repositories.server.ts` owns PostgreSQL locking and persistence
   only; authorization, recurrence, and fire idempotence stay in
   `server/reminders/`.

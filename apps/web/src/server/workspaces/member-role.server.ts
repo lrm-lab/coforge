@@ -34,6 +34,11 @@ export function assertCanManageWorkspaceSettings(actorRole: string | undefined):
   if (!canManageWorkspaceSettings(actorRole)) throw new AppError("ACCESS_DENIED");
 }
 
+/** Registering a Workspace's own apps, changing them, rotating their secrets and deleting them. */
+export function assertCanManageApps(actorRole: string | undefined): void {
+  if (!roleCan(actorRole, "manageApps")) throw new AppError("ACCESS_DENIED");
+}
+
 export function assertCanManageMembers(actorRole: WorkspaceMemberRole): void {
   if (!canManageMembers(actorRole)) throw new AppError("ACCESS_DENIED");
 }

@@ -33,6 +33,7 @@ export const WORKSPACE_CAPABILITY_ROLES = {
   manageMembers: WORKSPACE_ADMIN_ROLES,
   manageChannels: WORKSPACE_ADMIN_ROLES,
   manageWorkspaceSettings: WORKSPACE_ADMIN_ROLES,
+  manageApps: WORKSPACE_ADMIN_ROLES,
   changeWorkspaceSlug: OWNER_ONLY,
   deleteWorkspace: OWNER_ONLY,
 } as const satisfies Record<string, readonly WorkspaceMemberRole[]>;

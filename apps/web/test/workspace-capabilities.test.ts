@@ -18,6 +18,7 @@ import {
 } from "#src/server/conversations/channel-authority.server";
 import {
   assertCanDeleteAgents,
+  assertCanManageApps,
   assertHasAgentControlCapability,
   canCreateAgents,
 } from "#src/server/workspaces/member-role.server";
@@ -50,6 +51,7 @@ describe("the Workspace capability table", () => {
       "manageMembers",
       "manageChannels",
       "manageWorkspaceSettings",
+      "manageApps",
     ] as const)
       expect([capability, holders(capability)]).toEqual([capability, ["owner", "admin"]]);
     expect(holders("changeWorkspaceSlug")).toEqual(["owner"]);
@@ -76,6 +78,7 @@ describe("the Workspace capability table", () => {
       );
       expect(canManageMembers(role)).toBe(can("manageMembers"));
       expect(canManageWorkspaceSettings(role)).toBe(can("manageWorkspaceSettings"));
+      expect(passes(() => assertCanManageApps(role))).toBe(can("manageApps"));
       expect(canChangeWorkspaceSlug(role)).toBe(can("changeWorkspaceSlug"));
       expect(canDeleteWorkspace(role)).toBe(can("deleteWorkspace"));
       expect(canDeleteChannel("random", role)).toBe(can("manageChannels"));

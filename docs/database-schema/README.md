@@ -20,4 +20,5 @@ Agent execution `run`/`event` data out of the messaging core.
 - [Preference tables](preferences.md): Account-level and per-Workspace member preference tables.
 - [Identity boundaries, retention, and indexing](boundaries-and-retention.md): Deferred identity foreign keys, pagination and retention rules, and migration status.
 - [Workspace Records (proposed)](workspace-records.md): Proposed weekly-report persistence tables.
+- [App registry](apps.md): The apps Workspaces register and their installations; built-in Agent Apps live in the SDK.
 - [Release catalog](release-catalog.md): The release catalog's notes table, kept apart from every CoForge domain table.

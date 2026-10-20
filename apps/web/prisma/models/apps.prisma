@@ -1,0 +1,54 @@
+/// A third-party app a Workspace registered in the app registry (`server/apps/`), and an OpenID
+/// Connect client of CoForge's authorization server. The built-in Agent Apps (`system.reminder`,
+/// `system.cleaner`) are not rows: they are the SDK's `BUILT_IN_APPS`.
+model App {
+  id               String            @id @default(uuid(7)) @db.Uuid
+  /// Chosen at registration and never changed: `^[a-z][a-z0-9-]{2,63}$`, never dotted, so never a
+  /// built-in app's key. It is the app's OIDC `client_id`.
+  key              String            @unique
+  /// The Workspace that registered the app; it is installed there.
+  ownerWorkspaceId String            @db.Uuid
+  name             String
+  description      String            @default("")
+  /// One line telling an Agent when to use the app, at most 160 characters.
+  whenToUse        String            @default("")
+  /// An absolute https URL, in canonical form.
+  homepageUrl      String
+  /// OAuth redirect URIs, matched as exact strings (RFC 9700).
+  redirectUris     String[]
+  /// The audience of Agent tokens for this app; an app without one gets no Agent tokens.
+  resourceUri      String?
+  /// Scopes the app may request: a subset of `openid`, `profile`, `email`, `workspace`.
+  allowedScopes    String[]
+  /// SHA-256 (hex) of the client secret, whose plaintext is shown once.
+  clientSecretHash String
+  secretRotatedAt  DateTime?
+  createdByUserId  String?           @db.Uuid
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  ownerWorkspace   Workspace         @relation(fields: [ownerWorkspaceId], references: [id], onDelete: Cascade)
+  createdBy        User?             @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  installations    AppInstallation[]
+
+  @@index([ownerWorkspaceId])
+  @@index([createdByUserId])
+  @@map("apps")
+}
+
+/// An app installed in a Workspace. Today only the registering Workspace installs its app; the row
+/// is what a later install elsewhere adds.
+model AppInstallation {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  appId             String    @db.Uuid
+  workspaceId       String    @db.Uuid
+  installedByUserId String?   @db.Uuid
+  createdAt         DateTime  @default(now())
+  app               App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  installedBy       User?     @relation(fields: [installedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([appId, workspaceId])
+  @@index([workspaceId])
+  @@index([installedByUserId])
+  @@map("app_installations")
+}

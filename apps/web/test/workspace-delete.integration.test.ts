@@ -63,6 +63,8 @@ test.skipIf(!connectionString)(
         db.daemonApiKey.count({ where: { workspaceId: workspace.id } }),
         db.reminder.count({ where: { workspaceId: workspace.id } }),
         db.weeklyReport.count({ where: { workspaceId: workspace.id } }),
+        db.app.count({ where: { ownerWorkspaceId: workspace.id } }),
+        db.appInstallation.count({ where: { workspaceId: workspace.id } }),
       ])
         expect(await count).toBe(0);
       // Its Computer stays the owner's; only the link to the Workspace went.

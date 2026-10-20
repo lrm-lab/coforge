@@ -7,6 +7,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/agents/` — Agent lifecycle, control, sessions, a new Agent's introduction to its creator, display reduction,
   Activity (Computer lifecycle rows included), visibility, deletion, and the
   Agent HTTPS API, and platform assistants with private execution per member.
+- `server/apps/` — the app registry: the apps a Workspace registers (OIDC clients) and their client secrets; built-in Agent Apps are the SDK's `BUILT_IN_APPS`, and one Agent's config of an App is `server/agent-app-configs/`.
 - `server/attachments/` — attachment upload sessions, claiming a sender's uploads for a new message, and delivery.
 - `server/auth/` — login, sessions, username allocation, the first-sign-in name step, device auth, API keys, and auth guards.
 - `server/authorization-server/` — Login with CoForge: the OpenID Connect authorization server for third-party apps (issuer `<origin>/oidc`), its own signing keyset, discovery and JWKS. The Computer device flow stays in `server/auth/`.
