@@ -1,3 +1,4 @@
+import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { humanLabel } from "#src/lib/human-label";
@@ -203,7 +204,7 @@ export const setDirectConversationHidden = createServerFn({ method: "POST" })
 export const loadDirectConversationPreferences = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
-    await new WorkspaceAssistants(db).ensure(workspaceId, user.id);
+    await workspaceAssistantOnboarding(db).ensure(workspaceId, user.id);
     const { streamPositions, data } = await readAfterStreamPositions(
       [userConversationChannel(user.id)],
       () => new DirectConversations(db).list(workspaceId, user.id),

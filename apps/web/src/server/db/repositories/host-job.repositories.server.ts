@@ -152,6 +152,14 @@ type JobRow = {
 export class PrismaHostJobStore implements ClusterJobs {
   constructor(private readonly db: PrismaClient) {}
 
+  async findLatestCreate(computerId: string) {
+    const row = await this.db.hostJob.findFirst({
+      where: { computerId, operation: "create" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    return row ? fromRow(row) : undefined;
+  }
+
   async findOpenFormat(ownerId: string, computerId: string) {
     const row = await this.db.hostJob.findFirst({
       where: {

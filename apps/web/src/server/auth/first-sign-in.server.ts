@@ -1,3 +1,4 @@
+import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { namePrefill } from "#src/features/auth/name-prefill";
 import { checkPersonName, type PersonNameProblem } from "#src/features/profiles/person-name";
@@ -178,7 +179,10 @@ function firstSignIn(db: PrismaClient): FirstSignIn {
         (input) => productionCloudComputers(db).ensureDefault(input),
         request,
       ),
-    (request) => ensureWeeklyReportAssistant(db, request),
+    async (request) => {
+      await workspaceAssistantOnboarding(db).ensure(request.workspaceId, request.userId);
+      return ensureWeeklyReportAssistant(db, request);
+    },
   );
 }
 

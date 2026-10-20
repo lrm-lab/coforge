@@ -23,14 +23,32 @@ bun run scripts/backfill-workspace-assistants.ts
 ```
 
 The backfill is repeatable and provisions all existing memberships in bounded pages.
-It does not start a model session or move existing runtime history. New Workspace
-creators get an assistant immediately. Existing and newly joined members also get
-one when loading a Workspace or its Direct messages, covering a missed backfill.
+Web startup runs the same pass automatically, including for members who have not
+opened the app. It starts assistants that have not replied yet, without moving existing
+runtime history. New Workspace creators get an assistant immediately. Existing and newly joined members also get
+one when joining by link (after membership commits), or when loading a Workspace
+or its Direct messages, covering a missed backfill.
 
-The assistant uses the member's own live Computer linked to the Workspace. If none
-exists, its first browser message requests the normal default cloud Computer.
-An installation without cloud provisioning must first attach the member's Computer.
-The Computer needs a configured Pi runtime/model, as for an ordinary Pi Agent.
+The assistant defaults to the account's default cloud Computer, reused across its
+Workspaces, with runtime **Pi**, model **Use provider default** and reasoning
+**Use provider default**. The deployment's Pi settings and available credentials choose
+the model (DeepSeek when configured as that deployment's default); no model or key is
+hard-coded into the assistant. Existing explicitly configured Computers are retained.
+
+Creation and old-member backfill publish the normal Agent Start with a private welcome
+prompt. A pending cloud Computer's ready recovery delivers that introduction. Platform
+assistant introductions stay due until the first canonical reply, including after seven
+days offline; ordinary Agents retain their seven-day introduction window. Repeated
+provisioning, reloads, restarts and session resets do not re-welcome someone who already
+received a reply. A stopped assistant remains stopped. Operational cloud/transport
+failures leave provisioning intact and are logged; a later Workspace/sidebar load or
+manual backfill retries. A deployment without a cloud cluster cannot auto-start it.
+
+The welcome's five clickable choices cover platform features, Tasks/Projects, messages,
+reminders/weekly reports and casual chat. A choice is an ordinary member message sent
+through the existing durable outbox. The card appears when the welcome arrives live,
+and disappears after any member reply, including across reloads. It does not promise
+unconfigured email/calendar integrations or add a generic action-card protocol.
 Deploy the updated Web and Daemon together so the trusted assistant marker reaches
 the runtime and enables the platform playbook.
 
@@ -53,6 +71,7 @@ disposable database:
 
 ```sh
 mise run test:file -- ./apps/web/test/workspace-assistant.integration.ts
+mise run test:file -- ./apps/web/test/workspace-assistant-onboarding.integration.ts
 mise run test:file -- ./packages/daemon/test/workspace-assistant-native.e2e.ts
 ```
 
@@ -73,3 +92,7 @@ confirming the other retains its context. Verify current-role permissions, revok
 credentials after leaving, new Workspace provisioning and repeatable old-member backfill.
 Exercise channel commands, attachments, Tasks, search/read-around and consecutive message
 checks without advancing the human's unread state.
+For onboarding, use a fresh and an old Workspace without sending first: verify cloud
+assignment, Pi defaults, one proactive canonical DM per member and the five choices.
+Choose one, reload, and confirm it was sent once and the card stays gone. Repeat backfill,
+restart and session reset without a duplicate welcome; a stopped assistant stays stopped.

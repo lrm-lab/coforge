@@ -40,6 +40,8 @@ export type DirectConversationView = {
    * own creator, so an existing DM held by anyone else reads read-only once it goes private.
    * The server enforces the same rule on send; this only chooses the composer or the notice. */
   dmWritable?: boolean;
+  /** The viewer’s platform assistant has not received their first message yet. */
+  workspaceAssistantWelcome?: boolean;
   /** The viewing user's id; powers the stronger "mentioned me" chip, marks their own reaction, and
    * lets the composer drop the viewer from its candidate list. Absent for a non-member. */
   viewerId?: string;

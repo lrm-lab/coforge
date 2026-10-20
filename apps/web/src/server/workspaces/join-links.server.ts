@@ -102,6 +102,7 @@ export class WorkspaceJoinLinks {
     private readonly store: WorkspaceJoinLinkStore,
     private readonly now: () => Date = () => new Date(),
     private readonly realtime?: Pick<ConversationRealtime, "memberChanged">,
+    private readonly onboardMember?: (workspaceId: string, userId: string) => Promise<unknown>,
   ) {}
 
   async current(input: { workspaceId: string; actorUserId: string }) {
@@ -168,6 +169,7 @@ export class WorkspaceJoinLinks {
         conversationIds: admission.joinedChannelIds,
       });
     }
+    await this.onboardMember?.(workspace.id, input.userId);
     return landing;
   }
 

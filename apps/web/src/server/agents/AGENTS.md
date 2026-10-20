@@ -108,7 +108,7 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 - A user `start` carries the same recovery context
   (`conversations.readAgentRecoveryContext`) as a Daemon-ready recovery start.
 - Starts carry `introductionPrompt` up to 7 days after `introductionDueAt`,
-  which only a person's create sets and the next Start settles once the Agent
+  which a person's create sets and the next Start settles once the Agent
   has a message in its creator's DM.
 - Ready recovery reconciles a stopped Agent the Daemon still runs with a Stop
   through `AgentControl.publishStop`, without blocking the rest of recovery.
@@ -191,6 +191,7 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 
 ## Workspace platform assistants
 
+- `workspace-assistant-onboarding.server.ts` starts new and backfilled assistants on the default cloud Computer using Pi/provider defaults. Web boot reaches old memberships; stopped Agents stay stopped. Platform introductions remain due until their first canonical DM reply; ordinary introductions retain their seven-day window.
 - `workspace-assistants.server.ts` owns the Workspace singleton and each member's private execution Agent and DM. Only this provisioning path writes `systemKind = workspace-assistant`; ordinary create/edit APIs never accept it.
 - A platform assistant is visible only to its member, including against Workspace admins. Its native sessions, credentials, files and delegated read cursors belong to that member. It cannot become public or be deleted through ordinary Agent controls.
 - `workspace-assistant-authority.server.ts` resolves a trusted binding and current membership. Delegated commands use the member's existing use cases and current permissions; leaving invalidates existing credentials. Ordinary Agents retain their own roles and membership rules.

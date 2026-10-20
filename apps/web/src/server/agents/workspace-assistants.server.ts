@@ -54,6 +54,8 @@ export class WorkspaceAssistants {
         const computer = await tx.computer.findFirst({
           where: {
             ownerId: userId,
+            kind: "cloud",
+            cloudSlot: "default",
             deletedAt: null,
             workspaces: { some: { workspaceId } },
           },
@@ -80,6 +82,7 @@ export class WorkspaceAssistants {
                 displayName: assistant.displayName,
                 description: WORKSPACE_ASSISTANT_DESCRIPTION,
                 systemKind: WORKSPACE_ASSISTANT_KIND,
+                introductionDueAt: new Date(),
                 visibility: "private",
                 computerId: computer?.id,
                 runtimeConfig: DEFAULT_RUNTIME,
@@ -159,6 +162,7 @@ export class WorkspaceAssistants {
 /** Deployment backfill; safe to repeat and bounded to one membership page at a time. */
 export async function backfillWorkspaceAssistants(
   db: PrismaClient,
+  provision?: (workspaceId: string, userId: string) => Promise<unknown>,
 ): Promise<{ provisioned: number }> {
   const assistants = new WorkspaceAssistants(db);
   let provisioned = 0;
@@ -171,7 +175,10 @@ export async function backfillWorkspaceAssistants(
       .withPages({ limit: 100, page });
     for (const member of members) {
       try {
-        await assistants.ensure(member.workspaceId, member.userId);
+        await (provision ?? ((workspaceId, userId) => assistants.ensure(workspaceId, userId)))(
+          member.workspaceId,
+          member.userId,
+        );
         provisioned++;
       } catch (error) {
         if (!(error instanceof AppError && error.code === "ACCESS_DENIED")) throw error;

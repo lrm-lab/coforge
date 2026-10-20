@@ -1,0 +1,9 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "workspace_assistant_welcome_question": "What would you like help with first?",
+  "workspace_assistant_choice_platform": "Explore platform features",
+  "workspace_assistant_choice_tasks": "Work on tasks and projects",
+  "workspace_assistant_choice_messages": "Find messages and collaborate",
+  "workspace_assistant_choice_reminders": "Set reminders and prepare weekly reports",
+  "workspace_assistant_choice_chat": "Just chat for now"
+}

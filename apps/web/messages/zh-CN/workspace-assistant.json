@@ -1,0 +1,9 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "workspace_assistant_welcome_question": "你想先让我帮你做什么？",
+  "workspace_assistant_choice_platform": "了解平台功能",
+  "workspace_assistant_choice_tasks": "处理任务和项目",
+  "workspace_assistant_choice_messages": "查找消息、协作沟通",
+  "workspace_assistant_choice_reminders": "设置提醒、整理周报",
+  "workspace_assistant_choice_chat": "还没想好，先聊聊"
+}

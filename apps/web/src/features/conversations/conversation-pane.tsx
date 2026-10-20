@@ -1,3 +1,4 @@
+import { WorkspaceAssistantWelcome } from "./workspace-assistant-welcome";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { ProgressBar } from "react-aria-components";
@@ -318,10 +319,7 @@ export function ConversationPane({
     () => new Set(conversation.messages.map((message) => message.id)),
     [conversation.messages],
   );
-  // A delivered message leaves the outbox once the real one is on screen, never before, so the
-  // row never blinks out between the two. A pending row belongs at the foot of the conversation,
-  // which the main pane's window reaches only when no newer page is waiting; a failure is shown
-  // regardless, so it cannot go unseen. A thread pane always holds its whole reply list.
+  // Keep delivered entries until the real row is loaded; always show failures.
   const windowAtLatest = Boolean(root) || !conversation.hasNewer;
   const shownOutbox = outboxEntries.filter((entry) =>
     entry.state === "unsent"
@@ -337,9 +335,7 @@ export function ConversationPane({
       if (entry.state === "delivered" && loadedMessageIds.has(entry.messageId))
         outbox.discard(entry);
   }, [outboxEntries, loadedMessageIds]);
-  // Sending takes the reader to the latest messages, where the new one appears. Entries already
-  // there when the pane opens are not a new send: the open position stands. A thread pane only
-  // scrolls itself; asking for the main window's latest page could unload the thread's root.
+  // Only new sends scroll this pane to its latest messages.
   const knownOutboxIdsRef = useRef<ReadonlySet<string> | undefined>(undefined);
   useEffect(() => {
     const known = knownOutboxIdsRef.current;
@@ -1081,6 +1077,14 @@ export function ConversationPane({
                   />
                 ))}
               </ol>
+            )}
+            {!root && canCompose && (
+              <WorkspaceAssistantWelcome
+                conversation={conversation}
+                entries={outboxEntries}
+                outbox={outbox}
+                draftKey={outboxDraftKey}
+              />
             )}
             {!root &&
               conversation.hasNewer &&

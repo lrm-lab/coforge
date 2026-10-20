@@ -79,6 +79,7 @@ export interface CloudFleet {
 }
 
 export interface ClusterJobs {
+  findLatestCreate(computerId: string): Promise<HostJobRecord | undefined>;
   findByIdempotency(ownerId: string, idempotencyKey: string): Promise<HostJobRecord | undefined>;
   /** An unreported format removal for this computer, if one is already queued. */
   findOpenFormat(ownerId: string, computerId: string): Promise<HostJobRecord | undefined>;
@@ -357,28 +358,15 @@ export class HostJobs {
     clusterId: string,
     now: Date,
   ): Promise<void> {
-    if (!computer.containerReady) return;
-    if (await this.deps.fleet.isLinked(computer.id, workspace.id)) return;
-    const key = `cloud-attach:${computer.id}:${workspace.id}`;
-    if (await this.deps.jobs.findByIdempotency(userId, key)) return;
-    const daemonApiKey = await this.deps.keys.issue({
-      userId,
-      workspaceId: workspace.id,
-      computerId: computer.id,
-    });
-    await this.deps.fleet.link(computer.id, workspace.id, workspace.slug);
-    await this.deps.jobs.insert(
-      this.#job({
-        clusterId,
-        operation: "attach",
-        workspace,
-        computer,
-        ownerId: userId,
-        idempotencyKey: key,
-        daemonApiKey,
-        now,
-      }),
-    );
+    if (!(await this.deps.fleet.isLinked(computer.id, workspace.id)))
+      await this.deps.fleet.link(computer.id, workspace.id, workspace.slug);
+    // Re-read after linking: a create report may have passed its link snapshot meanwhile.
+    const latest = (await this.deps.fleet.list(userId)).find((item) => item.id === computer.id);
+    if (!latest?.containerReady || latest.deletedAt) return;
+    const placement = await this.deps.jobs.findLatestCreate(computer.id);
+    // The create itself configured its own Workspace; others need this container's attach.
+    if (placement?.workspaceId === workspace.id) return;
+    await this.#reattach(latest, workspace, userId, clusterId, placement?.id, now);
   }
 
   async #attachLinkedWorkspaces(job: HostJobRecord, now: Date): Promise<void> {
@@ -389,6 +377,7 @@ export class HostJobs {
     const ready = { ...computer, containerReady: true };
     for (const workspace of await this.deps.fleet.linkedWorkspaces(job.computerId)) {
       if (workspace.id === job.workspaceId) continue;
+
       await this.#reattach(ready, workspace, job.ownerId, job.clusterId, job.id, now);
     }
   }
@@ -399,10 +388,10 @@ export class HostJobs {
     workspace: { id: string; slug: string },
     userId: string,
     clusterId: string,
-    placementId: string,
+    placementId: string | undefined,
     now: Date,
   ): Promise<void> {
-    const key = `cloud-attach:${computer.id}:${workspace.id}:${placementId}`;
+    const key = `cloud-attach:${computer.id}:${workspace.id}${placementId ? `:${placementId}` : ""}`;
     if (await this.deps.jobs.findByIdempotency(userId, key)) return;
     const daemonApiKey = await this.deps.keys.issue({
       userId,

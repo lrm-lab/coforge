@@ -154,7 +154,7 @@ export class ManageAgents {
         visibility: input.visibility ?? AGENT_VISIBILITY.PUBLIC,
         avatarObjectKey: avatar?.objectKey ?? null,
         avatarContentType: avatar?.contentType ?? null,
-        // Only an Agent a person creates owes them an introduction (`AgentIntroduction`).
+        // A human-created Agent owes its creator an introduction (`AgentIntroduction`).
         introductionDueAt: new Date(),
         runtimeConfig: {
           runtime: selection.provider,
