@@ -244,6 +244,7 @@
         "@earendil-works/pi-coding-agent": "1.3.0",
         "@lrm/coforge-sdk": "workspace:*",
         "typebox": "1.3.7",
+        "zod": "4.5.4",
       },
       "devDependencies": {
         "@types/bun": "1.4.0",
@@ -287,6 +288,7 @@
       "name": "@coforge/computer",
       "version": "0.1.0",
       "dependencies": {
+        "@coforge/agent": "workspace:*",
         "@logtape/file": "2.3.2",
         "@logtape/logtape": "2.3.2",
         "@logtape/redaction": "2.3.2",

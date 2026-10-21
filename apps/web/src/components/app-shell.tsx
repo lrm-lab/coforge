@@ -11,6 +11,7 @@ import {
   Monitor01 as Monitor,
   SearchLg,
   Settings01,
+  Stars01,
   Users01 as Users,
 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
@@ -100,6 +101,7 @@ function useNavItems(
       icon: MessageChatSquare,
     },
     { label: m.navigation_activity(), ...item("activity"), icon: Activity, badge: activityDot },
+    { label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 },
     { label: m.tasks_tab(), ...item("tasks"), icon: ListTodo },
     { label: m.projects_title(), ...item("projects"), icon: Folder },
     {

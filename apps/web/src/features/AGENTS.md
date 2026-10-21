@@ -1,5 +1,7 @@
 # Features modules
 
+- `features/pi-chat/` — independent cloud Pi conversations, history and complete tool detail.
+
 The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGENTS.md#module-map). Each line names a directory under `src/` and its single responsibility. Update it before adding or reorganizing a module.
 
 - `features/agents/` — Members page, Agent creation, profile panel (its Apps tab included), control buttons, and Agent status and Activity display.

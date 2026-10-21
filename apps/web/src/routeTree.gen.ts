@@ -53,6 +53,7 @@ import { Route as WWorkspaceSlugChatRouteImport } from './routes/w.$workspaceSlu
 import { Route as WWorkspaceSlugComputersRouteImport } from './routes/w.$workspaceSlug/_computers'
 import { Route as WWorkspaceSlugActivityRouteImport } from './routes/w.$workspaceSlug/activity'
 import { Route as WWorkspaceSlugMembersRouteImport } from './routes/w.$workspaceSlug/members'
+import { Route as WWorkspaceSlugPiChatRouteImport } from './routes/w.$workspaceSlug/pi-chat'
 import { Route as WWorkspaceSlugRecordsRouteImport } from './routes/w.$workspaceSlug/records'
 import { Route as WWorkspaceSlugSearchRouteImport } from './routes/w.$workspaceSlug/search'
 import { Route as WWorkspaceSlugSettingsRouteImport } from './routes/w.$workspaceSlug/settings'
@@ -359,6 +360,11 @@ const WWorkspaceSlugActivityRoute = WWorkspaceSlugActivityRouteImport.update({
 const WWorkspaceSlugMembersRoute = WWorkspaceSlugMembersRouteImport.update({
   id: '/members',
   path: '/members',
+  getParentRoute: () => WWorkspaceSlugRoute,
+} as any)
+const WWorkspaceSlugPiChatRoute = WWorkspaceSlugPiChatRouteImport.update({
+  id: '/pi-chat',
+  path: '/pi-chat',
   getParentRoute: () => WWorkspaceSlugRoute,
 } as any)
 const WWorkspaceSlugRecordsRoute = WWorkspaceSlugRecordsRouteImport.update({
@@ -865,6 +871,7 @@ export interface FileRoutesByFullPath {
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
+  '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsRouteWithChildren
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
@@ -989,6 +996,7 @@ export interface FileRoutesByTo {
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
+  '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
@@ -1114,6 +1122,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/_computers': typeof WWorkspaceSlugComputersRouteWithChildren
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
+  '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsRouteWithChildren
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
@@ -1240,6 +1249,7 @@ export interface FileRouteTypes {
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/members'
+    | '/w/$workspaceSlug/pi-chat'
     | '/w/$workspaceSlug/records'
     | '/w/$workspaceSlug/search'
     | '/w/$workspaceSlug/settings'
@@ -1364,6 +1374,7 @@ export interface FileRouteTypes {
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/members'
+    | '/w/$workspaceSlug/pi-chat'
     | '/w/$workspaceSlug/search'
     | '/w/$workspaceSlug/settings'
     | '/w/$workspaceSlug/tasks'
@@ -1488,6 +1499,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/_computers'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/members'
+    | '/w/$workspaceSlug/pi-chat'
     | '/w/$workspaceSlug/records'
     | '/w/$workspaceSlug/search'
     | '/w/$workspaceSlug/settings'
@@ -1970,6 +1982,13 @@ declare module '@tanstack/react-router' {
       path: '/members'
       fullPath: '/w/$workspaceSlug/members'
       preLoaderRoute: typeof WWorkspaceSlugMembersRouteImport
+      parentRoute: typeof WWorkspaceSlugRoute
+    }
+    '/w/$workspaceSlug/pi-chat': {
+      id: '/w/$workspaceSlug/pi-chat'
+      path: '/pi-chat'
+      fullPath: '/w/$workspaceSlug/pi-chat'
+      preLoaderRoute: typeof WWorkspaceSlugPiChatRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
     }
     '/w/$workspaceSlug/records': {
@@ -2622,6 +2641,7 @@ interface WWorkspaceSlugRouteChildren {
   WWorkspaceSlugComputersRoute: typeof WWorkspaceSlugComputersRouteWithChildren
   WWorkspaceSlugActivityRoute: typeof WWorkspaceSlugActivityRoute
   WWorkspaceSlugMembersRoute: typeof WWorkspaceSlugMembersRoute
+  WWorkspaceSlugPiChatRoute: typeof WWorkspaceSlugPiChatRoute
   WWorkspaceSlugRecordsRoute: typeof WWorkspaceSlugRecordsRouteWithChildren
   WWorkspaceSlugSearchRoute: typeof WWorkspaceSlugSearchRoute
   WWorkspaceSlugSettingsRoute: typeof WWorkspaceSlugSettingsRoute
@@ -2638,6 +2658,7 @@ const WWorkspaceSlugRouteChildren: WWorkspaceSlugRouteChildren = {
   WWorkspaceSlugComputersRoute: WWorkspaceSlugComputersRouteWithChildren,
   WWorkspaceSlugActivityRoute: WWorkspaceSlugActivityRoute,
   WWorkspaceSlugMembersRoute: WWorkspaceSlugMembersRoute,
+  WWorkspaceSlugPiChatRoute: WWorkspaceSlugPiChatRoute,
   WWorkspaceSlugRecordsRoute: WWorkspaceSlugRecordsRouteWithChildren,
   WWorkspaceSlugSearchRoute: WWorkspaceSlugSearchRoute,
   WWorkspaceSlugSettingsRoute: WWorkspaceSlugSettingsRoute,

@@ -1,5 +1,8 @@
 # coforge-agent
 
+`src/pi-chat/` owns standalone cloud Pi sessions: native SDK execution, complete
+transcript reads, session metadata, request deduplication, and the internal JSONL worker.
+
 `@coforge/agent` is CoForge's built-in code-agent runtime. It is hosted by
 `coforge-daemon` in the daemon process (the package also exposes a standalone
 RPC runner for packaging and tests) and currently uses the official Pi SDK.
