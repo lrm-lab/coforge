@@ -35,7 +35,7 @@ import { useAppToast } from "#src/components/ui/toast";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
-import { BackToComputers } from "./back-to-computers";
+import { ComputerDetailHeader } from "./computer-detail-header";
 import { formatWorkspaceSize } from "./workspace-size";
 import {
   computerKind,
@@ -360,24 +360,20 @@ export function ComputerDetail({
 
   return (
     <>
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
-        <BackToComputers />
-        {onRestart && (
-          <Button
-            type="button"
-            size="sm"
-            color="secondary"
-            className="ml-auto"
-            iconLeading={RotateCw}
-            isDisabled={upgrading || restartState === "pending" || restartState === "accepted"}
-            onPress={runRestart}
-          >
-            {restartState === "pending"
-              ? m.computer_restart_requesting()
-              : m.computer_restart_action()}
-          </Button>
-        )}
-      </div>
+      <ComputerDetailHeader
+        computerId={computer.id}
+        showDesktop={isCloud && computer.ownedByCurrentUser}
+        online={computer.online}
+        restart={
+          onRestart
+            ? {
+                pending: restartState === "pending",
+                disabled: upgrading || restartState === "pending" || restartState === "accepted",
+                onPress: runRestart,
+              }
+            : undefined
+        }
+      />
 
       <div className="@container min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
         <div className="mx-auto flex w-full max-w-[40rem] flex-col gap-8">
