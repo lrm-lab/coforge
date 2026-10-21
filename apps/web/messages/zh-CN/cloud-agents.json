@@ -1,0 +1,11 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "cloud_agent_create_title": "创建云电脑 Bot",
+  "cloud_agent_create_description": "自动配置 Pi 和 DeepSeek，创建后即可私聊。已有默认云电脑时会自动复用。",
+  "cloud_agent_create_name": "Bot 名字",
+  "cloud_agent_create_submit": "创建并开始聊天",
+  "cloud_agent_create_preparing": "正在准备云电脑并启动 Bot…",
+  "cloud_agent_create_timeout": "云电脑仍在准备中，请重试以继续创建。",
+  "cloud_agent_create_no_deepseek": "云电脑上暂无可用的 DeepSeek 模型，请配置 DeepSeek 后重试。",
+  "cloud_agent_create_start_deferred": "Bot 已创建，但暂时无法启动。请重试，将继续启动同一个 Bot。"
+}

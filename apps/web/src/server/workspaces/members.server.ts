@@ -10,6 +10,7 @@ import {
   type AgentVisibilityViewer,
 } from "#src/server/agents/agent-visibility.server";
 import { canManageMembers } from "#src/features/workspaces/workspace-roles";
+import { canCreateAgents } from "./member-role.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { CREATED_AGENT_FACES, MEMBER_PAGE_MAX } from "#src/features/workspaces/member-directory";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
@@ -234,7 +235,7 @@ export class WorkspaceMembers {
    * whole-Workspace pickers; the Members page keeps its paged reads.
    */
   async directory(workspaceId: string, userId: string) {
-    const { visibleAgents } = await this.viewer(workspaceId, userId);
+    const { role, visibleAgents } = await this.viewer(workspaceId, userId);
     const [people, agents, directs] = await Promise.all([
       this.db.user.findMany({
         where: { memberships: { some: { workspaceId } } },
@@ -288,6 +289,7 @@ export class WorkspaceMembers {
     await this.storeAssistantNames(workspaceId, agents);
     return {
       // Listed by the name they are shown by, which the database cannot order by.
+      canCreateAgents: canCreateAgents(role),
       people: [...people].sort(compareHumanLabels).map((person) => ({
         id: person.id,
         name: humanLabel(person),

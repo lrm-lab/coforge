@@ -23,6 +23,7 @@ const providers = new Set<unknown>(Object.values(RUNTIME_PROVIDER));
 
 export type AgentCreateInput = {
   name: string;
+  displayName?: string;
   description: string;
   provider: RuntimeProvider;
   model?: string;
@@ -148,7 +149,7 @@ export class ManageAgents {
         workspaceId: principal.workspaceId,
         ownerId: principal.userId,
         name,
-        displayName: name,
+        displayName: input.displayName?.trim() || name,
         description,
         computerId: input.computerId,
         visibility: input.visibility ?? AGENT_VISIBILITY.PUBLIC,

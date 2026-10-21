@@ -1,0 +1,11 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "cloud_agent_create_title": "Create cloud Bot",
+  "cloud_agent_create_description": "A private Bot with Pi and DeepSeek on your cloud computer. Your default computer is reused automatically.",
+  "cloud_agent_create_name": "Bot name",
+  "cloud_agent_create_submit": "Create and chat",
+  "cloud_agent_create_preparing": "Preparing your cloud computer and starting your Bot…",
+  "cloud_agent_create_timeout": "Your cloud computer is still getting ready. Try again to continue.",
+  "cloud_agent_create_no_deepseek": "DeepSeek is not available on your cloud computer. Configure DeepSeek on the computer, then try again.",
+  "cloud_agent_create_start_deferred": "Your Bot was created, but could not start. Try again to start the same Bot."
+}

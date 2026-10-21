@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Loading02, Plus } from "@untitledui/icons";
+import { Cloud01, Loading02, Plus } from "@untitledui/icons";
 import { Heading, Popover as AriaPopover } from "react-aria-components";
 
 import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
@@ -16,34 +16,48 @@ import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { useOpenDirectConversation } from "./open-direct-conversation";
 import { useCloseConversationList } from "./conversation-navigation";
+import { CloudAgentCreateDialog } from "#src/features/agents/cloud-agent-create-dialog";
 
 /**
  * The Direct messages "+": a popover under the button with a member search and an Agent / Human
- * tab each. Picking someone goes through the existing DM seam, which opens or starts the
- * conversation.
+ * tab each. Picking someone opens or starts their DM. An authorized viewer can also create a
+ * private cloud Bot through the shared cloud Agent dialog.
  */
 export function StartDirectMessagePopover() {
   const label = m.conversation_start_direct();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   return (
-    <DialogTrigger>
-      <ButtonUtility
-        icon={Plus}
-        size="xs"
-        color="tertiary"
-        tooltip={label}
-        aria-label={label}
-        className="shrink-0 hover:bg-transparent!"
-      />
-      <AriaPopover
-        placement="bottom start"
-        offset={8}
-        className="h-[23.75rem] w-[19.5rem] rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
-      >
-        <Dialog className="flex h-full flex-col overflow-hidden outline-none">
-          {({ close }) => <DirectMessagePicker onDone={close} />}
-        </Dialog>
-      </AriaPopover>
-    </DialogTrigger>
+    <>
+      <DialogTrigger isOpen={pickerOpen} onOpenChange={setPickerOpen}>
+        <ButtonUtility
+          icon={Plus}
+          size="xs"
+          color="tertiary"
+          tooltip={label}
+          aria-label={label}
+          className="shrink-0 hover:bg-transparent!"
+        />
+        <AriaPopover
+          placement="bottom start"
+          offset={8}
+          className="h-[23.75rem] w-[19.5rem] rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
+        >
+          <Dialog className="flex h-full flex-col overflow-hidden outline-none">
+            {({ close }) => (
+              <DirectMessagePicker
+                onDone={close}
+                onCreate={() => {
+                  setPickerOpen(false);
+                  setCreateOpen(true);
+                }}
+              />
+            )}
+          </Dialog>
+        </AriaPopover>
+      </DialogTrigger>
+      <CloudAgentCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+    </>
   );
 }
 
@@ -54,7 +68,7 @@ type Member = {
   peer: { agentId: string } | { userId: string };
 };
 
-function DirectMessagePicker({ onDone }: { onDone: () => void }) {
+function DirectMessagePicker({ onDone, onCreate }: { onDone: () => void; onCreate: () => void }) {
   const workspaceId = useCurrentWorkspaceId();
   const load = useServerFn(loadWorkspaceDirectory);
   const directory = useQuery({
@@ -205,6 +219,20 @@ function DirectMessagePicker({ onDone }: { onDone: () => void }) {
             </TabPanel>
           ))}
         </Tabs>
+      )}
+      {directory.data?.canCreateAgents && (
+        <div className="shrink-0 border-t border-secondary p-2">
+          <Button
+            color="tertiary"
+            size="sm"
+            iconLeading={Cloud01}
+            className="w-full justify-start"
+            isDisabled={opening}
+            onPress={onCreate}
+          >
+            {m.cloud_agent_create_title()}
+          </Button>
+        </div>
       )}
     </>
   );

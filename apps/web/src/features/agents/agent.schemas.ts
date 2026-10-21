@@ -57,6 +57,11 @@ const nameSchema = z.string().trim().min(1).max(AGENT_NAME_MAX_LENGTH).regex(AGE
 
 export const AGENT_DISPLAY_NAME_MAX_LENGTH = 80;
 
+export const createCloudAgentInputSchema = z.object({
+  name: z.string().trim().min(1).max(AGENT_DISPLAY_NAME_MAX_LENGTH),
+  requestId: z.uuid(),
+});
+
 // Free-text label, independent of `name`; any charset. Editable only after creation, where it
 // defaults to the username.
 const displayNameSchema = z.preprocess(

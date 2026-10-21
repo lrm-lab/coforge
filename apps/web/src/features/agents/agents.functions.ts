@@ -1,3 +1,7 @@
+import {
+  manageAgents,
+  runtimeCredentials,
+} from "#src/server/agents/manage-agents-production.server";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { setResponseHeader } from "@tanstack/react-start/server";
@@ -28,7 +32,6 @@ import { AgentAvatars, agentAvatarUrl } from "#src/server/agents/agent-avatar.se
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
-import { ManageAgents } from "#src/server/agents/manage-agents.server";
 import { AgentDeletion } from "#src/server/agents/agent-deletion.server";
 import { listArchivedAgents } from "#src/server/agents/archived-agents.server";
 import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
@@ -54,13 +57,9 @@ import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import { PrismaAgentRuntimeCredentialRepository } from "#src/server/db/repositories/agent-runtime-credential.repositories.server";
-import {
-  AgentRuntimeCredentials,
-  readAgentRuntimeCredentialEncryptionKey,
-} from "#src/server/agents/agent-runtime-credentials.server";
+import { readAgentRuntimeCredentialEncryptionKey } from "#src/server/agents/agent-runtime-credentials.server";
 import { ChangeAgentRuntimeCredential } from "#src/server/agents/change-agent-runtime-credential.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
-import { computerCanRunAgent } from "#src/server/agents/computer-runtime-availability.server";
 import {
   ensureWeeklyReportAssistant,
   userOwnsLiveComputer,
@@ -81,33 +80,6 @@ import {
 } from "#src/server/auth/browser-realtime-token.server";
 
 type Database = ReturnType<typeof requireDatabaseClient>;
-
-function manageAgents(db: Database) {
-  const agents = new PrismaAgentRepository(db);
-  const runtimeLock = getAgentRuntimeLock();
-  const agentManagement = new ManageAgents(
-    agents,
-    {
-      start: (intent, ownerId) => userAgentRuntimeControl(db, agents).start(intent, ownerId),
-      stop: (intent, ownerId) => userAgentRuntimeControl(db, agents).stop(intent, ownerId),
-    },
-    {
-      canRun: (workspaceId, userId, computerId, config) =>
-        computerCanRunAgent(db, { workspaceId, userId }, computerId, config),
-    },
-    runtimeLock,
-    () => runtimeCredentials(db, true),
-    new AgentAvatars(db),
-  );
-  return agentManagement;
-}
-
-async function runtimeCredentials(db: Database, decrypt = false) {
-  return new AgentRuntimeCredentials(
-    new PrismaAgentRuntimeCredentialRepository(db),
-    decrypt ? await readAgentRuntimeCredentialEncryptionKey(process.env) : undefined,
-  );
-}
 
 async function changeRuntimeCredential(db: Database, decrypt = false) {
   const agents = new PrismaAgentRepository(db);

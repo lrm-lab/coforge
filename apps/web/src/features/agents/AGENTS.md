@@ -111,7 +111,7 @@ These rules apply to `src/features/agents/`.
   (`WorkspaceMembers.person` reports which apply); one's own profile is edited
   in Settings → Account.
 - Computer prerequisites appear only after the user requests Agent creation.
-  Runtime management stays in the profile panel, not the directory.
+  Runtime management stays in the profile panel. `cloud-agent-create-dialog.tsx`, opened from the DM picker, asks only for a display name, waits for cloud readiness, and opens the created private Agent's DM; creation permissions remain server-owned.
 - Workspace directory reads belong to
   `features/workspaces/workspaces.functions.ts` and
   `server/workspaces/members.server.ts`; owner-only Agent operations stay
