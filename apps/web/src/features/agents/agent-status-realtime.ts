@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   parseAgentDisplaySnapshot,
   type AgentDisplaySnapshot,
@@ -408,22 +408,22 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
     };
   }, [refresh, visibleAgents, workspaceId, extraAgents]);
 
-  const refreshSnapshot = async () => {
+  const refreshSnapshot = useCallback(async () => {
     const refreshed = await refresh();
-    if (mounted.current)
+    if (mounted.current && currentWorkspaceId.current === workspaceId)
       setVisibleAgents((current) =>
         expireAgentStatuses(
           mergeAgentStatusSnapshot(current, mergeExtraAgents(refreshed, extraAgents)),
           Date.now(),
         ),
       );
-  };
+  }, [refresh, extraAgents, workspaceId]);
 
   const handleStatusPublication = (data: unknown) => {
     try {
       const value = publicationData(data);
       if (isAgentVisibilityChangedEvent(value)) {
-        // Refetch immediately rather than waiting for the next scheduled refresh —
+        // Refetch immediately —
         // `mergeAgentStatusSnapshot` already drops any Agent absent from the fresh list, and
         // subscribing/unsubscribing its per-Agent channels follows from that same fresh list
         // wherever it is consumed (see `WorkspaceAgentsProvider`). A caller tracking a separate
@@ -493,5 +493,5 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
     onPublication: (_channel, publication) => handleStatusPublication(publication.data),
   });
 
-  return visibleAgents;
+  return { agents: visibleAgents, refresh: refreshSnapshot };
 }

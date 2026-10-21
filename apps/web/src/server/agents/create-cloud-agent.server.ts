@@ -24,7 +24,8 @@ export class CreateCloudAgent {
       ensureComputer(
         principal: Principal,
       ): Promise<{ computerId: string; containerReady: boolean }>;
-      models(principal: Principal, computerId: string): Promise<Model[]>;
+      /** Null until Pi has reported; an empty report means no models are configured. */
+      models(principal: Principal, computerId: string): Promise<Model[] | null>;
       create(
         principal: Principal,
         input: AgentCreateInput,
@@ -42,7 +43,7 @@ export class CreateCloudAgent {
     const computer = await this.ports.ensureComputer(principal);
     if (!computer.containerReady) return { status: "preparing" as const };
     const models = await this.ports.models(principal, computer.computerId);
-    if (!models.length) return { status: "preparing" as const };
+    if (models === null) return { status: "preparing" as const };
     const model = models.find((model) => /deepseek/i.test(`${model.id} ${model.name ?? ""}`));
     if (!model)
       throw new AppError("INVALID_INPUT", { errorId: "cloud-agent-deepseek-unavailable" });

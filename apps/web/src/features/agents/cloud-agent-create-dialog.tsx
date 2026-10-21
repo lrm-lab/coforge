@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQueryClient } from "@tanstack/react-query";
 import { Cloud01 } from "@untitledui/icons";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
@@ -10,6 +11,8 @@ import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import { useCloseConversationList } from "#src/features/conversations/conversation-navigation";
+import { useRefreshSidebar } from "#src/features/conversations/sidebar-lists";
+import { useCurrentWorkspaceId, useRefreshAgentDirectory } from "./workspace-agents-realtime";
 import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "./agent.schemas";
 import { agentCreateErrorMessage } from "./agent-form";
 import { createCloudAgent } from "./cloud-agents.functions";
@@ -22,6 +25,10 @@ export function CloudAgentCreateDialog({
   onOpenChange(open: boolean): void;
 }) {
   const create = useServerFn(createCloudAgent);
+  const refreshDirectory = useRefreshAgentDirectory();
+  const queryClient = useQueryClient();
+  const workspaceId = useCurrentWorkspaceId();
+  const refreshSidebar = useRefreshSidebar({ throwOnError: true });
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [submitting, guard] = useSubmitGuard();
@@ -54,6 +61,27 @@ export function CloudAgentCreateDialog({
         while (!active.signal.aborted) {
           const result = await create({ data: request.current, signal: active.signal });
           if (active.signal.aborted) return;
+          if (result.status !== "preparing") {
+            try {
+              // Creation committed even if its realtime directory signal was lost.
+              await Promise.all([
+                refreshDirectory(),
+                queryClient.invalidateQueries(
+                  { queryKey: ["direct-message-directory", workspaceId] },
+                  { throwOnError: true },
+                ),
+              ]);
+            } catch {
+              if (active.signal.aborted) return;
+              setError(
+                result.status === "start-deferred"
+                  ? m.cloud_agent_create_start_deferred()
+                  : m.cloud_agent_create_refresh_error(),
+              );
+              return;
+            }
+            if (active.signal.aborted) return;
+          }
           if (result.status === "start-deferred") {
             setError(m.cloud_agent_create_start_deferred());
             return;
@@ -63,7 +91,12 @@ export function CloudAgentCreateDialog({
             setOpening(true);
             let opened;
             try {
-              opened = await openDirect({ agentId: result.agentId });
+              if (await openDirect({ agentId: result.agentId })) {
+                await refreshSidebar(["dms"]);
+                opened = true;
+              }
+            } catch {
+              setError(m.cloud_agent_create_refresh_error());
             } finally {
               openingDirect.current = false;
               setOpening(false);

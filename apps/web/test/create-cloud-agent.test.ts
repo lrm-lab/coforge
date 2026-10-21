@@ -9,6 +9,7 @@ function fixture() {
     startPublished: true,
     startFailures: 0,
     stoppedAt: null as Date | null,
+    catalogReported: true,
     models: [{ id: "deepseek-v4", modelProvider: "lenovo", name: "DeepSeek V4" }],
   };
   const calls: string[] = [];
@@ -19,7 +20,7 @@ function fixture() {
       calls.push("ensure");
       return { computerId: "cloud", containerReady: state.ready };
     },
-    models: async () => state.models,
+    models: async () => (state.catalogReported ? state.models : null),
     create: async (_principal, input) => {
       if (existing) throw new Error("name taken");
       created.push(input);
@@ -142,8 +143,28 @@ describe("one-step cloud Agent creation", () => {
 
   test("waits for the first catalog report", async () => {
     const f = fixture();
-    f.state.models = [];
+    f.state.catalogReported = false;
     expect(await f.useCase.execute(principal, input)).toEqual({ status: "preparing" });
     expect(f.created).toEqual([]);
+    f.state.catalogReported = true;
+    expect(await f.useCase.execute(principal, input)).toEqual({
+      status: "created",
+      agentId: "agent",
+    });
+  });
+
+  test("reports missing DeepSeek immediately after an empty catalog report", async () => {
+    const f = fixture();
+    f.state.models = [];
+    await expect(f.useCase.execute(principal, input)).rejects.toMatchObject({
+      errorId: "cloud-agent-deepseek-unavailable",
+    });
+    expect(f.created).toEqual([]);
+    f.state.models = [{ id: "deepseek-v4", modelProvider: "lenovo", name: "DeepSeek V4" }];
+    expect(await f.useCase.execute(principal, input)).toEqual({
+      status: "created",
+      agentId: "agent",
+    });
+    expect(f.created).toHaveLength(1);
   });
 });
