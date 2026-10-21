@@ -25,6 +25,9 @@ import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
 /** The hung version probe test gives up this soon, so it need not wait out production's. */
 const SHORT_VERSION_PROBE_TIMEOUT_MS = 50;
 
+/** The five Claude Code effort levels every effort-capable static model offers. */
+const FULL_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
 function probeFor(
   runtimes: Record<string, { path: string; version: string; exitCode?: number }>,
 ): ExternalCodeAgentProbe {
@@ -400,7 +403,7 @@ describe("external Code Agent inventory", () => {
     const inventory = await discoverCodeAgentInventory({
       probe: probeFor({
         codex: { path: "/bin/codex", version: "codex-cli 0.151.0\n" },
-        claude: { path: "/bin/claude", version: "2.1.284 (Claude Code)\n" },
+        claude: { path: "/bin/claude", version: "2.1.293 (Claude Code)\n" },
         pi: { path: "/bin/pi", version: "0.9.1\n" },
       }),
       commands: {
@@ -471,123 +474,34 @@ describe("external Code Agent inventory", () => {
       {
         provider: "claude-code",
         models: [
-          ...["opus", "fable", "sonnet", "haiku"].map((id) => ({
+          ...(
+            [
+              ["opus", "Claude Opus", FULL_EFFORTS],
+              ["fable", "Claude Fable", FULL_EFFORTS],
+              ["sonnet", "Claude Sonnet", FULL_EFFORTS],
+              ["haiku", "Claude Haiku"],
+              ["claude-opus-5-5", "Claude Opus 5.5", FULL_EFFORTS],
+              ["claude-opus-5", "Claude Opus 5", FULL_EFFORTS],
+              ["claude-opus-4-8", "Claude Opus 4.8", FULL_EFFORTS],
+              ["claude-opus-4-7", "Claude Opus 4.7", FULL_EFFORTS],
+              ["claude-opus-4-6", "Claude Opus 4.6", FULL_EFFORTS],
+              ["claude-fable-5-1", "Claude Fable 5.1", FULL_EFFORTS],
+              ["claude-fable-5", "Claude Fable 5", FULL_EFFORTS],
+              ["claude-sonnet-5-5", "Claude Sonnet 5.5", FULL_EFFORTS],
+              ["claude-sonnet-5", "Claude Sonnet 5", FULL_EFFORTS],
+              ["claude-sonnet-4-6", "Claude Sonnet 4.6", FULL_EFFORTS],
+              ["claude-haiku-5-5", "Claude Haiku 5.5", FULL_EFFORTS],
+              ["claude-haiku-4-5", "Claude Haiku 4.5"],
+            ] as const
+          ).map(([id, displayName, efforts]) => ({
             id,
-            displayName: `Claude ${id.charAt(0).toUpperCase()}${id.slice(1)}`,
+            displayName,
             description: "",
             modelProvider: "",
-            reasoningEfforts: [],
-            defaultReasoning: "",
+            reasoningEfforts: efforts ? efforts.slice() : [],
+            defaultReasoning: efforts ? "medium" : "",
             recommended: false,
           })),
-          {
-            id: "claude-opus-5-5",
-            displayName: "Claude Opus 5.5",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
-            defaultReasoning: "medium",
-            recommended: false,
-          },
-          {
-            id: "claude-sonnet-5-5",
-            displayName: "Claude Sonnet 5.5",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
-            defaultReasoning: "medium",
-            recommended: false,
-          },
-          {
-            id: "claude-fable-5-1",
-            displayName: "Claude Fable 5.1",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
-            defaultReasoning: "medium",
-            recommended: false,
-          },
-          {
-            id: "claude-opus-5",
-            displayName: "Claude Opus 5",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
-            defaultReasoning: "medium",
-            recommended: false,
-          },
-          {
-            id: "claude-sonnet-5",
-            displayName: "Claude Sonnet 5",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
-            defaultReasoning: "medium",
-            recommended: false,
-          },
-          {
-            id: "claude-fable-5",
-            displayName: "Claude Fable 5",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
-            defaultReasoning: "medium",
-            recommended: false,
-          },
-          {
-            id: "claude-opus-4-8",
-            displayName: "Claude Opus 4.8",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
-            defaultReasoning: "medium",
-            recommended: false,
-          },
-          {
-            id: "claude-opus-4-7",
-            displayName: "Claude Opus 4.7",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
-            defaultReasoning: "medium",
-            recommended: false,
-          },
-          {
-            id: "claude-opus-4-6",
-            displayName: "Claude Opus 4.6",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: ["low", "medium", "high", "max"],
-            defaultReasoning: "medium",
-            recommended: false,
-          },
-          {
-            id: "claude-sonnet-4-6",
-            displayName: "Claude Sonnet 4.6",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: ["low", "medium", "high", "max"],
-            defaultReasoning: "medium",
-            recommended: false,
-          },
-          {
-            id: "claude-sonnet-4-5",
-            displayName: "Claude Sonnet 4.5",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: [],
-            defaultReasoning: "",
-            recommended: false,
-          },
-          {
-            id: "claude-haiku-4-5",
-            displayName: "Claude Haiku 4.5",
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: [],
-            defaultReasoning: "",
-            recommended: false,
-          },
         ],
       },
     ]);
@@ -626,7 +540,8 @@ test("Pi reasoning levels are the ones the SDK supports for each model", async (
 
 describe("Claude Code model catalog minimum versions", () => {
   // https://code.claude.com/docs/en/model-config: Sonnet 5.5 requires Claude Code v2.1.284, Opus
-  // 5.5 v2.1.280, Fable 5.1 v2.1.257. The docs state no minimum for the other pinned models.
+  // 5.5 v2.1.280, Fable 5.1 v2.1.257, Haiku 5.5 v2.1.293. The docs state no minimum for the other
+  // pinned models.
   const ALIASES = ["opus", "fable", "sonnet", "haiku"];
   const PINNED_WITHOUT_MINIMUM = [
     "claude-opus-5",
@@ -636,12 +551,12 @@ describe("Claude Code model catalog minimum versions", () => {
     "claude-opus-4-7",
     "claude-opus-4-6",
     "claude-sonnet-4-6",
-    "claude-sonnet-4-5",
     "claude-haiku-4-5",
   ];
   const FABLE_5_1 = "claude-fable-5-1";
   const OPUS_5_5 = "claude-opus-5-5";
   const SONNET_5_5 = "claude-sonnet-5-5";
+  const HAIKU_5_5 = "claude-haiku-5-5";
   const cases: Array<{ version: string; listed: string[] }> = [
     { version: "2.1.0", listed: [] },
     { version: "2.1.256", listed: [] },
@@ -650,19 +565,21 @@ describe("Claude Code model catalog minimum versions", () => {
     { version: "2.1.280", listed: [FABLE_5_1, OPUS_5_5] },
     { version: "2.1.283", listed: [FABLE_5_1, OPUS_5_5] },
     { version: "2.1.284", listed: [FABLE_5_1, OPUS_5_5, SONNET_5_5] },
-    { version: "2.2.0", listed: [FABLE_5_1, OPUS_5_5, SONNET_5_5] },
-    { version: "3.0.0", listed: [FABLE_5_1, OPUS_5_5, SONNET_5_5] },
+    { version: "2.1.292", listed: [FABLE_5_1, OPUS_5_5, SONNET_5_5] },
+    { version: "2.1.293", listed: [FABLE_5_1, OPUS_5_5, SONNET_5_5, HAIKU_5_5] },
+    { version: "2.2.0", listed: [FABLE_5_1, OPUS_5_5, SONNET_5_5, HAIKU_5_5] },
+    { version: "3.0.0", listed: [FABLE_5_1, OPUS_5_5, SONNET_5_5, HAIKU_5_5] },
   ];
   const ids = (catalog: { models: Array<{ id: string }> } | undefined) =>
     catalog?.models.map((model) => model.id) ?? [];
   const expectListed = (modelIds: string[], listed: string[]) => {
     expect(modelIds).toEqual(expect.arrayContaining([...ALIASES, ...PINNED_WITHOUT_MINIMUM]));
-    for (const id of [FABLE_5_1, OPUS_5_5, SONNET_5_5])
+    for (const id of [FABLE_5_1, OPUS_5_5, SONNET_5_5, HAIKU_5_5])
       expect(modelIds.includes(id)).toBe(listed.includes(id));
   };
 
   for (const { version, listed } of cases) {
-    test(`the live inventory of Claude Code ${version} lists ${listed.length} of the 3 minimum-gated models`, async () => {
+    test(`the live inventory of Claude Code ${version} lists ${listed.length} of the 4 minimum-gated models`, async () => {
       const inventory = await discoverCodeAgentInventory({
         probe: probeFor({ claude: { path: "/bin/claude", version: `${version} (Claude Code)\n` } }),
         environment: { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" },
@@ -693,7 +610,14 @@ describe("Claude Code model catalog minimum versions", () => {
   }
 
   test("a version that is unknown or not a dotted number keeps the full list", () => {
-    const full = [...ALIASES, FABLE_5_1, OPUS_5_5, SONNET_5_5, ...PINNED_WITHOUT_MINIMUM];
+    const full = [
+      ...ALIASES,
+      FABLE_5_1,
+      OPUS_5_5,
+      SONNET_5_5,
+      HAIKU_5_5,
+      ...PINNED_WITHOUT_MINIMUM,
+    ];
     for (const catalog of [
       claudeStaticCatalog(),
       claudeStaticCatalog(undefined),
@@ -738,4 +662,15 @@ describe("Claude Code model catalog minimum versions", () => {
     for (const { version } of cases)
       expect(ids(claudeStaticCatalog(version)).slice(0, 4)).toEqual(ALIASES);
   });
+});
+
+test("the Claude catalog gives every model but haiku the full effort list", () => {
+  const efforts = Object.fromEntries(
+    claudeStaticCatalog().models.map((model) => [model.id, model.reasoningEfforts]),
+  );
+  const full = ["low", "medium", "high", "xhigh", "max"];
+  expect(efforts["opus"]).toEqual(full);
+  expect(efforts["fable"]).toEqual(full);
+  expect(efforts["sonnet"]).toEqual(full);
+  expect(efforts["haiku"]).toEqual([]);
 });

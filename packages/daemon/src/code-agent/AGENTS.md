@@ -46,7 +46,8 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   `claudeStaticCatalog(version)` lists a pinned model only when the probed CLI
   meets the minimum `code.claude.com/docs/en/model-config` states for it
   (`CLAUDE_CODE_MODEL_MINIMUM_VERSION`); aliases always stay, and an unknown
-  version keeps every model.
+  version keeps every model. Its models and effort levels follow Raft
+  Computer's static Claude catalog (`opus`/`fable`/`sonnet` offer every level; `haiku` none).
 
 ## Standing instructions
 
