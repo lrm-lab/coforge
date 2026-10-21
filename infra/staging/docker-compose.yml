@@ -94,10 +94,10 @@ services:
       # docs/release/local-feed-hosting.md requires a staging entry point to install the staging
       # build, never the production one.
       COFORGE_RELEASE_FEED_URL: https://releases-staging.coforge.cn
-      # Browser address of this deployment's desktop. The page and websocket stay
-      # on this HTTPS site; Caddy forwards them to COFORGE_DESKTOP_UPSTREAM.
-      # The Open desktop button is absent when this is empty.
-      COFORGE_CLOUD_DESKTOP_ORIGIN: https://staging.coforge.cn
+      # Browser address of this deployment's Swarm desktop proxy. The browser
+      # opens it directly. Staging cannot reach that proxy, so this is not the
+      # site origin. The Open desktop button is absent when this is empty.
+      COFORGE_CLOUD_DESKTOP_ORIGIN: http://10.110.158.143:6090
       # SHA-256 of the release-catalog publish token (docs/release/release-notes.md). Not a
       # secret: the plaintext token lives only in the GitHub repository secret
       # COFORGE_RELEASE_CATALOG_TOKEN_STAGING; without this value every publish answers 503.
