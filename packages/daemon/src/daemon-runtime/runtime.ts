@@ -46,6 +46,7 @@ import {
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
 import { resolveLaunchIdentity, type SessionReference } from "./launch-identity";
+import { runtimeDisplayName, sessionInvalidateActivityText } from "./session-invalidate-activity";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import {
   AgentAuthorizationError,
@@ -101,7 +102,6 @@ import {
   type InboxResponse,
   type LocalAgentMessageRequest,
   type LocalInboxRequest,
-  RUNTIME_PROVIDER,
   type RuntimeProvider,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type UsageScanResponse,
@@ -365,35 +365,6 @@ function recoveryOf(intent: AgentStartIntent): AgentRecoveryContext {
     resumeMessages: intent.resumeMessages,
     unreadSummary: intent.unreadSummary,
     unreadConversationIds: intent.unreadConversationIds,
-  };
-}
-
-/** Human runtime label for an invalidated-session Activity notice. */
-const RUNTIME_DISPLAY_NAME: Record<RuntimeProvider, string> = {
-  [RUNTIME_PROVIDER.CODEX]: "Codex",
-  [RUNTIME_PROVIDER.CLAUDE_CODE]: "Claude Code",
-  [RUNTIME_PROVIDER.KIRO]: "Kiro",
-  [RUNTIME_PROVIDER.CURSOR]: "Cursor CLI",
-  [RUNTIME_PROVIDER.OPENCODE]: "OpenCode",
-  [RUNTIME_PROVIDER.GROK]: "Grok Build",
-  [RUNTIME_PROVIDER.ANTIGRAVITY]: "Antigravity CLI",
-  [RUNTIME_PROVIDER.PI]: "Pi",
-  [RUNTIME_PROVIDER.COFORGE]: "CoForge",
-};
-function runtimeDisplayName(provider: RuntimeProvider): string {
-  return RUNTIME_DISPLAY_NAME[provider];
-}
-
-/** Narration for a daemon-initiated cold start after a session invalidate. */
-function sessionInvalidateActivityText(
-  runtimeLabel: string,
-  staleSessionId: string,
-  reason: AgentSessionInvalidateReason,
-): { detail: string; entryText: string } {
-  const rejected = reason === "provider_replay_rejected";
-  return {
-    detail: `Stored ${runtimeLabel} session ${rejected ? "replay rejected" : "missing"}; cold-starting a new session…`,
-    entryText: `Stored ${runtimeLabel} session ${staleSessionId} ${rejected ? "was rejected by the provider during replay" : "is unavailable locally"}. Falling back to a cold start; earlier runtime context may not be restored.`,
   };
 }
 

@@ -16,6 +16,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `code-agent-inventory-sync.ts` owns Code Agent runtime and catalog reports,
   including the liveness re-check and refresh serialization. `runtime.ts` only
   decides when to report; Agent traffic never waits for a report.
+- `session-invalidate-activity.ts` narrates the cold-start Activity after a session invalidate. `runtime.ts` only publishes it.
 - A start that fails stops its transport before replacing it, so a connection
   that came up never keeps reporting the Computer online for a Workspace that
   did not start. `stop` aborts a start still waiting on the cloud (connect or
@@ -195,5 +196,4 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 
 ## Skills metadata
 
-- Resolve the stable Agent directory and route Skills queries and results;
-  never parse skill files here. That belongs to `code-agent/agent-skills.ts`.
+- Resolve the stable Agent directory and route Skills queries and results; never parse skill files here. That belongs to `code-agent/agent-skills.ts`.
