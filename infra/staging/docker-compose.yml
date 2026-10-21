@@ -31,6 +31,9 @@ services:
       # The deploy script refreshes this value from the Caddyfile so only a
       # Caddyfile change recreates this container (admin is off: no reload).
       COFORGE_CADDYFILE_SHA256: ${COFORGE_CADDYFILE_SHA256:?deploy script writes .env}
+      # Internal address of the Swarm desktop proxy. Caddy reaches it after the
+      # web app allows the signed-in computer owner. Not a public listener.
+      COFORGE_DESKTOP_UPSTREAM: 10.110.158.143:6090
     ports:
       - "80:80"
       - "443:443"
@@ -91,9 +94,10 @@ services:
       # docs/release/local-feed-hosting.md requires a staging entry point to install the staging
       # build, never the production one.
       COFORGE_RELEASE_FEED_URL: https://releases-staging.coforge.cn
-      # Browser address of this deployment's Swarm desktop proxy. Not a secret.
+      # Browser address of this deployment's desktop. The page and websocket stay
+      # on this HTTPS site; Caddy forwards them to COFORGE_DESKTOP_UPSTREAM.
       # The Open desktop button is absent when this is empty.
-      COFORGE_CLOUD_DESKTOP_ORIGIN: http://10.110.158.143:6090
+      COFORGE_CLOUD_DESKTOP_ORIGIN: https://staging.coforge.cn
       # SHA-256 of the release-catalog publish token (docs/release/release-notes.md). Not a
       # secret: the plaintext token lives only in the GitHub repository secret
       # COFORGE_RELEASE_CATALOG_TOKEN_STAGING; without this value every publish answers 503.

@@ -39,6 +39,10 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - Restart recovery must not eagerly load all canonical Message history.
 - A resumed session without pending messages uses its session context first, reads memory and its assigned unfinished tasks only when that context does not establish its current work, and stays silent when no actionable work remains; it never repeats its introduction.
 - A fresh session without an introduction recovers from existing memory files and assigned unfinished tasks once. Reset Session, Full Reset, migration and a lost native session can all take this path; only files still present are read, and a fresh session never implies a new Agent.
+- `agent-desktop.ts` holds one Agent's screen on the image's localhost control
+  port and releases it when that process ends. The hold's variables are that
+  process's display, authority file, and per-agent XDG directories. A missing
+  service returns nothing, and the launch continues.
 
 ## Control fencing (`agent-control.ts`)
 

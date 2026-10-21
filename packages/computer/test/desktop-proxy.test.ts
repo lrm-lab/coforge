@@ -29,6 +29,22 @@ describe("desktop route", () => {
       computerId: "computer-1",
       upstreamPath: "/websockify",
     });
+    expect(parseDesktopRoute("/desktop/computer-1/agent-1/")).toEqual({
+      computerId: "computer-1",
+      upstreamPath: "/screen/agent-1/desktop.html",
+    });
+    expect(parseDesktopRoute("/desktop/computer-1/agent-1/websockify")).toEqual({
+      computerId: "computer-1",
+      upstreamPath: "/screen/agent-1/websockify",
+    });
+    expect(parseDesktopRoute("/desktop/computer-1/agent-1/core/rfb.js")).toEqual({
+      computerId: "computer-1",
+      upstreamPath: "/screen/agent-1/core/rfb.js",
+    });
+    expect(parseDesktopRoute("/desktop/computer-1/core/rfb.js")).toEqual({
+      computerId: "computer-1",
+      upstreamPath: "/core/rfb.js",
+    });
   });
 
   test("reads the container address and desktop token from inspect output", () => {

@@ -18,6 +18,23 @@ staging.coforge.cn {
 		reverse_proxy centrifugo:8000
 	}
 
+	# Cloud desktops. The browser stays on this HTTPS site. Web confirms the
+	# signed-in user owns that cloud computer, then this proxies the page and
+	# its websocket to the Swarm host. The upstream is internal HTTP; it is not
+	# a public listener. {$COFORGE_DESKTOP_UPSTREAM} is the host:port from Compose.
+	# https://caddyserver.com/docs/caddyfile/directives/forward_auth
+	# https://caddyserver.com/docs/caddyfile/directives/reverse_proxy
+	@desktop path /desktop /desktop/*
+	handle @desktop {
+		forward_auth web:3000 {
+			uri /api/internal/desktop-authorize
+			header_up X-Desktop-Path {http.request.uri.path}
+		}
+		reverse_proxy {$COFORGE_DESKTOP_UPSTREAM} {
+			flush_interval -1
+		}
+	}
+
 	# The web application compresses nothing itself, so HTML, JS, CSS and
 	# Server Function JSON are compressed here (zstd, else gzip). The realtime
 	# route above stays unencoded.
