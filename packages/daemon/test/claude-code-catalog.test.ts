@@ -6,7 +6,10 @@ import {
   discoverCodeAgentInventory,
   loadCachedCodeAgentCatalogs,
 } from "#src/code-agent/runtime-inventory";
-import { claudeStaticCatalog } from "#src/code-agent/claude-code/catalog";
+import {
+  CLAUDE_CODE_CATALOG_ARGUMENTS,
+  claudeStaticCatalog,
+} from "#src/code-agent/claude-code/catalog";
 import { FULL_EFFORTS, probeFor } from "./fixtures/runtime-probe";
 
 describe("Claude Code model catalog minimum versions", () => {
@@ -110,6 +113,14 @@ describe("Claude Code model catalog minimum versions", () => {
       const inventory = () =>
         discoverCodeAgentInventory({
           probe: probeFor(installed),
+          // The shell stub above cannot answer `list_models`; the deterministic fixture does.
+          commands: {
+            claude: [
+              process.execPath,
+              new URL("./fixtures/claude-list-models.ts", import.meta.url).pathname,
+              ...CLAUDE_CODE_CATALOG_ARGUMENTS,
+            ],
+          },
           environment: { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" },
           piModels: async () => [],
           cacheDirectory: stateDirectory,

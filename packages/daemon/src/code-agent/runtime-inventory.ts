@@ -26,7 +26,11 @@ import {
 } from "./runtime-inventory-cache";
 import { CATALOG_DISCOVERY_TIMEOUT_MS } from "./catalog-discovery";
 import { discoverExternalCodeAgents } from "./runtime-probe";
-import { claudeStaticCatalog } from "./claude-code/catalog";
+import {
+  CLAUDE_CODE_CATALOG_ARGUMENTS,
+  claudeStaticCatalog,
+  discoverClaudeCodeCatalog,
+} from "./claude-code/catalog";
 import { discoverCodexCatalog } from "./codex/catalog";
 import {
   discoverCoforgeCatalog,
@@ -42,6 +46,7 @@ export type CodeAgentInventory = {
 };
 
 type CatalogCommands = {
+  claude?: readonly string[];
   codex?: readonly string[];
   kiro?: readonly string[];
   cursor?: readonly string[];
@@ -66,8 +71,9 @@ export type CodeAgentDiscoveryOptions = {
   /** The wait for each external runtime's generic `--version` probe (`versionProbeOutput`);
    * `VERSION_PROBE_TIMEOUT_MS` when unset. Provider-specific probes keep their own bounds. */
   versionProbeTimeoutMs?: number;
-  /** Each bounded wait of Codex's model catalog discovery; `CATALOG_DISCOVERY_TIMEOUT_MS` when
-   * unset. The runtime probe's own `initialize` wait is not affected. */
+  /** Each bounded wait of Codex's and Claude Code's model catalog discovery;
+   * `CATALOG_DISCOVERY_TIMEOUT_MS` when unset. The runtime probe's own `initialize` wait is not
+   * affected. */
   catalogDiscoveryTimeoutMs?: number;
   /** Pi's in-process catalog discovery; `PI_CATALOG_DISCOVERY_TIMEOUT_MS` when unset. */
   piCatalogDiscoveryTimeoutMs?: number;
@@ -75,6 +81,8 @@ export type CodeAgentDiscoveryOptions = {
 
 /** A provider whose model catalog is expensive enough (spawns a CLI) to be worth caching. */
 const CACHEABLE_CATALOG_PROVIDERS = [
+  // First, so the cached Claude Code entry keeps its place after the CoForge catalog.
+  RUNTIME_PROVIDER.CLAUDE_CODE,
   RUNTIME_PROVIDER.GROK,
   RUNTIME_PROVIDER.PI,
   RUNTIME_PROVIDER.CODEX,
@@ -146,8 +154,6 @@ export async function loadCachedCodeAgentCatalogs(
   const environment = options.environment ?? Bun.env;
   const searchPath = codeAgentExecutableSearchPath(environment, options.platform);
   const catalogs: CodeAgentModelCatalog[] = [discoverCoforgeCatalog()];
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.CLAUDE_CODE))
-    catalogs.push(claudeStaticCatalog(installedClaudeCodeVersion(runtimes)));
   const cache = options.cacheDirectory
     ? await readInventoryCache(options.cacheDirectory)
     : undefined;
@@ -168,6 +174,9 @@ export async function loadCachedCodeAgentCatalogs(
     const cached = key && cache ? cache[provider] : undefined;
     const fresh = key !== undefined && cached?.key === key && cached.catalog !== undefined;
     if (fresh) catalogs.push(cached.catalog!);
+    // Without a fresh entry, Claude Code still lists its static catalog while a refresh runs.
+    else if (provider === RUNTIME_PROVIDER.CLAUDE_CODE)
+      catalogs.push(claudeStaticCatalog(installedClaudeCodeVersion(runtimes)));
     if (!fresh || Date.now() - (cached?.catalogProbedAt ?? 0) > CATALOG_CACHE_TTL_MS)
       needsRefresh = true;
   }
@@ -235,8 +244,23 @@ export async function discoverCodeAgentCatalogs(
       );
   }
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.CLAUDE_CODE)) {
+    const claudeCodeVersion = installedClaudeCodeVersion(runtimes);
+    const executable = await resolveExecutable(RUNTIME_PROVIDER.CLAUDE_CODE);
     discoveries.push(
-      Promise.resolve({ catalog: claudeStaticCatalog(installedClaudeCodeVersion(runtimes)) }),
+      executable
+        ? discoverClaudeCodeCatalog(
+            commands.claude ?? [executable, ...CLAUDE_CODE_CATALOG_ARGUMENTS],
+            cwd,
+            environment,
+            options.catalogDiscoveryTimeoutMs ?? CATALOG_DISCOVERY_TIMEOUT_MS,
+            claudeCodeVersion,
+          ).then((catalog) =>
+            // A failed list is not cached; the static catalog stands in, Fast support unknown.
+            catalog
+              ? { provider: RUNTIME_PROVIDER.CLAUDE_CODE, keyPaths: [executable], catalog }
+              : { catalog: claudeStaticCatalog(claudeCodeVersion) },
+          )
+        : Promise.resolve({ catalog: claudeStaticCatalog(claudeCodeVersion) }),
     );
   }
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.KIRO)) {

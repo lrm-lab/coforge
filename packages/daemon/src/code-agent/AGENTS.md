@@ -41,8 +41,8 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   disk fallback; offline or failed probes are omitted, logged as `code_agent_catalog:discovery_failed`,
   and never cached. Ordinary inventory retains its existing cache fallback policy.
 - Report the maintained Claude Code model catalog when Claude Code is
-  installed. Never launch the CLI to infer a dynamic catalog; its
-  machine-readable initialization does not give a dependable list.
+  installed; its `list_models` answer (`CLAUDE_CODE_CATALOG_ARGUMENTS`, hooks off) sets only each
+  static model's `supportsFastMode`, cached by executable; a failed one leaves it unset, uncached.
   `claudeStaticCatalog(version)` lists a pinned model only when the probed CLI
   meets the minimum `code.claude.com/docs/en/model-config` states for it
   (`CLAUDE_CODE_MODEL_MINIMUM_VERSION`); aliases stay, an unknown version keeps
