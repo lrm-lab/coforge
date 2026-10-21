@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { FileDeliveryConfigError } from "#src/server/files/file-delivery.server";
 import { FileStorageConfigError } from "#src/server/files/file-storage.server";
 import { PublicImageDeliveryConfigError } from "#src/server/files/public-image-delivery.server";
+import { FeatureFlagsConfigError } from "#src/server/feature-flags/configuration.server";
 import { assertStartupConfig } from "#src/server/startup-config.server";
 
 test("boots without CDN delivery when it is not configured", async () => {
@@ -43,4 +44,10 @@ test("refuses to boot when profile images are published on the signed attachment
       COFORGE_IMAGE_DELIVERY_URL: "https://files-staging.coforge.cn",
     }),
   ).rejects.toThrow(PublicImageDeliveryConfigError);
+});
+
+test("refuses to boot when the feature flag file is set but missing, naming the variable", async () => {
+  const promise = assertStartupConfig({ COFORGE_FEATURE_FLAGS_FILE: "/nonexistent/flags.json" });
+  await expect(promise).rejects.toThrow(FeatureFlagsConfigError);
+  await expect(promise).rejects.toThrow(/COFORGE_FEATURE_FLAGS_FILE/);
 });

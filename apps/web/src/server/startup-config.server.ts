@@ -2,6 +2,8 @@ import {
   readAuthorizationServerConfiguration,
   rememberAuthorizationServerConfiguration,
 } from "#src/server/authorization-server/configuration.server";
+import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
+import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import {
   readFileDeliveryConfig,
   rememberFileDeliveryConfig,
@@ -23,7 +25,9 @@ import { readWeeklyReportScheduleTickMs } from "#src/server/records/weekly-repor
  * without the bucket that domain reads, or points them at the signed attachment domain, fails
  * here rather than serving broken avatars. The OIDC authorization server likewise: an unset
  * `COFORGE_OIDC_ISSUER` is valid; a set issuer that is not a usable URL, or comes without a
- * usable signing keyset, is a boot failure.
+ * usable signing keyset, is a boot failure. Feature flags too: an unset
+ * `COFORGE_FEATURE_FLAGS_FILE` leaves every flag off; a set path that is not a valid flag
+ * definition file is a boot failure.
  */
 export async function assertStartupConfig(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const delivery = await readFileDeliveryConfig(env);
@@ -33,6 +37,8 @@ export async function assertStartupConfig(env: NodeJS.ProcessEnv = process.env):
   const weeklyReportScheduleTickMs = readWeeklyReportScheduleTickMs(env);
   const authorizationServer = await readAuthorizationServerConfiguration(env);
   if (env === process.env) rememberAuthorizationServerConfiguration(authorizationServer);
+  const featureFlags = await readFeatureFlagsConfiguration(env);
+  if (env === process.env) await installFeatureFlags(featureFlags);
   console.info(
     JSON.stringify({
       event: "startup_config_checked",
@@ -41,6 +47,7 @@ export async function assertStartupConfig(env: NodeJS.ProcessEnv = process.env):
       public_image_bucket: imageStorage ? "configured" : "shared",
       weekly_report_schedule_tick_ms: weeklyReportScheduleTickMs ?? null,
       authorization_server: authorizationServer.status === "ready" ? "configured" : "disabled",
+      feature_flags: featureFlags.status,
     }),
   );
 }
