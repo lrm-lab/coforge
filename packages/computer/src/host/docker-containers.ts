@@ -145,7 +145,9 @@ export interface ContainerRuntime {
   updateServiceImage(computerId: string, image: string): Promise<void>;
   inspectPlacement(image: string): Promise<HostImagePlacement>;
   /** Address of the browser desktop inside a running cloud computer. */
-  desktopEndpoint(computerId: string): Promise<{ host: string; port: number; token: string } | undefined>;
+  desktopEndpoint(
+    computerId: string,
+  ): Promise<{ host: string; port: number; token: string } | undefined>;
 }
 
 export type DockerSpawn = (
