@@ -103,7 +103,7 @@ export class MemoryAgentTurnBudget {
     this.#unchangedReads = newEvidence > 0 ? 0 : this.#unchangedReads + 1;
     // A new search hit is discovery, not verification. Keep this progress across
     // Task follow-ups so rephrasing a request cannot hide a search-only loop.
-    if (response.op === "fork_find" || response.op === "search_context")
+    if (response.op === "search_context")
       this.#discoveriesWithoutRead++;
     if (response.op === "read" && !response.citation.uri.startsWith("viking://resources/causal/")) {
       const key = JSON.stringify([
@@ -158,14 +158,14 @@ export class MemoryAgentTurnBudget {
               relation: "branch_steps",
               limit: 5,
             }) +
-            ". Choose the candidate that fits the Task; follow next only on returned steps. If none fits, explain the mismatch and continue factual retrieval.",
+            ". Choose the candidate that fits the Task; follow next only on returned steps. If none fits, explain the mismatch and tell Task which current facts still need verification.",
         );
     }
     if (this.#unchangedReads < 2 || feedback.length)
       return feedback.length ? feedback.join("\n") : undefined;
     const next =
       this.#citationRefs.size > 0
-        ? "Publish a partial cited memory_offer with useful findings and explicit unresolved constraints, or change strategy: use ov_read on promising documents; for a method gap, use ov_fork_find with an abstract failure or reasoning pattern, then expand served branch_steps/next relations. If Task's observed state shows repeated failures or unresolved constraints, read its exact channel/thread update and decide whether memory_diagnose would help; do not diagnose your own Offer or routine progress. A changed snippet of an unchanged source is not a new source. Do not wait to solve the entire Task before replying."
+        ? "Publish a partial cited memory_offer with useful Fork/AIG findings and explicit unresolved constraints, or change strategy: use ov_fork_find with a materially different failure or reasoning pattern, then expand served branch_steps/next relations. If Task's observed state shows repeated failures or unresolved constraints, read its exact channel/thread update and decide whether memory_diagnose would help; do not diagnose your own Offer or routine progress. Do not wait to solve the entire Task before replying."
         : "Use a materially different query. No citation has been retrieved; do not fabricate evidence or citations.";
     feedback.push(
       `No new evidence in ${this.#unchangedReads} consecutive retrievals. ${next} Available citationRefs: ${[...this.#citationRefs].slice(-10).join(", ")}`,

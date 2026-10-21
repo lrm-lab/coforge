@@ -1,6 +1,9 @@
 import { PrismaWorkspaceMemoryAdmissionStore } from "../../../apps/web/src/server/db/repositories/workspace-memory-admission.repositories.server";
 import { PrismaWorkspaceMemoryProfileStore } from "../../../apps/web/src/server/db/repositories/workspace-memory-profile.repositories.server";
-import { createOpenVikingTypedSessionExtract } from "../../../apps/web/src/server/openviking/typed-session-extract.server";
+import {
+  createOpenVikingTypedSessionExtract,
+  type OpenVikingEvaluatorResult,
+} from "../../../apps/web/src/server/openviking/typed-session-extract.server";
 import {
   createAdmissionDispatcher,
   type AdmissionDispatcher,
@@ -19,11 +22,15 @@ export function createEvalDispatcher(input: {
   runtime: OpenVikingRuntimeClient;
   accountId: string;
   users: OvUsers;
+  /** Explicit external evaluator results attached to each drain commit. */
+  evaluatorResults?: () => readonly OpenVikingEvaluatorResult[] | undefined;
 }): AdmissionDispatcher {
   const admission = new PrismaWorkspaceMemoryAdmissionStore(input.workspace.db);
   const sessions = createOpenVikingTypedSessionExtract({
     runtime: input.runtime,
     authorizedOwner: "evol-sink",
+    publishCausal: true,
+    ...(input.evaluatorResults ? { evaluatorResults: () => input.evaluatorResults!() } : {}),
     sinkIdentity: userIdentity(
       input.accountId,
       input.users.adminUserId,

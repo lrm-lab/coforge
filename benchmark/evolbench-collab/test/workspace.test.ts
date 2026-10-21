@@ -80,8 +80,12 @@ test("failed identity provisioning releases the frozen account and owned rows", 
   ).rejects.toThrow("identity write failed");
   expect(bound).toBe(false);
   expect(deleted).toEqual(["workspace", "computer", "owner"]);
-  expect(descriptions[0]).toContain("ov_search_context");
+  expect(descriptions[0]).not.toContain("ov_search_context");
   expect(descriptions[0]).toContain("ov_fork_find");
+  expect(descriptions[0]).toContain("ov_expand");
+  expect(descriptions[0]).toContain("memory_diagnose");
   expect(descriptions[0]).not.toContain("ov_find");
   expect(descriptions[0]).not.toContain("do not use embedding");
+  expect(descriptions[1]).toContain("request diagnosis");
+  expect(descriptions[1]).toContain("actual failure");
 });

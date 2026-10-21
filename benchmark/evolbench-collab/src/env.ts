@@ -47,6 +47,12 @@ export type EvalEnv = {
    * message for this many ms) instead of riding the full deadline. */
   abortQuietMs: number;
   resultDir: string;
+  /** Parallel-sedimentation protocol: JSON file {accountId, adminUserId,
+   * adminKey} redirecting cold-arm episode drains from the per-episode
+   * disposable account into one shared corpus account. */
+  drainAccountFile: string | null;
+  /** Run cold-arm episodes regardless of split (batch train sedimentation). */
+  coldAllSplits: boolean;
 };
 
 const FLAG = "COFORGE_EVOLBENCH_COLLAB_EVAL";
@@ -106,6 +112,8 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     episodeMod: env.COFORGE_EVAL_EPISODE_MOD?.trim() || null,
     abortQuietMs: Number(env.COFORGE_EVAL_ABORT_QUIET_MS ?? "600000"),
     resultDir: env.COFORGE_EVAL_RESULT_DIR ?? new URL("../result", import.meta.url).pathname,
+    drainAccountFile: env.COFORGE_EVAL_DRAIN_ACCOUNT_FILE?.trim() || null,
+    coldAllSplits: env.COFORGE_EVAL_COLD_ALL_SPLITS === "1",
   };
 }
 
