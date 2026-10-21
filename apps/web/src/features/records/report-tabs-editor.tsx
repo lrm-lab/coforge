@@ -20,6 +20,7 @@ import type { UploadResult } from "#src/features/records/report-editor/types";
 import { isReportImageZoomOpen } from "./report-image-zoom";
 import { ReportPresentMode } from "./report-present-mode";
 import { ReportTabDrag, ReportTabDragItem, type ReportTabPress } from "./report-tab-drag";
+import { adjacentReportTabId } from "./report-tab-keyboard";
 import { RecordsReadingColumn } from "./records-reading-column";
 import {
   clearReadingEdge,
@@ -243,6 +244,20 @@ export function ReportTabsEditor({
     setEditingName(event.target.value);
   }
 
+  function focusReportTab(id: string) {
+    const node = scrollerRef.current?.querySelector(`[data-report-tab="${CSS.escape(id)}"]`);
+    if (node instanceof HTMLElement) node.focus();
+  }
+
+  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, id: string) {
+    if (event.key !== "Tab") return;
+    const next = adjacentReportTabId(allTabIds, id, event.shiftKey);
+    if (!next) return;
+    event.preventDefault();
+    setSelectedTab(next);
+    focusReportTab(next);
+  }
+
   function handleEditKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -327,7 +342,10 @@ export function ReportTabsEditor({
           type="button"
           size="sm"
           color="link-gray"
+          data-report-tab={name}
           aria-selected={name === activeTab}
+          onFocus={() => setSelectedTab(name)}
+          onKeyDown={(event) => onTabKeyDown(event, name)}
           onPressStart={press?.pressStart}
           onPress={() => {
             if (!press?.dragged()) setSelectedTab(name);
@@ -400,7 +418,10 @@ export function ReportTabsEditor({
               type="button"
               size="sm"
               color="link-gray"
+              data-report-tab={tab.id}
               aria-selected={tab.id === activeTab}
+              onFocus={() => setSelectedTab(tab.id)}
+              onKeyDown={(event) => onTabKeyDown(event, tab.id)}
               onPress={() => setSelectedTab(tab.id)}
               className={tabButtonClass(tab.id === activeTab)}
             >
