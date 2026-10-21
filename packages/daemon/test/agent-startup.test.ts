@@ -9,7 +9,11 @@ import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import type { AgentRuntimeEvent, AgentSession, CodeAgentProvider } from "#src/code-agent/contract";
 import { KiroProvider } from "#src/code-agent/kiro/provider";
 import { AgentSessionRecoveryError } from "#src/code-agent/contract";
-import { AGENT_STARTUP_TIMEOUT_MS, AgentStartup } from "#src/agent-runtime/agent-startup";
+import {
+  AGENT_STARTUP_TIMEOUT_MS,
+  AgentStartup,
+  agentStartupInput,
+} from "#src/agent-runtime/agent-startup";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
 import type { AgentActivity } from "@lrm/coforge-sdk/internal";
 import { captureDaemonLogs } from "./log-capture";
@@ -105,6 +109,15 @@ async function harness(provider?: CodeAgentProvider, input?: (emit: Emit) => Pro
 const runtimeErrors = (h: { activities: AgentActivity[] }) =>
   h.activities.filter((activity) => activity.detailKind === "runtime_error");
 
+test("a fresh session after reset or migration recovers existing files and tasks, without a new greeting", () => {
+  const input = agentStartupInput(false);
+  expect(input).toContain("You are starting a fresh session.");
+  expect(input).toContain("read MEMORY.md and notes/active-context.md if present");
+  expect(input).toContain("check unfinished tasks assigned to you once");
+  expect(input).toContain("If no actionable work remains, end this turn silently.");
+  expect(input).toContain("Do not send a startup announcement or repeat your introduction.");
+});
+
 test("startup fails and releases the session after 120 seconds without readiness, despite progress pings", async () => {
   const h = await harness();
   try {
@@ -185,6 +198,7 @@ test(
 
 test("a resumed provider that emits failure before rejecting its first input still retries with a fresh session", async () => {
   const modes: Array<string | undefined> = [];
+  const inputs: string[] = [];
   let disposed = 0;
   const h = await harness({
     provider: "pi",
@@ -201,7 +215,8 @@ test("a resumed provider that emits failure before rejecting its first input sti
         onExit() {
           return () => {};
         },
-        async sendMessage() {
+        async sendMessage(text) {
+          inputs.push(text);
           if (attempt === 1) {
             emit({ type: "error", message: "Cannot restore provider history" });
             emit({ type: "completed", status: "failed" });
@@ -236,6 +251,7 @@ test("a resumed provider that emits failure before rejecting its first input sti
       sessionMode: "resume",
     });
     expect(modes).toEqual(["resume", "create"]);
+    expect(inputs[1]).toContain("To recover your work without previous session context");
     expect(disposed).toBe(1);
     expect(h.activities.at(-1)?.detailKind).toBe("idle");
   } finally {
@@ -258,7 +274,7 @@ test("real model work cancels the startup deadline without imposing a turn time 
   }
 });
 
-test("an empty resume gets one no-work turn, not the fresh-start prompt", async () => {
+test("an empty resume recovers existing work before waiting silently", async () => {
   const h = await harness();
   try {
     await h.runtime.startAgent(
@@ -266,9 +282,15 @@ test("an empty resume gets one no-work turn, not the fresh-start prompt", async 
       { provider: "kiro", model: "auto", reasoning: "" },
       "stored-session",
     );
-    expect(h.notices).toEqual([
-      "You are back online. No new messages are pending. End this turn without taking action.",
-    ]);
+    expect(h.notices).toHaveLength(1);
+    expect(h.notices[0]).toContain("You are back online.");
+    expect(h.notices[0]).toContain("Use your existing session context first.");
+    expect(h.notices[0]).toContain("read MEMORY.md and notes/active-context.md if present");
+    expect(h.notices[0]).toContain("check unfinished tasks assigned to you once");
+    expect(h.notices[0]).toContain("If no actionable work remains, end this turn silently.");
+    expect(h.notices[0]).toContain(
+      "Do not send a startup announcement or repeat your introduction.",
+    );
   } finally {
     await h.runtime.stop();
   }

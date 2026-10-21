@@ -3,9 +3,17 @@ import { AgentSessionRecoveryError, type AgentRuntimeEvent } from "#src/code-age
 /** The first turn when no real Message or explicit resume prompt is available. Standing
  * instructions already live in the provider's native system/developer prompt. */
 export function agentStartupInput(resuming: boolean): string {
-  return resuming
-    ? "You are back online. No new messages are pending. End this turn without taking action."
-    : "Start.";
+  return [
+    resuming
+      ? "You are back online. No new messages are pending."
+      : "You are starting a fresh session. No new messages are pending.",
+    resuming
+      ? "Use your existing session context first. If it does not establish your current work, read MEMORY.md and notes/active-context.md if present, and check unfinished tasks assigned to you once."
+      : "To recover your work without previous session context, read MEMORY.md and notes/active-context.md if present, and check unfinished tasks assigned to you once.",
+    "Use only tools allowed by your role and skip unsupported recovery steps.",
+    "Resume only actionable work already requested or assigned to you; do not invent work or scan unrelated channels and projects.",
+    "If no actionable work remains, end this turn silently. Do not send a startup announcement or repeat your introduction.",
+  ].join(" ");
 }
 
 /** Summary-only recovery is bounded catch-up, not an instruction to drain every inbox. */

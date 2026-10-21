@@ -61,6 +61,20 @@ test("an Agent with no description asks its creator what they want help with ins
   expect(prompt).not.toContain("role");
 });
 
+test("a new Agent sends its greeting without running a startup audit", () => {
+  const prompt = promptFor({ description: "" });
+  expect(prompt).toContain(
+    "Do not read memory, list tasks, or scan channels merely to prepare this greeting.",
+  );
+  expect(prompt).toContain("A local final answer is not a delivered message");
+  expect(prompt).toContain(
+    "After sending a greeting with no request to act on, end this turn and wait.",
+  );
+  expect(prompt).toContain(
+    "If the creator has already sent a request, use the tools needed for that request.",
+  );
+});
+
 test("a description longer than an Agent profile allows is cut to that length", () => {
   const prompt = promptFor({
     description: `${"a".repeat(AGENT_PROFILE_DESCRIPTION_MAX_LENGTH)}TAIL`,
