@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { DELETED_AGENT_AVATAR_CLASS, DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import {
   Camera01,
@@ -14,36 +14,23 @@ import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Select } from "#src/components/base/select/select";
-import { HoverPopover } from "#src/components/ui/hover-popover";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
-import { formatDateForDisplay } from "#src/lib/dates";
 import { humanLabel } from "#src/lib/human-label";
-import { useTimeFormat } from "#src/lib/time-format-context";
 import { m } from "#src/paraglide/messages";
-import { getLocale } from "#src/paraglide/runtime";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { computerIcon } from "#src/features/computers/computer-identity";
-import {
-  RuntimeUsage,
-  UsageHealthDot,
-  usedPercentText,
-} from "#src/features/computers/runtime-usage";
-import { type UsageRisk, usageRisk } from "#src/features/computers/usage-risk";
-import { useAgentContextReport } from "#src/features/agents/agent-context-report";
-import {
-  AgentContextPopoverContent,
-  contextUsedPercent,
-} from "#src/features/agents/agent-context-popover";
+import { RuntimeUsage, UsageHealthDot } from "#src/features/computers/runtime-usage";
 import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
 import { AgentSkills, type AgentSkillsLoadResult } from "#src/features/agents/agent-skills";
-import { AGENT_VISIBILITY, type AgentVisibility } from "#src/features/agents/agent-visibility";
+import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { InlineEditField, SECTION_CAPTION_CLASS, SUBFIELD_LABEL_CLASS } from "./inline-edit-field";
+import { ContextUsageItem, RUNTIME_PILL_PART_CLASS } from "./agent-context-usage-item";
+import { RoleField, VisibilityField } from "./agent-profile-info-fields";
 
 /** Values are never shown in the chip; the dot count hints at length without revealing it. */
 function maskEnvValue(value: string) {
@@ -69,103 +56,6 @@ function FactBadge({
       {icon}
       {children}
     </Badge>
-  );
-}
-
-/** A part of the Runtime pill that opens its own peek: a button with no chrome of its own, so the
- * pill reads as one, and a focus ring of its own for the keyboard. */
-const RUNTIME_PILL_PART_CLASS =
-  "inline-flex items-center gap-1.5 rounded-sm outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
-
-/** The used share's text colour inside the Runtime pill: the pill's own text while fine, then the
- * semantic warning and error text tokens, by the same `usageRisk` rule as a usage bar. */
-const CONTEXT_USED_TEXT_CLASS: Record<UsageRisk, string | undefined> = {
-  success: undefined,
-  warning: "text-warning-primary",
-  error: "text-error-primary",
-};
-
-/**
- * The Agent's current context-window usage, the Runtime pill's second part: "Context 44% used",
- * its used share coloured by the same risk rule as a usage bar (`usageRisk`). Display only: nothing triggers
- * on a threshold. Hidden by the caller when there is no reading. The tooltip's observed time uses
- * the same `formatDateForDisplay` helper (workspace time zone, viewer locale) the Runtime usage
- * popover's `RelativeTime` already renders through.
- *
- * For a Claude Code Agent the item opens the context popover: hover shows the last stored report
- * with the same auto-refresh-once/Refresh pattern the Runtime usage popover uses. Other runtimes
- * keep the item + tooltip.
- */
-function ContextUsageItem({
-  agentId,
-  contextUsage,
-  timeZone,
-  supportsContextReport,
-  computerOnline,
-}: {
-  agentId: string;
-  contextUsage: { usedTokens: number; windowTokens: number; observedAtMs: number };
-  timeZone: string | null;
-  /** `runtime === RUNTIME_PROVIDER.CLAUDE_CODE` at the call site; only Claude Code has a
-   * composition to read. */
-  supportsContextReport: boolean;
-  computerOnline?: boolean;
-}) {
-  const locale = getLocale();
-  const timeFormat = useTimeFormat();
-  const percent = contextUsedPercent(contextUsage.usedTokens, contextUsage.windowTokens);
-  const numberFormat = new Intl.NumberFormat(locale);
-  const used = usedPercentText(percent);
-  const text = `${m.agent_context_title()} ${used}`;
-  const item = (
-    <span>
-      {m.agent_context_title()}{" "}
-      <span className={CONTEXT_USED_TEXT_CLASS[usageRisk(percent)]}>{used}</span>
-    </span>
-  );
-  const tooltipText = m.agent_context_usage_tooltip({
-    used: numberFormat.format(contextUsage.usedTokens),
-    window: numberFormat.format(contextUsage.windowTokens),
-    time: formatDateForDisplay(new Date(contextUsage.observedAtMs), timeZone, locale, timeFormat),
-  });
-  const context = useAgentContextReport(agentId, {
-    enabled: supportsContextReport,
-    computerOnline,
-  });
-  const [openCount, setOpenCount] = useState(0);
-  const refreshButtonWrapRef = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (openCount > 0) refreshButtonWrapRef.current?.querySelector("button")?.focus();
-  }, [openCount]);
-
-  if (!supportsContextReport) {
-    return (
-      <Tooltip title={tooltipText}>
-        <TooltipTrigger className={RUNTIME_PILL_PART_CLASS}>{item}</TooltipTrigger>
-      </Tooltip>
-    );
-  }
-
-  return (
-    <HoverPopover
-      label={`${text} · ${tooltipText}`}
-      trigger={item}
-      triggerClassName={RUNTIME_PILL_PART_CLASS}
-      className="text-sm"
-      working={context.scanning}
-      onOpen={() => setOpenCount((count) => count + 1)}
-    >
-      <AgentContextPopoverContent
-        usage={contextUsage}
-        data={context.data}
-        scanning={context.scanning}
-        scanFailed={context.scanFailed}
-        computerOnline={computerOnline}
-        timeZone={timeZone}
-        onRefresh={context.refresh}
-        refreshButtonWrapRef={refreshButtonWrapRef}
-      />
-    </HoverPopover>
   );
 }
 
@@ -260,7 +150,9 @@ export function AgentProfileTab({
       })
     : undefined;
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    // `relative` keeps absolutely positioned `sr-only` labels inside this scroll box; without
+    // it they escape it and stretch the page.
+    <div className="relative min-h-0 flex-1 overflow-y-auto">
       <section className="border-b border-secondary px-6 py-5">
         <div className="mb-5 flex flex-wrap items-center gap-4">
           {onAvatarChange ? (
@@ -542,94 +434,6 @@ export function AgentProfileTab({
           </div>
         </section>
       )}
-    </div>
-  );
-}
-
-/**
- * Visibility reads as a badge, same as Role; an authorized viewer (creator or Workspace
- * owner/admin) also gets a "Make private"/"Make public" button next to it. Both directions have
- * real consequences, so the button opens the container's confirmation dialog rather than
- * applying immediately.
- */
-function VisibilityField({
-  visibility,
-  onRequest,
-}: {
-  visibility: AgentVisibility;
-  onRequest?: (target: AgentVisibility) => void;
-}) {
-  const isPrivate = visibility === AGENT_VISIBILITY.PRIVATE;
-  return (
-    <div>
-      <p className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_visibility()}</p>
-      <div className="mt-1 flex items-center gap-3">
-        <Badge color={isPrivate ? "gray" : "brand"} size="sm">
-          {isPrivate ? m.agent_visibility_label_private() : m.agent_visibility_label_public()}
-        </Badge>
-        {onRequest && (
-          <Button
-            size="sm"
-            color="secondary"
-            onPress={() =>
-              onRequest(isPrivate ? AGENT_VISIBILITY.PUBLIC : AGENT_VISIBILITY.PRIVATE)
-            }
-          >
-            {isPrivate
-              ? m.agent_visibility_confirm_public_submit()
-              : m.agent_visibility_confirm_private_submit()}
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** Role reads as a badge; a manager's pencil swaps it for the Select until a choice is made. */
-function RoleField({
-  role,
-  onSave,
-}: {
-  role: string;
-  onSave?: (role: "admin" | "member") => Promise<void>;
-}) {
-  const [editing, setEditing] = useState(false);
-  return (
-    <div>
-      <div className="flex items-center gap-1.5">
-        <span className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_role()}</span>
-        {onSave && !editing && (
-          <ButtonUtility
-            size="xs"
-            color="tertiary"
-            icon={Edit01}
-            aria-label={m.agent_profile_edit_role()}
-            tooltip={m.agent_profile_edit_role()}
-            onClick={() => setEditing(true)}
-          />
-        )}
-      </div>
-      <div className="mt-1">
-        {editing && onSave ? (
-          <Select
-            aria-label={m.agent_profile_edit_role()}
-            size="sm"
-            selectedKey={role === "admin" ? "admin" : "member"}
-            onSelectionChange={(key) => {
-              setEditing(false);
-              void onSave(key === "admin" ? "admin" : "member");
-            }}
-            className="w-36"
-          >
-            <Select.Item id="member" label={m.agent_role_member()} />
-            <Select.Item id="admin" label={m.agent_role_admin()} />
-          </Select>
-        ) : (
-          <Badge color="gray" size="sm">
-            {role === "admin" ? m.agent_role_admin() : m.agent_role_member()}
-          </Badge>
-        )}
-      </div>
     </div>
   );
 }
