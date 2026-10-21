@@ -333,7 +333,7 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.expand]: openvikingTool(
       OPENVIKING_TOOL_NAMES.expand,
       "Expand memory graph",
-      "Read related experience and recorded evidence from nodes already returned by ov_fork_find or ov_expand. After finding a relevant Fork, inspect its suggested method with branch_steps, then next/previous on returned steps. To verify why the method was proposed, use anchor on the Fork to reach its original recorded AIG block; alternatively use observed_block on a Fork step to read its associated recorded block. From an AIG block, incoming/outgoing returns causal edges; source/target on a returned edge reaches the preceding/following blocks. Use ov_read to inspect returned node text when more detail is needed. Choose the path that resolves the current question; do not load the entire graph. Every hop must use the returned retrieval.chainRef, an already-served node URI and a relation listed for that node. Check remainingHops/exhausted; never invent URIs, relations or chain references. Fork steps are untested counterfactual proposals, while AIG blocks record prior execution; neither replaces documentary evidence for the current factual answer. Expansion is bounded and uses no embedding.",
+      "Read related experience and recorded evidence from nodes already returned by ov_fork_find or ov_expand. After finding a relevant Fork, inspect its suggested method with branch_steps, then next/previous on returned steps. To verify why the method was proposed, use anchor on the Fork to reach its original recorded AIG block; alternatively use observed_block on a Fork step to inspect its associated recorded block. From an AIG block, incoming/outgoing returns causal edges; source/target on a returned edge reaches the preceding/following blocks. Use the returned cited items and node metadata; choose the path that resolves the current question without loading the entire graph. Every hop must use the returned retrieval.chainRef, an already-served node URI and a relation listed for that node. Check remainingHops/exhausted; never invent URIs, relations or chain references. Fork steps are untested counterfactual proposals, while AIG blocks record prior execution; neither replaces documentary evidence for the current factual answer. Expansion is bounded and uses no embedding.",
       "expand",
       {
         operationId: Type.String({
@@ -358,7 +358,7 @@ export function createMemoryFenceTools(
     [OPENVIKING_TOOL_NAMES.forkFind]: openvikingTool(
       OPENVIKING_TOOL_NAMES.forkFind,
       "Find Fork experience",
-      "Find frozen Fork methods only in viking://resources/causal/forks. Query abstract failure patterns or reusable methods, not factual entity clues. Inspect relevant served branch_steps with ov_expand, then next/previous as needed; follow anchor to the original AIG evidence. Forks are untested counterfactual suggestions and cannot replace documentary evidence. Use ov_search_context for document questions.",
+      "Find frozen Fork methods only in viking://resources/causal/forks. Query abstract failure patterns or reusable methods, not factual entity clues. Inspect relevant served branch_steps with ov_expand, then next/previous as needed; follow anchor to the original AIG evidence. Forks are untested counterfactual suggestions and cannot replace documentary evidence. Tell Task when current factual evidence is still needed.",
       "fork_find",
       {
         operationId: Type.String({

@@ -1,10 +1,12 @@
-import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { readKnowledgeAccountCreatedAt, validateKnowledgeReady } from "./knowledge";
 import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
-import { controlAgent, startAgent, startEvalDaemon, type EvalDaemon } from "./eval-daemon";
+import { startAgent, startEvalDaemon, type EvalDaemon } from "./eval-daemon";
 import { runEpisode, type EpisodeResult } from "./eval-qa";
 import { createEvalDispatcher, drainEpisodeToMemory } from "./ingest";
+import type { OpenVikingEvaluatorResult } from "../../../apps/web/src/server/openviking/typed-session-extract.server";
 import { episodesForArm, groupFamilies, loadManifest } from "./manifest";
 import { profileFor, reminderForEpisode } from "./benchmarks";
 import { classifyMechanism } from "./leak";
@@ -38,6 +40,10 @@ const env = loadEvalEnv();
 Bun.env.COFORGE_EVAL_DISABLE_HOST_PI_INJECTION = "1";
 process.env.COFORGE_EVAL_DISABLE_HOST_PI_INJECTION = "1";
 const manifest = await loadManifest(env.manifestPath, env.episodeMod);
+const refsRoot = Bun.env.COFORGE_EVAL_REFS_ROOT?.trim();
+if (manifest.some((episode) => episode.stageFiles.length > 0) && !refsRoot) {
+  throw new Error("manifest declares stage_files; set COFORGE_EVAL_REFS_ROOT");
+}
 const benchmark = env.manifestBenchmark ?? manifest[0]!.benchmark;
 const knowledgePath = Bun.env.COFORGE_EVAL_KNOWLEDGE_READY;
 const frozenKnowledge = knowledgePath
@@ -73,6 +79,31 @@ Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE ??= "/tmp/pcm-eval-ov-keys.json";
 const runtime = createEvalRuntime(env.ovUrl);
 const rootKey = await readSecretRootKey(env.ovConfPath);
 const root = rootIdentity(rootKey);
+// Parallel-sedimentation protocol: cold episodes each run on their own empty
+// disposable account (no train-time retrieval), then drain their transcript
+// into ONE shared corpus account read by the later warm test phase.
+const drainAccount = env.drainAccountFile
+  ? await (async () => {
+      const raw = (await Bun.file(env.drainAccountFile!).json()) as {
+        accountId?: string;
+        adminUserId?: string;
+        adminKey?: string;
+      };
+      if (!raw.accountId || !raw.adminUserId || !raw.adminKey) {
+        throw new Error(`drain account file ${env.drainAccountFile} is missing fields`);
+      }
+      console.log(
+        sanitizeDiagnostic(`drain redirect: cold episodes drain to shared account ${raw.accountId}`),
+      );
+      return {
+        accountId: raw.accountId,
+        users: {
+          adminUserId: raw.adminUserId,
+          adminKey: raw.adminKey,
+        } as OvUsers,
+      };
+    })()
+  : null;
 const db = connectEvalDb(env.databaseUrl);
 const writer = await createAttemptWriter(
   env.resultDir,
@@ -99,6 +130,7 @@ function attemptRow(input: {
   workDir: string;
   finalOutput: string | null;
   citationCount: number;
+  hasOffer: boolean;
   timedOut: boolean;
   elapsedMs: number;
   mechanism: string;
@@ -121,14 +153,16 @@ function attemptRow(input: {
       ? "frozen_readonly"
       : input.arm === "warm"
         ? "read_write"
-        : "no_shared_memory",
+        : drainAccount
+          ? "write_shared_corpus"
+          : "no_shared_memory",
     seed: env.seed,
     attempt: 1,
     status: input.finalOutput?.trim() ? "success" : "failure",
     duration_seconds: Number((input.elapsedMs / 1000).toFixed(1)),
     work_dir: input.workDir,
     final_output: input.finalOutput ?? "",
-    recall_state: input.citationCount > 0 ? "cited" : input.timedOut ? "empty" : "offered",
+    recall_state: input.citationCount > 0 ? "cited" : input.hasOffer ? "offered" : "empty",
     recall_citations: input.citationCount,
     mechanism: input.mechanism,
     task_message_count: 0,
@@ -144,12 +178,43 @@ type FamilyWorkspace = {
   daemon: EvalDaemon;
   agentWorkspaceDir: string;
   dispatcher: ReturnType<typeof createEvalDispatcher>;
+  /** Cold-arm parallel sedimentation only: dispatcher bound to the shared
+   * corpus account instead of the episode's disposable one. */
+  drainDispatcher?: ReturnType<typeof createEvalDispatcher>;
 };
+
+async function stageEpisodeFiles(episode: ManifestEpisode, workDir: string): Promise<void> {
+  if (episode.stageFiles.length === 0) return;
+  const root = resolve(refsRoot!);
+  for (const file of episode.stageFiles) {
+    if (!file.src || !file.dst || isAbsolute(file.src) || isAbsolute(file.dst)) {
+      throw new Error("invalid stage_files path for " + episode.episodeId);
+    }
+    const source = resolve(root, file.src);
+    const target = resolve(workDir, file.dst);
+    if (relative(root, source).startsWith("..") || relative(workDir, target).startsWith("..")) {
+      throw new Error("stage_files path escapes its root for " + episode.episodeId);
+    }
+    if (!(await Bun.file(source).exists())) {
+      throw new Error("missing reference file for " + episode.episodeId + ": " + file.src);
+    }
+    await mkdir(dirname(target), { recursive: true });
+    await Bun.write(target, Bun.file(source));
+  }
+}
 
 // Crash-resume continuity for the warm arm: drained episode memory lives in the
 // OV account, not the workspace, so a resume must rebind to the previous
 // segment's account instead of minting a fresh one. The account id is recorded
 // per evaluation; COFORGE_EVAL_WARM_REUSE_ACCOUNT_ID overrides it explicitly.
+// Explicit external evaluator signal attached to drain commits so OpenViking can
+// adjudicate the episode (unanimous fail authors a fork overlay). `status` uses
+// the runner's own completion check (non-empty final output); it never reads a
+// held-out grade. Unset = no signal (previous behaviour).
+const drainOutcomeMode = (Bun.env.COFORGE_EVAL_DRAIN_OUTCOME ?? "").trim();
+let episodeEvaluatorResults: OpenVikingEvaluatorResult[] | undefined;
+const currentEvaluatorResults = () => episodeEvaluatorResults;
+
 const warmReuseStatePath = join(env.resultDir, `${env.evaluationId}-warm-account.txt`);
 
 async function warmReuseAccountId(): Promise<string> {
@@ -190,6 +255,24 @@ async function provisionFamily(
       );
     users = await rotateEvalAdminKey(runtime, root, accountId);
   } else if (reuseId.length > 0) {
+    // Parallel warm shards share one corpus account. Rotating its admin key or
+    // deleting every workspace bound to it would kill the sibling shards, so
+    // that path keeps the key from the drain-account file and leaves their
+    // bindings in place. The eval database must already allow more than one
+    // openviking_bindings row per account.
+    const warmParallel = (Bun.env.COFORGE_EVAL_WARM_PARALLEL ?? "") === "1";
+    if (warmParallel) {
+      if (!drainAccount || drainAccount.accountId !== reuseId) {
+        throw new Error(
+          "warm parallel requires COFORGE_EVAL_DRAIN_ACCOUNT_FILE to name the reused account",
+        );
+      }
+      users = drainAccount.users;
+      accountId = reuseId;
+      console.log(
+        sanitizeDiagnostic(`warm parallel sharing ov account ${accountId} without key rotation`),
+      );
+    } else {
     try {
       users = await rotateEvalAdminKey(runtime, root, reuseId);
       accountId = reuseId;
@@ -225,6 +308,7 @@ async function provisionFamily(
       accountId = `evol-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
       users = await provisionDisposableAccount(runtime, root, accountId);
     }
+    }
   } else {
     accountId = `evol-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
     users = await provisionDisposableAccount(runtime, root, accountId);
@@ -240,7 +324,23 @@ async function provisionFamily(
   });
   let daemon: EvalDaemon | undefined;
   try {
-    const dispatcher = createEvalDispatcher({ workspace, runtime, accountId, users });
+    const dispatcher = createEvalDispatcher({
+      workspace,
+      runtime,
+      accountId,
+      users,
+      evaluatorResults: currentEvaluatorResults,
+    });
+    const drainDispatcher =
+      arm === "cold" && drainAccount
+        ? createEvalDispatcher({
+            workspace,
+            runtime,
+            accountId: drainAccount.accountId,
+            users: drainAccount.users,
+            evaluatorResults: currentEvaluatorResults,
+          })
+        : undefined;
     daemon = await startEvalDaemon({ workspace, env });
     await startAgent(workspace, workspace.memoryAgentId, workspaceProfileToToolFence("openviking"));
     await startAgent(workspace, workspace.taskAgentId);
@@ -249,6 +349,7 @@ async function provisionFamily(
       workspace,
       daemon,
       dispatcher,
+      ...(drainDispatcher ? { drainDispatcher } : {}),
       agentWorkspaceDir: join(
         daemon.workspaceRoot,
         workspace.workspaceId,
@@ -287,38 +388,16 @@ async function executeEpisode(
   episode: ManifestEpisode,
   provisioned: FamilyWorkspace,
 ): Promise<AttemptRow> {
-  if (env.episodeClosure && arm === "warm") {
-    // Fresh session per episode: recall + prompt only, no cross-episode model
-    // context. The cold arm gets a whole fresh workspace anyway. Do NOT use
-    // the managed reset-session chain: its restart start intent is rebuilt
-    // server-side without the fence, so the memory agent relaunches with bash.
-    // Stop + clear the session pointer + explicit fenced start instead.
-    for (const agentId of [
-      provisioned.workspace.memoryAgentId,
-      provisioned.workspace.taskAgentId,
-    ]) {
-      await controlAgent(provisioned.workspace, agentId, "stop", undefined).catch((error) => {
-        console.warn(
-          sanitizeDiagnostic(`closure stop failed for ${episode.episodeId}: ${String(error)}`),
-        );
-      });
-      await provisioned.workspace.db.agent.update({
-        where: { id: agentId },
-        data: { currentSessionId: null },
-      });
-    }
-    await startAgent(
-      provisioned.workspace,
-      provisioned.workspace.memoryAgentId,
-      workspaceProfileToToolFence("openviking"),
-    );
-    await startAgent(provisioned.workspace, provisioned.workspace.taskAgentId);
-  }
+  await stageEpisodeFiles(episode, provisioned.agentWorkspaceDir);
+  const readyEpisode = {
+    ...episode,
+    prompt: episode.prompt.replaceAll("{workspace_dir}", provisioned.agentWorkspaceDir),
+  };
   const reminder = reminderForEpisode(episode.benchmark || benchmark, episode.domain);
   const result = await runEpisode({
     workspace: provisioned.workspace,
     env,
-    episode,
+    episode: readyEpisode,
     reminder,
     episodeTimeoutMs,
     settleMs,
@@ -363,6 +442,7 @@ async function executeEpisode(
     workDir: provisioned.agentWorkspaceDir,
     finalOutput: result.finalOutput,
     citationCount: result.citationCount,
+    hasOffer: result.offerMessageId !== null,
     timedOut: result.timedOut,
     elapsedMs: result.elapsedMs,
     mechanism,
@@ -413,10 +493,22 @@ async function executeEpisode(
     ),
   );
   if (sidecarVerification) row.sidecar_verification = sidecarVerification;
-  if (arm === "warm" && !frozenKnowledge) {
+  episodeEvaluatorResults =
+    drainOutcomeMode === "status"
+      ? [
+          {
+            binding_id: "run-completion",
+            signal_kind: "acceptance",
+            signal: row.status === "success" ? "pass" : "fail",
+            evidence_ref: `episode:${episode.episodeId}:final-output-${row.status === "success" ? "present" : "empty"}`,
+          },
+        ]
+      : undefined;
+  const coldDrain = arm === "cold" ? provisioned.drainDispatcher : undefined;
+  if ((arm === "warm" && !frozenKnowledge) || coldDrain) {
     const drained = await drainEpisodeToMemory({
       workspace: provisioned.workspace,
-      dispatcher: provisioned.dispatcher,
+      dispatcher: coldDrain ?? provisioned.dispatcher,
       channelName:
         family.familyId
           .toLowerCase()
@@ -443,9 +535,10 @@ try {
   for (const arm of env.arms) {
     const armRows: AttemptRow[] = [];
     for (const family of families) {
-      const episodes = episodesForArm(family, arm);
+      const episodes =
+        arm === "cold" && env.coldAllSplits ? family.episodes : episodesForArm(family, arm);
       if (episodes.length === 0) continue;
-      if (arm === "warm" && !frozenKnowledge) {
+      if (arm === "warm" && !frozenKnowledge && !env.episodeClosure) {
         const provisioned = await provisionFamily(arm, family);
         try {
           for (const episode of episodes) {
@@ -456,6 +549,9 @@ try {
           await releaseFamily(arm, provisioned);
         }
       } else {
+        // Closure uses a fresh daemon/workspace per episode. The warm arm
+        // rebinds its existing OV account, retaining memory without racing
+        // old session reports against stop/clear/restart or sharing files.
         for (const episode of episodes) {
           if (writer.completedRunIds.has(runIdFor(arm, episode.episodeId))) continue;
           const provisioned = await provisionFamily(arm, family);

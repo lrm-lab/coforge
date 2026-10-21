@@ -11,12 +11,14 @@ schema 的 manifest（不重新发明判分）。
 | evol_bench 原协议 | coforge 群聊协议 |
 | --- | --- |
 | family → Room + Shared/Private Space | family → 一个 workspace + 频道 + task/memory 双 agent |
-| episode = fresh Pi 进程（上下文=recall+prompt） | episode 间对两个 agent `reset-session`（stop+clear+start），上下文=offer 召回+prompt；频道历史可读是产品自身行为，记为协议差异 |
+| episode = fresh Pi 进程（上下文=recall+prompt） | 默认每条 episode 新建 workspace/daemon，warm 复用 OV 账号；上下文=offer 召回+prompt，文件与频道历史隔离 |
 | episode 后 evidence drain → GMS | episode 后 harness 显式 drain：新频道消息 → quiet-window 检测（短窗口，已沉淀判定幂等）→ Admitted Segment → OpenViking |
-| pre-turn Recall 注入 | `@task @memory <prompt>` → Memory 根据题目检索经验及文档，Task 按需继续 @memory → cited Memory Offer → Task 原生 adopt/reject/defer |
-| warm 臂：全量按 order，记忆跨 episode | 同：一个 workspace 跑完 family 全部 episode，OV 账号随 workspace 累积 |
+| pre-turn Recall 注入 | `@task @memory <prompt>` → Memory 通过 Fork/AIG 检索经验，Task 自行读取当前任务文档，Task 按需继续 @memory → cited Memory Offer → Task 原生 adopt/reject/defer |
+| warm 臂：全量按 order，记忆跨 episode | 按 order 顺序执行，跨 workspace 复用 OV 账号累积记忆；关闭 closure 时复用 workspace |
 | cold 臂：fresh tenant 只跑 test split | 同：每个 test episode 全新 workspace + 全新 OV 账号（零状态） |
 | final_output = room_send 发布 | final_output = task agent 最后一条非检索请求频道消息 |
+
+warm evidence drain 在提交完成后，由同一 eval-admin 调用 `publish_causal`，把已冻结的 AIG/Fork 发布到 BM25；没有冻结产物时发布数量为零，不能把普通 memory_write 当作 Fork。
 
 IR 的冻结 test 采用每题新 workspace，经验与文档先准备到 OpenViking，test 不写回。
 详见 [Task 与 Memory 协作评测](../../docs/eval-memory-requests.md)。
@@ -62,6 +64,8 @@ COFORGE_EVAL_MANIFEST=/home/zhoujie22/river2_0/evol_bench/PAST-Bench/data/past-s
 COFORGE_EVALUATION_ID=past-sm01-collab-1 \
 bun src/run.ts
 ```
+
+评测 Web 启动时必须显式设置 `COFORGE_MEMORY_HINT_TTL_SECONDS`（本轮为 `900` 秒）；否则检索可以成功，但 Offer 的 Hint 创建和显式 diagnosis 会失败。该变量属于 Web 进程，不能只设置在评测 runner 上。
 
 主要环境变量（`src/env.ts`）：`COFORGE_EVAL_MANIFEST`（必填）、
 `COFORGE_EVAL_ARMS`（默认 warm,cold）、`COFORGE_EVAL_FAMILIES`（逗号分隔过滤）、

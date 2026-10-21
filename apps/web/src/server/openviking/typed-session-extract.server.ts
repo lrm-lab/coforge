@@ -46,6 +46,14 @@ export type OpenVikingAdmittedSessionWrite = {
   messages: readonly OpenVikingAdmittedSessionMessage[];
 };
 
+/** One explicit external evaluator signal for the commit (outcome-evidence-v1). */
+export type OpenVikingEvaluatorResult = {
+  binding_id: string;
+  signal_kind: "evaluator" | "test" | "acceptance";
+  signal: "pass" | "fail";
+  evidence_ref: string;
+};
+
 export const OPENVIKING_SESSION_PHASES = [
   "append_submitted",
   "append_settled",
@@ -76,6 +84,15 @@ export function createOpenVikingTypedSessionExtract(deps: {
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   commitTimeoutMs?: number;
+  /** Admin-owned evaluation sinks may publish frozen causal summaries after commit. */
+  publishCausal?: boolean;
+  /**
+   * Admin-owned evaluation sinks may attach explicit evaluator results to the
+   * commit. OpenViking adjudicates them (unanimous fail authors a fork).
+   */
+  evaluatorResults?: (
+    write: OpenVikingAdmittedSessionWrite,
+  ) => readonly OpenVikingEvaluatorResult[] | undefined;
   onPhase?: (event: OpenVikingSessionPhaseEvent) => void;
 }): OpenVikingTypedSessionExtract {
   const now = deps.now ?? Date.now;
@@ -138,6 +155,7 @@ export function createOpenVikingTypedSessionExtract(deps: {
         body: {
           keep_recent_count: 0,
           aig_question: aigQuestion(input.write.messages, segmentId),
+          ...evaluatorResultsBody(deps.evaluatorResults?.(input.write)),
         },
       });
       if (!committed.ok) return committed;
@@ -145,18 +163,31 @@ export function createOpenVikingTypedSessionExtract(deps: {
       if (taskId) {
         const settled = await waitForCommitTask(deps, taskId, { now, sleep, commitTimeoutMs });
         if (!settled.ok) return settled;
-        emit("commit_settled");
-        return { ok: true, sessionId };
+      } else {
+        const extracted = await requestJson(deps, {
+          method: OPENVIKING_TYPED_SESSION_EXTRACT_ROUTE.method,
+          path: `/api/v1/sessions/${sessionId}/extract`,
+        });
+        if (!extracted.ok) return extracted;
       }
-      const extracted = await requestJson(deps, {
-        method: OPENVIKING_TYPED_SESSION_EXTRACT_ROUTE.method,
-        path: `/api/v1/sessions/${sessionId}/extract`,
-      });
-      if (!extracted.ok) return extracted;
+      if (deps.publishCausal) {
+        const published = await requestJson(deps, {
+          method: "POST",
+          path: "/api/v1/search/publish_causal",
+          body: { session_id: sessionId },
+        });
+        if (!published.ok) return published;
+      }
       emit("commit_settled");
       return { ok: true, sessionId };
     },
   };
+}
+
+function evaluatorResultsBody(
+  results: readonly OpenVikingEvaluatorResult[] | undefined,
+): { outcome_evaluator_results?: OpenVikingEvaluatorResult[] } {
+  return results && results.length > 0 ? { outcome_evaluator_results: [...results] } : {};
 }
 
 function aigQuestion(

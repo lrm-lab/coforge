@@ -33,9 +33,7 @@ test("strict eval Memory exposes reads and server-owned controls but no ordinary
   );
   expect(tools.map((tool) => tool.name)).toEqual([
     "ov_fork_find",
-    "ov_search_context",
     "ov_expand",
-    "ov_read",
     "memory_offer",
     "memory_diagnose",
     "message_check",
@@ -102,9 +100,7 @@ test("the openviking-memory fence exposes reads, scoped diagnosis, offers, and c
   );
   expect(names).toEqual([
     OPENVIKING_TOOL_NAMES.forkFind,
-    OPENVIKING_TOOL_NAMES.searchContext,
     OPENVIKING_TOOL_NAMES.expand,
-    OPENVIKING_TOOL_NAMES.read,
     OPENVIKING_TOOL_NAMES.offer,
     OPENVIKING_TOOL_NAMES.diagnose,
     ...CHANNEL_MESSAGE_TOOLS,
@@ -208,20 +204,19 @@ test("ov_* tools post the frozen openviking proxy path and never a mutation verb
   expect(JSON.stringify(proxy.calls[0]?.body)).not.toContain("commit");
 });
 
-test("openviking-memory search_context reads are counted without a per-trigger cap", () => {
+test("openviking-memory Fork reads are counted without a per-trigger cap", () => {
   const budget = new MemoryAgentTurnBudget();
-  const searchContext = {
+  const forkFind = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "search_context" as const,
+    op: "fork_find" as const,
     operationId: "c1",
     query: "deploy",
-    tokenBudget: 8000,
   };
-  budget.consume(searchContext);
+  budget.consume(forkFind);
   expect(budget.snapshot()).toEqual({ reads: 1, offers: 0 });
-  budget.consume({ ...searchContext, operationId: "c2" });
-  budget.consume({ ...searchContext, operationId: "c3" });
-  expect(() => budget.consume({ ...searchContext, operationId: "c4" })).not.toThrow();
+  budget.consume({ ...forkFind, operationId: "c2" });
+  budget.consume({ ...forkFind, operationId: "c3" });
+  expect(() => budget.consume({ ...forkFind, operationId: "c4" })).not.toThrow();
   expect(budget.snapshot()).toEqual({ reads: 4, offers: 0 });
 });
 
@@ -264,13 +259,19 @@ test("send_channel_message accepts message only as an alias of a missing content
   expect(proxy.calls[0]?.body).not.toHaveProperty("message");
 });
 
-test("Memory exposes context search through its read-only fence", () => {
+test("Memory exposes Fork/AIG retrieval and diagnosis through its fence", () => {
   const tools = createMemoryFenceTools(
     OPENVIKING_TOOL_PROFILE,
     new MemoryAgentTurnBudget(),
     fakeProxy(),
   );
-  expect(tools.some((tool) => tool.name === "ov_search_context")).toBe(true);
+  const names = tools.map((tool) => tool.name);
+  expect(names).toContain("ov_fork_find");
+  expect(names).toContain("ov_expand");
+  expect(names).toContain("memory_diagnose");
+  expect(names).not.toContain("ov_find");
+  expect(names).not.toContain("ov_search_context");
+  expect(names).not.toContain("ov_read");
 });
 
 test("group Memory tools default to their own channel and reject another channel", async () => {
@@ -454,8 +455,8 @@ test("changing search snippets for the same source prompts a strategy pivot with
     .filter((item) => item.type === "text")
     .map((item) => item.text)
     .join("\n");
-  expect(text).toContain("causal/forks");
-  expect(text).toContain("ov_read");
+  expect(text).toContain("materially different");
+  expect(text).not.toContain("ov_read");
   expect(proxy.calls).toHaveLength(4);
 });
 
@@ -524,181 +525,4 @@ test("Fork discovery supplies an executable served-relation example before a met
   expect(guidance).toContain('"relation":"branch_steps"');
   expect(guidance).toContain(uri);
   expect(proxy.calls).toHaveLength(1);
-});
-
-test("new discovery IDs do not hide a search-only loop and a full read clears its warning", async () => {
-  const budget = new MemoryAgentTurnBudget();
-  const proxy = fakeProxy((_path, raw) => {
-    const command = raw as { protocol: string; op: string; operationId: string; uri?: string };
-    const citation = {
-      kind: "openviking",
-      citationId: `ov:${command.operationId}`,
-      workspaceId: "ws",
-      accountId: "acct",
-      uri: command.uri ?? `viking://resources/evo-ir/documents/${command.operationId}.md`,
-      contentHash: "sha256:fixture",
-      matchedLevel: "L2",
-      excerpt: "A discovery candidate, not verified support for every constraint.",
-    };
-    return command.op === "read"
-      ? {
-          protocol: command.protocol,
-          op: "read",
-          operationId: command.operationId,
-          duplicate: false,
-          citation,
-          content: "Read document body.",
-        }
-      : {
-          ...emptyItemsResponse(command.protocol, command.op, command.operationId),
-          items: [citation],
-        };
-  });
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
-  let output = "";
-  for (let index = 0; index < 4; index++) {
-    if (index === 2) budget.reset();
-    const result = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
-      operationId: `find-${index}`,
-      query: `different ${index}`,
-    });
-    output = result.content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n");
-  }
-  expect(output).toContain("4 discovery calls without a new document read");
-  expect(output).toContain('"uri":"viking://resources/evo-ir/documents/find-3.md"');
-  expect(output).toContain("disconfirm");
-  await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
-    operationId: "read-1",
-    uri: "viking://resources/evo-ir/documents/find-3.md",
-  });
-  const afterRead = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
-    operationId: "find-after-read",
-    query: "next constraint",
-  });
-  expect(
-    afterRead.content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n"),
-  ).not.toContain("discovery calls without");
-  for (let index = 0; index < 2; index++)
-    await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
-      operationId: `more-${index}`,
-      query: "another keyword",
-    });
-  await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
-    operationId: "read-fork",
-    uri: "viking://resources/causal/forks/method.md",
-  });
-  await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
-    operationId: "read-again",
-    uri: "viking://resources/evo-ir/documents/find-3.md",
-  });
-  const stillStalled = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
-    operationId: "still-stalled",
-    query: "changed again",
-  });
-  expect(
-    stillStalled.content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n"),
-  ).toContain("4 discovery calls without a new document read");
-  expect(proxy.calls).toHaveLength(11);
-});
-
-test("document discovery stays compact and repeated snippets do not hide full read access", async () => {
-  const full = "Candidate biography. ".repeat(45) + "Decisive school name: Example Academy.";
-  const citation = {
-    kind: "openviking",
-    citationId: "ov:biography",
-    workspaceId: "ws",
-    accountId: "acct",
-    uri: "viking://resources/evo-ir/documents/biography.md",
-    contentHash: "sha256:biography",
-    matchedLevel: "L2",
-    excerpt: full,
-  };
-  const proxy = fakeProxy((_path, raw) => {
-    const command = raw as { protocol: string; op: string; operationId: string; query?: string };
-    const served =
-      command.query === "method"
-        ? { ...citation, uri: "viking://resources/causal/forks/method.md" }
-        : command.query === "updated"
-          ? { ...citation, contentHash: "sha256:new-version" }
-          : citation;
-    return command.op === "read"
-      ? {
-          protocol: command.protocol,
-          op: "read",
-          operationId: command.operationId,
-          duplicate: false,
-          citation,
-          content: full,
-        }
-      : {
-          ...emptyItemsResponse(command.protocol, command.op, command.operationId),
-          items: [served],
-        };
-  });
-  const budget = new MemoryAgentTurnBudget();
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
-  const first = await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
-    operationId: "discover",
-    query: "biography school",
-  });
-  budget.reset();
-  const second = await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
-    operationId: "rediscover",
-    query: "school biography",
-  });
-  const decode = (result: typeof first) =>
-    JSON.parse(result.content.find((part) => part.type === "text")!.text);
-  const card = decode(first).items[0];
-  expect(card.uri).toBe(citation.uri);
-  expect(card.contentHash).toBe(citation.contentHash);
-  expect(card.excerpt.length).toBeLessThanOrEqual(480);
-  expect(decode(first).discoveryNotes[0].note).toContain("ov_read");
-  expect(card.excerpt).not.toContain("Decisive school name");
-  expect(decode(second).items[0].excerpt).toBe("");
-  expect(decode(second).discoveryNotes[0].note).toContain("Previously discovered");
-  const read = await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
-    operationId: "verify",
-    uri: card.uri,
-  });
-  expect(decode(read).content).toBe(full);
-  expect(decode(read).content).toContain("Example Academy");
-  const updated = await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
-    operationId: "updated",
-    query: "updated",
-  });
-  expect(decode(updated).items[0].excerpt).toBe(full.slice(0, 480));
-  expect(decode(updated).items[0].contentHash).toBe("sha256:new-version");
-  for (const operationId of ["method-first", "method-again"]) {
-    const method = await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
-      operationId,
-      query: "method",
-    });
-    expect(decode(method).items[0].excerpt).toBe(full);
-    expect(decode(method).discoveryNotes).toBeUndefined();
-  }
-  expect(proxy.calls).toHaveLength(6);
-});
-
-test("restored context search forwards query and shared budget without mutation tools", async () => {
-  const proxy = fakeProxy();
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
-  await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
-    operationId: "context-restore-1",
-    query: "first wife",
-    tokenBudget: 800,
-  });
-  expect(proxy.calls[0].body).toMatchObject({
-    op: "search_context",
-    query: "first wife",
-    tokenBudget: 800,
-  });
 });
