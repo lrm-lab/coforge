@@ -17,6 +17,7 @@
     "generate:installer-contract": "bun scripts/installer-contract.ts"
   },
   "dependencies": {
+    "@coforge/agent": "workspace:*",
     "@logtape/file": "2.3.2",
     "@logtape/logtape": "2.3.2",
     "@logtape/redaction": "2.3.2",

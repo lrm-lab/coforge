@@ -2,6 +2,8 @@ import type { ContainerBindingEnv } from "./container-binding-env";
 import { createDockerContainers, swarmAccepting, type ContainerRuntime } from "./docker-containers";
 import { newDesktopToken, startDesktopProxy } from "./desktop-proxy";
 import { HttpHostCloud, type ClaimedContainerJob, type HostHeartbeatReport } from "./host-cloud";
+import { createPiChatHandler } from "./pi-chat-http";
+import { PiChatWorkers } from "./pi-chat-workers";
 
 export const HOST_POLL_INTERVAL_MS = 5_000;
 
@@ -110,6 +112,7 @@ export async function runHostProcess(config: HostProcessConfig): Promise<void> {
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   const containers = createDockerContainers();
+  const chatWorkers = new PiChatWorkers();
   const proxyPort = Number(process.env.COFORGE_DESKTOP_PROXY_PORT ?? "6090");
   const proxy =
     proxyPort === 0
@@ -118,6 +121,10 @@ export async function runHostProcess(config: HostProcessConfig): Promise<void> {
           hostname: process.env.COFORGE_DESKTOP_PROXY_HOST || "0.0.0.0",
           port: proxyPort,
           resolve: (computerId) => containers.desktopEndpoint(computerId),
+          handleRequest: createPiChatHandler({
+            secret: config.token,
+            execute: (scope, command) => chatWorkers.execute(scope, command),
+          }),
         });
   try {
     await runHost(
@@ -132,6 +139,7 @@ export async function runHostProcess(config: HostProcessConfig): Promise<void> {
     );
   } finally {
     proxy?.stop();
+    await chatWorkers.close();
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);
   }

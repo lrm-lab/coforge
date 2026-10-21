@@ -1,5 +1,7 @@
 # Server modules
 
+- `server/pi-chat/` — User/Workspace-authorized access to native Pi sessions in owned cloud Computers, over the signed host interface.
+
 The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENTS.md#module-map). Each line names a directory under `src/` and its single responsibility. Update it before adding or reorganizing a module.
 
 - `server/agent-migrations/` — moving an Agent and its workspace files to another Computer: state machine, step roles, fencing, stopping and starting the Agent around the transfer, the leases and cancels pushed to each Computer, and the daemons' HTTPS steps with presigned chunk URLs (`/api/daemon/agent-migrations`).

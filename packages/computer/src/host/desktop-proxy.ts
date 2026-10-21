@@ -88,11 +88,14 @@ export function startDesktopProxy(input: {
   hostname: string;
   port: number;
   resolve: (computerId: string) => Promise<DesktopEndpoint | undefined>;
+  handleRequest?: (request: Request) => Promise<Response | undefined>;
 }): { port: number; stop: () => void } {
   const server = Bun.serve<SocketData>({
     hostname: input.hostname,
     port: input.port,
     async fetch(request, bun) {
+      const handled = await input.handleRequest?.(request);
+      if (handled) return handled;
       const url = new URL(request.url);
       const route = parseDesktopRoute(url.pathname);
       if (!route) return new Response("not found", { status: 404 });
