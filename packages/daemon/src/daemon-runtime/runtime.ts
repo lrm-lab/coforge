@@ -608,10 +608,9 @@ export class DaemonRuntime {
           const launch = this.#currentActivityLaunches.get(agentId);
           if (launch) this.#reconcileIdleTurn(agentId, launch);
         },
-        // The consumed cursor outlives the process, in a `consumed-seqs.json` file: what an Agent
-        // has already reviewed decides the next hold, the `seenUpToSeq` a fresh send inherits, and
-        // whether a top-level send under a thread-read parent needs confirming. It lives beside
-        // the draft store in the temporary state root, not in this daemon's state directory.
+        // The consumed cursor outlives the process. What an Agent has already reviewed decides
+        // the next hold, the `seenUpToSeq` a fresh send inherits, and whether a top-level send
+        // under a thread-read parent needs confirming.
         consumedSeqs: new AgentConsumedSeqStore(),
       },
     );
