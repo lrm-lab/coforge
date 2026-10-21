@@ -15,7 +15,7 @@ import {
   type OpenVikingAgentError,
   type OpenVikingAgentErrorCode,
   type OpenVikingAgentReadOperation,
-  type OpenVikingFindCommand,
+  type OpenVikingForkFindCommand,
   type OpenVikingExpandCommand,
   type OpenVikingOfferCommand,
   type OpenVikingReadCommand,
@@ -24,7 +24,7 @@ import {
 
 export type OpenVikingAgentReadCommand =
   | OpenVikingExpandCommand
-  | OpenVikingFindCommand
+  | OpenVikingForkFindCommand
   | OpenVikingSearchContextCommand
   | OpenVikingReadCommand;
 

@@ -652,6 +652,7 @@ export class DaemonRuntime {
     this.#messageOperations = new AgentMessageOperations({
       connection,
       attention: this.#messageAttention,
+      isMemoryAgent: (agentId) => Boolean(this.memoryFence(agentId)),
       inbox: (agentId) => this.#agentInbox(agentId),
       get transport() {
         return runtime.#transport;

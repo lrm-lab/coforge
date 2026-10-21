@@ -1,9 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  MEMORY_OFFER_BUDGET_PER_TRIGGER,
-  MEMORY_READ_BUDGET_PER_TRIGGER,
-  OPENVIKING_AGENT_PROTOCOL,
-} from "@lrm/coforge-sdk/agent";
+import { MEMORY_OFFER_BUDGET_PER_TRIGGER, OPENVIKING_AGENT_PROTOCOL } from "@lrm/coforge-sdk/agent";
 import {
   createMemoryAgentBudgetLedger,
   MemoryAgentBudgetError,
@@ -12,7 +8,7 @@ import {
 
 const ovFind = {
   protocol: OPENVIKING_AGENT_PROTOCOL,
-  op: "find" as const,
+  op: "fork_find" as const,
   operationId: "f1",
   query: "deploy",
 };
@@ -29,25 +25,23 @@ const offer = {
 };
 
 test("Web budget consumes C2 constants rather than copied literals", () => {
-  expect(MEMORY_READ_BUDGET_PER_TRIGGER).toBe(3);
   expect(MEMORY_OFFER_BUDGET_PER_TRIGGER).toBe(1);
 });
 
-test("rejects a fourth read and a second Offer", () => {
+test("allows further reads and still rejects a second Offer", () => {
   const openviking = new MemoryAgentTriggerBudget();
   openviking.consume(ovFind);
   openviking.consume({ ...ovFind, operationId: "f2" });
   openviking.consume({ ...ovFind, operationId: "f3" });
-  expect(() => openviking.consume({ ...ovFind, operationId: "f4" })).toThrow(
-    MemoryAgentBudgetError,
-  );
+  expect(() => openviking.consume({ ...ovFind, operationId: "f4" })).not.toThrow();
+  expect(openviking.snapshot()).toEqual({ reads: 4, offers: 0 });
 
   const offers = new MemoryAgentTriggerBudget();
   offers.consume(offer);
   expect(() => offers.consume({ ...offer, operationId: "o2" })).toThrow(MemoryAgentBudgetError);
 });
 
-test("search_context consumes the read budget and carries no token pool", () => {
+test("search_context counts reads without a per-trigger cap or token pool", () => {
   const budget = new MemoryAgentTriggerBudget();
   const searchContext = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
@@ -60,10 +54,8 @@ test("search_context consumes the read budget and carries no token pool", () => 
   expect(budget.snapshot()).toEqual({ reads: 1, offers: 0 });
   budget.consume({ ...searchContext, operationId: "c2" });
   budget.consume({ ...searchContext, operationId: "c3" });
-  expect(() => budget.consume({ ...searchContext, operationId: "c4" })).toThrow(
-    MemoryAgentBudgetError,
-  );
-  expect(budget.snapshot()).toEqual({ reads: 3, offers: 0 });
+  expect(() => budget.consume({ ...searchContext, operationId: "c4" })).not.toThrow();
+  expect(budget.snapshot()).toEqual({ reads: 4, offers: 0 });
 });
 
 test("ledger isolates budget by Workspace, Memory Agent, and triggering Message", () => {

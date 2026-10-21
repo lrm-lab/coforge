@@ -35,7 +35,8 @@ export const TASK_AGENT_DESCRIPTION = [
   "When you need prior experience OR documents/evidence to solve the task, send a channel message",
   "mentioning @memory with a specific query and the constraints you need verified if its initial retrieval",
   "does not already cover your needs. You may ask again",
-  "as new questions arise. Wait for the Memory Agent's reply to that request before using its evidence.",
+  "as new questions arise. Wait for the Memory Agent's reply to that request before using its evidence. End the current model turn while waiting; native message delivery resumes you. Do not poll empty message check/read results.",
+  "An Offer ends Memory’s current retrieval round even if its body promises more work. If constraints remain unresolved, explicitly send a new @memory request with a focused next query, or publish an honest low-confidence final answer listing the missing evidence. Never wait for an autonomous follow-up after an Offer. Ask Memory to consult applicable Fork methods when the search strategy stalls.",
   "Both document search and experience retrieval belong to Memory Agent: do not call BM25/search",
   "scripts, skills_list, OpenViking directly, or read raw corpus/index/ledger files yourself.",
   "The harness does not retrieve or inject memory before your turn. For a cited Memory Hint addressed",
@@ -48,6 +49,13 @@ export const TASK_AGENT_DESCRIPTION = [
   "Verify the final send returns accepted=true and a messageId; the CLI's --json receipt",
   "renders acceptance as state=sent plus messageId. Without a receipt, never claim",
   "the answer was submitted; follow the send's retry/draft instructions and report any blocker honestly.",
+  "After the final answer send succeeds, end the current model turn immediately. Do not post completion",
+  "notices, repeat the answer, or invent task done / task claim --status commands. If tracked Task",
+  "status needs updating, consult coforge task --help or the Tasks manual before sending the final answer.",
+  "When Memory has repeatedly found only partial matches, ask it to read candidate documents and",
+  "test or disconfirm specific constraints, rather than send another list of synonymous searches.",
+  "Quoted phrases, wildcards and date ranges are not strict database filters. Treat a leading identity as a hypothesis",
+  "until its distinguishing constraints are evidenced; discard it when evidence contradicts the question.",
 ].join(" ");
 
 function slugFor(arm: EvalArm, familyId: string): string {
@@ -97,7 +105,7 @@ export async function provisionEvalWorkspace(input: {
         name: "memory",
         displayName: "Memory",
         description:
-          "The human posts each task to both @task and you (@memory). On that initial mention, read the task, formulate relevant queries, and start retrieval without waiting for a separate Task request. Respond also to subsequent Task @memory requests. Task owns the original task claim and final answer; your role is retrieval and cited support. Retrieve prior experience from viking://resources/evo-ir/experiences and evidence documents from viking://resources/evo-ir/documents when those prepared collections are present. Set targetUri to the relevant collection so unrelated account directory summaries do not displace evidence. Use ov_find with BM25 only and ov_read as needed. Search viking://resources/causal for published Fork/AIG nodes; use retrieval.chainRef, a served node URI and its listed relations with ov_expand to follow multiple hops. You have three retrieval reads per trigger: find plus two expansions fits that budget. Distinguish recorded AIG evidence from counterfactual Fork steps; do not use embedding or ov_search_context; return a cited memory_offer addressed to @task. Do not invent citations or claim retrieval succeeded when tools fail.",
+          "The human posts each task to both @task and you (@memory). On that initial mention, read the task, formulate relevant queries, and start retrieval without waiting for a separate Task request. Respond also to subsequent Task @memory requests. Task owns the original task claim and final answer; your role is retrieval and cited support. Use ov_fork_find for reusable methods; its viking://resources/causal/forks namespace is fixed and accepts no targetUri. Use ov_search_context for factual documents, with targetUri viking://resources/evo-ir/documents when that prepared collection is present, then ov_read promising cited documents. Decide from channel context whether facts, reusable methods or both are needed. For complex multi-hop tasks or stalled searches proactively search viking://resources/causal/forks with abstract method/failure-pattern queries, independently of factual entity queries. Use retrieval.chainRef, a served node URI and its listed relations with ov_expand to follow multiple hops. Retrieval reads have no per-trigger count limit. Read promising factual documents to verify constraints. Publish one cited offer describing supported findings, unresolved constraints and suggested next queries, then end this retrieval round. Do not promise autonomous continued search after the Offer. Distinguish recorded AIG evidence from counterfactual Fork steps; use document embedding context and lexical Fork discovery as separate paths; return a cited memory_offer addressed to @task. Do not invent citations or claim retrieval succeeded when tools fail.",
         computerId: null,
         runtimeConfig: {},
       },

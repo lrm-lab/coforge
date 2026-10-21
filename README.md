@@ -33,6 +33,7 @@ The architecture invariants every change must respect are in
 | [AGENTS.md](AGENTS.md) | Repository rules: decisions, module design, delivery, toolchain, architecture invariants |
 | [apps/web/AGENTS.md](apps/web/AGENTS.md) | Web/backend rules and module map |
 | [packages/computer/AGENTS.md](packages/computer/AGENTS.md) | Computer package rules and module map |
+| [packages/agent/AGENTS.md](packages/agent/AGENTS.md) | Agent runtime rules and module map |
 | [packages/daemon/AGENTS.md](packages/daemon/AGENTS.md) | Daemon package rules and module map |
 | [crates/installer/AGENTS.md](crates/installer/AGENTS.md) | Rust installer crate (`coforge-installer`): toolchain, commands, contract, CI, supply-chain gate |
 | [crates/installer/src/AGENTS.md](crates/installer/src/AGENTS.md) | Installer module map |

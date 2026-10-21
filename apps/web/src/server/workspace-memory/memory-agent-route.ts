@@ -167,25 +167,24 @@ async function handleOpenViking(
   input: { workspaceId: string; agentId: string },
   command: OpenVikingAgentCommand,
 ): Promise<OpenVikingAgentResponse> {
-  if (command.op === "find") {
-    const result = await deps.openviking.find({
+  if (command.op === "fork_find") {
+    const result = await deps.openviking.forkFind({
       workspaceId: input.workspaceId,
       agentId: input.agentId,
       operationId: command.operationId,
       query: command.query,
       ...(command.limit === undefined ? {} : { limit: command.limit }),
-      ...(command.targetUri === undefined ? {} : { targetUri: command.targetUri }),
     });
     return {
       protocol: OPENVIKING_AGENT_PROTOCOL,
-      op: "find",
+      op: "fork_find",
       operationId: command.operationId,
       duplicate: false,
       ...result,
     };
   }
   if (command.op === "search_context") {
-    const items = await deps.openviking.searchContext({
+    const result = await deps.openviking.searchContext({
       workspaceId: input.workspaceId,
       agentId: input.agentId,
       operationId: command.operationId,
@@ -199,7 +198,7 @@ async function handleOpenViking(
       op: "search_context",
       operationId: command.operationId,
       duplicate: false,
-      items,
+      ...result,
     };
   }
   if (command.op === "read") {
@@ -286,9 +285,13 @@ function translateError(command: OpenVikingAgentCommand, error: unknown): Memory
     return failure(403, command.operationId, "unauthorized");
   if (error instanceof MemoryAgentUnauthorizedError)
     return failure(403, command.operationId, "unauthorized");
-  if (error instanceof Error && /^openviking upstream status \d+$/.test(error.message))
-    return failure(400, command.operationId, "invalid", error.message);
-  return failure(400, command.operationId, "invalid");
+  if (error instanceof Error && /^openviking upstream status \d+$/.test(error.message)) {
+    const status = Number(error.message.split(" ").at(-1));
+    return status >= 500
+      ? failure(503, command.operationId, "runtime")
+      : failure(400, command.operationId, "invalid", error.message);
+  }
+  return failure(503, command.operationId, "runtime");
 }
 
 function failure(

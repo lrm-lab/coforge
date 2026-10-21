@@ -647,6 +647,7 @@ function memoryAgentCommands() {
       client: {
         async invoke() {
           return {
+            retrieval_mode: "bm25",
             results: [
               {
                 uri: "viking://resources/docs/deploy.md",
@@ -666,49 +667,36 @@ function memoryAgentCommands() {
 }
 
 test.skipIf(!connectionString)(
-  "5. the Memory Agent fence allows three OpenViking reads per trigger and rejects foreign protocols",
+  "5. the Memory Agent fence allows repeated OpenViking reads and rejects foreign protocols",
   async () => {
     const harness = await openHarness();
     try {
       expect(workspaceProfileToToolFence("openviking")).toBeDefined();
       expect(toolsForMemoryFence(workspaceProfileToToolFence("openviking")!)).toEqual([
-        OPENVIKING_TOOL_NAMES.find,
+        OPENVIKING_TOOL_NAMES.forkFind,
         OPENVIKING_TOOL_NAMES.searchContext,
+        OPENVIKING_TOOL_NAMES.expand,
         OPENVIKING_TOOL_NAMES.read,
         OPENVIKING_TOOL_NAMES.offer,
+        OPENVIKING_TOOL_NAMES.diagnose,
       ]);
       expect(workspaceProfileToToolFence("off")).toBeUndefined();
 
       const ov = memoryAgentCommands();
-      for (const index of [1, 2, 3]) {
+      for (let index = 0; index < 20; index++) {
         const read = await ov.handler.handle({
           workspaceId: harness.workspaceA,
           agentId: "mem-1",
           triggerMessageId: "msg-ov",
           command: {
             protocol: OPENVIKING_AGENT_PROTOCOL,
-            op: "find",
+            op: index % 2 === 0 ? "search_context" : "fork_find",
             operationId: `find-${index}`,
             query: "deploy",
           },
         });
         expect(read.ok).toBe(true);
       }
-      const fourth = await ov.handler.handle({
-        workspaceId: harness.workspaceA,
-        agentId: "mem-1",
-        triggerMessageId: "msg-ov",
-        command: {
-          protocol: OPENVIKING_AGENT_PROTOCOL,
-          op: "find",
-          operationId: "find-4",
-          query: "deploy",
-        },
-      });
-      expect(fourth.ok).toBe(false);
-      if (fourth.ok) throw new Error("expected fourth-read denial");
-      expect(fourth.code).toBe("openviking-budget-exhausted");
-
       const foreign = await ov.handler.handle({
         workspaceId: harness.workspaceA,
         agentId: "mem-1",

@@ -950,7 +950,7 @@ test("embedded Pi notifications are accepted before completion and steer the exi
   }
 });
 
-test("Pi notify resets the per-triggering-message memory budget like sendMessage", async () => {
+test("Pi forwards all retrieval reads before and after a notification", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-notify-budget-"));
   const workspace = join(root, "workspace");
   const agentDir = join(root, "host-pi-agent");
@@ -966,7 +966,7 @@ test("Pi notify resets the per-triggering-message memory budget like sendMessage
       };
       return Response.json({
         protocol: "coforge.openviking.agent.v1",
-        op: "find",
+        op: "fork_find",
         operationId: body.operationId ?? "memory",
         duplicate: false,
         items: [
@@ -992,7 +992,7 @@ test("Pi notify resets the per-triggering-message memory budget like sendMessage
       id,
       type: "function",
       function: {
-        name: "ov_find",
+        name: "ov_fork_find",
         arguments: JSON.stringify({
           operationId: `${opBase}${index}`,
           query: "caroline group",
@@ -1045,10 +1045,9 @@ test("Pi notify resets the per-triggering-message memory budget like sendMessage
   });
   try {
     await session.sendMessage("first triggering message");
-    // Three reads fit the per-triggering-message budget; the fourth is
-    // rejected client-side before it can reach the agent proxy.
-    expect(proxyRequests).toHaveLength(3);
-    expect(modelRequests[1]).toContain("read budget exhausted");
+    // All four reads reach the proxy within one triggering message.
+    expect(proxyRequests).toHaveLength(4);
+    expect(modelRequests[1]).not.toContain("read budget exhausted");
     // notify resolves at prompt preflight, so wait for the turn it started
     // to settle before asserting on its tool traffic.
     const turnCompleted = Promise.withResolvers<void>();
@@ -1057,9 +1056,8 @@ test("Pi notify resets the per-triggering-message memory budget like sendMessage
     });
     await session.notify!("second triggering message");
     await turnCompleted.promise;
-    // The notification is a new triggering message, so its read must reach
-    // the proxy instead of starving on the previous turn's exhausted budget.
-    expect(proxyRequests).toHaveLength(4);
+    // New notifications can continue retrieval in the same native session.
+    expect(proxyRequests).toHaveLength(5);
     // The whole conversation replays in every request, so inspect the tool
     // result for the post-notify read specifically: it must be the proxy's
     // citation payload, not another client-side budget rejection.

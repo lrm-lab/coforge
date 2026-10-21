@@ -377,3 +377,25 @@ test("a judged still-processing refusal keeps the server's code and carries the 
     proxy: { failure_class: "upstream_refusal", draft_saved: true },
   });
 });
+
+test("safe message-validation refusals retain their exact reason in daemon diagnostics", () => {
+  const failure = classifyAgentProxyFailure(
+    AgentMessageRequestError.fromRpc(
+      400,
+      "An explicit @memory question must be answered with memory_offer",
+    ),
+    context,
+  );
+  expect(failure.logFields.detail).toBe(
+    "An explicit @memory question must be answered with memory_offer",
+  );
+  expect(failure.body.proxy.failure_class).toBe("request_validation");
+  const isolated = classifyAgentProxyFailure(
+    AgentMessageRequestError.fromRpc(
+      400,
+      "An explicit @memory question must be answered with memory_offer",
+    ),
+    { ...context, redact: true },
+  );
+  expect(isolated.logFields.detail).toBeUndefined();
+});

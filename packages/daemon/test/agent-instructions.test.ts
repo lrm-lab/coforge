@@ -176,14 +176,16 @@ test("the fixed transport guidance stays within a 3KB budget", () => {
   expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(3072);
 });
 
-test("the openviking-memory profile requires an @memory query and never mentions tenant tokens", () => {
+test("the openviking-memory profile queries before retrieval Offers and protects tenant secrets", () => {
   const fenced = buildCoforgeAgentInstructions({
     agentWorkspaceDirectory: AGENT_WORKSPACES[0],
     toolProfile: "openviking-memory",
     memoryOfferOnly: false,
   });
   expect(fenced).toContain("## Team memory (Memory Agent)");
-  expect(fenced).toContain("Other explicit @memory questions require a memory query");
+  expect(fenced).toContain(
+    "Retrieval questions require a memory query before an Offer; diagnosis questions use memory_diagnose.",
+  );
   expect(fenced).toContain("Use message_read with the exact target");
   expect(fenced).not.toContain("Use message_check or message_read");
   expect(fenced).not.toContain("Bearer");
@@ -194,7 +196,7 @@ test("the openviking-memory profile requires an @memory query and never mentions
 });
 
 const OPENVIKING_FENCE_TOOLS = [
-  "ov_find",
+  "ov_fork_find",
   "ov_expand",
   "ov_read",
   "memory_offer",
@@ -265,10 +267,12 @@ test("the openviking-memory fence names reads and server-owned memory controls",
   const section = memoryAgentSection(instructionsForFence("openviking-memory"));
   const listing = allowedToolsetListing(section);
   for (const name of OPENVIKING_FENCE_TOOLS) expect(listing).toContain(name);
-  expect(listing).not.toContain("ov_search_context");
+  expect(listing).toContain("ov_search_context");
   expect(section).toContain("memory_diagnose");
   for (const name of CAUSAL_ONLY_TOOLS) expect(listing).not.toContain(name);
-  expect(section).toContain("Other explicit @memory questions require a memory query");
+  expect(section).toContain(
+    "Retrieval questions require a memory query before an Offer; diagnosis questions use memory_diagnose.",
+  );
   expect(section).toContain("cannot write files");
   expect(section).toContain("commit sessions");
   expect(section).toContain("skills or ACLs");
@@ -294,7 +298,7 @@ test("the memory fence shows copyable tool JSON and does not teach shell message
   const section = memoryAgentSection(fenced);
   expect(section).toContain('{"operationId": "find-1", "query": "<检索词>", "limit": 10}');
   expect(section).toContain(
-    '{"operationId": "offer-1", "citationRefs": ["<ov_find 返回的 citation id>"], "body": "<给 @task 的正文>"}',
+    '{"operationId": "offer-1", "citationRefs": ["<ov_search_context/ov_fork_find/ov_expand 返回的 citation id>"], "body": "<给 @task 的正文>"}',
   );
   expect(section).toContain('{"target": "#<频道名>"}');
   expect(section).toContain('{"target": "#<频道名>", "content": "<正文>"}');

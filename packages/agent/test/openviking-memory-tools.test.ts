@@ -32,7 +32,8 @@ test("strict eval Memory exposes reads and server-owned controls but no ordinary
     { memoryOfferOnly: true },
   );
   expect(tools.map((tool) => tool.name)).toEqual([
-    "ov_find",
+    "ov_fork_find",
+    "ov_search_context",
     "ov_expand",
     "ov_read",
     "memory_offer",
@@ -100,7 +101,8 @@ test("the openviking-memory fence exposes reads, scoped diagnosis, offers, and c
     (tool) => tool.name,
   );
   expect(names).toEqual([
-    OPENVIKING_TOOL_NAMES.find,
+    OPENVIKING_TOOL_NAMES.forkFind,
+    OPENVIKING_TOOL_NAMES.searchContext,
     OPENVIKING_TOOL_NAMES.expand,
     OPENVIKING_TOOL_NAMES.read,
     OPENVIKING_TOOL_NAMES.offer,
@@ -111,18 +113,19 @@ test("the openviking-memory fence exposes reads, scoped diagnosis, offers, and c
   expect(MUTATION_TOOL_NAMES.some((name) => names.includes(name))).toBe(false);
 });
 
-test("a fourth memory read is rejected", () => {
+test("native memory tools forward more than three reads in one trigger", async () => {
+  const proxy = fakeProxy();
   const budget = new MemoryAgentTurnBudget();
-  const find = {
-    protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find" as const,
-    operationId: "f1",
-    query: "deploy",
-  };
-  budget.consume(find);
-  budget.consume({ ...find, operationId: "f2" });
-  budget.consume({ ...find, operationId: "f3" });
-  expect(() => budget.consume({ ...find, operationId: "f4" })).toThrow("read budget");
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
+  for (let index = 0; index < 20; index++) {
+    await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
+      operationId: `find-${index}`,
+      query: "deploy rollback",
+      limit: 10,
+    });
+  }
+  expect(proxy.calls).toHaveLength(20);
+  expect(budget.snapshot()).toEqual({ reads: 20, offers: 0 });
 });
 
 test("a second Memory Offer is rejected", () => {
@@ -145,12 +148,12 @@ test("the factory rejects a candidate limit above ten before calling the proxy",
   const proxy = fakeProxy();
   const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
   await expect(
-    executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+    executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
       operationId: "too-many",
       query: "deploy",
       limit: 11,
     }),
-  ).rejects.toThrow("invalid openviking find limit");
+  ).rejects.toThrow("invalid openviking fork_find limit");
   expect(proxy.calls).toEqual([]);
 });
 
@@ -158,7 +161,7 @@ test("reset restores reads and offers for the next triggering message", () => {
   const budget = new MemoryAgentTurnBudget();
   const find = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
-    op: "find" as const,
+    op: "fork_find" as const,
     operationId: "f1",
     query: "deploy",
   };
@@ -184,7 +187,7 @@ test("reset restores reads and offers for the next triggering message", () => {
 test("ov_* tools post the frozen openviking proxy path and never a mutation verb", async () => {
   const proxy = fakeProxy();
   const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
-  await executeTool(tools, OPENVIKING_TOOL_NAMES.find, {
+  await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
     operationId: "find-1",
     query: "deploy rollback",
     limit: 10,
@@ -194,7 +197,7 @@ test("ov_* tools post the frozen openviking proxy path and never a mutation verb
       path: agentApiRoutes.proxy.openviking.path,
       body: {
         protocol: OPENVIKING_AGENT_PROTOCOL,
-        op: "find",
+        op: "fork_find",
         operationId: "find-1",
         query: "deploy rollback",
         limit: 10,
@@ -205,7 +208,7 @@ test("ov_* tools post the frozen openviking proxy path and never a mutation verb
   expect(JSON.stringify(proxy.calls[0]?.body)).not.toContain("commit");
 });
 
-test("openviking-memory search_context keeps the 3-read cap", () => {
+test("openviking-memory search_context reads are counted without a per-trigger cap", () => {
   const budget = new MemoryAgentTurnBudget();
   const searchContext = {
     protocol: OPENVIKING_AGENT_PROTOCOL,
@@ -218,18 +221,19 @@ test("openviking-memory search_context keeps the 3-read cap", () => {
   expect(budget.snapshot()).toEqual({ reads: 1, offers: 0 });
   budget.consume({ ...searchContext, operationId: "c2" });
   budget.consume({ ...searchContext, operationId: "c3" });
-  expect(() => budget.consume({ ...searchContext, operationId: "c4" })).toThrow("read budget");
+  expect(() => budget.consume({ ...searchContext, operationId: "c4" })).not.toThrow();
+  expect(budget.snapshot()).toEqual({ reads: 4, offers: 0 });
 });
 
-test("empty ov_find arguments return an example error and do not spend the read budget", async () => {
+test("empty ov_fork_find arguments return an example error and do not spend the read budget", async () => {
   const budget = new MemoryAgentTurnBudget();
   const proxy = fakeProxy();
   const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
-  const find = tools.find((tool) => tool.name === OPENVIKING_TOOL_NAMES.find);
+  const find = tools.find((tool) => tool.name === OPENVIKING_TOOL_NAMES.forkFind);
   expect(typeof find?.prepareArguments).toBe("function");
   expect(() => find?.prepareArguments?.({})).toThrow(/missing operationId, query/);
   expect(() => find?.prepareArguments?.({})).toThrow(/\{"operationId": "find-1"/);
-  await expect(executeTool(tools, OPENVIKING_TOOL_NAMES.find, {})).rejects.toThrow(
+  await expect(executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {})).rejects.toThrow(
     /missing operationId, query/,
   );
   expect(budget.snapshot()).toEqual({ reads: 0, offers: 0 });
@@ -260,13 +264,13 @@ test("send_channel_message accepts message only as an alias of a missing content
   expect(proxy.calls[0]?.body).not.toHaveProperty("message");
 });
 
-test("Memory does not expose ov_search_context", () => {
+test("Memory exposes context search through its read-only fence", () => {
   const tools = createMemoryFenceTools(
     OPENVIKING_TOOL_PROFILE,
     new MemoryAgentTurnBudget(),
     fakeProxy(),
   );
-  expect(tools.some((tool) => tool.name === "ov_search_context")).toBe(false);
+  expect(tools.some((tool) => tool.name === "ov_search_context")).toBe(true);
 });
 
 test("group Memory tools default to their own channel and reject another channel", async () => {
@@ -335,4 +339,366 @@ test("native diagnosis forwards the request without consuming retrieval budget",
     },
   ]);
   expect(budget.snapshot()).toEqual({ reads: 0, offers: 0 });
+});
+
+test("unchanged retrieval nudges a partial Offer without blocking further reads", async () => {
+  const proxy = fakeProxy((_path, raw) => {
+    const command = raw as { protocol: string; op: string; operationId: string; query: string };
+    return {
+      ...emptyItemsResponse(command.protocol, command.op, command.operationId),
+      items: [
+        {
+          kind: "openviking",
+          citationId: command.query === "new evidence" ? "ov:new" : "ov:known",
+          workspaceId: "ws",
+          accountId: "acct",
+          uri: "viking://resources/doc.md",
+          contentHash: "sha256:fixture",
+          matchedLevel: "L2",
+          excerpt: "Source evidence.",
+        },
+      ],
+    };
+  });
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  let result: Awaited<ReturnType<typeof executeTool>>;
+  for (let index = 0; index < 3; index++) {
+    result = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
+      operationId: `find-${index}`,
+      query: "same evidence",
+    });
+  }
+  expect(
+    result!.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n"),
+  ).toContain("partial cited memory_offer");
+  expect(
+    result!.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n"),
+  ).toContain("ov:known");
+  const fresh = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
+    operationId: "find-fresh",
+    query: "new evidence",
+  });
+  expect(
+    fresh.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n"),
+  ).not.toContain("No new evidence");
+  expect(proxy.calls).toHaveLength(4);
+});
+
+test("a new trigger cannot silently replay an old Offer with a different body", () => {
+  const budget = new MemoryAgentTurnBudget();
+  budget.consume({
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "offer",
+    operationId: "progress-1",
+    body: "First partial finding",
+    citationRefs: ["ov:known"],
+  });
+  budget.reset();
+  expect(() =>
+    budget.consume({
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "offer",
+      operationId: "progress-1",
+      body: "New findings after the follow-up",
+      citationRefs: ["ov:known"],
+    }),
+  ).toThrow("operationId already used for a different Offer");
+  expect(budget.snapshot().offers).toBe(0);
+  expect(() =>
+    budget.consume({
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "offer",
+      operationId: "progress-2",
+      body: "New findings after the follow-up",
+      citationRefs: ["ov:known"],
+    }),
+  ).not.toThrow();
+});
+
+test("changing search snippets for the same source prompts a strategy pivot without capping reads", async () => {
+  const proxy = fakeProxy((_path, raw) => {
+    const command = raw as { protocol: string; op: string; operationId: string; query: string };
+    return {
+      ...emptyItemsResponse(command.protocol, command.op, command.operationId),
+      items: [
+        {
+          kind: "openviking",
+          citationId: "ov:known",
+          workspaceId: "ws",
+          accountId: "acct",
+          uri: "viking://resources/doc.md",
+          contentHash: "sha256:fixture",
+          matchedLevel: "L2",
+          excerpt: `Snippet selected for ${command.query}`,
+        },
+      ],
+    };
+  });
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  let result;
+  for (let i = 0; i < 4; i++)
+    result = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
+      operationId: `query-${i}`,
+      query: `rephrasing ${i}`,
+    });
+  const text = result!.content
+    .filter((item) => item.type === "text")
+    .map((item) => item.text)
+    .join("\n");
+  expect(text).toContain("causal/forks");
+  expect(text).toContain("ov_read");
+  expect(proxy.calls).toHaveLength(4);
+});
+
+test("even unchanged findings need a fresh Offer id for a new triggering request", () => {
+  const budget = new MemoryAgentTurnBudget();
+  const offer = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "offer" as const,
+    operationId: "old-request",
+    body: "Same supported findings",
+    citationRefs: ["ov:known"],
+  };
+  budget.consume(offer);
+  budget.reset();
+  expect(() => budget.consume(offer)).toThrow("earlier triggering request");
+  expect(budget.snapshot().offers).toBe(0);
+});
+
+test("Fork discovery supplies an executable served-relation example before a method is adopted", async () => {
+  const uri = "viking://resources/causal/forks/method.md";
+  const proxy = fakeProxy((_path, raw) => ({
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "fork_find",
+    operationId: (raw as { operationId: string }).operationId,
+    duplicate: false,
+    items: [
+      {
+        kind: "openviking",
+        citationId: `ov:${uri}`,
+        workspaceId: "ws",
+        accountId: "acct",
+        uri,
+        contentHash: "sha256:fixture",
+        matchedLevel: "L2",
+        excerpt: "Candidate counterfactual method",
+      },
+    ],
+    retrieval: {
+      mode: "bm25",
+      chainRef: "served-chain",
+      step: 0,
+      remainingHops: 4,
+      exhausted: false,
+      nodes: [
+        {
+          uri,
+          kind: "fork_overlay",
+          status: "counterfactual",
+          sourceRef: "fork-a",
+          relations: ["branch_steps"],
+        },
+      ],
+    },
+  }));
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  const result = await executeTool(tools, "ov_fork_find", {
+    operationId: "find-method",
+    query: "constraint intersection",
+  });
+  const guidance = result.content
+    .slice(1)
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n");
+  expect(guidance).toContain('"chainRef":"served-chain"');
+  expect(guidance).toContain('"relation":"branch_steps"');
+  expect(guidance).toContain(uri);
+  expect(proxy.calls).toHaveLength(1);
+});
+
+test("new discovery IDs do not hide a search-only loop and a full read clears its warning", async () => {
+  const budget = new MemoryAgentTurnBudget();
+  const proxy = fakeProxy((_path, raw) => {
+    const command = raw as { protocol: string; op: string; operationId: string; uri?: string };
+    const citation = {
+      kind: "openviking",
+      citationId: `ov:${command.operationId}`,
+      workspaceId: "ws",
+      accountId: "acct",
+      uri: command.uri ?? `viking://resources/evo-ir/documents/${command.operationId}.md`,
+      contentHash: "sha256:fixture",
+      matchedLevel: "L2",
+      excerpt: "A discovery candidate, not verified support for every constraint.",
+    };
+    return command.op === "read"
+      ? {
+          protocol: command.protocol,
+          op: "read",
+          operationId: command.operationId,
+          duplicate: false,
+          citation,
+          content: "Read document body.",
+        }
+      : {
+          ...emptyItemsResponse(command.protocol, command.op, command.operationId),
+          items: [citation],
+        };
+  });
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
+  let output = "";
+  for (let index = 0; index < 4; index++) {
+    if (index === 2) budget.reset();
+    const result = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
+      operationId: `find-${index}`,
+      query: `different ${index}`,
+    });
+    output = result.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+  }
+  expect(output).toContain("4 discovery calls without a new document read");
+  expect(output).toContain('"uri":"viking://resources/evo-ir/documents/find-3.md"');
+  expect(output).toContain("disconfirm");
+  await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
+    operationId: "read-1",
+    uri: "viking://resources/evo-ir/documents/find-3.md",
+  });
+  const afterRead = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
+    operationId: "find-after-read",
+    query: "next constraint",
+  });
+  expect(
+    afterRead.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n"),
+  ).not.toContain("discovery calls without");
+  for (let index = 0; index < 2; index++)
+    await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
+      operationId: `more-${index}`,
+      query: "another keyword",
+    });
+  await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
+    operationId: "read-fork",
+    uri: "viking://resources/causal/forks/method.md",
+  });
+  await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
+    operationId: "read-again",
+    uri: "viking://resources/evo-ir/documents/find-3.md",
+  });
+  const stillStalled = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
+    operationId: "still-stalled",
+    query: "changed again",
+  });
+  expect(
+    stillStalled.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n"),
+  ).toContain("4 discovery calls without a new document read");
+  expect(proxy.calls).toHaveLength(11);
+});
+
+test("document discovery stays compact and repeated snippets do not hide full read access", async () => {
+  const full = "Candidate biography. ".repeat(45) + "Decisive school name: Example Academy.";
+  const citation = {
+    kind: "openviking",
+    citationId: "ov:biography",
+    workspaceId: "ws",
+    accountId: "acct",
+    uri: "viking://resources/evo-ir/documents/biography.md",
+    contentHash: "sha256:biography",
+    matchedLevel: "L2",
+    excerpt: full,
+  };
+  const proxy = fakeProxy((_path, raw) => {
+    const command = raw as { protocol: string; op: string; operationId: string; query?: string };
+    const served =
+      command.query === "method"
+        ? { ...citation, uri: "viking://resources/causal/forks/method.md" }
+        : command.query === "updated"
+          ? { ...citation, contentHash: "sha256:new-version" }
+          : citation;
+    return command.op === "read"
+      ? {
+          protocol: command.protocol,
+          op: "read",
+          operationId: command.operationId,
+          duplicate: false,
+          citation,
+          content: full,
+        }
+      : {
+          ...emptyItemsResponse(command.protocol, command.op, command.operationId),
+          items: [served],
+        };
+  });
+  const budget = new MemoryAgentTurnBudget();
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
+  const first = await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
+    operationId: "discover",
+    query: "biography school",
+  });
+  budget.reset();
+  const second = await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
+    operationId: "rediscover",
+    query: "school biography",
+  });
+  const decode = (result: typeof first) =>
+    JSON.parse(result.content.find((part) => part.type === "text")!.text);
+  const card = decode(first).items[0];
+  expect(card.uri).toBe(citation.uri);
+  expect(card.contentHash).toBe(citation.contentHash);
+  expect(card.excerpt.length).toBeLessThanOrEqual(480);
+  expect(decode(first).discoveryNotes[0].note).toContain("ov_read");
+  expect(card.excerpt).not.toContain("Decisive school name");
+  expect(decode(second).items[0].excerpt).toBe("");
+  expect(decode(second).discoveryNotes[0].note).toContain("Previously discovered");
+  const read = await executeTool(tools, OPENVIKING_TOOL_NAMES.read, {
+    operationId: "verify",
+    uri: card.uri,
+  });
+  expect(decode(read).content).toBe(full);
+  expect(decode(read).content).toContain("Example Academy");
+  const updated = await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
+    operationId: "updated",
+    query: "updated",
+  });
+  expect(decode(updated).items[0].excerpt).toBe(full.slice(0, 480));
+  expect(decode(updated).items[0].contentHash).toBe("sha256:new-version");
+  for (const operationId of ["method-first", "method-again"]) {
+    const method = await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
+      operationId,
+      query: "method",
+    });
+    expect(decode(method).items[0].excerpt).toBe(full);
+    expect(decode(method).discoveryNotes).toBeUndefined();
+  }
+  expect(proxy.calls).toHaveLength(6);
+});
+
+test("restored context search forwards query and shared budget without mutation tools", async () => {
+  const proxy = fakeProxy();
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  await executeTool(tools, OPENVIKING_TOOL_NAMES.searchContext, {
+    operationId: "context-restore-1",
+    query: "first wife",
+    tokenBudget: 800,
+  });
+  expect(proxy.calls[0].body).toMatchObject({
+    op: "search_context",
+    query: "first wife",
+    tokenBudget: 800,
+  });
 });
