@@ -19,6 +19,8 @@ export async function loadSharedDrainAccount(
     accountId?: string;
     adminUserId?: string;
     adminKey?: string;
+    userId?: string;
+    userKey?: string;
   };
   if (!raw.accountId || !raw.adminUserId || !raw.adminKey) {
     throw new Error(`drain account file ${path} is missing fields`);
@@ -31,6 +33,8 @@ export async function loadSharedDrainAccount(
     users: {
       adminUserId: raw.adminUserId,
       adminKey: raw.adminKey,
+      userId: raw.userId ?? raw.adminUserId,
+      userKey: raw.userKey ?? raw.adminKey,
     },
   };
 }
