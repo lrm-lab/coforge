@@ -18,7 +18,7 @@ These rules apply to `src/features/computers/`.
   Workspace can add one extra. The cluster places it. The page does not ask the
   user to pick a host. The owner's Open desktop button opens
   `<COFORGE_CLOUD_DESKTOP_ORIGIN>/desktop/<computer id>/` in a new tab when that
-  deployment variable is set. The same owner's Agent profile opens that Agent's
+  deployment variable is set. The same owner's Computer tab opens that Agent's
   own screen at `/desktop/<computer id>/<agent id>/`. That origin is the Swarm
   host proxy in front of the image, opened directly by the browser. The address
   carries no token. Without the variable the button is absent. Formatting a cloud computer removes its service and disk,

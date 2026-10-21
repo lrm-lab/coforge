@@ -28,6 +28,7 @@
   "computer_cloud_not_ready": "默认云电脑还没有运行起来。",
   "computer_cloud_unavailable": "云电脑暂不可用。",
   "computer_open_desktop": "进入桌面",
+  "agent_computer_tab": "电脑",
   "computer_cloud_creating": "正在创建…",
   "computer_cloud_create_error": "无法创建电脑，请重试。",
   "computer_cloud_access_denied": "你不能向此工作区添加电脑。",

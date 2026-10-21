@@ -23,6 +23,7 @@ export const AGENT_PROFILE_TABS = [
   "reminders",
   "workspace",
   "apps",
+  "computer",
 ] as const;
 export type AgentProfileTab = (typeof AGENT_PROFILE_TABS)[number];
 
@@ -68,17 +69,24 @@ function idFromProfileParam(profile: string | undefined, prefix: string): string
   return UUID_PATTERN.test(id) ? id : undefined;
 }
 
-/** The panel offers Profile, Reminders, Activity, Workspace and Apps. Reminders and Activity are
- * manager/owner-only (brief §Permissions); Workspace has its own, narrower gate — the Agent's
- * owner only, independent of `canSeeManagerTabs` (a manager who does not own the Agent must not
- * see Workspace). Apps is every viewer's, read-only to those who may not change it, but not an
- * archived Agent's (`canSeeApps`). Returned in default order. */
+/** The panel offers Profile, Reminders, Activity, Workspace, Apps and Computer. Reminders and
+ * Activity are manager/owner-only (brief §Permissions); Workspace has its own, narrower gate —
+ * the Agent's owner only, independent of `canSeeManagerTabs` (a manager who does not own the
+ * Agent must not see Workspace). Apps is every viewer's, read-only to those who may not change
+ * it, but not an archived Agent's (`canSeeApps`). Computer is the cloud computer's owner only.
+ * Returned in default order. */
 export function visibleAgentProfileTabs(
   canSeeManagerTabs: boolean,
   canSeeWorkspace: boolean,
   canSeeApps: boolean,
+  canSeeComputer: boolean,
 ): AgentProfileTab[] {
-  const visible = { profile: true, workspace: canSeeWorkspace, apps: canSeeApps };
+  const visible = {
+    profile: true,
+    workspace: canSeeWorkspace,
+    apps: canSeeApps,
+    computer: canSeeComputer,
+  };
   return AGENT_PROFILE_TABS.filter((tab) =>
     tab === "activity" || tab === "reminders" ? canSeeManagerTabs : visible[tab],
   );
