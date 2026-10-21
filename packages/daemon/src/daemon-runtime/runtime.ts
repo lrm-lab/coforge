@@ -46,6 +46,7 @@ import {
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
 import { resolveLaunchIdentity, type SessionReference } from "./launch-identity";
+import { runtimeDisplayName, sessionInvalidateActivityText } from "./session-invalidate-activity";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import {
   AgentAuthorizationError,
@@ -59,6 +60,7 @@ import {
   agentStartupInput,
 } from "#src/agent-runtime/agent-startup";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
+import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 import { toolStartActivity } from "#src/code-agent/tool-activity";
 export type DaemonConfig = {
   workspaceId: string;
@@ -100,7 +102,6 @@ import {
   type InboxResponse,
   type LocalAgentMessageRequest,
   type LocalInboxRequest,
-  RUNTIME_PROVIDER,
   type RuntimeProvider,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type UsageScanResponse,
@@ -367,35 +368,6 @@ function recoveryOf(intent: AgentStartIntent): AgentRecoveryContext {
   };
 }
 
-/** Human runtime label for an invalidated-session Activity notice. */
-const RUNTIME_DISPLAY_NAME: Record<RuntimeProvider, string> = {
-  [RUNTIME_PROVIDER.CODEX]: "Codex",
-  [RUNTIME_PROVIDER.CLAUDE_CODE]: "Claude Code",
-  [RUNTIME_PROVIDER.KIRO]: "Kiro",
-  [RUNTIME_PROVIDER.CURSOR]: "Cursor CLI",
-  [RUNTIME_PROVIDER.OPENCODE]: "OpenCode",
-  [RUNTIME_PROVIDER.GROK]: "Grok Build",
-  [RUNTIME_PROVIDER.ANTIGRAVITY]: "Antigravity CLI",
-  [RUNTIME_PROVIDER.PI]: "Pi",
-  [RUNTIME_PROVIDER.COFORGE]: "CoForge",
-};
-function runtimeDisplayName(provider: RuntimeProvider): string {
-  return RUNTIME_DISPLAY_NAME[provider];
-}
-
-/** Narration for a daemon-initiated cold start after a session invalidate. */
-function sessionInvalidateActivityText(
-  runtimeLabel: string,
-  staleSessionId: string,
-  reason: AgentSessionInvalidateReason,
-): { detail: string; entryText: string } {
-  const rejected = reason === "provider_replay_rejected";
-  return {
-    detail: `Stored ${runtimeLabel} session ${rejected ? "replay rejected" : "missing"}; cold-starting a new session…`,
-    entryText: `Stored ${runtimeLabel} session ${staleSessionId} ${rejected ? "was rejected by the provider during replay" : "is unavailable locally"}. Falling back to a cold start; earlier runtime context may not be restored.`,
-  };
-}
-
 /** A daemon-owned resident runtime for one supervised Workspace. */
 export class DaemonRuntime {
   readonly #connection: DaemonConfig;
@@ -470,6 +442,7 @@ export class DaemonRuntime {
    * launch introduces again while the server still asks. */
   readonly #introducedAgents = new Set<string>();
   readonly #stoppingAgents = new Set<string>();
+  readonly #desktops = createAgentDesktopHolds();
   readonly #agentStops = new Map<string, Promise<void>>();
   readonly #currentActivityLaunches = new Map<string, ActivityLaunch>();
   readonly #agentStatusSequences = new Map<string, number>();
@@ -2072,6 +2045,7 @@ export class DaemonRuntime {
       const proxyToken = this.#agentProxy?.issue(agentId, agentApiKey);
       if (proxyToken) this.#agentProxyTokens.set(agentId, proxyToken);
       const localContext = proxyToken ?? this.#contextFor(agentId);
+      const desktopEnvironment = await this.#desktops.hold(agentId);
       const workspaceDirectory = agentWorkspaceDirectory(
         this.#connection.workspaceRoot,
         this.#connection.workspaceId,
@@ -2088,6 +2062,7 @@ export class DaemonRuntime {
           agentWorkspaceDirectory: workspaceDirectory,
           sessionId: reference.sessionId,
           environment: {
+            ...desktopEnvironment,
             COFORGE_DAEMON_SOCKET: "",
             COFORGE_AGENT_CONTEXT: localContext,
             COFORGE_AGENT_PROXY_URL: this.#agentProxy?.url ?? "",
@@ -2248,6 +2223,7 @@ export class DaemonRuntime {
         trajectory.accept(event);
       });
       runtime.session.onExit(() => {
+        this.#desktops.end(agentId);
         launch.startup?.dispose();
         trajectory.dispose();
         if (this.#currentActivityLaunches.get(agentId) !== launch) return;
@@ -2302,6 +2278,7 @@ export class DaemonRuntime {
       void this.drainAppInboxNotices(agentId).catch(() => {});
       return runtime;
     } catch (error) {
+      this.#desktops.end(agentId);
       launch.startup?.dispose();
       this.#revokeLocalLaunch(agentId);
       if (agentApiKey) {
@@ -3462,6 +3439,7 @@ export class DaemonRuntime {
     agentId: string,
     { retainLaunch = false }: { retainLaunch?: boolean } = {},
   ): Promise<void> {
+    this.#desktops.end(agentId);
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
     activityLaunch?.startup?.dispose();
     void this.#revokeAgentApiKey(agentId, this.#agentApiKeys.get(agentId)).catch((error) => {

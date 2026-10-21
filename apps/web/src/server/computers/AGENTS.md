@@ -12,6 +12,10 @@ These rules apply to `src/server/computers/`.
   `/api/computer/attach` routes to `workspace:get` and `computer:register`.
   It is composition only; `ComputerRegistrar` owns registration authorization,
   idempotency, and persistence.
+- `desktop-proxy-auth.server.ts` answers Caddy before it forwards
+  `/desktop/<computer id>/...`. The signed-in user must own that cloud
+  computer. A missing session, any other computer, or a path that is not a
+  desktop is refused. The route is `/api/internal/desktop-authorize`.
 - A flow that removes a Computer from a Workspace calls
   `DaemonCredentialRevocations.recordForComputer(tx, {workspaceId, computerId})`
   inside its transaction, before anything revokes or cascades those daemon

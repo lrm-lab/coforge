@@ -4,11 +4,17 @@
  * `desktopOrigin` is the deployment's Swarm host proxy
  * (`COFORGE_CLOUD_DESKTOP_ORIGIN`), not the web page the user is on. The image
  * serves that page at `/desktop.html` and connects to a relative `websockify`.
- * The host proxy publishes it at `/desktop/<computer id>/` and adds the
+ * The host proxy publishes the computer at `/desktop/<computer id>/` and one
+ * Agent's screen at `/desktop/<computer id>/<agent id>/`. It adds the
  * container token on its own request, so this address has none.
  */
-export function cloudDesktopUrl(desktopOrigin: string, computerId: string): string | undefined {
+export function cloudDesktopUrl(
+  desktopOrigin: string,
+  computerId: string,
+  agentId?: string,
+): string | undefined {
   if (!/^[A-Za-z0-9_-]+$/.test(computerId)) return undefined;
+  if (agentId !== undefined && !/^[A-Za-z0-9_-]+$/.test(agentId)) return undefined;
   let origin: URL;
   try {
     origin = new URL(desktopOrigin);
@@ -22,6 +28,6 @@ export function cloudDesktopUrl(desktopOrigin: string, computerId: string): stri
   const desktop = new URL(`${origin.protocol}//desktop.invalid/`);
   desktop.hostname = origin.hostname;
   desktop.port = origin.port;
-  desktop.pathname = `/desktop/${computerId}/`;
+  desktop.pathname = agentId ? `/desktop/${computerId}/${agentId}/` : `/desktop/${computerId}/`;
   return desktop.toString();
 }

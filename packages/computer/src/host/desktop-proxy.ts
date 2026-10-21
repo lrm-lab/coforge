@@ -20,14 +20,33 @@ export function newDesktopToken(): string {
   return randomBytes(24).toString("base64url");
 }
 
+/** noVNC files that share the computer desktop. An Agent id is anything else. */
+const DESKTOP_ASSET = new Set(["websockify", "core", "vendor", "app", "desktop.html"]);
+
+/**
+ * `/desktop/<computer>/` is the computer's own screen.
+ * `/desktop/<computer>/<agent>/` is that Agent's screen on the same computer.
+ * The container serves the Agent page at `/screen/<agent>/`.
+ */
 export function parseDesktopRoute(
   pathname: string,
 ): { computerId: string; upstreamPath: string } | undefined {
   const match = /^\/desktop\/([A-Za-z0-9_-]+)(\/.*)?$/.exec(pathname.replace(/\/{2,}/g, "/"));
   if (!match?.[1]) return undefined;
+  const computerId = match[1];
   const suffix = match[2] ?? "/";
+  const parts = suffix.split("/").filter((part) => part.length > 0);
+  const agentId = parts[0];
+  if (agentId && !DESKTOP_ASSET.has(agentId)) {
+    const tail = parts.slice(1).join("/");
+    const upstreamPath =
+      tail.length === 0 || tail === "desktop.html"
+        ? `/screen/${agentId}/desktop.html`
+        : `/screen/${agentId}/${tail}`;
+    return { computerId, upstreamPath };
+  }
   return {
-    computerId: match[1],
+    computerId,
     upstreamPath: suffix === "/" ? "/desktop.html" : suffix,
   };
 }

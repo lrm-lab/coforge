@@ -40,9 +40,23 @@ if ! docker image inspect "$image" >/dev/null 2>&1 && ! docker pull --quiet "$im
 	exit 1
 fi
 
+# The desktop route's upstream is required. Validate with the address Compose
+# gives Caddy, so an empty placeholder fails here instead of at deploy.
+upstream="$(awk '
+	/^  caddy:/ { in_service = 1; next }
+	in_service && /^  [^ ]/ { in_service = 0 }
+	in_service && /^      COFORGE_DESKTOP_UPSTREAM:/ { print $2; exit }
+' "$compose_file")"
+if [ -z "$upstream" ]; then
+	printf 'check-caddy-config: COFORGE_DESKTOP_UPSTREAM is missing from the caddy service in %s\n' \
+		"$compose_file" >&2
+	exit 1
+fi
+
 # `caddy validate` loads and provisions every module without starting servers
 # or obtaining certificates.
 if ! docker run --rm \
+	-e "COFORGE_DESKTOP_UPSTREAM=$upstream" \
 	-v "$caddyfile:/etc/caddy/Caddyfile:ro" \
 	"$image" \
 	caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; then
