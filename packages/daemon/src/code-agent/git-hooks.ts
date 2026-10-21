@@ -1,7 +1,7 @@
 import type { AgentGitHookPlan } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { ensureGitHookShimDirectory } from "./git-hook-shims";
-import { versionProbeOutput } from "./runtime-inventory";
+import { versionProbeOutput } from "./runtime-probe";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "git-hooks"]);
 

@@ -5,7 +5,7 @@
  */
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { runCatalogCommand } from "#src/code-agent/catalog-command";
-import { discoverExternalCodeAgents } from "#src/code-agent/runtime-inventory";
+import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import { cliVersionGate } from "#src/code-agent/version-gate";
 
 const mode = Bun.argv[2];

@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  discoverCodeAgentInventory,
-  discoverExternalCodeAgents,
-  type ExternalCodeAgentProbe,
-} from "#src/code-agent/runtime-inventory";
+import { discoverCodeAgentInventory } from "#src/code-agent/runtime-inventory";
+import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
+import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
 import { KIRO_MIN_CLI_VERSION } from "#src/code-agent/kiro/connection";
 import { captureDaemonLogs } from "./log-capture";
 

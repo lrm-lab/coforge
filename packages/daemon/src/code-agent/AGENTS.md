@@ -5,7 +5,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Provider seam
 
-- `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession` instances and owns usage and context reports, composed from provider-internal modules. Discovery and catalogs live in `runtime-inventory.ts`.
+- `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession` instances and owns usage and context reports, composed from provider-internal modules. `runtime-inventory.ts` composes discovery; `runtime-probe.ts` probes versions; `catalog-discovery.ts` and `<provider>/catalog.ts` own catalogs.
 - The registry returns Providers, never lifecycle wrappers or forwarding adapters.
 - Higher layers consume normalized status and Activity messages and must not
   parse Claude Code, Codex, Pi, or any other provider's output.
@@ -45,9 +45,8 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   machine-readable initialization does not give a dependable list.
   `claudeStaticCatalog(version)` lists a pinned model only when the probed CLI
   meets the minimum `code.claude.com/docs/en/model-config` states for it
-  (`CLAUDE_CODE_MODEL_MINIMUM_VERSION`); aliases always stay, and an unknown
-  version keeps every model. Its models and effort levels follow Raft
-  Computer's static Claude catalog (`opus`/`fable`/`sonnet` offer every level; `haiku` none).
+  (`CLAUDE_CODE_MODEL_MINIMUM_VERSION`); aliases stay, an unknown version keeps
+  every model; efforts follow Raft's catalog (`opus`/`fable`/`sonnet` all; `haiku` none).
 
 ## Standing instructions
 

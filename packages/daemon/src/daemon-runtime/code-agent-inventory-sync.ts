@@ -9,9 +9,9 @@ import { getLogger } from "@logtape/logtape";
 import {
   discoverCodeAgentRuntimes,
   discoverCodeAgentCatalogs,
-  hostCodeAgentProbe,
   loadCachedCodeAgentCatalogs,
 } from "#src/code-agent/runtime-inventory";
+import { hostCodeAgentProbe } from "#src/code-agent/runtime-probe";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
 import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
 

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { CATALOG_DISCOVERY_TIMEOUT_MS } from "#src/code-agent/runtime-inventory";
+import { CATALOG_DISCOVERY_TIMEOUT_MS } from "#src/code-agent/catalog-discovery";
 import { VERSION_PROBE_TIMEOUT_MS } from "#src/code-agent/version-gate";
 
 const FIXTURE = new URL("./fixtures/finished-probe-exit.ts", import.meta.url).pathname;
