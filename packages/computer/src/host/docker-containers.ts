@@ -44,6 +44,33 @@ export function dockerVolumeRemoveArgs(computerId: string): string[] {
   return ["volume", "rm", serviceName(computerId)];
 }
 
+/** Docker says `no such service` or `service <name> not found` for a resource already gone. */
+function resourceGone(stderr: string, resource: "service" | "volume"): boolean {
+  return new RegExp(`no such ${resource}|${resource} .+ not found`, "i").test(stderr);
+}
+
+/** Container ids from `volume is in use - [id, id]`. */
+function volumeHolders(stderr: string): string[] {
+  const match = /volume is in use - \[([^\]]+)\]/i.exec(stderr);
+  if (!match?.[1]) return [];
+  return match[1]
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => /^[0-9a-f]+$/i.test(id));
+}
+
+async function removeDisk(spawn: DockerSpawn, computerId: string): Promise<void> {
+  const volume = await spawn(dockerVolumeRemoveArgs(computerId));
+  if (volume.exitCode === 0 || resourceGone(volume.stderr, "volume")) return;
+  const holders = volumeHolders(volume.stderr);
+  if (holders.length === 0) throw new Error(volume.stderr || "docker volume rm failed");
+  const cleared = await spawn(["rm", "-f", ...holders]);
+  if (cleared.exitCode !== 0) throw new Error(cleared.stderr || "docker rm failed");
+  const retry = await spawn(dockerVolumeRemoveArgs(computerId));
+  if (retry.exitCode === 0 || resourceGone(retry.stderr, "volume")) return;
+  throw new Error(retry.stderr || "docker volume rm failed");
+}
+
 export function dockerTaskFindArgs(computerId: string): string[] {
   return ["ps", "-q", "--filter", `label=com.docker.swarm.service.name=${serviceName(computerId)}`];
 }
@@ -172,12 +199,10 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       return id;
     },
     async removeService(computerId) {
-      const result = await spawn(dockerServiceRemoveArgs(computerId));
-      if (result.exitCode !== 0 && !/no such service/i.test(result.stderr))
-        throw new Error(result.stderr || "docker service rm failed");
-      const volume = await spawn(dockerVolumeRemoveArgs(computerId));
-      if (volume.exitCode === 0 || /no such volume/i.test(volume.stderr)) return;
-      throw new Error(volume.stderr || "docker volume rm failed");
+      const removed = await spawn(dockerServiceRemoveArgs(computerId));
+      if (removed.exitCode !== 0 && !resourceGone(removed.stderr, "service"))
+        throw new Error(removed.stderr || "docker service rm failed");
+      await removeDisk(spawn, computerId);
     },
     async attachWorkspace(input) {
       const containerId = firstId(

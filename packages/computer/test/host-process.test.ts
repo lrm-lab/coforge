@@ -396,6 +396,47 @@ describe("swarm service arguments", () => {
     ]);
   });
 
+  test("a service or volume Docker already reports missing is already removed", async () => {
+    const calls: string[][] = [];
+    const containers = createDockerContainers(async (args) => {
+      calls.push(args);
+      const name = args[2] ?? "";
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: `Error response from daemon: ${args[0]} ${name} not found\n`,
+      };
+    });
+    await containers.removeService("computer-1");
+    expect(calls).toEqual([
+      ["service", "rm", "coforge-computer-1"],
+      ["volume", "rm", "coforge-computer-1"],
+    ]);
+  });
+
+  test("containers still holding the disk are removed before the volume", async () => {
+    const calls: string[][] = [];
+    const containers = createDockerContainers(async (args) => {
+      calls.push(args);
+      if (args[0] === "volume" && calls.filter((call) => call[0] === "volume").length === 1) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr:
+            "Error response from daemon: remove coforge-computer-1: volume is in use - [abc123, def456]\n",
+        };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+    await containers.removeService("computer-1");
+    expect(calls).toEqual([
+      ["service", "rm", "coforge-computer-1"],
+      ["volume", "rm", "coforge-computer-1"],
+      ["rm", "-f", "abc123", "def456"],
+      ["volume", "rm", "coforge-computer-1"],
+    ]);
+  });
+
   test("accepting is true only when a swarm node is Ready", async () => {
     expect(
       await swarmAccepting(async () => ({ exitCode: 0, stdout: "Ready\nDown\n", stderr: "" })),
