@@ -6,6 +6,7 @@ import { piChatSessionSchema, type PiChatSession } from "@lrm/coforge-sdk/intern
 import { PI_SESSION_DIR } from "#src/paths";
 import { storedChatMessages } from "./runtime";
 import type { PiChatStore } from "./sessions";
+import { piChatCheckpointSchema, type PiChatCheckpoint } from "./checkpoint";
 
 /** Metadata only; Pi's JSONL retains the complete native transcript, including compaction history. */
 export class FilePiChatStore implements PiChatStore {
@@ -35,6 +36,19 @@ export class FilePiChatStore implements PiChatStore {
     const path = this.#path(row.id);
     await this.#write(path, row);
   }
+  async checkpoint(id: string) {
+    const path = `${this.#path(id)}.pending`;
+    return (await Bun.file(path).exists())
+      ? piChatCheckpointSchema.parse(await Bun.file(path).json())
+      : undefined;
+  }
+  async saveCheckpoint(id: string, checkpoint: PiChatCheckpoint) {
+    await mkdir(this.#metadata, { recursive: true, mode: 0o700 });
+    await this.#write(`${this.#path(id)}.pending`, piChatCheckpointSchema.parse(checkpoint));
+  }
+  async clearCheckpoint(id: string) {
+    await rm(`${this.#path(id)}.pending`, { force: true });
+  }
   async #write(path: string, value: unknown) {
     const temporary = `${path}.${crypto.randomUUID()}.tmp`;
     try {
@@ -58,6 +72,7 @@ export class FilePiChatStore implements PiChatStore {
     const file = SessionManager.findById(this.cwd, id, join(this.cwd, PI_SESSION_DIR));
     if (file) await rm(file, { force: true });
     await rm(path, { force: true });
+    await this.clearCheckpoint(id);
   }
   async wasAccepted(requestId: string) {
     z.uuid().parse(requestId);

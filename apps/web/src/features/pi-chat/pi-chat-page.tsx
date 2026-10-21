@@ -57,7 +57,11 @@ export function PiChatPage(props: Props) {
     queryFn: () => execute({ data: { computerId: computerId!, command: { action: "list" } } }),
     enabled: configured && !!computerId,
     refetchInterval: (query) =>
-      query.state.data?.sessions?.some((row) => row.status === "running") ? 2000 : false,
+      query.state.status === "error"
+        ? 3_000
+        : query.state.data?.sessions?.some((row) => row.status === "running")
+          ? 2000
+          : false,
     retry: false,
   });
   const viewports = useRef(new Map<string, PiChatView>());
@@ -231,7 +235,12 @@ function Conversation({
       ),
     enabled: sessionId !== "new",
     retry: false,
-    refetchInterval: (query) => (query.state.data?.session?.status === "running" ? 700 : false),
+    refetchInterval: (query) =>
+      query.state.status === "error"
+        ? 3_000
+        : query.state.data?.session?.status === "running"
+          ? 700
+          : false,
   });
   const session = history.data?.session;
   const busy = session?.status === "running";

@@ -6,6 +6,7 @@ function fixture() {
   const records = new Map<string, PiChatSession>();
   const histories = new Map<string, PiChatMessage[]>();
   const accepted = new Set<string>();
+  const checkpoints = new Map();
   const store: PiChatStore = {
     list: async () => [...records.values()].map((row) => ({ ...row })),
     save: async (row) => {
@@ -18,6 +19,13 @@ function fixture() {
     },
     messages: async (id) => histories.get(id) ?? [],
     wasAccepted: async (id) => accepted.has(id),
+    checkpoint: async (id) => checkpoints.get(id),
+    saveCheckpoint: async (id, checkpoint) => {
+      checkpoints.set(id, checkpoint);
+    },
+    clearCheckpoint: async (id) => {
+      checkpoints.delete(id);
+    },
   };
   let calls = 0;
   let finish: (() => void) | undefined;
@@ -39,6 +47,9 @@ function fixture() {
       },
       abort: async () => {
         finish?.();
+      },
+      resume: async () => {
+        throw new Error("fixture has no recoverable native history");
       },
       dispose: async () => {},
     };
