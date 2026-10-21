@@ -6633,7 +6633,7 @@ describe("DaemonRuntime", () => {
     }
   });
 
-  test("a resume launch opens one no-work startup turn", async () => {
+  test("a resume launch opens one recovery startup turn", async () => {
     const harness = await queueHarness();
     await harness.runtime.startAgent(
       "agent-a",
@@ -6646,7 +6646,7 @@ describe("DaemonRuntime", () => {
     );
     expect(harness.notices).toEqual([]);
     expect(harness.startupNotices).toEqual([
-      "You are back online. No new messages are pending. End this turn without taking action.",
+      expect.stringContaining("Use your existing session context first."),
     ]);
     await harness.runtime.stop();
   });

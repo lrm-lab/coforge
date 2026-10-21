@@ -258,7 +258,7 @@ test("real model work cancels the startup deadline without imposing a turn time 
   }
 });
 
-test("an empty resume gets one no-work turn, not the fresh-start prompt", async () => {
+test("an empty resume recovers existing work before waiting silently", async () => {
   const h = await harness();
   try {
     await h.runtime.startAgent(
@@ -266,9 +266,15 @@ test("an empty resume gets one no-work turn, not the fresh-start prompt", async 
       { provider: "kiro", model: "auto", reasoning: "" },
       "stored-session",
     );
-    expect(h.notices).toEqual([
-      "You are back online. No new messages are pending. End this turn without taking action.",
-    ]);
+    expect(h.notices).toHaveLength(1);
+    expect(h.notices[0]).toContain("You are back online.");
+    expect(h.notices[0]).toContain("Use your existing session context first.");
+    expect(h.notices[0]).toContain("read MEMORY.md and notes/active-context.md if present");
+    expect(h.notices[0]).toContain("check unfinished tasks assigned to you once");
+    expect(h.notices[0]).toContain("If no actionable work remains, end this turn silently.");
+    expect(h.notices[0]).toContain(
+      "Do not send a startup announcement or repeat your introduction.",
+    );
   } finally {
     await h.runtime.stop();
   }

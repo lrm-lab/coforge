@@ -37,6 +37,7 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   in place of `Start.`; a process gets at most one, and one queued when a
   process crashes is its relaunch's; the server alone decides whether one is owed.
 - Restart recovery must not eagerly load all canonical Message history.
+- A resumed session without pending messages uses its session context first, reads memory and its assigned unfinished tasks only when that context does not establish its current work, and stays silent when no actionable work remains; it never repeats its introduction.
 
 ## Control fencing (`agent-control.ts`)
 

@@ -47,20 +47,22 @@ export function introductionPromptFor(facts: AgentIntroductionFacts, now: Date) 
     .slice(0, AGENT_PROFILE_DESCRIPTION_MAX_LENGTH);
   const [role, language] = description
     ? [
-        `In two or three sentences, say what you are responsible for — your role: ${description} — and that you are ready. Only if your role leaves something important unclear, ask at most three short questions about their preferences; when they answer, record those preferences under \`## Rules\` in MEMORY.md.`,
+        `In one or two short sentences, say what you are responsible for — your role: ${description} — and that you are ready, then ask what they want your help with.`,
         `Write in the language @${creator} uses with you, or else the language of your role description.`,
       ]
     : [
-        "In two or three sentences, say that you are ready and ask what they want your help with; when they answer, record their preferences under `## Rules` in MEMORY.md.",
+        "In one or two short sentences, say that you are ready and ask what they want your help with.",
         `Write in the language @${creator} uses with you.`,
       ];
   return [
     "You were just created in CoForge.",
     `Before anything else, introduce yourself to @${creator}, who created you, in a direct message (\`coforge message send --target '@${creator}'\`).`,
+    "Do not read memory, list tasks, or scan channels merely to prepare this greeting. If the creator has already sent a request, use the tools needed for that request.",
     role,
     `If @${creator} has already written to you, answer that message and introduce yourself in the same reply.`,
     `If you have already introduced yourself to @${creator} in this session, end this turn without taking action.`,
     "Never post this introduction in a channel.",
+    "A local final answer is not a delivered message; execute the message send to deliver your reply. After sending a greeting with no request to act on, end this turn and wait.",
     language,
   ].join(" ");
 }

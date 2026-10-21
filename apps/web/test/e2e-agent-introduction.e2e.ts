@@ -46,7 +46,12 @@ const DESCRIPTION = "Keeps the E2E release notes tidy";
 const SKIP_INTRODUCTION_MARKER = "[e2e: skip introduction]";
 const STARTERS = [
   "Start.",
-  "You are back online. No new messages are pending. End this turn without taking action.",
+  [
+    "You are back online. No new messages are pending.",
+    "Use your existing session context first. If it does not establish your current work, read MEMORY.md and notes/active-context.md if present, and check unfinished tasks assigned to you once.",
+    "Resume only actionable work already requested or assigned to you; do not invent work or scan unrelated channels and projects.",
+    "If no actionable work remains, end this turn silently. Do not send a startup announcement or repeat your introduction.",
+  ].join(" "),
 ];
 
 type Turn = { pid: number; text: string };
