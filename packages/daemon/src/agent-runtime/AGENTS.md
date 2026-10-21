@@ -42,7 +42,7 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - `agent-desktop.ts` holds one Agent's screen on the image's localhost control
   port and releases it when that process ends. The hold's variables are that
   process's display, authority file, and per-agent XDG directories. A missing
-  service returns nothing, and the launch continues.
+  service returns nothing, the launch continues, and stop does not call the port.
 
 ## Control fencing (`agent-control.ts`)
 

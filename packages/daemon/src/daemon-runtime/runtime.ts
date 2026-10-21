@@ -60,7 +60,7 @@ import {
   agentStartupInput,
 } from "#src/agent-runtime/agent-startup";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
-import { holdAgentDesktop, releaseAgentDesktop } from "#src/agent-runtime/agent-desktop";
+import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 import { toolStartActivity } from "#src/code-agent/tool-activity";
 export type DaemonConfig = {
   workspaceId: string;
@@ -442,6 +442,7 @@ export class DaemonRuntime {
    * launch introduces again while the server still asks. */
   readonly #introducedAgents = new Set<string>();
   readonly #stoppingAgents = new Set<string>();
+  readonly #desktops = createAgentDesktopHolds();
   readonly #agentStops = new Map<string, Promise<void>>();
   readonly #currentActivityLaunches = new Map<string, ActivityLaunch>();
   readonly #agentStatusSequences = new Map<string, number>();
@@ -2044,14 +2045,7 @@ export class DaemonRuntime {
       const proxyToken = this.#agentProxy?.issue(agentId, agentApiKey);
       if (proxyToken) this.#agentProxyTokens.set(agentId, proxyToken);
       const localContext = proxyToken ?? this.#contextFor(agentId);
-      const desktopEnvironment = await holdAgentDesktop(agentId);
-      if (desktopEnvironment.DISPLAY) {
-        logger.info("Agent desktop screen held for {agentId} on {display}", {
-          event: "agent_runtime:desktop_screen",
-          agentId,
-          display: desktopEnvironment.DISPLAY,
-        });
-      }
+      const desktopEnvironment = await this.#desktops.hold(agentId);
       const workspaceDirectory = agentWorkspaceDirectory(
         this.#connection.workspaceRoot,
         this.#connection.workspaceId,
@@ -2229,7 +2223,7 @@ export class DaemonRuntime {
         trajectory.accept(event);
       });
       runtime.session.onExit(() => {
-        void releaseAgentDesktop(agentId);
+        this.#desktops.end(agentId);
         launch.startup?.dispose();
         trajectory.dispose();
         if (this.#currentActivityLaunches.get(agentId) !== launch) return;
@@ -2284,7 +2278,7 @@ export class DaemonRuntime {
       void this.drainAppInboxNotices(agentId).catch(() => {});
       return runtime;
     } catch (error) {
-      void releaseAgentDesktop(agentId);
+      this.#desktops.end(agentId);
       launch.startup?.dispose();
       this.#revokeLocalLaunch(agentId);
       if (agentApiKey) {
@@ -3445,7 +3439,7 @@ export class DaemonRuntime {
     agentId: string,
     { retainLaunch = false }: { retainLaunch?: boolean } = {},
   ): Promise<void> {
-    void releaseAgentDesktop(agentId);
+    this.#desktops.end(agentId);
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
     activityLaunch?.startup?.dispose();
     void this.#revokeAgentApiKey(agentId, this.#agentApiKeys.get(agentId)).catch((error) => {

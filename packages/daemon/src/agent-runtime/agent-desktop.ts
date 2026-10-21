@@ -1,3 +1,5 @@
+import { getLogger } from "@logtape/logtape";
+
 /**
  * One Agent's screen on the cloud computer image.
  *
@@ -5,6 +7,8 @@
  * (a local Computer, or an image from before per-agent screens) answers
  * nothing, and the launch continues on the shared desktop.
  */
+
+const logger = getLogger(["coforge", "daemon", "agent-desktop"]);
 
 const SCREEN_FIELDS = {
   display: "DISPLAY",
@@ -61,6 +65,31 @@ export async function holdAgentDesktop(
   } catch {
     return {};
   }
+}
+
+/** Screens one runtime held. A hold that returned no display is not released. */
+export function createAgentDesktopHolds(): {
+  hold(agentId: string): Promise<Record<string, string>>;
+  end(agentId: string): void;
+} {
+  const held = new Set<string>();
+  return {
+    async hold(agentId) {
+      const environment = await holdAgentDesktop(agentId);
+      if (environment.DISPLAY) {
+        held.add(agentId);
+        logger.info("Agent desktop screen held for {agentId} on {display}", {
+          event: "agent_runtime:desktop_screen",
+          agentId,
+          display: environment.DISPLAY,
+        });
+      }
+      return environment;
+    },
+    end(agentId) {
+      if (held.delete(agentId)) void releaseAgentDesktop(agentId);
+    },
+  };
 }
 
 /** Drops the Agent's hold. A browser that is still watching keeps the screen. */
