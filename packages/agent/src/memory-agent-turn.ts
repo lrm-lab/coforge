@@ -103,8 +103,7 @@ export class MemoryAgentTurnBudget {
     this.#unchangedReads = newEvidence > 0 ? 0 : this.#unchangedReads + 1;
     // A new search hit is discovery, not verification. Keep this progress across
     // Task follow-ups so rephrasing a request cannot hide a search-only loop.
-    if (response.op === "search_context")
-      this.#discoveriesWithoutRead++;
+    if (response.op === "search_context") this.#discoveriesWithoutRead++;
     if (response.op === "read" && !response.citation.uri.startsWith("viking://resources/causal/")) {
       const key = JSON.stringify([
         response.citation.uri,

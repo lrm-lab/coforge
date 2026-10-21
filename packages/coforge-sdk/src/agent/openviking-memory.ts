@@ -8,7 +8,10 @@
  */
 
 import { decodeOpenVikingCitation, type OpenVikingCitation } from "./memory-citations";
-import { OPENVIKING_ARGUMENT_EXAMPLES, OPENVIKING_REQUIRED_FIELDS } from "./openviking-memory-examples";
+import {
+  OPENVIKING_ARGUMENT_EXAMPLES,
+  OPENVIKING_REQUIRED_FIELDS,
+} from "./openviking-memory-examples";
 
 export {
   CHANNEL_ARGUMENT_EXAMPLES,

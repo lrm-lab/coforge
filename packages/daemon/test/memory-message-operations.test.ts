@@ -163,7 +163,12 @@ test("Memory channel reads fence transcript bodies; Task reads stay verbatim", a
   const read = (agentId: string) =>
     operations.handle(
       agentId,
-      { idempotencyKey: crypto.randomUUID(), context: "context", operation: "read", target: channel },
+      {
+        idempotencyKey: crypto.randomUUID(),
+        context: "context",
+        operation: "read",
+        target: channel,
+      },
       channel,
       "key",
     );

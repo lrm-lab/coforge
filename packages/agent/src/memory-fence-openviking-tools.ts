@@ -1,3 +1,4 @@
+import { defineTool } from "@earendil-works/pi-coding-agent";
 import {
   OPENVIKING_GRAPH_RELATIONS,
   OPENVIKING_TOOL_NAMES,
@@ -5,16 +6,20 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { Type } from "typebox";
 
-type OpenVikingFenceTool = <Params extends Record<string, unknown>>(
+type FenceTool = ReturnType<typeof defineTool>;
+
+type OpenVikingFenceTool = (
   name: string,
   label: string,
   description: string,
   op: OpenVikingAgentCommand["op"],
   parameters: Parameters<typeof Type.Object>[0],
-) => unknown;
+) => FenceTool;
 
 /** OpenViking tool schemas for the Memory fence. Split out so runner.ts stays within the size ratchet. */
-export function memoryFenceOpenVikingTools(openvikingTool: OpenVikingFenceTool) {
+export function memoryFenceOpenVikingTools(
+  openvikingTool: OpenVikingFenceTool,
+): Record<string, FenceTool> {
   return {
     [OPENVIKING_TOOL_NAMES.diagnose]: openvikingTool(
       OPENVIKING_TOOL_NAMES.diagnose,

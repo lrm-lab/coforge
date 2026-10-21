@@ -184,9 +184,9 @@ export function createOpenVikingTypedSessionExtract(deps: {
   };
 }
 
-function evaluatorResultsBody(
-  results: readonly OpenVikingEvaluatorResult[] | undefined,
-): { outcome_evaluator_results?: OpenVikingEvaluatorResult[] } {
+function evaluatorResultsBody(results: readonly OpenVikingEvaluatorResult[] | undefined): {
+  outcome_evaluator_results?: OpenVikingEvaluatorResult[];
+} {
   return results && results.length > 0 ? { outcome_evaluator_results: [...results] } : {};
 }
 

@@ -69,8 +69,8 @@ test("causal publication follows settled commit when explicitly enabled by an ad
     sleep: async () => undefined,
     onPhase: () => undefined,
   });
-  expect(await sessions.writeCommitAndExtract({ owner: "sink-owner", write: SAMPLE_WRITE })).toEqual(
-    { ok: true, sessionId: SAMPLE_WRITE.sessionId },
-  );
+  expect(
+    await sessions.writeCommitAndExtract({ owner: "sink-owner", write: SAMPLE_WRITE }),
+  ).toEqual({ ok: true, sessionId: SAMPLE_WRITE.sessionId });
   expect(calls.slice(-2)).toEqual(["/api/v1/tasks/task-publish", "/api/v1/search/publish_causal"]);
 });
