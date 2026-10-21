@@ -2,13 +2,18 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { Database } from "bun:sqlite";
-import { piChatCommandSchema } from "@lrm/coforge-sdk/internal/pi-chat";
+import { piChatCommandSchema, PI_CHAT_SHUTDOWN_GRACE_MS } from "@lrm/coforge-sdk/internal/pi-chat";
 import { createPiChatRuntime } from "./runtime";
 import { FilePiChatStore } from "./storage";
 import { PiChatSessions } from "./sessions";
 
 /** JSONL over docker-exec stdio; this worker opens no network port or Daemon connection. */
-export async function runPiChatWorker(root: string, workspaceId: string, userId: string) {
+export async function runPiChatWorker(
+  root: string,
+  workspaceId: string,
+  userId: string,
+  options: { shutdownTimeoutMs?: number } = {},
+) {
   const cwd = join(root, z.uuid().parse(workspaceId), z.uuid().parse(userId));
   await mkdir(cwd, { recursive: true, mode: 0o700 });
   // OS-released SQLite ownership also fences workers left alive by a host restart.
@@ -22,7 +27,15 @@ export async function runPiChatWorker(root: string, workspaceId: string, userId:
   const sessions = new PiChatSessions(new FilePiChatStore(cwd), (id) =>
     createPiChatRuntime(cwd, id),
   );
+  let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
+  const beginShutdown = () => {
+    shutdownTimer ??= setTimeout(
+      () => process.exit(1),
+      options.shutdownTimeoutMs ?? PI_CHAT_SHUTDOWN_GRACE_MS,
+    );
+  };
   const stop = () => {
+    beginShutdown();
     void sessions.dispose().finally(() => process.exit(0));
   };
   process.on("SIGTERM", stop);
@@ -62,10 +75,12 @@ export async function runPiChatWorker(root: string, workspaceId: string, userId:
       }
     }
   } finally {
+    beginShutdown();
     try {
       await Promise.allSettled(jobs);
       await sessions.dispose();
     } finally {
+      clearTimeout(shutdownTimer);
       owner.close();
       console.log = log;
       process.off("SIGTERM", stop);

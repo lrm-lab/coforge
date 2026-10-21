@@ -69,6 +69,8 @@ the volume. No Agent session or database backfill is needed.
 - Four concurrent turns per worker; 64 workers per host.
 - Workers expire after 30 minutes without a request; active work is stopped
   during worker cleanup. Host shutdown also closes its workers' input streams.
+  Cleanup gets 30 seconds before worker exit; unfinished sessions recover as
+  interrupted. A stuck docker-exec client is terminated after another 5 seconds.
 - One request accepts at most 100,000 message characters and a 512 KB HTTP body.
 - History loads 50 messages per page; a worker response has a 32 MB safety bound.
   Exceeding that bound is an explicit request failure, never silent truncation.

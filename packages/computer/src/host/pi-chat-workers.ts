@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   piChatResultSchema,
+  PI_CHAT_SHUTDOWN_GRACE_MS,
   type PiChatCommand,
   type PiChatResult,
   type PiChatScope,
@@ -22,6 +23,7 @@ class PiChatWorker {
   readonly #process;
   readonly #pending = new Map<string, Pending>();
   #closed = false;
+  #shutdownTimer?: ReturnType<typeof setTimeout>;
   lastUsed = Date.now();
   constructor(
     containerId: string,
@@ -46,6 +48,7 @@ class PiChatWorker {
     void this.#read().catch(() => this.close());
     void this.#process.exited.then(() => {
       void this.close();
+      clearTimeout(this.#shutdownTimer);
       this.removed();
     });
   }
@@ -90,6 +93,10 @@ class PiChatWorker {
   close() {
     if (!this.#closed) {
       this.#closed = true;
+      this.#shutdownTimer = setTimeout(
+        () => this.#process.kill(),
+        PI_CHAT_SHUTDOWN_GRACE_MS + 5000,
+      );
       // Closing docker-exec stdin lets the worker abort and persist its active sessions.
       this.#process.stdin.end();
       for (const call of this.#pending.values()) {

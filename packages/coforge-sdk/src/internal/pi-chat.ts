@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const PI_CHAT_SHUTDOWN_GRACE_MS = 30_000;
+
 const id = z.uuid();
 export const piChatCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("list") }),

@@ -33,9 +33,12 @@ export class FilePiChatStore implements PiChatStore {
     const row = piChatSessionSchema.parse(session);
     await mkdir(this.#metadata, { recursive: true, mode: 0o700 });
     const path = this.#path(row.id);
+    await this.#write(path, row);
+  }
+  async #write(path: string, value: unknown) {
     const temporary = `${path}.${crypto.randomUUID()}.tmp`;
     try {
-      await Bun.write(temporary, JSON.stringify(row), { mode: 0o600 });
+      await Bun.write(temporary, JSON.stringify(value), { mode: 0o600 });
       await rename(temporary, path);
     } finally {
       await rm(temporary, { force: true });
@@ -51,7 +54,7 @@ export class FilePiChatStore implements PiChatStore {
     const path = this.#path(id);
     const row = piChatSessionSchema.parse(await Bun.file(path).json());
     // Keep only request IDs after deletion: a delayed retry must not replay a tool.
-    await Bun.write(`${path}.retired`, JSON.stringify(row.requestIds), { mode: 0o600 });
+    await this.#write(`${path}.retired`, row.requestIds);
     const file = SessionManager.findById(this.cwd, id, join(this.cwd, PI_SESSION_DIR));
     if (file) await rm(file, { force: true });
     await rm(path, { force: true });
