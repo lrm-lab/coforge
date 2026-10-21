@@ -19,11 +19,9 @@ These rules apply to `src/features/computers/`.
   user to pick a host. The owner's Open desktop button opens
   `<COFORGE_CLOUD_DESKTOP_ORIGIN>/desktop/<computer id>/` in a new tab when that
   deployment variable is set. The same owner's Agent profile opens that Agent's
-  own screen at `/desktop/<computer id>/<agent id>/`. On staging that origin is
-  the site itself (`https://staging.coforge.cn`); Caddy asks the web app
-  whether this signed-in user owns the cloud computer, then forwards the page
-  and websocket to the Swarm proxy. The address carries no token. Without the
-  variable the button is absent. Formatting a cloud computer removes its service and disk,
+  own screen at `/desktop/<computer id>/<agent id>/`. That origin is the Swarm
+  host proxy in front of the image, opened directly by the browser. The address
+  carries no token. Without the variable the button is absent. Formatting a cloud computer removes its service and disk,
   then places the same computer again. The owner must type its name; the server
   checks that name. Agents, messages, and workspace links stay.
 - An upgrade's status is polled and settled only by `ComputerUpgradeWatcher`, mounted in the
