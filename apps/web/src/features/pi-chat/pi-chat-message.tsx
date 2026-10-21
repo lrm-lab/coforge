@@ -56,8 +56,13 @@ export function PiChatMessage({ message }: { message: Message }) {
       {message.role === "tool" ? (
         <Detail label={message.isError ? m.pi_chat_tool_error() : m.pi_chat_tool_result()}>
           <pre className="font-mono text-xs whitespace-pre-wrap wrap-anywhere">
-            {message.text || m.pi_chat_tool_running()}
+            {message.text || (message.details ? "" : m.pi_chat_tool_running())}
           </pre>
+          {message.details && (
+            <pre className="mt-3 font-mono text-xs whitespace-pre-wrap wrap-anywhere">
+              {message.details}
+            </pre>
+          )}
         </Detail>
       ) : (
         <div className="prose max-w-none text-sm text-primary [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-secondary [&_pre]:p-3 [&_pre]:text-xs [&_table]:block [&_table]:overflow-auto [&_a]:text-brand-secondary">

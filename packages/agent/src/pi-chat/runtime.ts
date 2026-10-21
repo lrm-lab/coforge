@@ -1,6 +1,7 @@
 import { getAgentDir, SessionManager } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 import { join } from "node:path";
+import { rename, rm } from "node:fs/promises";
 import type { PiChatMessage } from "@lrm/coforge-sdk/internal/pi-chat";
 import { createSession } from "#src/runner";
 import { PI_SESSION_DIR } from "#src/paths";
@@ -26,6 +27,7 @@ const nativeMessage = z.object({
   toolCallId: z.string().optional(),
   toolName: z.string().optional(),
   isError: z.boolean().optional(),
+  details: z.unknown().optional(),
 });
 
 export function chatMessage(id: string, value: unknown): PiChatMessage | undefined {
@@ -60,6 +62,7 @@ export function chatMessage(id: string, value: unknown): PiChatMessage | undefin
     toolCallId: message.toolCallId,
     toolName: message.toolName,
     isError: message.isError,
+    details: message.details === undefined ? undefined : JSON.stringify(message.details, null, 2),
   };
 }
 
@@ -108,6 +111,23 @@ export async function createPiChatRuntime(
     await runtime.dispose();
     throw new Error("saved session is unavailable");
   }
+  // Pi lazily creates JSONL on the first message. Persist the empty native
+  // session before accepting a request so a preflight failure can still resume.
+  const manager = runtime.session.sessionManager;
+  const file = manager.getSessionFile();
+  const temporary = file ? `${file}.${crypto.randomUUID()}.tmp` : undefined;
+  try {
+    if (!id && file && temporary && !(await Bun.file(file).exists())) {
+      runtime.session.exportToJsonl(temporary);
+      await rename(temporary, file);
+      manager.setSessionFile(file);
+    }
+  } catch (error) {
+    await runtime.dispose();
+    throw error;
+  } finally {
+    if (temporary) await rm(temporary, { force: true });
+  }
   let pending: PiChatMessage | undefined;
   let failed = false;
   const tools = new Map<string, PiChatMessage>();
@@ -132,16 +152,15 @@ export async function createPiChatRuntime(
         toolName: event.toolName,
         toolCallId: event.toolCallId,
       });
-    if (event.type === "tool_execution_update")
-      tools.set(event.toolCallId, {
-        id: `running:${event.toolCallId}`,
-        role: "tool",
-        text:
-          chatMessage("partial", { role: "toolResult", content: event.partialResult.content })
-            ?.text ?? "",
+    if (event.type === "tool_execution_update") {
+      const partial = chatMessage(`running:${event.toolCallId}`, {
+        ...event.partialResult,
+        role: "toolResult",
         toolName: event.toolName,
         toolCallId: event.toolCallId,
       });
+      if (partial) tools.set(event.toolCallId, partial);
+    }
   });
   return {
     id: runtime.sessionId,

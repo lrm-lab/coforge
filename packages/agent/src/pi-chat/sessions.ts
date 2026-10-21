@@ -103,16 +103,17 @@ export class PiChatSessions {
     });
   }
   async #run(row: PiChatSession, active: Active, message: string) {
+    let status: PiChatSession["status"] = "error";
     try {
       await active.runtime.prompt(message);
-      row.status = active.stopping ? "stopped" : "idle";
+      status = active.stopping ? "stopped" : "idle";
     } catch {
-      row.status = active.stopping ? "stopped" : "error";
+      status = active.stopping ? "stopped" : "error";
     } finally {
-      row.updatedAt = Date.now();
-      row.model = active.runtime.model();
+      const next = { ...row, status, updatedAt: Date.now(), model: active.runtime.model() };
       try {
-        await this.store.save(row);
+        await this.store.save(next);
+        Object.assign(row, next);
       } finally {
         this.#active.delete(row.id);
         await active.runtime.dispose();

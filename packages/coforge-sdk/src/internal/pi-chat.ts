@@ -43,6 +43,7 @@ export const piChatMessageSchema = z.object({
   id: z.string(),
   role: z.enum(["user", "assistant", "tool"]),
   text: z.string(),
+  details: z.string().optional(),
   thinking: z.string().optional(),
   toolCalls: z.array(z.object({ id: z.string(), name: z.string(), input: z.string() })).optional(),
   toolName: z.string().optional(),

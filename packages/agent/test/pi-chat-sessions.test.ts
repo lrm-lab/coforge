@@ -47,6 +47,38 @@ function fixture() {
 }
 
 describe("Pi chat sessions", () => {
+  test("reports a running session until its final state is saved and mutations are available", async () => {
+    const f = fixture();
+    const saving = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const sessions = new PiChatSessions(
+      {
+        ...f.store,
+        save: async (row) => {
+          if (row.status === "idle") {
+            saving.resolve();
+            await release.promise;
+          }
+          await f.store.save(row);
+        },
+      },
+      f.factory,
+    );
+    try {
+      const started = await sessions.start({ requestId: crypto.randomUUID(), message: "hello" });
+      f.finish();
+      await saving.promise;
+      expect((await sessions.read(started.id)).session.status).toBe("running");
+      release.resolve();
+      await sessions.stop(started.id);
+      expect((await sessions.rename(started.id, "Settled")).title).toBe("Settled");
+      await sessions.remove(started.id);
+      expect(await sessions.list()).toEqual([]);
+    } finally {
+      release.resolve();
+      await sessions.dispose();
+    }
+  });
   test("a delayed send cannot recreate a deleted conversation or repeat its tools", async () => {
     const f = fixture();
     const sessions = new PiChatSessions(f.store, f.factory);

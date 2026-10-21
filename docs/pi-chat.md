@@ -3,7 +3,8 @@
 The **AI workbench** at `/w/<workspace>/pi-chat` opens independent native Pi
 conversations in the current user's cloud Computer. It supports new chats,
 search, rename, deletion, stopping a turn, earlier-message paging, Markdown,
-thinking returned by the model, complete SDK tool arguments/results, and tool
+thinking returned by the model, complete SDK tool arguments/results (including
+structured details such as edit diffs and patches), and tool
 duration. It does not reset or reuse an ordinary Agent's session.
 
 ## Execution and data
@@ -44,6 +45,8 @@ the page does not cancel a turn. Reopening reads the worker/native history.
 An accepted request ID is persisted before execution; retries reuse it and
 never automatically replay tools. A worker restart marks unfinished runs
 interrupted. Users explicitly send a new message to continue.
+Empty native sessions are saved before accepting the first request, so fixing
+model credentials after a preflight failure allows the same chat to continue.
 
 ## Deployment
 
@@ -97,6 +100,10 @@ tests are added. Before deployment acceptance:
   Markdown/code rendering, and drafts retained when switching conversations.
 - [ ] Expand long thinking/tool arguments/results and verify complete content,
   duration, scroll behavior, and earlier-message loading.
+- [ ] Run an edit and expand its result; verify both the diff and patch remain
+  visible after switching chats and reloading the page.
+- [ ] Fail the first send with missing model credentials, repair the credentials,
+  and verify a new message continues the same chat without replaying the failure.
 - [ ] Stop, rename, cancel deletion, confirm deletion, and reload the page.
 - [ ] Disconnect/reconnect while sending; retry the same message without
   duplicate tool execution. Switch Users/Workspaces and verify isolation.
