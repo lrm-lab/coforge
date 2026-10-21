@@ -97,6 +97,21 @@ test("an unexpected process exit clears busy but keeps what was held for the nex
   expect(queue.shouldHold("agent-1")).toBe(false);
 });
 
+test("an offline-taking runtime error ends the explicit hold but keeps what was held", () => {
+  const queue = new AgentDeliveryQueue();
+  queue.setMode("agent-1", "queue_until_idle");
+  queue.busy("agent-1");
+  queue.hold("agent-1", "fingerprint_fence");
+  queue.enqueue("agent-1", delivery("one"));
+  queue.endHoldForNextLaunch("agent-1");
+  // The fence's hold ends with the process that earned it; the held delivery waits for the
+  // next launch and is drained by the first idle() after it.
+  expect(queue.explicitHold("agent-1")).toBeUndefined();
+  expect(queue.shouldHold("agent-1")).toBe(false);
+  expect(queue.pending("agent-1").map((message) => message.deliveryId)).toEqual(["delivery-one"]);
+  expect(queue.idle("agent-1").map((message) => message.deliveryId)).toEqual(["delivery-one"]);
+});
+
 test("an explicit Stop discards everything held, unlike an unexpected exit", () => {
   const queue = new AgentDeliveryQueue();
   queue.setMode("agent-1", "queue_until_idle");

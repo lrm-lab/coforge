@@ -23,11 +23,22 @@ const activity: AgentActivity = {
     errorClass: "CodexAuthError",
     errorReason: "turn_failed",
     fingerprint: "deadbeef",
+    requiredAction: "user_reauth",
   },
 };
 
 test("round trips the launch ordering identity", () => {
   expect(decodeAgentActivity(encodeAgentActivity(activity))).toEqual(activity);
+});
+
+test("drops an unrecognized runtime error action instead of carrying it", () => {
+  const unknown = {
+    ...activity,
+    runtimeError: { ...activity.runtimeError!, requiredAction: "rotate_keys" as "user_reauth" },
+  };
+  expect(decodeAgentActivity(encodeAgentActivity(unknown))?.runtimeError?.requiredAction).toBe(
+    undefined,
+  );
 });
 
 test("rejects incomplete or invalid launch ordering identity", () => {

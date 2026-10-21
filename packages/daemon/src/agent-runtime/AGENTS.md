@@ -8,6 +8,11 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - Agent lifecycle status values are `active` and `inactive` only. Starting,
   tool use, turns, commands, file operations, warnings, and provider errors are
   Activity records, never additional statuses.
+- `runtime-error-classification.ts` is the one place a runtime failure becomes a class, reason,
+  retry decision, `requiredAction` and `takesAgentOffline`. An action-required failure
+  (`user_reauth`, `user_model_access`) or a sticky model-config one ends the process and reports
+  `inactive` (see `daemon-runtime/runtime.ts`'s `#takeAgentOffline`); other terminal failures
+  (timeout, missing model) keep the Agent wakeable.
 - `subagent-progress-activity.ts` owns task row wording and `OutstandingBackgroundTasks`: a
   launch's tasks without a terminal notification, by task id, and the wait a quiet turn shows.
 - `activity-trajectory.ts` owns launch-local display-delta coalescing (350 ms),

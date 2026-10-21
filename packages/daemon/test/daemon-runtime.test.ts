@@ -9828,6 +9828,7 @@ function deliveryQueueSession() {
   const exitListeners = new Set<() => void>();
   const notices: string[] = [];
   const waiters: Array<{ length: number; resolve: () => void }> = [];
+  const disposed = Promise.withResolvers<void>();
   return {
     session: {
       async sendMessage() {
@@ -9856,9 +9857,13 @@ function deliveryQueueSession() {
         exitListeners.add(listener);
         return () => exitListeners.delete(listener);
       },
-      async dispose() {},
+      async dispose() {
+        disposed.resolve();
+      },
     } satisfies AgentSession,
     notices,
+    /** Resolves once the runtime has asked this session to exit (process end observed). */
+    disposed: disposed.promise,
     emit: (event: AgentRuntimeEvent) => {
       for (const listener of listeners) listener(event);
     },
@@ -9903,6 +9908,8 @@ describe("Agent delivery queue", () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const fake = deliveryQueueSession();
+    const statuses: import("@lrm/coforge-sdk/internal").AgentStatus[] = [];
+    const rejections: { reason: string }[] = [];
     const runtime = new DaemonRuntime(
       connection,
       () => ({ provider, createAgentSession: async () => fake.session }),
@@ -9919,8 +9926,14 @@ describe("Agent delivery queue", () => {
           async sendAgentDeliveryAck(ack) {
             acks.record(ack.deliveryId);
           },
+          async sendAgentDeliveryRejection(rejection) {
+            rejections.push(rejection);
+          },
           sendAgentActivity(activity) {
             onActivity?.(activity);
+          },
+          sendAgentStatus(status) {
+            statuses.push(status);
           },
         }),
       },
@@ -9934,6 +9947,8 @@ describe("Agent delivery queue", () => {
       runtime,
       fake,
       acks,
+      statuses,
+      rejections,
       deliver: (sequence: number) =>
         runtime.handleAgentMessage({
           protocolMajor: 1,
@@ -10366,17 +10381,16 @@ describe("Agent delivery queue", () => {
           expect(initial!.runtimeError!.fingerprint).toMatch(/^[0-9a-f]{8}$/);
           fake.emit(error);
 
-          // The third consecutive failure with the same fingerprint trips the fence.
+          // The third consecutive failure with the same fingerprint trips the fence, taking the
+          // Agent offline: the process ends and the Agent reports inactive.
           activities.length = 0;
           fake.emit(error);
+          await fake.disposed;
 
           const fenced = activities.find((activity) => activity.detailKind === "runtime_error");
           expect(fenced).toBeDefined();
           expect(fenced!.runtimeError?.errorReason).toBe("runtime_error_fenced");
-          expect(fenced!.detail).toContain("3");
-          expect(fenced!.detail.toLowerCase()).toContain("restart");
-          const detail =
-            "Runtime stopped retrying after 3 consecutive failures with the same underlying error. Last error: connect ECONNRESET Restart this Agent once the issue is fixed.";
+          const detail = `Runtime stopped after 3 repeated runtime errors with the same fingerprint (${initial!.runtimeError!.fingerprint}). Last error: connect ECONNRESET Restart after the runtime/tooling issue is fixed.`;
           expect(fenced).toMatchObject({
             agentId: "agent-a",
             detailKind: "runtime_error",
@@ -10390,102 +10404,78 @@ describe("Agent delivery queue", () => {
             activities.filter((activity) => activity.detailKind === "runtime_error"),
           ).toHaveLength(1);
 
-          // Further failures still name the current streak, even after retrying stopped.
+          // The process is gone: its exit reports nothing further, and a late event from a dead
+          // session is dropped.
           activities.length = 0;
+          fake.exit();
           fake.emit(error);
-          const laterErrors = activities.filter(
-            (activity) => activity.detailKind === "runtime_error",
-          );
-          expect(laterErrors).toHaveLength(1);
-          const laterDetail =
-            "Runtime stopped retrying after 4 consecutive failures with the same underlying error. Last error: connect ECONNRESET Restart this Agent once the issue is fixed.";
-          expect(laterErrors[0]).toMatchObject({
-            agentId: "agent-a",
-            level: "error",
-            detail: laterDetail,
-            entries: [{ kind: "text", text: `Error: ${laterDetail}` }],
-            runtimeError: {
-              errorClass,
-              errorReason: "runtime_error_fenced",
-              fingerprint: initial!.runtimeError!.fingerprint,
-            },
-          });
+          expect(activities).toHaveLength(0);
         } finally {
           await runtime.stop();
         }
       },
     );
 
-    test("a tripped fence holds every delivery, across its own turn end and later output, until an explicit Stop", async () => {
-      const acks = ackGate(3);
-      const { runtime, fake, deliver } = await deliveryQueueHarness("pi", acks);
-      jest.useFakeTimers();
-
-      // Three identical failures with no turn end or output in between trip the fence. An
-      // unclassified error, whose backoff a turn end would otherwise end.
-      for (let attempt = 0; attempt < 3; attempt++)
-        fake.emit({ type: "error", message: "something odd happened" });
-      // The third failure's own turn end, and output after it, leave the tripped fence holding:
-      // releasing would deliver straight into the runtime it just stopped retrying.
-      fake.emit({ type: "completed", status: "failed" });
-      fake.emit({ type: "text-delta", text: "still here" });
-      // Nor does a later retryable failure that does not itself trip the fence.
-      fake.emit({ type: "error", message: "429 Too Many Requests" });
-      fake.emit({ type: "completed", status: "failed" });
-
-      // Nothing schedules a release any more, even long past the longest backoff: a later
-      // delivery is still acknowledged as held, with no notice.
-      await deliver(1);
-      jest.advanceTimersByTime(5 * 60_000 * 1.1 + 1_000);
-      await deliver(2);
-      expect(acks.acks).toEqual(["delivery-1", "delivery-2"]);
-      expect(fake.notices).toEqual([]);
-
-      // An explicit Stop lifts it: a fresh launch is delivered to at once.
-      await runtime.stopAgent("agent-a");
-      await runtime.startAgent("agent-a", { ...config, provider: "pi" });
-      await deliver(3);
-      await fake.waitForNotices(1);
-      await acks.done;
-      expect(fake.notices).toHaveLength(1);
-    });
-
-    test("while fenced, every later failure says retrying stopped, naming the latest error, after the fence's own turn end", async () => {
+    test("a tripped fence takes the Agent offline: it keeps custody of later deliveries until a fresh start", async () => {
       const acks = ackGate(2);
-      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { runtime, fake, deliver } = await deliveryQueueHarness(
+      const { runtime, fake, deliver, statuses, rejections } = await deliveryQueueHarness(
         "pi",
         acks,
+      );
+
+      // Three identical failures with no turn end or output in between trip the fence, which
+      // ends the process and reports the Agent inactive (terminal residency, like an
+      // action-required failure).
+      for (let attempt = 0; attempt < 3; attempt++)
+        fake.emit({ type: "error", message: "something odd happened" });
+      await fake.disposed;
+      await Bun.sleep(0);
+      expect(statuses.at(-1)?.status).toBe("inactive");
+
+      // A later delivery is kept for the next launch: acknowledged, not rejected.
+      await deliver(1);
+      expect(rejections).toEqual([]);
+      expect(statuses.at(-1)?.status).toBe("inactive");
+      expect(fake.notices).toEqual([]);
+
+      // A fresh start presents what was kept: the launch's flush notice covers the kept
+      // delivery, and this one arrives as its own notice right after.
+      await runtime.startAgent("agent-a", { ...config, provider: "pi" });
+      await deliver(2);
+      await fake.waitForNotices(2);
+      await acks.done;
+      expect(fake.notices).toHaveLength(2);
+    });
+
+    test("the fence trip's Activity is restated, at a higher clientSeq, on a kept delivery", async () => {
+      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+      const { runtime, fake, deliver, rejections } = await deliveryQueueHarness(
+        "pi",
+        undefined,
         undefined,
         (activity) => activities.push(activity),
       );
-      jest.useFakeTimers();
       try {
         for (let attempt = 0; attempt < 3; attempt++)
           fake.emit({ type: "error", message: "something odd happened" });
-        // The turn end resets the fence's streak, but the tripped fence still holds deliveries.
-        fake.emit({ type: "completed", status: "failed" });
-
-        activities.length = 0;
-        fake.emit({ type: "error", message: "something odd happened" });
-        fake.emit({ type: "error", message: "429 Too Many Requests" });
-        const errors = activities.filter((activity) => activity.detailKind === "runtime_error");
-        expect(errors.map((activity) => activity.runtimeError?.errorReason)).toEqual([
-          "runtime_error_fenced",
-          "runtime_error_fenced",
-        ]);
-        // The count is the one the fence tripped at; the error named is the latest.
-        expect(errors[1]!.detail).toBe(
-          "Runtime stopped retrying after 3 consecutive failures with the same underlying error. Last error: 429 Too Many Requests Restart this Agent once the issue is fixed.",
+        await fake.disposed;
+        await Bun.sleep(0);
+        const fenced = activities.findLast((activity) => activity.detailKind === "runtime_error")!;
+        expect(fenced.runtimeError?.errorReason).toBe("runtime_error_fenced");
+        expect(fenced.detail).toBe(
+          `Runtime stopped after 3 repeated runtime errors with the same fingerprint (${fenced.runtimeError?.fingerprint}). Last error: something odd happened Restart after the runtime/tooling issue is fixed.`,
         );
 
-        // Still held by the fence, long past the longest backoff: a held delivery is acknowledged
-        // without a notice; one not held is notified first.
+        // The kept delivery restates `inactive` and the fenced Activity at a higher clientSeq.
+        const sentBefore = activities.length;
         await deliver(1);
-        jest.advanceTimersByTime(5 * 60_000 * 1.1 + 1_000);
-        await deliver(2);
-        await acks.done;
-        expect(fake.notices).toEqual([]);
+        expect(rejections).toEqual([]);
+        const restated = activities
+          .slice(sentBefore)
+          .find((activity) => activity.detailKind === "runtime_error");
+        expect(restated?.runtimeError?.errorReason).toBe("runtime_error_fenced");
+        expect(restated?.detail).toBe(fenced.detail);
+        expect(restated?.clientSeq).toBeGreaterThan(fenced.clientSeq ?? 0);
       } finally {
         await runtime.stop();
       }
@@ -10636,11 +10626,32 @@ describe("Agent delivery queue", () => {
       }
     });
 
+    test("an Agent the fingerprint fence took offline keeps deliveries and stays quiet to a probe", async () => {
+      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+      const { runtime, fake, deliver, rejections } = await deliveryQueueHarness(
+        "pi",
+        undefined,
+        undefined,
+        (activity) => activities.push(activity),
+      );
+      try {
+        for (let failure = 0; failure < 3; failure++)
+          fake.emit({ type: "error", message: "connect ECONNRESET" });
+        await fake.disposed;
+        await Bun.sleep(0);
+        // A delivery finds no process: kept for the next launch — acknowledged, not rejected.
+        await deliver(1);
+        expect(rejections).toEqual([]);
+
+        // A probe gets no busy answer: the fenced launch is stopping, so the publisher mutes it.
+        await probe(runtime, "probe-4");
+        expect(activities.filter((activity) => activity.probeId === "probe-4")).toEqual([]);
+      } finally {
+        await runtime.stop();
+      }
+    });
+
     test.each([
-      // The third identical failure in one turn trips the fingerprint fence: the Agent answers
-      // idle, as it did before it had anything unread, rather than looking busy with what the
-      // fence holds.
-      ["the fingerprint fence", "connect ECONNRESET", 3, AGENT_ACTIVITY_DETAIL_KIND.IDLE],
       // A backoff hold is temporary: the held message is still debt the Agent will be given.
       [
         "a runtime error backoff",

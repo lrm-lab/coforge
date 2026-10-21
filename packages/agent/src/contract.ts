@@ -1,6 +1,7 @@
 import { isMemoryAgentToolProfile, type MemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
 import type {
   RuntimeProvider,
+  RuntimeErrorAction,
   ActivityTrajectoryEntry,
   ActivitySubagent,
   AgentActivityDetailKind,
@@ -14,7 +15,12 @@ export type AgentActivity = Readonly<{
   detail: string;
   observedAtMs: number;
   entries?: ActivityTrajectoryEntry[];
-  runtimeError?: Readonly<{ errorClass: string; errorReason: string; fingerprint: string }>;
+  runtimeError?: Readonly<{
+    errorClass: string;
+    errorReason: string;
+    fingerprint: string;
+    requiredAction?: RuntimeErrorAction;
+  }>;
 }>;
 
 export type AgentRuntimeProviderConfig =

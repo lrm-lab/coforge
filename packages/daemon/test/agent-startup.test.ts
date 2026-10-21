@@ -306,7 +306,7 @@ test("a model error on an admitted recovery turn is an ordinary runtime error; t
       "recovery",
       { unreadSummary: { "#team": 1 } },
     );
-    h.emit({ type: "error", message: "Provider authentication failed" });
+    h.emit({ type: "error", message: "model gpt-9 not found" });
     h.emit({ type: "completed", status: "failed" });
     await Bun.sleep(0);
     expect(h.disposed()).toBe(false);
@@ -457,7 +457,7 @@ test.each<ProviderLimit>([
 test("a bare startup error closes the window but answers no input; a failed outcome does", () => {
   const startup = new AgentStartup(() => {});
   try {
-    startup.observe({ type: "error", message: "Provider authentication failed" });
+    startup.observe({ type: "error", message: "provider request failed" });
     expect(startup.waiting).toBe(false);
     expect(startup.errorObserved).toBe(true);
     expect(startup.endsLaunch(new Error("turn/start failed"), 0)).toBe(true);
@@ -517,7 +517,7 @@ test.each([
 );
 
 test.each([
-  ["a failed turn (Pi)", "Provider authentication failed"],
+  ["a failed turn (Pi)", "provider request failed"],
   ["a quota error without a provider limit", "provider.quota (HTTP 429): quota exceeded"],
 ])("a startup input rejected after %s leaves the launch running", async (_, message) => {
   const h = await harness(undefined, async (emit) => {
@@ -543,7 +543,7 @@ test("a bare startup error alone cancels the 120-second deadline", async () => {
   try {
     jest.useFakeTimers();
     await h.start();
-    h.emit({ type: "error", message: "Provider authentication failed" });
+    h.emit({ type: "error", message: "provider request failed" });
     jest.advanceTimersByTime(AGENT_STARTUP_TIMEOUT_MS);
     expect(h.disposed()).toBe(false);
   } finally {

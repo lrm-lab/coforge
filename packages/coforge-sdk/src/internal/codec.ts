@@ -19,6 +19,7 @@ import {
   type RuntimeProvider,
 } from "./index";
 import { safeUint64 } from "./agent-observation-codec";
+import { decodeRuntimeError, encodeRuntimeError } from "./runtime-error-action";
 import {
   WorkspaceGetRequestSchema,
   WorkspaceGetResponseSchema,
@@ -1148,9 +1149,7 @@ export function encodeAgentActivity(value: AgentActivity): Uint8Array {
       isHeartbeat: value.isHeartbeat ?? false,
       probeId: value.probeId ?? "",
       producerFactId: value.producerFactId ?? "",
-      runtimeErrorClass: value.runtimeError?.errorClass ?? "",
-      runtimeErrorReason: value.runtimeError?.errorReason ?? "",
-      runtimeErrorFingerprint: value.runtimeError?.fingerprint ?? "",
+      ...encodeRuntimeError(value.runtimeError),
       entries: value.entries?.map((entry) => ({
         content:
           entry.kind === "tool_start"
@@ -1291,15 +1290,7 @@ export function decodeAgentActivity(bytes: Uint8Array): AgentActivity {
     ...(v.messageId ? { messageId: v.messageId } : {}),
     ...(v.conversationId ? { conversationId: v.conversationId } : {}),
     ...(v.conversationTarget ? { conversationTarget: v.conversationTarget } : {}),
-    ...(v.runtimeErrorClass
-      ? {
-          runtimeError: {
-            errorClass: v.runtimeErrorClass,
-            errorReason: v.runtimeErrorReason,
-            fingerprint: v.runtimeErrorFingerprint,
-          },
-        }
-      : {}),
+    ...(decodeRuntimeError(v) ? { runtimeError: decodeRuntimeError(v) } : {}),
   };
   validateAgentActivity(value);
   return value;

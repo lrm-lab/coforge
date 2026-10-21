@@ -682,6 +682,8 @@ export { isActivityCallId } from "./activity-entries";
 export type { ActivityTrajectoryEntry, ActivitySubagent } from "./activity-entries";
 export { isActivityExitCode, isActivityToolOutcome } from "./activity-tool-outcome";
 export type { ActivityToolOutcome } from "./activity-tool-outcome";
+export * from "./runtime-error-action";
+
 export type AgentActivity = {
   protocolMajor: number;
   requestId: string;
@@ -704,14 +706,10 @@ export type AgentActivity = {
   isHeartbeat?: boolean;
   /** Set only on the daemon's reply to an AgentActivityProbe; echoes its probeId. */
   probeId?: string;
-  /** The freshness-decision lineage: `freshness_decision_fact:<sha256>` for the decision this row
-   * narrates. A freshness-hold row only; absent otherwise. */
+  /** `freshness_decision_fact:<sha256>` lineage of the decision this row narrates; freshness-hold
+   * rows only. */
   producerFactId?: string;
-  runtimeError?: {
-    errorClass: string;
-    errorReason: string;
-    fingerprint: string;
-  };
+  runtimeError?: import("./runtime-error-action").AgentActivityRuntimeError;
 };
 export type AgentStatus = {
   protocolMajor: number;

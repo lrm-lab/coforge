@@ -90,12 +90,13 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   when its notice is accepted, or when it is held for a later notice or launch
   (`AgentDeliveryQueue`, a failed launch's input queue). A delivery queued
   behind the runner hold of a `coforge-computer restart` is not ACKed.
-- An Agent with no process, no launch in progress, and no restart config
-  takes no custody: its untracked delivery, and any a lifted runner hold left
-  queued for it, is not ACKed but rejected over `agent:v1:message:reject` with
-  reason `no_process`, and the server decides whether to start it. A delivery
-  it has already consumed is still ACKed and dropped instead. A failed server
-  Start leaves no daemon-side restart config or failure record.
+- An Agent with no process, no launch in progress, and no restart config takes
+  no custody (`agent-exited-delivery.ts`): its untracked delivery, and any a
+  lifted runner hold left queued for it, is rejected as `no_process` over
+  `agent:v1:message:reject` — the server decides whether to start it — unless
+  a runtime error took it offline (`agent-offline-residency.ts`), which keeps
+  custody: ACKed, queued in `AgentDeliveryQueue`, `inactive` and its Activity
+  restated. A failed server Start leaves no restart config or failure record.
 - A tracked @mention delivery (it carries a `mentionDelivery` envelope) is
   settled by `mention-delivery-tracker.ts`, in memory only. It is ACKed, with
   its envelope echoed, only once drained: already consumed (whatever launch the
@@ -107,9 +108,9 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   (no running session, including during a launch or a pending server Start),
   `QUOTA_LIMITED` (rate-limit backoff), `UNSUPPORTED_DELIVERY_PATH` (a provider
   that takes notices only between turns, while busy), or `DELIVERY_REJECTED`
-  (another backoff or the fence, a refused notice, a process gone before it
-  accepted the notice, an inbox purge). Told during a turn, it stays pending
-  until the turn ends, then is drained if the current session was told it and
+  (another backoff, a refused notice, a process gone before it accepted the
+  notice, an inbox purge). Told during a turn, it stays pending until the
+  turn ends, then is drained if the current session was told it and
   rejected otherwise; one named by `notice-undelivered` is settled instead by
   the redelivery of that notice (drained once accepted). A runner hold queues it
   unacknowledged; one still queued for an Agent without a session when the
@@ -125,19 +126,18 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   included; an untracked delivery it drops is ACKed, so a later rejoin does not replay it on
   `ready` (a Start still surfaces it as unread from the read boundary).
 - `runtime-error-delivery-hold.ts` owns an Agent's delivery hold after
-  mid-turn runtime errors: the backoff, the fingerprint fence, and the one
-  release timer. `runtime.ts` only reports failures, raw output and progress,
-  turn ends and explicit Stops to it; keep hold and release decisions out of it.
-  `stop` disposes it, so no release timer outlives the runtime.
+  mid-turn runtime errors — backoff, fingerprint fence (a trip is taken
+  offline by `agent-offline-residency.ts`), the release timer (`runtime.ts`
+  only reports to it; `stop` disposes it).
 - Never launch an exited Agent for a delivery it has already consumed; ACK it
   instead.
 - A failed message-triggered launch starts the per-Agent wake cooldown
   (`LaunchFailureBackoff`, no attempt cap); any successful launch ends it.
   Deliveries that wait for the next launch (in the cooldown, in a failed
-  launch's input queue, or arriving while a batched wake launch is in flight)
-  wait in `AgentDeliveryQueue`, already ACKed. The next launch presents them in
-  one notice, or a server recovery notice covers them. `flush` gives them
-  `receive`'s treatment (consumed, malformed). An explicit Stop, or a
+  launch's input queue, a batched wake launch in flight, or kept by an offline
+  Agent) wait in `AgentDeliveryQueue`, already ACKed. The next launch presents
+  them in one notice, or a server recovery notice covers them. `flush` gives
+  them `receive`'s treatment (consumed, malformed). An explicit Stop, or a
   launch abandoned because its recovery notice was rejected, discards them;
   the next Start recovers them from the cloud read boundary.
 - `stalled-recovery.ts` owns when a message restarts a stalled provider instead

@@ -411,6 +411,9 @@ message AgentActivity {
   // `tool_end` only: how the tool call ended. Absent from older daemons. Additive:
   // protocol_major stays 1.
   ActivityToolOutcome tool_outcome = 22;
+  // The action only a person can take before the Agent can work again ("user_reauth",
+  // "user_model_access"); empty when the failure needs none. Absent from older daemons.
+  string runtime_error_action = 23;
 }
 
 // The outcome of one tool call, keyed by the `call_id` of its `tool_name` entry. What each
