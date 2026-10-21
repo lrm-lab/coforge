@@ -1,11 +1,12 @@
 import { useMemo, type ComponentPropsWithoutRef, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import Markdown, { type Components, type ExtraProps, type Options } from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import type { Element } from "hast";
 
 import { chipControl } from "#src/lib/chip-control";
 import { MESSAGE_REMARK_PLUGINS, escapeLiteralHtml } from "#src/lib/message-syntax";
+import { followInternalLinkClick, internalAppHref } from "./internal-app-href";
 import { mentionHandlesByToken, rehypeReferenceChips, type ChipMention } from "./message-markdown";
 import type { MentionRef } from "./mention-text";
 import { TaskReference } from "#src/features/tasks/task-reference";
@@ -266,13 +267,38 @@ function CodeBlock({ node, children, ...props }: ComponentPropsWithoutRef<"pre">
   );
 }
 
-function ExternalLink({ node, children, ...props }: ComponentPropsWithoutRef<"a"> & ExtraProps) {
+function ExternalLink({
+  node,
+  children,
+  href,
+  ...props
+}: ComponentPropsWithoutRef<"a"> & ExtraProps) {
   // `node` is react-markdown's hast node, not a DOM attribute; destructuring it out keeps it off
   // the rendered element.
   void node;
+  const router = useRouter();
+  const internal = internalAppHref(typeof href === "string" ? href : undefined);
+  if (internal) {
+    // A stored `target` must not force a new tab over an in-app path.
+    const { target: _target, ...rest } = props;
+    void _target;
+    return (
+      <a
+        {...rest}
+        href={internal}
+        onClick={(event) => {
+          if (!followInternalLinkClick(event)) return;
+          event.preventDefault();
+          void router.navigate({ href: internal });
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
   return (
     // Untrusted links open in a new tab without handing the opener over via `window.opener`.
-    <a target="_blank" rel="noopener noreferrer" {...props}>
+    <a {...props} href={href} target="_blank" rel="noopener noreferrer">
       {children}
     </a>
   );
