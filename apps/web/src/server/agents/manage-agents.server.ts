@@ -29,6 +29,8 @@ export type AgentCreateInput = {
   model?: string;
   modelProvider?: string;
   reasoning?: string;
+  /** Whether this Agent launches with the runtime's Fast service tier; absent means it does not. */
+  fastMode?: boolean;
   computerId: string;
   apiKey?: string;
   /** Defaults to public when omitted, matching every creation path except the
@@ -114,6 +116,7 @@ export class ManageAgents {
       model: input.model?.trim() ?? "",
       modelProvider: input.modelProvider?.trim() ?? "",
       reasoning: input.reasoning?.trim() ?? "",
+      fastMode: input.fastMode === true,
       hasApiKey: Boolean(apiKeyInput),
     };
     if (selection.provider === RUNTIME_PROVIDER.COFORGE && !apiKeyInput)
@@ -163,6 +166,7 @@ export class ManageAgents {
           model: selection.model,
           modelProvider: selection.modelProvider,
           reasoning: selection.reasoning,
+          ...(selection.fastMode ? { fastMode: true } : {}),
         },
       });
     } catch (error) {
@@ -199,6 +203,7 @@ export class ManageAgents {
         model: input.model?.trim() ?? "",
         modelProvider: input.modelProvider?.trim() ?? "",
         reasoning: input.reasoning?.trim() ?? "",
+        fastMode: input.fastMode === true,
       };
       const sameProvider =
         current.runtimeConfig.provider.kind === "coforge" &&
@@ -227,6 +232,7 @@ export class ManageAgents {
         model: selection.model,
         modelProvider: selection.modelProvider,
         reasoning: selection.reasoning,
+        ...(selection.fastMode ? { fastMode: true } : {}),
         ...(current.runtimeConfig.environment
           ? { environment: current.runtimeConfig.environment }
           : {}),
@@ -328,5 +334,7 @@ export function runtimeStartFields(config: AgentRecord["runtimeConfig"]) {
     modelProvider: config.modelProvider,
     reasoning: config.reasoning,
     providerConfig: launchProviderConfig,
+    // Absent means the ordinary tier; never send a `false` the daemon would have to read as one.
+    ...(config.fastMode ? { fastMode: true } : {}),
   };
 }

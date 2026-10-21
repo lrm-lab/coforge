@@ -30,6 +30,7 @@ import { AgentSkills, type AgentSkillsLoadResult } from "#src/features/agents/ag
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { InlineEditField, SECTION_CAPTION_CLASS, SUBFIELD_LABEL_CLASS } from "./inline-edit-field";
 import { ContextUsageItem, RUNTIME_PILL_PART_CLASS } from "./agent-context-usage-item";
+import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
 import { RoleField, VisibilityField } from "./agent-profile-info-fields";
 
 /** Values are never shown in the chip; the dot count hints at length without revealing it. */
@@ -85,12 +86,15 @@ export function AgentProfileTab({
   migration,
   archive,
   contextUsage,
+  fastMode,
 }: {
   profile: NonNullable<AgentProfile>;
   timeZone: string | null;
   /** The Agent's current context-window usage, or `null` when there is no reading —
    * hidden entirely in that case. Display only: coloured by risk, but nothing triggers on it. */
   contextUsage?: { usedTokens: number; windowTokens: number; observedAtMs: number } | null;
+  /** What the launch actually observed for its Fast service tier, when the Agent asks for it. */
+  fastMode?: AgentFastModeReading | null;
   /** The Agent's moves between Computers (`AgentMigrationSection`), shown under ACTIONS. */
   migration?: ReactNode;
   /** An archived Agent's ARCHIVE section (`AgentArchiveSection`), for those who managed it. */
@@ -359,6 +363,11 @@ export function AgentProfileTab({
               <FactBadge>{reasoning || m.agent_form_provider_default()}</FactBadge>
             </p>
           </div>
+          <AgentFastModeFact
+            runtime={runtime}
+            requested={profile.runtimeConfig.fastMode === true}
+            reading={fastMode}
+          />
         </div>
         {envVars && (
           <div className="mt-4">

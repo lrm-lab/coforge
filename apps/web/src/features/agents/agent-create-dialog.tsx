@@ -86,6 +86,7 @@ export function AgentCreateDialog({
           model: String(form.get("model") ?? "").trim() || undefined,
           modelProvider: String(form.get("modelProvider") ?? "").trim() || undefined,
           reasoning: String(form.get("reasoning") ?? "").trim(),
+          fastMode: form.get("fastMode") === "true",
           apiKey: String(form.get("apiKey") ?? "").trim() || undefined,
           computerId: computerLocked ? computerId : String(form.get("computerId") ?? ""),
           actionCardMessageId,

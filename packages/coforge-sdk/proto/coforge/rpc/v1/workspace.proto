@@ -132,6 +132,27 @@ message AgentContextUsage {
   uint64 client_seq = 13;
 }
 
+// Fire-and-forget daemon-to-cloud notice of the service tier an Agent's launch actually
+// observed, read from the runtime's own per-turn report (Claude Code's `fast_mode_state`). Never
+// delivered as Activity; a provider with no such signal never emits it. `requested` echoes what
+// the launch asked for; `observed` is a closed vocabulary: "on", "off", "cooldown" or
+// "unreported". New message, so its fields are numbered contiguously.
+message AgentServiceTier {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string agent_id = 5;
+  string provider = 6;
+  string launch_id = 7;
+  string session_id = 8;
+  bool requested = 9;
+  string observed = 10;
+  uint64 observed_at_ms = 11;
+  string daemon_instance_id = 12;
+  uint64 client_seq = 13;
+}
+
 // Versioned server-to-daemon intent.
 message AgentStartIntent {
   uint32 protocol_major = 1;
@@ -176,6 +197,11 @@ message AgentStartIntent {
   // until the server records the introduction, and it may be carried together
   // with wake_message, resume_messages, unread_summary and resume_prompt.
   optional string introduction_prompt = 23;
+  // Whether this launch asks the runtime for its Fast service tier. Claude Code applies it with
+  // `--settings {"fastMode":true}`; Codex applies it as `serviceTier:"fast"` on
+  // thread/start. Absent (and older daemons that never heard of it) means the ordinary tier.
+  // Additive: protocol_major stays 1.
+  optional bool fast_mode = 24;
 }
 
 // Versioned server-to-daemon stop intent. A replacement is expressed as a

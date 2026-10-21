@@ -8,7 +8,7 @@ import { InterruptTracker } from "#src/code-agent/interrupt-tracker";
 import type { AgentSession, AgentSessionIdentity, AgentSessionOptions } from "@coforge/agent";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, type AgentServiceTierObserved } from "@lrm/coforge-sdk/internal";
 import { readClaudeCodeUsage } from "./usage";
 import { readClaudeCodeContextReport } from "./context-report";
 import type { AgentContextReport } from "@lrm/coforge-sdk/internal";
@@ -18,6 +18,7 @@ import { claudeAssistantEvents, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
 import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record";
+import { claudeContextUsage, claudeServiceTierState } from "./observations";
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CLAUDE_CODE;
@@ -76,6 +77,7 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
         prompt.path,
         ...(options.runtime?.model ? ["--model", options.runtime.model] : []),
         ...(options.runtime?.reasoning ? ["--effort", options.runtime.reasoning] : []),
+        ...(options.runtime?.fastMode ? ["--settings", JSON.stringify({ fastMode: true })] : []),
       ];
       const initialFreshSessionId = options.sessionId ? undefined : crypto.randomUUID();
       const spawn = (sessionId?: string, freshSessionId?: string) =>
@@ -168,6 +170,8 @@ class ClaudeCodeAgentSession implements AgentSession {
     reject(error: Error): void;
   }> = [];
   readonly #rateLimits = new ClaudeRateLimitState();
+  /** The last service tier reported for this session, so a repeated reading is not re-emitted. */
+  #serviceTier: AgentServiceTierObserved | undefined;
   #interrupt = new InterruptTracker();
 
   constructor(
@@ -611,6 +615,21 @@ class ClaudeCodeAgentSession implements AgentSession {
         return;
       }
       this.#reportIdentity();
+      // A service-tier reading is a session fact observed at every top-level result, independent
+      // of the turn's own running/interrupting/idle state below. Emitted only when it changes, so
+      // a steady tier does not repeat every turn.
+      const serviceTier = claudeServiceTierState(record);
+      if (serviceTier !== undefined && serviceTier !== this.#serviceTier) {
+        this.#serviceTier = serviceTier;
+        // Claude's own explanation, when it gives one (`extra_usage_disabled`, ...), so a
+        // launch that did not get Fast mode can say why rather than only that it did not.
+        const reason = nonEmptyString(record.fast_mode_disabled_reason);
+        this.#emit({
+          type: AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER,
+          state: serviceTier,
+          ...(reason ? { reason } : {}),
+        });
+      }
       // A context-window reading is a session fact observed at every top-level
       // result, independent of the turn's own running/interrupting/idle state below.
       const contextUsage = claudeContextUsage(record, this.configuredModel);
@@ -715,73 +734,4 @@ class ClaudeCodeAgentSession implements AgentSession {
     this.#inputFailure ??= error;
     for (const notice of this.#waitingNotices.splice(0)) notice.reject(error);
   }
-}
-
-/**
- * The context-window reading a top-level `result` record carries, or `undefined`
- * when this Claude Code build reports neither `usage.iterations` nor a matched
- * `modelUsage[...].contextWindow` — never guessed. `usedTokens` is the last `"message"`-typed
- * iteration's `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`.
- * `windowTokens` is the `modelUsage` entry whose key or `canonicalModel` matches
- * `configuredModel`, or, when unconfigured or unmatched, the entry with the largest
- * `inputTokens + cacheReadInputTokens + cacheCreationInputTokens` (a subagent turn adds extra
- * models to this map).
- */
-function claudeContextUsage(
-  record: Readonly<Record<string, unknown>>,
-  configuredModel: string | undefined,
-):
-  | {
-      usedTokens: number;
-      windowTokens: number;
-      occurredAt: string;
-    }
-  | undefined {
-  const usage = asRecord(record.usage);
-  const iterations = Array.isArray(usage?.iterations) ? usage.iterations : undefined;
-  if (!iterations?.length) return undefined;
-  let lastMessage: Record<string, unknown> | undefined;
-  for (const entry of iterations) {
-    const parsed = asRecord(entry);
-    if (parsed?.type === "message") lastMessage = parsed;
-  }
-  if (!lastMessage) return undefined;
-  const usedTokens =
-    nonNegativeNumber(lastMessage.input_tokens) +
-    nonNegativeNumber(lastMessage.cache_read_input_tokens) +
-    nonNegativeNumber(lastMessage.cache_creation_input_tokens);
-  const modelUsage = asRecord(record.modelUsage);
-  if (!modelUsage) return undefined;
-  const entries = Object.entries(modelUsage).flatMap(([model, raw]) => {
-    const value = asRecord(raw);
-    return value ? [{ model, value }] : [];
-  });
-  if (!entries.length) return undefined;
-  const matched = configuredModel
-    ? entries.find(
-        ({ model, value }) => model === configuredModel || value.canonicalModel === configuredModel,
-      )
-    : undefined;
-  const selected =
-    matched ??
-    entries.reduce((largest, candidate) =>
-      claudeModelUsageWeight(candidate.value) > claudeModelUsageWeight(largest.value)
-        ? candidate
-        : largest,
-    );
-  const windowTokens = nonNegativeNumber(selected.value.contextWindow);
-  if (!windowTokens) return undefined;
-  return { usedTokens, windowTokens, occurredAt: eventTime(record) };
-}
-
-function claudeModelUsageWeight(value: Record<string, unknown>): number {
-  return (
-    nonNegativeNumber(value.inputTokens) +
-    nonNegativeNumber(value.cacheReadInputTokens) +
-    nonNegativeNumber(value.cacheCreationInputTokens)
-  );
-}
-
-function nonNegativeNumber(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }

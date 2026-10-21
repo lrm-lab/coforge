@@ -40,6 +40,7 @@ const RUNTIME_REFUSALS: Record<AgentRuntimeSelectionRefusal, string> = {
   runtime_missing: "agent-migration-runtime-missing",
   runtime_not_shared: "agent-migration-runtime-not-shared",
   model_missing: "agent-migration-model-missing",
+  fast_mode_unsupported: "agent-migration-fast-mode-unsupported",
 };
 
 /** The `AppError` each refusal of a request reaches its asker as. */

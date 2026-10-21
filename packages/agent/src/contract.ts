@@ -4,6 +4,7 @@ import type {
   ActivityTrajectoryEntry,
   ActivitySubagent,
   AgentActivityDetailKind,
+  AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
 
 export type AgentActivityLevel = "info" | "warning" | "error";
@@ -28,6 +29,9 @@ export type AgentRuntimeConfig = Readonly<{
   /** An explicitly fenced tool profile supplied by the versioned Agent start intent. */
   toolProfile?: MemoryAgentToolProfile;
   memoryAgent?: boolean;
+  /** Whether this launch asked the runtime for its Fast service tier. Applied by the adapters
+   * that support it (Claude Code, Codex); every other runtime ignores it. */
+  fastMode?: boolean;
   envVars?: Readonly<Record<string, string>>;
 }>;
 /** Plan-usage window status (task #50): `limit_reached` once the window's ratio hits 1.0,
@@ -163,6 +167,13 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
   // agent-runtime/phase-tracker.ts.
   | { type: "compaction-started"; occurredAt?: string }
   | { type: "compaction-finished"; occurredAt?: string }
+  // The service tier the runtime itself reports for this launch (Claude Code's per-turn
+  // `fast_mode_state`, normalized by the adapter into the closed vocabulary). A raw observation:
+  // the daemon core alone decides whether to report it and whether a mismatch with what the
+  // launch requested deserves an Activity. A provider that cannot observe it never emits it.
+  // `reason` is the runtime's own explanation when it reports one (Claude Code's
+  // `fast_mode_disabled_reason`), left uninterpreted.
+  | { type: "service-tier"; state: AgentServiceTierObserved; reason?: string }
   // Only providers that can observe an aborted compaction report this; a provider with no such
   // signal never emits it.
   | { type: "compaction-interrupted"; occurredAt?: string }

@@ -1,5 +1,6 @@
 import type { MemoryAgentToolProfile } from "../agent/memory-tool-fences";
 import { RPC_METHODS } from "./rpc-methods";
+import type { AgentServiceTierObserved } from "./service-tier";
 import { MESSAGE_ANCHOR_SOURCE, UUID_LIKE_SOURCE } from "./uuid";
 /** TypeScript boundary; codec/transport remains an adapter concern. */
 export const COMPUTER_REGISTER_METHOD = RPC_METHODS.computerRegister;
@@ -149,6 +150,9 @@ export const AGENT_ACTIVITY_DETAIL_KIND = {
   REVIEWING_CHANGES: "reviewing_changes",
   // Compaction started and no finish was observed for a long time.
   COMPACTION_STALE: "compaction_stale",
+  // This launch asked for the runtime's Fast service tier and the runtime reported it is not
+  // applied (off, cooling down, or unreported). Warning level; one row per launch.
+  FAST_MODE_UNAVAILABLE: "fast_mode_unavailable",
   // A review pass started and no finish was observed for a long time.
   REVIEW_STALE: "review_stale",
   // The daemon is restarting a provider it found stalled.
@@ -242,6 +246,28 @@ export type AgentContextUsage = {
   daemonInstanceId: string;
   clientSeq: number;
 };
+export const AGENT_SERVICE_TIER_METHOD = RPC_METHODS.agentServiceTier;
+/**
+ * Fire-and-forget daemon-to-cloud notice of the service tier an Agent's launch actually observed,
+ * read from the runtime's own per-turn report (Claude Code's `fast_mode_state`). Never delivered
+ * as Activity; a provider with no such signal never emits it. `requested` echoes the launch's
+ * ask, so the reader can tell "Fast was requested and is off" from "Fast was not requested".
+ */
+export type AgentServiceTier = {
+  protocolMajor: number;
+  requestId: string;
+  workspaceId: string;
+  computerId: string;
+  agentId: string;
+  provider: RuntimeProvider;
+  launchId: string;
+  sessionId: string;
+  requested: boolean;
+  observed: AgentServiceTierObserved;
+  observedAtMs: number;
+  daemonInstanceId: string;
+  clientSeq: number;
+};
 export const WORKSPACE_PROTOCOL_MAJOR = COMPUTER_REGISTER_PROTOCOL_MAJOR;
 export type Workspace = { id: string; slug: string; name: string };
 export type WorkspaceInfoRequest = { idempotencyKey: string };
@@ -305,78 +331,8 @@ export type WorkspaceQueryRequest = {
   workspaceSlug?: string;
 };
 
-export const RUNTIME_PROVIDER = {
-  COFORGE: "coforge",
-  CODEX: "codex",
-  CLAUDE_CODE: "claude-code",
-  PI: "pi",
-  KIRO: "kiro",
-  CURSOR: "cursor",
-  OPENCODE: "opencode",
-  GROK: "grok",
-  ANTIGRAVITY: "antigravity",
-} as const;
-export type RuntimeProvider = (typeof RUNTIME_PROVIDER)[keyof typeof RUNTIME_PROVIDER];
-/** Every RuntimeProvider value, for a zod `z.enum` or other exhaustive-tuple consumer. */
-export const RUNTIME_PROVIDER_VALUES = Object.values(RUNTIME_PROVIDER) as [
-  RuntimeProvider,
-  ...RuntimeProvider[],
-];
-const RUNTIME_PROVIDERS: ReadonlySet<string> = new Set(RUNTIME_PROVIDER_VALUES);
-/** The RuntimeProvider a persisted or user-supplied value names, or undefined. */
-/**
- * `parseRuntimeProvider`, but an unknown value is an error rather than an absence. The callers read
- * a runtime provider that the daemon or the database already stored, so an unrecognized one means
- * the stored data and this build disagree — not that the caller should fall back to a default.
- *
- * Three copies of the two-line check lived in this file's Agent lifecycle codec, Web's Computer
- * runtimes repository and Web's Computer server functions. Each passes its own message, because
- * those messages name the surface that failed.
- */
-export function requireRuntimeProvider(value: unknown, message: string): RuntimeProvider {
-  const provider = parseRuntimeProvider(value);
-  if (provider === undefined) throw new Error(message);
-  return provider;
-}
-
-export function parseRuntimeProvider(value: unknown): RuntimeProvider | undefined {
-  return typeof value === "string" && RUNTIME_PROVIDERS.has(value)
-    ? (value as RuntimeProvider)
-    : undefined;
-}
-/**
- * Whether the Daemon runs this provider as a spawned external CLI process (Codex, Claude Code,
- * Kiro) rather than in-process through the Pi SDK (Pi, CoForge). Governs whether a
- * CoForge-managed model-provider API key applies (only the in-process providers accept one).
- * A separate capability below describes which adapters implement usage scanning.
- */
-export const RUNTIME_PROVIDER_USES_EXTERNAL_CLI: Record<RuntimeProvider, boolean> = {
-  [RUNTIME_PROVIDER.COFORGE]: false,
-  [RUNTIME_PROVIDER.CODEX]: true,
-  [RUNTIME_PROVIDER.CLAUDE_CODE]: true,
-  [RUNTIME_PROVIDER.PI]: false,
-  [RUNTIME_PROVIDER.KIRO]: true,
-  [RUNTIME_PROVIDER.CURSOR]: true,
-  [RUNTIME_PROVIDER.OPENCODE]: true,
-  [RUNTIME_PROVIDER.GROK]: true,
-  [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
-};
-
-/** Whether the shipped adapter implements `readUsage`. Cursor, OpenCode, Pi, and CoForge
- * are not connected yet — this table does not say the official product has no quota endpoint.
- * A connected reader may still return unsupported for a particular account.
- * The daemon registry test checks this table against the actual adapters. */
-export const RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN: Record<RuntimeProvider, boolean> = {
-  [RUNTIME_PROVIDER.COFORGE]: false,
-  [RUNTIME_PROVIDER.CODEX]: true,
-  [RUNTIME_PROVIDER.CLAUDE_CODE]: true,
-  [RUNTIME_PROVIDER.PI]: false,
-  [RUNTIME_PROVIDER.KIRO]: true,
-  [RUNTIME_PROVIDER.CURSOR]: false,
-  [RUNTIME_PROVIDER.OPENCODE]: false,
-  [RUNTIME_PROVIDER.GROK]: true,
-  [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
-};
+export * from "./runtime-provider";
+import type { RuntimeProvider } from "./runtime-provider";
 export type AgentRuntimeProviderConfig =
   | { kind: "default" }
   | { kind: "coforge"; providerId: string };
@@ -420,6 +376,10 @@ export type CodeAgentModelMetadata = {
   reasoningEfforts: string[];
   defaultReasoning: string;
   recommended: boolean;
+  /** Whether the runtime accepts its Fast service tier for this model. Absent means the reported
+   * catalog said nothing about it (an older daemon, or a provider that does not report it): treat
+   * it as unknown, never as a confirmed "no". */
+  supportsFastMode?: boolean;
 };
 export type CodeAgentModelCatalog = {
   provider: RuntimeProvider;
@@ -615,6 +575,9 @@ export type AgentStartIntent = {
    * launch's first turn, in place of the empty-launch starter. Carried on every start until the
    * server records the introduction, and may accompany recovery and `resumePrompt`. */
   introductionPrompt?: string;
+  /** Whether this launch asks the runtime for its Fast service tier. Absent means the ordinary
+   * tier; an older daemon that never heard of it ignores it. */
+  fastMode?: boolean;
 };
 export type AgentStopIntent = {
   protocolMajor: number;
@@ -934,12 +897,16 @@ export {
   sanitizeUpgradeErrorText,
 } from "./codec";
 export {
+  encodeAgentContextUsage,
+  decodeAgentContextUsage,
+  encodeAgentServiceTier,
+  decodeAgentServiceTier,
+} from "./agent-observation-codec";
+export {
   encodeAgentSessionReport,
   decodeAgentSessionReport,
   encodeAgentSessionInvalidate,
   decodeAgentSessionInvalidate,
-  encodeAgentContextUsage,
-  decodeAgentContextUsage,
   AGENT_START_PROMPT_MAX_LENGTH,
   encodeAgentStartIntent,
   decodeAgentStartIntent,
@@ -969,6 +936,7 @@ export * from "./tasks";
 export * from "./task-codec";
 export * from "./channel-command";
 export * from "./agent-display";
+export * from "./service-tier";
 export * from "./message-sender";
 export * from "./agent-name";
 export * from "./workspace-slug";

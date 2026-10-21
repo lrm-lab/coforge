@@ -1,4 +1,8 @@
-import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_PROVIDER,
+  RUNTIME_PROVIDER_SUPPORTS_FAST_MODE,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 
 export type AgentRuntimeSelection = {
   provider: RuntimeProvider;
@@ -6,7 +10,16 @@ export type AgentRuntimeSelection = {
   modelProvider: string;
   reasoning: string;
   hasApiKey: boolean;
+  /** Whether this selection asks for the runtime's Fast service tier. Absent means it does not. */
+  fastMode?: boolean;
 };
+
+/** Whether the reported model entry says it accepts Fast mode. Absent is "unknown", which is
+ * refused here: a saved selection must be one the Computer actually reported. */
+function modelSupportsFastMode(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Reflect.get(value, "supportsFastMode") === true;
+}
 
 export function agentRuntimeSelectionIsAvailable(
   config: AgentRuntimeSelection,
@@ -18,6 +31,8 @@ export function agentRuntimeSelectionIsAvailable(
 ): boolean {
   if (!inventory.connected) return false;
   if (!providerIsSelectable(config.provider, inventory.providers)) return false;
+  // Fast mode exists only where an adapter applies it, whatever the model claims.
+  if (config.fastMode && !RUNTIME_PROVIDER_SUPPORTS_FAST_MODE[config.provider]) return false;
   // CoForge/keyed Pi may authorize a provider before the catalog model is chosen.
   if (
     config.modelProvider &&
@@ -25,19 +40,23 @@ export function agentRuntimeSelectionIsAvailable(
       (config.provider === RUNTIME_PROVIDER.PI && config.hasApiKey))
   )
     return true;
-  if (!config.model) return !config.modelProvider && !config.reasoning;
-  return inventory.models.some((value) => modelMatches(value, config));
+  if (!config.model) return !config.modelProvider && !config.reasoning && !config.fastMode;
+  return inventory.models.some(
+    (value) => modelMatches(value, config) && (!config.fastMode || modelSupportsFastMode(value)),
+  );
 }
 
 /** Why a Computer cannot run an Agent with this selection, told apart as the reference Computer
  * tells its refusals apart: not in the Workspace; no runtime reported yet; this runtime not among
- * those reported; reported but not shared with this person; or offered without the model. */
+ * those reported; reported but not shared with this person; offered without the model; or a model
+ * that does not accept the Fast tier the selection asks for. */
 export type AgentRuntimeSelectionRefusal =
   | "not_connected"
   | "runtime_unconfirmed"
   | "runtime_missing"
   | "runtime_not_shared"
-  | "model_missing";
+  | "model_missing"
+  | "fast_mode_unsupported";
 
 /**
  * Why `agentRuntimeSelectionIsAvailable` refuses this selection, or null when it does not.
@@ -55,7 +74,10 @@ export function agentRuntimeSelectionRefusal(
   if (inventory.reported.size === 0) return "runtime_unconfirmed";
   if (!providerIsSelectable(config.provider, inventory.reported)) return "runtime_missing";
   if (!providerIsSelectable(config.provider, inventory.providers)) return "runtime_not_shared";
-  return "model_missing";
+  // Provider and sharing are settled; the model itself is the remaining reason. A model that is
+  // there but does not accept Fast mode is refused as such, not as missing.
+  if (!inventory.models.some((value) => modelMatches(value, config))) return "model_missing";
+  return "fast_mode_unsupported";
 }
 
 function providerIsSelectable(

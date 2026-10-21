@@ -34,6 +34,7 @@ export function updateAgentInputFromForm(
     modelProvider: String(form.get("modelProvider") ?? ""),
     model: String(form.get("model") ?? ""),
     reasoning: String(form.get("reasoning") ?? ""),
+    fastMode: form.get("fastMode") === "true",
     ...(apiKey ? { apiKey } : {}),
     ...(displayName ? { displayName } : {}),
     ...(computerId ? { computerId } : {}),

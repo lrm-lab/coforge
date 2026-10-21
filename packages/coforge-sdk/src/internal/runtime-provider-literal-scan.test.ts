@@ -31,7 +31,8 @@ async function scanRoots(): Promise<string[]> {
 
 /** Every file allowed to hard-code a scanned provider value, and why. */
 const ALLOWLIST: Readonly<Record<string, string>> = {
-  "packages/coforge-sdk/src/internal/index.ts": "the RuntimeProvider vocabulary module itself",
+  "packages/coforge-sdk/src/internal/runtime-provider.ts":
+    "the RuntimeProvider vocabulary module itself",
   "packages/daemon/src/code-agent/runtime-executable.ts":
     'the provider-to-executable table and installer paths; the CLIs are literally named "codex", "opencode" and "grok"',
   "packages/daemon/src/code-agent/codex/provider.ts":

@@ -18,6 +18,7 @@ import {
   type CodeAgentModelCatalog,
   type RuntimeProvider,
 } from "./index";
+import { safeUint64 } from "./agent-observation-codec";
 import {
   WorkspaceGetRequestSchema,
   WorkspaceGetResponseSchema,
@@ -41,7 +42,6 @@ import {
 import {
   AgentSessionReportSchema,
   AgentSessionInvalidateSchema,
-  AgentContextUsageSchema,
   AgentStartIntentSchema,
   AgentStopIntentSchema,
   AgentActivityProbeSchema,
@@ -55,7 +55,6 @@ import {
 import type {
   AgentSessionReport,
   AgentSessionInvalidate,
-  AgentContextUsage,
   AgentStartIntent,
   AgentStopIntent,
   AgentActivityProbe,
@@ -114,11 +113,6 @@ function assertUint(value: number, maximum: number, field: string): void {
     throw new Error(`invalid ${field}`);
 }
 
-function safeUint64(value: bigint, field: string): number {
-  if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error(`invalid ${field}`);
-  return Number(value);
-}
-
 const decodedRuntimeMetadata = (runtime: {
   provider: string;
   version: string;
@@ -144,6 +138,7 @@ const decodedModelCatalog = (catalog: {
     reasoningEfforts: string[];
     defaultReasoning: string;
     recommended: boolean;
+    supportsFastMode?: boolean;
   }>;
 }): CodeAgentModelCatalog => ({
   provider: parseRuntimeProvider(catalog.provider),
@@ -155,6 +150,9 @@ const decodedModelCatalog = (catalog: {
     reasoningEfforts: [...model.reasoningEfforts],
     defaultReasoning: model.defaultReasoning,
     recommended: model.recommended,
+    // Absent stays absent: an older daemon never said whether the model supports Fast mode, and
+    // "unknown" must not read as a confirmed "no".
+    ...(model.supportsFastMode !== undefined ? { supportsFastMode: model.supportsFastMode } : {}),
   })),
 });
 
@@ -622,76 +620,6 @@ function validateAgentSessionInvalidate(value: {
     throw new Error("invalid session invalidate sessionId");
 }
 
-export function encodeAgentContextUsage(value: AgentContextUsage): Uint8Array {
-  validateAgentContextUsage(value);
-  return toBinary(
-    AgentContextUsageSchema,
-    create(AgentContextUsageSchema, {
-      ...value,
-      usedTokens: BigInt(value.usedTokens),
-      windowTokens: BigInt(value.windowTokens),
-      observedAtMs: BigInt(value.observedAtMs),
-      clientSeq: BigInt(value.clientSeq),
-    }),
-  );
-}
-
-export function decodeAgentContextUsage(bytes: Uint8Array): AgentContextUsage {
-  const v = fromBinary(AgentContextUsageSchema, bytes);
-  const value = {
-    protocolMajor: v.protocolMajor,
-    requestId: v.requestId,
-    workspaceId: v.workspaceId,
-    computerId: v.computerId,
-    agentId: v.agentId,
-    provider: v.provider as RuntimeProvider,
-    launchId: v.launchId,
-    sessionId: v.sessionId,
-    usedTokens: safeUint64(v.usedTokens, "context usage usedTokens"),
-    windowTokens: safeUint64(v.windowTokens, "context usage windowTokens"),
-    observedAtMs: safeUint64(v.observedAtMs, "context usage observedAtMs"),
-    daemonInstanceId: v.daemonInstanceId,
-    clientSeq: safeUint64(v.clientSeq, "context usage clientSeq"),
-  };
-  validateAgentContextUsage(value);
-  return value;
-}
-
-function validateAgentContextUsage(value: {
-  protocolMajor: number;
-  provider: string;
-  [key: string]: unknown;
-}): asserts value is AgentContextUsage {
-  if (
-    value.protocolMajor !== 1 ||
-    !Object.values(RUNTIME_PROVIDER).includes(value.provider as RuntimeProvider)
-  )
-    throw new Error("invalid context usage protocol/provider");
-  for (const field of [
-    "requestId",
-    "workspaceId",
-    "computerId",
-    "agentId",
-    "launchId",
-    "sessionId",
-    "daemonInstanceId",
-  ])
-    if (
-      typeof value[field] !== "string" ||
-      !(value[field] as string).trim() ||
-      (value[field] as string).length > 512
-    )
-      throw new Error(`invalid context usage ${field}`);
-  if (!Number.isSafeInteger(value.usedTokens) || (value.usedTokens as number) < 0)
-    throw new Error("invalid context usage usedTokens");
-  if (!Number.isSafeInteger(value.windowTokens) || (value.windowTokens as number) < 1)
-    throw new Error("invalid context usage windowTokens");
-  if (!Number.isSafeInteger(value.observedAtMs) || (value.observedAtMs as number) < 1)
-    throw new Error("invalid context usage observedAtMs");
-  if (!Number.isSafeInteger(value.clientSeq) || (value.clientSeq as number) < 1)
-    throw new Error("invalid context usage clientSeq");
-}
-
 /** The longest resume or introduction prompt a start intent carries, in UTF-16 code units. */
 export const AGENT_START_PROMPT_MAX_LENGTH = 8192;
 
@@ -772,6 +700,8 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
     AgentStartIntentSchema,
     create(AgentStartIntentSchema, {
       ...value,
+      // Absent means "not requested"; never send an explicit `false` for it.
+      fastMode: value.fastMode ? true : undefined,
       providerConfig: providerConfig
         ? {
             kind: providerConfig.kind,
@@ -902,6 +832,7 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     ...(v.memoryAgent === true ? { memoryAgent: true } : {}),
     ...(v.resumePrompt !== undefined ? { resumePrompt: v.resumePrompt } : {}),
     ...(v.introductionPrompt !== undefined ? { introductionPrompt: v.introductionPrompt } : {}),
+    ...(v.fastMode === true ? { fastMode: true } : {}),
     ...(v.wakeMessage ? { wakeMessage: recoveryMessage(v.wakeMessage) } : {}),
     ...(v.resumeMessages.length ? { resumeMessages: v.resumeMessages.map(recoveryMessage) } : {}),
     ...(v.unreadSummary.some((entry) => entry.conversationId)

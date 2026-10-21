@@ -69,6 +69,7 @@ import { AgentProfileHeader } from "./agent-profile-header";
 import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs";
 import { AgentComputerTab } from "./agent-computer-tab";
 import { AgentProfileTab } from "./agent-profile-tab";
+import { profileRuntimeSelection, profileUpdateInput } from "./agent-profile-runtime";
 import { AgentWorkspaceTab } from "./agent-workspace-tab";
 import { AgentActivityTab } from "./agent-activity-tab";
 import { AgentAppsTab } from "./agent-apps-tab";
@@ -242,16 +243,7 @@ export function AgentProfilePanel({
 
   function baseUpdateInput(overrides: { displayName?: string; description?: string }) {
     if (!profile) throw new Error("profile not loaded");
-    return {
-      agentId: profile.id,
-      displayName: overrides.displayName ?? profile.displayName,
-      description: overrides.description ?? profile.description ?? "",
-      provider: profile.runtimeConfig.runtime,
-      modelProvider: profile.runtimeConfig.modelProvider || undefined,
-      model: profile.runtimeConfig.model,
-      reasoning: profile.runtimeConfig.reasoning,
-      ...(profile.computerId ? { computerId: profile.computerId } : {}),
-    };
+    return profileUpdateInput(profile, overrides);
   }
 
   function onStartRuntimeEdit() {
@@ -439,6 +431,11 @@ export function AgentProfilePanel({
                 ? (liveAgent.display.contextUsage ?? null)
                 : (profile.display?.contextUsage ?? null)
             }
+            fastMode={
+              liveAgent?.display
+                ? (liveAgent.display.fastMode ?? null)
+                : (profile.display?.fastMode ?? null)
+            }
             onSaveDisplayName={async (value) => {
               await update({ data: baseUpdateInput({ displayName: value }) });
               await invalidate();
@@ -598,12 +595,7 @@ export function AgentProfilePanel({
           computerId={profile.computer?.id ?? ""}
           computers={setupComputers}
           credentialConfigured={Boolean(profile.runtimeCredential)}
-          initial={{
-            provider: profile.runtimeConfig.runtime,
-            modelProvider: profile.runtimeConfig.modelProvider,
-            model: profile.runtimeConfig.model,
-            reasoning: profile.runtimeConfig.reasoning,
-          }}
+          initial={profileRuntimeSelection(profile)}
           onLoad={onLoadRuntimeOptions}
           environment={environmentState}
           saving={runtimeFormSaving}

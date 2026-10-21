@@ -47,6 +47,21 @@ import {
 } from "#src/agent-runtime/agent-process-manager";
 import { resolveLaunchIdentity, type SessionReference } from "./launch-identity";
 import { runtimeDisplayName, sessionInvalidateActivityText } from "./session-invalidate-activity";
+import { fastModeUnavailableDetail } from "./fast-mode-activity";
+import {
+  recoveryHasContent,
+  recoveryOf,
+  runtimeConfigOf,
+  type AgentInput,
+  type AgentInputCompletion,
+  type AgentInputQueue,
+  type AgentRecoveryContext,
+} from "./runtime-launch-intent";
+import {
+  runtimeFailureDiagnostic,
+  safeRuntimeActivityMessage,
+  validUsageWindow,
+} from "./runtime-activity-text";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import {
   AgentAuthorizationError,
@@ -86,7 +101,6 @@ import {
   AGENT_MESSAGE_REJECT_METHOD,
   MENTION_DELIVERY_TERMINAL_CODES,
   AGENT_ACTIVITY_DETAIL_KIND,
-  truncateCodePoints,
   type AgentActivity,
   type AgentSessionInvalidate,
   type AgentSessionInvalidateReason,
@@ -103,6 +117,8 @@ import {
   type LocalAgentMessageRequest,
   type LocalInboxRequest,
   type RuntimeProvider,
+  AGENT_SERVICE_TIER_OBSERVED,
+  type AgentServiceTierObserved,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type UsageScanResponse,
   REMINDER_CAPABILITY,
@@ -244,41 +260,6 @@ function controlCodeField(error: unknown): { control_code: string } | Record<str
   return message !== undefined && CONTROL_ERROR_CODES.has(message) ? { control_code: message } : {};
 }
 
-type AgentInputCompletion = {
-  resolve: () => void;
-  reject: (error: unknown) => void;
-};
-
-type AgentRecoveryContext = Pick<
-  AgentStartIntent,
-  "wakeMessage" | "resumeMessages" | "unreadSummary" | "unreadConversationIds"
->;
-
-/** Whether a recovery context has anything concrete to deliver. `recoveryOf(intent)` always
- * returns an object, even for a launch with no wake message, resume messages, or unread summary,
- * so callers cannot tell "nothing to recover" from "recovery was requested" by presence alone —
- * this is the same check `#recoverAttention` uses to skip an empty context. */
-function recoveryHasContent(context: AgentRecoveryContext | undefined): boolean {
-  return Boolean(
-    context &&
-    (context.wakeMessage ||
-      context.resumeMessages?.length ||
-      Object.keys(context.unreadSummary ?? {}).length),
-  );
-}
-
-type AgentInput =
-  | { kind: "recovery"; context: AgentRecoveryContext; completion: AgentInputCompletion }
-  | { kind: "delivery"; message: AgentMessageDelivery; completion: AgentInputCompletion }
-  | { kind: "startup"; text: string; completion: AgentInputCompletion }
-  | { kind: "prompt"; text: string; introduction?: true; completion: AgentInputCompletion };
-
-type AgentInputQueue = {
-  items: AgentInput[];
-  drain?: Promise<void>;
-  closed: boolean;
-};
-
 type ActivityLaunch = PublishedActivityLaunch & {
   startup?: AgentStartup;
   trajectory?: Pick<ActivityTrajectory, "flush" | "dispose">;
@@ -345,27 +326,6 @@ type AgentProxy = {
 
 function generateRuntimeInstanceId(): string {
   return crypto.randomUUID();
-}
-
-function runtimeConfigOf(intent: AgentStartIntent): AgentRuntimeConfig {
-  return {
-    provider: intent.provider,
-    model: intent.model,
-    modelProvider: intent.modelProvider,
-    reasoning: intent.reasoning,
-    providerConfig: intent.providerConfig,
-    toolProfile: intent.toolProfile,
-    ...(intent.memoryAgent ? { memoryAgent: true } : {}),
-  };
-}
-
-function recoveryOf(intent: AgentStartIntent): AgentRecoveryContext {
-  return {
-    wakeMessage: intent.wakeMessage,
-    resumeMessages: intent.resumeMessages,
-    unreadSummary: intent.unreadSummary,
-    unreadConversationIds: intent.unreadConversationIds,
-  };
 }
 
 /** A daemon-owned resident runtime for one supervised Workspace. */
@@ -450,6 +410,12 @@ export class DaemonRuntime {
   /** The last (usedTokens, windowTokens) reading sent per Agent, so an unchanged
    * reading is not re-sent. Forgotten on launch end/dispose, alongside `#phases`. */
   readonly #lastContextUsage = new Map<string, { usedTokens: number; windowTokens: number }>();
+  /** The last service tier reported per Agent, so a repeated reading is not re-sent. Forgotten on
+   * launch end/dispose, alongside `#lastContextUsage`. */
+  readonly #lastServiceTier = new Map<string, AgentServiceTierObserved>();
+  /** Agents whose launch has already been warned that Fast mode was requested but is not applied.
+   * One warning per launch, forgotten with `#lastServiceTier`. */
+  readonly #fastModeWarned = new Set<string>();
   /** One early handoff request per native session; reset when a new launch starts. */
   readonly #contextHandoffs = new Map<string, ContextHandoffCoordinator>();
   readonly #agentProxy?: AgentProxy;
@@ -2009,6 +1975,8 @@ export class DaemonRuntime {
     // #deliveryQueue.shouldHold on every delivery for this Agent from now on.
     this.#deliveryQueue.setProvider(agentId, config.provider);
     this.#lastContextUsage.delete(agentId);
+    this.#lastServiceTier.delete(agentId);
+    this.#fastModeWarned.delete(agentId);
     for (const key of this.#contextHandoffs.keys())
       if (key === agentId || key.startsWith(`${agentId}:`)) this.#contextHandoffs.delete(key);
     // AgentControl's fresh retry after a kiro/pi AgentSessionRecoveryError: the invalidate was
@@ -2505,6 +2473,29 @@ export class DaemonRuntime {
         this.#contextHandoffs.set(handoffKey, handoff);
       }
       handoff.observe(event.usedTokens, event.windowTokens);
+      return;
+    }
+    if (event.type === AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER) {
+      // Only a launch that actually asked for Fast mode has anything to report about it: a
+      // runtime volunteering a tier for an ordinary launch is not news, and the Web has no
+      // switch on for it.
+      if (config.fastMode !== true) return;
+      this.#sendServiceTier(agentId, launch, config.provider, event.state);
+      // One warning per launch, on the first reading that says Fast is not actually on. A later
+      // reading cannot retract it; a following launch reports its own.
+      if (event.state !== AGENT_SERVICE_TIER_OBSERVED.ON && !this.#fastModeWarned.has(agentId)) {
+        this.#fastModeWarned.add(agentId);
+        publish(
+          agentId,
+          launch,
+          this.#activity(
+            agentId,
+            AGENT_ACTIVITY_DETAIL_KIND.FAST_MODE_UNAVAILABLE,
+            "warning",
+            fastModeUnavailableDetail(event.state, event.reason),
+          ),
+        );
+      }
       return;
     }
     if (event.type === "activity" || event.type === "tool-start") {
@@ -3461,6 +3452,8 @@ export class DaemonRuntime {
   #disposeLaunchObservations(agentId: string): void {
     this.#disposePhases(agentId);
     this.#lastContextUsage.delete(agentId);
+    this.#lastServiceTier.delete(agentId);
+    this.#fastModeWarned.delete(agentId);
   }
 
   #readyRunningAgentIds(): string[] {
@@ -3711,6 +3704,38 @@ export class DaemonRuntime {
     });
     // Survives a later exit so a wake reusing this launchId can continue the counter,
     // the same reason `AgentActivityPublisher.publish` records it after every send on this shared counter.
+    this.#agentProcessManager.recordClientSeq(agentId, launch.clientSeq);
+  }
+
+  /**
+   * Fire-and-forget, never blocking or failing the turn it observed. Skipped until the launch's
+   * native session id is known, exactly like `#sendContextUsage`: the wire message carries a
+   * session id, so a launch whose identity the daemon has not yet reported has nothing to attach
+   * a reading to. An unchanged reading is not re-sent; `#lastServiceTier` is forgotten on launch
+   * end/dispose alongside `#lastContextUsage`.
+   */
+  #sendServiceTier(
+    agentId: string,
+    launch: ActivityLaunch,
+    provider: RuntimeProvider,
+    observed: AgentServiceTierObserved,
+  ): void {
+    const sessionId = this.#sessionReferences.get(agentId)?.sessionId;
+    if (!sessionId) return;
+    if (this.#lastServiceTier.get(agentId) === observed) return;
+    this.#lastServiceTier.set(agentId, observed);
+    this.#transport.sendAgentServiceTier?.({
+      ...this.#envelope(),
+      agentId,
+      provider,
+      launchId: launch.launchId,
+      sessionId,
+      requested: true,
+      observed,
+      observedAtMs: Date.now(),
+      daemonInstanceId: this.#runtimeInstanceId,
+      clientSeq: ++launch.clientSeq,
+    });
     this.#agentProcessManager.recordClientSeq(agentId, launch.clientSeq);
   }
 
@@ -4266,6 +4291,8 @@ export class DaemonRuntime {
     this.#runtimeErrorHold.disposeAll();
     this.#upgradeResults.stop();
     this.#lastContextUsage.clear();
+    this.#lastServiceTier.clear();
+    this.#fastModeWarned.clear();
     for (const agentId of new Set([
       ...this.#agentInputQueues.keys(),
       ...this.#agentLaunches.keys(),
@@ -4417,47 +4444,6 @@ export class DaemonRuntime {
     shutdownError ??= transportError;
     if (shutdownError !== undefined) throw shutdownError;
   }
-}
-
-function safeRuntimeActivityMessage(activity: string, level: string, message: string): string {
-  if (level === "error") return truncateCodePoints(message, 512);
-  if (level === "warning") return scrubRuntimeErrorText(message);
-  if (activity === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS) return "";
-  if (activity === AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND)
-    return truncateCodePoints(scrubRuntimeErrorText(message), 200);
-  if (
-    activity === AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED ||
-    activity === AGENT_ACTIVITY_DETAIL_KIND.CHECKING_MESSAGES ||
-    activity === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING ||
-    activity === AGENT_ACTIVITY_DETAIL_KIND.THINKING_END
-  ) {
-    return scrubRuntimeErrorText(message);
-  }
-  // The content-free run-start announcement (ActivityTrajectory#startRun) carries no
-  // message; let it through empty instead of falling to the generic sentence below.
-  if (
-    (activity === AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED ||
-      activity === AGENT_ACTIVITY_DETAIL_KIND.MODEL_RESPONSE_STARTED) &&
-    !message
-  ) {
-    return "";
-  }
-  return "Agent activity observed.";
-}
-
-function runtimeFailureDiagnostic(message: string) {
-  const safe = scrubRuntimeErrorText(message);
-  return {
-    errorClass: "AgentRuntimeError",
-    errorReason: "runtime_failure",
-    fingerprint: fingerprintRuntimeError(safe),
-  };
-}
-
-function validUsageWindow(window: UsageSnapshot["primary"], now: number): UsageSnapshot["primary"] {
-  return window && window.resetsAt !== undefined && Date.parse(window.resetsAt) > now
-    ? window
-    : undefined;
 }
 
 export type { CodeAgentProviderFactory, AgentRuntime, AgentRuntimeConfig, CodeAgentProvider };

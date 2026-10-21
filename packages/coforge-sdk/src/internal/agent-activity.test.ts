@@ -89,6 +89,7 @@ for (const detailKind of [
   AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_STALLED,
   AGENT_ACTIVITY_DETAIL_KIND.STALLED_RECOVERY,
   AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
+  AGENT_ACTIVITY_DETAIL_KIND.FAST_MODE_UNAVAILABLE,
 ]) {
   test(`round trips the ${detailKind} detail kind`, () => {
     const withKind: AgentActivity = { ...activity, detailKind };

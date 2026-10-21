@@ -80,5 +80,6 @@ export function storedRuntimeSelection(config: AgentRuntimeConfig): AgentRuntime
     modelProvider: config.modelProvider,
     reasoning: config.reasoning,
     hasApiKey: config.provider.kind === "coforge" && Boolean(config.provider.apiKey),
+    fastMode: config.fastMode === true,
   };
 }

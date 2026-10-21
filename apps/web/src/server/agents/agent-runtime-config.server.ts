@@ -27,6 +27,9 @@ export type AgentRuntimeConfig = {
   model: string;
   modelProvider: string;
   reasoning: string;
+  /** Whether this Agent launches with the runtime's Fast service tier. Absent (every row written
+   * before Fast mode existed) means it does not. */
+  fastMode?: boolean;
   environment?: EncryptedAgentEnvironment;
 };
 
@@ -37,12 +40,14 @@ export function parseAgentRuntimeConfig(value: unknown): AgentRuntimeConfig {
   const model = Reflect.get(value, "model");
   const modelProvider = Reflect.get(value, "modelProvider");
   const reasoning = Reflect.get(value, "reasoning");
+  const fastMode = Reflect.get(value, "fastMode");
   const environment = parseEncryptedEnvironment(Reflect.get(value, "environment"));
   if (
     !runtime ||
     typeof model !== "string" ||
     (modelProvider !== undefined && typeof modelProvider !== "string") ||
-    typeof reasoning !== "string"
+    typeof reasoning !== "string" ||
+    (fastMode !== undefined && typeof fastMode !== "boolean")
   )
     throw new Error("invalid runtime config");
   return {
@@ -51,6 +56,7 @@ export function parseAgentRuntimeConfig(value: unknown): AgentRuntimeConfig {
     model,
     modelProvider: modelProvider ?? "",
     reasoning,
+    ...(fastMode === true ? { fastMode: true } : {}),
     ...(environment ? { environment } : {}),
   };
 }

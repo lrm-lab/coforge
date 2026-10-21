@@ -55,6 +55,28 @@ test("each reason a Computer cannot run the Agent is told apart, as the referenc
   expect(agentRuntimeSelectionRefusal(claude, inventory({ models: [] }))).toBe("model_missing");
 });
 
+test("a Fast mode selection is refused when the model does not accept it, and allowed when it does", () => {
+  const fastClaude = { ...claude, fastMode: true };
+  // The model is there; what it cannot do is the Fast tier, so that is the refusal named.
+  expect(agentRuntimeSelectionRefusal(fastClaude, inventory())).toBe("fast_mode_unsupported");
+  expect(
+    agentRuntimeSelectionRefusal(
+      fastClaude,
+      inventory({ models: [{ ...sonnet, supportsFastMode: true }] }),
+    ),
+  ).toBeNull();
+  // A runtime whose adapter applies no service tier never offers it, whatever the model claims.
+  expect(
+    agentRuntimeSelectionRefusal(
+      { ...fastClaude, provider: RUNTIME_PROVIDER.PI },
+      inventory({
+        reported: [RUNTIME_PROVIDER.PI],
+        models: [{ ...sonnet, supportsFastMode: true }],
+      }),
+    ),
+  ).toBe("fast_mode_unsupported");
+});
+
 test("the built-in runtime counts Pi on the Computer as offering it", () => {
   const builtIn = { ...claude, provider: RUNTIME_PROVIDER.COFORGE, model: "", modelProvider: "" };
   expect(

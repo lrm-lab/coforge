@@ -12,9 +12,19 @@ import { readCodexUsage } from "./usage";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { JsonlProcess, JsonlRequestError } from "#src/code-agent/jsonl-process";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
-import { RUNTIME_PROVIDER, utf8Encoder } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_PROVIDER,
+  utf8Encoder,
+  type AgentServiceTierObserved,
+} from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { asRecord, eventTime } from "#src/code-agent/json-record";
+import {
+  assertSkillsLoaded,
+  codexServiceTierState,
+  scrubError,
+  type CodexSessionState,
+} from "./provider-support";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "codex"]);
 
@@ -74,6 +84,8 @@ export class CodexProvider implements CodeAgentProvider {
             cwd: options.agentWorkspaceDirectory,
             developerInstructions: options.instructions,
             ...(options.runtime?.model ? { model: options.runtime.model } : {}),
+            // Codex's own service tier for this thread; the ordinary tier is the absence of it.
+            ...(options.runtime?.fastMode ? { serviceTier: "fast" } : {}),
             approvalPolicy: "never",
             sandbox: "danger-full-access",
             config: {
@@ -137,6 +149,10 @@ export class CodexProvider implements CodeAgentProvider {
         options.sessionId !== undefined && replacedSessionId === undefined,
         options.agentId,
         options.runtimeId,
+        // Only a launch that asked for the Fast tier has anything to report about it.
+        options.runtime?.fastMode
+          ? codexServiceTierState(asRecord(response.result)?.serviceTier)
+          : undefined,
       );
     } catch (error) {
       await process.dispose();
@@ -157,6 +173,11 @@ class CodexAgentSession implements AgentSession {
   #lastCompletedTurnId: string | undefined;
   #starting: Promise<void> | undefined;
   #identity: AgentSessionIdentity;
+  /** The service tier codex applied at thread/start, from its own reply. Reported on the first
+   * turn rather than in the constructor: the daemon subscribes only after
+   * `createAgentSession` returns, so an event emitted here would be dropped. */
+  readonly #serviceTier: AgentServiceTierObserved | undefined;
+  #serviceTierReported = false;
 
   constructor(
     process: JsonlProcess,
@@ -164,11 +185,13 @@ class CodexAgentSession implements AgentSession {
     resumed: boolean,
     agentId?: string,
     runtimeId?: string,
+    serviceTier?: AgentServiceTierObserved,
   ) {
     this.#process = process;
     this.#threadId = threadId;
     this.#agentId = agentId;
     this.#runtimeId = runtimeId;
+    this.#serviceTier = serviceTier;
     this.#identity = {
       sessionId: threadId,
       state: resumed ? "resumable" : "empty",
@@ -206,6 +229,10 @@ class CodexAgentSession implements AgentSession {
   }
 
   async #startTurn(text: string): Promise<void> {
+    if (!this.#serviceTierReported) {
+      this.#serviceTierReported = true;
+      if (this.#serviceTier) this.#emit({ type: "service-tier", state: this.#serviceTier });
+    }
     this.#setIdentity("unknown");
     this.#state = { type: "starting", completedTurnIds: new Set() };
     let response: Readonly<Record<string, unknown>>;
@@ -468,30 +495,4 @@ class CodexAgentSession implements AgentSession {
   #isDisposed(): boolean {
     return this.#state.type === "disposed";
   }
-}
-
-type CodexSessionState =
-  | { type: "idle" }
-  | { type: "starting"; completedTurnIds: Set<string> }
-  | { type: "running"; turnId: string }
-  | { type: "interrupting"; turnId: string }
-  | { type: "disposed" };
-
-function assertSkillsLoaded(response: Record<string, unknown>, cwd: string): void {
-  const data = asRecord(response.result)?.data;
-  if (!Array.isArray(data)) throw new Error("Codex did not report loaded skills");
-  const workspace = data.map(asRecord).find((entry) => entry?.cwd === cwd);
-  if (!workspace || !Array.isArray(workspace.errors) || workspace.errors.length > 0) {
-    throw new Error("Codex failed to load workspace skills");
-  }
-}
-
-// Bounds only the daemon's own structured log line (`codex.turn.failed`), never the visible
-// Activity: the daemon core owns redaction/truncation for anything shown to a user (see
-// agent-runtime/runtime-error-activity.ts, the single place that happens for every provider).
-function scrubError(message: string): string {
-  return message
-    .replace(/(?:sk|pk|api|token|key|secret)[_-]?[A-Za-z0-9_-]{8,}/gi, "[redacted]")
-    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
-    .slice(0, 500);
 }
