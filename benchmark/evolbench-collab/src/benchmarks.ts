@@ -89,6 +89,7 @@ export function reminderForEpisode(benchmark: string, domain: string): string {
   const profile = profileFor(benchmark);
   if (benchmark === "evoagentbench" && domain === "information_retrieval") return IR_REMINDER;
   if (benchmark === "evoagentbench" && domain === "software_engineering") return SWE_REMINDER;
+  if (benchmark === "evoagentbench" && domain === "knowledge_work") return GENERIC_REMINDER;
   if (benchmark === "agentstream" && domain === "function_calling") return CALL_LIST_REMINDER;
   return profile.publishReminder;
 }

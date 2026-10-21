@@ -571,3 +571,36 @@ test("the policy gateway cannot forward typed session commit or extract", async 
   expect(extractDenied.ok).toBe(false);
   expect(forwarded).toBe(false);
 });
+
+test("causal publication follows settled commit when explicitly enabled by an admin sink", async () => {
+  const calls: string[] = [];
+  const sessions = createOpenVikingTypedSessionExtract({
+    runtime: createOpenVikingRuntimeClient({
+      baseUrl: "http://ov.internal:1933",
+      fetchImpl: async (input, init) => {
+        const path = new URL(String(input)).pathname;
+        calls.push(path);
+        const result = path.endsWith("/commit")
+          ? { task_id: "task-publish" }
+          : path.endsWith("/tasks/task-publish")
+            ? { status: "completed" }
+            : path.endsWith("/publish_causal")
+              ? { resources: 6, retrieval_mode: "bm25" }
+              : {};
+        if (path.endsWith("/publish_causal")) {
+          expect(JSON.parse(String(init?.body))).toEqual({ session_id: SAMPLE_WRITE.sessionId });
+          expect(headersFrom(init)["x-openviking-user"]).toBe(SINK_IDENTITY.userId);
+        }
+        return new Response(JSON.stringify({ status: "ok", result }), { status: 200 });
+      },
+    }),
+    authorizedOwner: "sink-owner",
+    sinkIdentity: { ...SINK_IDENTITY, role: "admin" },
+    publishCausal: true,
+    sleep: async () => undefined,
+    onPhase: () => undefined,
+  });
+  expect(await sessions.writeCommitAndExtract({ owner: "sink-owner", write: SAMPLE_WRITE }))
+    .toEqual({ ok: true, sessionId: SAMPLE_WRITE.sessionId });
+  expect(calls.slice(-2)).toEqual(["/api/v1/tasks/task-publish", "/api/v1/search/publish_causal"]);
+});

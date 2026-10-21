@@ -198,7 +198,6 @@ test("the openviking-memory profile queries before retrieval Offers and protects
 const OPENVIKING_FENCE_TOOLS = [
   "ov_fork_find",
   "ov_expand",
-  "ov_read",
   "memory_offer",
   "memory_diagnose",
 ] as const;
@@ -267,7 +266,9 @@ test("the openviking-memory fence names reads and server-owned memory controls",
   const section = memoryAgentSection(instructionsForFence("openviking-memory"));
   const listing = allowedToolsetListing(section);
   for (const name of OPENVIKING_FENCE_TOOLS) expect(listing).toContain(name);
-  expect(listing).toContain("ov_search_context");
+  expect(listing).not.toContain("ov_find");
+  expect(listing).not.toContain("ov_search_context");
+  expect(listing).not.toContain("ov_read");
   expect(section).toContain("memory_diagnose");
   for (const name of CAUSAL_ONLY_TOOLS) expect(listing).not.toContain(name);
   expect(section).toContain(
@@ -298,7 +299,7 @@ test("the memory fence shows copyable tool JSON and does not teach shell message
   const section = memoryAgentSection(fenced);
   expect(section).toContain('{"operationId": "find-1", "query": "<检索词>", "limit": 10}');
   expect(section).toContain(
-    '{"operationId": "offer-1", "citationRefs": ["<ov_search_context/ov_fork_find/ov_expand 返回的 citation id>"], "body": "<给 @task 的正文>"}',
+    '{"operationId": "offer-1", "citationRefs": ["<ov_fork_find/ov_expand 返回的 citation id>"], "body": "<给 @task 的正文>"}',
   );
   expect(section).toContain('{"target": "#<频道名>"}');
   expect(section).toContain('{"target": "#<频道名>", "content": "<正文>"}');
