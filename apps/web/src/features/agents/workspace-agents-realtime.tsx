@@ -54,6 +54,7 @@ export type LiveAgent = {
 // told when that Agent changes and not when any other does.
 const LiveAgentStoreContext = createContext<Store<LiveAgent[]>>(createStore<LiveAgent[]>([]));
 const WorkspaceIdContext = createContext<string | undefined>(undefined);
+const RefreshAgentDirectoryContext = createContext<(() => Promise<void>) | null>(null);
 
 const visiblePrivateAgentIdsKey = (workspaceId: string | undefined) =>
   ["agent-visibility", "visible-private-ids", workspaceId ?? null] as const;
@@ -163,7 +164,7 @@ export function WorkspaceAgentsProvider({
   // `useAgentStatuses` derives its own per-Agent status subscriptions from its own current
   // state (see agent-status-realtime.ts), so a freshly-private Agent is subscribed the moment
   // it learns about it — no lag from an external, previous-render list.
-  const visibleAgents = useAgentStatuses<LiveAgent>({
+  const { agents: visibleAgents, refresh: refreshDirectory } = useAgentStatuses<LiveAgent>({
     agents,
     workspaceId,
     refresh: refreshAgents,
@@ -223,9 +224,20 @@ export function WorkspaceAgentsProvider({
 
   return (
     <LiveAgentStoreContext value={liveAgents}>
-      <WorkspaceIdContext value={workspaceId}>{children}</WorkspaceIdContext>
+      <WorkspaceIdContext value={workspaceId}>
+        <RefreshAgentDirectoryContext value={refreshDirectory}>
+          {children}
+        </RefreshAgentDirectoryContext>
+      </WorkspaceIdContext>
     </LiveAgentStoreContext>
   );
+}
+
+/** Re-reads the owning Agent store after a write, preserving its snapshot if the read fails. */
+export function useRefreshAgentDirectory() {
+  const refresh = useContext(RefreshAgentDirectoryContext);
+  if (!refresh) throw new Error("Agent directory refresh requires WorkspaceAgentsProvider");
+  return refresh;
 }
 
 /** Whether an Agent is in the viewer's own roster, not an `isExtra` placeholder. */

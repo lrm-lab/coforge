@@ -18,6 +18,7 @@ These rules apply to `src/features/agents/`.
   own Agent state. The live Agents are a TanStack Store: a reader of one Agent
   (`useLiveAgent`, `useLiveAgentDisplay`) re-renders only when that Agent
   changes, so a list row reads its own Agent rather than the whole list.
+  `useRefreshAgentDirectory` re-reads that store after a committed write; a failed read preserves the snapshot and rejects to the caller without replacing the Workspace route.
 - The model beside an Agent's name in chat (`agent-models.ts`, Settings → Show
   agent model) is one query per Workspace over every Agent the viewer may see
   (`listVisibleAgentModels`, scoped by `visibleAgentWhere`), wider than
@@ -111,7 +112,7 @@ These rules apply to `src/features/agents/`.
   (`WorkspaceMembers.person` reports which apply); one's own profile is edited
   in Settings → Account.
 - Computer prerequisites appear only after the user requests Agent creation.
-  Runtime management stays in the profile panel. `cloud-agent-create-dialog.tsx`, opened from the DM picker, asks only for a display name, waits for cloud readiness, and opens the created private Agent's DM; creation permissions remain server-owned.
+  Runtime management stays in the profile panel. `cloud-agent-create-dialog.tsx`, opened from the DM picker, asks only for a display name, waits for cloud readiness, and opens the created private Agent's DM; it re-reads the Agent roster, picker directory, and DM list after their writes instead of relying on realtime signals. Creation permissions remain server-owned.
 - Workspace directory reads belong to
   `features/workspaces/workspaces.functions.ts` and
   `server/workspaces/members.server.ts`; owner-only Agent operations stay

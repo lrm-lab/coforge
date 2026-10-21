@@ -7,5 +7,6 @@
   "cloud_agent_create_preparing": "正在准备云电脑并启动 Bot…",
   "cloud_agent_create_timeout": "云电脑仍在准备中，请重试以继续创建。",
   "cloud_agent_create_no_deepseek": "云电脑上暂无可用的 DeepSeek 模型，请配置 DeepSeek 后重试。",
-  "cloud_agent_create_start_deferred": "Bot 已创建，但暂时无法启动。请重试，将继续启动同一个 Bot。"
+  "cloud_agent_create_start_deferred": "Bot 已创建，但暂时无法启动。请重试，将继续启动同一个 Bot。",
+  "cloud_agent_create_refresh_error": "Bot 已创建，但列表暂时未能更新。请重试，将打开同一个 Bot。"
 }

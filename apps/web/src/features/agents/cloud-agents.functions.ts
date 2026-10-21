@@ -46,18 +46,17 @@ export const createCloudAgent = createServerFn({ method: "POST" })
             },
           },
         });
-        return (
-          computer?.modelCatalogs.flatMap(({ models }) => {
-            if (!Array.isArray(models)) return [];
-            return models.flatMap((model) => {
-              if (!model || typeof model !== "object" || Array.isArray(model)) return [];
-              const { id, modelProvider, displayName } = model;
-              return typeof id === "string" && typeof modelProvider === "string"
-                ? [{ id, modelProvider, name: typeof displayName === "string" ? displayName : "" }]
-                : [];
-            });
-          }) ?? []
-        );
+        if (!computer?.modelCatalogs.length) return null;
+        return computer.modelCatalogs.flatMap(({ models }) => {
+          if (!Array.isArray(models)) return [];
+          return models.flatMap((model) => {
+            if (!model || typeof model !== "object" || Array.isArray(model)) return [];
+            const { id, modelProvider, displayName } = model;
+            return typeof id === "string" && typeof modelProvider === "string"
+              ? [{ id, modelProvider, name: typeof displayName === "string" ? displayName : "" }]
+              : [];
+          });
+        });
       },
       create: (principal, input) => manageAgents(db).create(principal, input),
       start: (principal, agentId) =>

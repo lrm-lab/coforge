@@ -114,9 +114,10 @@ export function useListReadPosition() {
  * signal, `useApplyChannelSignal`), a message that brings a closed or unlisted chat in, the
  * Activity page moving badges, or the viewer's own place in a chat or their Saved list changed on
  * another page, tab or device (a `ViewerEvent`). A burst is read once (`sidebarRefreshQueue`). The collections follow the
- * refetched Query data.
+ * refetched Query data. Mutation flows that keep an inline retry on failure opt in to
+ * `throwOnError`; realtime refreshes retain the best-effort default.
  */
-export function useRefreshSidebar() {
+export function useRefreshSidebar({ throwOnError = false }: { throwOnError?: boolean } = {}) {
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId() ?? "";
   return useMemo(
@@ -124,11 +125,14 @@ export function useRefreshSidebar() {
       sidebarRefreshQueue((lists) =>
         Promise.all(
           [...lists].map((list) =>
-            queryClient.invalidateQueries({ queryKey: chatListQueryKey[list](workspaceId) }),
+            queryClient.invalidateQueries(
+              { queryKey: chatListQueryKey[list](workspaceId) },
+              { throwOnError },
+            ),
           ),
         ).then(() => undefined),
       ),
-    [queryClient, workspaceId],
+    [queryClient, workspaceId, throwOnError],
   );
 }
 
