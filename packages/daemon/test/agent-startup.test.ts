@@ -18,7 +18,8 @@ const workspaceRoot = join(realpathSync(tmpdir()), `coforge-startup-${crypto.ran
 afterAll(() => rm(workspaceRoot, { recursive: true, force: true }));
 afterEach(() => jest.useRealTimers());
 
-async function harness(provider?: CodeAgentProvider, input?: () => Promise<void>) {
+type Emit = (event: AgentRuntimeEvent) => void;
+async function harness(provider?: CodeAgentProvider, input?: (emit: Emit) => Promise<void>) {
   const connection = { workspaceId: "workspace-a", computerId: "computer-a", workspaceRoot };
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -28,7 +29,7 @@ async function harness(provider?: CodeAgentProvider, input?: () => Promise<void>
   const inactive = Promise.withResolvers<void>();
   const idle = Promise.withResolvers<void>();
   const inputStarted = Promise.withResolvers<void>();
-  let emit: (event: AgentRuntimeEvent) => void = () => {};
+  let emit: Emit = () => {};
   let disposed = false;
   let live = false;
   const session: AgentSession = {
@@ -39,7 +40,7 @@ async function harness(provider?: CodeAgentProvider, input?: () => Promise<void>
       notices.push(text);
       live = true;
       inputStarted.resolve();
-      await input?.();
+      await input?.(emit);
     },
     async notify() {},
     subscribe(listener) {
@@ -100,6 +101,9 @@ async function harness(provider?: CodeAgentProvider, input?: () => Promise<void>
     start: () => runtime.startAgent("agent-a", { provider: "kiro", model: "auto", reasoning: "" }),
   };
 }
+
+const runtimeErrors = (h: { activities: AgentActivity[] }) =>
+  h.activities.filter((activity) => activity.detailKind === "runtime_error");
 
 test("startup fails and releases the session after 120 seconds without readiness, despite progress pings", async () => {
   const h = await harness();
@@ -270,7 +274,7 @@ test("an empty resume gets one no-work turn, not the fresh-start prompt", async 
   }
 });
 
-test("a recovery input admitted before any model work gets the same startup failure cleanup", async () => {
+test("a model error on an admitted recovery turn is an ordinary runtime error; the launch stands", async () => {
   const h = await harness();
   try {
     await h.runtime.startAgent(
@@ -282,11 +286,10 @@ test("a recovery input admitted before any model work gets the same startup fail
     );
     h.emit({ type: "error", message: "Provider authentication failed" });
     h.emit({ type: "completed", status: "failed" });
-    await h.inactive;
-    expect(h.disposed()).toBe(true);
-    expect(h.activities.filter((activity) => activity.detailKind === "runtime_error")).toHaveLength(
-      1,
-    );
+    await Bun.sleep(0);
+    expect(h.disposed()).toBe(false);
+    expect(h.statuses).not.toContain("inactive");
+    expect(runtimeErrors(h)).toHaveLength(1);
   } finally {
     await h.runtime.stop();
   }
@@ -414,53 +417,34 @@ const usageLimitError = (providerLimit: ProviderLimit): AgentRuntimeEvent => ({
 test.each<ProviderLimit>([
   { kind: "quota_exhausted", resetsAt: "2026-10-20T13:30:00.000Z" },
   { kind: "transient_rate_limit" },
-])(
-  "a provider usage limit ($kind) after admission is readiness, not a startup failure",
-  async (providerLimit) => {
-    const startup = new AgentStartup(() => {});
-    try {
-      startup.admitted();
-      // Input the provider holds for the whole turn: only readiness settles it.
-      const ran = startup.run(new Promise<void>(() => {}));
-      expect(startup.observe(usageLimitError(providerLimit))).toBe(false);
-      expect(startup.failureObserved).toBe(false);
-      expect(startup.waiting).toBe(false);
-      await ran;
-      expect(startup.observe({ type: "completed", status: "failed" })).toBe(false);
-      expect(startup.failureObserved).toBe(false);
-    } finally {
-      startup.dispose();
-    }
-  },
-);
-
-test("a provider usage limit before input admission settles the launch input as ready", async () => {
+])("a provider usage limit ($kind) is readiness, not a startup failure", async (providerLimit) => {
   const startup = new AgentStartup(() => {});
   try {
-    const input = Promise.withResolvers<void>();
-    const ran = startup.run(input.promise);
-    expect(startup.observe(usageLimitError({ kind: "transient_rate_limit" }))).toBe(false);
-    await ran;
-    expect(startup.failureObserved).toBe(false);
+    // Input the provider holds for the whole turn: only readiness settles it.
+    const ran = startup.run(new Promise<void>(() => {}));
+    startup.observe(usageLimitError(providerLimit));
     expect(startup.waiting).toBe(false);
-    input.resolve();
-    await input.promise;
-    // Late admission after readiness carries no startup failure to rethrow.
-    expect(startup.admitted()).toBe(false);
+    await ran;
+    startup.observe({ type: "completed", status: "failed" });
+    expect(startup.endsLaunch(new Error("late rejection"), 0)).toBe(false);
   } finally {
     startup.dispose();
   }
 });
 
-test("an admitted startup error without a provider limit still fails startup", () => {
+test("a bare startup error closes the window but answers no input; a failed outcome does", () => {
   const startup = new AgentStartup(() => {});
   try {
-    startup.admitted();
-    expect(startup.observe({ type: "error", message: "Provider authentication failed" })).toBe(
-      true,
-    );
-    expect(startup.failureObserved).toBe(true);
-    expect(startup.waiting).toBe(true);
+    startup.observe({ type: "error", message: "Provider authentication failed" });
+    expect(startup.waiting).toBe(false);
+    expect(startup.errorObserved).toBe(true);
+    expect(startup.endsLaunch(new Error("turn/start failed"), 0)).toBe(true);
+    startup.observe({ type: "completed", status: "failed" });
+    expect(startup.endsLaunch(new Error("turn/start failed"), 0)).toBe(false);
+    // A later input the model has not answered yet is judged on its own.
+    expect(startup.endsLaunch(new Error("notice refused"), startup.responses)).toBe(true);
+    const recovery = new AgentSessionRecoveryError("provider_replay_rejected");
+    expect(startup.endsLaunch(recovery, 0)).toBe(true);
   } finally {
     startup.dispose();
   }
@@ -474,17 +458,74 @@ test("a usage limit on the startup turn leaves the Agent's launch running", asyn
       h.emit(usageLimitError({ kind: "quota_exhausted", resetsAt: "2026-10-20T13:30:00.000Z" }));
       h.emit({ type: "completed", status: "failed" });
     });
-    // Startup failure logs synchronously from the event, before tearing the launch down.
-    expect(records.map((record) => record.properties.event)).not.toContain(
-      "agent_runtime:startup_input_rejected",
-    );
+    const events = records.map((record) => record.properties.event);
+    expect(events).not.toContain("agent_runtime:startup_timed_out");
+    expect(events).not.toContain("agent.startup_input.rejected");
     expect(h.disposed()).toBe(false);
     // The limit takes the ordinary runtime-error path (the provider-limit hold) instead.
-    const errors = h.activities.filter((activity) => activity.detailKind === "runtime_error");
+    const errors = runtimeErrors(h);
     expect(errors).toHaveLength(1);
     expect(errors[0]?.runtimeError?.errorReason).toBe("quota_exhausted");
     expect(h.statuses).not.toContain("inactive");
   } finally {
+    await h.runtime.stop();
+  }
+});
+
+test.each([
+  ["no events (Codex turn/start error)", []],
+  ["a bare error event (Grok, Kiro)", [{ type: "error", message: "Prompt failed" }]],
+] as [string, AgentRuntimeEvent[]][])(
+  "a startup input rejected after %s ends the launch with one runtime error",
+  async (_, events) => {
+    const h = await harness(undefined, async (emit) => {
+      for (const event of events) emit(event);
+      throw new Error("Prompt failed");
+    });
+    try {
+      await expect(h.start()).rejects.toThrow("Prompt failed");
+      expect(h.disposed()).toBe(true);
+      expect(h.statuses).toContain("inactive");
+      expect(runtimeErrors(h)).toHaveLength(1);
+      expect(runtimeErrors(h)[0]?.detail).toContain("Prompt failed");
+    } finally {
+      await h.runtime.stop();
+    }
+  },
+);
+
+test.each([
+  ["a failed turn (Pi)", "Provider authentication failed"],
+  ["a quota error without a provider limit", "provider.quota (HTTP 429): quota exceeded"],
+])("a startup input rejected after %s leaves the launch running", async (_, message) => {
+  const h = await harness(undefined, async (emit) => {
+    emit({ type: "error", message });
+    emit({ type: "completed", status: "failed" });
+    throw new Error(message);
+  });
+  try {
+    const { records } = await captureDaemonLogs(() => h.start());
+    const events = records.map((record) => record.properties.event);
+    expect(events).toContain("agent.startup_input.rejected");
+    expect(events).not.toContain("agent_runtime:startup_timed_out");
+    expect(h.disposed()).toBe(false);
+    expect(h.statuses).not.toContain("inactive");
+    expect(runtimeErrors(h)).toHaveLength(1);
+  } finally {
+    await h.runtime.stop();
+  }
+});
+
+test("a bare startup error alone cancels the 120-second deadline", async () => {
+  const h = await harness();
+  try {
+    jest.useFakeTimers();
+    await h.start();
+    h.emit({ type: "error", message: "Provider authentication failed" });
+    jest.advanceTimersByTime(AGENT_STARTUP_TIMEOUT_MS);
+    expect(h.disposed()).toBe(false);
+  } finally {
+    jest.useRealTimers();
     await h.runtime.stop();
   }
 });

@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import { AgentSessionRecoveryError, type AgentRuntimeEvent } from "#src/code-agent/contract";
 
 /** The first turn when no real Message or explicit resume prompt is available. Standing
  * instructions already live in the provider's native system/developer prompt. */
@@ -28,16 +28,18 @@ Read each listed conversation with ${command} ${reading}, then end this turn. Do
 }
 export const AGENT_STARTUP_TIMEOUT_MS = 120_000;
 
-/** Launch-local readiness. Transport/session bookkeeping is not evidence that the model can
- * work. A real turn observation or outcome closes the startup window; later silence belongs
- * to the ordinary runtime liveness policy, not this timer. A provider usage or rate limit
- * (`providerLimit`) closes it too: the runtime reached the provider's API, so the limit takes
- * the ordinary runtime-error path instead of tearing the launch down. */
+/** Launch-local startup judgement. Transport/session bookkeeping is not evidence that the model
+ * can work; any other event, a bare `error` included, closes the startup window, and later
+ * silence belongs to the ordinary runtime liveness policy, not this timer. Once the model has
+ * responded to an input (an outcome, real work, or a provider usage or rate limit), a model error
+ * takes the ordinary runtime-error path. Startup fails only at the timeout, or when a startup or
+ * recovery input is rejected before a response to it or with `AgentSessionRecoveryError`. */
 export class AgentStartup {
   #timer: ReturnType<typeof setTimeout> | undefined;
   readonly #ready = Promise.withResolvers<void>();
-  #inputAccepted = false;
-  #failure: Error | undefined;
+  #closed = false;
+  #responses = 0;
+  #errorObserved = false;
 
   constructor(onTimeout: () => void) {
     void this.#ready.promise.catch(() => {});
@@ -45,69 +47,61 @@ export class AgentStartup {
     this.#timer.unref?.();
   }
 
-  /** Settle launch input at native admission or actual readiness, whichever happens first.
-   * A provider's typed rejection before either is preserved for session recovery. */
+  /** Settle launch input at native admission or actual readiness, whichever happens first. A
+   * rejection before readiness propagates for the caller to judge with `endsLaunch`. */
   run(input: Promise<void>): Promise<void> {
-    return Promise.race([
-      input.then(() => {
-        this.#inputAccepted = true;
-        if (this.#failure) throw this.#failure;
-      }),
-      this.#ready.promise,
-    ]);
-  }
-
-  get failureObserved(): boolean {
-    return this.#failure !== undefined;
+    return Promise.race([input, this.#ready.promise]);
   }
 
   get waiting(): boolean {
     return this.#timer !== undefined;
   }
 
-  /** Message recovery and user resume prompts use their existing admission/ACK path. */
-  admitted(): boolean {
-    this.#inputAccepted = true;
-    return this.waiting && this.failureObserved;
+  /** A provider `error` event already reported its own runtime error Activity. */
+  get errorObserved(): boolean {
+    return this.#errorObserved;
   }
 
-  /** True when an already-admitted startup failed before the model became ready. An error
-   * carrying `providerLimit` is readiness, never a startup failure, and closes the window even
-   * when marked retryable. */
-  observe(event: AgentRuntimeEvent): boolean {
-    if (this.#timer === undefined) return false;
-    const limited = event.type === "error" && event.providerLimit !== undefined;
+  /** Responses observed so far; read before presenting an input to judge its rejection. */
+  get responses(): number {
+    return this.#responses;
+  }
+
+  /** Whether a rejected startup or recovery input ends the launch. Session recovery always does,
+   * so the Start retries with a fresh session; any other rejection, only when the model gave no
+   * response since `since` (the `responses` read before presenting that input). */
+  endsLaunch(error: unknown, since: number): boolean {
+    return error instanceof AgentSessionRecoveryError || this.#responses === since;
+  }
+
+  /** Track readiness and response for the launch's lifetime, after the timer clears too; a
+   * disposed or failed startup ignores events. */
+  observe(event: AgentRuntimeEvent): void {
     if (
-      (event.type === "error" && !event.retryable && !limited) ||
-      (event.type === "completed" && event.status === "failed") ||
-      (event.type === "activity" && event.activity.level === "error")
-    ) {
-      this.#failure ??= new Error(
-        event.type === "error" ? event.message : "Agent startup turn failed",
-      );
-      return this.#inputAccepted;
-    }
-    if (
+      this.#closed ||
       event.type === "session" ||
       event.type === "usage" ||
       event.type === "context-usage" ||
       event.type === "progress" ||
       event.type === "reconnecting" ||
-      event.type === "notice-undelivered"
+      event.type === "notice-undelivered" ||
+      (event.type === "activity" &&
+        (event.activity.detailKind === "starting" ||
+          event.activity.detailKind === "runtime_progress"))
     )
-      return false;
-    if (event.type === "error" && !limited) return false;
-    if (
-      event.type === "activity" &&
-      (event.activity.detailKind === "starting" || event.activity.detailKind === "runtime_progress")
-    )
-      return false;
+      return;
     this.#clearTimer();
-    this.#ready.resolve();
-    return false;
+    if (event.type === "error") {
+      this.#errorObserved = true;
+      if (event.providerLimit === undefined) return;
+    }
+    this.#responses++;
+    // A failed outcome leaves the input to settle the queue, so its rejection is still judged.
+    if (event.type !== "completed" || event.status !== "failed") this.#ready.resolve();
   }
 
   dispose(): void {
+    this.#closed = true;
     this.#clearTimer();
     this.#ready.reject(new Error("Agent runtime is stopping"));
   }
@@ -117,10 +111,11 @@ export class AgentStartup {
     this.#timer = undefined;
   }
 
-  /** Claim failure only while startup still owns the turn. An input promise may reject much
-   * later, after real work already established readiness; that is an ordinary runtime error. */
+  /** Claim the timeout only while startup still owns the turn: any event after the deadline was
+   * armed already closed it. */
   fail(error: Error): boolean {
     if (this.#timer === undefined) return false;
+    this.#closed = true;
     this.#clearTimer();
     this.#ready.reject(error);
     return true;

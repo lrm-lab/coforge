@@ -1704,6 +1704,7 @@ export class DaemonRuntime {
     while (!queue.closed) {
       const item = queue.items.shift();
       if (!item) return;
+      const responses = this.#currentActivityLaunches.get(agentId)?.startup?.responses ?? 0;
       try {
         if (
           item.kind === "startup" &&
@@ -1734,8 +1735,7 @@ export class DaemonRuntime {
         } else if (item.kind === "startup") {
           const session = this.#agentProcessManager.session(agentId);
           const launch = this.#currentActivityLaunches.get(agentId);
-          // Preserve typed input rejection for AgentControl's session recovery, but release
-          // the queue at real readiness if this provider awaits the whole turn.
+          // Release the queue at real readiness if this provider awaits the whole turn.
           if (session && launch) await launch.startup?.run(session.sendMessage(item.text));
         } else if (item.kind === "prompt") {
           await this.#runPromptTurn(agentId, item.text, item.introduction);
@@ -1750,7 +1750,18 @@ export class DaemonRuntime {
             return;
           }
           const launch = this.#currentActivityLaunches.get(agentId);
-          if (item.kind === "startup" && launch && !launch.startup?.failureObserved)
+          if (launch?.startup && !launch.startup.endsLaunch(error, responses)) {
+            // The model already answered this input: the launch stands, like a refused prompt.
+            logger.warn("Agent startup input was not accepted", {
+              event: "agent.startup_input.rejected",
+              agent_id: agentId,
+              input_kind: item.kind,
+              error_code: diagnosticErrorCode(error),
+            });
+            item.completion.resolve();
+            continue;
+          }
+          if (item.kind === "startup" && launch && !launch.startup?.errorObserved)
             this.#activityPublisher.publish(
               agentId,
               launch,
@@ -1779,13 +1790,6 @@ export class DaemonRuntime {
           continue;
         }
       }
-      const launch = this.#currentActivityLaunches.get(agentId);
-      const hasInput =
-        item.kind === "delivery" ||
-        item.kind === "prompt" ||
-        (item.kind === "recovery" && recoveryHasContent(item.context));
-      if (hasInput && launch?.startup?.admitted())
-        this.#scheduleStartupFailure(agentId, launch, new Error("Agent startup turn failed"));
       item.completion.resolve();
     }
   }
@@ -2235,15 +2239,13 @@ export class DaemonRuntime {
         // event marks the Agent busy (a hold released while busy flushes only at the turn end).
         const recoverySignal = isCurrent ? runtimeErrorRecoverySignal(event) : undefined;
         if (recoverySignal) this.#runtimeErrorHold.noteRecoverySignal(agentId, recoverySignal);
-        const startupFailed = isCurrent && launch.startup?.observe(event);
+        if (isCurrent) launch.startup?.observe(event);
         const turnActivity =
           event.type === "activity"
             ? isBusyActivityDetailKind(event.activity.detailKind)
             : TURN_ACTIVITY_EVENT_TYPES.has(event.type);
         if (turnActivity && this.#reconcileIdleTurn(agentId, launch)) return;
         trajectory.accept(event);
-        if (startupFailed)
-          this.#scheduleStartupFailure(agentId, launch, new Error("Agent startup turn failed"));
       });
       runtime.session.onExit(() => {
         launch.startup?.dispose();
@@ -2336,34 +2338,27 @@ export class DaemonRuntime {
     }
   }
 
-  async #failAgentStartup(agentId: string, launch: ActivityLaunch, cause?: unknown): Promise<void> {
+  async #failAgentStartup(agentId: string, launch: ActivityLaunch): Promise<void> {
     if (this.#stopping || launch.stopping || this.#currentActivityLaunches.get(agentId) !== launch)
       return;
-    const detail =
-      cause === undefined
-        ? `Agent runtime did not become ready within ${AGENT_STARTUP_TIMEOUT_MS / 1000} seconds. Check the provider on this Computer, then start the Agent again.`
-        : `Agent runtime rejected its startup input. ${scrubRuntimeErrorText(cause instanceof Error ? cause.message : "Check the provider on this Computer, then start the Agent again.")}`;
+    const detail = `Agent runtime did not become ready within ${AGENT_STARTUP_TIMEOUT_MS / 1000} seconds. Check the provider on this Computer, then start the Agent again.`;
     const error = new Error(detail);
     if (!launch.startup?.fail(error)) return;
     logger.warning("Agent runtime startup failed", {
-      event:
-        cause === undefined
-          ? "agent_runtime:startup_timed_out"
-          : "agent_runtime:startup_input_rejected",
+      event: "agent_runtime:startup_timed_out",
       agent_id: agentId,
       launch_id: launch.launchId,
       timeout_ms: AGENT_STARTUP_TIMEOUT_MS,
       outcome: "failed",
     });
-    if (!launch.startup.failureObserved)
-      this.#activityPublisher.publish(agentId, launch, this.#runtimeErrorActivity(agentId, detail));
+    this.#activityPublisher.publish(agentId, launch, this.#runtimeErrorActivity(agentId, detail));
     const outcome = await this.#abandonLaunch(agentId, error);
     if (outcome !== error) throw outcome;
     await this.#agentControl.stopped(agentId, launch.launchId);
   }
 
-  #scheduleStartupFailure(agentId: string, launch: ActivityLaunch, cause?: unknown): void {
-    void this.#failAgentStartup(agentId, launch, cause).catch((error: unknown) => {
+  #scheduleStartupFailure(agentId: string, launch: ActivityLaunch): void {
+    void this.#failAgentStartup(agentId, launch).catch((error: unknown) => {
       logger.error("Agent startup cleanup did not confirm process exit", {
         event: "agent_runtime:startup_cleanup_failed",
         agent_id: agentId,

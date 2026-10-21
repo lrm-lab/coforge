@@ -44,10 +44,10 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   input or an explicit `resumePrompt` takes precedence; an empty fresh launch gets `Start.`, an empty
   resume gets a no-work turn, and summary-only recovery reads each listed target once and acts only on
   work directed to the Agent. Never add a starter to a provider's already-running bootstrap turn.
-- `agent-runtime/agent-startup.ts` owns startup input and the launch-local 120-second readiness
-  deadline; bookkeeping and transport progress are not readiness. Real turn Activity, an outcome, or
-  a startup `error` with `providerLimit` (kept under the runtime-error hold) closes it. Timeout reports
-  an error; it or another startup failure ends the launch. Stop, exit, and shutdown cancel it.
+- `agent-runtime/agent-startup.ts` owns startup input and the 120-second deadline (Stop, exit and
+  shutdown cancel it); any event but bookkeeping, a bare `error` too, clears it. A launch fails at
+  startup only on timeout, or when a startup or recovery input is rejected with `AgentSessionRecoveryError`
+  or before an outcome, real work or `providerLimit` error answers it. Other errors are ordinary.
 - After a successful current-generation `notify`, ordinary live Message delivery and concrete
   wake/resume batches report `Message received` Activity with detail kind `message_received`.
   Summary-only recovery and deduplicated inputs do not report it.
