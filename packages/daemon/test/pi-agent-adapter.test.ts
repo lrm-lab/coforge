@@ -238,55 +238,6 @@ export default function (pi) {
   }
 });
 
-test("embedded Pi reports a recovered retry as completed without a terminal error", async () => {
-  const root = await mkdtemp(join(tmpdir(), "coforge-pi-retry-"));
-  let server: ReturnType<typeof Bun.serve> | undefined;
-  let session: AgentSession | undefined;
-  try {
-    const workspace = join(root, "workspace");
-    const agentDir = join(root, "host-pi-agent");
-    await mkdir(workspace);
-    let requests = 0;
-    server = Bun.serve({
-      port: 0,
-      fetch() {
-        requests += 1;
-        if (requests === 1)
-          return new Response(JSON.stringify({ error: { message: "server_busy" } }), {
-            status: 400,
-          });
-        return completionStream({ role: "assistant", content: "recovered" }, "stop");
-      },
-    });
-    await writeOpenAiHost(agentDir, `${server.url}v1`);
-    await Bun.write(
-      join(agentDir, "settings.json"),
-      JSON.stringify({ retry: { enabled: true, maxRetries: 1, baseDelayMs: 1 } }),
-    );
-    session = await new PiProvider().createAgentSession({
-      agentWorkspaceDirectory: workspace,
-      instructions: TEST_AGENT_INSTRUCTIONS,
-      ...piRuntime(agentDir),
-    });
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
-    await session.sendMessage("hello");
-    expect(requests).toBe(2);
-    expect(events.filter((event) => event.type === "error")).toEqual([]);
-    expect(events.filter((event) => event.type === "completed")).toEqual([
-      { type: "completed", status: "completed" },
-    ]);
-    expect(events).toContainEqual({ type: "text-delta", text: "recovered" });
-  } finally {
-    try {
-      await session?.dispose();
-    } finally {
-      server?.stop(true);
-      await rm(root, { recursive: true, force: true });
-    }
-  }
-});
-
 test("embedded Pi reports extension cancellation as interrupted and can run again", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-extension-abort-"));
   let server: ReturnType<typeof Bun.serve> | undefined;

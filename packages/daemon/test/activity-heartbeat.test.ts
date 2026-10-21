@@ -18,6 +18,7 @@ import { COMPACTION_STALE_MS, REVIEW_STALE_MS } from "#src/agent-runtime/runtime
 import type { AgentActivity, AgentActivityDetailKind } from "@lrm/coforge-sdk/internal";
 import { backgroundBash, claudeEventFeed, claudeFixtureProvider } from "./fixtures/claude-feed";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
+import { activityHarness } from "./fixtures/activity-runtime";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -52,73 +53,7 @@ function sessionSpy() {
   } satisfies AgentSession;
 }
 
-function agentLaunchConfig(agentApiKey: string) {
-  return { agentApiKey };
-}
-
-/** Boots a runtime whose one Agent session hands the test direct control over runtime events. */
-async function harness(provider?: CodeAgentProvider) {
-  const credentials = new InMemoryDaemonCredentialStore();
-  await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-  const activities: AgentActivity[] = [];
-  let listener: Parameters<AgentSession["subscribe"]>[0] = () => undefined;
-  const runtime = new DaemonRuntime(
-    connection,
-    () =>
-      provider ?? {
-        provider: "pi",
-        async createAgentSession() {
-          return {
-            ...sessionSpy(),
-            subscribe(next) {
-              listener = next;
-              return () => undefined;
-            },
-          };
-        },
-      },
-    credentials,
-    {
-      create: () => ({
-        async start() {},
-        async ready() {},
-        async stop() {},
-        sendAgentActivity(activity) {
-          activities.push(activity);
-        },
-        async requestAgentLaunchConfig() {
-          return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
-        },
-        async revokeAgentApiKey() {},
-      }),
-    },
-    undefined,
-    emptyCodeAgentDiscovery,
-  );
-  await runtime.start(connection);
-  const agent = await runtime.startAgent(
-    "agent-a",
-    provider ? { ...config, provider: provider.provider } : config,
-  );
-  return {
-    runtime,
-    session: agent.session,
-    activities,
-    emit(activity: {
-      detailKind: AgentActivityDetailKind;
-      level: AgentActivity["level"];
-      detail: string;
-      entries?: AgentActivity["entries"];
-    }) {
-      listener({ type: "activity", activity: { ...activity, observedAtMs: Date.now() } });
-    },
-    /** Raw AgentRuntimeEvent injection, for events with no activity shorthand
-     * (tool-end, completed). */
-    emitEvent(event: AgentRuntimeEvent) {
-      listener(event);
-    },
-  };
-}
+const harness = (provider?: CodeAgentProvider) => activityHarness(connection, provider);
 
 for (const completionOrder of ["running", "before-start-response"] as const) {
   test(

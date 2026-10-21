@@ -56,7 +56,7 @@ attention 或确认旧投递；意外退出仍沿用原有的身份和恢复语�
 `AgentRuntimeEvent`（`packages/agent/src/contract.ts`）的 `error` 成员
 （`message`、可选的 `retryable`/`providerErrorCode`/`providerErrorClass`/
 `providerErrorReason`/`providerLimit`/`occurredAt`）和 `reconnecting` 成员（`attempt`/
-`message`）是四个 provider（Claude Code、Codex、Kiro、Pi）唯一允许上报运行时失败
+`maxAttempts`/`delayMs`/`message`）是四个 provider（Claude Code、Codex、Kiro、Pi）唯一允许上报运行时失败
 和重连的方式，只携带原始事实，不带格式化或分类。`packages/daemon/src/agent-runtime/
 runtime-error-activity.ts` 是把这些事实变成可见 Activity 的唯一位置：provider 报错文案
 原样显示；崩溃摘要（`Crashed (...)`）脱敏并截断到 512 个 Unicode 码点；附带的 `Error: …` trajectory
@@ -75,6 +75,13 @@ reason），否则退回到通用的 `AgentRuntimeError`/`runtime_failure`。唯
 引用 provider 原文、不带它。没有任何
 `code-agent/*/provider.ts` 文件再自行构造 `runtime_error`/`runtime_crashed`/
 `runtime_reconnecting` 的 Activity。
+
+Pi 和内置 CoForge Agent 将 SDK 的 `auto_retry_start` 与 `summarization_retry_scheduled`
+上报为 `reconnecting`，保留 attempt、maxAttempts、delayMs 与原始错误。核心在带退避事实时
+生成含重试次数和退避时长的说明，并脱敏、截断到 512 个 Unicode 码点；不把尚在重试的
+失败当作终止错误。`runtime_reconnecting` 是忙碌 Activity，心跳保留它而不复用旧的
+thinking；重试中断当前 thinking，恢复后的文本或 thinking 立即更新展示。回合结算仍由
+原生 `agent_settled` 决定，重试结束事件本身不额外发送 `completed` 或 `error`。
 
 `AgentSession.onExit` 本身不带退出码或信号，所以 Daemon 核心区分「进程崩溃」
 （`runtime_crashed`，文案 `Crashed (...)`) 和其他非主动退出（沿用 `stopped` 文案，

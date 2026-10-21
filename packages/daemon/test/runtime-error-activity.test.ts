@@ -113,6 +113,32 @@ test("builds a runtime_reconnecting activity with a default message when the pro
   expect(withoutMessage.detail).toBe("Reconnecting to provider…");
 });
 
+test("shows the provider retry attempt, backoff and original failure without a terminal error", () => {
+  const activity = buildRuntimeReconnectingActivity({
+    type: "reconnecting",
+    attempt: 2,
+    maxAttempts: 3,
+    delayMs: 4000,
+    message: "server_busy",
+  });
+  expect(activity).toMatchObject({
+    detailKind: "runtime_reconnecting",
+    level: "info",
+    detail: "Retrying provider request (attempt 2/3, backoff 4s): server_busy",
+    entries: [
+      { kind: "text", text: "Retrying provider request (attempt 2/3, backoff 4s): server_busy" },
+    ],
+  });
+  expect(activity.runtimeError).toBeUndefined();
+});
+
+test.each([
+  [{ delayMs: 2000 }, "Retrying provider request (backoff 2s)"],
+  [{ delayMs: 2000, attempt: 1 }, "Retrying provider request (attempt 1, backoff 2s)"],
+] as const)("retry wording omits unknown attempt facts: %j", (facts, detail) => {
+  expect(buildRuntimeReconnectingActivity({ type: "reconnecting", ...facts }).detail).toBe(detail);
+});
+
 test("scrubRuntimeErrorText redacts tokens/secrets/Bearer and caps at 512 chars", () => {
   expect(scrubRuntimeErrorText("password=hunter2 rest")).toBe("password=[REDACTED] rest");
   expect(scrubRuntimeErrorText("Bearer abc.def")).toBe("Bearer [REDACTED]");

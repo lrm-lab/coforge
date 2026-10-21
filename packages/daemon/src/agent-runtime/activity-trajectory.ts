@@ -12,7 +12,7 @@ import { PHASE_BOUNDARY_EVENT_TYPES } from "./runtime-phases";
 /**
  * True when `event` means the model moved on from an open thinking run: a rendered
  * response resuming, a tool call starting or ending, a phase boundary (context compaction,
- * review mode), the turn ending, or an error. `runtime_progress`, `session` and `usage` events
+ * review mode), the turn ending, an error or a retry. `runtime_progress`, `session` and `usage` events
  * never end thinking, and neither does a further `thinking-delta` (it continues the same run).
  */
 function endsThinking(event: AgentRuntimeEvent): boolean {
@@ -23,6 +23,7 @@ function endsThinking(event: AgentRuntimeEvent): boolean {
     case "tool-end":
     case "completed":
     case "error":
+    case "reconnecting":
       return true;
     case "activity":
       return event.activity.level === "error";
@@ -146,6 +147,8 @@ export class ActivityTrajectory {
     // The daemon core turns a tool-start into its Activity downstream; count it as announced
     // here so the run that follows the tool call announces itself again.
     if (event.type === "tool-start") this.#lastAnnounced = AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED;
+    if (event.type === "reconnecting")
+      this.#lastAnnounced = AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING;
     this.emit(event);
   }
 

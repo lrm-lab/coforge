@@ -168,7 +168,17 @@ export function buildRuntimeCrashedActivity(lastError: RuntimeErrorEvent): Agent
 
 /** Builds the visible Activity for a provider reconnecting to its upstream. */
 export function buildRuntimeReconnectingActivity(event: RuntimeReconnectingEvent): AgentActivity {
-  const detail = event.message || "Reconnecting to provider…";
+  let detail = event.message || "Reconnecting to provider…";
+  if (event.delayMs !== undefined) {
+    const facts = [`backoff ${event.delayMs / 1000}s`];
+    if (event.attempt !== undefined)
+      facts.unshift(
+        `attempt ${event.attempt}${event.maxAttempts === undefined ? "" : `/${event.maxAttempts}`}`,
+      );
+    detail = scrubRuntimeErrorText(
+      `Retrying provider request (${facts.join(", ")})${event.message ? `: ${event.message}` : ""}`,
+    );
+  }
   return {
     detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING,
     level: "info",

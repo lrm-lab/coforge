@@ -217,8 +217,15 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       };
       occurredAt?: string;
     }
-  /** The provider is reconnecting to its upstream after a transient disconnect. */
-  | { type: "reconnecting"; attempt?: number; message?: string }
+  /** The provider is reconnecting or retrying a request after a transient failure.
+   * Native backoff facts are optional; the daemon owns their display wording. */
+  | {
+      type: "reconnecting";
+      attempt?: number;
+      maxAttempts?: number;
+      delayMs?: number;
+      message?: string;
+    }
   /**
    * A steer-mode provider accepted a notice into the live turn (`notify` resolved), but later
    * learned it never actually reached the model — a native steer request the provider's own

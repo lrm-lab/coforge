@@ -43,6 +43,31 @@ describe("piSessionEvents", () => {
     ]);
   });
 
+  test.each(["auto_retry_start", "summarization_retry_scheduled"])(
+    "%s reports a provider retry with its native attempt and backoff facts",
+    (type) => {
+      expect(
+        events({ type, attempt: 2, maxAttempts: 3, delayMs: 4000, errorMessage: "server_busy" }),
+      ).toEqual([
+        {
+          type: "reconnecting",
+          attempt: 2,
+          maxAttempts: 3,
+          delayMs: 4000,
+          message: "server_busy",
+        },
+      ]);
+    },
+  );
+
+  test("retry settlement never ends the Agent turn or reports another terminal error", () => {
+    expect(events({ type: "auto_retry_end", success: true, attempt: 1 })).toEqual([]);
+    expect(
+      events({ type: "auto_retry_end", success: false, attempt: 3, finalError: "server_busy" }),
+    ).toEqual([]);
+    expect(events({ type: "summarization_retry_finished" })).toEqual([]);
+  });
+
   test("reports a tool's start, text output and end", () => {
     expect(
       events({

@@ -35,6 +35,17 @@ export function piSessionEvents(event: PiSessionEvent): AgentRuntimeEvent[] {
     case "turn_start":
     case "message_start":
       return [{ type: "progress", source: "pi_turn_lifecycle" }];
+    case "auto_retry_start":
+    case "summarization_retry_scheduled":
+      return [
+        {
+          type: "reconnecting",
+          attempt: event.attempt,
+          maxAttempts: event.maxAttempts,
+          delayMs: event.delayMs,
+          message: event.errorMessage,
+        },
+      ];
     case "compaction_start":
       return [{ type: "compaction-started" }];
     case "compaction_end":
