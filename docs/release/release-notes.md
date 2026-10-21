@@ -14,6 +14,9 @@ there is no editor page. Each publication needs both languages:
 - Written for the people who use the Computer: what changed for them, what
   they should do, what got fixed. Not a list of commit subjects, PR numbers,
   or internal module names.
+- Only `coforge-computer` and `coforge-daemon` changes. The Web, backend,
+  cloud, and other components are not installed by the Computer and never
+  appear in the notes.
 - At most 16000 characters per language after trimming surrounding
   whitespace, counted as JavaScript string length (UTF-16 code units). A
   blank language is refused.
