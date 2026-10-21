@@ -22,6 +22,7 @@ test("persists session metadata, rejects path traversal, and preserves native tr
     expect(await store.messages(id)).toEqual([]);
     await expect(store.remove("../outside")).rejects.toThrow();
     await store.remove(id);
+    expect(await new FilePiChatStore(directory).wasAccepted(row.requestIds[0]!)).toBe(true);
     expect(await store.list()).toEqual([]);
   } finally {
     await rm(directory, { recursive: true, force: true });

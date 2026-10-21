@@ -1,6 +1,7 @@
 import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { z } from "zod";
 import { piChatSessionSchema, type PiChatSession } from "@lrm/coforge-sdk/internal/pi-chat";
 import { PI_SESSION_DIR } from "#src/paths";
 import { storedChatMessages } from "./runtime";
@@ -48,8 +49,21 @@ export class FilePiChatStore implements PiChatStore {
   }
   async remove(id: string) {
     const path = this.#path(id);
+    const row = piChatSessionSchema.parse(await Bun.file(path).json());
+    // Keep only request IDs after deletion: a delayed retry must not replay a tool.
+    await Bun.write(`${path}.retired`, JSON.stringify(row.requestIds), { mode: 0o600 });
     const file = SessionManager.findById(this.cwd, id, join(this.cwd, PI_SESSION_DIR));
     if (file) await rm(file, { force: true });
     await rm(path, { force: true });
+  }
+  async wasAccepted(requestId: string) {
+    z.uuid().parse(requestId);
+    await mkdir(this.#metadata, { recursive: true, mode: 0o700 });
+    for (const file of await readdir(this.#metadata)) {
+      if (!/^[\da-f-]{36}\.json\.retired$/i.test(file)) continue;
+      const ids = z.array(z.uuid()).parse(await Bun.file(join(this.#metadata, file)).json());
+      if (ids.includes(requestId)) return true;
+    }
+    return false;
   }
 }

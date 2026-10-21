@@ -34,7 +34,8 @@ request IDs. History reads native entries, including entries preceding a
 compaction, instead of Activity summaries. Data remains on the existing
 Computer volume; this feature adds no PostgreSQL migration. Deleting a chat
 removes its native transcript and index record; files created by its tools
-remain in the working directory.
+remain in the working directory. Content-free accepted request IDs are retained
+after deletion so delayed retries cannot recreate the chat or replay its tools.
 
 The page reads updates every 700 ms while its selected session runs. Closing
 the page does not cancel a turn. Reopening reads the worker/native history.

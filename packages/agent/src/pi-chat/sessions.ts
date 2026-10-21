@@ -19,6 +19,7 @@ export interface PiChatStore {
   save(session: PiChatSession): Promise<void>;
   remove(id: string): Promise<void>;
   messages(id: string): Promise<PiChatMessage[]>;
+  wasAccepted(requestId: string): Promise<boolean>;
 }
 type Active = { runtime: PiChatRuntime; done: Promise<void>; stopping: boolean };
 
@@ -68,6 +69,8 @@ export class PiChatSessions {
           throw new Error("request belongs to another session");
         return { ...old };
       }
+      if (await this.store.wasAccepted(input.requestId))
+        throw new Error("request belongs to a deleted session");
       if (input.sessionId) this.#record(input.sessionId);
       if ((input.sessionId && this.#active.has(input.sessionId)) || this.#active.size >= 4)
         throw new Error("session is busy");

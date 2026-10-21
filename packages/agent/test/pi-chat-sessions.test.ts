@@ -5,16 +5,19 @@ import type { PiChatMessage, PiChatSession } from "@lrm/coforge-sdk/internal/pi-
 function fixture() {
   const records = new Map<string, PiChatSession>();
   const histories = new Map<string, PiChatMessage[]>();
+  const accepted = new Set<string>();
   const store: PiChatStore = {
     list: async () => [...records.values()].map((row) => ({ ...row })),
     save: async (row) => {
       records.set(row.id, { ...row });
+      for (const id of row.requestIds) accepted.add(id);
     },
     remove: async (id) => {
       records.delete(id);
       histories.delete(id);
     },
     messages: async (id) => histories.get(id) ?? [],
+    wasAccepted: async (id) => accepted.has(id),
   };
   let calls = 0;
   let finish: (() => void) | undefined;
@@ -44,6 +47,17 @@ function fixture() {
 }
 
 describe("Pi chat sessions", () => {
+  test("a delayed send cannot recreate a deleted conversation or repeat its tools", async () => {
+    const f = fixture();
+    const sessions = new PiChatSessions(f.store, f.factory);
+    const requestId = crypto.randomUUID();
+    const first = await sessions.start({ requestId, message: "run once" });
+    await sessions.stop(first.id);
+    await sessions.remove(first.id);
+    const restored = new PiChatSessions(f.store, f.factory);
+    await expect(restored.start({ requestId, message: "run once" })).rejects.toThrow("deleted");
+    expect(f.calls()).toBe(1);
+  });
   test("keeps independent conversations and full output; an accepted request never runs twice", async () => {
     const f = fixture();
     const sessions = new PiChatSessions(f.store, f.factory);
