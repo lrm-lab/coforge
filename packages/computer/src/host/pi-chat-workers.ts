@@ -44,7 +44,10 @@ class PiChatWorker {
       { stdin: "pipe", stdout: "pipe", stderr: "ignore" },
     );
     void this.#read().catch(() => this.close());
-    void this.#process.exited.then(() => this.close());
+    void this.#process.exited.then(() => {
+      void this.close();
+      this.removed();
+    });
   }
   execute(command: PiChatCommand): Promise<PiChatResult> {
     if (this.#closed) return Promise.reject(new Error("chat worker disconnected"));
@@ -54,14 +57,14 @@ class PiChatWorker {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
         reject(new Error("chat worker timed out"));
-        this.close();
+        void this.close();
       }, 30_000);
       this.#pending.set(id, { resolve, reject, timer });
       try {
         this.#process.stdin.write(`${JSON.stringify({ id, command })}\n`);
-        void this.#process.stdin.flush();
+        void Promise.resolve(this.#process.stdin.flush()).catch(() => this.close());
       } catch {
-        this.close();
+        void this.close();
       }
     });
   }
@@ -85,16 +88,18 @@ class PiChatWorker {
     }
   }
   close() {
-    if (this.#closed) return;
-    this.#closed = true;
-    // Closing docker-exec stdin lets the worker abort and persist its active sessions.
-    this.#process.stdin.end();
-    for (const call of this.#pending.values()) {
-      clearTimeout(call.timer);
-      call.reject(new Error("chat worker disconnected"));
+    if (!this.#closed) {
+      this.#closed = true;
+      // Closing docker-exec stdin lets the worker abort and persist its active sessions.
+      this.#process.stdin.end();
+      for (const call of this.#pending.values()) {
+        clearTimeout(call.timer);
+        call.reject(new Error("chat worker disconnected"));
+      }
+      this.#pending.clear();
     }
-    this.#pending.clear();
-    this.removed();
+    // Keep the registry key until docker-exec confirms remote cleanup has ended.
+    return this.#process.exited.then(() => {});
   }
 }
 

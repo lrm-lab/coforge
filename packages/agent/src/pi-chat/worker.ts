@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { Database } from "bun:sqlite";
 import { piChatCommandSchema } from "@lrm/coforge-sdk/internal/pi-chat";
 import { createPiChatRuntime } from "./runtime";
 import { FilePiChatStore } from "./storage";
@@ -10,6 +11,14 @@ import { PiChatSessions } from "./sessions";
 export async function runPiChatWorker(root: string, workspaceId: string, userId: string) {
   const cwd = join(root, z.uuid().parse(workspaceId), z.uuid().parse(userId));
   await mkdir(cwd, { recursive: true, mode: 0o700 });
+  // OS-released SQLite ownership also fences workers left alive by a host restart.
+  const owner = new Database(join(cwd, ".chat-owner.sqlite"));
+  try {
+    owner.exec("PRAGMA busy_timeout = 0; BEGIN EXCLUSIVE");
+  } catch (error) {
+    owner.close();
+    throw error;
+  }
   const sessions = new PiChatSessions(new FilePiChatStore(cwd), (id) =>
     createPiChatRuntime(cwd, id),
   );
@@ -53,10 +62,14 @@ export async function runPiChatWorker(root: string, workspaceId: string, userId:
       }
     }
   } finally {
-    await Promise.allSettled(jobs);
-    await sessions.dispose();
-    console.log = log;
-    process.off("SIGTERM", stop);
-    process.off("SIGINT", stop);
+    try {
+      await Promise.allSettled(jobs);
+      await sessions.dispose();
+    } finally {
+      owner.close();
+      console.log = log;
+      process.off("SIGTERM", stop);
+      process.off("SIGINT", stop);
+    }
   }
 }

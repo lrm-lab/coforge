@@ -7,6 +7,7 @@ import type {
   PiChatCommand,
   PiChatMessage as Message,
   PiChatSession,
+  PiChatResult,
 } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -18,6 +19,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { executePiChat } from "./pi-chat.functions";
 import { PiChatMessage } from "./pi-chat-message";
+import { loadPiChatHistory, preparePiChatSend, type PiChatDraft } from "./pi-chat-state";
 
 type Props = {
   workspaceSlug: string;
@@ -32,8 +34,8 @@ export function PiChatPage(props: Props) {
   const { workspaceSlug, computers, configured, sessionId, select } = props;
   const computerId = props.computerId ?? computers[0]?.id;
   const [search, setSearch] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const key = `${computerId}:${sessionId ?? "new"}`;
+  const [drafts, setDrafts] = useState<Record<string, PiChatDraft>>({});
+  const key = `${workspaceSlug}:${computerId}:${sessionId ?? "new"}`;
   const execute = useServerFn(executePiChat);
   const sessions = useQuery({
     queryKey: ["pi-chat", workspaceSlug, computerId, "sessions"],
@@ -163,7 +165,7 @@ export function PiChatPage(props: Props) {
           computerId={computerId}
           sessionId={sessionId}
           workspaceSlug={workspaceSlug}
-          draft={drafts[key] ?? ""}
+          draft={drafts[key] ?? { text: "" }}
           onDraft={(value) => setDrafts((current) => ({ ...current, [key]: value }))}
           onSelect={(id) => {
             if (selection.current === key) select(computerId, id);
@@ -197,8 +199,8 @@ function Conversation({
   computerId: string;
   sessionId: string;
   workspaceSlug: string;
-  draft: string;
-  onDraft(value: string): void;
+  draft: PiChatDraft;
+  onDraft(value: PiChatDraft): void;
   onSelect(id?: string): void;
 }) {
   const execute = useServerFn(executePiChat);
@@ -210,13 +212,15 @@ function Conversation({
   const [deleting, setDeleting] = useState(false);
   const [older, setOlder] = useState<Message[]>([]);
   const [before, setBefore] = useState<number>();
-  const request = useRef<{ id: string; text: string } | undefined>(undefined);
   const scroll = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   const queryKey = ["pi-chat", workspaceSlug, computerId, "session", sessionId];
   const history = useQuery({
     queryKey,
-    queryFn: () => execute({ data: { computerId, command: { action: "read", sessionId } } }),
+    queryFn: () =>
+      loadPiChatHistory(queryClient.getQueryData<PiChatResult>(queryKey), (before) =>
+        execute({ data: { computerId, command: { action: "read", sessionId, before } } }),
+      ),
     enabled: sessionId !== "new",
     retry: false,
     refetchInterval: (query) => (query.state.data?.session?.status === "running" ? 700 : false),
@@ -247,18 +251,18 @@ function Conversation({
     }
   };
   const send = async () => {
-    const text = draft.trim();
+    const text = draft.text.trim();
     if (!text || busy || submitting) return;
-    if (request.current?.text !== text) request.current = { id: crypto.randomUUID(), text };
+    const prepared = preparePiChatSend(draft);
+    onDraft(prepared);
     const result = await mutate({
       action: "start",
       sessionId: sessionId === "new" ? undefined : sessionId,
-      requestId: request.current.id,
+      requestId: prepared.request!.id,
       message: text,
     });
     if (result?.session) {
-      onDraft("");
-      request.current = undefined;
+      onDraft({ text: "" });
       follow.current = true;
       onSelect(result.session.id);
     }
@@ -444,8 +448,8 @@ function Conversation({
           <TextArea
             aria-label={m.pi_chat_message()}
             placeholder={m.pi_chat_placeholder()}
-            value={draft}
-            onChange={onDraft}
+            value={draft.text}
+            onChange={(text) => onDraft({ ...draft, text })}
             maxLength={100_000}
             rows={3}
             isDisabled={submitting}
@@ -475,7 +479,7 @@ function Conversation({
                 type="submit"
                 size="sm"
                 iconLeading={Send01}
-                isDisabled={!draft.trim() || submitting || (sessionId !== "new" && !session)}
+                isDisabled={!draft.text.trim() || submitting || (sessionId !== "new" && !session)}
                 isLoading={submitting}
               >
                 {m.pi_chat_send()}

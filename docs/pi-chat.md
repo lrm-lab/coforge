@@ -19,7 +19,9 @@ to the Computer binary's internal `__pi-chat` mode in the user's container.
 This mode uses the Pi SDK directly and opens neither a Daemon connection nor
 another TCP listener. Each User/Workspace has its own worker and working
 directory under the Computer state directory's `pi-chat/<workspace>/<user>`.
-The worker removes inherited `COFORGE_*` capabilities before loading Pi.
+The worker removes inherited `COFORGE_*` capabilities before loading Pi. A
+local SQLite exclusive lock admits one writer per scope even after a host
+restart; replacement workers cannot touch a previous worker's sessions.
 
 Pi uses that container's existing Pi model/settings/auth configuration
 (`PI_CODING_AGENT_DIR` or Pi's default). Model Factory DeepSeek needs no new

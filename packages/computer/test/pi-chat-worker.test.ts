@@ -48,26 +48,27 @@ test("Computer's standalone Pi worker serves isolated history, deduplicates send
       retry: { enabled: false },
     }),
   );
-  const child = Bun.spawn(
-    [process.execPath, join(import.meta.dir, "../src/main.ts"), "__pi-chat"],
-    {
-      env: {
-        ...Bun.env,
-        HOME: home,
-        USERPROFILE: home,
-        XDG_DATA_HOME: join(home, "data"),
-        PI_CODING_AGENT_DIR: agent,
-        PI_OFFLINE: "1",
-        NO_PROXY: "*",
-        COFORGE_PI_CHAT_WORKSPACE_ID: crypto.randomUUID(),
-        COFORGE_PI_CHAT_USER_ID: crypto.randomUUID(),
-        COFORGE_DAEMON_API_KEY: "must-not-reach-tools",
-      },
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
+  const environment = {
+    ...Bun.env,
+    HOME: home,
+    USERPROFILE: home,
+    XDG_DATA_HOME: join(home, "data"),
+    PI_CODING_AGENT_DIR: agent,
+    PI_OFFLINE: "1",
+    NO_PROXY: "*",
+    COFORGE_PI_CHAT_WORKSPACE_ID: crypto.randomUUID(),
+    COFORGE_PI_CHAT_USER_ID: crypto.randomUUID(),
+    COFORGE_DAEMON_API_KEY: "must-not-reach-tools",
+  };
+  const command = Bun.env.PI_CHAT_TEST_COMPUTER_EXECUTABLE
+    ? [Bun.env.PI_CHAT_TEST_COMPUTER_EXECUTABLE, "__pi-chat"]
+    : [process.execPath, join(import.meta.dir, "../src/main.ts"), "__pi-chat"];
+  const child = Bun.spawn(command, {
+    env: environment,
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const pending = new Map<string, ReturnType<typeof Promise.withResolvers<PiChatResult>>>();
   const replySchema = z.object({
     id: z.string(),
@@ -101,6 +102,19 @@ test("Computer's standalone Pi worker serves isolated history, deduplicates send
   };
   try {
     expect((await call({ action: "list" })).sessions).toEqual([]);
+    const competing = Bun.spawn(command, {
+      env: environment,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    competing.stdin.write(
+      `${JSON.stringify({ id: crypto.randomUUID(), command: { action: "list" } })}\n`,
+    );
+    competing.stdin.end();
+    const competingOutput = new Response(competing.stdout).text();
+    expect(await competing.exited).not.toBe(0);
+    expect(await competingOutput).toBe("");
     const requestId = crypto.randomUUID();
     const started = await call({ action: "start", requestId, message: "hello" });
     const id = started.session!.id;
