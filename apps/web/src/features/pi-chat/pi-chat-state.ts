@@ -1,5 +1,7 @@
 import type { PiChatMessage, PiChatResult } from "@lrm/coforge-sdk/internal/pi-chat";
 
+export type PiChatView = { top: number; follow: boolean; expanded: Set<string> };
+
 export type PiChatDraft = { text: string; request?: { id: string; text: string } };
 
 /** Keep the id with the retained draft, rather than with a mounted conversation panel. */
