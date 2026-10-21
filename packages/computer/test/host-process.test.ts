@@ -49,6 +49,7 @@ function containers(overrides: Partial<ContainerRuntime> = {}): ContainerRuntime
       image: { id: "sha256:img", version: "1.0.0" },
       computers: [],
     }),
+    desktopEndpoint: async () => undefined,
     ...overrides,
   };
 }
@@ -63,7 +64,9 @@ describe("host process", () => {
         createService: async (input) => {
           runs.push(input.computerId);
           expect(input.image).toBe("coforge-computer:local");
-          expect(input.env).toEqual({
+          const { VNC_WS_TOKEN: desktopToken, ...env } = input.env;
+          expect(desktopToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+          expect(env).toEqual({
             COFORGE_DAEMON_API_KEY: daemonKey,
             COFORGE_WORKSPACE_ID: "workspace-1",
             COFORGE_WORKSPACE_SLUG: "alpha",

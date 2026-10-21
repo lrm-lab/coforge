@@ -1,5 +1,6 @@
 import type { ContainerBindingEnv } from "./container-binding-env";
 import { createDockerContainers, swarmAccepting, type ContainerRuntime } from "./docker-containers";
+import { newDesktopToken, startDesktopProxy } from "./desktop-proxy";
 import { HttpHostCloud, type ClaimedContainerJob, type HostHeartbeatReport } from "./host-cloud";
 
 export const HOST_POLL_INTERVAL_MS = 5_000;
@@ -64,7 +65,7 @@ export async function acceptClaimedJob(
     (await ports.containers.createService({
       computerId: job.computerId,
       image: config.image,
-      env,
+      env: { ...env, VNC_WS_TOKEN: newDesktopToken() },
     }));
   await ports.report(serviceId);
 }
@@ -108,18 +109,29 @@ export async function runHostProcess(config: HostProcessConfig): Promise<void> {
   const stop = () => controller.abort();
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
+  const containers = createDockerContainers();
+  const proxyPort = Number(process.env.COFORGE_DESKTOP_PROXY_PORT ?? "6090");
+  const proxy =
+    proxyPort === 0
+      ? undefined
+      : startDesktopProxy({
+          hostname: process.env.COFORGE_DESKTOP_PROXY_HOST || "0.0.0.0",
+          port: proxyPort,
+          resolve: (computerId) => containers.desktopEndpoint(computerId),
+        });
   try {
     await runHost(
       config,
       {
         cloud: new HttpHostCloud(fetch, config.serverUrl),
-        containers: createDockerContainers(),
+        containers,
         canPlace: () => swarmAccepting(),
         wait: (signal) => delay(config.pollIntervalMs, signal),
       },
       controller.signal,
     );
   } finally {
+    proxy?.stop();
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);
   }
