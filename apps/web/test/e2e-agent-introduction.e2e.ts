@@ -44,11 +44,19 @@ const INTRODUCTION_BODY = "E2E introduction: I am ready.";
 const DESCRIPTION = "Keeps the E2E release notes tidy";
 /** The fixture logs an introduction prompt carrying this but never sends the DM. */
 const SKIP_INTRODUCTION_MARKER = "[e2e: skip introduction]";
+const FRESH_STARTER = [
+  "You are starting a fresh session. No new messages are pending.",
+  "To recover your work without previous session context, read MEMORY.md and notes/active-context.md if present, and check unfinished tasks assigned to you once.",
+  "Use only tools allowed by your role and skip unsupported recovery steps.",
+  "Resume only actionable work already requested or assigned to you; do not invent work or scan unrelated channels and projects.",
+  "If no actionable work remains, end this turn silently. Do not send a startup announcement or repeat your introduction.",
+].join(" ");
 const STARTERS = [
-  "Start.",
+  FRESH_STARTER,
   [
     "You are back online. No new messages are pending.",
     "Use your existing session context first. If it does not establish your current work, read MEMORY.md and notes/active-context.md if present, and check unfinished tasks assigned to you once.",
+    "Use only tools allowed by your role and skip unsupported recovery steps.",
     "Resume only actionable work already requested or assigned to you; do not invent work or scan unrelated channels and projects.",
     "If no actionable work remains, end this turn silently. Do not send a startup announcement or repeat your introduction.",
   ].join(" "),
@@ -243,7 +251,7 @@ test("a new Agent introduces itself to its creator by DM on its first start, unt
     observations.introductionDueAtBefore = dueBefore?.toISOString();
     steps.push("dev user created Agent @e2e-introducer through ManageAgents.create");
 
-    // 2. The first turn of the first process is the introduction, in place of `Start.`.
+    // 2. The first turn of the first process is the introduction, ahead of session recovery.
     await waitFor("first turn", async () => {
       await failIfFixtureFailed(agentId);
       return (await turnsOf(agentId)).length > 0;
@@ -270,7 +278,7 @@ test("a new Agent introduces itself to its creator by DM on its first start, unt
     observations.introductionMessage = introduction;
     observations.introductionDueAtAfterSend = dueAfterSend?.toISOString() ?? null;
     const firstProcessTurns = (await turnsOf(agentId)).filter(({ pid }) => pid === firstPid);
-    expect(firstProcessTurns.some(({ text }) => text === "Start.")).toBe(false);
+    expect(firstProcessTurns.some(({ text }) => text === FRESH_STARTER)).toBe(false);
     expect(
       firstProcessTurns.filter(({ text }) => text.startsWith(INTRODUCTION_MARKER)),
     ).toHaveLength(1);
@@ -334,11 +342,13 @@ test("a new Agent introduces itself to its creator by DM on its first start, unt
     });
     const systemTurns = await turnsOf(systemAgent.id);
     turnLogs[systemAgent.id] = systemTurns;
-    expect(systemTurns[0]!.text).toBe("Start.");
+    expect(systemTurns[0]!.text).toBe(FRESH_STARTER);
     expect(systemTurns.some(({ text }) => text.startsWith(INTRODUCTION_MARKER))).toBe(false);
     expect(await introductionMessages(systemAgent.id)).toEqual([]);
     observations.systemAgentTurns = systemTurns.map(({ text }) => text.slice(0, 120));
-    steps.push("Agent created without introductionDueAt started with `Start.` and sent nothing");
+    steps.push(
+      "Agent without introductionDueAt received fresh-session recovery and sent no greeting",
+    );
 
     // 6. An Agent whose introduction never landed is asked again by the next Start.
     const unlanded = await createAgent(

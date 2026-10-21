@@ -6399,7 +6399,8 @@ describe("DaemonRuntime", () => {
     await runtime.stop();
   });
 
-  test("an explicit create launch opens a fresh startup turn without a recovery notice", async () => {
+  const fresh = expect.stringContaining("fresh session.");
+  test("a create launch gets recovery without inbox input", async () => {
     const harness = await queueHarness();
     await harness.runtime.startAgent(
       "agent-a",
@@ -6411,7 +6412,7 @@ describe("DaemonRuntime", () => {
       "create",
     );
     expect(harness.notices).toEqual([]);
-    expect(harness.startupNotices).toEqual(["Start."]);
+    expect(harness.startupNotices).toEqual([fresh]);
     await harness.runtime.stop();
   });
 
@@ -6475,7 +6476,7 @@ describe("DaemonRuntime", () => {
     introductionPrompt,
   };
 
-  test("an introduction prompt opens a fresh launch's first turn in place of Start.", async () => {
+  test("an introduction replaces fresh-session recovery", async () => {
     const harness = await queueHarness();
     try {
       await harness.runtime.handleAgentStart({
@@ -6535,7 +6536,7 @@ describe("DaemonRuntime", () => {
     }
   });
 
-  test("a Start that joins a launch in progress replaces its Start. with the introduction", async () => {
+  test("a joining Start replaces fresh recovery with its introduction", async () => {
     const gate = Promise.withResolvers<void>();
     const harness = await queueHarness({ launch: () => gate.promise });
     try {
@@ -6626,7 +6627,7 @@ describe("DaemonRuntime", () => {
       await harness.delivery(3);
       expect(harness.sessions()).toBe(2);
       expect(harness.notices.filter((notice) => notice === introductionPrompt)).toHaveLength(1);
-      expect(harness.startupNotices).toEqual(["Start."]);
+      expect(harness.startupNotices).toEqual([fresh]);
     } finally {
       gate.resolve();
       await harness.runtime.stop();
@@ -6654,7 +6655,7 @@ describe("DaemonRuntime", () => {
   test("a fresh launch opens one startup turn", async () => {
     const harness = await queueHarness();
     await harness.runtime.startAgent("agent-a", config);
-    expect(harness.startupNotices).toEqual(["Start."]);
+    expect(harness.startupNotices).toEqual([fresh]);
     await harness.runtime.stop();
   });
 
