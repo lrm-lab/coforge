@@ -9,8 +9,7 @@ function fixture() {
     startPublished: true,
     startFailures: 0,
     stoppedAt: null as Date | null,
-    catalogReported: true,
-    models: [{ id: "deepseek-v4", modelProvider: "lenovo", name: "DeepSeek V4" }],
+    runtimeAvailable: true,
   };
   const calls: string[] = [];
   const starts: string[] = [];
@@ -20,7 +19,7 @@ function fixture() {
       calls.push("ensure");
       return { computerId: "cloud", containerReady: state.ready };
     },
-    models: async () => (state.catalogReported ? state.models : null),
+    canRun: async () => state.runtimeAvailable,
     create: async (_principal, input) => {
       if (existing) throw new Error("name taken");
       created.push(input);
@@ -42,7 +41,7 @@ const principal = { userId: "user", workspaceId: "workspace", role: "owner" as c
 const input = { name: "我的助手", requestId: "b4079160-26be-4edc-ac5d-a54a1d846e82" };
 
 describe("one-step cloud Agent creation", () => {
-  test("creates a private Pi Agent using the cloud's actual DeepSeek catalog", async () => {
+  test("creates a private Pi Agent inheriting the cloud's Configured default", async () => {
     const f = fixture();
     expect(await f.useCase.execute(principal, input)).toEqual({
       status: "created",
@@ -54,8 +53,8 @@ describe("one-step cloud Agent creation", () => {
         computerId: "cloud",
         provider: "pi",
         visibility: "private",
-        model: "deepseek-v4",
-        modelProvider: "lenovo",
+        model: "",
+        modelProvider: "",
       }),
     ]);
   });
@@ -132,39 +131,15 @@ describe("one-step cloud Agent creation", () => {
     expect(f.calls).toEqual([]);
   });
 
-  test("does not silently fall back to another model", async () => {
+  test("waits for the Computer to offer Pi before creating the default-configured Agent", async () => {
     const f = fixture();
-    f.state.models = [{ id: "gpt", modelProvider: "openai", name: "GPT" }];
-    await expect(f.useCase.execute(principal, input)).rejects.toMatchObject({
-      errorId: "cloud-agent-deepseek-unavailable",
-    });
-    expect(f.created).toEqual([]);
-  });
-
-  test("waits for the first catalog report", async () => {
-    const f = fixture();
-    f.state.catalogReported = false;
+    f.state.runtimeAvailable = false;
     expect(await f.useCase.execute(principal, input)).toEqual({ status: "preparing" });
     expect(f.created).toEqual([]);
-    f.state.catalogReported = true;
+    f.state.runtimeAvailable = true;
     expect(await f.useCase.execute(principal, input)).toEqual({
       status: "created",
       agentId: "agent",
     });
-  });
-
-  test("reports missing DeepSeek immediately after an empty catalog report", async () => {
-    const f = fixture();
-    f.state.models = [];
-    await expect(f.useCase.execute(principal, input)).rejects.toMatchObject({
-      errorId: "cloud-agent-deepseek-unavailable",
-    });
-    expect(f.created).toEqual([]);
-    f.state.models = [{ id: "deepseek-v4", modelProvider: "lenovo", name: "DeepSeek V4" }];
-    expect(await f.useCase.execute(principal, input)).toEqual({
-      status: "created",
-      agentId: "agent",
-    });
-    expect(f.created).toHaveLength(1);
   });
 });

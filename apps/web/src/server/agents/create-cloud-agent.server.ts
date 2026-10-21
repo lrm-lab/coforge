@@ -6,6 +6,7 @@ import {
   type WorkspaceMemberRole,
 } from "#src/server/workspaces/member-role.server";
 import type { AgentCreateInput } from "./manage-agents.server";
+import type { AgentRuntimeSelection } from "./agent-runtime-availability.server";
 
 type Principal = { userId: string; workspaceId: string; role: WorkspaceMemberRole };
 type CreatedAgent = {
@@ -14,7 +15,7 @@ type CreatedAgent = {
   deletedAt: Date | null;
   stoppedAt?: Date | null;
 };
-type Model = { id: string; modelProvider: string; name?: string };
+const configuredPi = { provider: RUNTIME_PROVIDER.PI, model: "", modelProvider: "", reasoning: "" };
 
 /** Retryable provisioning uses an ordinary Agent and its ordinary runtime validation/start. */
 export class CreateCloudAgent {
@@ -24,8 +25,11 @@ export class CreateCloudAgent {
       ensureComputer(
         principal: Principal,
       ): Promise<{ computerId: string; containerReady: boolean }>;
-      /** Null until Pi has reported; an empty report means no models are configured. */
-      models(principal: Principal, computerId: string): Promise<Model[] | null>;
+      canRun(
+        principal: Principal,
+        computerId: string,
+        selection: AgentRuntimeSelection,
+      ): Promise<boolean>;
       create(
         principal: Principal,
         input: AgentCreateInput,
@@ -42,21 +46,21 @@ export class CreateCloudAgent {
     if (existing) return this.result(principal, existing);
     const computer = await this.ports.ensureComputer(principal);
     if (!computer.containerReady) return { status: "preparing" as const };
-    const models = await this.ports.models(principal, computer.computerId);
-    if (models === null) return { status: "preparing" as const };
-    const model = models.find((model) => /deepseek/i.test(`${model.id} ${model.name ?? ""}`));
-    if (!model)
-      throw new AppError("INVALID_INPUT", { errorId: "cloud-agent-deepseek-unavailable" });
+    if (
+      !(await this.ports.canRun(principal, computer.computerId, {
+        ...configuredPi,
+        hasApiKey: false,
+      }))
+    )
+      return { status: "preparing" as const };
     try {
       const created = await this.ports.create(principal, {
         name,
         displayName: input.name.trim(),
         description: "",
         computerId: computer.computerId,
-        provider: RUNTIME_PROVIDER.PI,
-        model: model.id,
-        modelProvider: model.modelProvider,
-        reasoning: "",
+        // Inherit Pi's configured model, reasoning, and credentials on the cloud Computer.
+        ...configuredPi,
         visibility: "private",
       });
       return {

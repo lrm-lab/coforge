@@ -7,7 +7,6 @@ import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
-import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import { useCloseConversationList } from "#src/features/conversations/conversation-navigation";
@@ -117,11 +116,7 @@ export function CloudAgentCreateDialog({
         }
       } catch (cause) {
         if (active.signal.aborted) return;
-        setError(
-          isAppError(cause) && cause.errorId === "cloud-agent-deepseek-unavailable"
-            ? m.cloud_agent_create_no_deepseek()
-            : agentCreateErrorMessage(cause),
-        );
+        setError(agentCreateErrorMessage(cause));
       }
     });
   }

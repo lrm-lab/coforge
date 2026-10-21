@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Cloud01, Loading02, Plus } from "@untitledui/icons";
+import { ArrowRight, Cloud01, Loading02, Plus } from "@untitledui/icons";
 import { Heading, Popover as AriaPopover } from "react-aria-components";
 
 import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
@@ -221,12 +221,13 @@ function DirectMessagePicker({ onDone, onCreate }: { onDone: () => void; onCreat
         </Tabs>
       )}
       {directory.data?.canCreateAgents && (
-        <div className="shrink-0 border-t border-secondary p-2">
+        <div className="shrink-0 border-t border-secondary p-3">
           <Button
             color="tertiary"
-            size="sm"
+            size="md"
             iconLeading={Cloud01}
-            className="w-full justify-start"
+            iconTrailing={ArrowRight}
+            className="w-full justify-start gap-2 bg-utility-brand-50 text-utility-brand-700 ring-1 ring-utility-brand-200 ring-inset hover:bg-utility-brand-100 hover:text-utility-brand-700 [&>[data-text]]:flex-1 [&>[data-text]]:text-left *:data-icon:text-utility-brand-600 hover:*:data-icon:text-utility-brand-700"
             isDisabled={opening}
             onPress={onCreate}
           >

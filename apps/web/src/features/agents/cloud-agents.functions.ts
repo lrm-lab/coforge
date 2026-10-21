@@ -1,5 +1,5 @@
+import { computerCanRunAgent } from "#src/server/agents/computer-runtime-availability.server";
 import { createServerFn } from "@tanstack/react-start";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { createCloudAgentInputSchema } from "./agent.schemas";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { AppError } from "#src/lib/app-error";
@@ -31,33 +31,8 @@ export const createCloudAgent = createServerFn({ method: "POST" })
           workspaceId,
           now: new Date(),
         }),
-      models: async ({ userId, workspaceId }, computerId) => {
-        const computer = await db.computer.findFirst({
-          where: {
-            id: computerId,
-            ownerId: userId,
-            deletedAt: null,
-            workspaces: { some: { workspaceId } },
-          },
-          select: {
-            modelCatalogs: {
-              where: { workspaceId, provider: RUNTIME_PROVIDER.PI },
-              select: { models: true },
-            },
-          },
-        });
-        if (!computer?.modelCatalogs.length) return null;
-        return computer.modelCatalogs.flatMap(({ models }) => {
-          if (!Array.isArray(models)) return [];
-          return models.flatMap((model) => {
-            if (!model || typeof model !== "object" || Array.isArray(model)) return [];
-            const { id, modelProvider, displayName } = model;
-            return typeof id === "string" && typeof modelProvider === "string"
-              ? [{ id, modelProvider, name: typeof displayName === "string" ? displayName : "" }]
-              : [];
-          });
-        });
-      },
+      canRun: (principal, computerId, selection) =>
+        computerCanRunAgent(db, principal, computerId, selection),
       create: (principal, input) => manageAgents(db).create(principal, input),
       start: (principal, agentId) =>
         getAgentRuntimeLock().run(agentId, async () => {
