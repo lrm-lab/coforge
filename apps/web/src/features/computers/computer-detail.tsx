@@ -8,6 +8,7 @@ import {
   Plus,
   FolderSearch,
   Globe01,
+  Monitor01 as Monitor,
   RefreshCw01 as RotateCw,
   Terminal,
   Trash01 as Trash,
@@ -36,6 +37,7 @@ import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { BackToComputers } from "./back-to-computers";
+import { cloudDesktopUrl } from "./cloud-desktop-url";
 import { formatWorkspaceSize } from "./workspace-size";
 import {
   computerKind,
@@ -362,12 +364,28 @@ export function ComputerDetail({
     <>
       <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
         <BackToComputers />
+        {isCloud && computer.ownedByCurrentUser ? (
+          <Button
+            type="button"
+            size="sm"
+            color="primary"
+            className="ml-auto"
+            iconLeading={Monitor}
+            isDisabled={!computer.online}
+            onPress={() => {
+              const url = cloudDesktopUrl(window.location.href, computer.id);
+              if (url) window.open(url, "_blank", "noopener,noreferrer");
+            }}
+          >
+            {m.computer_open_desktop()}
+          </Button>
+        ) : null}
         {onRestart && (
           <Button
             type="button"
             size="sm"
             color="secondary"
-            className="ml-auto"
+            className={isCloud && computer.ownedByCurrentUser ? undefined : "ml-auto"}
             iconLeading={RotateCw}
             isDisabled={upgrading || restartState === "pending" || restartState === "accepted"}
             onPress={runRestart}
