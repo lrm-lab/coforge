@@ -7,6 +7,34 @@ thinking returned by the model, complete SDK tool arguments/results (including
 structured details such as edit diffs and patches), and tool
 duration. It does not reset or reuse an ordinary Agent's session.
 
+## Conversation experience
+
+The conversation list groups recent activity by the viewer's local calendar day
+and includes search with an explicit no-results state. On phones the list and
+conversation occupy the same surface, with a return-to-list action. Switching
+conversations preserves unsent drafts, expanded details, loaded history and reading position while
+the page stays mounted and its history remains in the Query cache.
+
+Each turn separates the user's message and Pi's latest answer from collapsible
+process details. Thinking, intermediate replies, complete tool arguments and
+results remain inspectable; tool failures are indicated even while the process
+is collapsed. Code fences have language labels, syntax highlighting and copy;
+answers and tool results can also be copied. The highlighter loads on demand.
+The composer grows with its text. Enter sends, Shift+Enter inserts a newline,
+and IME confirmation does not send.
+
+Replies follow the latest content while the reader is at the bottom. Scrolling
+up pauses following; “Back to latest” resumes it. Loading earlier history keeps
+the reading position instead of jumping to the end. Expanding process/tool details
+pauses following so the revealed content stays in view.
+
+The interaction reference is [Pi Agent Desktop](https://pi-desktop.app/),
+especially its [session sidebar](https://github.com/DLYZZT/pi-desktop/blob/v0.4.1/src/renderer/components/SessionSidebar.tsx),
+[process grouping](https://github.com/DLYZZT/pi-desktop/blob/v0.4.1/src/renderer/components/ProcessDetailsGroup.tsx)
+and [chat viewport](https://github.com/DLYZZT/pi-desktop/blob/v0.4.1/src/renderer/hooks/useChatViewport.ts).
+CoForge implements these patterns with its existing Untitled UI components and
+cloud conversation contract; no upstream UI source is copied.
+
 ## Execution and data
 
 The Web application authenticates each Server Function, verifies current
@@ -96,6 +124,16 @@ tests are added. Before deployment acceptance:
 
 - [ ] Verify the navigation and list/detail flow at desktop and mobile sizes,
   in both themes, including direct links and returning to the list.
+- [ ] Search across date groups, clear a no-results query, and verify grouping
+  around midnight in the saved time zone in both interface languages.
+- [ ] Expand process details and tool input/output; verify a failed tool remains
+  indicated when collapsed, and all output/diff/patch text remains available.
+- [ ] Copy a reply, code block and tool result; verify the clipboard and feedback.
+- [ ] Scroll up during a reply, load earlier history, switch chats and return;
+  verify reading position, expanded details, loaded pages and drafts. Expand long
+  details at the bottom and confirm the disclosure stays in view. Resume with Back to latest.
+- [ ] Type long/multiline text; verify composer growth, Enter, Shift+Enter and IME.
+- [ ] Open the conversation menu with keyboard and touch; rename and cancel delete.
 - [ ] Start two chats; verify independent context, actual model display,
   Markdown/code rendering, and drafts retained when switching conversations.
 - [ ] Expand long thinking/tool arguments/results and verify complete content,

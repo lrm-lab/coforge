@@ -1,15 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Plus, RefreshCw01, Send01, StopCircle } from "@untitledui/icons";
-import type {
-  PiChatCommand,
-  PiChatMessage as Message,
-  PiChatSession,
-  PiChatResult,
-} from "@lrm/coforge-sdk/internal/pi-chat";
+import {
+  ArrowDown,
+  ArrowLeft,
+  DotsHorizontal,
+  Edit03,
+  Plus,
+  RefreshCw01,
+  SearchLg,
+  Send01,
+  StopCircle,
+  Trash01,
+} from "@untitledui/icons";
+import type { PiChatCommand, PiChatSession, PiChatResult } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { TextArea } from "#src/components/base/textarea/textarea";
@@ -18,8 +25,16 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#src/component
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { executePiChat } from "./pi-chat.functions";
-import { PiChatMessage } from "./pi-chat-message";
-import { loadPiChatHistory, preparePiChatSend, type PiChatDraft } from "./pi-chat-state";
+import { PiChatTranscript } from "./pi-chat-transcript";
+import { PiChatSessionList } from "./pi-chat-session-list";
+import { usePiChatScroll } from "./pi-chat-scroll";
+import { PiChatDisclosureContext } from "./pi-chat-disclosure";
+import {
+  loadPiChatHistory,
+  preparePiChatSend,
+  type PiChatDraft,
+  type PiChatView,
+} from "./pi-chat-state";
 
 type Props = {
   workspaceSlug: string;
@@ -45,6 +60,9 @@ export function PiChatPage(props: Props) {
       query.state.data?.sessions?.some((row) => row.status === "running") ? 2000 : false,
     retry: false,
   });
+  const viewports = useRef(new Map<string, PiChatView>());
+  if (!viewports.current.has(key))
+    viewports.current.set(key, { top: 0, follow: true, expanded: new Set() });
   const selection = useRef(key);
   selection.current = key;
   if (!configured || !computerId)
@@ -86,11 +104,12 @@ export function PiChatPage(props: Props) {
           actions={
             <Button
               size="sm"
-              color="tertiary"
+              color="secondary"
               iconLeading={Plus}
-              aria-label={m.pi_chat_new()}
               onClick={() => select(computerId, "new")}
-            />
+            >
+              {m.pi_chat_new()}
+            </Button>
           }
         />
         <div className="space-y-3 p-3">
@@ -108,6 +127,7 @@ export function PiChatPage(props: Props) {
           <Input
             size="sm"
             aria-label={m.pi_chat_search()}
+            icon={SearchLg}
             placeholder={m.pi_chat_search()}
             value={search}
             onChange={setSearch}
@@ -132,30 +152,15 @@ export function PiChatPage(props: Props) {
               </Button>
             </div>
           )}
-          {sessions.data?.sessions
-            ?.filter((session) =>
-              session.title.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
-            )
-            .map((session) => (
-              <Link
-                key={session.id}
-                to="/w/$workspaceSlug/pi-chat"
-                params={{ workspaceSlug }}
-                search={{ computer: computerId, session: session.id }}
-                aria-current={sessionId === session.id ? "page" : undefined}
-                className={cn(
-                  "mb-1 block rounded-lg px-3 py-2 text-sm text-primary hover:bg-secondary",
-                  sessionId === session.id && "bg-active",
-                )}
-              >
-                <p className="truncate font-medium">{session.title}</p>
-                {session.status === "running" && (
-                  <p className="mt-1 text-xs text-tertiary">{m.pi_chat_running()}</p>
-                )}
-              </Link>
-            ))}
-          {sessions.data?.sessions?.length === 0 && (
-            <p className="p-3 text-sm text-tertiary">{m.pi_chat_no_sessions()}</p>
+          {sessions.data?.sessions && !sessions.isError && (
+            <PiChatSessionList
+              sessions={sessions.data.sessions}
+              search={search}
+              workspaceSlug={workspaceSlug}
+              computerId={computerId}
+              sessionId={sessionId}
+              clearSearch={() => setSearch("")}
+            />
           )}
         </div>
       </section>
@@ -165,6 +170,8 @@ export function PiChatPage(props: Props) {
           computerId={computerId}
           sessionId={sessionId}
           workspaceSlug={workspaceSlug}
+          viewport={viewports.current.get(key)!}
+          initialSession={sessions.data?.sessions?.find((session) => session.id === sessionId)}
           draft={drafts[key] ?? { text: "" }}
           onDraft={(value) => setDrafts((current) => ({ ...current, [key]: value }))}
           onSelect={(id) => {
@@ -195,10 +202,14 @@ function Conversation({
   draft,
   onDraft,
   onSelect,
+  viewport,
+  initialSession,
 }: {
   computerId: string;
   sessionId: string;
   workspaceSlug: string;
+  viewport: PiChatView;
+  initialSession?: PiChatSession;
   draft: PiChatDraft;
   onDraft(value: PiChatDraft): void;
   onSelect(id?: string): void;
@@ -210,10 +221,7 @@ function Conversation({
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const [older, setOlder] = useState<Message[]>([]);
-  const [before, setBefore] = useState<number>();
-  const scroll = useRef<HTMLDivElement>(null);
-  const follow = useRef(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const queryKey = ["pi-chat", workspaceSlug, computerId, "session", sessionId];
   const history = useQuery({
     queryKey,
@@ -227,12 +235,8 @@ function Conversation({
   });
   const session = history.data?.session;
   const busy = session?.status === "running";
-  const messages = [...older, ...(history.data?.messages ?? [])].filter(
-    (message, index, array) => array.findIndex((entry) => entry.id === message.id) === index,
-  );
-  useEffect(() => {
-    if (follow.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [history.data]);
+  const messages = history.data?.messages ?? [];
+  const position = usePiChatScroll(history.data, sessionId === "new" || !!history.data, viewport);
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["pi-chat", workspaceSlug, computerId] });
   };
@@ -263,23 +267,41 @@ function Conversation({
     });
     if (result?.session) {
       onDraft({ text: "" });
-      follow.current = true;
+      position.followLatest();
       onSelect(result.session.id);
     }
   };
   const loadOlder = async () => {
-    const cursor = before ?? history.data?.before;
-    if (!cursor) return;
-    const result = await mutate({ action: "read", sessionId, before: cursor });
-    if (result?.messages) {
-      setOlder((current) => [...result.messages!, ...current]);
-      setBefore(result.before);
+    const cursor = history.data?.before;
+    if (!cursor || loadingOlder) return;
+    setLoadingOlder(true);
+    setError(false);
+    try {
+      const result = await execute({
+        data: { computerId, command: { action: "read", sessionId, before: cursor } },
+      });
+      // A polling response started before this page was loaded must not discard it.
+      await queryClient.cancelQueries({ queryKey });
+      position.capturePrepend();
+      queryClient.setQueryData<PiChatResult>(queryKey, (current) => {
+        const merged = new Map((result.messages ?? []).map((message) => [message.id, message]));
+        for (const message of current?.messages ?? []) merged.set(message.id, message);
+        return {
+          ...current,
+          messages: [...merged.values()],
+          before: Math.min(current?.before ?? cursor, result.before ?? 0),
+        };
+      });
+    } catch {
+      setError(true);
+    } finally {
+      setLoadingOlder(false);
     }
   };
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
       <PageHeader
-        heading={session?.title ?? m.pi_chat_new()}
+        heading={session?.title ?? initialSession?.title ?? m.pi_chat_new()}
         leading={
           <Button
             size="sm"
@@ -292,31 +314,40 @@ function Conversation({
         }
         actions={
           session && (
-            <>
+            <Dropdown.Root>
               <Button
-                size="sm"
                 color="tertiary"
-                isDisabled={busy || submitting}
-                onClick={() => {
-                  setTitle(session.title);
-                  setRenaming(!renaming);
-                  setDeleting(false);
-                }}
-              >
-                {m.pi_chat_rename()}
-              </Button>
-              <Button
                 size="sm"
-                color="tertiary"
+                iconLeading={DotsHorizontal}
+                aria-label={m.pi_chat_actions()}
                 isDisabled={busy || submitting}
-                onClick={() => {
-                  setDeleting(!deleting);
-                  setRenaming(false);
-                }}
-              >
-                {m.pi_chat_delete()}
-              </Button>
-            </>
+              />
+              <Dropdown.Popover>
+                <Dropdown.Menu aria-label={m.pi_chat_actions()}>
+                  <Dropdown.Item
+                    id="rename"
+                    icon={Edit03}
+                    onAction={() => {
+                      setTitle(session.title);
+                      setRenaming(true);
+                      setDeleting(false);
+                    }}
+                  >
+                    {m.pi_chat_rename()}
+                  </Dropdown.Item>
+                  <Dropdown.Item
+                    id="delete"
+                    icon={Trash01}
+                    onAction={() => {
+                      setDeleting(true);
+                      setRenaming(false);
+                    }}
+                  >
+                    {m.pi_chat_delete()}
+                  </Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown.Root>
           )
         }
       />
@@ -387,53 +418,68 @@ function Conversation({
           </Button>
         </div>
       )}
-      <div
-        ref={scroll}
-        onScroll={(event) => {
-          const node = event.currentTarget;
-          follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
-        }}
-        className="min-h-0 flex-1 overflow-y-auto px-page"
-      >
-        <div className="mx-auto max-w-[52rem] divide-y divide-secondary">
-          {(before ?? history.data?.before ?? 0) > 0 && (
-            <div className="py-3">
-              <Button
-                size="sm"
-                color="secondary"
-                isDisabled={submitting}
-                onClick={() => void loadOlder()}
-              >
-                {m.pi_chat_older()}
-              </Button>
-            </div>
-          )}
-          {history.isPending && sessionId !== "new" && (
-            <p role="status" className="py-6 text-sm text-tertiary">
-              {m.pi_chat_loading()}
-            </p>
-          )}
-          {messages.map((message) => (
-            <PiChatMessage key={message.id} message={message} />
-          ))}
-          {messages.length === 0 &&
-            !history.isError &&
-            (sessionId === "new" || !history.isPending) && (
-              <div className="py-10">
-                <p className="text-lg font-semibold text-primary">{m.pi_chat_start_title()}</p>
-                <p className="mt-2 text-sm text-tertiary">{m.pi_chat_start_hint()}</p>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={position.scroll}
+          onScroll={position.onScroll}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-page [overflow-anchor:none]"
+        >
+          <div ref={position.content} className="mx-auto max-w-[48rem] py-3">
+            {(history.data?.before ?? 0) > 0 && (
+              <div className="py-3">
+                <Button
+                  size="sm"
+                  color="secondary"
+                  isDisabled={loadingOlder}
+                  isLoading={loadingOlder}
+                  onClick={() => void loadOlder()}
+                >
+                  {m.pi_chat_older()}
+                </Button>
               </div>
             )}
+            {history.isPending && sessionId !== "new" && (
+              <p role="status" className="py-6 text-sm text-tertiary">
+                {m.pi_chat_loading()}
+              </p>
+            )}
+            <PiChatDisclosureContext
+              value={{ expanded: viewport.expanded, onInspect: position.pauseFollowing }}
+            >
+              <PiChatTranscript messages={messages} busy={busy} />
+            </PiChatDisclosureContext>
+            {messages.length === 0 &&
+              !history.isError &&
+              (sessionId === "new" || !history.isPending) && (
+                <div className="py-10">
+                  <p className="text-lg font-semibold text-primary">{m.pi_chat_start_title()}</p>
+                  <p className="mt-2 text-sm text-tertiary">{m.pi_chat_start_hint()}</p>
+                </div>
+              )}
+          </div>
         </div>
+        {position.away && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+            <Button
+              color="secondary"
+              size="sm"
+              iconLeading={ArrowDown}
+              onClick={position.followLatest}
+              className="pointer-events-auto shadow-sm"
+            >
+              {m.pi_chat_latest()}
+            </Button>
+          </div>
+        )}
       </div>
       <form
         onSubmit={(event) => {
           event.preventDefault();
           void send();
         }}
-        className="border-t border-secondary px-page py-3"
+        className="shrink-0 px-page pt-2 pb-4"
       >
-        <div className="mx-auto max-w-[52rem] space-y-2">
+        <div className="mx-auto max-w-[48rem] space-y-2">
           {session?.status && (
             <p
               role="status"
@@ -445,47 +491,51 @@ function Conversation({
               {statusLabel(session.status)}
             </p>
           )}
-          <TextArea
-            aria-label={m.pi_chat_message()}
-            placeholder={m.pi_chat_placeholder()}
-            value={draft.text}
-            onChange={(text) => onDraft({ ...draft, text })}
-            maxLength={100_000}
-            rows={3}
-            isDisabled={submitting}
-            onTextAreaKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                void send();
-              }
-            }}
-          />
-          <div className="flex items-center justify-between gap-3">
-            <span className="min-w-0 text-xs text-tertiary wrap-anywhere">
-              {session?.model || m.pi_chat_model_default()}
-            </span>
-            {busy ? (
-              <Button
-                color="secondary"
-                size="sm"
-                iconLeading={StopCircle}
-                isDisabled={submitting}
-                onClick={() => void mutate({ action: "stop", sessionId })}
-              >
-                {m.pi_chat_stop()}
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                size="sm"
-                iconLeading={Send01}
-                isDisabled={!draft.text.trim() || submitting || (sessionId !== "new" && !session)}
-                isLoading={submitting}
-              >
-                {m.pi_chat_send()}
-              </Button>
-            )}
+          <div className="overflow-hidden rounded-xl border border-primary bg-primary shadow-xs focus-within:border-secondary">
+            <TextArea
+              aria-label={m.pi_chat_message()}
+              placeholder={m.pi_chat_placeholder()}
+              value={draft.text}
+              onChange={(text) => onDraft({ ...draft, text })}
+              maxLength={100_000}
+              rows={1}
+              textAreaClassName="min-h-12 max-h-48 resize-none rounded-none bg-transparent text-sm shadow-none ring-0 focus:ring-0 [field-sizing:content]"
+              isDisabled={submitting}
+              onTextAreaKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+            />
+            <div className="flex items-center justify-between gap-3 px-3 pb-3">
+              <span className="min-w-0 text-xs text-tertiary wrap-anywhere">
+                {session?.model || m.pi_chat_model_default()}
+              </span>
+              {busy ? (
+                <Button
+                  color="secondary"
+                  size="sm"
+                  iconLeading={StopCircle}
+                  isDisabled={submitting}
+                  onClick={() => void mutate({ action: "stop", sessionId })}
+                >
+                  {m.pi_chat_stop()}
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  size="sm"
+                  iconLeading={Send01}
+                  isDisabled={!draft.text.trim() || submitting || (sessionId !== "new" && !session)}
+                  isLoading={submitting}
+                >
+                  {m.pi_chat_send()}
+                </Button>
+              )}
+            </div>
           </div>
+          <p className="text-xs text-tertiary">{m.pi_chat_keyboard_hint()}</p>
         </div>
       </form>
     </section>

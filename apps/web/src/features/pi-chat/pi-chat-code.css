@@ -1,0 +1,22 @@
+.pi-chat-code .hljs-comment,
+.pi-chat-code .hljs-quote {
+  color: var(--color-text-tertiary);
+}
+.pi-chat-code .hljs-keyword,
+.pi-chat-code .hljs-selector-tag,
+.pi-chat-code .hljs-literal {
+  color: var(--color-text-brand-secondary);
+}
+.pi-chat-code .hljs-string,
+.pi-chat-code .hljs-addition {
+  color: var(--color-text-success-primary);
+}
+.pi-chat-code .hljs-number,
+.pi-chat-code .hljs-deletion {
+  color: var(--color-text-error-primary);
+}
+.pi-chat-code .hljs-title,
+.pi-chat-code .hljs-attr,
+.pi-chat-code .hljs-built_in {
+  font-weight: 600;
+}
