@@ -8,6 +8,7 @@ import {
   runtimeErrorDeliveryBackoffDelayMs,
   RuntimeErrorDeliveryBackoff,
   RuntimeErrorFingerprintFence,
+  runtimeErrorRecoverySignal,
 } from "#src/agent-runtime/runtime-error-recovery";
 
 test("the first backoff delay is the base delay, with no jitter added when the random source returns 0", () => {
@@ -104,4 +105,39 @@ test("fence.reset clears the streak for that Agent only", () => {
   fence.reset("agent-1");
   expect(fence.note("agent-1", "aaaaaaaa").attempts).toBe(1);
   expect(fence.note("agent-2", "cccccccc").attempts).toBe(2);
+});
+
+test("a retry-not-before time in the future is the whole delay, with no exponential or jitter", () => {
+  const backoff = new RuntimeErrorDeliveryBackoff({ jitterRandom: () => 1 });
+  const now = Date.parse("2026-10-21T13:00:00.000Z");
+  const reset = "2026-10-21T16:00:00.000Z";
+  const state = backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RATE_LIMIT, now, reset);
+  expect(state).toEqual({ attempts: 1, delayMs: 3 * 60 * 60_000, untilMs: Date.parse(reset) });
+});
+
+test.each([
+  ["already past", "2026-10-21T12:59:59.000Z"],
+  ["unparseable", "4pm"],
+])("a retry-not-before time %s falls back to the exponential delay", (_, notBefore) => {
+  const backoff = new RuntimeErrorDeliveryBackoff({ jitterRandom: () => 0 });
+  const now = Date.parse("2026-10-21T13:00:00.000Z");
+  const state = backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RATE_LIMIT, now, notBefore);
+  expect(state.delayMs).toBe(RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS);
+});
+
+test("model output from the main session is output; tool output and a subagent's are side output", () => {
+  const subagent = { parentToolUseId: "toolu_1" };
+  expect(runtimeErrorRecoverySignal({ type: "text-delta", text: "hi" })).toBe("output");
+  expect(runtimeErrorRecoverySignal({ type: "thinking-delta", text: "hm" })).toBe("output");
+  expect(runtimeErrorRecoverySignal({ type: "tool-start", id: "t", name: "Bash" })).toBe("output");
+  expect(runtimeErrorRecoverySignal({ type: "text-delta", text: "hi", subagent })).toBe(
+    "side_output",
+  );
+  expect(runtimeErrorRecoverySignal({ type: "tool-start", id: "t", name: "Bash", subagent })).toBe(
+    "side_output",
+  );
+  expect(runtimeErrorRecoverySignal({ type: "tool-output", id: "t", text: "ok" })).toBe(
+    "side_output",
+  );
+  expect(runtimeErrorRecoverySignal({ type: "progress" })).toBe("progress");
 });

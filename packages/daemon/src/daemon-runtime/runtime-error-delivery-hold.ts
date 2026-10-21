@@ -13,6 +13,9 @@ import {
 } from "#src/agent-runtime/runtime-error-recovery";
 import type { AgentDeliveryQueue } from "./agent-delivery-queue";
 
+/** The longest delay one `setTimeout` honours (a signed 32-bit millisecond count). */
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+
 export type RuntimeErrorDeliveryHoldPorts = Readonly<{
   /** Owns the explicit hold; this module only decides when it starts and ends. */
   deliveryQueue: Pick<AgentDeliveryQueue, "hold" | "release" | "explicitHold">;
@@ -70,14 +73,19 @@ export class RuntimeErrorDeliveryHold {
     }
     // A backoff would replace the fence's indefinite hold with one its timer releases.
     if (tripped) return tripped;
-    const backoff = this.#backoff.recordFailure(agentId, classification.errorClass);
+    const backoff = this.#backoff.recordFailure(
+      agentId,
+      classification.errorClass,
+      Date.now(),
+      classification.retryNotBefore,
+    );
     this.#ports.deliveryQueue.hold(
       agentId,
       classification.errorClass === RUNTIME_ERROR_CLASS.RATE_LIMIT
         ? "rate_limit_backoff"
         : "runtime_error_backoff",
     );
-    this.#scheduleRelease(agentId, backoff.delayMs);
+    this.#scheduleRelease(agentId, backoff.untilMs);
     return undefined;
   }
 
@@ -86,7 +94,9 @@ export class RuntimeErrorDeliveryHold {
   noteRecoverySignal(agentId: string, signal: RuntimeErrorRecoverySignal): void {
     const effects = RUNTIME_ERROR_RECOVERY_EFFECTS[signal];
     if (effects.resetsFence) this.#fence.reset(agentId);
-    if (effects.endsBackoff && this.#backoff.attempts(agentId) > 0) this.#endBackoff(agentId);
+    if (this.#backoff.attempts(agentId) === 0) return;
+    const rateLimited = this.#backoff.latestClass(agentId) === RUNTIME_ERROR_CLASS.RATE_LIMIT;
+    if (rateLimited ? effects.endsRateLimitBackoff : effects.endsBackoff) this.#endBackoff(agentId);
   }
 
   /** A turn ended, whatever its status. It ends only an unclassified failure's backoff: a
@@ -148,12 +158,19 @@ export class RuntimeErrorDeliveryHold {
     return this.#ports.deliveryQueue.explicitHold(agentId) === "fingerprint_fence";
   }
 
-  #scheduleRelease(agentId: string, delayMs: number): void {
+  /** Releases the hold at `untilMs`. A wait longer than one timer can run (a quota reset days
+   * away) re-arms until then: a longer timer delay fires at once. */
+  #scheduleRelease(agentId: string, untilMs: number): void {
     this.#clearReleaseTimer(agentId);
-    const timer = setTimeout(() => {
-      this.#releaseTimers.delete(agentId);
-      this.#releaseHeld(agentId);
-    }, delayMs);
+    const remainingMs = untilMs - Date.now();
+    const timer = setTimeout(
+      () => {
+        this.#releaseTimers.delete(agentId);
+        if (remainingMs > MAX_TIMER_DELAY_MS) this.#scheduleRelease(agentId, untilMs);
+        else this.#releaseHeld(agentId);
+      },
+      Math.min(Math.max(0, remainingMs), MAX_TIMER_DELAY_MS),
+    );
     this.#releaseTimers.set(agentId, timer);
   }
 

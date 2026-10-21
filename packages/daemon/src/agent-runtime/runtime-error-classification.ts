@@ -63,6 +63,8 @@ export type RuntimeErrorClassification = Readonly<{
   errorClass: RuntimeErrorClass;
   errorReason: string;
   retryDecision: RuntimeErrorRetryDecision;
+  /** An ISO time no retry can succeed before: an exhausted quota's reported reset. */
+  retryNotBefore?: string;
 }>;
 
 type ClassificationRule = Readonly<{
@@ -178,17 +180,20 @@ const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
   },
 ];
 
-/** A provider's normalized limit is a retryable rate limit, whatever its text says; any other
- * failure is classified from its text. */
+/** A provider's normalized limit is a retryable rate limit, whatever its text says, and an
+ * exhausted quota is not retried before its reported reset; any other failure is classified from
+ * its text. */
 export function classifyRuntimeError(
   event: Pick<Extract<AgentRuntimeEvent, { type: "error" }>, "message" | "providerLimit">,
 ): RuntimeErrorClassification {
   const limit = event.providerLimit;
   if (!limit) return classifyRuntimeErrorText(event.message);
+  const quota = limit.kind === "quota_exhausted";
   return {
     errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
-    errorReason: limit.kind === "quota_exhausted" ? "quota_exhausted" : "rate_limited",
+    errorReason: quota ? "quota_exhausted" : "rate_limited",
     retryDecision: RETRY,
+    ...(quota && limit.resetsAt ? { retryNotBefore: limit.resetsAt } : {}),
   };
 }
 

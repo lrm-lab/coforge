@@ -4,7 +4,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentActivity } from "@lrm/coforge-sdk/internal";
-import { runtimeErrorDeliveryBackoffDelayMs } from "#src/agent-runtime/runtime-error-recovery";
+import { RUNTIME_ERROR_DELIVERY_BACKOFF_MAX_MS } from "#src/agent-runtime/runtime-error-recovery";
 import type { AgentRuntimeConfig, AgentRuntimeEvent, AgentSession } from "#src/code-agent/contract";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
@@ -24,9 +24,8 @@ const config: AgentRuntimeConfig = {
   reasoning: "balanced",
 };
 const QUOTA_TEXT = "You've hit your session limit · resets 3:45pm";
-const RESETS_AT = "2100-01-01T00:00:00.000Z";
-/** The first backoff delay with its jitter at most (runtime-error-recovery.ts). */
-const FIRST_BACKOFF_MS = runtimeErrorDeliveryBackoffDelayMs(1, { jitterRandom: () => 1 }) + 1;
+const HOUR_MS = 60 * 60_000;
+const DAY_MS = 24 * HOUR_MS;
 
 afterAll(() => rm(workspaceRoot, { recursive: true, force: true }));
 afterEach(() => jest.useRealTimers());
@@ -113,28 +112,84 @@ async function harness() {
   };
 }
 
-test("a Claude quota limit keeps its delivery backoff across the failed turn's end", async () => {
+/** Fails the current turn on an exhausted quota that resets `resetsAt`, the way Claude Code
+ * reports one: the limit, then the failed turn's end. */
+function failOnQuota(emit: (event: AgentRuntimeEvent) => void, resetsAt: string) {
+  emit({
+    type: "error",
+    message: QUOTA_TEXT,
+    providerErrorCode: "rate_limit",
+    providerLimit: { kind: "quota_exhausted", resetsAt },
+  });
+  emit({ type: "completed", status: "failed" });
+}
+
+test("a Claude quota limit holds deliveries until its reported reset time", async () => {
   const { runtime, notices, acknowledged, activities, emit, noticed, deliver } = await harness();
   jest.useFakeTimers();
   try {
-    emit({
-      type: "error",
-      message: QUOTA_TEXT,
-      providerErrorCode: "rate_limit",
-      providerLimit: { kind: "quota_exhausted", resetsAt: RESETS_AT },
-    });
-    emit({ type: "completed", status: "failed" });
+    const resetsAt = new Date(Date.now() + 3 * HOUR_MS).toISOString();
+    failOnQuota(emit, resetsAt);
     await deliver(1);
     // Held: acknowledged without a notice, unlike the same text unclassified, whose backoff
     // its turn end ends (daemon-runtime.test.ts, "the same error ending every turn ...").
     await acknowledged;
     expect(notices).toEqual([]);
     expect(activities.find((activity) => activity.detailKind === "runtime_error")).toMatchObject({
-      detail: `${QUOTA_TEXT} (limit resets at ${RESETS_AT})`,
+      detail: `${QUOTA_TEXT} (limit resets at ${resetsAt})`,
       runtimeError: { errorClass: "RateLimitError", errorReason: "quota_exhausted" },
     });
 
-    jest.advanceTimersByTime(FIRST_BACKOFF_MS);
+    // Not the exponential backoff's first release, nor its cap: the reset time.
+    jest.advanceTimersByTime(RUNTIME_ERROR_DELIVERY_BACKOFF_MAX_MS * 2);
+    await Promise.resolve();
+    expect(notices).toEqual([]);
+    jest.advanceTimersByTime(3 * HOUR_MS);
+    await noticed;
+    expect(notices).toHaveLength(1);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("a reset time beyond the longest timer delay still holds until it", async () => {
+  const { runtime, notices, acknowledged, emit, noticed, deliver } = await harness();
+  jest.useFakeTimers();
+  try {
+    // Past 2^31 - 1 ms, where a single timer would fire at once.
+    failOnQuota(emit, new Date(Date.now() + 30 * DAY_MS).toISOString());
+    await deliver(1);
+    await acknowledged;
+    jest.advanceTimersByTime(29 * DAY_MS);
+    await Promise.resolve();
+    expect(notices).toEqual([]);
+    jest.advanceTimersByTime(DAY_MS);
+    await noticed;
+    expect(notices).toHaveLength(1);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("progress and side output leave a quota wait; main-session model output ends it", async () => {
+  const { runtime, notices, acknowledged, emit, noticed, deliver } = await harness();
+  jest.useFakeTimers();
+  try {
+    failOnQuota(emit, new Date(Date.now() + 3 * HOUR_MS).toISOString());
+    await deliver(1);
+    await acknowledged;
+    // A background subagent still reporting, as in the reference's rate-limit exception.
+    const subagent = { parentToolUseId: "toolu_1" };
+    emit({ type: "progress" });
+    emit({ type: "subagent-progress", phase: "progress", parentToolUseId: "toolu_1" });
+    emit({ type: "text-delta", text: "still going", subagent });
+    emit({ type: "tool-output", id: "toolu_1", text: "partial" });
+    emit({ type: "completed", status: "completed" });
+    await Promise.resolve();
+    expect(notices).toEqual([]);
+
+    emit({ type: "text-delta", text: "back" });
+    emit({ type: "completed", status: "completed" });
     await noticed;
     expect(notices).toHaveLength(1);
   } finally {

@@ -10137,7 +10137,7 @@ describe("Agent delivery queue", () => {
         jest.useFakeTimers();
 
         // A classified error, whose backoff its own turn end leaves holding.
-        fake.emit({ type: "error", message: "429 Too Many Requests" });
+        fake.emit({ type: "error", message: "502 Bad Gateway" });
         fake.emit({ type: "completed", status: "failed" });
         await deliver(1);
         expect(fake.notices).toEqual([]);
@@ -10161,7 +10161,7 @@ describe("Agent delivery queue", () => {
         jest.useFakeTimers();
 
         // A classified error, whose turn end leaves its backoff holding.
-        fake.emit({ type: "error", message: "429 Too Many Requests" });
+        fake.emit({ type: "error", message: "502 Bad Gateway" });
         await deliver(1);
         // Mid-turn, as these arrive (each marks the Agent busy until the turn end).
         fake.emit(between);

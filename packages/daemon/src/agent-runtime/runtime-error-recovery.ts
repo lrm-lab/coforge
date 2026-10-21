@@ -16,8 +16,8 @@ import { PHASE_EDGES } from "./runtime-phases";
  * Two independent streaks live here; the caller decides which runtime events reset each one
  * (`runtimeErrorRecoverySignal` below names what a raw event signals):
  * - `RuntimeErrorDeliveryBackoff` counts consecutive retryable failures for an Agent, regardless
- *   of which failure text caused each one, and computes the exponential/jittered delay before the
- *   next held delivery is released.
+ *   of which failure text caused each one, and computes the delay before the next held delivery
+ *   is released: exponential and jittered, or until an exhausted quota's reported reset.
  * - `RuntimeErrorFingerprintFence` counts consecutive failures that carry the *same* fingerprint
  *   (agent-runtime/runtime-error-activity.ts's `fingerprintRuntimeError`). Backing off forever at
  *   the delivery backoff's cap would otherwise retry an Agent whose runtime is stuck on the exact
@@ -75,15 +75,24 @@ export class RuntimeErrorDeliveryBackoff {
 
   constructor(private readonly options: RuntimeErrorDeliveryBackoffOptions = {}) {}
 
-  /** Records one retryable failure for `agentId` and returns the delay the next release owes. */
+  /** Records one retryable failure for `agentId` and returns the delay the next release owes:
+   * until `notBefore` (ISO) when that is still ahead, however far, else the exponential delay.
+   * The reference Computer 1.0.51 (darwin-arm64, release 463fd642-65db-4902-ae9b-c22fbae0e6a0,
+   * sha256 364ec010…c78e, observed 2026-10-21) waits for an exhausted quota's reported reset the
+   * same way, but caps that wait at an hour; this one is uncapped by product decision. */
   recordFailure(
     agentId: string,
     errorClass: RuntimeErrorClass,
     now: number = Date.now(),
+    notBefore?: string,
   ): RuntimeErrorDeliveryBackoffState {
     const attempts = this.attempts(agentId) + 1;
     this.#streaks.set(agentId, { attempts, latestClass: errorClass });
-    const delayMs = runtimeErrorDeliveryBackoffDelayMs(attempts, this.options);
+    const notBeforeMs = notBefore === undefined ? Number.NaN : Date.parse(notBefore);
+    const delayMs =
+      notBeforeMs > now
+        ? notBeforeMs - now
+        : runtimeErrorDeliveryBackoffDelayMs(attempts, this.options);
     return { attempts, delayMs, untilMs: now + delayMs };
   }
 
@@ -142,19 +151,27 @@ export class RuntimeErrorFingerprintFence {
   }
 }
 
-/** What one raw runtime event says about recovery from runtime errors: output (thinking, text, a
- * tool call or its output), progress without output, or a finished phase (compaction, review). */
-export type RuntimeErrorRecoverySignal = "output" | "progress" | "phase_finished";
+/** What one raw runtime event says about recovery from runtime errors: the main session's model
+ * output (thinking, text, a tool call), side output (a tool's output, or a subagent's model
+ * output), progress without output, or a finished phase (compaction, review). */
+export type RuntimeErrorRecoverySignal = "output" | "side_output" | "progress" | "phase_finished";
 
 /** What each recovery signal does to an Agent's two streaks: whether it ends a delivery backoff
- * (releasing what it held), and whether it resets the fingerprint fence's streak. A turn end is
- * not a signal here; the hold handles it on its own. */
+ * (releasing what it held), whether it ends one after a rate limit too, and whether it resets the
+ * fingerprint fence's streak. Only the main session's own model output shows a rate limit has
+ * lifted: a subagent or a tool still reporting does not (the reference Computer 1.0.51,
+ * `clearRuntimeErrorDeliveryBackoffAfterProgress`, release cited at `recordFailure`). A turn end
+ * is not a signal here; the hold handles it on its own. */
 export const RUNTIME_ERROR_RECOVERY_EFFECTS: Readonly<
-  Record<RuntimeErrorRecoverySignal, Readonly<{ endsBackoff: boolean; resetsFence: boolean }>>
+  Record<
+    RuntimeErrorRecoverySignal,
+    Readonly<{ endsBackoff: boolean; endsRateLimitBackoff: boolean; resetsFence: boolean }>
+  >
 > = {
-  output: { endsBackoff: true, resetsFence: true },
-  progress: { endsBackoff: true, resetsFence: false },
-  phase_finished: { endsBackoff: false, resetsFence: true },
+  output: { endsBackoff: true, endsRateLimitBackoff: true, resetsFence: true },
+  side_output: { endsBackoff: true, endsRateLimitBackoff: false, resetsFence: true },
+  progress: { endsBackoff: true, endsRateLimitBackoff: false, resetsFence: false },
+  phase_finished: { endsBackoff: false, endsRateLimitBackoff: false, resetsFence: true },
 };
 
 /**
@@ -171,8 +188,9 @@ export function runtimeErrorRecoverySignal(
     case "text-delta":
     case "thinking-delta":
     case "tool-start":
+      return event.subagent ? "side_output" : "output";
     case "tool-output":
-      return "output";
+      return "side_output";
     case "progress":
     case "subagent-progress":
       return "progress";

@@ -104,6 +104,19 @@ test.each([
   });
 });
 
+test("an exhausted quota with a reported reset time is not retried before it", () => {
+  const resetsAt = "2100-01-01T00:00:00.000Z";
+  const limit = { kind: "quota_exhausted", resetsAt } as const;
+  expect(classifyRuntimeError({ message: "limit", providerLimit: limit }).retryNotBefore).toBe(
+    resetsAt,
+  );
+  // A transient limit's reset, if any, is not a quota's: its backoff stays exponential.
+  const transient = { kind: "transient_rate_limit", resetsAt } as const;
+  expect(classifyRuntimeError({ message: "limit", providerLimit: transient })).not.toHaveProperty(
+    "retryNotBefore",
+  );
+});
+
 test("without a provider limit, a failure is classified from its text alone", () => {
   for (const message of ["request timed out", "You've hit your session limit", "429"])
     expect(classifyRuntimeError({ message })).toEqual(classifyRuntimeErrorText(message));
