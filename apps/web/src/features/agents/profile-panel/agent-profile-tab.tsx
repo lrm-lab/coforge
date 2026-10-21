@@ -22,7 +22,6 @@ import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
-import { AgentDesktopButton } from "#src/features/computers/agent-desktop-button";
 import { computerIcon } from "#src/features/computers/computer-identity";
 import { RuntimeUsage, UsageHealthDot } from "#src/features/computers/runtime-usage";
 import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
@@ -243,15 +242,6 @@ export function AgentProfileTab({
               )}
             </p>
           )}
-          {profile.computer ? (
-            <AgentDesktopButton
-              computerId={profile.computer.id}
-              agentId={profile.id}
-              kind={profile.computer.kind}
-              online={profile.computer.online === true}
-              owned={profile.computer.ownedByViewer === true}
-            />
-          ) : null}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4">
           <div>

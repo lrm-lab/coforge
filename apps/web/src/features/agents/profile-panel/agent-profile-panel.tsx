@@ -67,6 +67,7 @@ import { agentModelsQueryKey } from "#src/features/agents/agent-models";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { AgentProfileHeader } from "./agent-profile-header";
 import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs";
+import { AgentComputerTab } from "./agent-computer-tab";
 import { AgentProfileTab } from "./agent-profile-tab";
 import { AgentWorkspaceTab } from "./agent-workspace-tab";
 import { AgentActivityTab } from "./agent-activity-tab";
@@ -161,6 +162,7 @@ export function AgentProfilePanel({
     canManage,
     canSeeWorkspace,
     Boolean(profile) && !deleted,
+    profile?.computer?.kind === "cloud" && profile.computer.ownedByViewer === true && !deleted,
   );
   const tab = resolveAgentProfileTab(requestedTab, tabOrder.tabs);
   // Opened without `agentTab`, the panel lands on the first tab of the viewer's order once their
@@ -392,9 +394,7 @@ export function AgentProfilePanel({
         onSelect={onTabChange}
         onReorder={tabOrder.reorder}
       />
-      {/* Workspace (a split tree/file viewer) and Activity (a fixed band over a scrolling log)
-          scroll their own parts. A shared overflow here would grow with the content and drag the
-          tree or the band out of view. */}
+      {/* Workspace and Activity scroll their own parts. */}
       <div
         className={
           profile && (tab === "workspace" || tab === "activity")
@@ -417,6 +417,8 @@ export function AgentProfilePanel({
           </div>
         ) : tab === "apps" ? (
           <AgentAppsTab agentId={agentId} timeZone={timeZone} />
+        ) : tab === "computer" ? (
+          <AgentComputerTab profile={profile} />
         ) : tab === "workspace" ? (
           <AgentWorkspaceTab
             agentId={agentId}
@@ -432,7 +434,6 @@ export function AgentProfilePanel({
             // Realtime once a display snapshot has arrived, the initial `getAgentProfile` load
             // until then — trusting `liveAgent.display`'s own (possibly explicitly null)
             // `contextUsage` once present, never falling back past it to a stale initial read.
-            // Display-only: nothing here triggers on any threshold.
             contextUsage={
               liveAgent?.display
                 ? (liveAgent.display.contextUsage ?? null)

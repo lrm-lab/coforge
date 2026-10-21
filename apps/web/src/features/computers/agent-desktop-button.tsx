@@ -40,7 +40,6 @@ export function AgentDesktopButton({
       type="button"
       size="sm"
       color="secondary"
-      className="mt-3"
       iconLeading={Monitor}
       isDisabled={!online}
       onPress={() => {
