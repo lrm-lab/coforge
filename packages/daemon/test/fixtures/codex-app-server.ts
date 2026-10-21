@@ -1,6 +1,12 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { appliedServiceTier, CODEX_MODEL_LIST, hasExpectedThreadConfig } from "./codex-models";
+import {
+  appliedServiceTier,
+  CODEX_MODEL_LIST,
+  CODEX_SPEED_TIER_MODEL_LIST,
+  hasExpectedThreadConfig,
+} from "./codex-models";
+import { readLines } from "./read-lines";
 
 const expectedSkill = process.argv
   .find((argument) => argument.startsWith("expected-skill="))
@@ -32,22 +38,14 @@ try {
   // No project skills were discovered.
 }
 
-const decoder = new TextDecoder();
-let buffer = "";
 let initialized = false;
 let skillsLoaded = false;
 let turn = 0;
 let active = false;
 
-for await (const chunk of Bun.stdin.stream()) {
-  buffer += decoder.decode(chunk, { stream: true });
-  let newline = buffer.indexOf("\n");
-  while (newline >= 0) {
-    const line = buffer.slice(0, newline).replace(/\r$/, "");
-    buffer = buffer.slice(newline + 1);
-    if (line) handle(JSON.parse(line) as Request);
-    newline = buffer.indexOf("\n");
-  }
+for await (const line of readLines(Bun.stdin.stream())) {
+  const text = line.replace(/\r?\n$/, "");
+  if (text) handle(JSON.parse(text) as Request);
 }
 
 interface Request {
@@ -185,7 +183,12 @@ function handle(request: Request): void {
       write({ id: request.id, error: { code: -32001, message: "token=fixture-private-token" } });
       return;
     }
-    write({ id: request.id, result: CODEX_MODEL_LIST });
+    write({
+      id: request.id,
+      result: process.argv.includes("catalog-speed-tiers")
+        ? CODEX_SPEED_TIER_MODEL_LIST
+        : CODEX_MODEL_LIST,
+    });
     return;
   }
   if (request.method === "skills/list" && request.id && initialized) {

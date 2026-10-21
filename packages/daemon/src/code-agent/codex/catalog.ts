@@ -54,6 +54,8 @@ export async function discoverCodexCatalog(
                 reasoningEffort: asRecord(level)?.effort,
               }))
             : [],
+          serviceTiers: entry.service_tiers,
+          additionalSpeedTiers: entry.additional_speed_tiers,
         });
       })
       .filter(isModel);
@@ -130,6 +132,29 @@ export async function initializeCodex(
   await process.send({ method: "initialized", params: {} });
 }
 
+/** The Fast tier's ids: its service-tier id (codex-cli 0.163.0 reports `priority`) and the speed
+ * tier `thread/start` takes. */
+const CODEX_FAST_TIER_IDS: ReadonlySet<unknown> = new Set(["priority", "fast"]);
+
+/**
+ * Whether Codex lists the Fast tier: a Fast service tier (an entry is its id, or an object with
+ * that `id`) or the `fast` speed tier; another tier does not count. Undefined when the entry
+ * carries neither field, which an older Codex does not report.
+ */
+function codexFastMode(model: Record<string, unknown>): boolean | undefined {
+  if (model.serviceTiers === undefined && model.additionalSpeedTiers === undefined)
+    return undefined;
+  const hasServiceTier =
+    Array.isArray(model.serviceTiers) &&
+    model.serviceTiers.some(
+      (tier: unknown) =>
+        CODEX_FAST_TIER_IDS.has(tier) || CODEX_FAST_TIER_IDS.has(asRecord(tier)?.id),
+    );
+  const hasSpeedTier =
+    Array.isArray(model.additionalSpeedTiers) && model.additionalSpeedTiers.includes("fast");
+  return hasServiceTier || hasSpeedTier;
+}
+
 function codexModel(value: unknown): CodeAgentModelMetadata | undefined {
   const model = asRecord(value);
   if (typeof model?.model !== "string") return undefined;
@@ -139,6 +164,7 @@ function codexModel(value: unknown): CodeAgentModelMetadata | undefined {
         .map((effort) => effort?.reasoningEffort)
         .filter((effort): effort is string => typeof effort === "string")
     : [];
+  const supportsFastMode = codexFastMode(model);
   return {
     id: model.model,
     displayName: typeof model.displayName === "string" ? model.displayName : model.model,
@@ -148,5 +174,6 @@ function codexModel(value: unknown): CodeAgentModelMetadata | undefined {
     defaultReasoning:
       typeof model.defaultReasoningEffort === "string" ? model.defaultReasoningEffort : "",
     recommended: model.isDefault === true,
+    ...(supportsFastMode === undefined ? {} : { supportsFastMode }),
   };
 }
