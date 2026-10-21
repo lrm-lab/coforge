@@ -6,6 +6,7 @@ import { AddComputerDialog } from "#src/features/computers/add-computer-dialog";
 import { ComputerLayout } from "#src/features/computers/computer-layout";
 import { ComputersPending } from "#src/features/computers/computers-pending";
 import { ensureCloudComputer } from "#src/features/computers/cloud-computers.functions";
+import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-origin.functions";
 import { listComputers } from "#src/features/computers/computers.functions";
 import {
   followComputerUpgrade,
@@ -24,10 +25,11 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
     // again, including an attach that waited because the container was not
     // ready yet. A deployment without a cluster still shows the computers it has.
     await ensureCloudComputer();
-    const [computers, preferences, installOrigin] = await Promise.all([
+    const [computers, preferences, installOrigin, desktopOrigin] = await Promise.all([
       listComputers(),
       getUserPreferences(),
       getInstallOrigin(),
+      getCloudDesktopOrigin(),
     ]);
     // An upgrade still running is followed by the Workspace shell (`computer-upgrade-watcher.tsx`).
     for (const computer of computers)
@@ -41,6 +43,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
       computers,
       timeZone: preferences.timeZone,
       installOrigin,
+      desktopOrigin,
     };
   },
   pendingComponent: ComputersPending,

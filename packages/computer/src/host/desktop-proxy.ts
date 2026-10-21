@@ -23,7 +23,7 @@ export function newDesktopToken(): string {
 export function parseDesktopRoute(
   pathname: string,
 ): { computerId: string; upstreamPath: string } | undefined {
-  const match = /^\/desktop\/([A-Za-z0-9_-]+)(\/.*)?$/.exec(pathname);
+  const match = /^\/desktop\/([A-Za-z0-9_-]+)(\/.*)?$/.exec(pathname.replace(/\/{2,}/g, "/"));
   if (!match?.[1]) return undefined;
   const suffix = match[2] ?? "/";
   return {
@@ -39,7 +39,7 @@ const RELATIVE_PAGE_SCRIPT = `
     const params = new URLSearchParams(location.search);
     const token = params.get("token") || "";
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    const base = location.pathname.replace(/\\/desktop\\.html$/, "");
+    const base = location.pathname.replace(/\\/desktop\\.html$/, "").replace(/\\/+$/, "");
     const query = token ? \`?token=\${encodeURIComponent(token)}\` : "";
     const url = \`\${proto}://\${location.host}\${base}/websockify\${query}\`;
     const rfb = new RFB(document.getElementById("screen"), url);

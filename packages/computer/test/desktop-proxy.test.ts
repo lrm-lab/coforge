@@ -25,6 +25,10 @@ describe("desktop route", () => {
     });
     expect(parseDesktopRoute("/other")).toBeUndefined();
     expect(parseDesktopRoute("/desktop/../etc/passwd")).toBeUndefined();
+    expect(parseDesktopRoute("/desktop/computer-1//websockify")).toEqual({
+      computerId: "computer-1",
+      upstreamPath: "/websockify",
+    });
   });
 
   test("reads the container address and desktop token from inspect output", () => {

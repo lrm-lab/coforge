@@ -1,26 +1,27 @@
-/** The Swarm host desktop proxy port (`COFORGE_DESKTOP_PROXY_PORT`, default 6090). */
-const CLOUD_DESKTOP_PROXY_PORT = "6090";
-
 /**
  * Browser address of one cloud Computer's desktop.
  *
- * The image serves that page at `/desktop.html` and connects to a relative
- * `websockify`. The host proxy publishes it at `/desktop/<computer id>/` and
- * adds the container token on its own request, so this address has none.
+ * `desktopOrigin` is the deployment's Swarm host proxy
+ * (`COFORGE_CLOUD_DESKTOP_ORIGIN`), not the web page the user is on. The image
+ * serves that page at `/desktop.html` and connects to a relative `websockify`.
+ * The host proxy publishes it at `/desktop/<computer id>/` and adds the
+ * container token on its own request, so this address has none.
  */
-export function cloudDesktopUrl(pageUrl: string, computerId: string): string | undefined {
+export function cloudDesktopUrl(desktopOrigin: string, computerId: string): string | undefined {
   if (!/^[A-Za-z0-9_-]+$/.test(computerId)) return undefined;
-  let page: URL;
+  let origin: URL;
   try {
-    page = new URL(pageUrl);
+    origin = new URL(desktopOrigin);
   } catch {
     return undefined;
   }
-  if (page.protocol !== "http:" && page.protocol !== "https:") return undefined;
-  if (!page.hostname) return undefined;
-  const desktop = new URL("http://desktop.invalid/");
-  desktop.hostname = page.hostname;
-  desktop.port = CLOUD_DESKTOP_PROXY_PORT;
+  if (origin.protocol !== "http:" && origin.protocol !== "https:") return undefined;
+  if (!origin.hostname || origin.username || origin.password) return undefined;
+  if (origin.pathname !== "" && origin.pathname !== "/") return undefined;
+  if (origin.search || origin.hash) return undefined;
+  const desktop = new URL(`${origin.protocol}//desktop.invalid/`);
+  desktop.hostname = origin.hostname;
+  desktop.port = origin.port;
   desktop.pathname = `/desktop/${computerId}/`;
   return desktop.toString();
 }
