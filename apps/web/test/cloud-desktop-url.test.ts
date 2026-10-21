@@ -4,17 +4,18 @@ import { cloudDesktopUrl } from "#src/features/computers/cloud-desktop-url";
 
 const COMPUTER = "01a15829-2da5-740c-848c-c287bf1e8ab6";
 
-test("a cloud desktop opens on the page host's proxy, without a token", () => {
-  expect(cloudDesktopUrl("https://cloud.example.com/w/acme/computers", COMPUTER)).toBe(
-    `http://cloud.example.com:6090/desktop/${COMPUTER}/`,
+test("a cloud desktop opens on the configured proxy, without a token", () => {
+  expect(cloudDesktopUrl("http://10.110.158.143:6090", COMPUTER)).toBe(
+    `http://10.110.158.143:6090/desktop/${COMPUTER}/`,
   );
-  expect(cloudDesktopUrl("http://10.0.0.8:8788/w/acme", COMPUTER)).toBe(
-    `http://10.0.0.8:6090/desktop/${COMPUTER}/`,
+  expect(cloudDesktopUrl("https://desktop.example.com/", COMPUTER)).toBe(
+    `https://desktop.example.com/desktop/${COMPUTER}/`,
   );
 });
 
-test("a computer id that is not a single path segment is refused", () => {
-  expect(cloudDesktopUrl("https://cloud.example.com", "../other")).toBeUndefined();
-  expect(cloudDesktopUrl("https://cloud.example.com", "a/b")).toBeUndefined();
+test("a computer id or origin that is not one desktop proxy is refused", () => {
+  expect(cloudDesktopUrl("http://10.110.158.143:6090", "../other")).toBeUndefined();
+  expect(cloudDesktopUrl("http://10.110.158.143:6090", "a/b")).toBeUndefined();
+  expect(cloudDesktopUrl("https://staging.example.com/w/acme", COMPUTER)).toBeUndefined();
   expect(cloudDesktopUrl("not a url", COMPUTER)).toBeUndefined();
 });

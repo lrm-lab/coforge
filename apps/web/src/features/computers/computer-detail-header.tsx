@@ -4,6 +4,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import { BackToComputers } from "./back-to-computers";
 import { cloudDesktopUrl } from "./cloud-desktop-url";
+import { useCloudDesktopOrigin } from "./cloud-desktop-origin";
 
 /** Restart control next to Open desktop. The detail page owns the request. */
 export type ComputerDetailRestart = {
@@ -14,7 +15,7 @@ export type ComputerDetailRestart = {
 
 /**
  * Detail header band: back to the list, the owner's cloud desktop, and restart.
- * Open desktop uses the page host's proxy and stays disabled while the computer is offline.
+ * Open desktop uses this deployment's proxy and stays disabled while the computer is offline.
  */
 export function ComputerDetailHeader({
   computerId,
@@ -27,10 +28,13 @@ export function ComputerDetailHeader({
   online: boolean;
   restart: ComputerDetailRestart | undefined;
 }) {
+  const desktopOrigin = useCloudDesktopOrigin();
+  const desktopUrl =
+    showDesktop && desktopOrigin ? cloudDesktopUrl(desktopOrigin, computerId) : undefined;
   return (
     <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
       <BackToComputers />
-      {showDesktop ? (
+      {desktopUrl ? (
         <Button
           type="button"
           size="sm"
@@ -39,8 +43,7 @@ export function ComputerDetailHeader({
           iconLeading={Monitor}
           isDisabled={!online}
           onPress={() => {
-            const url = cloudDesktopUrl(window.location.href, computerId);
-            if (url) window.open(url, "_blank", "noopener,noreferrer");
+            window.open(desktopUrl, "_blank", "noopener,noreferrer");
           }}
         >
           {m.computer_open_desktop()}
@@ -51,7 +54,7 @@ export function ComputerDetailHeader({
           type="button"
           size="sm"
           color="secondary"
-          className={showDesktop ? undefined : "ml-auto"}
+          className={desktopUrl ? undefined : "ml-auto"}
           iconLeading={RotateCw}
           isDisabled={restart.disabled}
           onPress={restart.onPress}
