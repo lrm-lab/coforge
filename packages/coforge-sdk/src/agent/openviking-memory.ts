@@ -8,6 +8,13 @@
  */
 
 import { decodeOpenVikingCitation, type OpenVikingCitation } from "./memory-citations";
+import { OPENVIKING_ARGUMENT_EXAMPLES, OPENVIKING_REQUIRED_FIELDS } from "./openviking-memory-examples";
+
+export {
+  CHANNEL_ARGUMENT_EXAMPLES,
+  OPENVIKING_ARGUMENT_EXAMPLES,
+  OPENVIKING_REQUIRED_FIELDS,
+} from "./openviking-memory-examples";
 
 export const OPENVIKING_AGENT_PROTOCOL = "coforge.openviking.agent.v1" as const;
 
@@ -226,33 +233,6 @@ export const OPENVIKING_OPERATION_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}
 /** Copyable rule for models that echo prompt text instead of reading JSON Schema. */
 export const OPENVIKING_OPERATION_ID_RULE =
   "operationId is a client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$ (starts with a letter or digit, may contain hyphens and underscores, at most 128 characters). Use a fresh id for each new logical operation or changed arguments; preserve the id only for an identical retry.";
-
-/** One complete arguments object per operation. Placeholders are meant to be copied. */
-export const OPENVIKING_ARGUMENT_EXAMPLES: Record<OpenVikingAgentOperation, string> = {
-  diagnose: '{"operationId":"diagnose-1","messageId":"<求助消息 id>"}',
-  fork_find: '{"operationId": "find-1", "query": "<检索词>", "limit": 10}',
-  search_context: '{"operationId": "search-1", "query": "<检索词>", "limit": 10}',
-  read: '{"operationId": "read-1", "uri": "<document uri>"}',
-  expand:
-    '{"operationId": "hop-1", "chainRef": "<ov_fork_find chainRef>", "uri": "<served node uri>", "relation": "anchor", "limit": 5}',
-  offer:
-    '{"operationId": "offer-1", "citationRefs": ["<ov_fork_find/ov_expand 返回的 citation id>"], "body": "<给 @task 的正文>"}',
-};
-
-/** Channel fence tools. Not OpenViking commands; kept beside the examples models copy. */
-export const CHANNEL_ARGUMENT_EXAMPLES = {
-  message_read: '{"target": "#<频道名>"}',
-  send_channel_message: '{"target": "#<频道名>", "content": "<正文>"}',
-} as const;
-
-export const OPENVIKING_REQUIRED_FIELDS: Record<OpenVikingAgentOperation, readonly string[]> = {
-  diagnose: ["operationId", "messageId"],
-  fork_find: ["operationId", "query"],
-  search_context: ["operationId", "query"],
-  read: ["operationId", "uri"],
-  expand: ["operationId", "chainRef", "uri", "relation"],
-  offer: ["operationId", "citationRefs", "body"],
-};
 
 export function isOpenVikingOperationId(value: unknown): value is string {
   return typeof value === "string" && new RegExp(OPENVIKING_OPERATION_ID_PATTERN).test(value);

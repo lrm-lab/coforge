@@ -1,6 +1,11 @@
-import { mkdir } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { join } from "node:path";
 import { readKnowledgeAccountCreatedAt, validateKnowledgeReady } from "./knowledge";
+import {
+  drainEvaluatorResults,
+  loadSharedDrainAccount,
+  stageEpisodeFiles,
+  warmReuseAccountId,
+} from "./drain-account";
 import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/agent/memory-tool-fences.ts";
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
 import { startAgent, startEvalDaemon, type EvalDaemon } from "./eval-daemon";
@@ -82,28 +87,7 @@ const root = rootIdentity(rootKey);
 // Parallel-sedimentation protocol: cold episodes each run on their own empty
 // disposable account (no train-time retrieval), then drain their transcript
 // into ONE shared corpus account read by the later warm test phase.
-const drainAccount = env.drainAccountFile
-  ? await (async () => {
-      const raw = (await Bun.file(env.drainAccountFile!).json()) as {
-        accountId?: string;
-        adminUserId?: string;
-        adminKey?: string;
-      };
-      if (!raw.accountId || !raw.adminUserId || !raw.adminKey) {
-        throw new Error(`drain account file ${env.drainAccountFile} is missing fields`);
-      }
-      console.log(
-        sanitizeDiagnostic(`drain redirect: cold episodes drain to shared account ${raw.accountId}`),
-      );
-      return {
-        accountId: raw.accountId,
-        users: {
-          adminUserId: raw.adminUserId,
-          adminKey: raw.adminKey,
-        } as OvUsers,
-      };
-    })()
-  : null;
+const drainAccount = await loadSharedDrainAccount(env.drainAccountFile);
 const db = connectEvalDb(env.databaseUrl);
 const writer = await createAttemptWriter(
   env.resultDir,
@@ -183,49 +167,11 @@ type FamilyWorkspace = {
   drainDispatcher?: ReturnType<typeof createEvalDispatcher>;
 };
 
-async function stageEpisodeFiles(episode: ManifestEpisode, workDir: string): Promise<void> {
-  if (episode.stageFiles.length === 0) return;
-  const root = resolve(refsRoot!);
-  for (const file of episode.stageFiles) {
-    if (!file.src || !file.dst || isAbsolute(file.src) || isAbsolute(file.dst)) {
-      throw new Error("invalid stage_files path for " + episode.episodeId);
-    }
-    const source = resolve(root, file.src);
-    const target = resolve(workDir, file.dst);
-    if (relative(root, source).startsWith("..") || relative(workDir, target).startsWith("..")) {
-      throw new Error("stage_files path escapes its root for " + episode.episodeId);
-    }
-    if (!(await Bun.file(source).exists())) {
-      throw new Error("missing reference file for " + episode.episodeId + ": " + file.src);
-    }
-    await mkdir(dirname(target), { recursive: true });
-    await Bun.write(target, Bun.file(source));
-  }
-}
-
-// Crash-resume continuity for the warm arm: drained episode memory lives in the
-// OV account, not the workspace, so a resume must rebind to the previous
-// segment's account instead of minting a fresh one. The account id is recorded
-// per evaluation; COFORGE_EVAL_WARM_REUSE_ACCOUNT_ID overrides it explicitly.
-// Explicit external evaluator signal attached to drain commits so OpenViking can
-// adjudicate the episode (unanimous fail authors a fork overlay). `status` uses
-// the runner's own completion check (non-empty final output); it never reads a
-// held-out grade. Unset = no signal (previous behaviour).
 const drainOutcomeMode = (Bun.env.COFORGE_EVAL_DRAIN_OUTCOME ?? "").trim();
 let episodeEvaluatorResults: OpenVikingEvaluatorResult[] | undefined;
 const currentEvaluatorResults = () => episodeEvaluatorResults;
 
 const warmReuseStatePath = join(env.resultDir, `${env.evaluationId}-warm-account.txt`);
-
-async function warmReuseAccountId(): Promise<string> {
-  const explicit = (Bun.env.COFORGE_EVAL_WARM_REUSE_ACCOUNT_ID ?? "").trim();
-  if (explicit.length > 0) return explicit;
-  try {
-    return (await Bun.file(warmReuseStatePath).text()).trim();
-  } catch {
-    return "";
-  }
-}
 
 async function provisionFamily(
   arm: "warm" | "cold",
@@ -233,7 +179,13 @@ async function provisionFamily(
 ): Promise<FamilyWorkspace> {
   const health = await fetch(new URL("/health", env.ovUrl));
   if (health.status !== 200) throw new Error(`openviking /health ${health.status}`);
-  const reuseId = arm === "warm" ? await warmReuseAccountId() : "";
+  const reuseId =
+    arm === "warm"
+      ? await warmReuseAccountId(
+          Bun.env.COFORGE_EVAL_WARM_REUSE_ACCOUNT_ID ?? "",
+          warmReuseStatePath,
+        )
+      : "";
   let accountId: string;
   let users: OvUsers;
   if (frozenKnowledge) {
@@ -388,7 +340,7 @@ async function executeEpisode(
   episode: ManifestEpisode,
   provisioned: FamilyWorkspace,
 ): Promise<AttemptRow> {
-  await stageEpisodeFiles(episode, provisioned.agentWorkspaceDir);
+  await stageEpisodeFiles(episode, provisioned.agentWorkspaceDir, refsRoot ?? "");
   const readyEpisode = {
     ...episode,
     prompt: episode.prompt.replaceAll("{workspace_dir}", provisioned.agentWorkspaceDir),
@@ -493,17 +445,11 @@ async function executeEpisode(
     ),
   );
   if (sidecarVerification) row.sidecar_verification = sidecarVerification;
-  episodeEvaluatorResults =
-    drainOutcomeMode === "status"
-      ? [
-          {
-            binding_id: "run-completion",
-            signal_kind: "acceptance",
-            signal: row.status === "success" ? "pass" : "fail",
-            evidence_ref: `episode:${episode.episodeId}:final-output-${row.status === "success" ? "present" : "empty"}`,
-          },
-        ]
-      : undefined;
+  episodeEvaluatorResults = drainEvaluatorResults(
+    drainOutcomeMode,
+    row.status,
+    episode.episodeId,
+  );
   const coldDrain = arm === "cold" ? provisioned.drainDispatcher : undefined;
   if ((arm === "warm" && !frozenKnowledge) || coldDrain) {
     const drained = await drainEpisodeToMemory({
