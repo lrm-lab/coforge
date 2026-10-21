@@ -100,6 +100,33 @@ export function dockerImageVersionArgs(image: string): string[] {
   return ["run", "--rm", "--network", "none", "--entrypoint", "coforge-computer", image, "-V"];
 }
 
+export function dockerDesktopInspectArgs(containerId: string): string[] {
+  return [
+    "inspect",
+    "-f",
+    '{{range .Config.Env}}{{println .}}{{end}}{{println "---"}}{{range $name, $net := .NetworkSettings.Networks}}{{println $net.IPAddress}}{{end}}',
+    containerId,
+  ];
+}
+
+export function parseDesktopInspect(stdout: string): { ip?: string; token?: string } {
+  const marker = "\n---\n";
+  const at = stdout.indexOf(marker);
+  const envText = at === -1 ? stdout : stdout.slice(0, at);
+  const ipText = at === -1 ? "" : stdout.slice(at + marker.length);
+  let token: string | undefined;
+  for (const line of envText.split("\n")) {
+    if (!line.startsWith("VNC_WS_TOKEN=")) continue;
+    const value = line.slice("VNC_WS_TOKEN=".length).trim();
+    if (value) token = value;
+  }
+  const ip = ipText
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  return { ip, token };
+}
+
 export type HostImagePlacement = {
   image: { id: string; version: string };
   computers: Array<{ computerId: string; imageId: string }>;
@@ -117,6 +144,8 @@ export interface ContainerRuntime {
   /** Replaces the running image. The named volume stays mounted. */
   updateServiceImage(computerId: string, image: string): Promise<void>;
   inspectPlacement(image: string): Promise<HostImagePlacement>;
+  /** Address of the browser desktop inside a running cloud computer. */
+  desktopEndpoint(computerId: string): Promise<{ host: string; port: number; token: string } | undefined>;
 }
 
 export type DockerSpawn = (
@@ -157,6 +186,23 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
     },
     async updateServiceImage(computerId, image) {
       await run(spawn, dockerServiceUpdateArgs(computerId, image), "docker service update failed");
+    },
+    async desktopEndpoint(computerId) {
+      const listed = await spawn(dockerTaskFindArgs(computerId));
+      if (listed.exitCode !== 0) throw new Error(listed.stderr || "docker ps failed");
+      const containerId = firstId(listed);
+      if (!containerId) return undefined;
+      const inspected = await spawn(dockerDesktopInspectArgs(containerId));
+      if (inspected.exitCode !== 0) throw new Error(inspected.stderr || "docker inspect failed");
+      const parsed = parseDesktopInspect(inspected.stdout);
+      if (!parsed.ip) return undefined;
+      let token = parsed.token;
+      if (!token) {
+        const file = await spawn(["exec", containerId, "cat", "/root/.vnc/ws-token.txt"]);
+        if (file.exitCode === 0) token = file.stdout.trim();
+      }
+      if (!token) return undefined;
+      return { host: parsed.ip, port: 6080, token };
     },
     async inspectPlacement(image) {
       const inspected = await run(
