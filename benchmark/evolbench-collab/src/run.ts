@@ -225,41 +225,41 @@ async function provisionFamily(
         sanitizeDiagnostic(`warm parallel sharing ov account ${accountId} without key rotation`),
       );
     } else {
-    try {
-      users = await rotateEvalAdminKey(runtime, root, reuseId);
-      accountId = reuseId;
-      console.log(sanitizeDiagnostic(`warm arm reusing ov account ${accountId} across resume`));
-      // A crash skips releaseFamily, so the previous segment's workspace still
-      // holds this account's binding, and the binding store rejects
-      // cross-workspace references. Free the account by deleting the stale
-      // workspace rows (bindings and mapped identities cascade; OV-side memory
-      // is account-scoped and untouched).
-      const staleBindings = await db.openVikingBinding.findMany({
-        where: { accountId },
-        select: { workspaceId: true },
-      });
-      for (const row of staleBindings) {
-        await db.workspace.delete({ where: { id: row.workspaceId } }).catch(() => undefined);
-      }
-      if (staleBindings.length > 0) {
-        console.log(
+      try {
+        users = await rotateEvalAdminKey(runtime, root, reuseId);
+        accountId = reuseId;
+        console.log(sanitizeDiagnostic(`warm arm reusing ov account ${accountId} across resume`));
+        // A crash skips releaseFamily, so the previous segment's workspace still
+        // holds this account's binding, and the binding store rejects
+        // cross-workspace references. Free the account by deleting the stale
+        // workspace rows (bindings and mapped identities cascade; OV-side memory
+        // is account-scoped and untouched).
+        const staleBindings = await db.openVikingBinding.findMany({
+          where: { accountId },
+          select: { workspaceId: true },
+        });
+        for (const row of staleBindings) {
+          await db.workspace.delete({ where: { id: row.workspaceId } }).catch(() => undefined);
+        }
+        if (staleBindings.length > 0) {
+          console.log(
+            sanitizeDiagnostic(
+              `freed ${staleBindings.length} stale workspace(s) bound to ${accountId}`,
+            ),
+          );
+        }
+      } catch (error) {
+        // Account deleted server-side: its memory is unrecoverable, so a fresh
+        // provision is the only option — but say so loudly, it silently breaks
+        // warm comparability.
+        console.warn(
           sanitizeDiagnostic(
-            `freed ${staleBindings.length} stale workspace(s) bound to ${accountId}`,
+            `warm account reuse failed: ${String(error)}; provisioning fresh account`,
           ),
         );
+        accountId = `evol-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+        users = await provisionDisposableAccount(runtime, root, accountId);
       }
-    } catch (error) {
-      // Account deleted server-side: its memory is unrecoverable, so a fresh
-      // provision is the only option — but say so loudly, it silently breaks
-      // warm comparability.
-      console.warn(
-        sanitizeDiagnostic(
-          `warm account reuse failed: ${String(error)}; provisioning fresh account`,
-        ),
-      );
-      accountId = `evol-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
-      users = await provisionDisposableAccount(runtime, root, accountId);
-    }
     }
   } else {
     accountId = `evol-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
@@ -445,11 +445,7 @@ async function executeEpisode(
     ),
   );
   if (sidecarVerification) row.sidecar_verification = sidecarVerification;
-  episodeEvaluatorResults = drainEvaluatorResults(
-    drainOutcomeMode,
-    row.status,
-    episode.episodeId,
-  );
+  episodeEvaluatorResults = drainEvaluatorResults(drainOutcomeMode, row.status, episode.episodeId);
   const coldDrain = arm === "cold" ? provisioned.drainDispatcher : undefined;
   if ((arm === "warm" && !frozenKnowledge) || coldDrain) {
     const drained = await drainEpisodeToMemory({

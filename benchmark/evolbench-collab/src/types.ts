@@ -40,11 +40,7 @@ export type AttemptRow = {
   family_id: string;
   domain: string;
   arm: EvalArm;
-  memory_policy:
-    | "read_write"
-    | "no_shared_memory"
-    | "frozen_readonly"
-    | "write_shared_corpus";
+  memory_policy: "read_write" | "no_shared_memory" | "frozen_readonly" | "write_shared_corpus";
   seed: number;
   attempt: number;
   status: EpisodeStatus;
