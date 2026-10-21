@@ -7,6 +7,10 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 /** How a delivery is settled for an Agent with no hold, session, or launch in flight. */
 export type AgentExitedDeliveryPorts = Readonly<{
+  /** A runtime-error backoff that must survive an unexpected process exit. */
+  hasRuntimeErrorHold(agentId: string): boolean;
+  /** Records a delivery in attention and the daemon-owned hold without waking a process. */
+  holdRuntimeErrorDelivery(message: AgentMessageDelivery): Promise<void>;
   /** The consumed cursor already covers this delivery. */
   hasConsumed(message: AgentMessageDelivery): boolean;
   logConsumed(message: AgentMessageDelivery): void;
@@ -63,6 +67,10 @@ export class AgentExitedDelivery {
 
   /** A delivery for an Agent with no hold, session, or launch in flight. */
   async deliver(message: AgentMessageDelivery): Promise<void> {
+    if (this.#ports.hasRuntimeErrorHold(message.agentId)) {
+      await this.#ports.holdRuntimeErrorDelivery(message);
+      return;
+    }
     // An exited Agent is not woken for a message it has already consumed: the delivery is
     // acknowledged and dropped here, before any launch, rather than after one.
     if (this.#ports.hasConsumed(message)) {

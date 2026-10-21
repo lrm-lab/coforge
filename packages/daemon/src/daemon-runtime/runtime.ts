@@ -368,8 +368,9 @@ export class DaemonRuntime {
   /** Launch failures of message-triggered wakes, per Agent: while one owes a cooldown, a delivery
    * does not launch the Agent again. No attempt cap; the cooldown stops growing at its ceiling. */
   readonly #wakeLaunchFailures = new LaunchFailureBackoff();
-  /** Delivery settlement for an Agent with nothing running (`agent-exited-delivery.ts`). */
   readonly #exitedDelivery = new AgentExitedDelivery({
+    hasRuntimeErrorHold: (agentId) => this.#deliveryQueue.explicitHold(agentId) !== undefined,
+    holdRuntimeErrorDelivery: (message) => this.#messageAttention.receive(message),
     hasConsumed: (message) => this.#messageAttention.hasConsumed(message),
     logConsumed: (message) => this.#messageAttention.logDecision(message, "consumed"),
     acknowledge: (message) => this.#messageAttention.acknowledge(message),
@@ -3119,9 +3120,7 @@ export class DaemonRuntime {
     if (isTrackedMention(message)) return this.#handleTrackedMention(message);
     if (this.#stoppingAgents.has(message.agentId))
       throw new Error(`Agent runtime is stopping: ${message.agentId}`);
-    // A stalled provider is restarted for this message, which waits for the relaunch rather than
-    // the stalled session; so does one arriving meanwhile (nor does it wake the Agent a second
-    // time once the old process is gone).
+    // A stalled provider is restarted for this message; arrivals meanwhile wait for that relaunch.
     if (this.#runnerHold === undefined) {
       const recovering = this.#stalledRecoveries.has(message.agentId);
       const stalled = recovering ? undefined : this.#stalledRuntime(message.agentId);
