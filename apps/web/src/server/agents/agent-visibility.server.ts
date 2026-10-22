@@ -124,8 +124,8 @@ export function directMessageAgentWhere(userId: string): Prisma.AgentWhereInput 
   return { OR: [{ visibility: AGENT_VISIBILITY.PUBLIC }, { ownerId: userId }] };
 }
 
-/** Agents whose Workspace files and Reminders `viewer` reads: their own while a member, or any
- * when they are a Workspace owner/admin. */
+/** Agents whose Workspace files and Reminders `viewer` reads: their own while a member, or, for a
+ * Workspace owner/admin, any but another member's platform assistant (`canSeeAgent`). */
 export function managedAgentWhere(viewer: {
   userId: string;
   workspaceId: string;
@@ -138,6 +138,8 @@ export function managedAgentWhere(viewer: {
         workspace: {
           members: { some: { userId: viewer.userId, role: { in: [...WORKSPACE_ADMIN_ROLES] } } },
         },
+        // A bare `not` would also drop the `null` kind of every ordinary Agent.
+        OR: [{ systemKind: null }, { systemKind: { not: WORKSPACE_ASSISTANT_KIND } }],
       },
     ],
   };

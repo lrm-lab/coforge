@@ -152,7 +152,7 @@ test("the directory names the viewer's own DM with each member, once there is on
   expect(await dmOf(grace.id, grace.id)).toBe(self.conversationId);
 });
 
-test("a DM with an Agent is its creator's alone, and a deleted Agent's DM stays readable only", async () => {
+test("a DM with an Agent is its key's person's alone, and a deleted Agent's DM stays readable only", async () => {
   const conversations = new DirectConversations(db);
   const own = await conversations.open(workspaceId, ada.id, { agentId: helper.id });
   expect(

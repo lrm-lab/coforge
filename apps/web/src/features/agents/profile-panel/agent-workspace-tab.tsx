@@ -113,8 +113,8 @@ function joinPath(dirPath: string, name: string): string {
 
 /**
  * The Agent profile panel's Workspace tab: a lazy directory tree of the Agent's working directory
- * on its Computer, plus a read-only file viewer. Owner-only (gated by the caller via
- * `visibleAgentProfileTabs`), matching the same publish/poll/timeout data shape
+ * on its Computer, plus a read-only file viewer. Creator/admin only (caller gates via
+ * `visibleAgentProfileTabs`), with the same publish/poll/timeout data shape
  * as Skills, but with two operations (list, read) instead of one.
  */
 export function AgentWorkspaceTab({

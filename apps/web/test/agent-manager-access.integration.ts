@@ -6,6 +6,7 @@ import {
   prismaAgentReminderReadStore,
 } from "#src/server/agents/agent-reminders.server";
 import { findWorkspaceFilesAssignment } from "#src/server/agents/agent-workspace-files.server";
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 
 /**
  * Who reads an Agent's profile-panel tabs beyond Profile, against real PostgreSQL: its workspace
@@ -98,4 +99,30 @@ test("the Agent's creator and a Workspace owner or admin read its reminders", as
       reminders: [{ id: reminder.id, title: "Check the build" }],
     });
   expect(await listFor(users.member)).toEqual({ status: "unauthorized" });
+});
+
+test("a member's platform assistant stays theirs alone, even against a Workspace admin", async () => {
+  const assistant = await db.agent.create({
+    data: {
+      workspaceId,
+      ownerId: users.creator,
+      computerId,
+      name: `wf-assistant-${suffix}`,
+      displayName: "Assistant",
+      visibility: "private",
+      systemKind: WORKSPACE_ASSISTANT_KIND,
+      runtimeConfig: {},
+    },
+  });
+  const query = new AgentRemindersQuery(prismaAgentReminderReadStore(db));
+  const viewer = (userId: string) => ({ userId, workspaceId });
+  expect(await findWorkspaceFilesAssignment(db, viewer(users.creator), assistant.id)).toMatchObject(
+    { computerId },
+  );
+  for (const userId of [users.owner, users.admin]) {
+    expect(await findWorkspaceFilesAssignment(db, viewer(userId), assistant.id)).toBeUndefined();
+    expect(await query.list(viewer(userId), { agentId: assistant.id })).toEqual({
+      status: "unauthorized",
+    });
+  }
 });
