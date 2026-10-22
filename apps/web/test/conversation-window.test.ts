@@ -6,8 +6,10 @@ import {
   flushWindowUpdates,
   foldWindowUpdates,
   nextPageCursor,
+  CONVERSATION_WINDOW_SERVER_PAGE_LIMIT,
   previousPageCursor,
   windowPageFlags,
+  windowPageLimit,
 } from "#src/lib/conversation-window";
 
 describe("previousPageCursor", () => {
@@ -56,6 +58,30 @@ describe("windowPageFlags", () => {
   test("a forward page only reaches the tail when the fetch did not overflow", () => {
     expect(windowPageFlags("forward", true)).toEqual({ hasOlder: true, hasNewer: true });
     expect(windowPageFlags("forward", false)).toEqual({ hasOlder: true, hasNewer: false });
+  });
+});
+
+describe("windowPageLimit", () => {
+  const atTailRefetch = { forward: true, fullRefetch: true, windowAtTail: true };
+
+  test("a forward page of a refetch at the tail asks for the server's maximum", () => {
+    expect(windowPageLimit(atTailRefetch)).toBe(CONVERSATION_WINDOW_SERVER_PAGE_LIMIT);
+  });
+
+  test("every other page asks for one ordinary page", () => {
+    // The refetch's first page, re-read from its own backward cursor (or none).
+    expect(windowPageLimit({ ...atTailRefetch, forward: false })).toBe(
+      CONVERSATION_WINDOW_PAGE_SIZE,
+    );
+    // Paging down: the window grows by one page, as it does in either direction.
+    expect(windowPageLimit({ ...atTailRefetch, fullRefetch: false })).toBe(
+      CONVERSATION_WINDOW_PAGE_SIZE,
+    );
+    // A refetch while reading history: its realtime is buffered, not folded, so the pages it
+    // re-reads are the size they were fetched at.
+    expect(windowPageLimit({ ...atTailRefetch, windowAtTail: false })).toBe(
+      CONVERSATION_WINDOW_PAGE_SIZE,
+    );
   });
 });
 

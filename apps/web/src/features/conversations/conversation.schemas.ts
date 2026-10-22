@@ -5,6 +5,8 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { z } from "zod";
 
+import { CONVERSATION_WINDOW_SERVER_PAGE_LIMIT } from "#src/lib/conversation-window";
+
 const uuid = z.uuid();
 
 /** The members a browser send names by id, beside the `@handle`s in its body: the shape and bounds
@@ -39,12 +41,13 @@ export const attachmentIdsSchema = z
  * A page of a conversation's message stream. `beforeSequence` pages up into history;
  * `afterSequence` pages down towards the live end once the retained newest page is no longer the
  * tail (the bounded window evicts it). At most one is set, and neither is the initial load.
- * `limit` is the window's own page size (see `lib/conversation-window.ts`).
+ * `limit` is the window's page size, or the server's cap when a refetch catches up with the tail
+ * (`windowPageLimit` in `lib/conversation-window.ts`).
  */
 export const conversationPageInputSchema = {
   beforeSequence: z.number().int().positive().optional(),
   afterSequence: z.number().int().nonnegative().optional(),
-  limit: z.number().int().min(1).max(100).optional(),
+  limit: z.number().int().min(1).max(CONVERSATION_WINDOW_SERVER_PAGE_LIMIT).optional(),
 };
 /** One of the viewer's direct conversations, by its own id (`dm/<id>`). */
 export const directConversationInputSchema = z.object({ conversationId: uuid });
