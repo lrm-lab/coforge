@@ -114,18 +114,3 @@ model WorkspaceComputer {
   @@unique([workspaceId, computerId])
   @@map("workspace_computers")
 }
-
-/// One submitted server connection per Workspace. The install command is not stored: a later
-/// read shows who submitted it and whether a Daemon is online, and does not mint another command.
-model WorkspaceServerConnection {
-  workspaceId       String    @id @db.Uuid
-  installOrigin     String
-  workspaceSlug     String
-  submittedByUserId String    @db.Uuid
-  submittedAt       DateTime
-  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  submittedBy       User      @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
-
-  @@index([submittedByUserId])
-  @@map("workspace_server_connections")
-}

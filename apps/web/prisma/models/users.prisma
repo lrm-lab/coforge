@@ -33,7 +33,6 @@ model User {
   agentApiKeys                AgentApiKey[]
   daemonApiKeys               DaemonApiKey[]
   computers                   Computer[]
-  submittedServerConnections  WorkspaceServerConnection[]
   requestedHostJobs           HostJob[]
   conversationMembers         ConversationMember[]
   webPushSubscriptions        WebPushSubscription[]
