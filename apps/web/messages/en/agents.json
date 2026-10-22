@@ -98,7 +98,7 @@
   "agent_activity_tab": "Activity",
   "agent_reminders_tab": "Reminders",
   "agent_reminders_loading": "Loading reminders…",
-  "agent_reminders_private": "Only the Agent owner can view reminders.",
+  "agent_reminders_private": "Only creators and admins see reminders.",
   "agent_reminders_error": "Reminders could not be loaded.",
   "agent_reminders_retry": "Retry",
   "agent_reminders_empty": "No active reminders",

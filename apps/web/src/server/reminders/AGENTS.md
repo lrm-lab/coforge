@@ -9,6 +9,6 @@ These rules apply to `src/server/reminders/`.
   only; they never re-implement Reminder rules.
 - Daemon capability leases remain volatile, and reminder timer state remains
   owned by the Daemon.
-- The owner-only browser read model in `server/agents/agent-reminders.server.ts`
+- The browser read model in `server/agents/agent-reminders.server.ts` (the Agent's creator or a Workspace owner/admin)
   reads bounded, scheduled Reminders only; lifecycle and history persistence
   stay here.

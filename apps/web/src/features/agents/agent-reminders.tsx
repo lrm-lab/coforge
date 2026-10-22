@@ -12,12 +12,13 @@ type ListResult = Awaited<
 >;
 export function AgentReminders({
   agentId,
-  owned,
+  canRead,
   timeZone,
   onLoad,
 }: {
   agentId: string;
-  owned: boolean;
+  /** The viewer created the Agent or is a Workspace owner/admin (`canManageAgent`). */
+  canRead: boolean;
   timeZone: string | null;
   onLoad: (cursor?: { id: string }) => Promise<ListResult>;
 }) {
@@ -26,7 +27,7 @@ export function AgentReminders({
   const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    if (!owned) return;
+    if (!canRead) return;
     let active = true;
     setResult(undefined);
     setError(false);
@@ -36,9 +37,9 @@ export function AgentReminders({
     return () => {
       active = false;
     };
-  }, [agentId, onLoad, owned]);
+  }, [agentId, onLoad, canRead]);
 
-  if (!owned || result?.status === "unauthorized")
+  if (!canRead || result?.status === "unauthorized")
     return <State message={m.agent_reminders_private()} />;
   if (error)
     return (

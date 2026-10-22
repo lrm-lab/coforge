@@ -8,6 +8,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
+import { WORKSPACE_ADMIN_ROLES } from "#src/features/workspaces/workspace-roles";
 
 export type WorkspaceFilesViewer = { userId: string; workspaceId: string };
 export type WorkspaceFilesAssignment = { computerId: string; revision: string };
@@ -265,11 +266,11 @@ export function sameWorkspaceDeleteScope(
   );
 }
 
-/** Same ownership rule as `findOwnedSkillsAssignment`: the agent must belong to the viewer's
- * workspace, be owned by the viewer, and have an online-eligible Computer relationship. Workspace
- * Files has no use for `provider`, so this returns the narrower shape directly rather than going
- * through Skills' runtime-config parsing. */
-export async function findOwnedWorkspaceFilesAssignment(
+/** The Agent's workspace files, for its creator or a Workspace owner/admin: the agent must belong
+ * to the viewer's workspace and have an online-eligible Computer relationship. Workspace Files has
+ * no use for `provider`, so this returns the narrower shape directly rather than going through
+ * Skills' runtime-config parsing. */
+export async function findWorkspaceFilesAssignment(
   db: PrismaClient,
   viewer: WorkspaceFilesViewer,
   id: string,
@@ -278,8 +279,17 @@ export async function findOwnedWorkspaceFilesAssignment(
     where: {
       id,
       workspaceId: viewer.workspaceId,
-      ownerId: viewer.userId,
-      workspace: { members: { some: { userId: viewer.userId } } },
+      OR: [
+        {
+          ownerId: viewer.userId,
+          workspace: { members: { some: { userId: viewer.userId } } },
+        },
+        {
+          workspace: {
+            members: { some: { userId: viewer.userId, role: { in: [...WORKSPACE_ADMIN_ROLES] } } },
+          },
+        },
+      ],
       computer: { workspaces: { some: { workspaceId: viewer.workspaceId } } },
       // Same live-view rule as `findOwnedSkillsAssignment`.
       ...ACTIVE_AGENT_WHERE,

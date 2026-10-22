@@ -43,11 +43,11 @@ export function SearchEntityRow({
 }) {
   const { previewed, preview } = useSearchPreview();
   const workspaceSlug = useWorkspaceSlug();
-  // The viewer's DM with their own Agent, once there is one, or with a member.
+  // The viewer's DM with an Agent they may message, once there is one, or with a member.
   const dmId =
     entity.kind === "dm"
       ? entity.id
-      : entity.kind === "agent" && entity.ownedByCurrentUser
+      : entity.kind === "agent" && entity.canMessage
         ? entity.dmId
         : null;
   // A channel or a DM previews; others just open.

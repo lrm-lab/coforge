@@ -27,7 +27,7 @@ const item = (id: string) => ({
 
 function store(overrides: Partial<AgentReminderReadStore> = {}): AgentReminderReadStore {
   return {
-    ownsAgent: async () => true,
+    canReadAgent: async () => true,
     list: async () => ({ reminders: [], hasMore: false }),
     ...overrides,
   };
@@ -37,7 +37,7 @@ test("does not query reminders when the viewer does not own the Agent in the Wor
   let read = false;
   const query = new AgentRemindersQuery(
     store({
-      ownsAgent: async () => false,
+      canReadAgent: async () => false,
       list: async () => {
         read = true;
         return { reminders: [], hasMore: false };

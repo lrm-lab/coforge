@@ -150,6 +150,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
           computerName: "Owner workstation",
           createdAt: assignedAgent.createdAt,
           owner: { id: otherOwner.id, displayName: "Agent Owner", avatarUrl: null },
+          canMessage: true,
           deletable: true,
         },
         {
@@ -162,6 +163,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
           computerName: null,
           createdAt: unassignedAgent.createdAt,
           owner: { id: otherOwner.id, displayName: "Agent Owner", avatarUrl: null },
+          canMessage: true,
           deletable: true,
         },
       ],
@@ -258,6 +260,59 @@ test("a person with a blank display name is listed as unnamed, never by the user
     expect(page.items.map((person) => person.displayName)).toEqual(["Zoe"]);
   } finally {
     await db.workspace.deleteMany({ where: { slug: `full-${suffix}` } });
+    await db.user.deleteMany({ where: { username: { in: usernames } } });
+    await db.$disconnect();
+  }
+});
+
+test("the directory says which Agents the viewer may message: public ones and their own", async () => {
+  const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
+  if (!connectionString)
+    throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
+
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const suffix = crypto.randomUUID();
+  const usernames = ["admin", "creator"].map((name) => `message-${name}-${suffix}`);
+  try {
+    const [admin, creator] = await Promise.all(
+      usernames.map((username) => db.user.create({ data: { username, displayName: username } })),
+    );
+    const workspace = await db.workspace.create({
+      data: {
+        slug: `message-${suffix}`,
+        name: "Messageable",
+        members: {
+          create: [
+            { userId: admin!.id, role: "admin" },
+            { userId: creator!.id, role: "member" },
+          ],
+        },
+      },
+    });
+    const agent = (name: string, ownerId: string, visibility: string) =>
+      db.agent.create({
+        data: {
+          workspaceId: workspace.id,
+          ownerId,
+          name: `${name}-${suffix}`,
+          displayName: name,
+          visibility,
+          runtimeConfig: {},
+        },
+      });
+    const shared = await agent("shared", creator!.id, "public");
+    const secret = await agent("secret", creator!.id, "private");
+    const mine = await agent("mine", admin!.id, "private");
+
+    const { agents } = await new WorkspaceMembers(db).directory(workspace.id, admin!.id);
+    // An admin sees another member's private Agent, but its direct conversation is its creator's.
+    expect(Object.fromEntries(agents.map((row) => [row.id, row.canMessage]))).toEqual({
+      [shared.id]: true,
+      [secret.id]: false,
+      [mine.id]: true,
+    });
+  } finally {
+    await db.workspace.deleteMany({ where: { slug: `message-${suffix}` } });
     await db.user.deleteMany({ where: { username: { in: usernames } } });
     await db.$disconnect();
   }

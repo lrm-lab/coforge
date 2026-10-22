@@ -12,6 +12,7 @@ export type SearchEntity =
       handle: string;
       avatarUrl: string | null;
       ownedByCurrentUser: boolean;
+      canMessage: boolean;
       /** The viewer's direct conversation with this Agent, once there is one. */
       dmId: string | null;
     }

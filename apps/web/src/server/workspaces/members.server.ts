@@ -6,6 +6,7 @@ import { weeklyReportAssistantDisplayName } from "#src/server/records/weekly-rep
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import {
+  canDirectMessageAgent,
   visibleAgentWhere,
   type AgentVisibilityViewer,
 } from "#src/server/agents/agent-visibility.server";
@@ -176,6 +177,7 @@ export class WorkspaceMembers {
           description: true,
           avatarObjectKey: true,
           createdAt: true,
+          visibility: true,
           owner: {
             select: {
               id: true,
@@ -221,6 +223,8 @@ export class WorkspaceMembers {
             agent.owner.avatarObjectKey,
           ),
         },
+        /** Whether the viewer may open a direct conversation with it (`DirectConversations.open`). */
+        canMessage: canDirectMessageAgent(userId, { ...agent, ownerId: agent.owner.id }),
         // A weekly-report assistant is protected from deletion (AgentDeletion refuses it), so the
         // directory never offers a Delete that is certain to fail.
         deletable: !agent.weeklyReportAssistant && !agent.workspaceAssistantSession,
@@ -303,9 +307,9 @@ export class WorkspaceMembers {
         handle: agent.name,
         name: shownAgentName(agent),
         avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
-        /** The Web opens an Agent's direct conversation only for its owner
-         * (`DirectConversations.authorize`). */
         ownedByCurrentUser: agent.ownerId === userId,
+        /** Whether the viewer may open a direct conversation with it (`DirectConversations.open`). */
+        canMessage: canDirectMessageAgent(userId, agent),
         /** Visibility and the weekly-report flag, so a channel picker offers only the Agents a
          * channel can take (`PublicChannels.addMembers`). */
         visibility: agent.visibility,

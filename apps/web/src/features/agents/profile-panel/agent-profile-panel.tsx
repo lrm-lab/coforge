@@ -136,7 +136,6 @@ export function AgentProfilePanel({
   const deleted = Boolean(profile?.deletedAt);
   const canManage = profile && !deleted ? canManageAgent(profile) : false;
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
-  const canSeeWorkspace = owned;
   const loadComputers = useServerFn(listComputers);
   // An unbound Agent needs a Computer before its runtime can be saved. A weekly-report
   // assistant keeps the picker after that first bind, so a retired Computer can be replaced.
@@ -158,11 +157,7 @@ export function AgentProfilePanel({
             online: Boolean(computer.online),
           }))
       : undefined;
-  const tabOrder = useAgentProfileTabOrder(
-    canManage,
-    canSeeWorkspace,
-    Boolean(profile) && !deleted,
-  );
+  const tabOrder = useAgentProfileTabOrder(canManage, Boolean(profile) && !deleted);
   const tab = resolveAgentProfileTab(requestedTab, tabOrder.tabs);
   // Opened without `agentTab`, the panel lands on the first tab of the viewer's order once their
   // permissions are known, and records it through `onTabChange` (the URL, or the embedding page's
@@ -356,7 +351,7 @@ export function AgentProfilePanel({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       <AgentProfileHeader
-        canMessage={owned}
+        canMessage={Boolean(profile?.canMessage)}
         deleted={deleted}
         agent={{
           id: agentId,
@@ -400,7 +395,7 @@ export function AgentProfilePanel({
           <div className="px-5 pb-5">
             <AgentReminders
               agentId={agentId}
-              owned={profile.ownedByCurrentUser}
+              canRead={canManage}
               timeZone={timeZone}
               onLoad={onLoadReminders}
             />

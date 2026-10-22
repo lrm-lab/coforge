@@ -1,6 +1,7 @@
 import type { Prisma } from "#src/generated/prisma/client";
 import type { AgentStatusCache } from "./agent-status.server";
 import type { AgentDisplay } from "./agent-display.server";
+import { canDirectMessageAgent } from "./agent-visibility.server";
 
 type DetailComputer = {
   id: string;
@@ -109,6 +110,13 @@ export class AgentDetailQuery {
       avatarObjectKey: agent.avatarObjectKey ?? null,
       deletedAt: agent.deletedAt ?? null,
       deletedBy: agent.deletedBy ?? null,
+      /** The viewer may open a direct conversation with it (`DirectConversations.open`). */
+      canMessage:
+        !agent.deletedAt &&
+        canDirectMessageAgent(userId, {
+          visibility: agent.visibility ?? "",
+          ownerId: agent.owner.id,
+        }),
       ...(display ? { display } : {}),
       status: {
         value: statusReadFailed ? ("unknown" as const) : (status?.status ?? ("inactive" as const)),

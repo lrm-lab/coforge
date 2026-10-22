@@ -116,6 +116,12 @@ These rules apply to `src/features/agents/`.
   in Settings → Account.
 - Computer prerequisites appear only after the user requests Agent creation.
   Runtime management stays in the profile panel. `cloud-agent-create-dialog.tsx`, opened from the DM picker, asks only for a display name, waits for cloud readiness, and opens the created private Agent's DM; it re-reads the Agent roster, picker directory, and DM list after their writes instead of relying on realtime signals. Creation permissions remain server-owned.
+- Who sees what on an Agent, as Raft does: Message (profile header, Members
+  card, DM picker, search) follows the server's `canMessage` (any member a
+  public Agent, only its creator a private one); Activity, Reminders and
+  Workspace follow `canManageAgent` (its creator or a Workspace owner/admin);
+  Computer is the cloud Computer's owner's. Start, Stop and Restart are any
+  member's; Full reset is owner/admin only (`AgentControl.execute`).
 - Workspace directory reads belong to
   `features/workspaces/workspaces.functions.ts` and
   `server/workspaces/members.server.ts`; owner-only Agent operations stay
