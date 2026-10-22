@@ -92,7 +92,7 @@ test("compact activity history preserves launch sequence across clock rollback a
     });
 
     const repository = new AgentActivityRepository(db);
-    const history = await repository.listForMember(workspace.id, member.id);
+    const history = await repository.listForManager(workspace.id, member.id);
     expect(history.map(({ id }) => id).sort()).toEqual([agent.id, emptyAgent.id].sort());
     expect(history.find(({ id }) => id === emptyAgent.id)?.activity).toEqual([]);
     expect(
@@ -106,8 +106,8 @@ test("compact activity history preserves launch sequence across clock rollback a
       ["launch-b", 2, "working"],
       ["launch-b", 1, "working"],
     ]);
-    expect(await repository.listForMember(workspace.id, outsider.id)).toEqual([]);
-    expect(await repository.listForMember(otherWorkspace.id, member.id)).toEqual([]);
+    expect(await repository.listForManager(workspace.id, outsider.id)).toEqual([]);
+    expect(await repository.listForManager(otherWorkspace.id, member.id)).toEqual([]);
   } finally {
     await db.workspace.deleteMany({
       where: { id: { in: [workspace.id, otherWorkspace.id] } },
@@ -167,7 +167,7 @@ test("compact activity history reads the five newest rows, finished frames inclu
       })),
     });
 
-    const history = await new AgentActivityRepository(db).listForMember(workspace.id, member.id);
+    const history = await new AgentActivityRepository(db).listForManager(workspace.id, member.id);
     expect(
       history[0]?.activity.map(({ launchId, clientSeq, detailKind }) => [
         launchId,
@@ -250,7 +250,7 @@ test("one member aggregates persisted activity from independent conversations", 
     expect(
       (await repository.list(workspace.id, agent.id)).map((r) => r.conversationId).sort(),
     ).toEqual([groupA, groupB].sort());
-    const members = await repository.listForMember(workspace.id, owner.id);
+    const members = await repository.listForManager(workspace.id, owner.id);
     expect(members).toHaveLength(1);
     expect(members[0]!.activity.map((r) => r.conversationTarget).sort()).toEqual([
       "#alpha",

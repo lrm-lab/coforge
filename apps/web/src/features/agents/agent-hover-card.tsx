@@ -97,10 +97,10 @@ function AgentCard({
   onOpenActivity?: () => void;
 }) {
   const profile = useQuery({ ...agentProfileQuery(agentId), staleTime: CARD_PROFILE_STALE_MS });
-  // Read here, beside the profile, so the two run side by side; the list itself shows only once
-  // the profile says the viewer may see it.
-  const activity = useAgentRecentActivity(agentId, conversationId);
   const data = profile.data;
+  // Read only once the profile says the viewer gets the panel's Activity tab, as the server does.
+  const canSeeActivity = Boolean(data && !data.deletedAt && canManageAgent(data));
+  const activity = useAgentRecentActivity(agentId, conversationId, canSeeActivity);
   // The live display once a publication has arrived; until then the profile read's own snapshot,
   // as the profile panel does.
   const display = useLiveAgentDisplay(agentId) ?? data?.display;
@@ -162,8 +162,7 @@ function AgentCard({
           </TooltipTrigger>
         </Tooltip>
       )}
-      {/* The same viewers who get the profile panel's Activity tab. */}
-      {data && canManageAgent(data) && onOpenActivity && (
+      {canSeeActivity && onOpenActivity && (
         <CardRecentActivity activity={activity} onOpenActivity={onOpenActivity} />
       )}
     </>

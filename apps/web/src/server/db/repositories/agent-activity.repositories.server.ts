@@ -3,10 +3,7 @@ import { parseActivityEntries, type AgentActivity } from "@lrm/coforge-sdk/inter
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { activityKindForObservation } from "#src/server/agents/agent-display.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import {
-  agentVisibilityViewerForUser,
-  visibleAgentWhere,
-} from "#src/server/agents/agent-visibility.server";
+import { managedAgentWhere } from "#src/server/agents/agent-visibility.server";
 import { AGENT_ACTIVITY_WINDOW } from "#src/features/agents/agent-activity-window";
 
 export type TrustedAgentActivity = AgentActivity & { computerId: string };
@@ -46,18 +43,17 @@ function activityKind(activity: { detailKind: string; level: string }) {
 export class AgentActivityRepository {
   constructor(private readonly db: PrismaClient) {}
 
-  async listForMember(workspaceId: string, userId: string) {
-    // A private Agent the viewer cannot see never contributes an Activity row here —
-    // the same `visibleAgentWhere` predicate every Agent list applies, resolved once against the
-    // viewer's own Workspace role and reused as a plain id filter inside the CTE below (SQL never
-    // re-derives the visibility rule itself, so the two can never disagree).
-    const viewer = await agentVisibilityViewerForUser(this.db, workspaceId, userId);
-    const visibleAgents = await this.db.agent.findMany({
-      where: { workspaceId, ...ACTIVE_AGENT_WHERE, ...visibleAgentWhere(viewer) },
+  /** The recent Activity of the Agents `userId` manages (`managedAgentWhere`: their own, or any
+   * for a Workspace owner/admin), for the Agent card. */
+  async listForManager(workspaceId: string, userId: string) {
+    // The Agents the viewer manages, resolved once and reused as a plain id filter inside the
+    // CTE below (SQL never re-derives the rule itself, so the two can never disagree).
+    const managedAgents = await this.db.agent.findMany({
+      where: { ...managedAgentWhere({ userId, workspaceId }), ...ACTIVE_AGENT_WHERE },
       select: { id: true },
     });
-    const visibleAgentIds = visibleAgents.map((agent) => agent.id);
-    if (visibleAgentIds.length === 0) return [];
+    const managedAgentIds = managedAgents.map((agent) => agent.id);
+    if (managedAgentIds.length === 0) return [];
     const rows = await this.db.$queryRaw<CompactActivityRow[]>`
       WITH authorized_agents AS (
         SELECT agent."id"
@@ -67,7 +63,7 @@ export class AgentActivityRepository {
         WHERE agent."workspaceId" = ${workspaceId}::uuid
           AND agent."deletedAt" IS NULL
           AND membership."userId" = ${userId}::uuid
-          AND agent."id" = ANY(${visibleAgentIds}::uuid[])
+          AND agent."id" = ANY(${managedAgentIds}::uuid[])
       ),
       -- Each Agent's five newest rows, read from the head of its
       -- (workspaceId, agentId, occurredAt DESC) index instead of ranking its whole history.
@@ -213,6 +209,15 @@ export class AgentActivityRepository {
       })),
       skipDuplicates: true,
     });
+  }
+
+  /** One Agent's Activity feed, when `userId` manages it (`managedAgentWhere`); else undefined. */
+  async feedForManager(workspaceId: string, userId: string, agentId: string) {
+    const managed = await this.db.agent.findFirst({
+      where: { id: agentId, ...managedAgentWhere({ userId, workspaceId }), ...ACTIVE_AGENT_WHERE },
+      select: { id: true },
+    });
+    return managed ? this.list(workspaceId, agentId) : undefined;
   }
 
   async list(workspaceId: string, agentId: string) {

@@ -129,12 +129,12 @@ export function AgentProfilePanel({
   const query = useQuery(agentProfileQuery(agentId));
   const profile = query.data;
   const invalidate = useInvalidateAgentProfile(agentId);
-  usePrefetchAgentActivityFeed(agentId);
 
   const knownName = profile?.displayName ?? liveAgent?.displayName ?? "";
-  // A deleted Agent's profile is read-only: the Profile tab alone, with nothing that acts on it.
+  // A deleted Agent's profile is read-only: the Profile tab alone, nothing acting on it.
   const deleted = Boolean(profile?.deletedAt);
   const canManage = profile && !deleted ? canManageAgent(profile) : false;
+  usePrefetchAgentActivityFeed(agentId, canManage);
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
   const loadComputers = useServerFn(listComputers);
   // An unbound Agent needs a Computer before its runtime can be saved. A weekly-report
@@ -331,11 +331,10 @@ export function AgentProfilePanel({
   }
 
   // `liveAgent` (the shared realtime roster) is blank for an Agent outside the viewer's own
-  // `listAgents` roster until its first live publication arrives — e.g. an owner/admin's
-  // placeholder for another member's private Agent. `getAgentProfile` (`profile`, this panel's own
-  // authorized fetch) already computes an initial status/display snapshot for any Agent the viewer
-  // can see; prefer the live one once a publication lands, but seed from the authorized fetch
-  // instead of showing nothing.
+  // `listAgents` roster until its first live publication arrives, e.g. an owner/admin's
+  // placeholder for another member's private Agent. `getAgentProfile` (this panel's authorized
+  // fetch) already computes an initial display snapshot for any Agent the viewer can see;
+  // prefer the live one once a publication lands, but seed from that fetch, not nothing.
   const display = liveAgent?.display ?? profile?.display;
   const diagnosticFacts = profile && {
     id: profile.id,

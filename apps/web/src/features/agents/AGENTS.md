@@ -120,7 +120,8 @@ These rules apply to `src/features/agents/`.
   card, DM picker, search) follows the server's `canMessage` (any member a
   public Agent, only its creator a private one); the Activity, Reminders and
   Workspace tabs follow `canManageAgent` (its creator or a Workspace
-  owner/admin; the Activity feed read itself is any viewer's who sees it);
+  owner/admin), and so do the Activity reads behind the tab and the Agent card:
+  the server answers no one else and the browser does not ask;
   Start, Stop and Restart are any member's; Full reset is owner/admin only
   (`AgentControl.execute`).
 - Workspace directory reads belong to
