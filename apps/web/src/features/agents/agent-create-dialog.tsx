@@ -5,7 +5,6 @@ import { Monitor01 as Monitor } from "@untitledui/icons";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { localizeHref } from "#src/paraglide/runtime";
 import { Button } from "#src/components/base/buttons/button";
-import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Input } from "#src/components/base/input/input";
@@ -16,6 +15,7 @@ import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { AGENT_VISIBILITY } from "./agent-visibility";
 import { agentCreateErrorMessage } from "./agent-form";
+import { AgentOptionCard } from "./agent-option-card";
 import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields";
 import type { CreateAgentInput } from "./agent.schemas";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
@@ -192,7 +192,7 @@ export function AgentCreateDialog({
                       catalogs: await onLoadRuntimeCatalog(id),
                     })}
                   />
-                  <Checkbox
+                  <AgentOptionCard
                     label={m.agent_form_visibility_private()}
                     hint={m.agent_form_visibility_private_hint()}
                     isDisabled={visibilityLocked}
