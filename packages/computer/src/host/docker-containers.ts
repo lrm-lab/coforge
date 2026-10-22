@@ -138,14 +138,16 @@ export function pinnedImageReference(image: string, inspectLine: string): string
 }
 
 export function dockerCloudContainerListArgs(): string[] {
-  return ["ps", "-q", "--filter", `label=${COMPUTER_ID_LABEL}`];
+  // Computer id is a Swarm *service* label, not a container label. Tasks still
+  // carry com.docker.swarm.service.name=coforge-<computer id>.
+  return ["ps", "-q", "--filter", "label=com.docker.swarm.service.name"];
 }
 
 export function dockerCloudPlacementInspectArgs(containerIds: string[]): string[] {
   return [
     "inspect",
     "-f",
-    `{{index .Config.Labels "${COMPUTER_ID_LABEL}"}} {{.Image}}`,
+    '{{index .Config.Labels "com.docker.swarm.service.name"}} {{.Image}}',
     ...containerIds,
   ];
 }
@@ -321,12 +323,19 @@ function parsePlacement(stdout: string): Array<{ computerId: string; imageId: st
     if (!trimmed) continue;
     const space = trimmed.indexOf(" ");
     if (space < 1) continue;
-    const computerId = trimmed.slice(0, space);
+    const computerId = computerIdFromServiceName(trimmed.slice(0, space));
     const imageId = trimmed.slice(space + 1).trim();
     if (!computerId || !imageId) continue;
     computers.push({ computerId, imageId });
   }
   return computers;
+}
+
+function computerIdFromServiceName(name: string): string | undefined {
+  const prefix = "coforge-";
+  if (!name.startsWith(prefix)) return undefined;
+  const computerId = name.slice(prefix.length);
+  return computerId.length > 0 ? computerId : undefined;
 }
 
 function ids(stdout: string): string[] {

@@ -309,12 +309,12 @@ describe("swarm service arguments", () => {
       "ps",
       "-q",
       "--filter",
-      "label=coforge.computer_id",
+      "label=com.docker.swarm.service.name",
     ]);
     expect(dockerCloudPlacementInspectArgs(["abc"])).toEqual([
       "inspect",
       "-f",
-      '{{index .Config.Labels "coforge.computer_id"}} {{.Image}}',
+      '{{index .Config.Labels "com.docker.swarm.service.name"}} {{.Image}}',
       "abc",
     ]);
     expect(dockerAttachExecArgs("task-1", { COFORGE_WORKSPACE_ID: "workspace-2" })).toEqual([
@@ -413,14 +413,21 @@ describe("swarm service arguments", () => {
       if (args[0] === "inspect")
         return {
           exitCode: 0,
-          stdout: "computer-1 sha256:old\n",
+          stdout:
+            "coforge-computer-1 sha256:old\nother-stack sha256:ignored\ncoforge-0ca18953-635c-4f7f-ba04-1a20e09bac03 sha256:older\n",
           stderr: "",
         };
       return { exitCode: 1, stdout: "", stderr: `unexpected ${args.join(" ")}` };
     });
     expect(await runtime.inspectPlacement("coforge-computer:staging")).toEqual({
       image: { id: "sha256:new", version: "0.1.3-dev.2" },
-      computers: [{ computerId: "computer-1", imageId: "sha256:old" }],
+      computers: [
+        { computerId: "computer-1", imageId: "sha256:old" },
+        {
+          computerId: "0ca18953-635c-4f7f-ba04-1a20e09bac03",
+          imageId: "sha256:older",
+        },
+      ],
     });
   });
 
