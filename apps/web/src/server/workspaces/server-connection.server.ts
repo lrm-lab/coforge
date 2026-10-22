@@ -1,5 +1,3 @@
-import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
-
 /** Host polls every 5 seconds. The light stays on through several missed heartbeats, then goes out. */
 const HOST_HEARTBEAT_LEASE_MS = 90_000;
 
@@ -13,44 +11,10 @@ export class ServerConnectionError extends Error {
   }
 }
 
-export type ServerConnectionRow = {
-  workspaceId: string;
-  installOrigin: string;
-  workspaceSlug: string;
-  submittedByUserId: string;
-  submittedByName: string;
-  submittedAt: Date;
-};
-
 export interface ServerConnectionPorts {
-  /** Inserts the workspace's only row. Throws `ServerConnectionError` 409 when one already exists. */
-  insert(row: ServerConnectionRow): Promise<void>;
-  find(workspaceId: string): Promise<ServerConnectionRow | undefined>;
   /** When this deployment's Swarm host last registered or heartbeated. */
   hostLastSeen(): Promise<Date | undefined>;
 }
-
-export type ServerConnectionSubmit = {
-  workspaceId: string;
-  userId: string;
-  submittedByName: string;
-  installOrigin: string;
-  workspaceSlug: string;
-  now: Date;
-};
-
-type ConfiguredView = {
-  configured: true;
-  installOrigin: string;
-  workspaceSlug: string;
-  submittedByUserId: string;
-  submittedByName: string;
-  submittedAt: Date;
-  connected: boolean;
-  command: string;
-};
-
-export type ServerConnectionView = { configured: false; connected: false } | ConfiguredView;
 
 export type CloudComputerServicePage = {
   connected: boolean;
@@ -68,39 +32,6 @@ export class WorkspaceServerConnection {
       connected: await this.#connected(now),
       command: hostConnectionCommand(installOrigin),
       serviceUnit: hostServiceUnit(installOrigin),
-    };
-  }
-
-  async read(workspaceId: string, now: Date): Promise<ServerConnectionView> {
-    const row = await this.ports.find(workspaceId);
-    if (!row) return { configured: false, connected: false };
-    return {
-      configured: true,
-      ...viewOf(row),
-      connected: await this.#connected(now),
-      command: hostConnectionCommand(row.installOrigin),
-    };
-  }
-
-  async submit(input: ServerConnectionSubmit): Promise<ConfiguredView & { command: string }> {
-    const installOrigin = requireInstallOrigin(input.installOrigin);
-    if (!isValidWorkspaceSlug(input.workspaceSlug)) {
-      throw new ServerConnectionError(422, "invalid workspace slug");
-    }
-    const row: ServerConnectionRow = {
-      workspaceId: input.workspaceId,
-      installOrigin,
-      workspaceSlug: input.workspaceSlug,
-      submittedByUserId: input.userId,
-      submittedByName: input.submittedByName,
-      submittedAt: input.now,
-    };
-    await this.ports.insert(row);
-    return {
-      configured: true,
-      ...viewOf(row),
-      connected: await this.#connected(input.now),
-      command: hostConnectionCommand(installOrigin),
     };
   }
 
@@ -137,16 +68,6 @@ RestartSec=2
 [Install]
 WantedBy=multi-user.target
 `;
-}
-
-function viewOf(row: ServerConnectionRow) {
-  return {
-    installOrigin: row.installOrigin,
-    workspaceSlug: row.workspaceSlug,
-    submittedByUserId: row.submittedByUserId,
-    submittedByName: row.submittedByName,
-    submittedAt: row.submittedAt,
-  };
 }
 
 /** The origin pasted into `curl` must be this deployment's bare origin, with nothing a shell

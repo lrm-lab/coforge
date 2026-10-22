@@ -29,7 +29,6 @@ import {
   reportTabsEqual,
   retainMemberReportDelivery,
   withAssignmentUnread,
-  withReceivedSnapshot,
   withAutoSendCancelled,
   withWeekSendDismissed,
   type ReportContent,
@@ -994,63 +993,6 @@ export class RecordCatalog {
   }
 
   /**
-   * Create a member assignment under a Leader weekly parent (send path).
-   * Drafts are not listed as children until submitted.
-   */
-  async createSubmissionUnderTemplate(input: {
-    workspaceId: string;
-    userId: string;
-    templateId: string;
-  }) {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-    const template = await this.db.weeklyReport.findFirst({
-      where: {
-        id: input.templateId,
-        workspaceId: input.workspaceId,
-        kind: "template",
-      },
-      select: {
-        id: true,
-        content: true,
-        cycle: { select: { id: true, year: true, week: true } },
-      },
-    });
-    if (!template) throw new AppError("NOT_FOUND");
-    const author = await this.db.user.findUnique({
-      where: { id: input.userId },
-      select: { displayName: true, username: true },
-    });
-    const displayName = author ? humanLabel(author) : "Member";
-    const title = memberReportTitle(displayName, template.cycle.year, template.cycle.week);
-    const report = await this.db.weeklyReport.create({
-      data: {
-        workspaceId: input.workspaceId,
-        cycleId: template.cycle.id,
-        authorId: input.userId,
-        kind: "member",
-        sourceTemplateId: template.id,
-        title,
-        status: "draft",
-        content: withAssignmentUnread(
-          withReceivedSnapshot(asReportContent(template.content)),
-          true,
-        ) as unknown as Prisma.InputJsonValue,
-      },
-      select: { id: true, title: true },
-    });
-    return {
-      id: report.id,
-      cycleId: template.cycle.id,
-      title: report.title,
-      year: template.cycle.year,
-      week: template.cycle.week,
-      kind: "member" as const,
-      sourceTemplateId: template.id,
-      created: true,
-    };
-  }
-
-  /**
    * The assistant send card confirms whichever report it names: a member report is
    * submitted, a template is distributed to its recipients.
    */
@@ -1384,33 +1326,6 @@ export class RecordCatalog {
       where: { userId: input.userId, reportId: report.id },
     });
     return { favorited: false as const };
-  }
-
-  async deleteTemplateReport(input: { workspaceId: string; userId: string; reportId: string }) {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-    const report = await this.db.weeklyReport.findFirst({
-      where: {
-        id: input.reportId,
-        workspaceId: input.workspaceId,
-        kind: "template",
-        authorId: input.userId,
-      },
-      select: { id: true },
-    });
-    if (!report) throw new AppError("NOT_FOUND");
-    await this.db.weeklyReport.delete({ where: { id: report.id } });
-    return { ok: true as const };
-  }
-
-  async deleteCycle(input: { workspaceId: string; userId: string; cycleId: string }) {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-    const cycle = await this.db.weeklyReportCycle.findFirst({
-      where: { id: input.cycleId, workspaceId: input.workspaceId },
-      select: { id: true },
-    });
-    if (!cycle) throw new AppError("NOT_FOUND");
-    await this.db.weeklyReportCycle.delete({ where: { id: cycle.id } });
-    return { ok: true as const };
   }
 
   /**
@@ -2720,39 +2635,6 @@ export class RecordCatalog {
       alignContent: true,
     });
     return { id: template.id, active: true as const };
-  }
-
-  async setTemplateScheduleEnabled(input: {
-    workspaceId: string;
-    userId: string;
-    templateId: string;
-    scheduleEnabled: boolean;
-  }) {
-    await requireWeeklyReportLeader(this.db, input.workspaceId, input.userId);
-    const template = await this.db.weeklyReportTemplate.findFirst({
-      where: { id: input.templateId, workspaceId: input.workspaceId, ownerId: input.userId },
-      select: { id: true, name: true, applied: true, dimensions: true },
-    });
-    if (!template) throw new AppError("NOT_FOUND");
-    await this.db.weeklyReportTemplate.update({
-      where: { id: template.id },
-      data: { scheduleEnabled: input.scheduleEnabled, applied: input.scheduleEnabled },
-    });
-    if (input.scheduleEnabled) {
-      await this.ensureFormatForSettings({
-        workspaceId: input.workspaceId,
-        userId: input.userId,
-        settingsId: template.id,
-        settingsName: template.name,
-        sections: parseTemplateSections(template.dimensions),
-        alignContent: true,
-      });
-    }
-    return {
-      id: template.id,
-      scheduleEnabled: input.scheduleEnabled,
-      active: input.scheduleEnabled,
-    };
   }
 
   /** Rejects a malformed template or recipients outside the Workspace; returns the parsed parts. */

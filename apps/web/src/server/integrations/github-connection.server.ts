@@ -679,13 +679,6 @@ export class GitHubConnection {
     return this.overview(userId);
   }
 
-  async installations(userId: string, page: number) {
-    pageSchema.parse(page);
-    const result = await this.withToken(userId, (token) => this.apiInstallationsPage(token, page));
-    if (!result.ok) throw new AppError("ACCESS_DENIED");
-    return result.data;
-  }
-
   private async apiInstallationsPage(token: string, page: number) {
     const data = installationsSchema.parse(
       await this.api(`/user/installations?per_page=30&page=${page}`, token),

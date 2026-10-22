@@ -5,8 +5,6 @@ import { HttpHostCloud, type ClaimedContainerJob, type HostHeartbeatReport } fro
 import { createPiChatHandler } from "./pi-chat-http";
 import { PiChatWorkers } from "./pi-chat-workers";
 
-export const HOST_POLL_INTERVAL_MS = 5_000;
-
 export type { ClaimedContainerJob, HostHeartbeatReport };
 
 export type HostProcessConfig = {

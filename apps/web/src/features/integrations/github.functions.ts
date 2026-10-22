@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
 import { declareNoStore } from "#src/features/no-store-response.server";
 
-import { z } from "zod";
 import { AppError } from "#src/lib/app-error";
 import {
   authMiddleware,
@@ -100,23 +99,6 @@ export const disconnectGitHub = createServerFn({ method: "POST" })
     await github.connection.disconnect(userId);
     setResponseHeader("set-cookie", githubStateCookie(""));
     return { ok: true as const };
-  });
-
-const page = z.number().int().min(1).max(10000);
-export const listGitHubInstallations = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .validator(z.object({ page }))
-  .handler(async ({ data, context }) => {
-    const userId = context.user.id;
-    return (await requiredGitHub()).connection.installations(userId, data.page);
-  });
-
-export const listGitHubRepositories = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .validator(z.object({ installationId: z.number().int().positive().safe(), page }))
-  .handler(async ({ data, context }) => {
-    const userId = context.user.id;
-    return (await requiredGitHub()).connection.repositories(userId, data.installationId, data.page);
   });
 
 export const listAccessibleGitHubRepositories = createServerFn({ method: "GET" })

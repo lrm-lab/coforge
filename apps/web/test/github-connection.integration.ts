@@ -382,18 +382,6 @@ test("repository reads use the personal installation endpoint, paginate, and dis
   try {
     const { state } = await connection.begin(user.id);
     expect(await connection.complete(user.id, state, state, "code")).toBe(true);
-    expect(await connection.installations(user.id, 2)).toEqual({
-      installations: [
-        {
-          id: 42,
-          login: "example-org",
-          repositorySelection: "selected",
-          suspended: false,
-          configureUrl: "https://github.com/apps/coforge-staging/installations/new",
-        },
-      ],
-      hasMore: false,
-    });
     expect(await connection.repositories(user.id, 42, 1)).toEqual({
       repositories: [
         {

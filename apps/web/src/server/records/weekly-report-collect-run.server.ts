@@ -530,15 +530,6 @@ async function computerRuntimeOnline(workspaceId: string, computerId: string): P
   }
 }
 
-export async function getCollectRun(
-  db: PrismaClient,
-  input: { workspaceId: string; userId: string; runId: string },
-): Promise<CollectRunView> {
-  return settleStaleCollectRun(db, input, Date.now(), (computerId) =>
-    computerRuntimeOnline(input.workspaceId, computerId),
-  );
-}
-
 export type CollectRunSlotDetail = CollectRunSlotView & {
   packMarkdown: string | null;
   computerLabel: string;

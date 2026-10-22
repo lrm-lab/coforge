@@ -71,7 +71,6 @@ export const LifecycleProblemSchema = z.looseObject({
   binding_id: z.string().optional(),
   message: z.string(),
 });
-export type LifecycleProblem = z.infer<typeof LifecycleProblemSchema>;
 
 /** `__lifecycle status`. With no supervisor running, bindings come from bindings.json. */
 export const LifecycleStatusSchema = z

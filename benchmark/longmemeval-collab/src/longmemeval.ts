@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import type { LongMemEvalSample, LongMemEvalSession } from "./types";
 
-export const LONGMEMEVAL_S_SHA256 =
-  "08d8dad4be43ee2049a22ff5674eb86725d0ce5ff434cde2627e5e8e7e117894";
-
 export const DEFAULT_LONGMEMEVAL_PATH =
   "/home/zhoujie22/river2_0/evol_bench/LongMemEval/data/longmemeval/longmemeval_s.json";
 
