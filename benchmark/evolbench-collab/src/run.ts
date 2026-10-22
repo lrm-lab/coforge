@@ -10,12 +10,8 @@ import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/a
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
 import { startAgent, startEvalDaemon, type EvalDaemon } from "./eval-daemon";
 import { runEpisode, type EpisodeResult } from "./eval-qa";
-import { AgentAttentionDecisionStore } from "../../../packages/daemon/src/persistence/agent-attention-decision-store";
-import {
-  deriveTurnEnrichment,
-  evaluatorResultFromVerdict,
-  loadEnrichmentAgents,
-} from "./enrichment";
+import { evaluatorResultFromVerdict } from "./enrichment";
+import { episodeEnrichment } from "./episode-enrichment";
 import { verifyWithSidecar } from "./sidecar";
 import { createEvalDispatcher, drainEpisodeToMemory } from "./ingest";
 import type { OpenVikingEvaluatorResult } from "../../../apps/web/src/server/openviking/typed-session-extract.server";
@@ -341,32 +337,6 @@ async function releaseFamily(arm: "warm" | "cold", provisioned: FamilyWorkspace)
   });
 }
 
-async function episodeEnrichment(provisioned: FamilyWorkspace) {
-  const { workspace } = provisioned;
-  const agentRows = await workspace.db.agent.findMany({
-    where: { id: { in: [workspace.memoryAgentId, workspace.taskAgentId] } },
-    select: { id: true, name: true, currentSessionId: true },
-  });
-  const agents = await loadEnrichmentAgents({
-    agents: agentRows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      sessionId: row.currentSessionId,
-      cwd: join(provisioned.daemon.workspaceRoot, workspace.workspaceId, "agents", row.id),
-    })),
-    decisions: new AgentAttentionDecisionStore(),
-    warn: (message) => console.warn(sanitizeDiagnostic(message)),
-  });
-  const messages = await workspace.db.message.findMany({
-    where: { conversationId: workspace.channelId },
-    select: { id: true, sender: { select: { agentId: true } } },
-  });
-  return deriveTurnEnrichment({
-    agents,
-    messages: messages.map((row) => ({ id: row.id, senderAgentId: row.sender?.agentId ?? null })),
-  });
-}
-
 async function executeEpisode(
   arm: "warm" | "cold",
   family: EpisodeFamily,
@@ -466,7 +436,7 @@ async function executeEpisode(
         })
       : [];
     const turnEnrichment = env.recordTrajectoryAos
-      ? await episodeEnrichment(provisioned)
+      ? await episodeEnrichment(provisioned.workspace, provisioned.daemon.workspaceRoot)
       : undefined;
     const drained = await drainEpisodeToMemory({
       workspace: provisioned.workspace,

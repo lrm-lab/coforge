@@ -87,18 +87,30 @@ export function deriveTurnEnrichment(input: {
 
 /** Reads each agent's runtime session and attention journal. A missing session is not fatal. */
 export async function loadEnrichmentAgents(input: {
-  agents: ReadonlyArray<{ id: string; name: string; cwd: string; sessionId: string | null }>;
+  agents: ReadonlyArray<{ id: string; name: string; cwd: string; sessionIds: readonly string[] }>;
   decisions: AgentAttentionDecisionPort;
   warn?: (message: string) => void;
 }): Promise<EnrichmentAgent[]> {
   const loaded: EnrichmentAgent[] = [];
   for (const agent of input.agents) {
     let trace: AgentChannelTrace | null = null;
-    if (agent.sessionId) {
+    for (const sessionId of agent.sessionIds) {
       try {
-        trace = await exportAgentChannelTrace({ cwd: agent.cwd, sessionId: agent.sessionId });
+        const next = await exportAgentChannelTrace({ cwd: agent.cwd, sessionId });
+        trace = trace
+          ? {
+              sessionId: next.sessionId,
+              sends: [...trace.sends, ...next.sends],
+              trailingReceivedShortIds: [
+                ...trace.trailingReceivedShortIds,
+                ...next.trailingReceivedShortIds,
+              ],
+            }
+          : next;
       } catch (error) {
-        input.warn?.(`agent ${agent.name} session trace unavailable: ${String(error)}`);
+        input.warn?.(
+          `agent ${agent.name} session ${sessionId} trace unavailable: ${String(error)}`,
+        );
       }
     }
     loaded.push({
