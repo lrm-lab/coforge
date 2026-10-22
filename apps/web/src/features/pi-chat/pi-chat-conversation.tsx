@@ -65,9 +65,9 @@ export function PiChatConversation({
   const reconcile = usePiChatStream({ userId, workspaceId, computerId }, workspaceSlug, sessionId);
   const history = useQuery({
     queryKey,
-    queryFn: async () =>
-      reconcile(
-        await loadPiChatHistory(queryClient.getQueryData<PiChatResult>(queryKey), (before) =>
+    queryFn: () =>
+      reconcile(() =>
+        loadPiChatHistory(queryClient.getQueryData<PiChatResult>(queryKey), (before) =>
           execute({ data: { computerId, command: { action: "read", sessionId, before } } }),
         ),
       ),
