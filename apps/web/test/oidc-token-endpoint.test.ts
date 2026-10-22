@@ -175,10 +175,10 @@ test("a request that is not a form, repeats a parameter, or misses one is invali
   expect(charset.status).toBe(200);
 });
 
-test("only the authorization_code grant is supported", async () => {
+test("only the authorization_code and client_credentials grants are supported", async () => {
   const { tokenEndpoint, issueCode } = endpoints();
   const { code } = issueCode();
-  for (const grantType of ["refresh_token", "client_credentials", "password"])
+  for (const grantType of ["refresh_token", "password"])
     expect(
       await tokenEndpoint
         .exchange(tokenRequest(code, { form: { grant_type: grantType } }))

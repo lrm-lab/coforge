@@ -194,6 +194,20 @@ test("range mode applies the size ratchet to the range as a whole", () => {
   expect(result.stderr).not.toContain("deps.lock");
 });
 
+test("range mode applies the Markdown line limit only to changed files", () => {
+  const long = "line\n".repeat(200);
+  const base = repo.seed({ "docs/legacy.md": long, "README.md": "# Repo\n" });
+  repo.seed({ "unrelated.txt": "unchanged legacy document is outside the range\n" });
+  expect(repo.range(base).exitCode).toBe(0);
+
+  repo.seed({ "docs/legacy.md": `${long}one more\n` });
+  const result = repo.range(base);
+
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain("markdown-lines");
+  expect(result.stderr).toContain("docs/legacy.md: 201 lines");
+});
+
 test("range mode diffs from the merge base, like a pull request", () => {
   const base = repo.seed({ "legacy.ts": "x".repeat(30_000) });
   repo.ok("switch", "-q", "-c", "feature");

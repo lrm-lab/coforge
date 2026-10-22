@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
 import {
-  infiniteQueryOptions,
   queryOptions,
   useQueryClient,
   useSuspenseInfiniteQuery,
@@ -17,14 +16,15 @@ import {
 } from "./conversation-reconciliation";
 import { useConversationRealtime } from "./conversation-realtime-client";
 import {
-  CONVERSATION_WINDOW_MAX_PAGES,
-  CONVERSATION_WINDOW_PAGE_SIZE,
   flushWindowUpdates,
   foldWindowUpdates,
-  nextPageCursor,
-  previousPageCursor,
   type ConversationWindowCursor,
 } from "#src/lib/conversation-window";
+import {
+  conversationPages,
+  type ConversationPage,
+  type PageMessage,
+} from "./conversation-window-query";
 import {
   loadConversationAround,
   loadDirectConversation,
@@ -41,8 +41,6 @@ import { createReactionSync } from "./reaction-sync";
 import { channelMembersQueryKey, channelNamesQueryKey } from "./conversation-query-keys";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
 import { listSavedMessages } from "./saved-messages.functions";
-import type { ActionCardView } from "#src/server/conversations/action-cards.server";
-import type { ReactionSummary } from "./message-reactions";
 import {
   applyThreadRead,
   conversationThreadsQueryKey,
@@ -51,69 +49,7 @@ import {
   setThreadFollowed,
   updateLoadedReply,
 } from "./thread-cache";
-import {
-  mergeWindowThreads,
-  newestReflectedSequence,
-  type ThreadReplyInput,
-  type WindowThreadsPage,
-} from "./thread-summary-model";
-
-type PageMessage = ThreadReplyInput & {
-  threadRootId?: string;
-  actionCard?: ActionCardView;
-  reactions?: ReactionSummary[];
-};
-type ConversationPage<M extends PageMessage> = WindowThreadsPage & {
-  conversationId: string;
-  /** The viewer's member row in the conversation; empty for someone who never joined or left. */
-  senderMemberId?: string;
-  hasOlder: boolean;
-  hasNewer?: boolean;
-  /** Top-level messages only: a thread's replies are read when its pane opens
-   * (`conversationThreadQuery`), and the page holds its summary (`threads`). */
-  messages: M[];
-};
-
-/** One page request: an initial load (no cursor), an older page, or a newer page. */
-type PageRequest = {
-  beforeSequence?: number;
-  afterSequence?: number;
-  limit?: number;
-};
-
-/** The oldest loaded message bounds the next page of history (a page holds top-level messages). */
-const beforeFirstMessage = (messages: PageMessage[]) => messages[0]?.sequence;
-
-function conversationPages<M extends PageMessage, T extends ConversationPage<M>>(
-  queryKey: readonly unknown[],
-  loadPage: (page: PageRequest) => Promise<T>,
-) {
-  // The bounded window: `maxPages` keeps the loaded pages from growing with every page of history
-  // read, dropping the page at the far end from the fetch (see `lib/conversation-window.ts`).
-  const query = infiniteQueryOptions({
-    queryKey,
-    queryFn: ({ pageParam }) => {
-      const cursor = pageParam as ConversationWindowCursor;
-      return loadPage({
-        beforeSequence: cursor?.before,
-        afterSequence: cursor?.after,
-        limit: CONVERSATION_WINDOW_PAGE_SIZE,
-      });
-    },
-    initialPageParam: undefined as ConversationWindowCursor,
-    maxPages: CONVERSATION_WINDOW_MAX_PAGES,
-    // Pages[0] is the oldest loaded window, the latest is the live end. Each direction derives its
-    // cursor from the boundary page, and an honest `hasNewer` tells whether the newest retained page
-    // is still the tail.
-    getPreviousPageParam: (oldest: T) =>
-      previousPageCursor(oldest, beforeFirstMessage(oldest.messages)),
-    getNextPageParam: (newest: T) => nextPageCursor(newest, newest.messages.at(-1)?.sequence),
-  });
-  /** The newest page on its own, for returning to the live end after the window slid up into
-   * history and evicted the tail. */
-  const loadInitialPage = () => loadPage({ limit: CONVERSATION_WINDOW_PAGE_SIZE });
-  return { query, loadInitialPage };
-}
+import { mergeWindowThreads, newestReflectedSequence } from "./thread-summary-model";
 
 export const directConversationQuery = (conversationId: string) =>
   conversationPages(["conversation", "direct", conversationId], (page) =>

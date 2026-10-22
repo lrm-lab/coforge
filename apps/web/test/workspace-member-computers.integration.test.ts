@@ -54,7 +54,7 @@ async function setup() {
     },
   });
   await db.$transaction((tx) =>
-    admitWorkspaceMember(tx, { workspaceId: workspace.id, userId: bob.id, role: "member" }),
+    admitWorkspaceMember(tx, { workspace, userId: bob.id, role: "member" }),
   );
   const computer = async (ownerId: string, workspaceIds: string[]) => {
     const row = await db.computer.create({

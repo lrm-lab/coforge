@@ -33,7 +33,6 @@ model User {
   agentApiKeys                AgentApiKey[]
   daemonApiKeys               DaemonApiKey[]
   computers                   Computer[]
-  submittedServerConnections  WorkspaceServerConnection[]
   requestedHostJobs           HostJob[]
   conversationMembers         ConversationMember[]
   webPushSubscriptions        WebPushSubscription[]
@@ -49,7 +48,8 @@ model User {
   committedActionCards        ActionCard[]
   requestedAgentMigrations    AgentMigration[]
   createdApps                 App[]
-  appInstallations            AppInstallation[]
+  appInstallations            AppInstallation[]       @relation("AppInstallationInstalledBy")
+  appInstallationsApproved    AppInstallation[]       @relation("AppInstallationApprovedBy")
   oauthAuthorizationCodes     OAuthAuthorizationCode[]
   appConsents                 UserAppConsent[]
   appAgentGrantsGiven         AppAgentGrant[]         @relation("AppAgentGrantGrantedBy")

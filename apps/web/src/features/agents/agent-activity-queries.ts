@@ -42,8 +42,8 @@ const realtimeBackedQueryOptions = {
 
 /**
  * One Workspace's recent Activity per Agent (newest first, capped at
- * RECENT_ACTIVITY_LIMIT). The sidebar and every open avatar read this same
- * cache entry instead of subscribing themselves.
+ * RECENT_ACTIVITY_LIMIT), for the Agents the viewer manages. Every open Agent card
+ * of theirs reads this same cache entry instead of subscribing itself.
  */
 export const workspaceActivityQuery = (workspaceId: string | undefined) =>
   queryOptions({

@@ -143,7 +143,7 @@ test.skipIf(!connectionString)(
       });
       await db.$transaction((tx) =>
         admitWorkspaceMember(tx, {
-          workspaceId: workspace.id,
+          workspace,
           userId: returning.id,
           role: "member",
         }),

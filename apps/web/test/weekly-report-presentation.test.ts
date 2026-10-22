@@ -1,7 +1,33 @@
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { unzipSync } from "fflate";
+import { useStorage } from "nitro/storage";
 import { buildWeeklyReportHtml } from "#src/server/records/weekly-report-html.server";
 import { buildWeeklyReportPresentation } from "#src/server/records/weekly-report-presentation.server";
+
+const TEMPLATE_NAME = "foundation-models-weekly.pptx";
+const templateStorage = useStorage<Uint8Array>("assets:weekly-report-templates");
+let templateBytes: Uint8Array;
+
+beforeAll(async () => {
+  templateBytes = new Uint8Array(
+    await Bun.file(
+      new URL(`../assets/weekly-report-templates/${TEMPLATE_NAME}`, import.meta.url),
+    ).arrayBuffer(),
+  );
+  await templateStorage.setItemRaw(TEMPLATE_NAME, templateBytes);
+});
+
+afterAll(async () => {
+  await templateStorage.removeItem(TEMPLATE_NAME);
+});
+
+test("weekly report template is a checked-in binary PPTX server asset", () => {
+  expect(templateBytes.byteLength).toBe(3_932_563);
+  expect(new TextDecoder().decode(templateBytes.slice(0, 4))).toBe("PK\u0003\u0004");
+  expect(new Bun.CryptoHasher("sha256").update(templateBytes).digest("hex")).toBe(
+    "cc038d5c4e1252e1cbf055d0f2211455fb88621eb1e0a5f78bf50320bcb9b5c9",
+  );
+});
 
 test("weekly report presentation keeps the checked-in PPTX package", async () => {
   const bytes = await buildWeeklyReportPresentation({
@@ -9,7 +35,7 @@ test("weekly report presentation keeps the checked-in PPTX package", async () =>
     period: "2026.09.21 ~ 2026.09.24",
     members: [{ displayName: "jianghp3", sections: { Summary: "• completed the benchmark" } }],
   });
-  expect(bytes.byteLength).toBeGreaterThan(1_000_000);
+  expect(bytes.byteLength).toBe(3_932_987);
   const files = unzipSync(bytes);
   const xml = Object.values(files)
     .map((file) => new TextDecoder().decode(file))

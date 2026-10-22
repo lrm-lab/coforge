@@ -20,17 +20,24 @@
  */
 
 /**
- * Pages the query keeps at once. The server's page size is `CONVERSATION_WINDOW_PAGE_SIZE`, so the
- * loaded window holds at most 100 top-level rows (a thread rides along as its summary, never its
- * replies) — about eight screenfuls on the staging channel, where a real message row is roughly
+ * Pages the query keeps at once. A page asks for `CONVERSATION_WINDOW_PAGE_SIZE` rows, so paging
+ * through history holds a window of 100 top-level rows (a thread rides along as its summary, never
+ * its replies) — about eight screenfuls on the staging channel, where a real message row is roughly
  * 130 DOM nodes. That is enough to scroll a conversation for a while without re-fetching, and small
  * enough that the DOM node count stays flat however far back the reader goes. Changing either
- * constant moves the window size; keep the derivation honest if you do.
+ * constant moves the window size; keep the derivation honest if you do. Two pages are larger: the
+ * live tail grows with every realtime message folded into it, and a refetch at the tail reads its
+ * forward pages at `CONVERSATION_WINDOW_SERVER_PAGE_LIMIT` (`windowPageLimit`).
  */
 export const CONVERSATION_WINDOW_MAX_PAGES = 5;
 
-/** Top-level messages a page asks the server for; the server caps a page at 100. */
+/** Top-level messages a page asks the server for. */
 export const CONVERSATION_WINDOW_PAGE_SIZE = 20;
+
+/** The most top-level messages the server returns in one page, whatever a request asks for
+ * (`conversationPageInputSchema`, and the page reads of `public-channels.server.ts` and
+ * `direct-conversation.repositories.server.ts`). */
+export const CONVERSATION_WINDOW_SERVER_PAGE_LIMIT = 100;
 
 /** A page's fetch direction: `before` reads history upwards, `after` reads towards the live end.
  * `undefined` is the initial (uncursored) fetch, which lands on the newest page. */
@@ -74,6 +81,28 @@ export function windowPageFlags(
     case "forward":
       return { hasOlder: true, hasNewer: overflow };
   }
+}
+
+/**
+ * How many messages a page asks for. A full refetch (window focus, an invalidation, a reconnect)
+ * re-reads every held page: the first from its own cursor, each later one forward from the page
+ * before it, as many as were held (`@tanstack/query-core`'s `infiniteQueryBehavior`). Realtime
+ * messages folded into the live tail grow it past an ordinary page, so a walk at that size stops
+ * short of the tail: the newest page comes back `hasNewer`, without the latest messages, and the
+ * pane shows older history behind "back to latest". A forward page of a refetch of a window at the
+ * tail asks for the server's maximum instead, which reaches the tail again unless more than that
+ * arrived since the page before it. Every other page asks for an ordinary one: paging either way,
+ * a refetch's first page, and a refetch while reading history, whose realtime is buffered, not
+ * folded, until paging down flushes it (`foldWindowUpdates`).
+ */
+export function windowPageLimit(page: {
+  forward: boolean;
+  fullRefetch: boolean;
+  windowAtTail: boolean;
+}): number {
+  return page.forward && page.fullRefetch && page.windowAtTail
+    ? CONVERSATION_WINDOW_SERVER_PAGE_LIMIT
+    : CONVERSATION_WINDOW_PAGE_SIZE;
 }
 
 type MergeMessages<M> = (base: readonly M[], incoming: readonly M[]) => M[];

@@ -121,6 +121,20 @@ test("pages the Workspace directory with owner and search filters", async () => 
     expect(names(await page({ query: "ARL" }))).toEqual(["charlie"]);
     expect(names(await page({ query: "build mac" }))).toEqual(["alpha", "charlie", "delta"]);
     expect(names(await page({ query: "nobody" }))).toEqual([]);
+    // Each card says whether the viewer may message the Agent: any public one, their own private
+    // one, never another member's private one, which an admin sees but does not message.
+    const canMessage = (rows: { items: { name: string; canMessage: boolean }[] }) =>
+      Object.fromEntries(rows.items.map((agent) => [agent.name, agent.canMessage]));
+    expect(canMessage(await page({ query: "build mac" }))).toEqual({
+      alpha: true,
+      charlie: true,
+      delta: true,
+    });
+    await db.workspaceMembership.update({
+      where: { workspaceId_userId: { workspaceId: workspace.id, userId: viewer!.id } },
+      data: { role: "admin" },
+    });
+    expect(canMessage(await page({ query: "hidden" }))).toEqual({ hidden: false });
 
     const people = await members.peoplePage(workspace.id, viewer!.id, { query: "", limit: 1 });
     expect(people.items.map((person) => person.displayName)).toEqual(["Owner"]);

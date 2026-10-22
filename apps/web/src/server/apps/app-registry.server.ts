@@ -151,6 +151,9 @@ export class AppRegistry {
         chosen === ""
           ? appKeyFromName(typeof input.name === "string" ? input.name : "", this.keySuffix())
           : chosen;
+      // A made key already taken is skipped before the insert, so a registration inside a
+      // transaction (`AppEditorSave.register`) is not left with a failed statement to retry after.
+      if (chosen === "" && (await this.store.find(key))) continue;
       const created = await create(checked(checkAppInput({ ...input, key }, "registration")));
       if (created) return { app: created, clientSecret: secret };
     }
@@ -227,12 +230,12 @@ export class AppRegistry {
   }
 
   /**
-   * The actor may manage apps, and `key` is their Workspace's own app. The role and the app are
+   * The actor may manage apps, and `key` is their Workspace's own app, which is the answer. The role and the app are
    * read together, then judged in this order, so a role without the right is always ACCESS_DENIED;
    * another Workspace's app is NOT_FOUND, as is an unknown or built-in key, so another Workspace's
    * app is not confirmed to exist.
    */
-  private async requireOwnApp(actor: AppActor, key: string): Promise<AppView> {
+  async requireOwnApp(actor: AppActor, key: string): Promise<AppView> {
     const [role, app] = await Promise.all([
       this.store.findMemberRole(actor.workspaceId, actor.actorUserId),
       this.store.find(key),

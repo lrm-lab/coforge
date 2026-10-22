@@ -19,47 +19,32 @@ import {
   type FieldErrors,
 } from "./app-editor-fields";
 import { EMPTY_APP_DRAFT, draftOf, inputOf, type AppDraft } from "./app-draft";
-import { APP_FIELD_PROBLEMS, appFormProblem } from "./app-form";
+import {
+  APP_FIELD_PROBLEMS,
+  SETUP_FIELD_PROBLEMS,
+  appFormProblem,
+  type AppEditorSubmission,
+} from "./app-form";
 import { AppLogo } from "./app-logo";
 import { AppLogoField } from "./app-logo-field";
-import {
-  APP_WHEN_TO_USE_MAX_LENGTH,
-  refusedAppFields,
-  type AppRegistrationInput,
-} from "./app-registration";
+import { InstallationCard } from "./app-editor-installation";
+import { PermissionFields } from "./app-editor-permissions";
+import { SetupSection, type SetupErrors } from "./app-editor-setup";
+import { refusedSetupFields, setupDraftOf, setupInputOf, type SetupDraft } from "./app-setup-draft";
+import type { AppPermissionGroup } from "./app-permissions";
+import { APP_WHEN_TO_USE_MAX_LENGTH, refusedAppFields } from "./app-registration";
 import { AppSecretPanel, type IssuedSecret } from "./app-secret-panel";
 import type { AppSummary } from "./apps.functions";
 
 /**
  * Registers an app (`app` absent) or edits one, in one wide form: a section nav beside Profile,
- * Login with CoForge and, when editing, the Danger zone. One Save sends the form; regenerating the
- * secret and deleting act at once. A click outside never closes it; Escape and the close button
- * do, except while a save runs.
+ * Login with CoForge, Installation setup and App permissions (each where its flag is on: `declares`),
+ * and, when editing, the Danger zone. One Save sends the form, the declarations included, which a
+ * registration writes with the app; approving a permissions update, regenerating the secret and
+ * deleting act at once. A click outside never
+ * closes it; Escape and the close button do, except while a save runs.
  */
-export function AppEditor({
-  open,
-  app,
-  issued,
-  onClose,
-  onSubmit,
-  onRegenerate,
-  onDelete,
-  onUploadLogo,
-  onResetLogo,
-}: {
-  open: boolean;
-  app?: AppSummary;
-  /** A secret regenerated for this app, shown in the editor's notice strip. */
-  issued: IssuedSecret | null;
-  onClose: () => void;
-  /** Sends the input: the whole registration, or the change without the key. Throws when refused. */
-  onSubmit: (input: AppRegistrationInput) => Promise<void>;
-  onRegenerate: (app: AppSummary) => Promise<void>;
-  onDelete: (app: AppSummary) => Promise<void>;
-  /** Replace or reset the app's logo at once, outside Save. Throw when refused. */
-  onUploadLogo: (app: AppSummary, file: File) => Promise<void>;
-  onResetLogo: (app: AppSummary) => Promise<void>;
-}) {
+export function AppEditor({ open, onClose, ...form }: AppEditorProps) {
   const [saving, guard] = useSubmitGuard();
   return (
     <ModalOverlay
@@ -74,17 +59,11 @@ export function AppEditor({
           {({ close }) => (
             // Each opening starts from the app as it is now, or from an empty form.
             <AppEditorForm
-              key={app?.key ?? "new"}
-              app={app}
-              issued={issued}
+              key={form.app?.key ?? "new"}
+              {...form}
               saving={saving}
               guard={guard}
               onClose={close}
-              onSubmit={onSubmit}
-              onRegenerate={onRegenerate}
-              onDelete={onDelete}
-              onUploadLogo={onUploadLogo}
-              onResetLogo={onResetLogo}
             />
           )}
         </Dialog>
@@ -93,10 +72,37 @@ export function AppEditor({
   );
 }
 
+type AppEditorProps = {
+  open: boolean;
+  app?: AppSummary;
+  /** Which declarations this Workspace has the editor show: `app-data-permissions` and
+   * `app-installation-setup` on. */
+  declares: { permissions: boolean; setup: boolean };
+  /** A secret regenerated for this app, shown in the editor's notice strip. */
+  issued: IssuedSecret | null;
+  onClose: () => void;
+  /** Sends the submission: the whole registration, or the change without the key, with the data
+   * groups and setup page declared when their sections are shown. Throws when refused. */
+  onSubmit: (submission: AppEditorSubmission) => Promise<void>;
+  onRegenerate: (app: AppSummary) => Promise<void>;
+  onDelete: (app: AppSummary) => Promise<void>;
+  /** Replace or reset the app's logo at once, outside Save. Throw when refused. */
+  onUploadLogo: (app: AppSummary, file: File) => Promise<void>;
+  onResetLogo: (app: AppSummary) => Promise<void>;
+  /** Approves the app's saved permissions at `revision`, the one shown, for this Workspace, at
+   * once. Throws when refused. */
+  onApprovePermissions: (app: AppSummary, revision: number) => Promise<void>;
+  /** Reads the apps again for the installation's setup status; throws when it can't. */
+  onRefreshSetup: () => Promise<void>;
+};
+
 type Section = { id: string; title: string };
+
+const EMPTY_SETUP_DRAFT: SetupDraft = { required: false, url: "", description: "" };
 
 function AppEditorForm({
   app,
+  declares,
   issued,
   saving,
   guard,
@@ -106,20 +112,27 @@ function AppEditorForm({
   onDelete,
   onUploadLogo,
   onResetLogo,
-}: {
-  app?: AppSummary;
-  issued: IssuedSecret | null;
+  onApprovePermissions,
+  onRefreshSetup,
+}: Omit<AppEditorProps, "open"> & {
   saving: boolean;
   guard: ReturnType<typeof useSubmitGuard>[1];
-  onClose: () => void;
-  onSubmit: (input: AppRegistrationInput) => Promise<void>;
-  onRegenerate: (app: AppSummary) => Promise<void>;
-  onDelete: (app: AppSummary) => Promise<void>;
-  onUploadLogo: (app: AppSummary, file: File) => Promise<void>;
-  onResetLogo: (app: AppSummary) => Promise<void>;
 }) {
   const editing = app !== undefined;
   const [draft, setDraft] = useState<AppDraft>(() => (app ? draftOf(app) : EMPTY_APP_DRAFT));
+  const permissions = app?.permissions;
+  const [groups, setGroups] = useState<AppPermissionGroup[]>(() => permissions?.declared ?? []);
+  // A newer declaration (the list was read again after a refused approval) replaces the selection.
+  const [shownRevision, setShownRevision] = useState(permissions?.revision);
+  if (permissions && permissions.revision !== shownRevision) {
+    setShownRevision(permissions.revision);
+    setGroups(permissions.declared);
+  }
+  const setup = app?.setup;
+  const [setupDraft, setSetupDraft] = useState<SetupDraft>(() =>
+    setup ? setupDraftOf(setup) : EMPTY_SETUP_DRAFT,
+  );
+  const [setupErrors, setSetupErrors] = useState<SetupErrors>({});
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
@@ -127,11 +140,15 @@ function AppEditorForm({
   const ids = {
     profile: `${idPrefix}profile`,
     login: `${idPrefix}login`,
+    permissions: `${idPrefix}permissions`,
+    setup: `${idPrefix}setup`,
     danger: `${idPrefix}danger`,
   };
   const sections: Section[] = [
     { id: ids.profile, title: m.apps_section_profile() },
     { id: ids.login, title: m.apps_section_login() },
+    ...(declares.setup ? [{ id: ids.setup, title: m.apps_section_setup() }] : []),
+    ...(declares.permissions ? [{ id: ids.permissions, title: m.apps_section_permissions() }] : []),
     ...(editing ? [{ id: ids.danger, title: m.apps_section_danger() }] : []),
   ];
   const [active, setActive] = useActiveSection(scroller, sections);
@@ -150,19 +167,29 @@ function AppEditorForm({
     // A change never carries the key (it is the client ID), and a blank one asks for a made key.
     const { key, ...rest } = input;
     const refused = refusedAppFields(editing || key === "" ? rest : input);
-    if (refused.length > 0) {
+    const setupRefused = declares.setup ? refusedSetupFields(setupDraft) : [];
+    if (refused.length > 0 || setupRefused.length > 0) {
       setErrors(Object.fromEntries(refused.map((field) => [field, APP_FIELD_PROBLEMS[field]()])));
+      setSetupErrors(
+        Object.fromEntries(setupRefused.map((field) => [field, SETUP_FIELD_PROBLEMS[field]()])),
+      );
       return;
     }
+    setSetupErrors({});
     void guard(async () => {
       try {
-        await onSubmit(input);
+        await onSubmit({
+          input,
+          permissionGroups: declares.permissions ? groups : undefined,
+          setup: declares.setup ? setupInputOf(setupDraft) : undefined,
+        });
       } catch (cause) {
         const problem = appFormProblem(
           cause,
           editing ? m.apps_error_update : m.apps_error_register,
         );
-        if (problem.field) setErrors({ [problem.field]: problem.message });
+        if (problem.setupField) setSetupErrors({ [problem.setupField]: problem.message });
+        else if (problem.field) setErrors({ [problem.field]: problem.message });
         else setFormError(problem.message);
       }
     });
@@ -173,6 +200,11 @@ function AppEditorForm({
   );
   const hasRedirect = draft.redirectUris.some((uri) => uri.trim() !== "");
   const fields = { draft, change, errors, editing };
+  // One card for the installation both sections refer to, in the first of them shown.
+  const installationId = permissions?.installationId ?? setup?.installation?.installationId;
+  const installationCard = installationId !== undefined && (
+    <InstallationCard installationId={installationId} />
+  );
 
   return (
     // The rules below are the registry's own, shown inline beside each field; the browser's bubbles
@@ -273,6 +305,50 @@ function AppEditorForm({
           >
             <LoginFields {...fields} />
           </EditorSection>
+          {declares.setup && (
+            <EditorSection
+              id={ids.setup}
+              title={m.apps_section_setup()}
+              status={
+                setupDraft.required ? m.apps_setup_status_required() : m.apps_setup_status_none()
+              }
+              description={m.apps_section_setup_description()}
+            >
+              {installationCard}
+              <SetupSection
+                draft={setupDraft}
+                setup={setup}
+                errors={setupErrors}
+                isDisabled={saving}
+                onChange={(next) => {
+                  setSetupDraft(next);
+                  setSetupErrors({});
+                }}
+                onRefresh={onRefreshSetup}
+              />
+            </EditorSection>
+          )}
+          {declares.permissions && (
+            <EditorSection
+              id={ids.permissions}
+              title={m.apps_section_permissions()}
+              status={m.apps_permissions_selected({ count: groups.length })}
+              description={m.apps_section_permissions_description()}
+            >
+              {!declares.setup && installationCard}
+              <PermissionFields
+                groups={groups}
+                permissions={permissions}
+                isDisabled={saving}
+                onChange={setGroups}
+                onApprove={async () => {
+                  if (app && permissions)
+                    await guard(() => onApprovePermissions(app, permissions.revision));
+                }}
+                installationShownAbove={declares.setup && installationId !== undefined}
+              />
+            </EditorSection>
+          )}
           {editing && (
             <EditorSection
               id={ids.danger}

@@ -13,7 +13,7 @@ import {
 } from "#src/code-agent/contract";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { evalMemoryOfferOnly } from "#src/code-agent/agent-instructions";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { AGENT_ACTIVITY_DETAIL_KIND, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import {
   createSession,
@@ -175,6 +175,28 @@ class AgentSessionImpl implements AgentSession {
     this.#identity = {
       sessionId: runtime.sessionId,
       state: resumed ? "resumable" : "empty",
+    };
+    // The SDK's turn_start precedes context/auth preparation, and message_start follows
+    // the provider's first stream event. Observe the public stream seam between them.
+    const stream = runtime.session.agent.streamFunction.bind(runtime.session.agent);
+    runtime.session.agent.streamFunction = (model, context, options) => {
+      // Summaries use this stream too; keep their more specific compaction phase.
+      if (!runtime.session.isCompacting && !this.#disposed && !this.#interrupting) {
+        try {
+          this.#emit({
+            type: "activity",
+            activity: {
+              detailKind: AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED,
+              level: "info",
+              detail: "Waiting for model response",
+              observedAtMs: Date.now(),
+            },
+          });
+        } catch {
+          // Best-effort observation must never prevent the provider request.
+        }
+      }
+      return stream(model, context, options);
     };
     runtime.session.subscribe((event) => {
       if (event.type === "agent_start" && (this.#disposed || this.#interrupting)) {

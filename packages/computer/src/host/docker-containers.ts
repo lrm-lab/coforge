@@ -44,6 +44,33 @@ export function dockerVolumeRemoveArgs(computerId: string): string[] {
   return ["volume", "rm", serviceName(computerId)];
 }
 
+/** Docker says `no such service` or `service <name> not found` for a resource already gone. */
+function resourceGone(stderr: string, resource: "service" | "volume"): boolean {
+  return new RegExp(`no such ${resource}|${resource} .+ not found`, "i").test(stderr);
+}
+
+/** Container ids from `volume is in use - [id, id]`. */
+function volumeHolders(stderr: string): string[] {
+  const match = /volume is in use - \[([^\]]+)\]/i.exec(stderr);
+  if (!match?.[1]) return [];
+  return match[1]
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => /^[0-9a-f]+$/i.test(id));
+}
+
+async function removeDisk(spawn: DockerSpawn, computerId: string): Promise<void> {
+  const volume = await spawn(dockerVolumeRemoveArgs(computerId));
+  if (volume.exitCode === 0 || resourceGone(volume.stderr, "volume")) return;
+  const holders = volumeHolders(volume.stderr);
+  if (holders.length === 0) throw new Error(volume.stderr || "docker volume rm failed");
+  const cleared = await spawn(["rm", "-f", ...holders]);
+  if (cleared.exitCode !== 0) throw new Error(cleared.stderr || "docker rm failed");
+  const retry = await spawn(dockerVolumeRemoveArgs(computerId));
+  if (retry.exitCode === 0 || resourceGone(retry.stderr, "volume")) return;
+  throw new Error(retry.stderr || "docker volume rm failed");
+}
+
 export function dockerTaskFindArgs(computerId: string): string[] {
   return ["ps", "-q", "--filter", `label=com.docker.swarm.service.name=${serviceName(computerId)}`];
 }
@@ -83,21 +110,54 @@ export function dockerImageInspectArgs(image: string): string[] {
   ];
 }
 
+/** Repo digest when the image was pushed or built with one, otherwise the local image id. */
+export function dockerImageDigestArgs(image: string): string[] {
+  return [
+    "image",
+    "inspect",
+    "-f",
+    "{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}{{.Id}}{{end}}",
+    image,
+  ];
+}
+
+const IMAGE_DIGEST = /^sha256:[0-9a-f]{64}$/;
+
+/**
+ * Swarm still asks Docker Hub for a `name:tag`, even with `--no-resolve-image`.
+ * Pinning the local digest makes the node start the image it already has.
+ */
+export function pinnedImageReference(image: string, inspectLine: string): string {
+  if (image.includes("@")) return image;
+  const token = inspectLine.trim().split(/\s+/)[0] ?? "";
+  const digest = token.includes("@") ? token.slice(token.lastIndexOf("@") + 1) : token;
+  if (!IMAGE_DIGEST.test(digest)) {
+    throw new Error("docker image inspect returned an unusable image id");
+  }
+  return `${image}@${digest}`;
+}
+
 export function dockerCloudContainerListArgs(): string[] {
-  return ["ps", "-q", "--filter", `label=${COMPUTER_ID_LABEL}`];
+  // Computer id is a Swarm *service* label, not a container label. Tasks still
+  // carry com.docker.swarm.service.name=coforge-<computer id>.
+  return ["ps", "-q", "--filter", "label=com.docker.swarm.service.name"];
 }
 
 export function dockerCloudPlacementInspectArgs(containerIds: string[]): string[] {
   return [
     "inspect",
     "-f",
-    `{{index .Config.Labels "${COMPUTER_ID_LABEL}"}} {{.Image}}`,
+    '{{index .Config.Labels "com.docker.swarm.service.name"}} {{.Image}}',
     ...containerIds,
   ];
 }
 
-export function dockerImageVersionArgs(image: string): string[] {
-  return ["run", "--rm", "--network", "none", "--entrypoint", "coforge-computer", image, "-V"];
+const IMAGE_LAYER = /(?:^|@)(sha256:[0-9a-f]{64})$/i;
+
+/** The content-addressed layer, whether the value is a raw id or a tagged digest. */
+export function imageLayerId(reference: string): string | undefined {
+  const match = IMAGE_LAYER.exec(reference.trim());
+  return match?.[1]?.toLowerCase();
 }
 
 export function dockerDesktopInspectArgs(containerId: string): string[] {
@@ -164,7 +224,7 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
     async createService(input) {
       const result = await run(
         spawn,
-        dockerServiceCreateArgs(input),
+        dockerServiceCreateArgs({ ...input, image: await localImageReference(spawn, input.image) }),
         "docker service create failed",
       );
       const id = firstId(result);
@@ -172,12 +232,10 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       return id;
     },
     async removeService(computerId) {
-      const result = await spawn(dockerServiceRemoveArgs(computerId));
-      if (result.exitCode !== 0 && !/no such service/i.test(result.stderr))
-        throw new Error(result.stderr || "docker service rm failed");
-      const volume = await spawn(dockerVolumeRemoveArgs(computerId));
-      if (volume.exitCode === 0 || /no such volume/i.test(volume.stderr)) return;
-      throw new Error(volume.stderr || "docker volume rm failed");
+      const removed = await spawn(dockerServiceRemoveArgs(computerId));
+      if (removed.exitCode !== 0 && !resourceGone(removed.stderr, "service"))
+        throw new Error(removed.stderr || "docker service rm failed");
+      await removeDisk(spawn, computerId);
     },
     async attachWorkspace(input) {
       const containerId = firstId(
@@ -187,7 +245,11 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       await run(spawn, dockerAttachExecArgs(containerId, input.env), "docker exec failed");
     },
     async updateServiceImage(computerId, image) {
-      await run(spawn, dockerServiceUpdateArgs(computerId, image), "docker service update failed");
+      await run(
+        spawn,
+        dockerServiceUpdateArgs(computerId, await localImageReference(spawn, image)),
+        "docker service update failed",
+      );
     },
     async desktopEndpoint(computerId) {
       const listed = await spawn(dockerTaskFindArgs(computerId));
@@ -214,34 +276,31 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       );
       const parsed = parseImageInspect(inspected.stdout);
       if (!parsed) throw new Error("docker image inspect returned an empty image id");
-      const version = parsed.version || (await readImageVersion(spawn, image, parsed.id));
       const list = await spawn(dockerCloudContainerListArgs());
       if (list.exitCode !== 0) throw new Error(list.stderr || "docker ps failed");
       const containerIds = ids(list.stdout);
-      if (containerIds.length === 0) return { image: { id: parsed.id, version }, computers: [] };
+      if (containerIds.length === 0)
+        return {
+          image: { id: imageLayerId(parsed.id) ?? parsed.id, version: parsed.version },
+          computers: [],
+        };
       const details = await run(
         spawn,
         dockerCloudPlacementInspectArgs(containerIds),
         "docker inspect failed",
       );
       return {
-        image: { id: parsed.id, version },
+        image: { id: imageLayerId(parsed.id) ?? parsed.id, version: parsed.version },
         computers: parsePlacement(details.stdout),
       };
     },
   };
 }
 
-const imageVersions = new Map<string, string>();
-
-async function readImageVersion(spawn: DockerSpawn, image: string, imageId: string) {
-  const cached = imageVersions.get(imageId);
-  if (cached) return cached;
-  const result = await run(spawn, dockerImageVersionArgs(image), "computer version probe failed");
-  const version = result.stdout.trim();
-  if (!version) throw new Error("computer version probe returned no version");
-  imageVersions.set(imageId, version);
-  return version;
+async function localImageReference(spawn: DockerSpawn, image: string): Promise<string> {
+  if (image.includes("@")) return image;
+  const inspected = await run(spawn, dockerImageDigestArgs(image), "docker image inspect failed");
+  return pinnedImageReference(image, inspected.stdout);
 }
 
 function parseImageInspect(stdout: string): { id: string; version: string } | undefined {
@@ -259,12 +318,20 @@ function parsePlacement(stdout: string): Array<{ computerId: string; imageId: st
     if (!trimmed) continue;
     const space = trimmed.indexOf(" ");
     if (space < 1) continue;
-    const computerId = trimmed.slice(0, space);
-    const imageId = trimmed.slice(space + 1).trim();
+    const computerId = computerIdFromServiceName(trimmed.slice(0, space));
+    const rawImage = trimmed.slice(space + 1).trim();
+    const imageId = imageLayerId(rawImage) ?? rawImage;
     if (!computerId || !imageId) continue;
     computers.push({ computerId, imageId });
   }
   return computers;
+}
+
+function computerIdFromServiceName(name: string): string | undefined {
+  const prefix = "coforge-";
+  if (!name.startsWith(prefix)) return undefined;
+  const computerId = name.slice(prefix.length);
+  return computerId.length > 0 ? computerId : undefined;
 }
 
 function ids(stdout: string): string[] {

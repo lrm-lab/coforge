@@ -15,18 +15,13 @@ import { signComputerAccessToken } from "./computer-access-token.server";
 
 /** Deliberately excludes I/L/O/0/1/U - a code is read off one screen and typed into another, so
  * every pair a person confuses is a support ticket. U is dropped so the alphabet cannot spell
- * unfortunate words. 8 characters over 26 symbols is ~38 bits, which the attempt limit below is
- * what actually protects; the alphabet only makes the code transcribable. */
+ * unfortunate words. 8 characters over 26 symbols is ~38 bits; the alphabet only makes the code
+ * transcribable. */
 const USER_CODE_ALPHABET = "BCDFGHJKMNPQRSTVWXYZ23456789";
 
 export const DEVICE_CODE_TTL_SECONDS = 15 * 60;
 export const DEVICE_POLL_INTERVAL_SECONDS = 5;
-/** Attempts to enter a user code before a browser session is refused further tries. */
-export const USER_CODE_ATTEMPT_LIMIT = 10;
-
 export const DEVICE_CLIENT_ID = "coforge-computer";
-
-export type DeviceAuthorizationStatus = "pending" | "approved" | "denied" | "consumed";
 
 export type DeviceAuthorizationRecord = {
   id: string;

@@ -16,7 +16,7 @@ import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import {
   AgentWorkspaceFilesQuery,
-  findOwnedWorkspaceFilesAssignment,
+  findWorkspaceFilesAssignment,
 } from "#src/server/agents/agent-workspace-files.server";
 import {
   createCentrifugoServerApi,
@@ -29,9 +29,9 @@ import {
   getAgentWorkspaceDeleteResults,
 } from "#src/server/centrifugo/agent-workspace-files-cache.server";
 
-function buildQuery(db: Parameters<typeof findOwnedWorkspaceFilesAssignment>[0]) {
+function buildQuery(db: Parameters<typeof findWorkspaceFilesAssignment>[0]) {
   return new AgentWorkspaceFilesQuery({
-    findOwned: (viewer, id) => findOwnedWorkspaceFilesAssignment(db, viewer, id),
+    findOwned: (viewer, id) => findWorkspaceFilesAssignment(db, viewer, id),
     online: (scope) => getComputerStatusCache().get(scope),
     publishList: (request) =>
       createCentrifugoServerApi().publish(

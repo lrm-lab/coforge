@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
-import {
-  CATALOG_DISCOVERY_TIMEOUT_MS,
-  discoverCodexCatalog,
-} from "#src/code-agent/runtime-inventory";
+import { CATALOG_DISCOVERY_TIMEOUT_MS } from "#src/code-agent/catalog-discovery";
+import { discoverCodexCatalog } from "#src/code-agent/codex/catalog";
 import {
   CATALOG_DISCOVERY_BUDGET_MS,
   SHORT_CATALOG_DISCOVERY_TIMEOUT_MS,

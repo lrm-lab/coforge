@@ -1,5 +1,6 @@
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 import { getDatabaseClient } from "#src/server/db/client.server";
+import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 import { recordCatalog } from "./record-catalog.server";
 
 export const WEEKLY_REPORT_SCHEDULE_TICK_ENV = "COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS";
@@ -80,7 +81,7 @@ export function startWeeklyReportScheduleTickFromEnv(
   const intervalMs = readWeeklyReportScheduleTickMs(env);
   if (intervalMs === undefined) return undefined;
 
-  return startWeeklyReportScheduleTick({
+  const tick = startWeeklyReportScheduleTick({
     intervalMs,
     runDue: async () => {
       const db = getDatabaseClient();
@@ -88,4 +89,6 @@ export function startWeeklyReportScheduleTickFromEnv(
       return recordCatalog(db).runDueScheduledWeeklyAssignments();
     },
   });
+  onServerShutdown(tick.stop);
+  return tick;
 }

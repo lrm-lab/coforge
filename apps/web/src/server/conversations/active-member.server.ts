@@ -24,3 +24,14 @@ export const ACTIVE_CHANNEL_MEMBER_WHERE = {
   ...ACTIVE_MEMBER_WHERE,
   conversation: { channelName: { not: null } },
 } satisfies Prisma.ConversationMemberWhereInput;
+
+/**
+ * A channel any Workspace member may read: it has a channel name (a DM has none), is not
+ * archived, and is not hidden from the Workspace. The privacy rule for what a surface outside the
+ * Workspace's own members (an installed app) may list.
+ */
+export const PUBLIC_CHANNEL_WHERE = {
+  channelName: { not: null },
+  archivedAt: null,
+  ...VISIBLE_CONVERSATION_WHERE,
+} satisfies Prisma.ConversationWhereInput;

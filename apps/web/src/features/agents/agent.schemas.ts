@@ -75,6 +75,10 @@ const agentInputShape = {
   model: z.string().trim().max(200).optional(),
   modelProvider: z.string().trim().max(100).optional(),
   reasoning: z.string().trim().max(50).optional(),
+  /** Whether the Agent launches with the runtime's Fast service tier. The server re-checks the
+   * provider and the model's reported capability; this only carries the intent. Optional so a
+   * client that predates it keeps parsing, and absent means the ordinary tier. */
+  fastMode: z.boolean().optional(),
   apiKey: apiKeySchema,
 };
 

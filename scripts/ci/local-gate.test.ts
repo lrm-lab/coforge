@@ -70,6 +70,9 @@ test("a stale origin/main judges from its old commit until it is fetched", () =>
   // Someone else's commit reaches main, and this clone builds on it without fetching origin.
   repo.seed({ "theirs.ts": "x".repeat(20_001) });
   repo.ok("push", "-q", remote, "HEAD:main");
+  // Newer git matches a pushed URL to the remote configured with it and advances origin/main;
+  // older git does not. Pin the stale tracking ref so the test does not depend on the version.
+  repo.ok("update-ref", "refs/remotes/origin/main", stale);
   repo.seed({ "mine.md": "# Mine\n" });
 
   const result = runGate();

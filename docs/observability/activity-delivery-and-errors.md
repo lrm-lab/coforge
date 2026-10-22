@@ -53,6 +53,15 @@ attention 或确认旧投递；意外退出仍沿用原有的身份和恢复语�
 强制终止，再等待最多 5 秒确认退出。进程树无法确认退出时停止失败，阻止替换启动并
 显示已有的停止失败 Activity。Grok 的原生后台等待不因此改变。
 
+## 模型请求等待
+
+Pi／内置 Agent 在 SDK 的公开 `agent.streamFunction` 调用处上报 `model_request_started`，
+涵盖工具结束后的下一轮请求；普通 lifecycle/progress 不替代此事实，compaction 保留自己的阶段。
+该观察写入历史，Web 中英文显示“等待模型响应”。仅云端 display 仍是等待时按该条历史时间
+计时，心跳不重置；后续同一 launch 的历史给出阶段耗时。租约过期时显示等待状态更新，
+不据此判定模型故障。计时是 best-effort 观察间隔，不是服务端精确首 token 延迟。
+请求发起本身不是模型已就绪，不结束首次启动的 120 秒截止，也不算输入已得到回答。
+
 ## 错误与重连的单一转换点
 
 `AgentRuntimeEvent`（`packages/agent/src/contract.ts`）的 `error` 成员
@@ -61,9 +70,10 @@ attention 或确认旧投递；意外退出仍沿用原有的身份和恢复语�
 `maxAttempts`/`delayMs`/`message`）是四个 provider（Claude Code、Codex、Kiro、Pi）唯一允许上报运行时失败
 和重连的方式，只携带原始事实，不带格式化或分类。`packages/daemon/src/agent-runtime/
 runtime-error-activity.ts` 是把这些事实变成可见 Activity 的唯一位置：provider 报错文案
-原样显示；崩溃摘要（`Crashed (...)`）脱敏并截断到 512 个 Unicode 码点；附带的 `Error: …` trajectory
+原样显示（需要人处理的错误除外——见下方「需要人处理的运行时错误」，其文案被改写为
+处理提示）；崩溃摘要（`Crashed (...)`）脱敏并截断到 512 个 Unicode 码点；附带的 `Error: …` trajectory
 entry，以及运行中错误的 `runtimeError`（`errorClass`/
-`errorReason`/`fingerprint`）结构化字段的分类，都只在这一个模块里发生（启动失败的分类见下方
+`errorReason`/`fingerprint`/`requiredAction`）结构化字段的分类，都只在这一个模块里发生（启动失败的分类见下方
 [启动失败原因](#启动失败原因)，在 `launch-failure.ts`）；`error` 事件
 额外携带的 `providerErrorCode`/`providerErrorClass`/`providerErrorReason` 会被优先
 采用（例如 Codex 的 turn 失败带着原生错误码和 `turn_failed` 这个比通用分类更精确的
@@ -88,7 +98,41 @@ thinking；重试中断当前 thinking，恢复后的文本或 thinking 立即�
 `AgentSession.onExit` 本身不带退出码或信号，所以 Daemon 核心区分「进程崩溃」
 （`runtime_crashed`，文案 `Crashed (...)`) 和其他非主动退出（沿用 `stopped` 文案，
 因为 Agent 的控制状态此时同样是 stopped）时，唯一可用的事实是：这次退出之前最近一次
-`error` 事件是否已经被一个 `completed` 事件解决过。
+`error` 事件是否已经被一个 `completed` 事件解决过。例外是让人处理的错误把它带下线：
+进程退出时重发的是该错误的 Activity，不再是 `runtime_crashed`。
+
+## 需要人处理的运行时错误（Agent 下线）
+
+与参考客户端 1.0.51 对齐：`runtime-error-classification.ts` 的分类结果带
+`requiredAction`（`user_reauth`：任何 `AuthError`；`user_model_access`：plan-access 措辞的
+`ModelConfigError`——「plan/subscription 不含该模型」，先排除限流、容量等暂态措辞）和
+`takesAgentOffline`（action-required；`BillingError`——HTTP 402 或额度/余额耗尽措辞，
+`billing_exhausted`；或 sticky 的「model not supported/unsupported model」）。一旦发生
+——回合中、启动输入、或启动时 `createAgentSession` 直接抛错——Daemon
+结束进程、发送 `agent:status(inactive)`，并把可见 `detail` 改写为面向人的处理提示
+（重新登录/换模型或升级套餐；billing 文案提示余额已耗尽、等待中的消息在 Agent 重启后
+会送达、充值或为该 Agent 换模型/provider），`entries` 里附诊断子类
+（`provider_plan_access_error`、`host_claude_login_required`、
+`custom_provider_missing_key`/`invalid_key`/`auth_error`、
+`builtin_provider_auth_error`、`runtime_auth_error`）和脱敏后的原文摘录。`runtimeError`
+额外携带 `requiredAction`（proto `AgentActivity.runtime_error_action`）；`BillingError`
+不带 `requiredAction`，也无诊断子类。
+
+同一指纹的相同 runtime error 连续出现 3 次（中间无回合结束或输出）会触发 fingerprint
+fence，同样走下线路径：可见 `detail` 为
+`Runtime stopped after <N> repeated runtime errors with the same fingerprint (<fp>). Last error: <msg> Restart after the runtime/tooling issue is fixed.`，
+`runtimeError.errorReason` 为 `runtime_error_fenced`，`errorClass` 沿用底层错误的分类。
+
+下线的错误有：`requiredAction` 非空的（`user_reauth` 重新登录、`user_model_access`
+换模型/升级套餐）、`BillingError`（provider 余额耗尽，无 `requiredAction`）和同一指纹
+连续 3 次错误触发的熔断（`runtime_error_fenced`，无 `requiredAction`）。下线即终态驻留：
+进程结束后不保留 restart config，Daemon 也不自行重启。后续投递由
+Daemon 接管：排入 `AgentDeliveryQueue` 等待下一次 launch 并立即 ACK，同时重发
+`inactive` 与该错误 Activity（更高的 clientSeq）；已消费的投递仍只 ACK、不再排队。
+下一次 launch 的首个 notice 呈现这些排队的投递（或服务端恢复通知覆盖它们）。显式
+Stop、下一次 `active` 状态或 Agent 离开本机时清除该记录——Stop 之后投递恢复为
+`no_process` 拒绝。其余 terminal 类（超时、model not found）只停掉投递退避，Agent
+仍可被唤醒。
 
 ## 启动失败原因
 

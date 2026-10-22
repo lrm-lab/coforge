@@ -7,13 +7,12 @@ These rules apply to `src/server/conversations/`.
 - `channel-coordination.server.ts` owns current coordinator context and role changes after `PublicChannels.setCoordinator` authorizes the channel: atomically store a system Message and old/new coordinator deliveries, even when muted or stopped. Repeated settings are a no-op. Channel reads show current roles, including threads and restart recovery; never rewrite stored messages or Agent memory.
 - `chat-sections.server.ts` owns personal Chat groups, their saved collapse state, and assigning a member's conversations, scoped to that user and Workspace.
   Deleting a group keeps its conversations; moving into one unpins that row. Group and row ordering takes the member pin lock before conversation locks.
-- `PublicChannels` (`public-channels.server.ts`) owns Workspace authorization, default-channel enrollment, channel membership, canonical read/write and ordering, human read positions, persistent follow state, and
-  mute/mention delivery eligibility. `channelAgentRecipients` is the one rule for which Agents a sent channel message wakes, whether a person or an Agent
+- `PublicChannels` (`public-channels.server.ts`) owns Workspace authorization, default-channel enrollment, channel membership, canonical read/write and ordering, human read positions, persistent follow state, and mute/mention delivery eligibility. `channelAgentRecipients` is the one rule for which Agents a sent channel message wakes, whether a person or an Agent
   sent it; the Agent send path in the direct-conversation repository calls it too, and `enrollThreadReplyFollowers`, the one rule for who a thread reply makes a follower. A Task and an action card keep their own rules.
 - The active registered Workspace Memory Agent also receives channel Message observations, including messages addressed to another Agent. These ordinary observations are coalesced by the daemon (five updates or 30 seconds); personal mentions remain immediate. Only `message_read` consumes the full channel increment. Memory's own sends are excluded, and stopped Agents, departed members and a disabled memory profile are not observers.
-- `DirectConversations` (`direct-conversations.server.ts`) owns the viewer's direct conversations by id: opening one by who it is with (only their own
-  live Agent, or a Workspace member), `authorize` (who may use a conversation id and who it is with: a DM with an Agent is its creator's alone, and a
-  deleted Agent's DM is read-only), every page operation (read a window, updates, read cursors, reactions, send) and the viewer's Direct messages
+- `DirectConversations` (`direct-conversations.server.ts`) owns the viewer's direct conversations by id: opening one by who it is with (a live Agent they
+  may message per `canDirectMessageAgent`, or a member), `authorize` (who may use a conversation id and who it is with: a DM with an Agent is its key's
+  person's while they may message it, and a deleted Agent's DM is read-only), every page operation (read a window, updates, read cursors, reactions, send) and the viewer's Direct messages
   list (`list`, `unreadCounts`, pin, mark unread, close). A DM with an Agent and one between members share each operation; only a send branches, to
   `SendDirectMessage` or `UserDirectConversations`. Server Functions call it and stay thin; do not key a new DM operation by Agent.
 - `viewerDirectConversationWhere` (`viewer-direct-conversations.server.ts`) is the one filter for the DMs a viewer's list holds (the ones `authorize`

@@ -1,10 +1,8 @@
 import { isFormRequest } from "#src/lib/form-request";
+import { bearerChallenge, bearerToken } from "./bearer-challenge.server";
 import { activeGrant, scopeClaims, type GrantStore } from "./grants.server";
 import { NO_STORE } from "./http-headers.server";
 import { verifyAccessToken, type TokenIssuer } from "./issued-tokens.server";
-
-/** RFC 6750 §2.1: `Bearer` and a b64token. */
-const BEARER = /^Bearer +([A-Za-z0-9\-._~+/]+=*) *$/i;
 
 /**
  * The UserInfo endpoint (OIDC Core §5.3): the claims an access token's scopes release about the
@@ -52,18 +50,10 @@ export class UserInfoEndpoint {
     status: 400 | 401;
     description: string;
   }): Response {
-    const realm = `Bearer realm="${this.options.issuer}"`;
-    if (!refusal)
-      return new Response(null, {
-        status: 401,
-        headers: { ...NO_STORE, "www-authenticate": realm },
-      });
-    return Response.json(
-      { error: refusal.error, error_description: refusal.description },
-      {
-        status: refusal.status,
-        headers: { ...NO_STORE, "www-authenticate": `${realm}, error="${refusal.error}"` },
-      },
+    return bearerChallenge(
+      this.options.issuer,
+      refusal?.status ?? 401,
+      refusal && { error: refusal.error, description: refusal.description },
     );
   }
 }
@@ -80,7 +70,7 @@ async function presentedToken(request: Request): Promise<PresentedToken> {
     return { status: "invalid_request", description: "send the access token one way only" };
   if (fromForm !== undefined) return { status: "presented", token: fromForm };
   if (authorization === null) return { status: "absent" };
-  const token = BEARER.exec(authorization)?.[1];
+  const token = bearerToken(authorization);
   return token
     ? { status: "presented", token }
     : { status: "invalid_request", description: "the Authorization header is not a Bearer token" };

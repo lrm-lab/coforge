@@ -388,14 +388,6 @@ export function createMemoryFenceTools(
   ];
 }
 
-/** The only model-callable tools available under the openviking-memory fence. */
-export function createOpenVikingMemoryTools(
-  budget: MemoryAgentTurnBudget,
-  proxy?: MemoryAgentProxy,
-) {
-  return createMemoryFenceTools("openviking-memory", budget, proxy);
-}
-
 export const createRuntime: CreateAgentSessionRuntimeFactory = async ({
   cwd,
   agentDir,

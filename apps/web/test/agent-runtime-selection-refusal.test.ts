@@ -55,6 +55,26 @@ test("each reason a Computer cannot run the Agent is told apart, as the referenc
   expect(agentRuntimeSelectionRefusal(claude, inventory({ models: [] }))).toBe("model_missing");
 });
 
+test("Fast mode is accepted for any Claude Code or Codex model, and refused by other runtimes", () => {
+  const fastClaude = { ...claude, fastMode: true };
+  // The reference offers it for every model of the two runtimes.
+  expect(agentRuntimeSelectionRefusal(fastClaude, inventory())).toBeNull();
+  // The runtime's default model, too.
+  expect(
+    agentRuntimeSelectionRefusal({ ...fastClaude, model: "", modelProvider: "" }, inventory()),
+  ).toBeNull();
+  // A runtime whose adapter applies no service tier never offers it.
+  expect(
+    agentRuntimeSelectionRefusal(
+      { ...fastClaude, provider: RUNTIME_PROVIDER.PI },
+      inventory({
+        reported: [RUNTIME_PROVIDER.PI],
+        models: [sonnet],
+      }),
+    ),
+  ).toBe("fast_mode_unsupported");
+});
+
 test("the built-in runtime counts Pi on the Computer as offering it", () => {
   const builtIn = { ...claude, provider: RUNTIME_PROVIDER.COFORGE, model: "", modelProvider: "" };
   expect(

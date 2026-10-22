@@ -90,7 +90,7 @@ function DirectMessagePicker({ onDone, onCreate }: { onDone: () => void; onCreat
       id: "agents",
       label: m.member_agent(),
       members: (directory.data?.agents ?? [])
-        .filter((agent) => agent.ownedByCurrentUser && matches(agent.name, agent.handle))
+        .filter((agent) => agent.canMessage && matches(agent.name, agent.handle))
         .map((agent) => ({ ...agent, peer: { agentId: agent.id } })),
     },
     {

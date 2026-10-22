@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   discoverCodeAgentCatalogs,
-  discoverExternalCodeAgents,
   loadCachedCodeAgentCatalogs,
-  type ExternalCodeAgentProbe,
 } from "#src/code-agent/runtime-inventory";
+import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
+import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
 import { fileStatCacheKey, writeInventoryCache } from "#src/code-agent/runtime-inventory-cache";
 import { OPENCODE_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
 

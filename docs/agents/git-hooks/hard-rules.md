@@ -31,9 +31,17 @@ one `hard-rules: <message>` line, prefixed `::error::` on GitHub Actions.
 | Rule | Fails when |
 | --- | --- |
 | `size-ratchet` | The change adds a file over the 5,000-token limit, or one crosses or grows beyond it, by the [size limit table](size-limit.md) (in CI, the range's base in place of HEAD). |
+| `markdown-lines` | A Markdown file the change adds or edits has 200 lines or more. Whole-tree mode checks every tracked Markdown file. |
 | `markdown-links` | A relative link `](path)` in a Markdown file the change adds or edits names no tracked file or directory, or a link in any Markdown file names a path the change deletes or renames away. |
 | `new-suppression` | An added line carries a lint, type-check or test suppression (list below). Existing ones are not flagged. |
 | `author-identity` | The author or the committer looks like an Agent or bot (patterns below). |
+
+**Markdown length.** Markdown means `.md`, `.mdx`, `.mdc`, and `.markdown`. A file must have
+fewer than 200 lines: line 200 is already a violation. A final unterminated line counts, while a
+trailing newline does not add an empty line. Change modes check added and edited Markdown only;
+`--all` checks every tracked Markdown file. Split a long document into a topic directory with a
+short `README.md` overview linking to focused files, move each section to its owning file, and
+update incoming links.
 
 **Links.** Inline links, whose destination may hold balanced parentheses (`foo_(bar).md`), and
 reference definitions: `[label]: path` alone on its line or followed only by a quoted or
@@ -83,7 +91,7 @@ Agent (root `AGENTS.md`).
 
 **The one exemption.** Files under a skill directory registered in `skills-lock.json`
 (`.agents/skills/<name>/`, read from the change's base) are vendored upstream content: the
-file rules (size, links, suppressions) skip them; the identity rule does not. Project skills that
+file rules (size, Markdown length and links, suppressions) skip them; the identity rule does not. Project skills that
 are not in the lock are checked like any other file. This is the only exemption the hard rules
 add. The size rule also keeps the two skips it was approved with (task #25): files marked
 `linguist-generated` and binary files ([size limit](size-limit.md#files-that-are-not-checked)).

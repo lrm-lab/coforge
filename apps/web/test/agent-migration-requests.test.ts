@@ -209,7 +209,12 @@ test("a move checks the target against the Agent's stored selection, key include
     modelProvider: "anthropic",
     reasoning: "high",
     hasApiKey: false,
+    // The stored selection carries the Fast intent too, so a move re-checks it.
+    fastMode: false,
   });
+  expect(
+    storedRuntimeSelection({ ...base, provider: { kind: "default" }, fastMode: true }).fastMode,
+  ).toBe(true);
   expect(
     storedRuntimeSelection({
       ...base,

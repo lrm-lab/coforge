@@ -38,7 +38,7 @@ Daemon、服务端存储和前端展示使用同一契约，每条 activity 固�
 | `idle` | Agent 当前没有执行中的 turn（一次 turn 完成，且它启动的后台 task 都已结束，见 `subagent_activity`） |
 | `running_command` | Agent 正在执行命令 |
 | `reading_file` / `writing_file` / `editing_file` | Agent 的文件工具操作 |
-| `runtime_error`（`runtimeError.errorClass=LauncherError`） | 启动失败：`errorReason` 为稳定原因（见[启动失败原因](activity-delivery-and-errors.md#启动失败原因)），`detail` 给出原因和下一步 |
+| `runtime_error`（`runtimeError.errorClass=LauncherError`） | 启动失败：`errorReason` 为稳定原因（见[启动失败原因](activity-delivery-and-errors.md#启动失败原因)），`detail` 给出原因和下一步；下线类见[该节](activity-delivery-and-errors.md#需要人处理的运行时错误agent-下线) |
 | `runtime_error`（无 `runtimeError`） | 安全回收失败（进程未确认退出）；使用脱敏后的可操作原因 |
 | `error` / `warning` | provider 运行错误或可恢复警告 |
 
@@ -109,12 +109,9 @@ turn/message 生命周期事件）；这些信号自 2026-09-18 起统一上报�
 取出已过期的 lease，对每个成员运行 `SWEEP_STALE`：还新鲜则从索引移除；刚过期且未探测过
 则记录一次待定探测并向其 Daemon 发布新的 `agent:activity_probe` 意图；已探测但仍在等待则
 跳过；探测已经等待超过 `ACTIVITY_PROBE_TIMEOUT_MS`（5 秒）则判定为不可达，清除可见忙碌
-状态并直接把结果推给 `agent:status:<workspace_id>`，浏览器不必等自己下一次刷新就能看到
-Agent 变回 online。Daemon 用一条带 `probe_id` 的普通 `agent:activity` 应答，按序取第一条
-成立的：投递给它的消息仍有未读（fingerprint fence 挡住投递时除外；Memory Agent 批量观察的
-普通频道消息不算）则回复 `message_received`
-（`Message received`），启动中回复 `starting`，有最近一条忙碌 Activity 则重发它，否则回复
-`idle`；探测应答本身不算新的忙碌证据。服务端把这条应答当成真实观测处理，
+状态并直接把结果推给 `agent:status:<workspace_id>`，浏览器随即可见 Agent 变回 online。Daemon 用一条带 `probe_id` 的普通 `agent:activity` 应答，按序取第一条
+成立的：仍有未读投递（Memory Agent 批量观察的普通频道消息不算）回复 `message_received`，
+启动中回复 `starting`，有最近一条忙碌 Activity 则重发它，否则回复 `idle`；探测应答不算新的忙碌证据。服务端把它当成真实观测处理，
 而不是当成心跳：只有心跳和 `runtime_progress` 本身不改变可见状态，探测应答可以把展示从
 `working`/`thinking` 纠正为 `idle`，也可以续租并保持忙碌，并清除该 Agent 待定的探测记录。
 探测应答同样不写入 `agent_activities` 历史，也不进入前端“最近活动”列表。浏览器自身完全

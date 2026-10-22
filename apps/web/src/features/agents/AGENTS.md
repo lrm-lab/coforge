@@ -48,10 +48,13 @@ These rules apply to `src/features/agents/`.
 - Render `agent:activity` fields `detail`, `detailKind`, `entries`,
   `observedAtMs`, and the CoForge `level` extension in the Agent-owned timeline
   in this directory.
-- Activity content and labels are **not internationalized**. Use plain English
-  activity labels consistently in the timeline, the Agent card, and chat header.
-  Do not add Activity label translation keys. Navigation, tabs, and general UI
+- Model-request waiting labels and elapsed-time captions are localized in the timeline,
+  Agent card, and chat header. Other existing Activity labels remain plain English.
+  Preserve provider content in its original language. Navigation, tabs, and general UI
   remain localized.
+- The model-wait clock uses the retained request observation, never heartbeat time.
+  Only the cloud display authorizes a live clock; hide timing without matching history
+  and stop its live claim when that display lease expires. It never decides availability.
 - Preserve provider text, thinking, errors, and warnings in their original
   language and wording, subject to required secret redaction.
 - Display backend status detail. Tool labels come from structured tool names,
@@ -113,6 +116,14 @@ These rules apply to `src/features/agents/`.
   in Settings → Account.
 - Computer prerequisites appear only after the user requests Agent creation.
   Runtime management stays in the profile panel. `cloud-agent-create-dialog.tsx`, opened from the DM picker, asks only for a display name, waits for cloud readiness, and opens the created private Agent's DM; it re-reads the Agent roster, picker directory, and DM list after their writes instead of relying on realtime signals. Creation permissions remain server-owned.
+- Who sees what on an Agent, as Raft does: Message (profile header, Members
+  card, DM picker, search) follows the server's `canMessage` (any member a
+  public Agent, only its creator a private one); the Activity, Reminders and
+  Workspace tabs follow `canManageAgent` (its creator or a Workspace
+  owner/admin), and so do the Activity reads behind the tab and the Agent card:
+  the server answers no one else and the browser does not ask;
+  Start, Stop and Restart are any member's; Full reset is owner/admin only
+  (`AgentControl.execute`).
 - Workspace directory reads belong to
   `features/workspaces/workspaces.functions.ts` and
   `server/workspaces/members.server.ts`; owner-only Agent operations stay
@@ -146,7 +157,8 @@ These rules apply to `src/features/agents/`.
 - While the display says `error`, the profile panel shows the provider's
   original error text (not translated or summarized) in a banner under its
   header on every tab (`agent-error-banner.tsx`), with the Activity tab's
-  diagnostics copy and a way to that tab. Nothing else in the panel repeats it.
+  diagnostics copy and a way to that tab
+  for whoever gets that tab. Nothing else in the panel repeats it.
 - `deleted-agent.tsx` owns archived-sender rendering (grey avatar and `ARCHIVED`
   badge) for every message-history surface. Use it rather than local styling.
 - `agent-avatar-dialog.tsx` is the creator's change-avatar dialog, opened by
@@ -163,6 +175,8 @@ These rules apply to `src/features/agents/`.
   Agent its pending requests and active grants; Approve, Deny, Grant access and Revoke only when
   the read's `canManage` says so (Workspace owner/admin or the Agent's creator). Revoke acts at
   once, with no confirmation, and every failure stays inline at the top of the tab.
+- The Profile tab's computer row opens that Agent's desktop in its own window, titled with the
+  Agent's name, for the cloud computer's owner only. The panel does not embed the desktop.
 - The Skills tab displays Global/Workspace metadata only, never skill bodies
   or a claim that a running session has loaded each entry.
 - The context popover is display-only: no toast and nothing triggers on a

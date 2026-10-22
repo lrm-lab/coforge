@@ -7,6 +7,8 @@
     "pathPattern": [
       "./messages/{locale}/common.json",
       "./messages/{locale}/agents.json",
+      "./messages/{locale}/agent-activity.json",
+      "./messages/{locale}/agent-runtime.json",
       "./messages/{locale}/conversations.json",
       "./messages/{locale}/composer.json",
       "./messages/{locale}/channel-members.json",

@@ -1,9 +1,10 @@
 import { isFormRequest } from "#src/lib/form-request";
-import { appClientSecretMatches } from "#src/server/apps/app-client-secret.server";
 import { hashAuthorizationCode } from "./authorization-codes.server";
-import { readClientCredentials } from "./client-authentication.server";
+import { authenticateClient } from "./client-authentication.server";
+import type { InstallationTokenRefusal, InstallationTokens } from "./installation-tokens.server";
 import { activeGrant, type GrantStore } from "./grants.server";
-import { NO_STORE } from "./http-headers.server";
+import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
+import { NO_STORE, refuseIfRateLimited } from "./http-headers.server";
 import { verifierMatchesChallenge } from "./pkce.server";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
@@ -15,13 +16,14 @@ import {
 /** RFC 6749 §5.2. */
 type TokenErrorCode =
   | "invalid_request"
-  | "invalid_client"
   | "invalid_grant"
-  | "unsupported_grant_type";
+  | "unsupported_grant_type"
+  | InstallationTokenRefusal;
 
 /**
  * The token endpoint (RFC 6749 §4.1.3–4.1.4, OIDC Core §3.1.3): an app redeems an authorization
- * code once for an access token and an ID token. No refresh token is issued.
+ * code once for an access token and an ID token. An app also gets an installation token by
+ * `client_credentials` (RFC 6749 §4.4). No refresh token is issued.
  */
 export class TokenEndpoint {
   private readonly now: () => Date;
@@ -29,6 +31,8 @@ export class TokenEndpoint {
   constructor(
     private readonly store: GrantStore,
     private readonly options: TokenIssuer & { now?: () => Date },
+    private readonly installationTokens: InstallationTokens,
+    private readonly clientCredentialsLimit: AppRateLimit,
   ) {
     this.now = options.now ?? (() => new Date());
   }
@@ -37,23 +41,19 @@ export class TokenEndpoint {
     const form = await readForm(request);
     if (!form)
       return tokenError("invalid_request", "the request must be a form with each parameter once");
-    const credentials = readClientCredentials(request.headers.get("authorization"), form);
-    if (credentials.status === "ambiguous")
-      return tokenError("invalid_request", "use one client authentication method");
-    if (credentials.status === "invalid") return this.unauthenticated();
+    const authenticated = await authenticateClient(request, this.store, this.options.issuer, form);
+    if (authenticated instanceof Response) return authenticated;
+    const { client, clientId } = authenticated;
     const grantType = form.get("grant_type");
     const presentedCode = form.get("code");
     const redirectUri = form.get("redirect_uri");
-    // The client and the code are read together. An unknown client_id is refused without a
-    // secret comparison: client ids are public, so timing reveals nothing secret.
-    const [client, code] = await Promise.all([
-      this.store.findClient(credentials.clientId),
-      presentedCode ? this.store.findCode(hashAuthorizationCode(presentedCode)) : undefined,
-    ]);
-    if (!client || !appClientSecretMatches(client.clientSecretHash, credentials.clientSecret))
-      return this.unauthenticated();
+    const code = presentedCode
+      ? await this.store.findCode(hashAuthorizationCode(presentedCode))
+      : undefined;
 
     if (!grantType) return tokenError("invalid_request", "grant_type is required");
+    if (grantType === "client_credentials")
+      return this.issueInstallationToken({ id: client.id, key: clientId }, form);
     if (grantType !== "authorization_code")
       return tokenError("unsupported_grant_type", "only authorization_code is supported");
     if (!presentedCode || !redirectUri)
@@ -106,8 +106,17 @@ export class TokenEndpoint {
     );
   }
 
-  private unauthenticated(): Response {
-    return tokenError("invalid_client", "client authentication failed", this.options.issuer);
+  /** RFC 6749 §4.4: the app's own installation token; no refresh token (§4.4.3). */
+  private async issueInstallationToken(
+    client: { id: string; key: string },
+    form: URLSearchParams,
+  ): Promise<Response> {
+    // Counted only for an authenticated client, so a flood of bad secrets cannot spend an app's budget.
+    const refusal = await refuseIfRateLimited(this.clientCredentialsLimit, client.id);
+    if (refusal) return refusal;
+    const result = await this.installationTokens.issue(client, form, this.now());
+    if (result.status === "refused") return tokenError(result.error, result.description);
+    return Response.json(result.body, { headers: NO_STORE });
   }
 
   /** RFC 6749 §4.1.2 and §10.5: a code used twice is refused, and the tokens it yielded stop
@@ -132,17 +141,10 @@ async function readForm(request: Request): Promise<URLSearchParams | undefined> 
   return form;
 }
 
-/** RFC 6749 §5.2. `invalid_client` is a 401, which names the scheme to authenticate with
- * (RFC 9110 §15.5.2) whichever method the app tried. */
-function tokenError(error: TokenErrorCode, description: string, realm?: string): Response {
-  const unauthorized = error === "invalid_client";
+/** RFC 6749 §5.2. */
+function tokenError(error: TokenErrorCode, description: string): Response {
   return Response.json(
     { error, error_description: description },
-    {
-      status: unauthorized ? 401 : 400,
-      headers: unauthorized
-        ? { ...NO_STORE, "www-authenticate": `Basic realm="${realm}"` }
-        : NO_STORE,
-    },
+    { status: 400, headers: NO_STORE },
   );
 }

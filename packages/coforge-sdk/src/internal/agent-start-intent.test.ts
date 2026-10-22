@@ -31,6 +31,20 @@ test("round-trips an unmanaged start intent without launchId or controlEpoch", (
   });
 });
 
+test("round-trips the Fast mode request, and omits it when not requested", () => {
+  const fast = { ...base, fastMode: true };
+  expect(decodeAgentStartIntent(encodeAgentStartIntent(fast))).toEqual({
+    ...fast,
+    modelProvider: "",
+    providerConfig: undefined,
+  });
+  // Absent, never an explicit `false`: an older daemon reads "no field" as the ordinary tier.
+  expect(decodeAgentStartIntent(encodeAgentStartIntent(base))).not.toHaveProperty("fastMode");
+  expect(
+    decodeAgentStartIntent(encodeAgentStartIntent({ ...base, fastMode: false })),
+  ).not.toHaveProperty("fastMode");
+});
+
 test("round-trips the openviking-memory tool profile and rejects unknown profiles", () => {
   const fenced = { ...base, toolProfile: "openviking-memory" as const };
   expect(decodeAgentStartIntent(encodeAgentStartIntent(fenced))).toEqual({

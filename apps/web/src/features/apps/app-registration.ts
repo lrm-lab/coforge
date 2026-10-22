@@ -27,6 +27,14 @@ export const APP_FIXED_SCOPES = [
   "identity",
 ] as const satisfies readonly AppScope[];
 
+/** The scopes Login with CoForge lets an app with `allowed` ask for: the fixed ones and any
+ * optional one it is allowed, in `APP_SCOPES` order (the editor and the app detail both show it). */
+export function appLoginScopes(allowed: readonly string[]): AppScope[] {
+  return APP_SCOPES.filter(
+    (scope) => (APP_FIXED_SCOPES as readonly string[]).includes(scope) || allowed.includes(scope),
+  );
+}
+
 export const MAX_REDIRECT_URIS = 10;
 /** The hosts a redirect URI may reach over plain http: a native or development client on the
  * user's own machine (RFC 8252 §7.3). */
@@ -66,7 +74,7 @@ const REFUSE = { ok: false as const };
  * points. Control and bidirectional characters are refused (the rule for a person's name), except
  * line breaks where `lines` allows them; a required text must not be only invisible characters.
  */
-const text =
+export const text =
   (min: number, max: number, { lines = false } = {}): FieldCheck<string> =>
   (value) => {
     if (typeof value !== "string") return REFUSE;

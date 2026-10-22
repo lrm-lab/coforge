@@ -1,4 +1,5 @@
-import { RedisClient } from "bun";
+import type { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import {
   decodeDaemonRuntimeProviderModelRefreshResponse,
   encodeDaemonRuntimeProviderModelRefreshResponse,
@@ -30,6 +31,6 @@ export class RedisModelCatalogRefreshResults extends RedisPendingResults<
 let singleton: RedisModelCatalogRefreshResults | undefined;
 export function getModelCatalogRefreshResults() {
   return (singleton ??= new RedisModelCatalogRefreshResults(
-    new RedisClient(redisUrlFor("Model catalog refresh")),
+    openRedisClient(redisUrlFor("Model catalog refresh")),
   ));
 }

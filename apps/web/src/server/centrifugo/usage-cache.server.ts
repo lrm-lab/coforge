@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import {
   SCAN_RESULT_STALE_AFTER_MS,
@@ -169,6 +169,6 @@ export class RedisUsageCache implements UsageCache {
 
 let singleton: RedisUsageCache | undefined;
 export function getUsageCache() {
-  singleton ??= new RedisUsageCache(new RedisClient(redisUrlFor("usage cache")));
+  singleton ??= new RedisUsageCache(openRedisClient(redisUrlFor("usage cache")));
   return singleton;
 }

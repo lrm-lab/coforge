@@ -2,7 +2,7 @@
 // `.githooks/pre-commit` runs them on the commit being made (`--staged`); CI's Plan checks job runs
 // them over the pushed or proposed range (`--range`; a base that is not a commit skips them with a
 // warning). The one exemption: files under a skill directory registered in skills-lock.json are
-// vendored, and the file rules (size, links, suppressions) skip them.
+// vendored, and the file rules (size, Markdown length and links, suppressions) skip them.
 // See docs/agents/git-hooks/hard-rules.md.
 //
 // usage: bun scripts/ci/hard-rules.ts --staged | --all
@@ -10,8 +10,8 @@
 //   --authors-since: a push checks the authors of only the commits it introduced (`<rev>..<head>`;
 //   given more than once, those reachable from none of the revs), so a pushed bot commit fails one
 //   run, not every run until main is rewritten; revs that are not commits fall back to the range.
-//   --all checks the rules that hold for a whole tree: HEAD's Markdown links and every author in
-//   HEAD's history. Exit 1 lists violations on stderr.
+//   --all checks every Markdown file's length and links in HEAD, and every author in its history.
+//   Exit 1 lists violations on stderr.
 import { dirname } from "node:path";
 import {
   type ChangeSource,
@@ -25,11 +25,18 @@ import {
 import { commitIdentities, type IdentityMatch, stagedIdentities } from "./commit-identity";
 import { linkPath, markdownLinks } from "./markdown-links";
 
-type Rule = "size-ratchet" | "markdown-links" | "new-suppression" | "author-identity";
+type Rule =
+  | "size-ratchet"
+  | "markdown-lines"
+  | "markdown-links"
+  | "new-suppression"
+  | "author-identity";
 type Violation = { rule: Rule; location: string; found: string };
 
 const FIX: Record<Rule, string> = {
   "size-ratchet": SIZE_FIX,
+  "markdown-lines":
+    "Split the document into a topic directory: keep a short README.md overview that links to focused Markdown files, move each section into its owning file, and update incoming links.",
   "markdown-links":
     "Point each link at a file or directory tracked in the change (relative to the Markdown file; a leading / is the repository root), or remove the link.",
   "new-suppression":
@@ -285,6 +292,32 @@ function linkViolations(
   );
 }
 
+function markdownLineCount(text: string): number {
+  if (text.length === 0) return 0;
+  const newlineCount = text.split("\n").length - 1;
+  return newlineCount + (text.endsWith("\n") ? 0 : 1);
+}
+
+/** Markdown at 200 lines or more in `source`'s result, limited to changed files when provided. */
+function markdownLineViolations(
+  source: ChangeSource,
+  exempt: (path: string) => boolean,
+  changes?: Change[],
+): Violation[] {
+  const candidates =
+    changes === undefined
+      ? trackedPaths(source)
+      : changes.filter((change) => !change.status.startsWith("D")).map((change) => change.path);
+  const checked = [...new Set(candidates.filter((path) => MARKDOWN.test(path) && !exempt(path)))];
+  const contents = readFiles(resultRevision(source), checked);
+  return checked.flatMap((path) => {
+    const lines = markdownLineCount(contents.get(path) ?? "");
+    return lines < 200
+      ? []
+      : [{ rule: "markdown-lines" as const, location: path, found: `${lines} lines` }];
+  });
+}
+
 /** Suppressions the change adds. One the change also removes from a checked file, anywhere, was
  * moved or edited around: each removed suppression accounts for one identical added one. */
 function suppressionViolations(
@@ -339,12 +372,14 @@ const isCommit = (revision: string) =>
     stderr: "ignore",
   }).exitCode === 0;
 
-/** The file rules over a change: the size ratchet, links and new suppressions. */
+/** The file rules over a change: size, Markdown length and links, and new suppressions. */
 async function fileViolations(source: ChangeSource): Promise<Violation[]> {
   const exempt = exemption(source);
+  const changes = changedFiles(source);
   return [
     ...(await sizeRatchet(source, exempt)),
-    ...linkViolations(source, exempt, changedFiles(source)),
+    ...markdownLineViolations(source, exempt, changes),
+    ...linkViolations(source, exempt, changes),
     ...suppressionViolations(source, exempt),
   ];
 }
@@ -388,8 +423,10 @@ async function check(args: string[]): Promise<Violation[] | string> {
     // Only the range's head is read when no changes are given.
     const head = text(["rev-parse", "--verify", "HEAD^{commit}"]).trim();
     const source: ChangeSource = { kind: "range", base: head, head };
+    const exempt = exemption(source);
     return [
-      ...linkViolations(source, exemption(source)),
+      ...markdownLineViolations(source, exempt),
+      ...linkViolations(source, exempt),
       ...identityViolations(commitIdentities([head])),
     ];
   }

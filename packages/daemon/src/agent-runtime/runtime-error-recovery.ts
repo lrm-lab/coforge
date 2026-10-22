@@ -131,9 +131,10 @@ export class RuntimeErrorFingerprintFence {
    * stopped retrying after. */
   constructor(readonly threshold: number = RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD) {}
 
-  /** Records one retryable failure carrying `fingerprint` for `agentId`. A fingerprint different
-   * from the one last seen restarts the streak at one, matching a brand-new problem rather than a
-   * repeat of the last one. */
+  /** Records one runtime failure carrying `fingerprint` for `agentId` — every failure the caller
+   * reports counts, retryable or not (offline-taking ones never reach it). A fingerprint
+   * different from the one last seen restarts the streak at one, matching a brand-new problem
+   * rather than a repeat of the last one. */
   note(agentId: string, fingerprint: string): RuntimeErrorFingerprintFenceState {
     const existing = this.#state.get(agentId);
     const attempts = existing && existing.fingerprint === fingerprint ? existing.attempts + 1 : 1;

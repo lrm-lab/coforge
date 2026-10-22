@@ -11,8 +11,9 @@ import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
 /**
  * The Agent's current error, under the panel header on every tab, for as long as the cloud
  * display says `error`: the provider's own wording after `Error:` (two lines; the whole of it on
- * hover), a copy of the Activity tab's diagnostic block and a way to that tab, except on the tab
- * itself, whose own band copies it. It leaves on its own once the display moves on.
+ * hover), and, for whoever gets the Activity tab, a copy of its diagnostic block and a way to it,
+ * except on the tab itself, whose own band copies it. It leaves on its own once the display moves
+ * on.
  */
 export function AgentErrorBanner({
   agent,
@@ -24,7 +25,8 @@ export function AgentErrorBanner({
   display: AgentDisplaySnapshot;
   /** The Activity tab is open: the banner leaves the copy to its band. */
   onActivityTab: boolean;
-  /** Opens the Activity tab; absent when the viewer cannot see it. */
+  /** Opens the Activity tab; absent when the viewer cannot see it, and the diagnostics copy (which
+   * reads the tab's feed) goes with it. */
   onViewLogs?: () => void;
 }) {
   // "Error: <detail>", the same label the DM header and the Activity log give this state.
@@ -42,21 +44,19 @@ export function AgentErrorBanner({
           <span className="line-clamp-2 text-sm break-words text-primary">{label}</span>
         </TooltipTrigger>
       </Tooltip>
-      {!onActivityTab && (
+      {!onActivityTab && onViewLogs && (
         <div className="-my-1 flex shrink-0 items-center gap-1">
           <CopyDiagnosticsButton agent={agent} display={display} />
-          {onViewLogs && (
-            // Underlined at rest, not only on hover: a text link in a status line has to read as
-            // one before the pointer finds it.
-            <Button
-              color="link-gray"
-              size="sm"
-              className="*:data-text:decoration-fg-quaternary *:data-text:underline-offset-2"
-              onPress={onViewLogs}
-            >
-              {m.agent_error_banner_view_logs()}
-            </Button>
-          )}
+          {/* Underlined at rest, not only on hover: a text link in a status line has to read as
+              one before the pointer finds it. */}
+          <Button
+            color="link-gray"
+            size="sm"
+            className="*:data-text:decoration-fg-quaternary *:data-text:underline-offset-2"
+            onPress={onViewLogs}
+          >
+            {m.agent_error_banner_view_logs()}
+          </Button>
         </div>
       )}
     </div>

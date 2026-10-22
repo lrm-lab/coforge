@@ -2,13 +2,12 @@ import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
 
-test("chat activity history uses a compact parameterized member-scoped query", async () => {
+test("chat activity history uses a compact parameterized manager-scoped query", async () => {
   let query: unknown[] = [];
   const db = {
-    workspaceMembership: { findUnique: async () => ({ role: "member" }) },
     agent: {
-      // The viewer's own visible-Agent ids are read once, through the shared
-      // `visibleAgentWhere` seam, and passed into the CTE's WHERE — never re-derived in SQL.
+      // The ids of the Agents the viewer manages are read once, through the shared
+      // `managedAgentWhere` seam, and passed into the CTE's WHERE — never re-derived in SQL.
       findMany: async () => [{ id: "agent-1" }, { id: "agent-empty" }],
     },
     $queryRaw: async (...input: unknown[]) => {
@@ -41,7 +40,7 @@ test("chat activity history uses a compact parameterized member-scoped query", a
       ];
     },
   } as unknown as PrismaClient;
-  expect(await new AgentActivityRepository(db).listForMember("workspace-1", "user-1")).toEqual([
+  expect(await new AgentActivityRepository(db).listForManager("workspace-1", "user-1")).toEqual([
     {
       id: "agent-1",
       activity: [
@@ -79,10 +78,9 @@ test("chat activity history uses a compact parameterized member-scoped query", a
   expect(sql).toContain('compact."detail"');
 });
 
-test("chat activity history never runs the compact query when the viewer can see no Agent", async () => {
+test("chat activity history never runs the compact query when the viewer manages no Agent", async () => {
   let queried = false;
   const db = {
-    workspaceMembership: { findUnique: async () => ({ role: "member" }) },
     agent: { findMany: async () => [] },
     $queryRaw: async () => {
       queried = true;
@@ -90,6 +88,6 @@ test("chat activity history never runs the compact query when the viewer can see
     },
   } as unknown as PrismaClient;
 
-  expect(await new AgentActivityRepository(db).listForMember("workspace-1", "user-1")).toEqual([]);
+  expect(await new AgentActivityRepository(db).listForManager("workspace-1", "user-1")).toEqual([]);
   expect(queried).toBe(false);
 });

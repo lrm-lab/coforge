@@ -1,4 +1,6 @@
 import { Centrifuge, disconnectedCodes, type ErrorContext } from "centrifuge/build/protobuf";
+import type { PiChatRequest, PiChatFrame } from "@lrm/coforge-sdk/internal/pi-chat-wire";
+import { DaemonQueries } from "./daemon-queries";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import type {
   AgentActionPrepareRequest,
@@ -36,6 +38,7 @@ import {
 import { DaemonConnectionRefusedError } from "./daemon-connection-refused-error";
 import { DaemonConnectionStoppedError } from "./daemon-connection-stopped-error";
 import { HELD_NOTICE_CAP, HeldPublications } from "./held-publications";
+import { AgentObservationPublisher } from "./agent-observation-publisher";
 import {
   daemonConnectRejectionReason,
   type DaemonConnectData,
@@ -44,38 +47,27 @@ import {
   encodeAgentControlResult,
   encodeAgentSessionReport,
   encodeAgentSessionInvalidate,
-  encodeAgentContextUsage,
   AGENT_CONTROL_RESULT_METHOD,
   AGENT_SESSION_METHOD,
   AGENT_SESSION_INVALIDATE_METHOD,
   AGENT_CONTEXT_USAGE_METHOD,
+  AGENT_SERVICE_TIER_METHOD,
   type AgentWorkspaceResetRequest,
   type AgentControlResult,
   type AgentSessionReport,
   type AgentSessionInvalidate,
   type AgentContextUsage,
+  type AgentServiceTier,
   decodeAgentStartIntent,
   decodeAgentStopIntent,
   decodeAgentActivityProbe,
   decodeAgentInboxPurge,
-  decodeAgentSkillsListRequest,
-  encodeAgentSkillsListResult,
-  AGENT_SKILLS_LIST_RESULT_METHOD,
   type AgentSkillsListRequest,
   type AgentSkillsListResult,
-  decodeAgentWorkspaceFilesListRequest,
-  encodeAgentWorkspaceFilesListResult,
-  AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD,
   type AgentWorkspaceFilesListRequest,
   type AgentWorkspaceFilesListResult,
-  decodeAgentWorkspaceFileReadRequest,
-  encodeAgentWorkspaceFileReadResult,
-  AGENT_WORKSPACE_FILE_READ_RESULT_METHOD,
   type AgentWorkspaceFileReadRequest,
   type AgentWorkspaceFileReadResult,
-  decodeAgentWorkspaceDeleteRequest,
-  encodeAgentWorkspaceDeleteResult,
-  AGENT_WORKSPACE_DELETE_RESULT_METHOD,
   type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceDeleteResult,
   type ComputerUpgradeResult,
@@ -353,6 +345,8 @@ export interface DaemonConnectionClient {
   ready(createRequest: () => DaemonRuntimeReadyRequest, signal?: AbortSignal): Promise<void>;
   updateCodeAgents?(request: DaemonRuntimeCodeAgentsUpdateRequest): Promise<void>;
   onSkillsList?(callback: (request: AgentSkillsListRequest) => Promise<void>): () => void;
+  onPiChatRequest?(callback: (request: PiChatRequest) => Promise<void>): () => void;
+  sendPiChatFrame?(frame: PiChatFrame): Promise<void>;
   sendSkillsListResult?(result: AgentSkillsListResult): Promise<void>;
   onWorkspaceFilesList?(
     callback: (request: AgentWorkspaceFilesListRequest) => Promise<void>,
@@ -409,6 +403,9 @@ export interface DaemonConnectionClient {
   /** Fire-and-forget: never blocks or fails a turn. Buffered latest-per-agent while
    * disconnected and flushed on reconnect, like `sendSessionInvalidate`. */
   sendAgentContextUsage?(message: AgentContextUsage): void;
+  /** Fire-and-forget observation of the launch's service tier, buffered and flushed the same way
+   * as `sendAgentContextUsage`. */
+  sendAgentServiceTier?(message: AgentServiceTier): void;
   sendAgentDeliveryAck?(ack: AgentMessageDeliveryAck): Promise<void>;
   /** Rejects a delivery the daemon did not take custody of back to the server; never an ACK. */
   sendAgentDeliveryRejection?(rejection: AgentMessageDeliveryRejection): Promise<void>;
@@ -549,16 +546,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   readonly #appConfigSync = new ListenerSlot<(sync: AppConfigSync) => void>();
   readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
   readonly #agentMigrationCancel = new ListenerSlot<(cancel: AgentMigrationCancel) => void>();
-  readonly #skillsList = new ListenerSlot<(request: AgentSkillsListRequest) => Promise<void>>();
-  readonly #workspaceFilesList = new ListenerSlot<
-    (request: AgentWorkspaceFilesListRequest) => Promise<void>
-  >();
-  readonly #workspaceFileRead = new ListenerSlot<
-    (request: AgentWorkspaceFileReadRequest) => Promise<void>
-  >();
-  readonly #workspaceDelete = new ListenerSlot<
-    (request: AgentWorkspaceDeleteRequest) => Promise<void>
-  >();
+  readonly #queries = new DaemonQueries((method, bytes) => this.#rpc(method, bytes));
   readonly #usageScan = new ListenerSlot<
     (request: DaemonRuntimeUsageScanRequest) => Promise<void>
   >();
@@ -608,13 +596,12 @@ export class DaemonConnection implements DaemonConnectionClient {
    * been logged; suppresses repeats for the rest of this connection's lifetime (fix for a log
    * line that used to repeat on every rejected attempt). */
   #loggedUnknownSessionInvalidateMethod = false;
-  /** Latest-per-agent, like `#pendingSessionInvalidate`. No launch-observation drop
-   * rule here: the server's own launch-fence gate already rejects a stale one, and a context
-   * reading is superseded by the next one anyway. */
-  readonly #pendingContextUsage = new Map<string, AgentContextUsage>();
-  /** Same one-per-connection-lifetime log suppression as
-   * `#loggedUnknownSessionInvalidateMethod`, for `agent:context:usage`. */
-  #loggedUnknownContextUsageMethod = false;
+  /** Latest-per-agent per-launch observations (a context-window reading, the applied service
+   * tier): buffered while disconnected, flushed on reconnect, never retried or surfaced. */
+  readonly #observations = new AgentObservationPublisher({
+    contextUsage: AGENT_CONTEXT_USAGE_METHOD,
+    serviceTier: AGENT_SERVICE_TIER_METHOD,
+  });
   /** Same one-per-connection-lifetime log suppression as
    * `#loggedUnknownSessionInvalidateMethod`, for `agent:context_scan_result`. */
   #loggedUnknownContextScanResultMethod = false;
@@ -714,7 +701,7 @@ export class DaemonConnection implements DaemonConnectionClient {
         // Invalidate before Activity on reconnect.
         this.#flushPendingSessionInvalidate(client);
         this.#flushPendingActivity(client);
-        this.#flushPendingContextUsage(client);
+        this.#observations.flush(client);
         for (const status of this.#latestStatuses.values()) this.#queueAgentStatus(client, status);
         this.#startStatusRefresh(config);
         if (reconnect && this.#readyRequestFactory) {
@@ -873,25 +860,16 @@ export class DaemonConnection implements DaemonConnectionClient {
     return this.#agentMigrationCancel.set(callback);
   }
 
-  onSkillsList(callback: (request: AgentSkillsListRequest) => Promise<void>): () => void {
-    return this.#skillsList.set(callback);
-  }
-
-  onWorkspaceFilesList(
-    callback: (request: AgentWorkspaceFilesListRequest) => Promise<void>,
-  ): () => void {
-    return this.#workspaceFilesList.set(callback);
-  }
-
-  onWorkspaceFileRead(
-    callback: (request: AgentWorkspaceFileReadRequest) => Promise<void>,
-  ): () => void {
-    return this.#workspaceFileRead.set(callback);
-  }
-
-  onWorkspaceDelete(callback: (request: AgentWorkspaceDeleteRequest) => Promise<void>): () => void {
-    return this.#workspaceDelete.set(callback);
-  }
+  readonly onSkillsList = this.#queries.skills.onRequest;
+  readonly sendSkillsListResult = this.#queries.skills.sendResult;
+  readonly onWorkspaceFilesList = this.#queries.files.onRequest;
+  readonly sendWorkspaceFilesListResult = this.#queries.files.sendResult;
+  readonly onWorkspaceFileRead = this.#queries.file.onRequest;
+  readonly sendWorkspaceFileReadResult = this.#queries.file.sendResult;
+  readonly onWorkspaceDelete = this.#queries.deletion.onRequest;
+  readonly sendWorkspaceDeleteResult = this.#queries.deletion.sendResult;
+  readonly onPiChatRequest = this.#queries.piChat.onRequest;
+  readonly sendPiChatFrame = this.#queries.piChat.sendResult;
 
   onUsageScan(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void {
     return this.#usageScan.set(callback);
@@ -949,11 +927,16 @@ export class DaemonConnection implements DaemonConnectionClient {
 
   /** Fire-and-forget; never awaited by a caller and never fails a turn. */
   sendAgentContextUsage(message: AgentContextUsage): void {
-    if (!this.#connected || !this.#client) {
-      this.#pendingContextUsage.set(message.agentId, message);
-      return;
-    }
-    this.#publishContextUsage(this.#client, message);
+    this.#observations.sendContextUsage(message, this.#activeClient());
+  }
+
+  /** Fire-and-forget; never awaited by a caller and never fails a turn. */
+  sendAgentServiceTier(message: AgentServiceTier): void {
+    this.#observations.sendServiceTier(message, this.#activeClient());
+  }
+
+  #activeClient(): CentrifugeWorkspaceClient | undefined {
+    return this.#connected ? this.#client : undefined;
   }
 
   sendAgentStatus(status: AgentStatus): void {
@@ -1027,36 +1010,6 @@ export class DaemonConnection implements DaemonConnectionClient {
       if (this.#supersededActivityLaunches.get(message.agentId)?.has(message.launchId)) continue;
       this.#publishSessionInvalidate(client, message);
     }
-  }
-
-  #publishContextUsage(client: CentrifugeWorkspaceClient, message: AgentContextUsage): void {
-    // An observation, not a command: a rejection (including an old server that does not
-    // recognize this RPC) is logged, never retried or surfaced to the caller.
-    void client.rpc(AGENT_CONTEXT_USAGE_METHOD, encodeAgentContextUsage(message)).catch((error) => {
-      const errorCode = diagnosticErrorCode(error);
-      // An old server that has never heard of this RPC rejects every attempt the same way for
-      // as long as this process talks to it; logging that fact once per connection lifetime is
-      // enough. Any other rejection (a genuinely transient failure) still logs every time.
-      const unknownMethod = errorCode === "404";
-      if (unknownMethod && this.#loggedUnknownContextUsageMethod) return;
-      if (unknownMethod) this.#loggedUnknownContextUsageMethod = true;
-      logger.warning("Agent context usage was not accepted", {
-        event: "agent_context_usage:rejected",
-        request_id: message.requestId,
-        workspace_id: message.workspaceId,
-        computer_id: message.computerId,
-        agent_id: message.agentId,
-        launch_id: message.launchId,
-        error_code: errorCode,
-        outcome: "failed",
-      });
-    });
-  }
-
-  #flushPendingContextUsage(client: CentrifugeWorkspaceClient): void {
-    const pending = [...this.#pendingContextUsage.values()];
-    this.#pendingContextUsage.clear();
-    for (const message of pending) this.#publishContextUsage(client, message);
   }
 
   #queueAgentStatus(client: CentrifugeWorkspaceClient, status: AgentStatus): void {
@@ -1964,6 +1917,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     const ownsDaemon = (value: { workspaceId: string; computerId?: string }) =>
       value.workspaceId === workspaceId && value.computerId === computerId;
     const handled =
+      this.#queries.receive(data, config) ||
       this.#route(data, decodeReminderSync, (sync) => {
         if (sync.messageType !== REMINDER_SYNC_MESSAGE_TYPE || !ownsDaemon(sync)) return false;
         this.#deliver(this.#reminderSync, sync);
@@ -2019,26 +1973,6 @@ export class DaemonConnection implements DaemonConnectionClient {
       }) ||
       this.#route(data, decodeAgentWorkspaceResetRequest, (request) => {
         if (request.workspaceId === workspaceId) this.#deliver(this.#agentWorkspaceReset, request);
-        return true;
-      }) ||
-      this.#route(data, decodeAgentSkillsListRequest, (request) => {
-        if (request.workspaceId === workspaceId)
-          void this.#skillsList.current?.(request).catch(() => {});
-        return true;
-      }) ||
-      this.#route(data, decodeAgentWorkspaceFilesListRequest, (request) => {
-        if (request.workspaceId === workspaceId)
-          void this.#workspaceFilesList.current?.(request).catch(() => {});
-        return true;
-      }) ||
-      this.#route(data, decodeAgentWorkspaceFileReadRequest, (request) => {
-        if (request.workspaceId === workspaceId)
-          void this.#workspaceFileRead.current?.(request).catch(() => {});
-        return true;
-      }) ||
-      this.#route(data, decodeAgentWorkspaceDeleteRequest, (request) => {
-        if (request.workspaceId === workspaceId)
-          void this.#workspaceDelete.current?.(request).catch(() => {});
         return true;
       }) ||
       this.#route(data, decodeDaemonRuntimeUsageScanRequest, (usage) => {
@@ -2140,28 +2074,6 @@ export class DaemonConnection implements DaemonConnectionClient {
 
   async sendAgentControlResult(result: AgentControlResult) {
     await this.#rpc(AGENT_CONTROL_RESULT_METHOD, encodeAgentControlResult(result));
-  }
-
-  async sendSkillsListResult(result: AgentSkillsListResult): Promise<void> {
-    await this.#rpc(AGENT_SKILLS_LIST_RESULT_METHOD, encodeAgentSkillsListResult(result));
-  }
-
-  async sendWorkspaceFilesListResult(result: AgentWorkspaceFilesListResult): Promise<void> {
-    await this.#rpc(
-      AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD,
-      encodeAgentWorkspaceFilesListResult(result),
-    );
-  }
-
-  async sendWorkspaceFileReadResult(result: AgentWorkspaceFileReadResult): Promise<void> {
-    await this.#rpc(
-      AGENT_WORKSPACE_FILE_READ_RESULT_METHOD,
-      encodeAgentWorkspaceFileReadResult(result),
-    );
-  }
-
-  async sendWorkspaceDeleteResult(result: AgentWorkspaceDeleteResult): Promise<void> {
-    await this.#rpc(AGENT_WORKSPACE_DELETE_RESULT_METHOD, encodeAgentWorkspaceDeleteResult(result));
   }
 
   /**
@@ -2503,11 +2415,11 @@ export class DaemonConnection implements DaemonConnectionClient {
       this.#upgradeRequestIds,
       this.#reportedUpgradeRequestIds,
       this.#latestObservedLaunchByAgent,
-      this.#pendingContextUsage,
     ])
       collection.clear();
+    this.#observations.clear();
     this.#loggedUnknownSessionInvalidateMethod = false;
-    this.#loggedUnknownContextUsageMethod = false;
+    this.#observations.resetConnectionLifetime();
     this.#statusRpcQueue = Promise.resolve();
     client?.disconnect();
   }

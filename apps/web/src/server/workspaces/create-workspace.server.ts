@@ -15,8 +15,13 @@ export function defaultCloudComputerId(started: unknown): string | undefined {
 /** Starts the account's default cloud computer for a Workspace. A deployment
  * without a cluster does nothing and returns undefined. */
 export async function startDefaultCloudComputer(
-  start: (input: { userId: string; workspaceId: string; now: Date }) => Promise<unknown>,
-  input: { userId: string; workspaceId: string; now: Date },
+  start: (input: {
+    userId: string;
+    workspaceId: string;
+    now: Date;
+    displayName?: string;
+  }) => Promise<unknown>,
+  input: { userId: string; workspaceId: string; now: Date; displayName?: string },
 ): Promise<unknown> {
   try {
     return await start(input);

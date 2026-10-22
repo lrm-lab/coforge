@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { useTestRepo } from "../git-hooks/test-repo";
 
-// The Markdown link rule, the skills-lock exemption, whole-tree mode, and the pre-commit hook
-// running both checks. hard-rules-diff.test.ts covers the rules judged on a diff.
+// The Markdown length and link rules, the skills-lock exemption, whole-tree mode, and the
+// pre-commit hook running all checks. hard-rules-diff.test.ts covers rules judged on a diff.
 const repo = useTestRepo();
 
 const BROKEN_LINK_MESSAGE = "markdown-links";
@@ -168,6 +168,43 @@ test("the hook reports the size ratchet and the other hard rules together", () =
   expect(result.stderr).toContain("big.ts: 5,001 tokens, new file over the limit");
   expect(result.stderr).toContain("docs/guide.md:1");
   expect(repo.ok("ls-tree", "-r", "--name-only", "HEAD")).toBe("README.md");
+});
+
+for (const extension of ["md", "mdx", "mdc", "markdown"]) {
+  test(`.${extension} files must stay below 200 lines, with a topic-split fix`, () => {
+    const lines = (count: number, trailingNewline: boolean) =>
+      `${Array.from({ length: count }, (_, i) => `line ${i + 1}`).join("\n")}${trailingNewline ? "\n" : ""}`;
+    repo.seed({ "README.md": "# Repo\n" });
+    repo.write({
+      [`docs/short.${extension}`]: lines(199, true),
+      [`docs/long.${extension}`]: lines(200, false),
+    });
+
+    const result = repo.commitAll();
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("markdown-lines (1)");
+    expect(result.stderr).toContain(`docs/long.${extension}: 200 lines`);
+    expect(result.stderr).not.toContain(`docs/short.${extension}`);
+    expect(result.stderr).toContain("topic directory");
+    expect(result.stderr).toContain("README.md overview");
+  });
+}
+
+test("whole-tree mode reports long Markdown outside registered skills", () => {
+  const long = "line\n".repeat(200);
+  const lock = { version: 1, skills: { "vendored-skill": { source: "upstream/skills" } } };
+  repo.seed({
+    "skills-lock.json": JSON.stringify(lock),
+    "docs/long.md": long,
+    ".agents/skills/vendored-skill/SKILL.md": long,
+  });
+
+  const result = repo.all();
+
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain("docs/long.md: 200 lines");
+  expect(result.stderr).not.toContain("vendored-skill");
 });
 
 test("a clean commit passes silently", () => {

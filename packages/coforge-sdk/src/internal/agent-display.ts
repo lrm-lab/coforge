@@ -1,4 +1,5 @@
 import { parseActivityEntries, type ActivityTrajectoryEntry } from "./activity-entries";
+import { AGENT_SERVICE_TIER_OBSERVED, type AgentServiceTierObserved } from "./service-tier";
 
 import { utf8Decoder } from "./text-codec";
 export type AgentActivityKind = "online" | "working" | "thinking" | "error" | "offline";
@@ -23,6 +24,16 @@ export type AgentDisplaySnapshot = {
    * or no reading has been observed yet for the current one.
    */
   contextUsage?: { usedTokens: number; windowTokens: number; observedAtMs: number } | null;
+  /**
+   * The service tier the Agent's launch actually observed, display-only — nothing triggers on it.
+   * `undefined` on an older server that has never written the field; `null` once written but no
+   * observation is current (the process is offline, or a different launch/daemon instance started).
+   */
+  fastMode?: {
+    requested: boolean;
+    observed: AgentServiceTierObserved;
+    observedAtMs: number;
+  } | null;
 };
 
 const activityKinds = new Set<AgentActivityKind>([
@@ -61,6 +72,7 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
   )
     throw new Error("invalid Agent display snapshot");
   const contextUsage = parseContextUsage(item.contextUsage);
+  const fastMode = parseFastMode(item.fastMode);
   return {
     protocolMajor: 1,
     workspaceId: item.workspaceId,
@@ -73,6 +85,7 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
     entries: parseActivityEntries(item.entries),
     expiresAt: item.expiresAt,
     ...(contextUsage !== undefined ? { contextUsage } : {}),
+    ...(fastMode !== undefined ? { fastMode } : {}),
   } as AgentDisplaySnapshot;
 }
 
@@ -96,6 +109,28 @@ function parseContextUsage(value: unknown): AgentDisplaySnapshot["contextUsage"]
   return {
     usedTokens: item.usedTokens as number,
     windowTokens: item.windowTokens as number,
+    observedAtMs: item.observedAtMs as number,
+  };
+}
+
+/** Same tolerance as `parseContextUsage`: absent (older server) returns `undefined`, `null`
+ * (written, nothing current) passes through, present values are validated. */
+function parseFastMode(value: unknown): AgentDisplaySnapshot["fastMode"] {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("invalid Agent display snapshot");
+  const item = value as Record<string, unknown>;
+  if (
+    typeof item.requested !== "boolean" ||
+    !Object.values(AGENT_SERVICE_TIER_OBSERVED).includes(item.observed as never) ||
+    !Number.isSafeInteger(item.observedAtMs) ||
+    (item.observedAtMs as number) < 1
+  )
+    throw new Error("invalid Agent display snapshot");
+  return {
+    requested: item.requested,
+    observed: item.observed as AgentServiceTierObserved,
     observedAtMs: item.observedAtMs as number,
   };
 }

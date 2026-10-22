@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { encodeAgentActivityProbe } from "@lrm/coforge-sdk/internal";
 
@@ -10,6 +10,7 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { getAgentDisplay, type AgentDisplay, type Scope } from "./agent-display.server";
+import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { errorType } from "#src/server/errors/error-type.server";
 
@@ -155,13 +156,14 @@ export class AgentActivitySweep {
 }
 
 let singleton: AgentActivitySweep | undefined;
+let sweepStopRegistered = false;
 
 function getAgentActivitySweep(): AgentActivitySweep {
   const redisUrl = redisUrlFor("the Agent activity sweep");
   singleton ??= new AgentActivitySweep(
     getAgentDisplay(),
     createCentrifugoServerApi(),
-    new RedisAgentActivitySweepLock(new RedisClient(redisUrl)),
+    new RedisAgentActivitySweepLock(openRedisClient(redisUrl)),
     undefined,
     undefined,
     async (scope) => {
@@ -184,6 +186,10 @@ function getAgentActivitySweep(): AgentActivitySweep {
  */
 export function ensureAgentActivitySweep(): AgentActivitySweep {
   const sweep = getAgentActivitySweep();
+  if (!sweepStopRegistered) {
+    sweepStopRegistered = true;
+    onServerShutdown(() => sweep.stop());
+  }
   sweep.start();
   return sweep;
 }

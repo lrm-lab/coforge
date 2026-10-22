@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { MODEL_CATALOG_REFRESH_TIMEOUT_MS } from "./computer-model-catalog-refresh.server";
@@ -44,7 +44,7 @@ let detection: RedisComputerRuntimeDetection | undefined;
 
 export function getComputerRuntimeDetection() {
   detection ??= new RedisComputerRuntimeDetection(
-    new RedisClient(redisUrlFor("Computer runtime detection")),
+    openRedisClient(redisUrlFor("Computer runtime detection")),
   );
   return detection;
 }

@@ -80,8 +80,8 @@ test("the list names each of the viewer's DMs by conversation id and who is on t
   const withHelper = await conversations.open(workspaceId, ada.id, { agentId: helper.id });
   const withGrace = await conversations.open(workspaceId, ada.id, { userId: grace.id });
   const withSelf = await conversations.open(workspaceId, ada.id, { userId: ada.id });
-  // Grace's DM with Ada's Agent, from before only a creator could start one, with a member row
-  // for Ada: Ada cannot open it, so her list leaves it out.
+  // Grace's own DM with Ada's Agent, with a member row for Ada: Ada cannot open it, so her list
+  // leaves it out.
   const gracesDm = await new PrismaDirectConversationRepository(db).getOrCreateUserAgent(
     workspaceId,
     grace.id,
@@ -302,9 +302,19 @@ test("the list and a pin drag leave out DMs the viewer cannot open", async () =>
   const conversations = new DirectConversations(db);
   const repository = new PrismaDirectConversationRepository(db);
   const ivy = await newMember("ivy");
-  // Ivy's own DM with Ada's Agent, from before only a creator could start one: its key names Ivy,
-  // but the DM is not hers to use.
-  const withAdasAgent = await repository.getOrCreateUserAgent(workspaceId, ivy.id, helper.id);
+  // Ivy's own DM with Ada's Agent, since made private: its key names Ivy, but only the creator
+  // messages a private Agent.
+  const secret = await db.agent.create({
+    data: {
+      workspaceId,
+      ownerId: ada.id,
+      name: `ada-secret-${suffix}`,
+      displayName: "Secret",
+      runtimeConfig: {},
+    },
+  });
+  const withAdasAgent = await repository.getOrCreateUserAgent(workspaceId, ivy.id, secret.id);
+  await db.agent.update({ where: { id: secret.id }, data: { visibility: "private" } });
   // Ivy's DM with her own Agent, since deleted: kept for history, gone from the list.
   const retired = await db.agent.create({
     data: {
@@ -326,6 +336,46 @@ test("the list and a pin drag leave out DMs the viewer cannot open", async () =>
         unpinned: [],
       }),
     ).rejects.toThrow("ACCESS_DENIED");
+});
+
+test("any member opens, lists and may write in their own DM with another member's public Agent", async () => {
+  const conversations = new DirectConversations(db);
+  const kai = await newMember("kai");
+  const { conversationId } = await conversations.open(workspaceId, kai.id, {
+    agentId: helper.id,
+  });
+
+  expect((await conversations.list(workspaceId, kai.id)).conversations).toEqual([
+    { conversationId, peer: { kind: "agent", agentId: helper.id }, lastMessage: null },
+  ]);
+  await expect(
+    conversations.authorize(workspaceId, kai.id, conversationId, { canSend: true }),
+  ).resolves.toEqual({ kind: "agent", agentId: helper.id });
+  // The DM is Kai's own: its creator gets no way into it.
+  await expect(conversations.authorize(workspaceId, ada.id, conversationId)).rejects.toThrow(
+    "NOT_FOUND",
+  );
+});
+
+test("only its creator opens a DM with a private Agent", async () => {
+  const conversations = new DirectConversations(db);
+  const mia = await newMember("mia");
+  const hidden = await db.agent.create({
+    data: {
+      workspaceId,
+      ownerId: ada.id,
+      name: `ada-hidden-${suffix}`,
+      displayName: "Hidden",
+      visibility: "private",
+      runtimeConfig: {},
+    },
+  });
+  await expect(conversations.open(workspaceId, mia.id, { agentId: hidden.id })).rejects.toThrow(
+    "ACCESS_DENIED",
+  );
+  await expect(conversations.open(workspaceId, ada.id, { agentId: hidden.id })).resolves.toEqual({
+    conversationId: expect.any(String),
+  });
 });
 
 test("each DM's lastMessage is its newest top-level message: its time and one line of text, or null", async () => {

@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
 
@@ -52,6 +52,6 @@ export class RedisComputerStatusCache implements ComputerStatusCache {
 let singleton: RedisComputerStatusCache | undefined;
 
 export function getComputerStatusCache() {
-  singleton ??= new RedisComputerStatusCache(new RedisClient(redisUrlFor("Computer status")));
+  singleton ??= new RedisComputerStatusCache(openRedisClient(redisUrlFor("Computer status")));
   return singleton;
 }

@@ -23,16 +23,17 @@ export async function mintAccessToken(
   grant: { grantId: string; userId: string; clientId: string; scopes: string[] },
   now: Date,
 ): Promise<string> {
-  const issuedAt = epochSeconds(now);
-  return new SignJWT({ client_id: grant.clientId, scope: grant.scopes.join(" ") })
-    .setProtectedHeader(header(signingKeys, "at+jwt"))
-    .setIssuer(issuer)
-    .setSubject(grant.userId)
-    .setAudience(accessTokenAudience(issuer))
-    .setIssuedAt(issuedAt)
-    .setExpirationTime(issuedAt + ACCESS_TOKEN_TTL_SECONDS)
-    .setJti(grant.grantId)
-    .sign(await privateKey(signingKeys));
+  return signAccessToken(
+    { issuer, signingKeys },
+    { client_id: grant.clientId, scope: grant.scopes.join(" ") },
+    {
+      subject: grant.userId,
+      audience: accessTokenAudience(issuer),
+      ttlSeconds: ACCESS_TOKEN_TTL_SECONDS,
+      jti: grant.grantId,
+    },
+    now,
+  );
 }
 
 /** An Agent's token for an app lives five minutes: it is asked for at each use. */
@@ -52,22 +53,96 @@ export async function mintAgentAccessToken(
   },
   now: Date,
 ): Promise<string> {
-  const issuedAt = epochSeconds(now);
-  return new SignJWT({
-    client_id: token.appKey,
-    type: "agent",
-    workspace_id: token.workspaceId,
-    workspace_slug: token.workspaceSlug,
-    scope: token.scopes.join(" "),
-  })
-    .setProtectedHeader(header(signingKeys, "at+jwt"))
-    .setIssuer(issuer)
-    .setSubject(token.agentId)
-    .setAudience(token.appKey)
-    .setIssuedAt(issuedAt)
-    .setExpirationTime(issuedAt + AGENT_TOKEN_TTL_SECONDS)
-    .setJti(crypto.randomUUID())
-    .sign(await privateKey(signingKeys));
+  return signAccessToken(
+    { issuer, signingKeys },
+    {
+      client_id: token.appKey,
+      type: "agent",
+      workspace_id: token.workspaceId,
+      workspace_slug: token.workspaceSlug,
+      scope: token.scopes.join(" "),
+    },
+    {
+      subject: token.agentId,
+      audience: token.appKey,
+      ttlSeconds: AGENT_TOKEN_TTL_SECONDS,
+      jti: crypto.randomUUID(),
+    },
+    now,
+  );
+}
+
+/** An installation token lives ten minutes: an app asks for a new one when it needs one. */
+export const INSTALLATION_TOKEN_TTL_SECONDS = 600;
+
+/** What an installation token names (`type: "installation"`). */
+export type InstallationTokenClaims = {
+  appKey: string;
+  installationId: string;
+  workspaceId: string;
+  scope: string;
+};
+
+/** An RFC 9068 JWT access token for the app `claims.appKey` (its `sub` and `client_id`, RFC 9068
+ * §2.2) to read its installation: `audience` is the installation's resource URI. Each one has its
+ * own `jti`. */
+export async function mintInstallationAccessToken(
+  { issuer, signingKeys }: TokenIssuer,
+  claims: InstallationTokenClaims,
+  audience: string,
+  now: Date,
+): Promise<string> {
+  return signAccessToken(
+    { issuer, signingKeys },
+    {
+      client_id: claims.appKey,
+      type: "installation",
+      installation_id: claims.installationId,
+      workspace_id: claims.workspaceId,
+      scope: claims.scope,
+    },
+    {
+      subject: claims.appKey,
+      audience,
+      ttlSeconds: INSTALLATION_TOKEN_TTL_SECONDS,
+      jti: crypto.randomUUID(),
+    },
+    now,
+  );
+}
+
+/** The claims of an unexpired `at+jwt` this issuer signed for `audience` as an installation token;
+ * `undefined` otherwise. The installation itself is not consulted here. */
+export async function verifyInstallationAccessToken(
+  { issuer, signingKeys }: TokenIssuer,
+  token: string,
+  audience: string,
+  now: Date,
+): Promise<(InstallationTokenClaims & { subject: string }) | undefined> {
+  const payload = await verifyAccessJwt(
+    { issuer, signingKeys },
+    token,
+    audience,
+    ["client_id", "scope", "installation_id"],
+    now,
+  );
+  if (!payload) return undefined;
+  const { client_id, type, installation_id, workspace_id, scope } = payload;
+  if (
+    type !== "installation" ||
+    typeof client_id !== "string" ||
+    typeof installation_id !== "string" ||
+    typeof workspace_id !== "string" ||
+    typeof scope !== "string"
+  )
+    return undefined;
+  return {
+    subject: payload.sub!,
+    appKey: client_id,
+    installationId: installation_id,
+    workspaceId: workspace_id,
+    scope,
+  };
 }
 
 /** An OIDC Core §2 ID token for the app `clientId`, with `at_hash` binding `accessToken`
@@ -109,16 +184,55 @@ export async function verifyAccessToken(
   token: string,
   now: Date,
 ): Promise<VerifiedAccessToken | undefined> {
+  const payload = await verifyAccessJwt(
+    { issuer, signingKeys },
+    token,
+    accessTokenAudience(issuer),
+    ["client_id", "scope"],
+    now,
+  );
+  return payload && { grantId: payload.jti!, userId: payload.sub! };
+}
+
+/** An `at+jwt` signed by the current key: `claims` plus the issuer, `subject`, `audience`, issue
+ * and expiry times, and `jti`. */
+async function signAccessToken(
+  { issuer, signingKeys }: TokenIssuer,
+  claims: Record<string, string>,
+  token: { subject: string; audience: string; ttlSeconds: number; jti: string },
+  now: Date,
+): Promise<string> {
+  const issuedAt = epochSeconds(now);
+  return new SignJWT(claims)
+    .setProtectedHeader(header(signingKeys, "at+jwt"))
+    .setIssuer(issuer)
+    .setSubject(token.subject)
+    .setAudience(token.audience)
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + token.ttlSeconds)
+    .setJti(token.jti)
+    .sign(await privateKey(signingKeys));
+}
+
+/** The payload of an unexpired `at+jwt` this issuer signed for `audience`, carrying `sub`, `jti`,
+ * `exp`, `iat` and `extraClaims`; `undefined` otherwise. */
+async function verifyAccessJwt(
+  { issuer, signingKeys }: TokenIssuer,
+  token: string,
+  audience: string,
+  extraClaims: string[],
+  now: Date,
+) {
   try {
     const { payload } = await jwtVerify(token, publishedKeys(signingKeys), {
       issuer,
-      audience: accessTokenAudience(issuer),
+      audience,
       typ: "at+jwt",
       algorithms: [SIGNING_ALGORITHM],
-      requiredClaims: ["sub", "jti", "exp", "iat", "client_id", "scope"],
+      requiredClaims: ["sub", "jti", "exp", "iat", ...extraClaims],
       currentDate: now,
     });
-    return { grantId: payload.jti!, userId: payload.sub! };
+    return payload;
   } catch {
     return undefined;
   }

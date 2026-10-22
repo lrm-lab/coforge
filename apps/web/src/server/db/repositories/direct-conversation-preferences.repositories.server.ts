@@ -108,8 +108,8 @@ export class PrismaDirectConversationPreferences {
    */
   async preferencesForUser(workspaceId: string, userId: string) {
     const [memberships, latest, pins, hidden] = await Promise.all([
-      // Only DMs the viewer can open: a member row in someone else's DM, or a DM with an Agent
-      // they did not create (from before only a creator could start one), lists nothing.
+      // Only DMs the viewer can open: a member row in someone else's DM, or their DM with an Agent
+      // they may no longer message (another member's, since made private), lists nothing.
       this.db.conversationMember.findMany({
         where: {
           workspaceId,

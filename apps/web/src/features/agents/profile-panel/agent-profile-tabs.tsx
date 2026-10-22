@@ -21,15 +21,8 @@ const TABS = {
 };
 
 /** The tabs this viewer may see, in their saved order; the first one is the panel's default. */
-export function useAgentProfileTabOrder(
-  canSeeManagerTabs: boolean,
-  canSeeWorkspace: boolean,
-  canSeeApps: boolean,
-) {
-  return usePanelTabOrder(
-    "agentProfile",
-    visibleAgentProfileTabs(canSeeManagerTabs, canSeeWorkspace, canSeeApps),
-  );
+export function useAgentProfileTabOrder(canSeeManagerTabs: boolean, canSeeApps: boolean) {
+  return usePanelTabOrder("agentProfile", visibleAgentProfileTabs(canSeeManagerTabs, canSeeApps));
 }
 
 /**

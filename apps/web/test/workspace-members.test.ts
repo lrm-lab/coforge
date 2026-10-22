@@ -63,6 +63,7 @@ describe("WorkspaceMembers", () => {
               description: "Builds releases",
               avatarObjectKey: "workspaces/workspace-1/agents/other-agent/avatars/pic-1/original",
               ownerId: "another-user",
+              visibility: "public",
               createdAt: new Date("2026-07-23T08:00:00.000Z"),
               owner: {
                 id: "another-user",
@@ -84,6 +85,7 @@ describe("WorkspaceMembers", () => {
               displayName: "Reviewer",
               description: "Reviews changes",
               ownerId: "another-user",
+              visibility: "private",
               createdAt: new Date("2026-08-01T00:00:00.000Z"),
               owner: {
                 id: "another-user",
@@ -171,6 +173,7 @@ describe("WorkspaceMembers", () => {
             displayName: "Ada Lovelace",
             avatarUrl: "/api/workspaces/workspace-1/users/another-user/avatar?v=9c1d",
           },
+          canMessage: true,
           deletable: true,
         },
         {
@@ -183,6 +186,7 @@ describe("WorkspaceMembers", () => {
           computerName: null,
           createdAt: new Date("2026-08-01T00:00:00.000Z"),
           owner: { id: "another-user", displayName: "Ada Lovelace", avatarUrl: null },
+          canMessage: false,
           deletable: false,
         },
       ],

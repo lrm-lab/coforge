@@ -7,10 +7,23 @@ import {
   type WorkspaceUserContext,
 } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
+import {
+  createAppEditorSave,
+  createAppPermissions,
+} from "#src/server/app-permissions/app-permissions-composition.server";
+import type { AppPermissionsView } from "#src/server/app-permissions/app-permissions.server";
+import { createAppInstallationSetup } from "#src/server/app-installation-setup/app-installation-setup-composition.server";
+import type { AppSetupView } from "#src/server/app-installation-setup/app-installation-setup.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import type { AppActor, AppView } from "#src/server/apps/app-registry.server";
 import { APP_CATEGORIES } from "./app-category";
+import {
+  SETUP_DESCRIPTION_MAX_LENGTH,
+  SETUP_URL_MAX_LENGTH,
+  type AppSetupSummary,
+} from "./app-installation-setup";
+import { APP_PERMISSION_GROUPS, type AppPermissionsSummary } from "./app-permissions";
 import {
   APP_DESCRIPTION_MAX_LENGTH,
   APP_KEY_MAX_LENGTH,
@@ -27,23 +40,63 @@ import {
  * shape and size, so a refused value still reaches the registry and comes back naming its field.
  */
 
-/** An app as the Settings page shows it: its logo as a URL (none shows the monogram). */
+/** An app as the Settings page shows it: its logo as a URL (none shows the monogram), its data
+ * permissions only where `app-data-permissions` is on, and its setup only where
+ * `app-installation-setup` is on. */
 export type AppSummary = Omit<
   AppView,
   "ownerWorkspaceId" | "logoObjectKey" | "secretRotatedAt" | "createdAt" | "updatedAt"
-> & { logoUrl: string | null; createdAt: string };
+> & {
+  logoUrl: string | null;
+  createdAt: string;
+  permissions?: AppPermissionsSummary;
+  setup?: AppSetupSummary;
+};
 
-const summary = ({
-  ownerWorkspaceId,
-  logoObjectKey,
-  secretRotatedAt: _rotated,
-  updatedAt: _updated,
-  createdAt,
-  ...app
-}: AppView): AppSummary => ({
+const permissionsSummary = ({
+  installationId,
+  declared,
+  revision,
+  effective,
+  pending,
+}: AppPermissionsView): AppPermissionsSummary => ({
+  installationId,
+  declared,
+  revision,
+  effective,
+  pending,
+});
+
+const setupSummary = ({
+  installationId,
+  status,
+  url,
+  description,
+  link,
+  completedAt,
+}: AppSetupView): AppSetupSummary => ({
+  url,
+  description,
+  installation: { installationId, status, link, completedAt: completedAt?.toISOString() ?? null },
+});
+
+const summary = (
+  {
+    ownerWorkspaceId,
+    logoObjectKey,
+    secretRotatedAt: _rotated,
+    updatedAt: _updated,
+    createdAt,
+    ...app
+  }: AppView,
+  permissions?: AppPermissionsView | null,
+  setup?: AppSetupView | null,
+): AppSummary => ({
   ...app,
   logoUrl: appLogoUrl(ownerWorkspaceId, app.key, logoObjectKey),
   createdAt: createdAt.toISOString(),
+  ...(permissions && { permissions: permissionsSummary(permissions) }),
+  ...(setup && { setup: setupSummary(setup) }),
 });
 
 /** A text the registry counts in code points; zod counts UTF-16 units, at most two per code point. */
@@ -69,37 +122,95 @@ const actorOf = ({ user, workspaceId }: WorkspaceUserContext): AppActor => ({
   actorUserId: user.id,
 });
 
-/** The apps installed in the Workspace: the ones it registered. */
+/** Which declarations the editor shows in this Workspace: where the `app-data-permissions` and
+ * `app-installation-setup` flags are on. */
+export type AppDeclarations = { permissions: boolean; setup: boolean };
+
+/** The apps installed in the Workspace (the ones it registered), and the declarations it shows. */
 export const loadWorkspaceApps = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     declareNoStore();
-    const apps = await createAppRegistry(context.db).listWorkspaceApps(actorOf(context));
-    return apps.map(summary);
+    const actor = actorOf(context);
+    const [apps, permissions, setups] = await Promise.all([
+      createAppRegistry(context.db).listWorkspaceApps(actor),
+      createAppPermissions(context.db).workspacePermissions(actor),
+      createAppInstallationSetup(context.db).workspaceSetups(actor),
+    ]);
+    return {
+      apps: apps.map((app) => summary(app, permissions?.get(app.key), setups?.get(app.key))),
+      declares: {
+        permissions: permissions !== null,
+        setup: setups !== null,
+      } satisfies AppDeclarations,
+    };
   });
 
-/** Registers an app in the Workspace; a blank key asks for one made from its name. The answer
- * carries its client secret, once. */
+/** The data groups and setup page an app declares, where the editor shows them. */
+const declarations = {
+  permissionGroups: z.array(z.string()).max(APP_PERMISSION_GROUPS.length).optional(),
+  setup: z
+    .object({
+      url: z.string().max(SETUP_URL_MAX_LENGTH).nullable(),
+      description: text(SETUP_DESCRIPTION_MAX_LENGTH),
+    })
+    .optional(),
+};
+
+/** Registers an app in the Workspace; a blank key asks for one made from its name. With
+ * `permissionGroups` it declares the data it reads (refused where `app-data-permissions` is off;
+ * the Workspace's installation starts with them pending approval) and, with `setup`, the page it is
+ * set up on (refused where `app-installation-setup` is off): one change with the registration
+ * (`AppEditorSave`). The answer carries its client secret, once. */
 export const registerWorkspaceApp = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(keyInput.extend(fields))
+  .validator(keyInput.extend(fields).extend(declarations))
   .handler(async ({ data, context }) => {
     declareNoStore();
-    const { app, clientSecret } = await createAppRegistry(context.db).registerApp(
-      actorOf(context),
-      data,
-    );
-    return { app: summary(app), clientSecret };
+    const { permissionGroups, setup, ...input } = data;
+    const {
+      app,
+      clientSecret,
+      permissions,
+      setup: declaredSetup,
+    } = await createAppEditorSave(context.db).register(actorOf(context), input, {
+      permissionGroups,
+      setup,
+    });
+    return { app: summary(app, permissions, declaredSetup), clientSecret };
   });
 
-/** Changes any field of the Workspace's app but its key. */
+/** Changes any field of the Workspace's app but its key and, with `permissionGroups`, the data it
+ * declares (refused where `app-data-permissions` is off) and, with `setup`, the page it is set up
+ * on (refused where `app-installation-setup` is off). One change: a refusal of any leaves the app
+ * as it was (`AppEditorSave`). */
 export const updateWorkspaceApp = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(keyInput.extend({ patch: z.object(fields).partial() }))
+  .validator(
+    keyInput.extend({
+      patch: z.object(fields).partial(),
+      ...declarations,
+    }),
+  )
   .handler(async ({ data, context }) => {
     declareNoStore();
-    return summary(
-      await createAppRegistry(context.db).updateApp(actorOf(context), data.key, data.patch),
+    const { app, permissions, setup } = await createAppEditorSave(context.db).save(
+      actorOf(context),
+      data.key,
+      { patch: data.patch, permissionGroups: data.permissionGroups, setup: data.setup },
+    );
+    return summary(app, permissions, setup);
+  });
+
+/** Approves the data app `key` declares at `revision`, the one the approver was shown, for this
+ * Workspace's installation; CONFLICT (`app-permissions-changed`) once the app declared again. */
+export const approveWorkspaceAppPermissions = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(keyInput.extend({ revision: z.number().int().nonnegative() }))
+  .handler(async ({ data, context }) => {
+    declareNoStore();
+    return permissionsSummary(
+      await createAppPermissions(context.db).approve(actorOf(context), data.key, data.revision),
     );
   });
 

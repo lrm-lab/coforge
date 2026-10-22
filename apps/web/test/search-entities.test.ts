@@ -16,7 +16,7 @@ const agent: SearchEntity = {
   name: "Atlas Bot",
   handle: "atlas",
   avatarUrl: null,
-  ownedByCurrentUser: true,
+  canMessage: true,
   dmId: null,
 };
 

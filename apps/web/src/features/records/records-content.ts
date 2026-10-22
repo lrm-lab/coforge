@@ -829,10 +829,6 @@ export function memberWeekTitle(year: number, week: number): string {
   return `${year} W${week} 工作周报`;
 }
 
-export function templateDraftTitle(year: number, week: number): string {
-  return `${year} W${week} 周报模板`;
-}
-
 /** Member report title: `{name} {year} W{week} 工作周报`. */
 export function memberReportTitle(displayName: string, year: number, week: number): string {
   return `${displayName} ${year} W${week} 工作周报`;

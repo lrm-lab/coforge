@@ -5,12 +5,14 @@ import {
   dockerAttachExecArgs,
   dockerCloudContainerListArgs,
   dockerCloudPlacementInspectArgs,
+  dockerImageDigestArgs,
   dockerImageInspectArgs,
   dockerServiceCreateArgs,
   dockerServiceFindArgs,
   dockerServiceRemoveArgs,
   dockerServiceUpdateArgs,
   dockerVolumeRemoveArgs,
+  pinnedImageReference,
   swarmAccepting,
   type ContainerRuntime,
 } from "#src/host/docker-containers";
@@ -307,12 +309,12 @@ describe("swarm service arguments", () => {
       "ps",
       "-q",
       "--filter",
-      "label=coforge.computer_id",
+      "label=com.docker.swarm.service.name",
     ]);
     expect(dockerCloudPlacementInspectArgs(["abc"])).toEqual([
       "inspect",
       "-f",
-      '{{index .Config.Labels "coforge.computer_id"}} {{.Image}}',
+      '{{index .Config.Labels "com.docker.swarm.service.name"}} {{.Image}}',
       "abc",
     ]);
     expect(dockerAttachExecArgs("task-1", { COFORGE_WORKSPACE_ID: "workspace-2" })).toEqual([
@@ -349,15 +351,54 @@ describe("swarm service arguments", () => {
     ]);
   });
 
-  test("updating a service image does not remove the disk volume", async () => {
+  test("creating or updating a service pins the local image digest", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     const calls: string[][] = [];
     const runtime = createDockerContainers(async (args) => {
       calls.push(args);
-      return { exitCode: 0, stdout: "", stderr: "" };
+      if (args[0] === "image") {
+        return { exitCode: 0, stdout: `coforge-computer@${digest}\n`, stderr: "" };
+      }
+      return { exitCode: 0, stdout: "service-1\n", stderr: "" };
+    });
+    await runtime.createService({
+      computerId: "computer-1",
+      image: "coforge-computer:staging",
+      env: {},
     });
     await runtime.updateServiceImage("computer-1", "coforge-computer:staging");
-    expect(calls).toEqual([dockerServiceUpdateArgs("computer-1", "coforge-computer:staging")]);
+    const pinned = `coforge-computer:staging@${digest}`;
+    expect(calls).toEqual([
+      dockerImageDigestArgs("coforge-computer:staging"),
+      dockerServiceCreateArgs({
+        computerId: "computer-1",
+        image: pinned,
+        env: {},
+      }),
+      dockerImageDigestArgs("coforge-computer:staging"),
+      dockerServiceUpdateArgs("computer-1", pinned),
+    ]);
     expect(calls.some((args) => args[0] === "volume")).toBe(false);
+  });
+
+  test("an image reference that already has a digest is not inspected again", async () => {
+    const digest = `sha256:${"b".repeat(64)}`;
+    const pinned = `coforge-computer:staging@${digest}`;
+    const calls: string[][] = [];
+    const runtime = createDockerContainers(async (args) => {
+      calls.push(args);
+      return { exitCode: 0, stdout: "service-1\n", stderr: "" };
+    });
+    await runtime.createService({ computerId: "computer-1", image: pinned, env: {} });
+    expect(calls).toEqual([
+      dockerServiceCreateArgs({ computerId: "computer-1", image: pinned, env: {} }),
+    ]);
+    expect(pinnedImageReference("coforge-computer:staging", `sha256:${"c".repeat(64)}`)).toBe(
+      `coforge-computer:staging@sha256:${"c".repeat(64)}`,
+    );
+    expect(() => pinnedImageReference("coforge-computer:staging", "not-a-digest")).toThrow(
+      /unusable image id/,
+    );
   });
 
   test("placement reports the node image and each running computer's image id", async () => {
@@ -372,15 +413,44 @@ describe("swarm service arguments", () => {
       if (args[0] === "inspect")
         return {
           exitCode: 0,
-          stdout: "computer-1 sha256:old\n",
+          stdout:
+            "coforge-computer-1 sha256:old\nother-stack sha256:ignored\ncoforge-0ca18953-635c-4f7f-ba04-1a20e09bac03 sha256:older\n",
           stderr: "",
         };
       return { exitCode: 1, stdout: "", stderr: `unexpected ${args.join(" ")}` };
     });
     expect(await runtime.inspectPlacement("coforge-computer:staging")).toEqual({
       image: { id: "sha256:new", version: "0.1.3-dev.2" },
-      computers: [{ computerId: "computer-1", imageId: "sha256:old" }],
+      computers: [
+        { computerId: "computer-1", imageId: "sha256:old" },
+        {
+          computerId: "0ca18953-635c-4f7f-ba04-1a20e09bac03",
+          imageId: "sha256:older",
+        },
+      ],
     });
+  });
+
+  test("placement reports image ids without probing the runtime version", async () => {
+    const calls: string[][] = [];
+    const digest = `sha256:${"cd".repeat(32)}`;
+    const runtime = createDockerContainers(async (args) => {
+      calls.push(args);
+      if (args[0] === "image") return { exitCode: 0, stdout: `${digest}\n`, stderr: "" };
+      if (args[0] === "ps") return { exitCode: 0, stdout: "ctr-1\n", stderr: "" };
+      if (args[0] === "inspect")
+        return {
+          exitCode: 0,
+          stdout: `coforge-computer-1 coforge-computer:staging@${digest}\n`,
+          stderr: "",
+        };
+      return { exitCode: 1, stdout: "", stderr: `unexpected ${args.join(" ")}` };
+    });
+    expect(await runtime.inspectPlacement("coforge-computer:staging")).toEqual({
+      image: { id: digest, version: "" },
+      computers: [{ computerId: "computer-1", imageId: digest }],
+    });
+    expect(calls.some((args) => args[0] === "run")).toBe(false);
   });
 
   test("removing a service also removes its disk volume", async () => {
@@ -392,6 +462,47 @@ describe("swarm service arguments", () => {
     await containers.removeService("computer-1");
     expect(calls).toEqual([
       ["service", "rm", "coforge-computer-1"],
+      ["volume", "rm", "coforge-computer-1"],
+    ]);
+  });
+
+  test("a service or volume Docker already reports missing is already removed", async () => {
+    const calls: string[][] = [];
+    const containers = createDockerContainers(async (args) => {
+      calls.push(args);
+      const name = args[2] ?? "";
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: `Error response from daemon: ${args[0]} ${name} not found\n`,
+      };
+    });
+    await containers.removeService("computer-1");
+    expect(calls).toEqual([
+      ["service", "rm", "coforge-computer-1"],
+      ["volume", "rm", "coforge-computer-1"],
+    ]);
+  });
+
+  test("containers still holding the disk are removed before the volume", async () => {
+    const calls: string[][] = [];
+    const containers = createDockerContainers(async (args) => {
+      calls.push(args);
+      if (args[0] === "volume" && calls.filter((call) => call[0] === "volume").length === 1) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr:
+            "Error response from daemon: remove coforge-computer-1: volume is in use - [abc123, def456]\n",
+        };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+    await containers.removeService("computer-1");
+    expect(calls).toEqual([
+      ["service", "rm", "coforge-computer-1"],
+      ["volume", "rm", "coforge-computer-1"],
+      ["rm", "-f", "abc123", "def456"],
       ["volume", "rm", "coforge-computer-1"],
     ]);
   });

@@ -1,7 +1,14 @@
 import type { AgentActivity, AgentRuntimeEvent } from "@coforge/agent";
-import { AGENT_ACTIVITY_DETAIL_KIND, truncateCodePoints } from "@lrm/coforge-sdk/internal";
+import {
+  AGENT_ACTIVITY_DETAIL_KIND,
+  RUNTIME_PROVIDER,
+  truncateCodePoints,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import {
   classifyRuntimeError,
+  isRuntimePlanAccessText,
+  type ClassifiedRuntimeErrorAction,
   type RuntimeErrorClassification,
 } from "./runtime-error-classification";
 import type { RuntimeErrorFingerprintFenceState } from "./runtime-error-recovery";
@@ -116,16 +123,154 @@ export function buildRuntimeErrorActivity(
   };
 }
 
+/**
+ * What an action-required Activity needs about the Agent's launch config: which runtime
+ * reported the failure, the configured model, and whether the Agent carries its own provider
+ * key (`providerConfig.kind === "coforge"` — the "custom provider" setting), which changes whose
+ * credentials a person must fix.
+ */
+export type RuntimeActionRequiredContext = Readonly<{
+  provider: RuntimeProvider;
+  providerLabel: string;
+  model: string;
+  agentProviderKey: boolean;
+}>;
+
+/** The diagnostic subtype an action-required Activity reports, mirroring the reference
+ * Computer's `classifyRuntimeActionRequiredSubtype`. */
+function runtimeActionRequiredSubtype(
+  message: string,
+  context: RuntimeActionRequiredContext,
+): string {
+  if (isRuntimePlanAccessText(message)) return "provider_plan_access_error";
+  if (context.agentProviderKey) {
+    if (
+      /\bmissing\b.*\b(?:api\s*)?key\b|\b(?:api\s*)?key\b.*\bnot set\b|\bmissing\b.*\btoken\b|\bno\b.*\btoken\b/i.test(
+        message,
+      )
+    )
+      return "custom_provider_missing_key";
+    if (
+      /\binvalid\b.*\b(?:api\s*)?key\b|\bunauthorized\b|\b401\b|\b403\b|auth(?:entication)? failed/i.test(
+        message,
+      )
+    )
+      return "custom_provider_invalid_key";
+    return "custom_provider_auth_error";
+  }
+  if (context.provider === RUNTIME_PROVIDER.CLAUDE_CODE) {
+    const lower = message.toLowerCase();
+    if (
+      lower.includes("not logged in") ||
+      lower.includes("not signed in") ||
+      lower.includes("please log in") ||
+      lower.includes("login required")
+    )
+      return "host_claude_login_required";
+    return "runtime_auth_error";
+  }
+  if (context.provider === RUNTIME_PROVIDER.COFORGE) return "builtin_provider_auth_error";
+  return "runtime_auth_error";
+}
+
+/** The person-facing wording an action-required failure shows, mirroring the reference
+ * Computer's `formatRuntimeActionRequiredMessage`. */
+function runtimeActionRequiredMessage(
+  requiredAction: ClassifiedRuntimeErrorAction,
+  context: RuntimeActionRequiredContext,
+): string {
+  if (requiredAction === "user_model_access") {
+    const modelLabel = context.model.trim() ? ` (${context.model.trim()})` : "";
+    return `${context.providerLabel} reported that the provider plan for this Agent does not include access to the configured model${modelLabel}. CoForge stopped retrying because retries cannot succeed until the model or the plan changes. Switch this Agent to a model the plan includes, or upgrade the plan, then retry starting this Agent.`;
+  }
+  if (context.agentProviderKey)
+    return `${context.providerLabel} custom provider authentication failed. Check this Agent's provider API key/API URL, then retry starting this Agent.`;
+  if (context.provider === RUNTIME_PROVIDER.COFORGE)
+    return "Built-in provider authentication failed. Check this Agent's provider API key and region/provider selection, then retry starting this Agent.";
+  if (context.provider === RUNTIME_PROVIDER.PI)
+    return "Pi's model provider rejected the API key, or no key is set for it on this machine. Check the API key for this Agent's provider, then retry starting this Agent.";
+  return `${context.providerLabel} is not logged in on this machine. Please log in to ${context.providerLabel} locally, then retry starting this Agent.`;
+}
+
+/** The Activity a runtime failure needing a person's action reports: the provider text is
+ * replaced by wording that says what to fix, followed by a diagnostic subtype and a redacted
+ * excerpt of the raw message. `runtimeError.requiredAction` carries the action on the wire. */
+export function buildRuntimeActionRequiredActivity(
+  event: RuntimeErrorEvent,
+  classified: RuntimeErrorClassification,
+  context: RuntimeActionRequiredContext,
+): AgentActivity {
+  const detail = runtimeActionRequiredMessage(classified.requiredAction, context);
+  const subtype = runtimeActionRequiredSubtype(event.message, context);
+  const diagnosticLabel =
+    subtype === "provider_plan_access_error"
+      ? "Runtime model-access diagnostic"
+      : "Runtime auth diagnostic";
+  const entries = [
+    { kind: "text" as const, text: `Error: ${detail}` },
+    { kind: "text" as const, text: `${diagnosticLabel}: ${subtype}` },
+    {
+      kind: "text" as const,
+      text: `Raw error excerpt (redacted): ${scrubRuntimeErrorText(event.message)}`,
+    },
+  ];
+  return {
+    detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
+    level: "error",
+    detail,
+    observedAtMs: event.occurredAt ? Date.parse(event.occurredAt) : Date.now(),
+    entries,
+    runtimeError: {
+      ...reportedClassification(event, () => classified),
+      fingerprint: fingerprintRuntimeError(event.message),
+      ...(classified.requiredAction !== "none"
+        ? { requiredAction: classified.requiredAction }
+        : {}),
+    },
+  };
+}
+
+/** The Activity an exhausted provider billing/credit balance reports: no `requiredAction`
+ * (refilling the balance is a provider-side act, not a client action), but the same offline
+ * semantics as an action-required failure — the detail says why retrying stopped and what
+ * restores the Agent, followed by a redacted excerpt of the raw message. Mirrors the reference
+ * Computer's `formatRuntimeBillingExhaustedMessage`. */
+export function buildRuntimeBillingExhaustedActivity(
+  event: RuntimeErrorEvent,
+  classified: RuntimeErrorClassification,
+  providerLabel: string,
+): AgentActivity {
+  const detail = `${providerLabel} reported that the provider's billing or credit balance is exhausted. CoForge stopped retrying because retries cannot succeed until the balance is restored. Messages that were waiting are kept and will be delivered when the agent starts again. Add credits or switch this agent to another model or provider, then restart the agent.`;
+  return {
+    detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
+    level: "error",
+    detail,
+    observedAtMs: event.occurredAt ? Date.parse(event.occurredAt) : Date.now(),
+    entries: [
+      { kind: "text", text: `Error: ${detail}` },
+      {
+        kind: "text",
+        text: `Raw error excerpt (redacted): ${scrubRuntimeErrorText(event.message)}`,
+      },
+    ],
+    runtimeError: {
+      ...reportedClassification(event, () => classified),
+      fingerprint: fingerprintRuntimeError(event.message),
+    },
+  };
+}
+
 /** Overrides a runtime_error Activity's wording once the fingerprint fence has tripped: same
  * detailKind/level (still an ordinary runtime_error, so nothing new appears in a client that
  * does not yet know about fencing), but a distinguishable `errorReason` and a detail that names
- * the repeat and how to recover — CoForge's own words, not the last raw provider message alone. */
+ * the repeat and how to recover — the reference Computer's fence wording, not the last raw
+ * provider message alone. */
 export function buildRuntimeErrorFingerprintFenceActivity(
   built: ReturnType<typeof buildRuntimeErrorActivity>,
   fence: RuntimeErrorFingerprintFenceState,
   lastError: RuntimeErrorEvent,
 ): ReturnType<typeof buildRuntimeErrorActivity> {
-  const detail = `Runtime stopped retrying after ${fence.attempts} consecutive failures with the same underlying error. Last error: ${lastError.message} Restart this Agent once the issue is fixed.`;
+  const detail = `Runtime stopped after ${fence.attempts} repeated runtime errors with the same fingerprint (${fence.fingerprint}). Last error: ${lastError.message} Restart after the runtime/tooling issue is fixed.`;
   return {
     ...built,
     detail,

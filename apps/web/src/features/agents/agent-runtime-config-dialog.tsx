@@ -71,7 +71,7 @@ export function AgentRuntimeConfigForm({
   environment?: AgentEnvironmentState;
   saving: boolean;
   error: string;
-  onClose?: () => void;
+  onClose: () => void;
   onSave: (form: FormData, changed: { runtime: boolean; environment: boolean }) => void;
 }) {
   const [selectedComputerId, setSelectedComputerId] = useState(
@@ -169,7 +169,7 @@ export function AgentRuntimeConfigForm({
           // heading, one line saying what environment variables do, then the rows and the add
           // action. The heading and the line together replace what used to be a bordered box with
           // a trailing hint, which read as a stray control rather than a section of the form.
-          <Disclosure className="sm:col-span-2">
+          <Disclosure>
             <Button
               slot="trigger"
               type="button"
@@ -250,14 +250,15 @@ export function AgentRuntimeConfigForm({
           </Disclosure>
         )}
         {error && (
-          <p role="alert" className="text-sm text-error-primary sm:col-span-2">
+          <p role="alert" className="text-sm text-error-primary">
             {error}
           </p>
         )}
       </div>
-      {/* The footer is the save action alone; the dialog is dismissed by its header X, Esc or the
-          overlay (all already wired, and already blocked while saving). */}
       <div className="flex justify-end gap-3 border-t border-secondary px-6 py-4">
+        <Button type="button" color="secondary" isDisabled={saving} onPress={onClose}>
+          {m.controls_cancel()}
+        </Button>
         <Button
           type="submit"
           isDisabled={

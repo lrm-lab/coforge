@@ -7,7 +7,7 @@ import {
   codeAgentExecutableSearchPath,
   executablePathDelimiter,
 } from "#src/platform/code-agent-path";
-import { discoverExternalCodeAgents, hostCodeAgentProbe } from "#src/code-agent/runtime-inventory";
+import { discoverExternalCodeAgents, hostCodeAgentProbe } from "#src/code-agent/runtime-probe";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
 import { captureDaemonLogs } from "./log-capture";

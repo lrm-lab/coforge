@@ -37,7 +37,7 @@ export function AgentProfileHeader({
   };
   display?: AgentDisplaySnapshot;
   controls: AgentRuntimeControls;
-  /** The viewer created this Agent: only its creator has a direct message with it. */
+  /** The viewer may message this Agent: any member a public one, only its creator a private one. */
   canMessage: boolean;
   /** The Agent was deleted: its profile is read-only, so the header offers no runtime control. */
   deleted?: boolean;

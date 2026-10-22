@@ -6,8 +6,10 @@ import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { permissionGroupList } from "./app-permission-copy";
 import { APP_CATEGORY_LABELS } from "./app-list";
 import { AppLogo } from "./app-logo";
+import { SetupDirections, SetupStatusBadge } from "./setup-status-badge";
 import type { AppsLayout } from "./apps-layout";
 import type { AppSummary } from "./apps.functions";
 
@@ -15,20 +17,26 @@ import type { AppSummary } from "./apps.functions";
  * One app on Settings → Applications. `installed`: as the Installed list shows it (where it comes
  * from, its visibility and that it is this Workspace's own); `mine`: as My apps shows it. The grid
  * shows the homepage when the app has one; the list the description, clamped to two lines with all
- * of it in a tooltip. `onEdit` only for an owner or admin.
+ * of it in a tooltip. Where the app's data permissions are shown (`app-data-permissions`), every
+ * member sees what it reads here and whether an update waits for approval. `onEdit` only for an
+ * owner or admin.
  */
 export function AppCard({
   app,
   view,
   layout,
   onEdit,
+  onOpen,
 }: {
   app: AppSummary;
   view: "installed" | "mine";
   layout: AppsLayout;
   onEdit?: () => void;
+  /** Opens the read-only detail (Installed apps, every role) from the app name. */
+  onOpen?: () => void;
 }) {
   const category = APP_CATEGORY_LABELS[app.category]();
+  const installationSetup = app.setup?.installation;
   const homepage = app.homepageUrl === null ? null : new URL(app.homepageUrl);
   return (
     <li
@@ -39,8 +47,19 @@ export function AppCard({
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <AppLogo name={app.name} url={app.logoUrl} size={layout === "grid" ? "md" : "sm"} />
-        <div className="grid min-w-0 flex-1 gap-1">
-          <p className="truncate text-sm font-semibold text-primary">{app.name}</p>
+        <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-1">
+          {onOpen ? (
+            <Button
+              color="link-gray"
+              size="sm"
+              onPress={onOpen}
+              className="w-fit max-w-full min-w-0 justify-start font-semibold text-primary *:data-text:truncate"
+            >
+              {app.name}
+            </Button>
+          ) : (
+            <p className="truncate text-sm font-semibold text-primary">{app.name}</p>
+          )}
           <p className="truncate text-sm text-tertiary">
             {view === "installed" ? m.apps_installed_byline({ category }) : category}
           </p>
@@ -53,7 +72,26 @@ export function AppCard({
                 {m.apps_this_workspace()}
               </Badge>
             )}
+            {installationSetup && installationSetup.status !== "not_required" && (
+              <SetupStatusBadge status={installationSetup.status} />
+            )}
+            {app.permissions && app.permissions.pending.length > 0 && (
+              <Badge size="sm" color="warning">
+                {m.apps_card_pending()}
+              </Badge>
+            )}
           </div>
+          {app.permissions && app.permissions.effective.length > 0 && (
+            <p className="text-sm text-tertiary">
+              {m.apps_card_reads({ groups: permissionGroupList(app.permissions.effective) })}
+            </p>
+          )}
+          {!onEdit && installationSetup?.status === "pending" && app.setup?.url && (
+            <div className="grid gap-1">
+              <SetupDirections url={app.setup.url} description={app.setup.description} />
+              <p className="text-sm text-tertiary">{m.apps_setup_member_note()}</p>
+            </div>
+          )}
           {layout === "list" && app.description && (
             <Tooltip title={app.description} placement="bottom start">
               <TooltipTrigger className="mt-1 w-full cursor-default rounded-sm text-left outline-focus-ring focus-visible:outline-2">

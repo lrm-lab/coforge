@@ -5,10 +5,8 @@ import { Monitor01 as Monitor } from "@untitledui/icons";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { localizeHref } from "#src/paraglide/runtime";
 import { Button } from "#src/components/base/buttons/button";
-import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { StatusDot } from "#src/components/ui/status-dot";
@@ -16,7 +14,10 @@ import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { AGENT_VISIBILITY } from "./agent-visibility";
 import { agentCreateErrorMessage } from "./agent-form";
+import { AgentOptionCard } from "./agent-option-card";
 import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields";
+import { finishedAgentUsername } from "./agent-username";
+import { AgentUsernameField } from "./agent-username-field";
 import type { CreateAgentInput } from "./agent.schemas";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 
@@ -71,7 +72,7 @@ export function AgentCreateDialog({
     setError("");
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const name = String(form.get("name") ?? "").trim();
+    const name = finishedAgentUsername(String(form.get("name") ?? ""));
     const description = String(form.get("description") ?? "").trim();
     if (!name) {
       setError(m.agent_form_required_error());
@@ -86,6 +87,7 @@ export function AgentCreateDialog({
           model: String(form.get("model") ?? "").trim() || undefined,
           modelProvider: String(form.get("modelProvider") ?? "").trim() || undefined,
           reasoning: String(form.get("reasoning") ?? "").trim(),
+          fastMode: form.get("fastMode") === "true",
           apiKey: String(form.get("apiKey") ?? "").trim() || undefined,
           computerId: computerLocked ? computerId : String(form.get("computerId") ?? ""),
           actionCardMessageId,
@@ -115,13 +117,12 @@ export function AgentCreateDialog({
               <form onSubmit={submit}>
                 <DialogHeader
                   title={m.agent_form_title()}
-                  description={m.agent_form_description()}
                   onClose={close}
                   className="px-4 pt-4 sm:px-6 sm:pt-6"
                 />
-                <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 sm:gap-4 sm:px-6 sm:py-6">
+                <div className="grid gap-3 px-4 py-4 sm:gap-4 sm:px-6 sm:py-6">
                   {joinsChannelName && (
-                    <p className="text-sm text-secondary sm:col-span-2">
+                    <p className="text-sm text-secondary">
                       {m.agent_form_joins_channel({ channel: joinsChannelName })}
                     </p>
                   )}
@@ -131,7 +132,7 @@ export function AgentCreateDialog({
                     isDisabled={computerLocked}
                     size="md"
                     label={m.agent_form_computer()}
-                    className="min-w-0 sm:col-span-2"
+                    className="min-w-0"
                     selectedKey={computerId}
                     onSelectionChange={(key) => {
                       if (key !== null) setComputerId(String(key));
@@ -157,27 +158,14 @@ export function AgentCreateDialog({
                       />
                     ))}
                   </Select>
-                  <Input
-                    label={m.agent_form_username()}
-                    name="name"
-                    isRequired
-                    defaultValue={defaults?.name}
-                    pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                    placeholder="release-fix"
-                    hint={
-                      nameNote
-                        ? `${m.agent_form_username_hint()} ${nameNote}`
-                        : m.agent_form_username_hint()
-                    }
-                    className="min-w-0 sm:col-span-2"
-                  />
+                  <AgentUsernameField defaultValue={defaults?.name} note={nameNote} />
                   <TextArea
                     label={m.agent_profile_description()}
                     name="description"
                     rows={2}
                     defaultValue={defaults?.description}
                     placeholder={m.agent_form_description_placeholder()}
-                    className="min-w-0 sm:col-span-2"
+                    className="min-w-0"
                   />
                   <AgentRuntimeFields
                     key={computerId}
@@ -191,8 +179,7 @@ export function AgentCreateDialog({
                       catalogs: await onLoadRuntimeCatalog(id),
                     })}
                   />
-                  <Checkbox
-                    className="sm:col-span-2"
+                  <AgentOptionCard
                     label={m.agent_form_visibility_private()}
                     hint={m.agent_form_visibility_private_hint()}
                     isDisabled={visibilityLocked}
@@ -202,7 +189,7 @@ export function AgentCreateDialog({
                   {/* A plain alert, not `HintText`: outside a field its "errorMessage" slot is not
                       one the enclosing Dialog offers, and rendering it crashes the page. */}
                   {error && (
-                    <p role="alert" className="text-sm text-error-primary sm:col-span-2">
+                    <p role="alert" className="text-sm text-error-primary">
                       {error}
                     </p>
                   )}

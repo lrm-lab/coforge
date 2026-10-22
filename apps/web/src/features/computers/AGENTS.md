@@ -18,12 +18,10 @@ These rules apply to `src/features/computers/`.
   Workspace can add one extra. The cluster places it. The page does not ask the
   user to pick a host. The owner's Open desktop button opens
   `<COFORGE_CLOUD_DESKTOP_ORIGIN>/desktop/<computer id>/` in a new tab when that
-  deployment variable is set. The same owner's Agent profile opens that Agent's
-  own screen at `/desktop/<computer id>/<agent id>/`. On staging that origin is
-  the site itself (`https://staging.coforge.cn`); Caddy asks the web app
-  whether this signed-in user owns the cloud computer, then forwards the page
-  and websocket to the Swarm proxy. The address carries no token. Without the
-  variable the button is absent. Formatting a cloud computer removes its service and disk,
+  deployment variable is set. The same owner's Computer tab opens that Agent's
+  own screen at `/desktop/<computer id>/<agent id>/`. That origin is the Swarm
+  host proxy in front of the image, opened directly by the browser. The address
+  carries no token. Without the variable the button is absent. Formatting a cloud computer removes its service and disk,
   then places the same computer again. The owner must type its name; the server
   checks that name. Agents, messages, and workspace links stay.
 - An upgrade's status is polled and settled only by `ComputerUpgradeWatcher`, mounted in the
@@ -33,7 +31,8 @@ These rules apply to `src/features/computers/`.
   still reports the old error while `isFetching` is true, and the follow stays until it returns.
 - Every member is told an update is waiting: the list tile's badge and the detail's upgrade slot,
   which for a member who is not the owner is a plain "v{X} available" line, never a request to ask
-  the owner. A running or failed upgrade shows to every member; Upgrade and Retry stay the owner's.
+  the owner. A cloud Computer's offer is a different image layer on the node, not a newer
+  runtime version inside the image; the version string is only the label for that layer. A running or failed upgrade shows to every member; Upgrade and Retry stay the owner's.
   Versions always show in full (`0.1.4-dev.2`, never `dev.2`). A success has no inline slot: the
   Version row changes, and the watcher's toast confirms it (§13).
 - The slot's "What's new" opens the notes the release catalog (`server/release-catalog/`) holds for

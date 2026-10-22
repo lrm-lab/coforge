@@ -33,15 +33,19 @@ Staging and production do not set these variables yet; setting them turns on eve
 | `GET /oidc/jwks` | The public keys, in configured order |
 | `GET /oidc/auth` | The authorization endpoint: a redirect back to the app (a code or an error), to sign-in, or the consent page; [the authorization endpoint](authorization-endpoint.md) |
 | `POST /oidc/auth` | The same request sent as a form (OIDC Core §3.1.2.1): a 303 to the GET with its parameters |
-| `POST /oidc/token` | The token endpoint: redeems a code once for an access token and an ID token; [the token and UserInfo endpoints](token-and-userinfo.md) |
+| `POST /oidc/token` | The token endpoint: redeems a code once for an access token and an ID token ([the token and UserInfo endpoints](token-and-userinfo.md)); with `client_credentials`, issues an app's [installation token](installation-tokens.md) |
+| `GET`, `PUT /api/app-installations/<id>/setup`, `POST /api/app-installations/lookup` | An app finds its installation in a Workspace and reads and reports its setup status ([installation setup](app-installation-setup.md)) |
 | `GET`, `POST /oidc/me` | The UserInfo endpoint: the signed-in person's claims for an access token |
+| `GET /api/app-installations/<id>/{workspace,agents,channels,computers}` | What an installed app reads with its installation token: [installed app data](app-installation-data.md) (not under `/oidc`) |
 
 The metadata advertises only endpoints that exist. Its fixed policy: the `code` response
-type in the query response mode, PKCE with `S256` only, ES256 ID tokens, public subject
-identifiers, `client_secret_basic` and `client_secret_post` client authentication, and the
-`iss` authorization response parameter (RFC 9207); `claims_supported` lists the ID token's own
-claims and every claim a scope releases. It states `request_uri_parameter_supported:
-false`, because Discovery defaults that field to true.
+type in the query response mode, the `authorization_code` and `client_credentials` grant
+types, PKCE with `S256` only, ES256 ID tokens, public subject identifiers,
+`client_secret_basic` and `client_secret_post` client authentication, and the `iss`
+authorization response parameter (RFC 9207); `scopes_supported` adds the four
+`installation:` scopes; `claims_supported` lists the ID token's own claims and every claim a
+scope releases. It states `request_uri_parameter_supported: false`, because Discovery
+defaults that field to true.
 
 ## For app developers
 

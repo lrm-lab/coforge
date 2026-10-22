@@ -6,6 +6,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE, assertAgentLive } from "#src/server/agents/active-agent.server";
 import { agentDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
+import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import {
   PrismaDirectConversationRepository,
@@ -78,12 +79,13 @@ export class DirectConversations {
   ) {
     if ("userId" in peer)
       return openPeopleDirectConversation(this.db, workspaceId, viewerId, peer.userId);
-    // A DM with an Agent is its creator's alone, and never starts with a deleted one.
-    const own = await this.db.agent.findFirst({
-      where: { id: peer.agentId, workspaceId, ownerId: viewerId, ...ACTIVE_AGENT_WHERE },
-      select: { id: true },
+    // Any member messages a public Agent, only its creator a private one, and nobody starts a
+    // DM with a deleted one.
+    const agent = await this.db.agent.findFirst({
+      where: { id: peer.agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+      select: { ownerId: true, visibility: true },
     });
-    if (!own) throw new AppError("ACCESS_DENIED");
+    if (!agent || !canDirectMessageAgent(viewerId, agent)) throw new AppError("ACCESS_DENIED");
     const conversation = await this.conversations.openUserAgent(
       workspaceId,
       viewerId,
@@ -94,7 +96,8 @@ export class DirectConversations {
 
   /**
    * Who a direct conversation of the viewer's is with, once the viewer may use it: a DM with an
-   * Agent is its creator's alone, and one with a deleted Agent stays readable but takes no new
+   * Agent is the one person's whose key it is, while they may message the Agent
+   * (`canDirectMessageAgent`), and one with a deleted Agent stays readable but takes no new
    * message (`canSend`). `NOT_FOUND` for anything that is not the viewer's direct conversation.
    */
   async authorize(
@@ -127,7 +130,7 @@ export class DirectConversations {
           select: {
             id: true,
             userId: true,
-            agent: { select: { id: true, ownerId: true, deletedAt: true } },
+            agent: { select: { id: true, ownerId: true, visibility: true, deletedAt: true } },
           },
         },
       },
@@ -143,8 +146,11 @@ export class DirectConversations {
     }
     const agent = conversation.members.find((member) => member.agent)?.agent;
     if (!agent) throw new AppError("NOT_FOUND");
-    // Only the creator's own DM with it: a member row in another member's DM grants nothing.
-    if (agent.ownerId !== viewerId || conversation.directKey !== agentDirectKey(viewerId, agent.id))
+    // Only the viewer's own DM with it: a member row in another member's DM grants nothing.
+    if (
+      conversation.directKey !== agentDirectKey(viewerId, agent.id) ||
+      !canDirectMessageAgent(viewerId, agent)
+    )
       throw new AppError("ACCESS_DENIED");
     if (canSend) assertAgentLive(agent);
     return { target: { kind: "agent", agentId: agent.id }, viewerMemberId };

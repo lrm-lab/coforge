@@ -1,10 +1,13 @@
 import { Prisma } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import { directMessageAgentWhere } from "#src/server/agents/agent-visibility.server";
 
 /**
  * The direct conversations a viewer's Direct messages list holds, by `DirectConversations.authorize`'s
- * rule: one between members that names them, or their own DM with an Agent they created. A deleted
- * Agent's DM stays readable by its link but leaves the list. A pin drag reads exactly these.
+ * rule: one between members that names them, or their own DM with an Agent they may message (a
+ * public one, or one they created). A deleted Agent's DM stays readable by its link but leaves the
+ * list. A pin drag reads exactly these.
  * `viewerDirectConversationSql` is the same rule for raw SQL; change the two together.
  */
 export function viewerDirectConversationWhere(userId: string) {
@@ -13,7 +16,7 @@ export function viewerDirectConversationWhere(userId: string) {
       { directKey: { startsWith: "user:", contains: `user:${userId}` } },
       {
         directKey: { endsWith: `|user:${userId}` },
-        members: { some: { agent: { ownerId: userId, ...ACTIVE_AGENT_WHERE } } },
+        members: { some: { agent: { ...directMessageAgentWhere(userId), ...ACTIVE_AGENT_WHERE } } },
       },
     ],
   } satisfies Prisma.ConversationWhereInput;
@@ -33,7 +36,7 @@ export function viewerDirectConversationSql(userId: string) {
         SELECT 1 FROM "conversation_members" own
         JOIN "agents" a ON a."id" = own."agentId"
         WHERE own."conversationId" = c."id"
-          AND a."ownerId" = ${userId}::uuid
+          AND (a."visibility" = ${AGENT_VISIBILITY.PUBLIC} OR a."ownerId" = ${userId}::uuid)
           AND a."deletedAt" IS NULL
       )
     )

@@ -202,4 +202,7 @@ message CodeAgentModelMetadata {
   repeated string reasoning_efforts = 5;
   string default_reasoning = 6;
   bool recommended = 7;
+  // Fast support is decided by runtime, not per model; an older daemon may still send this field.
+  reserved 8;
+  reserved "supports_fast_mode";
 }

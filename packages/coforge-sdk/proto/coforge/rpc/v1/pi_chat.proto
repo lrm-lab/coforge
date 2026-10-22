@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+// Independent native Pi conversations, carried by the existing Workspace Daemon connection.
+message PiChatRequest {
+  uint32 protocol_major = 1;
+  string message_type = 2;
+  string request_id = 3;
+  string workspace_id = 4;
+  string computer_id = 5;
+  string user_id = 6;
+  bytes command_json = 7;
+}
+
+// Chunking keeps even complete native tool results below the existing WSS frame limit.
+message PiChatFrame {
+  uint32 protocol_major = 1;
+  string message_type = 2;
+  string frame_id = 3;
+  string workspace_id = 4;
+  string computer_id = 5;
+  string user_id = 6;
+  string kind = 7;
+  uint32 part = 8;
+  uint32 parts = 9;
+  bytes data = 10;
+}

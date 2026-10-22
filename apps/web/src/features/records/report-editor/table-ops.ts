@@ -1,5 +1,4 @@
 import type { Editor } from "@tiptap/core";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import {
   CellSelection,
   TableMap,
@@ -19,23 +18,6 @@ export function isColumnResizeDragging(editor: Editor): boolean {
     | undefined
     | null;
   return Boolean(state?.dragging);
-}
-
-export function findTablePos(doc: ProseMirrorNode, hintPos?: number | null): number | null {
-  if (typeof hintPos === "number") {
-    const node = doc.nodeAt(hintPos);
-    if (node?.type.name === "table") return hintPos;
-  }
-  let found: number | null = null;
-  doc.descendants((node, pos) => {
-    if (found != null) return false;
-    if (node.type.name === "table") {
-      found = pos;
-      return false;
-    }
-    return true;
-  });
-  return found;
 }
 
 export function getTableContext(editor: Editor, tablePos: number): TableContext | null {
@@ -169,10 +151,4 @@ export function deleteColumnAt(editor: Editor, tablePos: number, colIndex: numbe
   editor.view.dispatch(tr.scrollIntoView());
   editor.view.focus();
   return true;
-}
-
-export function tableSize(editor: Editor, tablePos: number): { rows: number; cols: number } | null {
-  const ctx = getTableContext(editor, tablePos);
-  if (!ctx) return null;
-  return { rows: ctx.map.height, cols: ctx.map.width };
 }

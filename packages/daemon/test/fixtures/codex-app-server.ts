@@ -1,11 +1,14 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { appliedServiceTier, CODEX_MODEL_LIST, hasExpectedThreadConfig } from "./codex-models";
+import { readLines } from "./read-lines";
 
 const expectedSkill = process.argv
   .find((argument) => argument.startsWith("expected-skill="))
   ?.slice(15);
 const expectsCoforgeEnvironment = process.argv.includes("expected-coforge-environment");
 const expectsRuntimeConfig = process.argv.includes("expected-runtime-config");
+const expectsFastMode = process.argv.includes("expected-fast-mode");
 const expectsAgentInstructions = process.argv.includes("expected-agent-instructions");
 const expectedSession = process.argv
   .find((argument) => argument.startsWith("expected-session="))
@@ -30,22 +33,14 @@ try {
   // No project skills were discovered.
 }
 
-const decoder = new TextDecoder();
-let buffer = "";
 let initialized = false;
 let skillsLoaded = false;
 let turn = 0;
 let active = false;
 
-for await (const chunk of Bun.stdin.stream()) {
-  buffer += decoder.decode(chunk, { stream: true });
-  let newline = buffer.indexOf("\n");
-  while (newline >= 0) {
-    const line = buffer.slice(0, newline).replace(/\r$/, "");
-    buffer = buffer.slice(newline + 1);
-    if (line) handle(JSON.parse(line) as Request);
-    newline = buffer.indexOf("\n");
-  }
+for await (const line of readLines(Bun.stdin.stream())) {
+  const text = line.replace(/\r?\n$/, "");
+  if (text) handle(JSON.parse(text) as Request);
 }
 
 interface Request {
@@ -183,26 +178,7 @@ function handle(request: Request): void {
       write({ id: request.id, error: { code: -32001, message: "token=fixture-private-token" } });
       return;
     }
-    write({
-      id: request.id,
-      result: {
-        data: [
-          {
-            model: "gpt-5.6-sol",
-            displayName: "GPT-5.6 Sol",
-            description: "Primary coding model",
-            isDefault: true,
-            supportedReasoningEfforts: [
-              { reasoningEffort: "low" },
-              { reasoningEffort: "medium" },
-              { reasoningEffort: "high" },
-            ],
-            defaultReasoningEffort: "low",
-          },
-        ],
-        nextCursor: null,
-      },
-    });
+    write({ id: request.id, result: CODEX_MODEL_LIST });
     return;
   }
   if (request.method === "skills/list" && request.id && initialized) {
@@ -290,7 +266,7 @@ function handle(request: Request): void {
       });
       return;
     }
-    if (expectsRuntimeConfig && !hasRuntimeConfig(request.params)) {
+    if (expectsRuntimeConfig && !hasExpectedThreadConfig(request.params, expectsFastMode)) {
       write({
         id: request.id,
         error: { message: "missing selected runtime config" },
@@ -327,6 +303,9 @@ function handle(request: Request): void {
         thread: {
           id: process.argv.includes("wrong-resume-id") ? "wrong-thread" : threadId,
         },
+        // Mirrors codex-cli 0.163.0's own reply: a "fast"/"priority" request resolves to
+        // "priority", no request at all reports "default", and an unknown value reports null.
+        serviceTier: appliedServiceTier(request.params?.serviceTier),
       },
     });
     return;
@@ -667,11 +646,6 @@ function hasCoforgeEnvironmentPolicy(params: Record<string, unknown> | undefined
     filters.PATH === "include" &&
     filters.HOME === "include"
   );
-}
-
-function hasRuntimeConfig(params: Record<string, unknown> | undefined): boolean {
-  const config = record(params?.config);
-  return params?.model === "gpt-5.6-sol" && config?.model_reasoning_effort === "high";
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

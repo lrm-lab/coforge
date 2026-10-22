@@ -1,5 +1,15 @@
 import { unzipSync, zipSync } from "fflate";
-import template from "./templates/foundation-models-weekly.json";
+import { useStorage } from "nitro/storage";
+
+const TEMPLATE_NAME = "foundation-models-weekly.pptx";
+
+async function presentationTemplate(): Promise<Uint8Array> {
+  const template = await useStorage("assets:weekly-report-templates").getItemRaw<Uint8Array>(
+    TEMPLATE_NAME,
+  );
+  if (!template) throw new Error("Weekly report presentation template is unavailable.");
+  return template;
+}
 
 export type WeeklyReportPresentationMember = {
   displayName: string;
@@ -60,7 +70,7 @@ function pages(markdown: string): string[] {
 export async function buildWeeklyReportPresentation(
   input: WeeklyReportPresentationInput,
 ): Promise<Uint8Array> {
-  const files = unzipSync(Uint8Array.fromBase64(template.base64));
+  const files = unzipSync(await presentationTemplate());
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   const bodyTemplate = decoder.decode(files["ppt/slides/slide2.xml"]);

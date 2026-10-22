@@ -1,14 +1,7 @@
-import type {
-  TaskCommand,
-  TaskHistoryEvent,
-  TaskStatus,
-  TaskView,
-} from "@lrm/coforge-sdk/internal";
+import type { TaskCommand, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
 import { useQuery } from "@tanstack/react-query";
-import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  ArrowRight,
   ChevronDown,
   ChevronUp,
   DotsHorizontal as MoreHorizontal,
@@ -16,7 +9,7 @@ import {
   SearchLg,
   XClose,
 } from "@untitledui/icons";
-import { useState, type ReactNode } from "react";
+import { useState, type ComponentProps, type CSSProperties, type ReactNode } from "react";
 import { useFilter } from "react-aria";
 import {
   Autocomplete as AriaAutocomplete,
@@ -27,17 +20,14 @@ import {
 } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
-import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import type { Mentionable } from "#src/features/conversations/mention-text";
-import { formatDateForDisplay } from "#src/lib/dates";
-import { useTimeFormat } from "#src/lib/time-format-context";
+import { useVisualViewportTop } from "#src/hooks/use-visual-viewport-top";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { getLocale } from "#src/paraglide/runtime";
-import { taskTimeline } from "./task-history-timeline";
+import { StatusBadge, TaskHistory, type TimelineNames } from "./task-history";
 import { TaskPerson } from "./task-owner";
 import { getTaskMoveCommand, taskStatusOptions } from "./task-move";
 import { executeTask } from "./tasks.functions";
@@ -46,18 +36,8 @@ import { statusLabel, TASK_STATUS_COLOR, type TaskControls } from "./task-workfl
 
 type DetailCommand = Omit<TaskCommand, "idempotencyKey" | "conversationId"> & { number: number };
 
-const appRoute = getRouteApi("/w/$workspaceSlug");
-
 const UNASSIGNED = "unassigned";
 const memberKey = (member: { kind: string; id: string }) => `${member.kind}:${member.id}`;
-
-function StatusBadge({ status }: { status: TaskStatus }) {
-  return (
-    <Badge type="color" size="sm" color={TASK_STATUS_COLOR[status].badge}>
-      {statusLabel(status)}
-    </Badge>
-  );
-}
 
 export function TaskDetailMenu({
   task,
@@ -159,18 +139,19 @@ export function TaskDetailDialog({
     />
   );
   return (
-    <ModalOverlay isOpen={open} onOpenChange={onOpenChange} isDismissable>
+    <TaskPopupOverlay isOpen={open} onOpenChange={onOpenChange}>
       <Modal
         className={cn(
-          "flex flex-col overflow-hidden",
+          // On a phone the thread scrolls, never the sheet (the shared Modal scrolls there).
+          "flex h-full w-full flex-col overflow-hidden rounded-none max-sm:overflow-hidden max-sm:shadow-none",
           // With a thread the popup is a workspace; without one it only wraps the task.
           thread
-            ? "h-[min(86vh,56rem)] w-[min(60rem,calc(100vw-2rem))]"
-            : "w-[min(40rem,calc(100vw-2rem))]",
+            ? "sm:h-[min(86vh,56rem)] sm:w-[min(60rem,calc(100vw-2rem))]"
+            : "sm:h-auto sm:w-[min(40rem,calc(100vw-2rem))]",
         )}
       >
         <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center gap-3 border-b border-secondary py-3 pr-3 pl-6">
+          <div className="flex shrink-0 items-center gap-3 border-b border-secondary py-3 pr-3 pl-4 sm:pl-6">
             <div className="min-w-0 flex-1">
               <div className="truncate text-xs font-medium text-tertiary">{conversationName}</div>
               <Heading
@@ -196,7 +177,28 @@ export function TaskDetailDialog({
           )}
         </Dialog>
       </Modal>
-    </ModalOverlay>
+    </TaskPopupOverlay>
+  );
+}
+
+/**
+ * The popup's overlay. A phone shows the popup as a full-screen sheet over exactly the visual
+ * viewport (React Aria's `--visual-viewport-height`, at its measured offset, so px): with the
+ * keyboard up, the header stays at the top and the composer sits right above the keyboard. The
+ * offset changes while the keyboard moves; only this component renders again, not the thread.
+ */
+function TaskPopupOverlay(
+  props: Pick<ComponentProps<typeof ModalOverlay>, "isOpen" | "onOpenChange" | "children">,
+) {
+  // Every board card holds a closed popup, so only an open one follows the viewport.
+  const viewportTop = useVisualViewportTop(props.isOpen ?? false);
+  return (
+    <ModalOverlay
+      {...props}
+      isDismissable
+      style={{ "--visual-viewport-top": `${viewportTop}px` } as CSSProperties}
+      className="max-sm:top-(--visual-viewport-top) max-sm:bottom-auto max-sm:h-(--visual-viewport-height) max-sm:min-h-0 max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
+    />
   );
 }
 
@@ -281,7 +283,7 @@ function TaskSection({
   };
 
   return (
-    <section className="flex flex-col gap-5 border-b border-secondary px-6 pt-5 pb-5">
+    <section className="flex flex-col gap-5 border-b border-secondary px-4 pt-5 pb-5 sm:px-6">
       <h3 className="line-clamp-3 text-lg font-semibold break-words text-primary">{task.title}</h3>
 
       <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-3">
@@ -503,146 +505,4 @@ function AssigneeMenu({
       </Dropdown.Popover>
     </Dropdown.Root>
   );
-}
-
-type TimelineNames = {
-  actor: (type: TaskHistoryEvent["actorType"], handle: string | null) => string;
-  assignee: (kind: "user" | "agent", id: string) => string;
-};
-
-function TaskHistory({
-  failed,
-  events,
-  names,
-}: {
-  failed: boolean;
-  events?: readonly TaskHistoryEvent[];
-  names: TimelineNames;
-}) {
-  if (failed)
-    return (
-      <p role="alert" className="mt-3 text-sm text-error-primary">
-        {m.tasks_history_error()}
-      </p>
-    );
-  if (!events) return null;
-  if (events.length === 0)
-    return <p className="mt-3 text-sm text-tertiary">{m.tasks_history_empty()}</p>;
-  return <TaskTimeline events={events} names={names} />;
-}
-
-function TaskTimeline({
-  events,
-  names,
-}: {
-  events: readonly TaskHistoryEvent[];
-  names: TimelineNames;
-}) {
-  const timeZone = appRoute.useLoaderData().timeZone;
-  const timeFormat = useTimeFormat();
-  const locale = getLocale();
-  return (
-    <ol className="mt-3 flex flex-col">
-      {taskTimeline(events).map(({ event, status, lineStatus }, index) => (
-        <li key={event.id} className="relative flex gap-3 pb-4 last:pb-0">
-          {index < events.length - 1 && (
-            <span
-              aria-hidden="true"
-              className={cn(
-                "absolute top-4 bottom-0 left-1.5 w-px -translate-x-1/2",
-                lineStatus ? TASK_STATUS_COLOR[lineStatus].line : "bg-border-secondary",
-              )}
-            />
-          )}
-          <span
-            aria-hidden="true"
-            className={cn(
-              "relative mt-1 size-3 shrink-0 rounded-full",
-              status ? TASK_STATUS_COLOR[status].dot : "border-2 border-primary bg-primary",
-            )}
-          />
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="text-sm font-semibold text-primary">{eventTitle(event)}</div>
-            <div className="text-xs text-tertiary">
-              {names.actor(event.actorType, event.actorName)} ·{" "}
-              {formatDateForDisplay(event.createdAt, timeZone, locale, timeFormat)}
-            </div>
-            <EventDetail event={event} names={names} />
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function eventTitle(event: TaskHistoryEvent) {
-  switch (event.eventType) {
-    case "created":
-      return m.tasks_history_created();
-    case "status_changed":
-      return m.tasks_history_status_changed();
-    case "assignee_changed":
-      return m.tasks_history_assignee_changed();
-    case "amended":
-      return m.tasks_history_amended();
-  }
-}
-
-function EventDetail({ event, names }: { event: TaskHistoryEvent; names: TimelineNames }) {
-  const detail = "mt-1 text-sm text-secondary";
-  switch (event.eventType) {
-    case "created":
-      return (
-        <p className={detail}>
-          {m.tasks_history_created_detail({
-            number: String(event.payload.taskNumber),
-            status: statusLabel(event.payload.status),
-          })}
-        </p>
-      );
-    case "status_changed":
-      return (
-        <div className="mt-1 flex items-center gap-1.5">
-          <StatusBadge status={event.payload.from} />
-          <ArrowRight aria-hidden="true" className="size-3.5 text-fg-quaternary" />
-          <StatusBadge status={event.payload.to} />
-        </div>
-      );
-    case "assignee_changed": {
-      const { assigneeId, assigneeType } = event.payload;
-      return (
-        <p className={detail}>
-          {assigneeId && assigneeType
-            ? m.tasks_history_assigned_to({ name: names.assignee(assigneeType, assigneeId) })
-            : m.tasks_history_unassigned()}
-        </p>
-      );
-    }
-    case "amended": {
-      const { title, description } = event.payload.changes;
-      const empty = "—";
-      return (
-        <>
-          {title && (
-            <p className={cn(detail, "break-words")}>
-              {m.tasks_history_field_change({
-                field: m.tasks_title(),
-                from: title.from,
-                to: title.to,
-              })}
-            </p>
-          )}
-          {description && (
-            <p className={cn(detail, "line-clamp-3 break-words")}>
-              {m.tasks_history_field_change({
-                field: m.tasks_description(),
-                from: description.from ?? empty,
-                to: description.to ?? empty,
-              })}
-            </p>
-          )}
-        </>
-      );
-    }
-  }
 }

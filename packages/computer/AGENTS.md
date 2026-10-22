@@ -6,9 +6,7 @@ These rules extend the repository root `AGENTS.md` for this package component.
 
 `coforge-computer` is the sole installed native executable and user-facing CLI. It is not
 a desktop UI, a cloud WebSocket client, or the owner of Daemon business logic.
-The Computer starts or reuses the Daemon and talks to it through the local
-versioned RPC boundary. It may perform the one-time user-authorized setup
-registration, but the Daemon owns ongoing Workspace and Agent operation.
+The Computer starts or reuses the Daemon and talks to it through the local versioned RPC boundary. It may perform the one-time user-authorized setup registration, but the Daemon owns ongoing Workspace and Agent operation.
 The executable dispatches `__daemon` to the Daemon runtime, `__agent-cli` to
 the existing `@lrm/coforge/runner`, `__lifecycle` to the installer's read-only
 surface, and all normal invocations to the Computer management CLI. These internal modes do not make Daemon or Agent CLI public
@@ -22,6 +20,10 @@ launches it and reads the receipt; it does not roll back itself. `coforge-comput
 recover` runs the installer's `recover`.
 
 ## Module map
+
+`host/pi-chat-http.ts` and `host/pi-chat-workers.ts` retain the legacy adapter.
+Current Pi Chat uses Workspace Daemon WSS; `packages/daemon/src/pi-chat/` owns
+worker lifecycle. `__pi-chat` clears platform capabilities before using Pi.
 
 Keep `src` organized by responsibility. New code belongs in the owning module;
 do not grow `cli.ts` or `setup/` into an application god module. Paths are
@@ -133,8 +135,8 @@ that environment; login, setup, and lifecycle adapters share that public seam.
   Removing the service also removes that named volume. A disk format is this
   removal, then a create of the same computer id. An `update` job runs
   `docker service update --image --force` on that service and does not remove
-  the volume. Heartbeats report the node image and each running computer's
-  image id so Web can offer a replace when they differ.
+  the volume. Heartbeats report node and `coforge-<id>` task image ids so Web
+  can offer a replace when layers differ; the runtime version is display-only.
   `docker/Dockerfile` is the local image; its entrypoint is `coforge-computer foreground`.
 - `workspace/` owns the direct Workspace lookup used by setup intent. Computer
   never lists or interactively selects Workspaces; do not add a picker or a

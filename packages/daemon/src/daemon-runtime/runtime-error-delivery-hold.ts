@@ -33,7 +33,8 @@ export type RuntimeErrorDeliveryHoldPorts = Readonly<{
  * What the runtime does next ends them, per the reference behaviour cited at
  * `runtimeErrorRecoverySignal`. A turn end resets the fence's streak, so the fence trips only for
  * the same failure repeating with no turn end or output in between; a usage limit ending every
- * turn never trips it. A tripped fence holds until an explicit Stop.
+ * turn never trips it. A tripped fence takes the Agent offline: `runtime.ts` ends the process,
+ * and the hold is then cleared via the delivery queue's `clearAgent` and this hold's `forget`.
  */
 export class RuntimeErrorDeliveryHold {
   readonly #ports: RuntimeErrorDeliveryHoldPorts;
@@ -46,33 +47,28 @@ export class RuntimeErrorDeliveryHold {
   }
 
   /**
-   * Records one runtime error. A failure not worth retrying ends any backoff instead of holding
-   * deliveries behind one that will never usefully resolve. A retryable one holds deliveries for
-   * the next backoff delay, unless its fingerprint has now repeated enough to trip the fence.
-   * Returns a fence state whenever the Agent is fenced, so the caller words every failure from the
-   * trip until an explicit Stop as retrying having stopped: the tripping failure and repeats of it
-   * with their own streak, and any other failure (a different one, or the same one after a turn
-   * end reset the streak) with the count the fence tripped at, since that is what stopped it.
+   * Records one runtime error. Every failure reaching this point counts toward the fingerprint
+   * fence — matching the reference Computer, which fences any non-offline repeat: a terminal
+   * failure that is not worth retrying ends any backoff instead of holding deliveries behind
+   * one that will never usefully resolve, and a retryable one holds deliveries for the next
+   * backoff delay — unless its fingerprint has now repeated enough to trip the fence, whatever
+   * its class. Returns the fence state on a trip so the caller takes the Agent offline with the
+   * fence Activity that names what stopped retrying.
    */
   noteFailure(
     agentId: string,
     classification: RuntimeErrorClassification,
     fingerprint: string,
   ): RuntimeErrorFingerprintFenceState | undefined {
-    const tripped = this.#isFenced(agentId)
-      ? { fingerprint, attempts: this.#fence.threshold, fenced: true }
-      : undefined;
-    if (classification.retryDecision !== RUNTIME_ERROR_RETRY_DECISION.RETRY) {
-      this.#endBackoff(agentId);
-      return tripped;
-    }
     const fence = this.#fence.note(agentId, fingerprint);
     if (fence.fenced) {
       this.#holdFenced(agentId);
       return fence;
     }
-    // A backoff would replace the fence's indefinite hold with one its timer releases.
-    if (tripped) return tripped;
+    if (classification.retryDecision !== RUNTIME_ERROR_RETRY_DECISION.RETRY) {
+      this.#endBackoff(agentId);
+      return undefined;
+    }
     const backoff = this.#backoff.recordFailure(
       agentId,
       classification.errorClass,
@@ -108,9 +104,9 @@ export class RuntimeErrorDeliveryHold {
       this.#endBackoff(agentId);
   }
 
-  /** An explicit Stop: a fresh start must not inherit a backoff or fence from a process that no
-   * longer exists. The delivery queue's own `clearAgent`, called first, drops the hold (the fence's
-   * included) and what it held. */
+  /** An explicit Stop or an offline-taking failure: a fresh start must not inherit a backoff or
+   * fence from a process that no longer exists. The delivery queue's own `clearAgent`, called
+   * first, drops the hold (the fence's included) and what it held. */
   forget(agentId: string): void {
     this.#clearReleaseTimer(agentId);
     this.#backoff.reset(agentId);
@@ -143,11 +139,12 @@ export class RuntimeErrorDeliveryHold {
 
   /**
    * A tripped fingerprint fence stops retrying — cancels any pending release timer and keeps (or
-   * starts) an indefinite explicit hold, so nothing currently held, and nothing newly queued,
-   * reaches the runtime that just failed the same way three times in a row. Never releases or
-   * flushes anything already held: doing so would deliver straight into the same broken runtime
-   * this fence exists to stop retrying. Only an explicit Stop clears the hold; output, progress, a
-   * turn end, an unexpected exit and any relaunch that follows leave it unchanged.
+   * starts) an explicit hold, so nothing currently held, and nothing newly queued, reaches the
+   * runtime that just failed the same way three times in a row while its process is ending.
+   * Never releases or flushes anything already held: doing so would deliver straight into the
+   * same broken runtime this fence exists to stop retrying. The trip itself takes the Agent
+   * offline (`runtime.ts` ends the process); the hold is then cleared by the delivery queue's
+   * `clearAgent` and this hold's `forget`, as an explicit Stop's is.
    */
   #holdFenced(agentId: string): void {
     this.#clearReleaseTimer(agentId);

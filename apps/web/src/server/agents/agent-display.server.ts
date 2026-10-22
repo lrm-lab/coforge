@@ -1,6 +1,11 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
-import type { AgentActivity, AgentContextUsage, AgentStatus } from "@lrm/coforge-sdk/internal";
+import type {
+  AgentActivity,
+  AgentContextUsage,
+  AgentServiceTier,
+  AgentStatus,
+} from "@lrm/coforge-sdk/internal";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
   parseAgentDisplaySnapshot,
@@ -8,6 +13,7 @@ import {
   type AgentDisplaySnapshot,
 } from "@lrm/coforge-sdk/internal";
 import { AGENT_STATUS_LEASE_MS } from "./agent-status.server";
+import { LUA_COMMON, PUT_SERVICE_TIER } from "./agent-display-lua";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
 
 // 90s: 1.5x the daemon's 60s busy heartbeat (ACTIVITY_HEARTBEAT_MS), the same
@@ -86,113 +92,6 @@ export function activityKindForObservation(
   return undefined;
 }
 
-const LUA_COMMON = `
-local function decode_state(raw)
-  if not raw then return {} end
-  local ok, state = pcall(cjson.decode, raw)
-  if not ok or type(state) ~= "table" then return {} end
-  return state
-end
-
-local function revision(state, revision_key)
-  -- The single-scope scripts call this with the keys execute already put in place, so the default
-  -- keeps them exactly as they were; the batch reader passes each scope's own index instead.
-  revision_key = revision_key or KEYS[2]
-  local redis_time = redis.call("TIME")
-  local server_time_floor = tonumber(redis_time[1]) * 1000000 + tonumber(redis_time[2])
-  local stored_revision = tonumber(redis.call("GET", KEYS[2])) or 0
-  local state_revision = tonumber(state.revision) or 0
-  local next_revision = math.max(server_time_floor, stored_revision + 1, state_revision + 1)
-  local encoded_revision = string.format("%.0f", next_revision)
-  -- The counter deliberately outlives the 24-hour display state. Redis TIME is
-  -- the fallback lower bound when eviction or a datastore reset removes both.
-  -- Keep the revision as a string inside Redis because cjson encodes Lua numbers
-  -- with only 14 significant digits, below the precision of this microsecond value.
-  redis.call("SET", revision_key, encoded_revision)
-  state.revision = encoded_revision
-  return next_revision
-end
-
-local function save(state, state_key)
-  state_key = state_key or KEYS[1]
-  redis.call("SET", state_key, cjson.encode(state), "EX", 86400)
-end
-
-local function project(state, now, revision_key)
-  local changed = false
-  if state.process and state.process.status == "active" and not state.processExpired and
-      now >= state.process.leaseUntil then
-    state.processExpired = true
-    state.activityVisible = false
-    changed = true
-  elseif state.process and state.process.status == "active" and not state.processExpired and
-      state.activityVisible and state.activity and
-      (state.activity.kind == "working" or state.activity.kind == "thinking") and
-      now >= state.activity.expiresAt then
-    state.activityVisible = false
-    changed = true
-  end
-  if changed then revision(state, revision_key) end
-  return changed
-end
-
-local function snapshot(state, workspace_id, computer_id, agent_id, now)
-  local active = state.process and state.process.status == "active" and not state.processExpired and
-    now < state.process.leaseUntil
-  local kind = "offline"
-  local detail_kind = ""
-  local detail = ""
-  local entries = {}
-  local expires_at = cjson.null
-  local context_usage = cjson.null
-  if active then
-    kind = "online"
-    expires_at = state.process.leaseUntil
-    if state.activityVisible and state.activity then
-      kind = state.activity.kind
-      detail_kind = state.activity.detailKind
-      detail = state.activity.detail
-      entries = state.activity.entries or {}
-      if kind == "working" or kind == "thinking" then
-        if state.activity.expiresAt < expires_at then expires_at = state.activity.expiresAt end
-      end
-    end
-    -- AgentStatus carries no launch id, so the strongest fence available here is
-    -- "the same daemon instance the active process reports" plus "not a launch OBSERVE_ACTIVITY
-    -- has since retired" — the same bounded, best-effort fence retiredLaunchId already is, not a
-    -- database race fence. A dead/superseded launch's reading never paints the badge.
-    if state.contextUsage and state.contextUsage.daemonInstanceId == state.process.daemonInstanceId and
-        state.contextUsage.launchId ~= state.retiredLaunchId then
-      context_usage = {
-        usedTokens = state.contextUsage.usedTokens, windowTokens = state.contextUsage.windowTokens,
-        observedAtMs = state.contextUsage.observedAt
-      }
-    end
-  end
-  return cjson.encode({
-    protocolMajor = 1, workspaceId = workspace_id, computerId = computer_id,
-    agentId = agent_id, revision = state.revision, activityKind = kind,
-    detailKind = detail_kind, detail = detail, entries = entries, expiresAt = expires_at,
-    contextUsage = context_usage
-  })
-end
-
--- One scope's snapshot, read and projected exactly as the single-scope reader always did. The key
--- indices are parameters so the batch reader below can answer many scopes in one round trip; the
--- helpers fall back to the keys execute already put in place, which is what keeps the other
--- scripts on this shared preamble unchanged.
-local function take_snapshot(state_index, revision_index, workspace_id, computer_id, agent_id, now)
-  local state_key = KEYS[state_index]
-  local revision_key = KEYS[revision_index]
-  local raw = redis.call("GET", state_key)
-  local state = decode_state(raw)
-  local changed = project(state, now, revision_key)
-  if not raw then revision(state, revision_key) changed = true end
-  if changed then save(state, state_key) end
-  return snapshot(state, workspace_id, computer_id, agent_id, now)
-end
-`;
-
 const OBSERVE_STATUS = `${LUA_COMMON}
 local state = decode_state(redis.call("GET", KEYS[1]))
 local now = tonumber(ARGV[1])
@@ -220,8 +119,11 @@ local preserve_provisional = not current and state.activityVisible and state.act
 local reset_activity = (current and (not same_instance or current.status == "inactive")) or ARGV[5] == "inactive"
 if reset_activity or (not preserve_provisional and not current) then state.activityVisible = false end
 -- The process going inactive, or a different daemon instance taking over, makes any
--- stored context-window reading stale.
-if reset_activity then state.contextUsage = nil end
+-- stored context-window reading and service-tier reading stale.
+if reset_activity then
+  state.contextUsage = nil
+  state.serviceTier = nil
+end
 state.process = {
   status = ARGV[5], daemonInstanceId = ARGV[6], sequence = tonumber(ARGV[7]),
   observedAt = tonumber(ARGV[8]), leaseUntil = ARGV[5] == "active" and
@@ -266,6 +168,10 @@ if previous then
     -- A context-window reading from the launch just retired is stale.
     if state.contextUsage and state.contextUsage.launchId == previous.launchId then
       state.contextUsage = nil
+    end
+    -- The service-tier reading belongs to that launch too.
+    if state.serviceTier and state.serviceTier.launchId == previous.launchId then
+      state.serviceTier = nil
     end
   end
 end
@@ -336,11 +242,10 @@ save(state)
 return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)
 `;
 
-// KEYS: [state, revision] per scope, in that order, as many as ARGV names scopes.
-// ARGV: [1] now, then one (workspaceId, computerId, agentId) triple per scope.
-//
-// A Workspace's Agent list asks for the same snapshot for every row at once; one script answers
-// them all in a single round trip while keeping each scope's own lazy projection and save, which is
+// ARGV: [1] now, [2] workspaceId, [3] computerId, [4] agentId, [5] launchId,
+// [6] daemonInstanceId, [7] clientSeq, [8] observedAtMs, [9] requested ("1"/"0"), [10] observed.
+// The ordering fence is PUT_CONTEXT_USAGE's exactly: a same-daemon-instance replay must advance
+// clientSeq, and a different daemon instance's own reading only advances by wall time.
 // what makes the answers as fresh as the single-scope reads they replace.
 const SNAPSHOT_MANY = `${LUA_COMMON}
 local now = tonumber(ARGV[1])
@@ -430,6 +335,9 @@ export interface AgentDisplay {
   /** Sets the Agent's current context-window reading, guarded by the same
    * daemonInstanceId/clientSeq ordering rule `observeStatus` uses. */
   putContextUsage(message: AgentContextUsage): Promise<AgentDisplaySnapshot | undefined>;
+  /** Sets the Agent's current service-tier reading (whether the launch got the Fast tier it
+   * asked for), guarded by the same ordering rule `putContextUsage` uses. */
+  putServiceTier(message: AgentServiceTier): Promise<AgentDisplaySnapshot | undefined>;
   snapshot(scope: Scope): Promise<AgentDisplaySnapshot>;
   /** Many snapshots in one round trip (a Workspace's Agent list); same value per scope as
    * `snapshot`, in the scopes' order. */
@@ -490,6 +398,17 @@ export class RedisAgentDisplay implements AgentDisplay {
       message.observedAtMs,
       message.usedTokens,
       message.windowTokens,
+    ]);
+  }
+
+  async putServiceTier(message: AgentServiceTier) {
+    return this.execute(PUT_SERVICE_TIER, message, [
+      message.launchId,
+      message.daemonInstanceId,
+      message.clientSeq,
+      message.observedAtMs,
+      message.requested ? "1" : "0",
+      message.observed,
     ]);
   }
 
@@ -593,13 +512,7 @@ export class RedisAgentDisplay implements AgentDisplay {
   }
 
   private keyPrefix(scope: Scope) {
-    return workspaceRedisKey({
-      workspaceId: scope.workspaceId,
-      computerId: scope.computerId,
-      agentId: scope.agentId,
-      name: "display",
-      version: "v1",
-    });
+    return workspaceRedisKey({ ...scope, name: "display", version: "v1" });
   }
 }
 
@@ -607,6 +520,6 @@ let singleton: RedisAgentDisplay | undefined;
 
 export function getAgentDisplay(): AgentDisplay {
   const redisUrl = redisUrlFor("Agent display");
-  singleton ??= new RedisAgentDisplay(new RedisClient(redisUrl));
+  singleton ??= new RedisAgentDisplay(openRedisClient(redisUrl));
   return singleton;
 }

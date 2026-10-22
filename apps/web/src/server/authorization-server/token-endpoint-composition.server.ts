@@ -1,12 +1,19 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
+import { createAppInstallationSetup } from "#src/server/app-installation-setup/app-installation-setup-composition.server";
 import { PrismaGrantStore } from "#src/server/db/repositories/oauth-grant.repositories.server";
+import { PrismaAppPermissionsStore } from "#src/server/db/repositories/app-permissions.repositories.server";
+import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import { authorizationServerConfiguration } from "./configuration.server";
+import { InstallationTokens } from "./installation-tokens.server";
 import type { SigningKey } from "./signing-keys.server";
+import { SetupEndpoint } from "./setup-endpoint.server";
 import { TokenEndpoint } from "./token-endpoint.server";
 import { UserInfoEndpoint } from "./userinfo-endpoint.server";
 
-/** The token and UserInfo endpoints over PostgreSQL, signing with `signingKeys`. */
+/** The token, UserInfo and installation setup endpoints over PostgreSQL, signing with
+ * `signingKeys`, and the installation tokens the token endpoint issues and an API verifies. */
 export function createTokenEndpoints({
   issuer,
   signingKeys,
@@ -17,12 +24,24 @@ export function createTokenEndpoints({
   signingKeys: SigningKey[];
   db?: PrismaClient;
   now?: () => Date;
-}): { token: TokenEndpoint; userInfo: UserInfoEndpoint } {
+}): {
+  token: TokenEndpoint;
+  userInfo: UserInfoEndpoint;
+  installationTokens: InstallationTokens;
+  setup: SetupEndpoint;
+} {
   const store = new PrismaGrantStore(db);
   const options = { issuer, signingKeys, ...(now ? { now } : {}) };
+  const installationTokens = new InstallationTokens(
+    new PrismaAppPermissionsStore(db),
+    isFeatureEnabled,
+    options,
+  );
   return {
-    token: new TokenEndpoint(store, options),
+    token: new TokenEndpoint(store, options, installationTokens, getAppRateLimits().token),
     userInfo: new UserInfoEndpoint(store, options),
+    installationTokens,
+    setup: new SetupEndpoint(installationTokens, createAppInstallationSetup(db), store, options),
   };
 }
 

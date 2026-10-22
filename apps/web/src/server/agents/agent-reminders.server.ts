@@ -1,6 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { paginated } from "#src/server/db/pagination.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
+import { managedAgentWhere } from "./agent-visibility.server";
 
 export const AGENT_REMINDER_PAGE_SIZE = 50;
 
@@ -28,7 +29,8 @@ export type AgentReminderListItem = {
 };
 
 export interface AgentReminderReadStore {
-  ownsAgent(viewer: AgentReminderViewer, agentId: string): Promise<boolean>;
+  /** The Agent's creator, or a Workspace owner/admin, may read its reminders. */
+  canReadAgent(viewer: AgentReminderViewer, agentId: string): Promise<boolean>;
   list(input: {
     viewer: AgentReminderViewer;
     agentId: string;
@@ -44,7 +46,7 @@ export class AgentRemindersQuery {
     viewer: AgentReminderViewer,
     input: { agentId: string; cursor?: AgentReminderCursor },
   ) {
-    if (!(await this.store.ownsAgent(viewer, input.agentId)))
+    if (!(await this.store.canReadAgent(viewer, input.agentId)))
       return { status: "unauthorized" as const };
     const { reminders, hasMore } = await this.store.list({
       viewer,
@@ -62,14 +64,12 @@ export class AgentRemindersQuery {
 
 export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderReadStore {
   return {
-    ownsAgent: async (viewer, agentId) =>
+    canReadAgent: async (viewer, agentId) =>
       Boolean(
         await db.agent.findFirst({
           where: {
             id: agentId,
-            workspaceId: viewer.workspaceId,
-            ownerId: viewer.userId,
-            workspace: { members: { some: { userId: viewer.userId } } },
+            ...managedAgentWhere(viewer),
             ...ACTIVE_AGENT_WHERE,
           },
           select: { id: true },
@@ -81,10 +81,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
           where: {
             workspaceId: viewer.workspaceId,
             ownerAgentId: agentId,
-            ownerAgent: {
-              ownerId: viewer.userId,
-              workspace: { members: { some: { userId: viewer.userId } } },
-            },
+            ownerAgent: managedAgentWhere(viewer),
             status: "scheduled",
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],

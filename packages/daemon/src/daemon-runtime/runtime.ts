@@ -47,6 +47,21 @@ import {
 } from "#src/agent-runtime/agent-process-manager";
 import { resolveLaunchIdentity, type SessionReference } from "./launch-identity";
 import { runtimeDisplayName, sessionInvalidateActivityText } from "./session-invalidate-activity";
+import { fastModeUnavailableDetail } from "./fast-mode-activity";
+import {
+  recoveryHasContent,
+  recoveryOf,
+  runtimeConfigOf,
+  type AgentInput,
+  type AgentInputCompletion,
+  type AgentInputQueue,
+  type AgentRecoveryContext,
+} from "./runtime-launch-intent";
+import {
+  runtimeFailureDiagnostic,
+  safeRuntimeActivityMessage,
+  validUsageWindow,
+} from "./runtime-activity-text";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import {
   AgentAuthorizationError,
@@ -71,6 +86,8 @@ export type DaemonConfig = {
 /** @deprecated wire-facing callers should use DaemonConfig internally. */
 export type WorkspaceConfig = DaemonConfig;
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
+import { PiChatRelay } from "#src/pi-chat/relay";
+import { readyCapabilities } from "./ready-capabilities";
 import type {
   DaemonConnectionClient,
   DaemonConnectionClientFactory,
@@ -86,7 +103,6 @@ import {
   AGENT_MESSAGE_REJECT_METHOD,
   MENTION_DELIVERY_TERMINAL_CODES,
   AGENT_ACTIVITY_DETAIL_KIND,
-  truncateCodePoints,
   type AgentActivity,
   type AgentSessionInvalidate,
   type AgentSessionInvalidateReason,
@@ -103,11 +119,9 @@ import {
   type LocalAgentMessageRequest,
   type LocalInboxRequest,
   type RuntimeProvider,
+  AGENT_SERVICE_TIER_OBSERVED,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type UsageScanResponse,
-  REMINDER_CAPABILITY,
-  AGENT_MIGRATION_CAPABILITY,
-  APP_CONFIG_CAPABILITY,
   CLEANER_APP_ID,
   type AgentReminderOperationRequest,
   type LocalReminderRequest,
@@ -116,10 +130,6 @@ import {
   type TaskCommand,
   type TaskResult,
   parseUpgradeErrorCode,
-  type AgentWorkspaceFilesListRequest,
-  type AgentWorkspaceFilesListResult,
-  type AgentWorkspaceFileReadRequest,
-  type AgentWorkspaceFileReadResult,
   type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceDeleteResult,
   type AgentContextScanRequest,
@@ -147,12 +157,8 @@ import {
   contextHandoffActivity,
 } from "#src/agent-runtime/context-handoff";
 import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
-import { listAgentSkills } from "#src/code-agent/agent-skills";
-import {
-  deleteAgentWorkspaceFiles,
-  listAgentWorkspaceFiles,
-  readAgentWorkspaceFile,
-} from "#src/agent-runtime/agent-workspace-files";
+import { AgentWorkspaceQueries } from "./agent-workspace-queries";
+import { deleteAgentWorkspaceFiles } from "#src/agent-runtime/agent-workspace-files";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import {
   ProviderProgress,
@@ -170,6 +176,9 @@ import {
   type PublishedActivityLaunch,
 } from "./agent-activity-publisher";
 import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
+import { AgentOfflineResidency } from "./agent-offline-residency";
+import { AgentExitedDelivery } from "./agent-exited-delivery";
+import { AgentUsageReport } from "./agent-usage-report";
 import {
   isTrackedMention,
   MentionDeliveryTracker,
@@ -245,41 +254,6 @@ function controlCodeField(error: unknown): { control_code: string } | Record<str
   return message !== undefined && CONTROL_ERROR_CODES.has(message) ? { control_code: message } : {};
 }
 
-type AgentInputCompletion = {
-  resolve: () => void;
-  reject: (error: unknown) => void;
-};
-
-type AgentRecoveryContext = Pick<
-  AgentStartIntent,
-  "wakeMessage" | "resumeMessages" | "unreadSummary" | "unreadConversationIds"
->;
-
-/** Whether a recovery context has anything concrete to deliver. `recoveryOf(intent)` always
- * returns an object, even for a launch with no wake message, resume messages, or unread summary,
- * so callers cannot tell "nothing to recover" from "recovery was requested" by presence alone —
- * this is the same check `#recoverAttention` uses to skip an empty context. */
-function recoveryHasContent(context: AgentRecoveryContext | undefined): boolean {
-  return Boolean(
-    context &&
-    (context.wakeMessage ||
-      context.resumeMessages?.length ||
-      Object.keys(context.unreadSummary ?? {}).length),
-  );
-}
-
-type AgentInput =
-  | { kind: "recovery"; context: AgentRecoveryContext; completion: AgentInputCompletion }
-  | { kind: "delivery"; message: AgentMessageDelivery; completion: AgentInputCompletion }
-  | { kind: "startup"; text: string; completion: AgentInputCompletion }
-  | { kind: "prompt"; text: string; introduction?: true; completion: AgentInputCompletion };
-
-type AgentInputQueue = {
-  items: AgentInput[];
-  drain?: Promise<void>;
-  closed: boolean;
-};
-
 type ActivityLaunch = PublishedActivityLaunch & {
   startup?: AgentStartup;
   trajectory?: Pick<ActivityTrajectory, "flush" | "dispose">;
@@ -294,6 +268,11 @@ type ActivityLaunch = PublishedActivityLaunch & {
   // — `AgentSession.onExit` itself carries no exit code/signal, so this is the only fact the
   // core has for that decision (see agent-runtime/runtime-error-activity.ts).
   crashDetail?: RuntimeErrorEvent;
+  /** Set when a runtime error took this launch's Agent offline (`#takeAgentOffline`): the exit
+   * handler republishes this Activity — never a bare `runtime_crashed` — a launch that then
+   * fails reports it instead of a generic launch failure, and a delivery to the offline Agent is
+   * kept (queued and ACKed) with this Activity restated. */
+  offlineError?: ReturnType<typeof buildRuntimeErrorActivity>;
 };
 
 /** A launch found stalled, and what its restart needs (`#stalledRuntime`). */
@@ -348,27 +327,6 @@ function generateRuntimeInstanceId(): string {
   return crypto.randomUUID();
 }
 
-function runtimeConfigOf(intent: AgentStartIntent): AgentRuntimeConfig {
-  return {
-    provider: intent.provider,
-    model: intent.model,
-    modelProvider: intent.modelProvider,
-    reasoning: intent.reasoning,
-    providerConfig: intent.providerConfig,
-    toolProfile: intent.toolProfile,
-    ...(intent.memoryAgent ? { memoryAgent: true } : {}),
-  };
-}
-
-function recoveryOf(intent: AgentStartIntent): AgentRecoveryContext {
-  return {
-    wakeMessage: intent.wakeMessage,
-    resumeMessages: intent.resumeMessages,
-    unreadSummary: intent.unreadSummary,
-    unreadConversationIds: intent.unreadConversationIds,
-  };
-}
-
 /** A daemon-owned resident runtime for one supervised Workspace. */
 export class DaemonRuntime {
   readonly #connection: DaemonConfig;
@@ -386,9 +344,6 @@ export class DaemonRuntime {
   #subscriptions: Array<() => void> = [];
   readonly #agentControl: AgentControl;
   readonly #agentSessions: AgentSessions;
-  #skillsScanning = false;
-  /** One Workspace Files list/read at a time per daemon, mirroring `#skillsScanning`. */
-  #workspaceFilesScanning = false;
   readonly #messageAttention: AgentMessageAttentionIndex;
   readonly #messageOperations: AgentMessageOperations;
   /** The Agent requests the daemon only authorizes and forwards over Agent HTTPS. */
@@ -402,9 +357,66 @@ export class DaemonRuntime {
   /** Launch failures of message-triggered wakes, per Agent: while one owes a cooldown, a delivery
    * does not launch the Agent again. No attempt cap; the cooldown stops growing at its ceiling. */
   readonly #wakeLaunchFailures = new LaunchFailureBackoff();
-  /** Deliveries held, unacknowledged, while a server Start is pending for an Agent with nothing
-   * else to take them; released when that Start settles. */
-  readonly #startBuffers = new Map<string, AgentMessageDelivery[]>();
+  readonly #exitedDelivery = new AgentExitedDelivery({
+    hasRuntimeErrorHold: (agentId) => this.#deliveryQueue.explicitHold(agentId) !== undefined,
+    holdRuntimeErrorDelivery: (message) => this.#messageAttention.receive(message),
+    hasConsumed: (message) => this.#messageAttention.hasConsumed(message),
+    logConsumed: (message) => this.#messageAttention.logDecision(message, "consumed"),
+    acknowledge: (message) => this.#messageAttention.acknowledge(message),
+    acknowledgeCustody: (message) => this.#acknowledgeCustody(message),
+    restartConfig: (agentId) => this.#agentProcessManager.restartConfig(agentId),
+    startPending: (agentId) => this.#agentControl.startPending(agentId),
+    hasQueued: (agentId) => this.#deliveryQueue.hasQueued(agentId),
+    queueForNextLaunch: (agentId, m) => this.#deliveryQueue.enqueue(agentId, m),
+    wakeBlockedUntil: (agentId) =>
+      this.#wakeLaunchFailures.isBlocked(agentId)
+        ? this.#wakeLaunchFailures.blockedUntil(agentId)
+        : undefined,
+    enqueueInputDelivery: (agentId, message) => this.#enqueueDelivery(agentId, message),
+    wakeAgent: (agentId, restart) => this.#wakeAgent(agentId, restart),
+    offline: {
+      has: (agentId) => this.#offlineResidency.has(agentId),
+      restate: (agentId) => this.#offlineResidency.restate(agentId),
+    },
+    queuedInputDeliveries: (agentId) =>
+      this.#agentInputQueues
+        .get(agentId)
+        ?.items.flatMap((item) => (item.kind === "delivery" ? [item.message] : [])) ?? [],
+    drainInputDeliveries: (agentId) => {
+      const queue = this.#agentInputQueues.get(agentId);
+      const kept: AgentMessageDelivery[] = [];
+      if (queue)
+        queue.items = queue.items.filter((item) => {
+          if (item.kind !== "delivery") return true;
+          item.completion.resolve();
+          kept.push(item.message);
+          return false;
+        });
+      return kept;
+    },
+    closeAgentInputQueue: (agentId, error) => this.#closeAgentInputQueue(agentId, error),
+    dropMentionAsUnknown: (message) =>
+      this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
+    sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+    sendAgentDeliveryRejection: async (message, reason) => {
+      await this.#transport.sendAgentDeliveryRejection?.({
+        protocolMajor: message.protocolMajor,
+        requestId: message.requestId,
+        messageId: message.messageId,
+        deliveryId: message.deliveryId,
+        workspaceId: message.workspaceId,
+        agentId: message.agentId,
+        sequence: message.sequence,
+        reason,
+        method: AGENT_MESSAGE_REJECT_METHOD,
+      });
+    },
+    hasSession: (agentId) => this.#agentProcessManager.session(agentId) !== undefined,
+    redeliver: (message) =>
+      void this.handleAgentMessage(message).catch((error) =>
+        this.#logAgentOperationFailure("message_delivery", message, error),
+      ),
+  });
   /** Agents whose in-flight launch is a message wake, which presents what waits as one notice. */
   readonly #wakeLaunches = new Set<string>();
   /** Agents whose stalled provider is being restarted; messages meanwhile wait for the relaunch. */
@@ -447,10 +459,37 @@ export class DaemonRuntime {
   readonly #agentStops = new Map<string, Promise<void>>();
   readonly #currentActivityLaunches = new Map<string, ActivityLaunch>();
   readonly #agentStatusSequences = new Map<string, number>();
+  /** The per-Agent offline record a runtime error leaves (`agent-offline-residency.ts`). */
+  readonly #offlineResidency = new AgentOfflineResidency({
+    endHoldForNextLaunch: (agentId) => this.#deliveryQueue.endHoldForNextLaunch(agentId),
+    forgetRuntimeErrorHold: (agentId) => this.#runtimeErrorHold.forget(agentId),
+    keepInputDeliveriesForNextLaunch: (agentId, error) =>
+      this.#exitedDelivery.keepInputDeliveriesForNextLaunch(agentId, error),
+    closeAgentInputQueue: (agentId, error) => this.#closeAgentInputQueue(agentId, error),
+    buildDraft: (agentId, built) =>
+      this.#activity(agentId, built.detailKind, built.level, built.detail, {
+        entries: built.entries,
+        runtimeError: built.runtimeError,
+      }),
+    publish: (agentId, launch, draft) => this.#activityPublisher.publish(agentId, launch, draft),
+    sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+    sendAgentActivity: (activity) => this.#transport.sendAgentActivity?.(activity),
+    stopProcess: (agentId) => this.#agentProcessManager.stop(agentId),
+  });
   readonly #observedUsage = new Map<RuntimeProvider, UsageSnapshot>();
-  /** The last (usedTokens, windowTokens) reading sent per Agent, so an unchanged
-   * reading is not re-sent. Forgotten on launch end/dispose, alongside `#phases`. */
-  readonly #lastContextUsage = new Map<string, { usedTokens: number; windowTokens: number }>();
+  /** Per-launch context-usage and service-tier readings (`agent-usage-report.ts`). */
+  readonly #usageReport = new AgentUsageReport({
+    sessionId: (agentId) => this.#sessionReferences.get(agentId)?.sessionId,
+    envelope: () => this.#envelope(),
+    daemonInstanceId: () => this.#runtimeInstanceId,
+    recordClientSeq: (agentId, clientSeq) =>
+      this.#agentProcessManager.recordClientSeq(agentId, clientSeq),
+    sendContextUsage: (message) => this.#transport.sendAgentContextUsage?.(message),
+    sendServiceTier: (message) => this.#transport.sendAgentServiceTier?.(message),
+  });
+  /** Agents whose launch has already been warned that Fast mode was requested but is not applied.
+   * One warning per launch, forgotten with the usage report. */
+  readonly #fastModeWarned = new Set<string>();
   /** One early handoff request per native session; reset when a new launch starts. */
   readonly #contextHandoffs = new Map<string, ContextHandoffCoordinator>();
   readonly #agentProxy?: AgentProxy;
@@ -469,6 +508,10 @@ export class DaemonRuntime {
   };
   readonly #codeAgentInventory: CodeAgentInventorySync;
   readonly #upgradeResults: UpgradeResultReporter;
+  #piChat?: PiChatRelay;
+  readonly #workspaceQueries = new AgentWorkspaceQueries(
+    (agentId) => this.#agentProcessManager.runtime(agentId)?.config.provider,
+  );
 
   constructor(
     connection: DaemonConfig,
@@ -754,7 +797,7 @@ export class DaemonRuntime {
         );
       },
       rebind: (intent, launchId) => this.#rebindAgent(intent, launchId),
-      startSettled: (agentId) => this.#releaseStartBuffer(agentId),
+      startSettled: (agentId) => this.#exitedDelivery.releaseStartBuffer(agentId),
       // `launchId` is always present here (minted synchronously by `AgentControl.start()`
       // before this call); the wire message and the retry's cold-start Activity
       // (`#launchAgent`'s `request.invalidateReason` narration) both follow that same,
@@ -827,7 +870,7 @@ export class DaemonRuntime {
    * Answers a server-requested breakdown of one Agent's current Claude Code context-window
    * composition. Unlike `scanUsage` (provider-wide), this is per-Agent: it resolves the
    * Agent's own current launch and native session id from what this runtime already tracks
-   * (`#currentActivityLaunches`, `#sessionReferences` — the same references `#sendContextUsage`
+   * (`#currentActivityLaunches`, `#sessionReferences` — the same references `#usageReport`
    * reads), never trusting `request.launchId`/`request.sessionId` to run anything; those fields are
    * only echoed back for correlation, or used to detect a request naming a launch this runtime has
    * already superseded (`error`, without running the CLI). Check order: not running ->
@@ -999,6 +1042,22 @@ export class DaemonRuntime {
         }),
       );
       const transport = this.#transport;
+      this.#piChat ??= new PiChatRelay(connection, async (frame) => {
+        if (this.#stopping || !this.#transport.sendPiChatFrame)
+          throw new Error("Pi chat connection unavailable");
+        await this.#transport.sendPiChatFrame(frame);
+      });
+      this.#subscribe(
+        transport.onPiChatRequest?.(async (request) => {
+          if (
+            this.#stopping ||
+            request.workspaceId !== connection.workspaceId ||
+            request.computerId !== connection.computerId
+          )
+            return;
+          await this.#piChat?.execute(request);
+        }),
+      );
       this.#subscribe(
         transport.onSkillsList?.(async (request) => {
           if (
@@ -1007,7 +1066,7 @@ export class DaemonRuntime {
             request.computerId !== connection.computerId
           )
             return;
-          const result = await this.#listAgentSkills(connection, request);
+          const result = await this.#workspaceQueries.listSkills(connection, request);
           if (!this.#stopping && this.#transport === transport)
             await transport.sendSkillsListResult?.({
               ...request,
@@ -1024,7 +1083,7 @@ export class DaemonRuntime {
             request.computerId !== connection.computerId
           )
             return;
-          const result = await this.#listWorkspaceFiles(connection, request);
+          const result = await this.#workspaceQueries.listFiles(connection, request);
           if (!this.#stopping && this.#transport === transport)
             await transport.sendWorkspaceFilesListResult?.({ ...request, ...result });
         }),
@@ -1037,7 +1096,7 @@ export class DaemonRuntime {
             request.computerId !== connection.computerId
           )
             return;
-          const result = await this.#readWorkspaceFile(connection, request);
+          const result = await this.#workspaceQueries.readFile(connection, request);
           if (!this.#stopping && this.#transport === transport)
             await transport.sendWorkspaceFileReadResult?.({ ...request, ...result });
         }),
@@ -1212,11 +1271,7 @@ export class DaemonRuntime {
           ...readOperatingSystem(),
           recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds ?? [],
           recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds ?? [],
-          capabilities: [
-            REMINDER_CAPABILITY,
-            APP_CONFIG_CAPABILITY,
-            ...(this.#migrations ? [AGENT_MIGRATION_CAPABILITY] : []),
-          ],
+          capabilities: readyCapabilities(!!this.#migrations),
         }),
         signal,
       );
@@ -1291,95 +1346,6 @@ export class DaemonRuntime {
         ...(errorCode ? { errorCode } : {}),
       });
       throw error;
-    }
-  }
-
-  async #listAgentSkills(
-    connection: DaemonConfig,
-    request: { agentId: string; provider: RuntimeProvider },
-  ): Promise<Awaited<ReturnType<typeof listAgentSkills>>> {
-    const unavailable = { status: "error" as const, entries: [], directories: [] };
-    const config = this.#agentProcessManager.runtime(request.agentId)?.config;
-    if (this.#skillsScanning || (config && config.provider !== request.provider))
-      return { global: unavailable, workspace: unavailable };
-    this.#skillsScanning = true;
-    try {
-      // Launch only adds COFORGE_* capabilities to agentEnvironment;
-      // it does not override HOME or provider-native config roots.
-      return await listAgentSkills({
-        provider: request.provider,
-        agentWorkspaceDirectory: agentWorkspaceDirectory(
-          connection.workspaceRoot,
-          connection.workspaceId,
-          request.agentId,
-        ),
-      });
-    } catch {
-      // Return safe diagnostics, never file contents or raw filesystem errors.
-      return { global: unavailable, workspace: unavailable };
-    } finally {
-      this.#skillsScanning = false;
-    }
-  }
-
-  async #listWorkspaceFiles(
-    connection: DaemonConfig,
-    request: Pick<AgentWorkspaceFilesListRequest, "agentId" | "dirPath" | "includeHidden">,
-  ): Promise<Pick<AgentWorkspaceFilesListResult, "status" | "rootPath" | "entries">> {
-    const unavailable = { status: "error" as const, rootPath: "", entries: [] };
-    if (this.#workspaceFilesScanning) return unavailable;
-    this.#workspaceFilesScanning = true;
-    try {
-      return await listAgentWorkspaceFiles({
-        agentWorkspaceDirectory: agentWorkspaceDirectory(
-          connection.workspaceRoot,
-          connection.workspaceId,
-          request.agentId,
-        ),
-        dirPath: request.dirPath,
-        includeHidden: request.includeHidden,
-      });
-    } catch {
-      // Return safe diagnostics, never file contents or raw filesystem errors.
-      return unavailable;
-    } finally {
-      this.#workspaceFilesScanning = false;
-    }
-  }
-
-  async #readWorkspaceFile(
-    connection: DaemonConfig,
-    request: Pick<AgentWorkspaceFileReadRequest, "agentId" | "path">,
-  ): Promise<
-    Pick<
-      AgentWorkspaceFileReadResult,
-      "status" | "sizeBytes" | "modifiedAtMs" | "text" | "contentType" | "contentBase64"
-    >
-  > {
-    const unavailable = {
-      status: "error" as const,
-      sizeBytes: 0,
-      modifiedAtMs: 0,
-      text: "",
-      contentType: "",
-      contentBase64: "",
-    };
-    if (this.#workspaceFilesScanning) return unavailable;
-    this.#workspaceFilesScanning = true;
-    try {
-      return await readAgentWorkspaceFile({
-        agentWorkspaceDirectory: agentWorkspaceDirectory(
-          connection.workspaceRoot,
-          connection.workspaceId,
-          request.agentId,
-        ),
-        path: request.path,
-      });
-    } catch {
-      // Return safe diagnostics, never file contents or raw filesystem errors.
-      return unavailable;
-    } finally {
-      this.#workspaceFilesScanning = false;
     }
   }
 
@@ -1626,7 +1592,7 @@ export class DaemonRuntime {
           return runtime;
         },
         (error: unknown) => {
-          this.#keepDeliveriesForNextLaunch(agentId, error);
+          this.#exitedDelivery.keepInputDeliveriesForNextLaunch(agentId, error);
           this.#closeAgentInputQueue(agentId, error);
           throw error;
         },
@@ -1833,13 +1799,6 @@ export class DaemonRuntime {
     this.#messageAttention.acknowledgeCustody(message);
   }
 
-  /** Keeps a delivery in `AgentDeliveryQueue` for the Agent's next launch, acknowledged now: the
-   * daemon has taken custody of it, so the server need not resend it. */
-  #keepForNextLaunch(agentId: string, message: AgentMessageDelivery): void {
-    this.#deliveryQueue.enqueue(agentId, message);
-    this.#acknowledgeCustody(message);
-  }
-
   /** Queues a delivery as the Agent's next input; settles once the input drain handled it. */
   #enqueueDelivery(agentId: string, message: AgentMessageDelivery): Promise<void> {
     return this.#enqueueAgentInput(agentId, (completion) => ({
@@ -1903,40 +1862,17 @@ export class DaemonRuntime {
     for (const key of this.#contextHandoffs.keys())
       if (key === agentId || key.startsWith(`${agentId}:`)) this.#contextHandoffs.delete(key);
     this.#revokeLocalLaunch(agentId);
+    // An abandoned launch is teardown, not a person's Stop: an offline error's record must
+    // survive so later deliveries still restate the failure that took the Agent down.
+    const offlineError = this.#offlineResidency.record(agentId);
     try {
       await this.#releaseAgentRuntime(agentId);
+      if (offlineError) this.#offlineResidency.remember(agentId, offlineError);
       if (!this.#agentStops.has(agentId)) this.#stoppingAgents.delete(agentId);
       return error;
     } catch (cleanupError) {
       return cleanupError;
     }
-  }
-
-  /** A failed launch hands the deliveries still waiting in its input queue to `AgentDeliveryQueue`,
-   * acknowledging each as the daemon keeps it, so the next launch presents them. */
-  #keepDeliveriesForNextLaunch(agentId: string, error: unknown): void {
-    const queue = this.#agentInputQueues.get(agentId);
-    if (!queue) return;
-    queue.items = queue.items.filter((item) => {
-      if (item.kind !== "delivery") return true;
-      // A tracked mention named a launch that never came up; it never waits for the next one.
-      if (
-        this.#mentionDeliveries.drop(item.message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN)
-      ) {
-        item.completion.resolve();
-        return false;
-      }
-      this.#keepForNextLaunch(agentId, item.message);
-      // Kept, not failed: the delivery is not lost, so it is not reported as a failed delivery.
-      item.completion.resolve();
-      logger.info("Agent delivery kept for the next launch after a failed launch", {
-        event: "agent.message.delivery_kept",
-        agent_id: agentId,
-        delivery_id: item.message.deliveryId,
-        error_code: diagnosticErrorName(error),
-      });
-      return false;
-    });
   }
 
   #closeAgentInputQueue(agentId: string, error: unknown): void {
@@ -2010,7 +1946,8 @@ export class DaemonRuntime {
     // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
     // #deliveryQueue.shouldHold on every delivery for this Agent from now on.
     this.#deliveryQueue.setProvider(agentId, config.provider);
-    this.#lastContextUsage.delete(agentId);
+    this.#usageReport.forget(agentId);
+    this.#fastModeWarned.delete(agentId);
     for (const key of this.#contextHandoffs.keys())
       if (key === agentId || key.startsWith(`${agentId}:`)) this.#contextHandoffs.delete(key);
     // AgentControl's fresh retry after a kiro/pi AgentSessionRecoveryError: the invalidate was
@@ -2261,7 +2198,20 @@ export class DaemonRuntime {
         // An exit that leaves the most recent `error` event unresolved by a `completed`
         // outcome is a crash; any other unintentional exit keeps the stopped wording, because
         // the Agent's control state is stopped either way.
-        const crashed = launch.crashDetail && buildRuntimeCrashedActivity(launch.crashDetail);
+        // An exit after an offline error republishes that error's Activity (the same wording,
+        // as the reference Computer does at close) rather than a bare `runtime_crashed`.
+        const crashed = launch.offlineError
+          ? this.#activity(
+              agentId,
+              launch.offlineError.detailKind,
+              launch.offlineError.level,
+              launch.offlineError.detail,
+              {
+                entries: launch.offlineError.entries,
+                runtimeError: launch.offlineError.runtimeError,
+              },
+            )
+          : launch.crashDetail && buildRuntimeCrashedActivity(launch.crashDetail);
         this.#activityPublisher.publish(
           agentId,
           launch,
@@ -2301,10 +2251,35 @@ export class DaemonRuntime {
           outcome: "failed",
         });
         this.#sendAgentStatus(agentId, "inactive");
+        // A thrown launch failure whose text classifies as an offline error (auth, plan access)
+        // gets that failure's prompt and offline record, not the generic launcher wording — as
+        // the reference Computer does for `runtime.start.request_failed`. The launch-failure
+        // reason in the log above stays the typed one; classification only chooses what the
+        // person sees and what a later `no_process` rejection restates.
+        const offlineLaunchError =
+          launch.offlineError ??
+          this.#offlineResidency.thrownLaunchActivity(
+            agentId,
+            launch,
+            runtimeDisplayName(config.provider),
+            config,
+            error,
+          );
         this.#activityPublisher.publish(
           agentId,
           launch,
-          this.#launchFailureActivity(agentId, config.provider, error),
+          offlineLaunchError
+            ? this.#activity(
+                agentId,
+                offlineLaunchError.detailKind,
+                offlineLaunchError.level,
+                offlineLaunchError.detail,
+                {
+                  entries: offlineLaunchError.entries,
+                  runtimeError: offlineLaunchError.runtimeError,
+                },
+              )
+            : this.#launchFailureActivity(agentId, config.provider, error),
         );
       }
       if (this.#currentActivityLaunches.get(agentId) === launch) {
@@ -2469,7 +2444,7 @@ export class DaemonRuntime {
       return;
     }
     if (event.type === AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE) {
-      this.#sendContextUsage(
+      this.#usageReport.contextUsage(
         agentId,
         launch,
         config.provider,
@@ -2507,6 +2482,29 @@ export class DaemonRuntime {
         this.#contextHandoffs.set(handoffKey, handoff);
       }
       handoff.observe(event.usedTokens, event.windowTokens);
+      return;
+    }
+    if (event.type === AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER) {
+      // Only a launch that actually asked for Fast mode has anything to report about it: a
+      // runtime volunteering a tier for an ordinary launch is not news, and the Web has no
+      // switch on for it.
+      if (config.fastMode !== true) return;
+      this.#usageReport.serviceTier(agentId, launch, config.provider, event.state);
+      // One warning per launch, on the first reading that says Fast is not actually on. A later
+      // reading cannot retract it; a following launch reports its own.
+      if (event.state !== AGENT_SERVICE_TIER_OBSERVED.ON && !this.#fastModeWarned.has(agentId)) {
+        this.#fastModeWarned.add(agentId);
+        publish(
+          agentId,
+          launch,
+          this.#activity(
+            agentId,
+            AGENT_ACTIVITY_DETAIL_KIND.FAST_MODE_UNAVAILABLE,
+            "warning",
+            fastModeUnavailableDetail(event.state, event.reason),
+          ),
+        );
+      }
       return;
     }
     if (event.type === "activity" || event.type === "tool-start") {
@@ -2620,6 +2618,29 @@ export class DaemonRuntime {
       // Classified once here: the Activity's fallback class/reason and this failure's retry
       // decision are the same reading of the same failure.
       const classification = classifyRuntimeError(event);
+      // A failure only a person can fix (re-auth, a model the plan does not include), an
+      // exhausted billing balance, or a sticky model-config one ends the process and takes the
+      // Agent offline — whenever in the launch it is observed.
+      if (classification.takesAgentOffline) {
+        this.#offlineResidency.takeOffline(
+          agentId,
+          launch,
+          config.provider,
+          this.#offlineResidency.buildActivity(
+            config,
+            runtimeDisplayName(config.provider),
+            event,
+            classification,
+          ),
+          {
+            event: "agent_runtime:error_requires_user_action",
+            errorClass: classification.errorClass,
+            errorReason: classification.errorReason,
+            requiredAction: classification.requiredAction,
+          },
+        );
+        return;
+      }
       const built = buildRuntimeErrorActivity(event, classification);
       // Retry policy reads that classification, never free-form provider hints.
       const fence = this.#runtimeErrorHold.noteFailure(
@@ -2627,15 +2648,29 @@ export class DaemonRuntime {
         classification,
         built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
       );
-      const reported = fence
-        ? buildRuntimeErrorFingerprintFenceActivity(built, fence, event)
-        : built;
+      // A tripped fingerprint fence is terminal residency like an action-required failure
+      // (reference `applyRuntimeErrorFingerprintFence`): end the process and report inactive.
+      if (fence) {
+        this.#offlineResidency.takeOffline(
+          agentId,
+          launch,
+          config.provider,
+          buildRuntimeErrorFingerprintFenceActivity(built, fence, event),
+          {
+            event: "agent_runtime:fingerprint_fence_tripped",
+            errorClass: classification.errorClass,
+            errorReason: "runtime_error_fenced",
+            requiredAction: "none",
+          },
+        );
+        return;
+      }
       publish(
         agentId,
         launch,
-        this.#activity(agentId, reported.detailKind, reported.level, reported.detail, {
-          entries: reported.entries,
-          runtimeError: reported.runtimeError,
+        this.#activity(agentId, built.detailKind, built.level, built.detail, {
+          entries: built.entries,
+          runtimeError: built.runtimeError,
         }),
       );
       return;
@@ -3002,14 +3037,12 @@ export class DaemonRuntime {
     if (isTrackedMention(message)) return this.#handleTrackedMention(message);
     if (this.#stoppingAgents.has(message.agentId))
       throw new Error(`Agent runtime is stopping: ${message.agentId}`);
-    // A stalled provider is restarted for this message, which waits for the relaunch rather than
-    // the stalled session; so does one arriving meanwhile (nor does it wake the Agent a second
-    // time once the old process is gone).
+    // A stalled provider is restarted for this message; arrivals meanwhile wait for that relaunch.
     if (this.#runnerHold === undefined) {
       const recovering = this.#stalledRecoveries.has(message.agentId);
       const stalled = recovering ? undefined : this.#stalledRuntime(message.agentId);
       if (recovering || stalled) {
-        this.#keepForNextLaunch(message.agentId, message);
+        this.#exitedDelivery.keepForNextLaunch(message.agentId, message);
         if (stalled) return this.#recoverStalledRuntime(message.agentId, stalled);
         return;
       }
@@ -3018,7 +3051,7 @@ export class DaemonRuntime {
       this.#runnerHold === undefined &&
       !this.#agentProcessManager.session(message.agentId) &&
       !this.#agentLaunches.has(message.agentId);
-    if (exited) return this.#deliverToExitedAgent(message);
+    if (exited) return this.#exitedDelivery.deliver(message);
     // A wake launch that will present waiting deliveries is still in flight: join them as well,
     // rather than arriving as a second notice right after theirs. Only a wake: a recovery launch
     // drops what waits once its own notice is accepted, and that notice does not cover this one.
@@ -3028,7 +3061,7 @@ export class DaemonRuntime {
       this.#wakeLaunches.has(message.agentId) &&
       this.#deliveryQueue.hasQueued(message.agentId)
     ) {
-      this.#keepForNextLaunch(message.agentId, message);
+      this.#exitedDelivery.keepForNextLaunch(message.agentId, message);
       return;
     }
     const delivery = this.#enqueueDelivery(message.agentId, message);
@@ -3206,118 +3239,6 @@ export class DaemonRuntime {
     }
   }
 
-  /** A delivery for an Agent with no hold, session, or launch in flight. */
-  async #deliverToExitedAgent(message: AgentMessageDelivery): Promise<void> {
-    // An exited Agent is not woken for a message it has already consumed: the delivery is
-    // acknowledged and dropped here, before any launch, rather than after one.
-    if (this.#messageAttention.hasConsumed(message)) {
-      this.#messageAttention.logDecision(message, "consumed");
-      return this.#messageAttention.acknowledge(message);
-    }
-    const restart = this.#agentProcessManager.restartConfig(message.agentId);
-    if (!restart && this.#agentControl.startPending(message.agentId))
-      return this.#holdForPendingStart(message);
-    if (!restart) return this.#rejectDeliveriesWithoutProcess(message);
-    // A wake launch failed moments ago, so launching again now would most likely fail the same
-    // way. The delivery waits, acknowledged as the daemon keeps it, for the first launch after the
-    // cooldown.
-    const blockedUntil = this.#wakeLaunchFailures.isBlocked(message.agentId)
-      ? this.#wakeLaunchFailures.blockedUntil(message.agentId)
-      : undefined;
-    if (blockedUntil !== undefined) {
-      this.#keepForNextLaunch(message.agentId, message);
-      logger.info("Agent wake deferred by a launch-failure cooldown", {
-        event: "agent.wake.cooldown_deferred",
-        agent_id: message.agentId,
-        delivery_id: message.deliveryId,
-        until: new Date(blockedUntil).toISOString(),
-      });
-      return;
-    }
-    // Deliveries are already waiting for this Agent's next launch: this one joins them, so the
-    // launch presents all of them in a single notice instead of this one alone.
-    if (this.#deliveryQueue.hasQueued(message.agentId)) {
-      this.#keepForNextLaunch(message.agentId, message);
-      await this.#wakeAgent(message.agentId, restart);
-      return;
-    }
-    const delivery = this.#enqueueDelivery(message.agentId, message);
-    await Promise.all([this.#wakeAgent(message.agentId, restart), delivery]);
-  }
-
-  /**
-   * A server Start is pending (being set up, or waiting out a launch-retry cooldown) for an Agent
-   * with nothing else to take this delivery. It is held for that Start without an ACK: the daemon
-   * takes custody only once the Agent can be told.
-   */
-  #holdForPendingStart(message: AgentMessageDelivery): void {
-    const held = this.#startBuffers.get(message.agentId) ?? [];
-    held.push(message);
-    this.#startBuffers.set(message.agentId, held);
-    logger.info("Agent delivery held for a pending Start", {
-      event: "agent.message.delivery_held_for_start",
-      agent_id: message.agentId,
-      delivery_id: message.deliveryId,
-      held_count: held.length,
-    });
-  }
-
-  /** The pending Start settled: a launched Agent receives what was held as ordinary deliveries;
-   * otherwise it is dropped unacknowledged and stays unread in the cloud. */
-  #releaseStartBuffer(agentId: string): void {
-    const held = this.#startBuffers.get(agentId);
-    if (!held) return;
-    this.#startBuffers.delete(agentId);
-    if (!this.#agentProcessManager.session(agentId)) {
-      logger.info("Agent deliveries held for a Start that did not launch were dropped", {
-        event: "agent.message.start_buffer_dropped",
-        agent_id: agentId,
-        dropped_count: held.length,
-      });
-      return;
-    }
-    for (const message of held)
-      void this.handleAgentMessage(message).catch((error) =>
-        this.#logAgentOperationFailure("message_delivery", message, error),
-      );
-  }
-
-  /**
-   * No process, no launch in flight, and nothing to relaunch from: the daemon takes no custody, so
-   * nothing is acknowledged. This delivery, and any a lifted runner hold left queued for the same
-   * Agent, are rejected back to the server as `no_process`; the server decides whether to start
-   * the Agent.
-   */
-  async #rejectDeliveriesWithoutProcess(message: AgentMessageDelivery): Promise<void> {
-    const queued =
-      this.#agentInputQueues
-        .get(message.agentId)
-        ?.items.flatMap((item) => (item.kind === "delivery" ? [item.message] : [])) ?? [];
-    this.#closeAgentInputQueue(message.agentId, new Error("Agent is inactive"));
-    for (const rejected of [...queued, message]) {
-      // A tracked mention a lifted runner hold left queued names a launch that is gone.
-      if (this.#mentionDeliveries.drop(rejected, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN))
-        continue;
-      logger.info("Agent delivery rejected: no process to take it", {
-        event: "agent.message.delivery_rejected",
-        agent_id: rejected.agentId,
-        delivery_id: rejected.deliveryId,
-        reason: "no_process",
-      });
-      await this.#transport.sendAgentDeliveryRejection?.({
-        protocolMajor: rejected.protocolMajor,
-        requestId: rejected.requestId,
-        messageId: rejected.messageId,
-        deliveryId: rejected.deliveryId,
-        workspaceId: rejected.workspaceId,
-        agentId: rejected.agentId,
-        sequence: rejected.sequence,
-        reason: "no_process",
-        method: AGENT_MESSAGE_REJECT_METHOD,
-      });
-    }
-  }
-
   /** Relaunches an exited Agent for a message; a failure starts or extends the wake cooldown. A
    * successful launch presents whatever `AgentDeliveryQueue` holds for it as one notice. */
   #wakeAgent(agentId: string, restart: AgentRestartConfig): Promise<AgentRuntime> {
@@ -3454,6 +3375,7 @@ export class DaemonRuntime {
     // An explicit Stop discards the runtime-error recovery streaks the same way — a
     // fresh start should not inherit a backoff/fence from a process that no longer exists.
     this.#runtimeErrorHold.forget(agentId);
+    this.#offlineResidency.forget(agentId);
     this.#sendAgentStatus(agentId, "inactive");
     this.#activityPublisher.forgetBusy(agentId);
     if (!retainLaunch) this.#currentActivityLaunches.delete(agentId);
@@ -3462,7 +3384,8 @@ export class DaemonRuntime {
   /** Forgets one ended launch's observation state without affecting another Agent. */
   #disposeLaunchObservations(agentId: string): void {
     this.#disposePhases(agentId);
-    this.#lastContextUsage.delete(agentId);
+    this.#usageReport.forget(agentId);
+    this.#fastModeWarned.delete(agentId);
   }
 
   #readyRunningAgentIds(): string[] {
@@ -3648,6 +3571,7 @@ export class DaemonRuntime {
   /** The Agent no longer lives on this Computer: its workspace was deleted or moved away. */
   #forgetLocalAgent(agentId: string): void {
     this.systemCleaner.replaceOwnerSnapshot(agentId, null);
+    this.#offlineResidency.forget(agentId);
   }
 
   /** Whether the Agent is mid-turn, by its last busy Activity or a notice just written. */
@@ -3669,6 +3593,7 @@ export class DaemonRuntime {
   #sendAgentStatus(agentId: string, status: "active" | "inactive"): void {
     const clientSeq = (this.#agentStatusSequences.get(agentId) ?? 0) + 1;
     this.#agentStatusSequences.set(agentId, clientSeq);
+    if (status === "active") this.#offlineResidency.forget(agentId);
     this.#transport.sendAgentStatus?.({
       ...this.#envelope(),
       agentId,
@@ -3677,43 +3602,6 @@ export class DaemonRuntime {
       clientSeq,
       observedAtMs: this.#startedAt,
     });
-  }
-
-  /**
-   * Fire-and-forget, never blocking or failing the turn it observed. Skipped when the
-   * Agent's current native session id is not yet known (the daemon has not yet reported this
-   * launch's first identity) or the reading is unchanged from the last one sent for this launch
-   * — `#lastContextUsage` is forgotten on launch end/dispose alongside `#phases`, so a
-   * new launch always sends its first reading. Reuses Activity's own `clientSeq` counter on the
-   * launch, the same ordering fence `AgentActivityPublisher.publish` advances.
-   */
-  #sendContextUsage(
-    agentId: string,
-    launch: ActivityLaunch,
-    provider: RuntimeProvider,
-    usedTokens: number,
-    windowTokens: number,
-  ): void {
-    const sessionId = this.#sessionReferences.get(agentId)?.sessionId;
-    if (!sessionId) return;
-    const last = this.#lastContextUsage.get(agentId);
-    if (last && last.usedTokens === usedTokens && last.windowTokens === windowTokens) return;
-    this.#lastContextUsage.set(agentId, { usedTokens, windowTokens });
-    this.#transport.sendAgentContextUsage?.({
-      ...this.#envelope(),
-      agentId,
-      provider,
-      launchId: launch.launchId,
-      sessionId,
-      usedTokens,
-      windowTokens,
-      observedAtMs: Date.now(),
-      daemonInstanceId: this.#runtimeInstanceId,
-      clientSeq: ++launch.clientSeq,
-    });
-    // Survives a later exit so a wake reusing this launchId can continue the counter,
-    // the same reason `AgentActivityPublisher.publish` records it after every send on this shared counter.
-    this.#agentProcessManager.recordClientSeq(agentId, launch.clientSeq);
   }
 
   #cleanupUnconfirmed(agentId: string, error: unknown): boolean {
@@ -4267,7 +4155,8 @@ export class DaemonRuntime {
     this.#disposeAllPhases();
     this.#runtimeErrorHold.disposeAll();
     this.#upgradeResults.stop();
-    this.#lastContextUsage.clear();
+    this.#usageReport.clear();
+    this.#fastModeWarned.clear();
     for (const agentId of new Set([
       ...this.#agentInputQueues.keys(),
       ...this.#agentLaunches.keys(),
@@ -4356,6 +4245,9 @@ export class DaemonRuntime {
   }
 
   async #stop(shutdownReason: DaemonShutdownReason): Promise<void> {
+    const piChat = this.#piChat;
+    this.#piChat = undefined;
+    const piChatClosed = piChat?.close();
     // No retry timer may outlive this daemon instance: a launch that was mid-cooldown left a
     // "starting" record behind, which the next instance repairs and recovers (`recover()`).
     this.#agentControl.dispose();
@@ -4401,6 +4293,7 @@ export class DaemonRuntime {
     // work already running settles alongside too, on the same bound, before the transport closes.
     await Promise.all([
       this.#settleReminders(),
+      piChatClosed,
       this.#settleMigrations(),
       this.#connection.computerId
         ? this.#transport.sendShutdownNotice?.({
@@ -4419,47 +4312,6 @@ export class DaemonRuntime {
     shutdownError ??= transportError;
     if (shutdownError !== undefined) throw shutdownError;
   }
-}
-
-function safeRuntimeActivityMessage(activity: string, level: string, message: string): string {
-  if (level === "error") return truncateCodePoints(message, 512);
-  if (level === "warning") return scrubRuntimeErrorText(message);
-  if (activity === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS) return "";
-  if (activity === AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND)
-    return truncateCodePoints(scrubRuntimeErrorText(message), 200);
-  if (
-    activity === AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED ||
-    activity === AGENT_ACTIVITY_DETAIL_KIND.CHECKING_MESSAGES ||
-    activity === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING ||
-    activity === AGENT_ACTIVITY_DETAIL_KIND.THINKING_END
-  ) {
-    return scrubRuntimeErrorText(message);
-  }
-  // The content-free run-start announcement (ActivityTrajectory#startRun) carries no
-  // message; let it through empty instead of falling to the generic sentence below.
-  if (
-    (activity === AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED ||
-      activity === AGENT_ACTIVITY_DETAIL_KIND.MODEL_RESPONSE_STARTED) &&
-    !message
-  ) {
-    return "";
-  }
-  return "Agent activity observed.";
-}
-
-function runtimeFailureDiagnostic(message: string) {
-  const safe = scrubRuntimeErrorText(message);
-  return {
-    errorClass: "AgentRuntimeError",
-    errorReason: "runtime_failure",
-    fingerprint: fingerprintRuntimeError(safe),
-  };
-}
-
-function validUsageWindow(window: UsageSnapshot["primary"], now: number): UsageSnapshot["primary"] {
-  return window && window.resetsAt !== undefined && Date.parse(window.resetsAt) > now
-    ? window
-    : undefined;
 }
 
 export type { CodeAgentProviderFactory, AgentRuntime, AgentRuntimeConfig, CodeAgentProvider };

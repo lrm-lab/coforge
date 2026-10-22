@@ -16,7 +16,7 @@ parameter once (RFC 6749 §3.2); an empty parameter counts as absent. In this or
 | Not a form, or a parameter given twice | 400 `invalid_request` |
 | Client credentials both in the Authorization header and as `client_secret` in the form (RFC 6749 §2.3) | 400 `invalid_request` |
 | No credentials, unreadable ones, an unknown app or a wrong secret; a form `client_id` naming another app than Basic | 401 `invalid_client` with `WWW-Authenticate: Basic realm="<issuer>"` |
-| No `grant_type` / one other than `authorization_code` | 400 `invalid_request` / `unsupported_grant_type` |
+| No `grant_type` / one other than `authorization_code` and `client_credentials` ([installation tokens](installation-tokens.md)) | 400 `invalid_request` / `unsupported_grant_type` |
 | No `code` or no `redirect_uri` | 400 `invalid_request` |
 | An unknown code, or another app's | 400 `invalid_grant` |
 | A code already redeemed | 400 `invalid_grant`, and the code's grant ends (below) |

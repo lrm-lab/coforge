@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import type { ComputerRestartStatus } from "#src/features/computers/computer.schemas";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
@@ -205,6 +205,6 @@ export class RedisComputerRestartStore implements ComputerRestartStore {
 let singleton: ComputerRestartStore | undefined;
 export function getComputerRestartStore() {
   const url = redisUrlFor("Computer restart status");
-  singleton ??= new RedisComputerRestartStore(new RedisClient(url));
+  singleton ??= new RedisComputerRestartStore(openRedisClient(url));
   return singleton;
 }

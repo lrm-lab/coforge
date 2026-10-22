@@ -2,20 +2,29 @@ import handler from "@tanstack/react-start/server-entry";
 
 import { isRawHttpPath } from "#src/lib/non-localized-path";
 import { paraglideMiddleware } from "#src/paraglide/server";
+import { startAppNotificationQueueAtServerStartFromEnv } from "#src/server/app-notifications/app-notification-queue.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
+import { installServerLifecycle } from "#src/server/runtime/server-lifecycle.server";
 import { assertStartupConfig } from "#src/server/startup-config.server";
 import { ensureWorkspaceMemoryLifecycle } from "#src/server/workspace-memory/lifecycle.server";
 import { startWeeklyReportScheduleTickFromEnv } from "#src/server/records/weekly-report-schedule-tick.server";
 import { startWorkspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 
-// Fail the boot, not the first request, on invalid deployment configuration.
+// This module loads on the first request (Nitro loads the SSR entry lazily), not at boot. It
+// validates and installs the configuration the request handlers read, so a request never runs
+// without it. The boot-time check that fails the deployment is `runtime/boot-config-check.server.ts`
+// (a Nitro plugin, registered in `vite.config.ts`).
 await assertStartupConfig();
+installServerLifecycle();
 // Backend-owned memory sweep: independent of incidental Centrifugo traffic.
 ensureWorkspaceMemoryLifecycle();
 // Optional in-process clock for weekly-report auto-send. No-op unless
 // COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS is set; external HTTP cron remains valid.
 startWeeklyReportScheduleTickFromEnv();
 startWorkspaceAssistantOnboarding();
+// The app notification outbox's pg-boss workers run in the process that serves requests. This
+// entry loads on the first request, which the deployment's health check makes at start.
+startAppNotificationQueueAtServerStartFromEnv();
 
 /** Requests Paraglide never sees: raw HTTP without a locale prefix. The unprefixed pages go
  * through it to render in the visitor's locale, without a redirect. */

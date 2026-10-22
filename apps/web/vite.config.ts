@@ -151,10 +151,24 @@ const config = defineConfig({
     assertLibraryChunksDoNotImportAppChunks(),
     nitro({
       preset: "bun",
+      // Nitro reads the binary template from this directory in development and bundles it for
+      // production access through `assets:weekly-report-templates`.
+      // https://nitro.build/docs/assets#custom-server-assets
+      serverAssets: [
+        {
+          baseName: "weekly-report-templates",
+          dir: "./assets/weekly-report-templates",
+        },
+      ],
       // Avoid cyclic SSR chunks evaluating server functions before createSsrRpc
       // initializes. Keep client splitting; only the final server bundle is inlined.
       // https://github.com/TanStack/router/issues/8031
       inlineDynamicImports: true,
+      // Runs at server start, unlike `src/server.ts`, which loads on the first request.
+      // https://nitro.build/docs/plugins
+      plugins: [
+        fileURLToPath(new URL("./src/server/runtime/boot-config-check.server.ts", import.meta.url)),
+      ],
     }),
     tailwindcss(),
     viteReact(),

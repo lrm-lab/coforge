@@ -89,12 +89,12 @@ test("only a conversation's own member finds it, and only a direct one", async (
   await expect(conversations.open(workspaceId, ada.id, { agentId: secret.id })).rejects.toThrow();
 });
 
-test("only an Agent's own creator starts a DM with it, and never with a deleted one", async () => {
+test("any member starts their own DM with a public Agent, and nobody with a deleted one", async () => {
   const conversations = new DirectConversations(db);
-  // Ada's public Agent: Grace sees it but may not message it.
-  await expect(conversations.open(workspaceId, grace.id, { agentId: helper.id })).rejects.toThrow(
-    "ACCESS_DENIED",
-  );
+  // Ada's public Agent: Grace messages it in a DM of her own, not Ada's.
+  const graces = await conversations.open(workspaceId, grace.id, { agentId: helper.id });
+  const adas = await conversations.open(workspaceId, ada.id, { agentId: helper.id });
+  expect(graces.conversationId).not.toBe(adas.conversationId);
   const gone = await db.agent.create({
     data: {
       workspaceId,
@@ -152,7 +152,7 @@ test("the directory names the viewer's own DM with each member, once there is on
   expect(await dmOf(grace.id, grace.id)).toBe(self.conversationId);
 });
 
-test("a DM with an Agent is its creator's alone, and a deleted Agent's DM stays readable only", async () => {
+test("a DM with an Agent is its key's person's alone, and a deleted Agent's DM stays readable only", async () => {
   const conversations = new DirectConversations(db);
   const own = await conversations.open(workspaceId, ada.id, { agentId: helper.id });
   expect(
@@ -188,7 +188,7 @@ test("a DM with an Agent is its creator's alone, and a deleted Agent's DM stays 
 });
 
 test("an Agent's creator reads only their own DM with it, not another member's", async () => {
-  // Grace's DM with Ada's public Agent, from before only a creator could start one.
+  // Grace's own DM with Ada's public Agent, with a member row for Ada.
   const gracesDm = await new PrismaDirectConversationRepository(db).getOrCreateUserAgent(
     workspaceId,
     grace.id,

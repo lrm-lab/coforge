@@ -23,11 +23,22 @@ const activity: AgentActivity = {
     errorClass: "CodexAuthError",
     errorReason: "turn_failed",
     fingerprint: "deadbeef",
+    requiredAction: "user_reauth",
   },
 };
 
 test("round trips the launch ordering identity", () => {
   expect(decodeAgentActivity(encodeAgentActivity(activity))).toEqual(activity);
+});
+
+test("drops an unrecognized runtime error action instead of carrying it", () => {
+  const unknown = {
+    ...activity,
+    runtimeError: { ...activity.runtimeError!, requiredAction: "rotate_keys" as "user_reauth" },
+  };
+  expect(decodeAgentActivity(encodeAgentActivity(unknown))?.runtimeError?.requiredAction).toBe(
+    undefined,
+  );
 });
 
 test("rejects incomplete or invalid launch ordering identity", () => {
@@ -89,6 +100,7 @@ for (const detailKind of [
   AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_STALLED,
   AGENT_ACTIVITY_DETAIL_KIND.STALLED_RECOVERY,
   AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
+  AGENT_ACTIVITY_DETAIL_KIND.FAST_MODE_UNAVAILABLE,
 ]) {
   test(`round trips the ${detailKind} detail kind`, () => {
     const withKind: AgentActivity = { ...activity, detailKind };

@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import { createDockerContainers, parseDesktopInspect } from "#src/host/docker-containers";
-import { adaptDesktopHtml, parseDesktopRoute, startDesktopProxy } from "#src/host/desktop-proxy";
+import {
+  adaptDesktopHtml,
+  parseDesktopRoute,
+  startDesktopProxy,
+  withDesktopTitle,
+} from "#src/host/desktop-proxy";
 
 const oldPage = `<!DOCTYPE html>
 <script type="module">
@@ -59,6 +64,41 @@ describe("desktop route", () => {
     expect(html).not.toContain("缺少连接令牌");
     expect(html).toContain("/websockify");
   });
+
+  test("a dropped desktop session offers a centered control that connects again", () => {
+    const html = adaptDesktopHtml(oldPage);
+    expect(html).toContain('id="coforge-desktop-reconnect"');
+    expect(html).toContain("重新连接");
+    expect(html).not.toContain("msg.remove()");
+    expect(html).toContain('addEventListener("click"');
+    expect(html).toContain("new RFB");
+  });
+
+  test("a page that already loads RFB relatively still gets the reconnect control", () => {
+    const currentPage = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    const rfb = new RFB(document.getElementById("screen"), "ws://example/websockify");
+    rfb.addEventListener("connect", () => msg.remove());
+</script>
+`;
+    const html = adaptDesktopHtml(currentPage);
+    expect(html).toContain('id="coforge-desktop-reconnect"');
+    expect(html).not.toContain("msg.remove()");
+  });
+
+  test("the page title becomes the requested name, and markup in it stays text", () => {
+    const page = "<title>云电脑桌面</title><script>ok</script>";
+    expect(withDesktopTitle(page, "小明")).toBe("<title>小明</title><script>ok</script>");
+    expect(withDesktopTitle(page, "A&B<C>")).toBe(
+      "<title>A&amp;B&lt;C&gt;</title><script>ok</script>",
+    );
+    expect(withDesktopTitle(page, undefined)).toBe(page);
+    expect(withDesktopTitle(page, " \n ")).toBe(page);
+    expect(withDesktopTitle(page, `${"名".repeat(81)}`)).toBe(
+      `<title>${"名".repeat(80)}</title><script>ok</script>`,
+    );
+  });
 });
 
 describe("desktop proxy", () => {
@@ -99,6 +139,37 @@ describe("desktop proxy", () => {
         "GET /desktop.html token=desk-token",
         "GET /core/rfb.js token=desk-token",
       ]);
+    } finally {
+      proxy.stop();
+      upstream.stop(true);
+    }
+  });
+
+  test("a requested title is written into the page and not sent to the container", async () => {
+    const seen: string[] = [];
+    const upstream = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch(request) {
+        const url = new URL(request.url);
+        seen.push(`${url.pathname}${url.search}`);
+        return new Response("<title>云电脑桌面</title>", { status: 200 });
+      },
+    });
+    const upstreamPort = upstream.port;
+    if (upstreamPort === undefined) throw new Error("upstream did not bind");
+    const proxy = startDesktopProxy({
+      hostname: "127.0.0.1",
+      port: 0,
+      resolve: async () => ({ host: "127.0.0.1", port: upstreamPort, token: "desk-token" }),
+    });
+    try {
+      const page = await fetch(
+        `http://127.0.0.1:${proxy.port}/desktop/computer-1/agent-1/?title=${encodeURIComponent("A&B")}`,
+      );
+      expect(page.status).toBe(200);
+      expect(await page.text()).toBe("<title>A&amp;B</title>");
+      expect(seen).toEqual(["/screen/agent-1/desktop.html"]);
     } finally {
       proxy.stop();
       upstream.stop(true);

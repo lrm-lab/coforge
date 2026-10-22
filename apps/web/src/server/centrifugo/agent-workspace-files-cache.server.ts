@@ -1,4 +1,5 @@
-import { RedisClient } from "bun";
+import type { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import {
   decodeAgentWorkspaceFileReadResult,
@@ -92,7 +93,7 @@ let deleteSingleton: RedisAgentWorkspaceDeleteResults | undefined;
 export function getAgentWorkspaceFilesListResults() {
   if (!listSingleton)
     listSingleton = new RedisAgentWorkspaceFilesListResults(
-      new RedisClient(redisUrlFor("Workspace Files queries")),
+      openRedisClient(redisUrlFor("Workspace Files queries")),
     );
   return listSingleton;
 }
@@ -100,7 +101,7 @@ export function getAgentWorkspaceFilesListResults() {
 export function getAgentWorkspaceFileReadResults() {
   if (!readSingleton)
     readSingleton = new RedisAgentWorkspaceFileReadResults(
-      new RedisClient(redisUrlFor("Workspace Files queries")),
+      openRedisClient(redisUrlFor("Workspace Files queries")),
     );
   return readSingleton;
 }
@@ -108,7 +109,7 @@ export function getAgentWorkspaceFileReadResults() {
 export function getAgentWorkspaceDeleteResults() {
   if (!deleteSingleton)
     deleteSingleton = new RedisAgentWorkspaceDeleteResults(
-      new RedisClient(redisUrlFor("Workspace Files queries")),
+      openRedisClient(redisUrlFor("Workspace Files queries")),
     );
   return deleteSingleton;
 }

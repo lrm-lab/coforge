@@ -6,8 +6,6 @@ import {
 } from "#src/server/db/repositories/workspace-memory-cleanup.repositories.server";
 import { WorkspaceMemoryScopeError } from "#src/server/db/repositories/workspace-memory-errors.server";
 
-export const WORKSPACE_DELETION_CLEANUP_TARGETS = CLEANUP_TARGETS;
-
 export type CleanupRemoteResult = { ok: true } | { ok: false; sanitizedError: string };
 
 export type WorkspaceMemoryCleanupRemotes = {

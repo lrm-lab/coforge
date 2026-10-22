@@ -2,11 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  discoverCodeAgentInventory,
-  discoverExternalCodeAgents,
-  type ExternalCodeAgentProbe,
-} from "#src/code-agent/runtime-inventory";
+import { discoverCodeAgentInventory } from "#src/code-agent/runtime-inventory";
+import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
+import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
 
 const OPENCODE_FIXTURE = new URL("./fixtures/opencode-fixture.ts", import.meta.url).pathname;
 

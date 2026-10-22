@@ -235,6 +235,15 @@ export class AgentDeliveryQueue {
     this.#busy.delete(agentId);
   }
 
+  /** A runtime error took the Agent offline and its process is ending: like `onProcessExit`,
+   * everything held stays queued for the next launch, and the explicit hold — a backoff or the
+   * just-tripped fence — ends with the process that earned it instead of pinning the launch
+   * that follows. Nothing is flushed: there is no process left to notify. */
+  endHoldForNextLaunch(agentId: string): void {
+    this.#busy.delete(agentId);
+    this.#explicitHolds.delete(agentId);
+  }
+
   /** Explicit Stop: discards this Agent's held deliveries, app items, and fallback notices along
    * with the rest of its state. */
   clearAgent(agentId: string): void {

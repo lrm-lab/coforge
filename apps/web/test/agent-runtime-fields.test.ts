@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { RUNTIME_PROVIDER, type CodeAgentModelMetadata } from "@lrm/coforge-sdk/internal";
 
 import {
+  fastModeFieldState,
   isPiCustomModel,
   isRuntimeDirty,
   joinCustomModel,
@@ -57,6 +58,24 @@ test("model known with reasoning levels: field shown, current reasoning submitte
   expect(reasoningFieldState(known, "high")).toEqual({
     visible: true,
     submitted: "high",
+  });
+});
+
+test("Fast mode is offered by Codex and Claude Code for every model, as the reference does", () => {
+  // The runtime alone decides, so every model offers it, the runtime's default and a model still
+  // loading included; a saved request is submitted as it stands.
+  expect(fastModeFieldState(RUNTIME_PROVIDER.CLAUDE_CODE, true)).toEqual({
+    visible: true,
+    submitted: true,
+  });
+  expect(fastModeFieldState(RUNTIME_PROVIDER.CODEX, false)).toEqual({
+    visible: true,
+    submitted: false,
+  });
+  // A runtime whose adapter applies no tier never offers it, whatever the model claims.
+  expect(fastModeFieldState(RUNTIME_PROVIDER.PI, true)).toEqual({
+    visible: false,
+    submitted: false,
   });
 });
 
@@ -175,6 +194,7 @@ test("opens not-dirty: a saved Configured model found in the Pi catalog", () => 
       submittedModelProvider: piModel.modelProvider,
       modelValue: piModel.id,
       submittedReasoning: "",
+      submittedFastMode: false,
       initial,
     }),
   ).toBe(false);
@@ -198,6 +218,7 @@ test("opens not-dirty: a saved built-in provider with a stored credential", () =
       submittedModelProvider: piProviderChoice,
       modelValue: coforgeModel.id,
       submittedReasoning: "",
+      submittedFastMode: false,
       initial,
     }),
   ).toBe(false);
@@ -225,6 +246,7 @@ test("opens not-dirty: a saved custom model absent from the Pi catalog preselect
       submittedModelProvider: split?.modelProvider ?? "",
       modelValue: split?.model ?? "",
       submittedReasoning: "",
+      submittedFastMode: false,
       initial,
     }),
   ).toBe(false);

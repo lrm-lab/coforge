@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
+import { WORKSPACE_ADMIN_ROLES } from "#src/features/workspaces/workspace-roles";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import {
@@ -116,6 +117,32 @@ export function canDirectMessageAgent(
   agent: { visibility: string; ownerId: string },
 ): boolean {
   return agent.visibility === AGENT_VISIBILITY.PUBLIC || agent.ownerId === userId;
+}
+
+/** `canDirectMessageAgent` as a `Prisma.AgentWhereInput` fragment. */
+export function directMessageAgentWhere(userId: string): Prisma.AgentWhereInput {
+  return { OR: [{ visibility: AGENT_VISIBILITY.PUBLIC }, { ownerId: userId }] };
+}
+
+/** Agents whose Workspace files and Reminders `viewer` reads: their own while a member, or, for a
+ * Workspace owner/admin, any but another member's platform assistant (`canSeeAgent`). */
+export function managedAgentWhere(viewer: {
+  userId: string;
+  workspaceId: string;
+}): Prisma.AgentWhereInput {
+  return {
+    workspaceId: viewer.workspaceId,
+    OR: [
+      { ownerId: viewer.userId, workspace: { members: { some: { userId: viewer.userId } } } },
+      {
+        workspace: {
+          members: { some: { userId: viewer.userId, role: { in: [...WORKSPACE_ADMIN_ROLES] } } },
+        },
+        // A bare `not` would also drop the `null` kind of every ordinary Agent.
+        OR: [{ systemKind: null }, { systemKind: { not: WORKSPACE_ASSISTANT_KIND } }],
+      },
+    ],
+  };
 }
 
 /**

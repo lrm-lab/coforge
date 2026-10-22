@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { createStore, useSelector, type Store } from "@tanstack/react-store";
-import { usePrefetchQuery, useQuery, useQueryClient, skipToken } from "@tanstack/react-query";
+import { useQuery, useQueryClient, skipToken } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
@@ -297,17 +297,22 @@ export function useLiveAgentDisplay(agentId: string): AgentDisplaySnapshot | und
   );
 }
 
-/** One Agent's recent activity (≤5, newest first), for the Agent card. */
-export function useAgentRecentActivity(agentId: string, conversationId?: string): ActivityEntry[] {
+/** One Agent's recent activity (≤5, newest first), for the Agent card; read only when `enabled`
+ * (the viewer manages the Agent: the server answers no one else). */
+export function useAgentRecentActivity(
+  agentId: string,
+  conversationId: string | undefined,
+  enabled: boolean,
+): ActivityEntry[] {
   const workspaceId = useContext(WorkspaceIdContext);
   const query = useQuery({
     ...workspaceActivityQuery(workspaceId),
     select: (data) => data[agentId] ?? EMPTY_ACTIVITY,
-    enabled: !conversationId,
+    enabled: enabled && !conversationId,
   });
   const scoped = useQuery({
     ...agentActivityFeedQuery(agentId),
-    enabled: Boolean(conversationId),
+    enabled: enabled && Boolean(conversationId),
     select: (entries) =>
       activityInConversation(entries, conversationId).slice(0, RECENT_ACTIVITY_LIMIT),
   });
@@ -327,7 +332,11 @@ export function useReadAgentActivityFeed(agentId: string) {
 }
 
 /** Starts loading an Agent's Activity feed without re-rendering the caller on each frame, so the
- * Activity tab is usually ready by the time it is selected. */
-export function usePrefetchAgentActivityFeed(agentId: string) {
-  usePrefetchQuery(agentActivityFeedQuery(agentId));
+ * Activity tab is usually ready by the time it is selected; only when `enabled` (the viewer gets
+ * the tab: the server answers no one else). */
+export function usePrefetchAgentActivityFeed(agentId: string, enabled: boolean) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (enabled) void queryClient.prefetchQuery(agentActivityFeedQuery(agentId));
+  }, [queryClient, agentId, enabled]);
 }

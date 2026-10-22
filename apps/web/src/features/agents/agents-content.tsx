@@ -610,7 +610,7 @@ function AgentCard({
           />
         )}
         <div className="flex min-h-9 shrink-0 items-center gap-1">
-          {ownedAgent && (
+          {member.canMessage && (
             <Button
               size="sm"
               color="secondary"
@@ -625,7 +625,7 @@ function AgentCard({
               size="sm"
               color="tertiary"
               tooltip={m.member_agent_actions({ name: member.displayName })}
-              // Greyed out, as in the design, when the viewer may neither edit nor delete.
+              // Greyed out, per design, if the viewer may neither edit nor delete.
               isDisabled={!canEdit && !onDelete}
             />
             <Dropdown.Popover placement="bottom end" className="w-44">

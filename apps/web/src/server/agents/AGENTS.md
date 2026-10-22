@@ -185,8 +185,8 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 - `agent-context-report.server.ts` authorizes through the Agent owner's
   assignment (the Skills/Workspace Files rule) and resolves the launch and
   session from the persisted session reference.
-- `agent-reminders.server.ts` is an owner-only, Workspace-scoped browser read
-  model of bounded, scheduled Reminders. Reminder lifecycle stays in
+- `agent-reminders.server.ts` is the creator's or Workspace owner/admin's
+  browser read model of bounded, scheduled Reminders. Reminder lifecycle stays in
   `server/reminders/`.
 
 ## Workspace platform assistants

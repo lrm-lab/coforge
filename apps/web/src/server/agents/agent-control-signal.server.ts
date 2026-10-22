@@ -1,4 +1,5 @@
-import { RedisClient } from "bun";
+import type { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 
 /**
  * Wakes a control waiter when an Agent's control state changes, so `drive()`
@@ -87,6 +88,6 @@ export function getAgentControlSignal(): AgentControlSignal {
   if (singleton) return singleton;
   const redisUrl = process.env.REDIS_URL;
   return (singleton = redisUrl
-    ? new RedisAgentControlSignal(new RedisClient(redisUrl), () => new RedisClient(redisUrl))
+    ? new RedisAgentControlSignal(openRedisClient(redisUrl), () => openRedisClient(redisUrl))
     : new LocalAgentControlSignal());
 }

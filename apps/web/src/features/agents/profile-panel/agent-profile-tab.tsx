@@ -31,6 +31,7 @@ import { AgentSkills, type AgentSkillsLoadResult } from "#src/features/agents/ag
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { InlineEditField, SECTION_CAPTION_CLASS, SUBFIELD_LABEL_CLASS } from "./inline-edit-field";
 import { ContextUsageItem, RUNTIME_PILL_PART_CLASS } from "./agent-context-usage-item";
+import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
 import { RoleField, VisibilityField } from "./agent-profile-info-fields";
 
 /** Values are never shown in the chip; the dot count hints at length without revealing it. */
@@ -40,9 +41,7 @@ function maskEnvValue(value: string) {
 
 type AgentProfile = Awaited<ReturnType<typeof getAgentProfile>>;
 
-/** A small chip-style badge for Runtime / Model / Reasoning and the Role field — the prototype's
- * `.chip`; the app has no separate chip primitive, so this reuses the official `Badge` at
- * `color="gray"`, the same "short fact" vocabulary `docs/design/color-status-typography.md` §11 already uses. */
+/** Gray badge for a short fact such as runtime, model, reasoning, or role. */
 function FactBadge({
   children,
   icon,
@@ -86,12 +85,15 @@ export function AgentProfileTab({
   migration,
   archive,
   contextUsage,
+  fastMode,
 }: {
   profile: NonNullable<AgentProfile>;
   timeZone: string | null;
   /** The Agent's current context-window usage, or `null` when there is no reading —
    * hidden entirely in that case. Display only: coloured by risk, but nothing triggers on it. */
   contextUsage?: { usedTokens: number; windowTokens: number; observedAtMs: number } | null;
+  /** What the launch actually observed for its Fast service tier, when the Agent asks for it. */
+  fastMode?: AgentFastModeReading | null;
   /** The Agent's moves between Computers (`AgentMigrationSection`), shown under ACTIONS. */
   migration?: ReactNode;
   /** An archived Agent's ARCHIVE section (`AgentArchiveSection`), for those who managed it. */
@@ -219,39 +221,42 @@ export function AgentProfileTab({
             onRequest={profile.canChangeVisibility ? onRequestVisibilityChange : undefined}
           />
         </div>
-        <div className="mt-4">
-          <p className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_computer()}</p>
-          <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-primary">
-            {ComputerIcon && (
-              <ComputerIcon className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
-            )}
-            <span className="truncate font-mono">
-              {profile.computer?.label || m.agent_profile_computer_unassigned()}
-            </span>
-          </p>
-          {profile.computer && (
-            <p className="mt-1 flex items-center gap-1.5 text-xs text-tertiary">
-              <StatusDot
-                tone={profile.computer.online ? "online" : "offline"}
-                className="size-1.5"
-              />
-              {profile.computer.online
-                ? m.agent_profile_computer_connected()
-                : m.agent_profile_computer_offline()}
-              {profile.computer.computerVersion && (
-                <span className="font-mono">· {profile.computer.computerVersion}</span>
+        <div className="mt-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_computer()}</p>
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-primary">
+              {ComputerIcon && (
+                <ComputerIcon className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
               )}
+              <span className="truncate font-mono">
+                {profile.computer?.label || m.agent_profile_computer_unassigned()}
+              </span>
             </p>
-          )}
-          {profile.computer ? (
+            {profile.computer && (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-tertiary">
+                <StatusDot
+                  tone={profile.computer.online ? "online" : "offline"}
+                  className="size-1.5"
+                />
+                {profile.computer.online
+                  ? m.agent_profile_computer_connected()
+                  : m.agent_profile_computer_offline()}
+                {profile.computer.computerVersion && (
+                  <span className="font-mono">· {profile.computer.computerVersion}</span>
+                )}
+              </p>
+            )}
+          </div>
+          {profile.computer && (
             <AgentDesktopButton
               computerId={profile.computer.id}
               agentId={profile.id}
+              title={profile.displayName}
               kind={profile.computer.kind}
               online={profile.computer.online === true}
               owned={profile.computer.ownedByViewer === true}
             />
-          ) : null}
+          )}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4">
           <div>
@@ -369,6 +374,11 @@ export function AgentProfileTab({
               <FactBadge>{reasoning || m.agent_form_provider_default()}</FactBadge>
             </p>
           </div>
+          <AgentFastModeFact
+            runtime={runtime}
+            requested={profile.runtimeConfig.fastMode === true}
+            reading={fastMode}
+          />
         </div>
         {envVars && (
           <div className="mt-4">

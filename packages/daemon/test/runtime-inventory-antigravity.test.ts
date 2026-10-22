@@ -9,10 +9,10 @@ import {
 import {
   discoverCodeAgentCatalogs,
   discoverCodeAgentInventory,
-  discoverExternalCodeAgents,
   loadCachedCodeAgentCatalogs,
-  type ExternalCodeAgentProbe,
 } from "#src/code-agent/runtime-inventory";
+import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
+import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
 import {
   ANTIGRAVITY_DISCOVERY_BUDGET_MS,
   CATALOG_DISCOVERY_BUDGET_MS,

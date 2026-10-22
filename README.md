@@ -38,11 +38,14 @@ The architecture invariants every change must respect are in
 | [crates/installer/AGENTS.md](crates/installer/AGENTS.md) | Rust installer crate (`coforge-installer`): toolchain, commands, contract, CI, supply-chain gate |
 | [crates/installer/src/AGENTS.md](crates/installer/src/AGENTS.md) | Installer module map |
 | [docs/workspace-assistant.md](docs/workspace-assistant.md) | Workspace platform assistant setup, isolated sessions, and backfill |
+| [docs/pi-chat.md](docs/pi-chat.md) | Independent cloud Pi conversations, signed host access, native history, deployment and acceptance |
 | [docs/database-schema/](docs/database-schema/README.md) | Database schema and conversation/delivery model |
 | [docs/memory-disposition.md](docs/memory-disposition.md) | Target-only Memory Hint receipts, configuration, and validation |
 | [docs/reliable-message-delivery.md](docs/reliable-message-delivery.md) | Message delivery guarantees |
 | [docs/workspace-deletion.md](docs/workspace-deletion.md) | What deleting a Workspace removes, and when |
 | [docs/authorization-server/](docs/authorization-server/README.md) | "Login with CoForge": the OpenID Connect authorization server for third-party apps, its configuration and endpoints |
+| [docs/app-notifications.md](docs/app-notifications.md) | App notifications: the pg-boss outbox that records events in the domain transaction and fans them out to installed apps |
+| [docs/feature-flags.md](docs/feature-flags.md) | Feature flags: turning a dark feature on per Workspace with a flagd definition file |
 | [docs/observability/](docs/observability/README.md) | Agent Activity, status, and observability baseline |
 | [docs/local-gemma-evaluation.md](docs/local-gemma-evaluation.md) | Local SWE evaluation, Gemma service management, Docker and token audits |
 | [benchmark/evolbench-collab/ops/swe-gemma/README.md](benchmark/evolbench-collab/ops/swe-gemma/README.md) | SWE Docker Task runtime and independent 20-worker evaluation pools |

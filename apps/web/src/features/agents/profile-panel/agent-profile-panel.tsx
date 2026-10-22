@@ -68,6 +68,7 @@ import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-rea
 import { AgentProfileHeader } from "./agent-profile-header";
 import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs";
 import { AgentProfileTab } from "./agent-profile-tab";
+import { profileRuntimeSelection, profileUpdateInput } from "./agent-profile-runtime";
 import { AgentWorkspaceTab } from "./agent-workspace-tab";
 import { AgentActivityTab } from "./agent-activity-tab";
 import { AgentAppsTab } from "./agent-apps-tab";
@@ -128,14 +129,13 @@ export function AgentProfilePanel({
   const query = useQuery(agentProfileQuery(agentId));
   const profile = query.data;
   const invalidate = useInvalidateAgentProfile(agentId);
-  usePrefetchAgentActivityFeed(agentId);
 
   const knownName = profile?.displayName ?? liveAgent?.displayName ?? "";
-  // A deleted Agent's profile is read-only: the Profile tab alone, with nothing that acts on it.
+  // A deleted Agent's profile is read-only: the Profile tab alone, nothing acting on it.
   const deleted = Boolean(profile?.deletedAt);
   const canManage = profile && !deleted ? canManageAgent(profile) : false;
+  usePrefetchAgentActivityFeed(agentId, canManage);
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
-  const canSeeWorkspace = owned;
   const loadComputers = useServerFn(listComputers);
   // An unbound Agent needs a Computer before its runtime can be saved. A weekly-report
   // assistant keeps the picker after that first bind, so a retired Computer can be replaced.
@@ -157,11 +157,7 @@ export function AgentProfilePanel({
             online: Boolean(computer.online),
           }))
       : undefined;
-  const tabOrder = useAgentProfileTabOrder(
-    canManage,
-    canSeeWorkspace,
-    Boolean(profile) && !deleted,
-  );
+  const tabOrder = useAgentProfileTabOrder(canManage, Boolean(profile) && !deleted);
   const tab = resolveAgentProfileTab(requestedTab, tabOrder.tabs);
   // Opened without `agentTab`, the panel lands on the first tab of the viewer's order once their
   // permissions are known, and records it through `onTabChange` (the URL, or the embedding page's
@@ -240,16 +236,7 @@ export function AgentProfilePanel({
 
   function baseUpdateInput(overrides: { displayName?: string; description?: string }) {
     if (!profile) throw new Error("profile not loaded");
-    return {
-      agentId: profile.id,
-      displayName: overrides.displayName ?? profile.displayName,
-      description: overrides.description ?? profile.description ?? "",
-      provider: profile.runtimeConfig.runtime,
-      modelProvider: profile.runtimeConfig.modelProvider || undefined,
-      model: profile.runtimeConfig.model,
-      reasoning: profile.runtimeConfig.reasoning,
-      ...(profile.computerId ? { computerId: profile.computerId } : {}),
-    };
+    return profileUpdateInput(profile, overrides);
   }
 
   function onStartRuntimeEdit() {
@@ -344,11 +331,10 @@ export function AgentProfilePanel({
   }
 
   // `liveAgent` (the shared realtime roster) is blank for an Agent outside the viewer's own
-  // `listAgents` roster until its first live publication arrives — e.g. an owner/admin's
-  // placeholder for another member's private Agent. `getAgentProfile` (`profile`, this panel's own
-  // authorized fetch) already computes an initial status/display snapshot for any Agent the viewer
-  // can see; prefer the live one once a publication lands, but seed from the authorized fetch
-  // instead of showing nothing.
+  // `listAgents` roster until its first live publication arrives, e.g. an owner/admin's
+  // placeholder for another member's private Agent. `getAgentProfile` (this panel's authorized
+  // fetch) already computes an initial display snapshot for any Agent the viewer can see;
+  // prefer the live one once a publication lands, but seed from that fetch, not nothing.
   const display = liveAgent?.display ?? profile?.display;
   const diagnosticFacts = profile && {
     id: profile.id,
@@ -364,7 +350,7 @@ export function AgentProfilePanel({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       <AgentProfileHeader
-        canMessage={owned}
+        canMessage={Boolean(profile?.canMessage)}
         deleted={deleted}
         agent={{
           id: agentId,
@@ -392,9 +378,7 @@ export function AgentProfilePanel({
         onSelect={onTabChange}
         onReorder={tabOrder.reorder}
       />
-      {/* Workspace (a split tree/file viewer) and Activity (a fixed band over a scrolling log)
-          scroll their own parts. A shared overflow here would grow with the content and drag the
-          tree or the band out of view. */}
+      {/* Workspace and Activity scroll their own parts. */}
       <div
         className={
           profile && (tab === "workspace" || tab === "activity")
@@ -410,7 +394,7 @@ export function AgentProfilePanel({
           <div className="px-5 pb-5">
             <AgentReminders
               agentId={agentId}
-              owned={profile.ownedByCurrentUser}
+              canRead={canManage}
               timeZone={timeZone}
               onLoad={onLoadReminders}
             />
@@ -432,11 +416,15 @@ export function AgentProfilePanel({
             // Realtime once a display snapshot has arrived, the initial `getAgentProfile` load
             // until then — trusting `liveAgent.display`'s own (possibly explicitly null)
             // `contextUsage` once present, never falling back past it to a stale initial read.
-            // Display-only: nothing here triggers on any threshold.
             contextUsage={
               liveAgent?.display
                 ? (liveAgent.display.contextUsage ?? null)
                 : (profile.display?.contextUsage ?? null)
+            }
+            fastMode={
+              liveAgent?.display
+                ? (liveAgent.display.fastMode ?? null)
+                : (profile.display?.fastMode ?? null)
             }
             onSaveDisplayName={async (value) => {
               await update({ data: baseUpdateInput({ displayName: value }) });
@@ -597,12 +585,7 @@ export function AgentProfilePanel({
           computerId={profile.computer?.id ?? ""}
           computers={setupComputers}
           credentialConfigured={Boolean(profile.runtimeCredential)}
-          initial={{
-            provider: profile.runtimeConfig.runtime,
-            modelProvider: profile.runtimeConfig.modelProvider,
-            model: profile.runtimeConfig.model,
-            reasoning: profile.runtimeConfig.reasoning,
-          }}
+          initial={profileRuntimeSelection(profile)}
           onLoad={onLoadRuntimeOptions}
           environment={environmentState}
           saving={runtimeFormSaving}

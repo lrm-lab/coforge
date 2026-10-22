@@ -12,6 +12,8 @@ test("classifies a rate-limit message as retryable", () => {
     errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
     errorReason: "rate_limited",
     retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    requiredAction: "none",
+    takesAgentOffline: false,
   });
 });
 
@@ -53,17 +55,84 @@ test("classifies a timeout as terminal-for-this-process (retrying will not help)
   expect(result.retryDecision).toBe(RUNTIME_ERROR_RETRY_DECISION.TERMINAL);
 });
 
-test("classifies an auth/login failure as terminal", () => {
+test("classifies an auth/login failure as terminal and offline, action user_reauth", () => {
   const result = classifyRuntimeErrorText("Unauthorized: please sign in again");
-  expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.AUTH);
-  expect(result.errorReason).toBe("auth_required");
-  expect(result.retryDecision).toBe(RUNTIME_ERROR_RETRY_DECISION.TERMINAL);
+  expect(result).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.AUTH,
+    errorReason: "auth_failed",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.TERMINAL,
+    requiredAction: "user_reauth",
+    takesAgentOffline: true,
+  });
 });
 
-test("classifies an unsupported model as terminal", () => {
+test.each([
+  "access token could not be refreshed",
+  "authentication token has been invalidated",
+  "logged out or signed in to another account",
+  "missing credentials",
+  "invalid api key",
+  "api key is not set",
+])("auth wording takes the Agent offline for re-authentication: %s", (message) => {
+  const result = classifyRuntimeErrorText(message);
+  expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.AUTH);
+  expect(result.requiredAction).toBe("user_reauth");
+  expect(result.takesAgentOffline).toBe(true);
+});
+
+test("a bare 401 status is an auth failure", () => {
+  const result = classifyRuntimeErrorText("request failed with status 401");
+  expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.AUTH);
+  expect(result.requiredAction).toBe("user_reauth");
+});
+
+test("a 403 only counts as auth when its text names an auth failure", () => {
+  expect(classifyRuntimeErrorText("HTTP 403: not logged in").errorClass).toBe(
+    RUNTIME_ERROR_CLASS.AUTH,
+  );
+  expect(classifyRuntimeErrorText("HTTP 403: quota per day exceeded").errorClass).not.toBe(
+    RUNTIME_ERROR_CLASS.AUTH,
+  );
+});
+
+test("a plan that does not include the model is ModelConfigError with user_model_access", () => {
+  const result = classifyRuntimeErrorText(
+    "Your plan does not include access to the configured model",
+  );
+  expect(result).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.MODEL_CONFIG,
+    errorReason: "model_config_error",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.TERMINAL,
+    requiredAction: "user_model_access",
+    takesAgentOffline: true,
+  });
+});
+
+test("a plan-access message naming a transient limit is not user_model_access", () => {
+  const result = classifyRuntimeErrorText(
+    "model is not included in your plan at the moment, try again later",
+  );
+  expect(result.errorClass).not.toBe(RUNTIME_ERROR_CLASS.MODEL_CONFIG);
+  expect(result.requiredAction).toBe("none");
+  expect(result.takesAgentOffline).toBe(false);
+});
+
+test("an unsupported model is a sticky offline failure without a named action", () => {
   const result = classifyRuntimeErrorText("The requested model is not supported");
+  expect(result).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.MODEL_CONFIG,
+    errorReason: "model_config_error",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.TERMINAL,
+    requiredAction: "none",
+    takesAgentOffline: true,
+  });
+});
+
+test("a missing model is terminal but stays wakeable", () => {
+  const result = classifyRuntimeErrorText("model gpt-9 not found");
   expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.MODEL_CONFIG);
-  expect(result.retryDecision).toBe(RUNTIME_ERROR_RETRY_DECISION.TERMINAL);
+  expect(result.requiredAction).toBe("none");
+  expect(result.takesAgentOffline).toBe(false);
 });
 
 test("classifies an oversized prompt as terminal", () => {
@@ -84,6 +153,8 @@ test("falls back to the generic runtime error class for unrecognized text, treat
     errorClass: RUNTIME_ERROR_CLASS.RUNTIME,
     errorReason: "runtime_failure",
     retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    requiredAction: "none",
+    takesAgentOffline: false,
   });
 });
 
@@ -101,6 +172,8 @@ test.each([
     errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
     errorReason: why,
     retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    requiredAction: "none",
+    takesAgentOffline: false,
   });
 });
 
@@ -115,6 +188,45 @@ test("an exhausted quota with a reported reset time is not retried before it", (
   expect(classifyRuntimeError({ message: "limit", providerLimit: transient })).not.toHaveProperty(
     "retryNotBefore",
   );
+});
+
+test("an HTTP 402 status is an exhausted billing balance: terminal, offline, no named action", () => {
+  expect(classifyRuntimeErrorText("HTTP 402: request failed")).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.BILLING,
+    errorReason: "billing_exhausted",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.TERMINAL,
+    requiredAction: "none",
+    takesAgentOffline: true,
+  });
+});
+
+test.each([
+  "Payment Required",
+  "Your credit balance is too low to access the API",
+  "insufficient credits",
+  "You have run out of credits",
+])("billing-exhausted wording is terminal and offline, without a named action: %s", (message) => {
+  expect(classifyRuntimeErrorText(message)).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.BILLING,
+    errorReason: "billing_exhausted",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.TERMINAL,
+    requiredAction: "none",
+    takesAgentOffline: true,
+  });
+});
+
+test("a 402 whose text names plan access is still billing: billing precedes plan access", () => {
+  const result = classifyRuntimeErrorText(
+    "HTTP 402: your plan does not include access to this model",
+  );
+  expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.BILLING);
+  expect(result.requiredAction).toBe("none");
+});
+
+test("billing wording under another status still wins over the status block", () => {
+  const result = classifyRuntimeErrorText("HTTP 429: insufficient balance");
+  expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.BILLING);
+  expect(result.errorReason).toBe("billing_exhausted");
 });
 
 test("without a provider limit, a failure is classified from its text alone", () => {

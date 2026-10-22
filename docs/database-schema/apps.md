@@ -4,8 +4,10 @@ The app registry (`apps/web/src/server/apps/`) holds the third-party apps Worksp
 is an OpenID Connect client of CoForge's authorization server, its key the `client_id`. There is no
 marketplace: a registered app is installed only in the Workspace that registered it. Migrations
 `20261020120000_app_registry`, `20261020130000_app_category_identity_scope` (the category, the
-`identity` scope, and no resource URI) and `20261020140000_app_homepage_optional` (an app needs only
-a name) and `20261021120000_app_logo` (its uploaded logo).
+`identity` scope, and no resource URI), `20261020140000_app_homepage_optional` (an app needs only a
+name), `20261021120000_app_logo` (its uploaded logo) `20261021180000_app_data_permissions` (the
+data it may read where it is installed) and `20261022120000_app_installation_setup` (the page it is set
+up on after installation).
 
 The built-in Agent Apps (`system.reminder`, `system.cleaner`) are not rows. They are the SDK's
 `BUILT_IN_APPS` (`packages/coforge-sdk/src/internal/app-config.ts`), run by the daemon, and
@@ -29,6 +31,11 @@ The built-in Agent Apps (`system.reminder`, `system.cleaner`) are not rows. They
 | `logoContentType` | TEXT | The logo's checked type (`image/jpeg`, `image/png`, `image/gif` or `image/webp`), served with its bytes; set and cleared with `logoObjectKey`. |
 | `clientSecretHash` | TEXT | SHA-256 (hex) of the client secret `cfa_secret_…`, whose plaintext is returned once at registration or rotation. |
 | `secretRotatedAt` | TIMESTAMP(3) | Last rotation. |
+| `permissionGroups` | TEXT[] | The data the app declares it reads where it is installed: any of `workspace`, `agent`, `channel` and `computer`, each read-only, once each (`apps_permission_groups_check` only limits the values to those four; the application keeps them in that order); empty by default. Separate from `allowedScopes`. |
+| `permissionRevision` | INTEGER | 0 at first, one more each time `permissionGroups` changes (saving the same set leaves it). |
+| `setupUrl` | TEXT | The page an owner or admin continues setup on after installing; null when the app needs no setup. https, or http on `localhost`, `127.0.0.1` or `[::1]`; at most 2000 characters, canonical, no user info or fragment (`apps_setup_url_check` checks the length, the fragment and the scheme; the application checks the rest). |
+| `setupDescription` | TEXT | One line saying what the setup page is for; at most 500 characters (`apps_setup_description_check`); empty by default. |
+| `setupRevision` | INTEGER | 0 at first, one more each time `setupUrl` changes, setup turned on or off included; a change of `setupDescription` leaves it (`apps_setup_revision_check`). |
 | `createdByUserId` | UUID | Set null when the User is deleted. |
 | `createdAt`, `updatedAt` | TIMESTAMP(3) | |
 
@@ -51,6 +58,50 @@ the app is installed. The consent page shows the logo; the page for a person wit
 does not. A logo that does not load falls back to the monogram.
 
 `app_installations` — an app installed in a Workspace: `appId` (cascade), `workspaceId` (cascade),
-`installedByUserId` (set null), `createdAt`, unique (`appId`, `workspaceId`). Today only the
-registering Workspace installs its app; the table is where a later install elsewhere goes. A
-Workspace's delete removes its apps and installations.
+`installedByUserId` (set null), `approvedGroups` (TEXT[], empty by default;
+`app_installations_approved_groups_check` limits the values to the four groups, the application keeps
+their order), `approvedRevision` (INTEGER, 0 before any approval), `approvedAt`, `approvedByUserId` (set null when the User is deleted), `setupCompletedRevision` (INTEGER, null until the app reports setup done) and `setupCompletedAt` (TIMESTAMP(3); null exactly when the revision is: `app_installations_setup_completion_check`), `createdAt`, unique (`appId`,
+`workspaceId`). Today only the registering Workspace installs its app; the table is where a later
+install elsewhere goes. A Workspace's delete removes its apps and installations.
+
+## Data permissions
+
+Behind the `app-data-permissions` feature flag ([feature flags](../feature-flags.md)), owned by
+`apps/web/src/server/app-permissions/`. The registering Workspace's owners and admins declare the
+app's `permissionGroups` in its editor; an owner or admin of a Workspace where it is installed
+approves them there. An approval sends the `permissionRevision` it was shown and records that
+revision, the groups declared at it, who approved and when; a revision that is no longer current is
+refused (`CONFLICT`, `app-permissions-changed`). Registering may declare groups too, in the same
+transaction as the registration (`AppEditorSave.register`); the registering Workspace's installation
+then starts with them pending, since registering is not an approval (Raft's registration-time
+approval is unverified, so the approval stays a separate act).
+
+Deliberate departures from Raft: the groups are four read-only checkboxes (Raft: a Resource | Access table of five rows, the fifth, agent reminders, writable); the reminders write group is not offered until a product decision. Approval happens on the installation card in the app editor, because apps are private to their Workspace (Raft: the installed-app detail or the marketplace install modal). No Suspended or App disabled installation state exists. Members see the summary on the app card and can open a read-only app detail (every role can: description, homepage, Login with CoForge scopes, setup status, what it reads and any pending update; Continue/Manage, Approve update and the installation ID are for owners and admins).
+
+- Effective groups, what the app may read in that Workspace: `approvedGroups` ∩ `permissionGroups`.
+- Pending groups, waiting for approval: `permissionGroups` not in `approvedGroups`.
+- A declaration that drops a group takes effect at once, with no approval, and removes the group from
+  every installation's `approvedGroups` in the same transaction, so declaring it again is pending
+  until approved again.
+- The editor's Save writes the profile fields and the declaration in one transaction: a refused field
+  leaves the declaration, its revision and the approvals as they were.
+- While the flag is off for a Workspace, its members see none of this, declaring and approving are
+  refused (`ACCESS_DENIED`, `app-data-permissions-off`), and saving an app leaves these columns as
+  they are.
+
+## Installation setup
+
+Behind the `app-installation-setup` feature flag, owned by `apps/web/src/server/app-installation-setup/`;
+the API an app calls is [installation setup](../authorization-server/app-installation-setup.md). The
+registering Workspace's owners and admins declare the page and what it is for in the app's editor; the
+app reports, per installation, that it finished a revision.
+
+- Status, derived and never stored: no `setupUrl` is `not_required`; `setupCompletedRevision` equal to
+  the app's `setupRevision` is `complete`; anything else is `pending`.
+- The revision goes up in the same SQL statement that writes the URL, only when the URL differs from the
+  stored one. Changing the page, or turning setup off and on, therefore asks every installation again;
+  changing only the description keeps a finished setup finished.
+- Completion belongs to one installation, so a new installation of the app starts `pending`.
+- The editor's Save, and a registration, write the setup with the profile and the permissions in one transaction. While the
+  flag is off for a Workspace its members see none of this, declaring is refused (`ACCESS_DENIED`,
+  `app-installation-setup-off`), and saving an app leaves these columns as they are.

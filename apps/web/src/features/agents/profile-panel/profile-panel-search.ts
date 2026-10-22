@@ -68,20 +68,22 @@ function idFromProfileParam(profile: string | undefined, prefix: string): string
   return UUID_PATTERN.test(id) ? id : undefined;
 }
 
-/** The panel offers Profile, Reminders, Activity, Workspace and Apps. Reminders and Activity are
- * manager/owner-only (brief §Permissions); Workspace has its own, narrower gate — the Agent's
- * owner only, independent of `canSeeManagerTabs` (a manager who does not own the Agent must not
- * see Workspace). Apps is every viewer's, read-only to those who may not change it, but not an
- * archived Agent's (`canSeeApps`). Returned in default order. */
+/** The panel offers Profile, Reminders, Activity, Workspace and Apps. Reminders, Activity and
+ * Workspace are for the Agent's creator and a Workspace owner/admin (`canSeeManagerTabs`). Apps
+ * is every viewer's, read-only to those who may not change it, but not an archived Agent's
+ * (`canSeeApps`). Returned in default order. */
 export function visibleAgentProfileTabs(
   canSeeManagerTabs: boolean,
-  canSeeWorkspace: boolean,
   canSeeApps: boolean,
 ): AgentProfileTab[] {
-  const visible = { profile: true, workspace: canSeeWorkspace, apps: canSeeApps };
-  return AGENT_PROFILE_TABS.filter((tab) =>
-    tab === "activity" || tab === "reminders" ? canSeeManagerTabs : visible[tab],
-  );
+  const visible = {
+    profile: true,
+    activity: canSeeManagerTabs,
+    reminders: canSeeManagerTabs,
+    workspace: canSeeManagerTabs,
+    apps: canSeeApps,
+  };
+  return AGENT_PROFILE_TABS.filter((tab) => visible[tab]);
 }
 
 /** The tab the panel shows: the requested one when the viewer can see it, otherwise the first of

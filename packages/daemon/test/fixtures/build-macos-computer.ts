@@ -35,16 +35,28 @@ const result = await Bun.build({
         build.onLoad({ filter: /\/code-agent\/runtime-inventory\.ts$/ }, () => ({
           loader: "ts",
           contents: `export async function discoverCodeAgentInventory(){return {runtimes:[],catalogs:[]}}
-             export const hostCodeAgentProbe={}
              export async function discoverCodeAgentRuntimes(){return []}
              export async function loadCachedCodeAgentCatalogs(){return {catalogs:[],needsRefresh:false}}
-             export async function discoverCodeAgentCatalogs(){throw new Error("Lifecycle fixture must not query provider catalogs")}
+             export async function discoverCodeAgentCatalogs(){throw new Error("Lifecycle fixture must not query provider catalogs")}`,
+        }));
+        build.onLoad({ filter: /\/code-agent\/runtime-probe\.ts$/ }, () => ({
+          loader: "ts",
+          contents: `export const hostCodeAgentProbe={}
              export function discoverExternalCodeAgents(){throw new Error("Lifecycle fixture must not probe external providers")}
-             export function claudeStaticCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}
-             export function discoverCodexCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}
-             export function discoverCoforgeCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}
-             export function discoverPiCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}
              export async function versionProbeOutput(){throw new Error("Lifecycle fixture must not probe git")}`,
+        }));
+        build.onLoad({ filter: /\/code-agent\/claude-code\/catalog\.ts$/ }, () => ({
+          loader: "ts",
+          contents: `export function claudeStaticCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}`,
+        }));
+        build.onLoad({ filter: /\/code-agent\/codex\/catalog\.ts$/ }, () => ({
+          loader: "ts",
+          contents: `export function discoverCodexCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}`,
+        }));
+        build.onLoad({ filter: /\/code-agent\/pi\/catalog\.ts$/ }, () => ({
+          loader: "ts",
+          contents: `export function discoverCoforgeCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}
+             export function discoverPiCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}`,
         }));
       },
     },

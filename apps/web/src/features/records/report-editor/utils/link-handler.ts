@@ -11,8 +11,3 @@ export function openLink(href: string, _currentSlug?: string | null): void {
   }
   window.open(href, "_blank", "noopener,noreferrer");
 }
-
-/** Mention protocol links must not open as regular URLs (stubbed schema). */
-export function isMentionHref(href: string | null | undefined): href is string {
-  return !!href && href.startsWith("mention://");
-}

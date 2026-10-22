@@ -62,7 +62,6 @@ import { AgentMentionActionRequestError } from "#src/connection/agent-mention-ac
 import { AgentMentionDeliveryRequestError } from "#src/connection/agent-mention-delivery-request-error";
 import { AgentAppConfigRequestError } from "#src/connection/agent-app-config-request-error";
 import { captureDaemonLogs } from "./log-capture";
-
 const TEST_AGENT_API_KEY = `sk_agent_${"a".repeat(43)}`;
 
 function fakeClient() {

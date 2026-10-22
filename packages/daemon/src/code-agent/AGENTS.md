@@ -5,7 +5,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Provider seam
 
-- `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession` instances and owns usage and context reports, composed from provider-internal modules. Discovery and catalogs live in `runtime-inventory.ts`.
+- `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession` instances and owns usage and context reports, composed from provider-internal modules. `runtime-inventory.ts` composes discovery; `runtime-probe.ts` probes versions; `catalog-discovery.ts` and `<provider>/catalog.ts` own catalogs.
 - The registry returns Providers, never lifecycle wrappers or forwarding adapters.
 - Higher layers consume normalized status and Activity messages and must not
   parse Claude Code, Codex, Pi, or any other provider's output.
@@ -45,8 +45,8 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   machine-readable initialization does not give a dependable list.
   `claudeStaticCatalog(version)` lists a pinned model only when the probed CLI
   meets the minimum `code.claude.com/docs/en/model-config` states for it
-  (`CLAUDE_CODE_MODEL_MINIMUM_VERSION`); aliases always stay, and an unknown
-  version keeps every model.
+  (`CLAUDE_CODE_MODEL_MINIMUM_VERSION`); aliases stay, an unknown version keeps
+  every model; efforts follow Raft's catalog (`opus`/`fable`/`sonnet` all; `haiku` none).
 
 ## Standing instructions
 
@@ -174,8 +174,8 @@ Behavior, compatibility and native verification: [`docs/agents/grok-acp.md`](../
 - Pi's Provider embeds the bundled Pi SDK and keeps the user's Pi models,
   settings, packages, extensions, skills, and authentication.
 - An explicit Agent key overrides host authentication only in that session's
-  in-memory model runtime. Never write it to disk or pass it in process
-  arguments.
+  in-memory model runtime. Never write it to disk or pass it in process arguments.
+- Pi and the built-in Agent report `model_request_started` at the public SDK `agent.streamFunction` seam; lifecycle/progress is not a request start, and compaction keeps its own phase.
 - Pi session files stay in the Agent's `.pi-sessions` directory. The built-in
   CoForge Agent uses its isolated bundled resources and `.builtin-sessions`;
   for skills, the Pi SDK still loads the user's `~/.agents/skills`, so that is
