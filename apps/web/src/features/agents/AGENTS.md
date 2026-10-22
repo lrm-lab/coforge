@@ -121,8 +121,8 @@ These rules apply to `src/features/agents/`.
   public Agent, only its creator a private one); the Activity, Reminders and
   Workspace tabs follow `canManageAgent` (its creator or a Workspace
   owner/admin; the Activity feed read itself is any viewer's who sees it);
-  Computer is the cloud Computer's owner's. Start, Stop and Restart are any
-  member's; Full reset is owner/admin only (`AgentControl.execute`).
+  Start, Stop and Restart are any member's; Full reset is owner/admin only
+  (`AgentControl.execute`).
 - Workspace directory reads belong to
   `features/workspaces/workspaces.functions.ts` and
   `server/workspaces/members.server.ts`; owner-only Agent operations stay
