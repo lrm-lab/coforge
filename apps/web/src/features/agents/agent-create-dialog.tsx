@@ -7,7 +7,6 @@ import { localizeHref } from "#src/paraglide/runtime";
 import { Button } from "#src/components/base/buttons/button";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { StatusDot } from "#src/components/ui/status-dot";
@@ -17,6 +16,8 @@ import { AGENT_VISIBILITY } from "./agent-visibility";
 import { agentCreateErrorMessage } from "./agent-form";
 import { AgentOptionCard } from "./agent-option-card";
 import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields";
+import { finishedAgentUsername } from "./agent-username";
+import { AgentUsernameField } from "./agent-username-field";
 import type { CreateAgentInput } from "./agent.schemas";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 
@@ -71,7 +72,7 @@ export function AgentCreateDialog({
     setError("");
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const name = String(form.get("name") ?? "").trim();
+    const name = finishedAgentUsername(String(form.get("name") ?? ""));
     const description = String(form.get("description") ?? "").trim();
     if (!name) {
       setError(m.agent_form_required_error());
@@ -116,7 +117,6 @@ export function AgentCreateDialog({
               <form onSubmit={submit}>
                 <DialogHeader
                   title={m.agent_form_title()}
-                  description={m.agent_form_description()}
                   onClose={close}
                   className="px-4 pt-4 sm:px-6 sm:pt-6"
                 />
@@ -158,20 +158,7 @@ export function AgentCreateDialog({
                       />
                     ))}
                   </Select>
-                  <Input
-                    label={m.agent_form_username()}
-                    name="name"
-                    isRequired
-                    defaultValue={defaults?.name}
-                    pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                    placeholder="release-fix"
-                    hint={
-                      nameNote
-                        ? `${m.agent_form_username_hint()} ${nameNote}`
-                        : m.agent_form_username_hint()
-                    }
-                    className="min-w-0"
-                  />
+                  <AgentUsernameField defaultValue={defaults?.name} note={nameNote} />
                   <TextArea
                     label={m.agent_profile_description()}
                     name="description"
