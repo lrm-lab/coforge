@@ -28,7 +28,6 @@
   "computer_cloud_not_ready": "The default cloud computer is not running yet.",
   "computer_cloud_unavailable": "Cloud computers are not available.",
   "computer_open_desktop": "Open desktop",
-  "agent_computer_tab": "Computer",
   "computer_cloud_creating": "Creating…",
   "computer_cloud_create_error": "The computer could not be created. Try again.",
   "computer_cloud_access_denied": "You cannot add a computer to this workspace.",

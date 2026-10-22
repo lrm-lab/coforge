@@ -5,10 +5,10 @@ import { Monitor01 as Monitor } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import { getCloudDesktopOrigin } from "./cloud-desktop-origin.functions";
-import { cloudDesktopUrl } from "./cloud-desktop-url";
+import { cloudDesktopUrl, openCloudDesktopWindow } from "./cloud-desktop-url";
 
 /**
- * Opens this Agent's screen on its cloud computer.
+ * Opens this Agent's screen on its cloud computer, in its own window.
  * Shown to the computer's owner when this deployment has a desktop proxy.
  * The address is `/desktop/<computer id>/<agent id>/` and carries no token.
  */
@@ -43,7 +43,7 @@ export function AgentDesktopButton({
       iconLeading={Monitor}
       isDisabled={!online}
       onPress={() => {
-        window.open(url, "_blank", "noopener,noreferrer");
+        openCloudDesktopWindow(url, computerId, agentId);
       }}
     >
       {m.computer_open_desktop()}

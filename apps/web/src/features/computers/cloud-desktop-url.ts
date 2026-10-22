@@ -31,3 +31,15 @@ export function cloudDesktopUrl(
   desktop.pathname = agentId ? `/desktop/${computerId}/${agentId}/` : `/desktop/${computerId}/`;
   return desktop.toString();
 }
+
+/** A sized popup, not a tab. `noopener` keeps the desktop page from navigating this one. */
+export const CLOUD_DESKTOP_WINDOW_FEATURES = "popup,width=1280,height=800,noopener,noreferrer";
+
+/** One window per desktop, so opening it again focuses that window when the browser allows it. */
+export function cloudDesktopWindowName(computerId: string, agentId?: string): string {
+  return agentId ? `coforge-desktop-${computerId}-${agentId}` : `coforge-desktop-${computerId}`;
+}
+
+export function openCloudDesktopWindow(url: string, computerId: string, agentId?: string): void {
+  window.open(url, cloudDesktopWindowName(computerId, agentId), CLOUD_DESKTOP_WINDOW_FEATURES);
+}

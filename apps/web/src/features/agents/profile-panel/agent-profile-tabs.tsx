@@ -4,7 +4,6 @@ import {
   Bell01 as Bell,
   Folder,
   Grid01,
-  Monitor01 as Monitor,
   UserCircle as UserRound,
 } from "@untitledui/icons";
 
@@ -19,7 +18,6 @@ const TABS = {
   activity: { label: m.agent_activity_tab, icon: ActivityIcon },
   workspace: { label: m.agent_workspace_tab, icon: Folder },
   apps: { label: m.agent_apps_tab, icon: Grid01 },
-  computer: { label: m.agent_computer_tab, icon: Monitor },
 };
 
 /** The tabs this viewer may see, in their saved order; the first one is the panel's default. */
@@ -27,11 +25,10 @@ export function useAgentProfileTabOrder(
   canSeeManagerTabs: boolean,
   canSeeWorkspace: boolean,
   canSeeApps: boolean,
-  canSeeComputer: boolean,
 ) {
   return usePanelTabOrder(
     "agentProfile",
-    visibleAgentProfileTabs(canSeeManagerTabs, canSeeWorkspace, canSeeApps, canSeeComputer),
+    visibleAgentProfileTabs(canSeeManagerTabs, canSeeWorkspace, canSeeApps),
   );
 }
 

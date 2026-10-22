@@ -166,8 +166,8 @@ These rules apply to `src/features/agents/`.
   Agent its pending requests and active grants; Approve, Deny, Grant access and Revoke only when
   the read's `canManage` says so (Workspace owner/admin or the Agent's creator). Revoke acts at
   once, with no confirmation, and every failure stays inline at the top of the tab.
-- The Computer tab is the cloud computer's owner only. Its button opens that Agent's desktop in
-  a new window; the panel does not embed the desktop.
+- The Profile tab's computer row opens that Agent's desktop in its own window, for the cloud
+  computer's owner only. The panel does not embed the desktop.
 - The Skills tab displays Global/Workspace metadata only, never skill bodies
   or a claim that a running session has loaded each entry.
 - The context popover is display-only: no toast and nothing triggers on a

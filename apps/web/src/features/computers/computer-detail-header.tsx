@@ -3,7 +3,7 @@ import { Monitor01 as Monitor, RefreshCw01 as RotateCw } from "@untitledui/icons
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import { BackToComputers } from "./back-to-computers";
-import { cloudDesktopUrl } from "./cloud-desktop-url";
+import { cloudDesktopUrl, openCloudDesktopWindow } from "./cloud-desktop-url";
 import { useCloudDesktopOrigin } from "./cloud-desktop-origin";
 
 /** Restart control next to Open desktop. The detail page owns the request. */
@@ -43,7 +43,7 @@ export function ComputerDetailHeader({
           iconLeading={Monitor}
           isDisabled={!online}
           onPress={() => {
-            window.open(desktopUrl, "_blank", "noopener,noreferrer");
+            openCloudDesktopWindow(desktopUrl, computerId);
           }}
         >
           {m.computer_open_desktop()}

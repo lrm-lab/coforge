@@ -67,7 +67,6 @@ import { agentModelsQueryKey } from "#src/features/agents/agent-models";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { AgentProfileHeader } from "./agent-profile-header";
 import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs";
-import { AgentComputerTab } from "./agent-computer-tab";
 import { AgentProfileTab } from "./agent-profile-tab";
 import { profileRuntimeSelection, profileUpdateInput } from "./agent-profile-runtime";
 import { AgentWorkspaceTab } from "./agent-workspace-tab";
@@ -163,7 +162,6 @@ export function AgentProfilePanel({
     canManage,
     canSeeWorkspace,
     Boolean(profile) && !deleted,
-    profile?.computer?.kind === "cloud" && profile.computer.ownedByViewer === true && !deleted,
   );
   const tab = resolveAgentProfileTab(requestedTab, tabOrder.tabs);
   // Opened without `agentTab`, the panel lands on the first tab of the viewer's order once their
@@ -409,8 +407,6 @@ export function AgentProfilePanel({
           </div>
         ) : tab === "apps" ? (
           <AgentAppsTab agentId={agentId} timeZone={timeZone} />
-        ) : tab === "computer" ? (
-          <AgentComputerTab profile={profile} />
         ) : tab === "workspace" ? (
           <AgentWorkspaceTab
             agentId={agentId}

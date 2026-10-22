@@ -22,6 +22,7 @@ import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
+import { AgentDesktopButton } from "#src/features/computers/agent-desktop-button";
 import { computerIcon } from "#src/features/computers/computer-identity";
 import { RuntimeUsage, UsageHealthDot } from "#src/features/computers/runtime-usage";
 import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
@@ -222,29 +223,40 @@ export function AgentProfileTab({
             onRequest={profile.canChangeVisibility ? onRequestVisibilityChange : undefined}
           />
         </div>
-        <div className="mt-4">
-          <p className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_computer()}</p>
-          <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-primary">
-            {ComputerIcon && (
-              <ComputerIcon className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
-            )}
-            <span className="truncate font-mono">
-              {profile.computer?.label || m.agent_profile_computer_unassigned()}
-            </span>
-          </p>
-          {profile.computer && (
-            <p className="mt-1 flex items-center gap-1.5 text-xs text-tertiary">
-              <StatusDot
-                tone={profile.computer.online ? "online" : "offline"}
-                className="size-1.5"
-              />
-              {profile.computer.online
-                ? m.agent_profile_computer_connected()
-                : m.agent_profile_computer_offline()}
-              {profile.computer.computerVersion && (
-                <span className="font-mono">· {profile.computer.computerVersion}</span>
+        <div className="mt-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_computer()}</p>
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-primary">
+              {ComputerIcon && (
+                <ComputerIcon className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
               )}
+              <span className="truncate font-mono">
+                {profile.computer?.label || m.agent_profile_computer_unassigned()}
+              </span>
             </p>
+            {profile.computer && (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-tertiary">
+                <StatusDot
+                  tone={profile.computer.online ? "online" : "offline"}
+                  className="size-1.5"
+                />
+                {profile.computer.online
+                  ? m.agent_profile_computer_connected()
+                  : m.agent_profile_computer_offline()}
+                {profile.computer.computerVersion && (
+                  <span className="font-mono">· {profile.computer.computerVersion}</span>
+                )}
+              </p>
+            )}
+          </div>
+          {profile.computer && (
+            <AgentDesktopButton
+              computerId={profile.computer.id}
+              agentId={profile.id}
+              kind={profile.computer.kind}
+              online={profile.computer.online === true}
+              owned={profile.computer.ownedByViewer === true}
+            />
           )}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4">

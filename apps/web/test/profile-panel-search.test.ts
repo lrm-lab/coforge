@@ -45,7 +45,7 @@ describe("agentProfileTabParamSchema", () => {
     expect(agentProfileTabParamSchema.parse("reminders")).toBe("reminders");
     expect(agentProfileTabParamSchema.parse("activity")).toBe("activity");
     expect(agentProfileTabParamSchema.parse("workspace")).toBe("workspace");
-    expect(agentProfileTabParamSchema.parse("computer")).toBe("computer");
+    expect(agentProfileTabParamSchema.parse("computer")).toBeUndefined();
     expect(agentProfileTabParamSchema.parse("nonsense")).toBeUndefined();
     expect(agentProfileTabParamSchema.parse(undefined)).toBeUndefined();
   });
@@ -77,49 +77,29 @@ describe("agentProfileSearchWithoutThread", () => {
 
 describe("visibleAgentProfileTabs", () => {
   test("shows reminders and activity to managers, workspace to the owner, profile and apps to everyone", () => {
-    expect(visibleAgentProfileTabs(false, false, true, false)).toEqual(["profile", "apps"]);
-    expect(visibleAgentProfileTabs(true, false, true, false)).toEqual([
+    expect(visibleAgentProfileTabs(false, false, true)).toEqual(["profile", "apps"]);
+    expect(visibleAgentProfileTabs(true, false, true)).toEqual([
       "profile",
       "activity",
       "reminders",
       "apps",
     ]);
-    expect(visibleAgentProfileTabs(false, true, true, false)).toEqual([
-      "profile",
-      "workspace",
-      "apps",
-    ]);
-    expect(visibleAgentProfileTabs(true, true, true, false)).toEqual([
+    expect(visibleAgentProfileTabs(false, true, true)).toEqual(["profile", "workspace", "apps"]);
+    expect(visibleAgentProfileTabs(true, true, true)).toEqual([
       "profile",
       "activity",
       "reminders",
       "workspace",
       "apps",
     ]);
-  });
-
-  test("adds Computer after Apps for the cloud computer's owner", () => {
-    expect(visibleAgentProfileTabs(false, false, true, true)).toEqual([
-      "profile",
-      "apps",
-      "computer",
-    ]);
-    expect(visibleAgentProfileTabs(true, true, true, true)).toEqual([...AGENT_PROFILE_TABS]);
   });
 
   test("an archived Agent shows Profile alone", () => {
-    expect(visibleAgentProfileTabs(false, false, false, false)).toEqual(["profile"]);
+    expect(visibleAgentProfileTabs(false, false, false)).toEqual(["profile"]);
   });
 
-  test("opens on Profile, then lists Activity, Reminders, Workspace, Apps and Computer by default", () => {
-    expect(visibleAgentProfileTabs(true, true, true, true)).toEqual([
-      "profile",
-      "activity",
-      "reminders",
-      "workspace",
-      "apps",
-      "computer",
-    ]);
+  test("opens on Profile, then lists Activity, Reminders, Workspace and Apps by default", () => {
+    expect(visibleAgentProfileTabs(true, true, true)).toEqual([...AGENT_PROFILE_TABS]);
   });
 });
 
