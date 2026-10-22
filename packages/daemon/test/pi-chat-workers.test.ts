@@ -36,3 +36,30 @@ test("the Workspace daemon relays independent Pi input and live feedback without
   }
   await expect(workers.execute(scope, { action: "list" })).rejects.toThrow("closed");
 }, 40_000);
+
+test("closing a worker forcibly terminates a child that ignores graceful shutdown", async () => {
+  const scope = {
+    workspaceId: crypto.randomUUID(),
+    computerId: crypto.randomUUID(),
+    userId: crypto.randomUUID(),
+  };
+  const workers = new PiChatWorkers(scope, () => {}, {
+    command: [
+      process.execPath,
+      "-e",
+      `
+      process.on("SIGTERM", () => {});
+      setInterval(() => {}, 1000);
+      setTimeout(() => process.exit(0), 60_000);
+      for await (const chunk of Bun.stdin.stream()) {
+        const request = JSON.parse(new TextDecoder().decode(chunk));
+        console.log(JSON.stringify({ id: request.id, result: { sessions: [] } }));
+      }
+    `,
+    ],
+  });
+  await workers.execute(scope, { action: "list" });
+  const started = Date.now();
+  await workers.close();
+  expect(Date.now() - started).toBeLessThan(40_000);
+}, 45_000);

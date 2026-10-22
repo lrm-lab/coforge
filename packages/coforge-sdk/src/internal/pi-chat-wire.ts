@@ -120,8 +120,12 @@ export function piChatFrames(
 /** One bounded frame assembly. Owners expire unfinished assemblies and bound their count. */
 export class PiChatFrameAssembly {
   #first?: PiChatFrame;
+  #lastActivity = 0;
   readonly #parts = new Map<number, Uint8Array>();
-  accept(frame: PiChatFrame): unknown | undefined {
+  isIdle(now = Date.now()) {
+    return now - this.#lastActivity > 30_000;
+  }
+  accept(frame: PiChatFrame, now = Date.now()): unknown | undefined {
     validFrame(frame);
     const first = (this.#first ??= frame);
     if (
@@ -139,6 +143,7 @@ export class PiChatFrameAssembly {
     )
       throw new Error("Conflicting Pi chat frame");
     this.#parts.set(frame.part, frame.data);
+    this.#lastActivity = now;
     if (this.#parts.size !== first.parts) return;
     const length = [...this.#parts.values()].reduce((sum, bytes) => sum + bytes.length, 0);
     if (length > PI_CHAT_MAX_BYTES) throw new Error("Pi chat response too large");

@@ -21,7 +21,7 @@ export function usePiChatStream(scope: PiChatScope, workspaceSlug: string, sessi
   const queries = useQueryClient();
   const getToken = useServerFn(getUserConversationSubscriptionToken);
   const live = useRef(new PiChatLiveHistory(sessionId));
-  const assemblies = useRef(new Map<string, { at: number; value: PiChatFrameAssembly }>());
+  const assemblies = useRef(new Map<string, PiChatFrameAssembly>());
   const queryKey = ["pi-chat", workspaceSlug, scope.computerId, "session", sessionId];
   const listKey = ["pi-chat", workspaceSlug, scope.computerId, "sessions"];
   const recover = () => {
@@ -45,7 +45,7 @@ export function usePiChatStream(scope: PiChatScope, workspaceSlug: string, sessi
       try {
         const now = Date.now();
         for (const [id, entry] of assemblies.current)
-          if (now - entry.at > 5000) {
+          if (entry.isIdle(now)) {
             assemblies.current.delete(id);
             recover();
           }
@@ -55,10 +55,10 @@ export function usePiChatStream(scope: PiChatScope, workspaceSlug: string, sessi
             assemblies.current.clear();
             recover();
           }
-          assembly = { at: now, value: new PiChatFrameAssembly() };
+          assembly = new PiChatFrameAssembly();
           assemblies.current.set(frame.frameId, assembly);
         }
-        const value = assembly.value.accept(frame);
+        const value = assembly.accept(frame, now);
         if (!value) return;
         assemblies.current.delete(frame.frameId);
         const event = piChatEventSchema.parse(value);
@@ -71,7 +71,7 @@ export function usePiChatStream(scope: PiChatScope, workspaceSlug: string, sessi
             if (event.session && !event.deleted) rows.push(event.session);
             return { ...current, sessions: rows.sort((a, b) => b.updatedAt - a.updatedAt) };
           });
-        if (event.sessionId === sessionId && outcome !== "ignored")
+        if (event.sessionId === sessionId)
           queries.setQueryData<PiChatResult>(queryKey, (current) =>
             current ? applyPiChatEvent(current, event) : current,
           );

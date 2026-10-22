@@ -50,3 +50,14 @@ test("an assembly rejects mixed scopes, conflicting duplicates and oversized pay
     piChatFrames(scope, crypto.randomUUID(), "result", "x".repeat(32_000_001)),
   ).toThrow();
 });
+test("multipart delivery stays live while chunks arrive and expires only after an idle interval", () => {
+  const body = { text: "x".repeat(750_000) };
+  const frames = piChatFrames(scope, crypto.randomUUID(), "event", body);
+  const assembly = new PiChatFrameAssembly();
+  assembly.accept(frames[0]!, 0);
+  expect(assembly.isIdle(20_000)).toBe(false);
+  assembly.accept(frames[1]!, 20_000);
+  expect(assembly.isIdle(40_000)).toBe(false);
+  expect(assembly.accept(frames[2]!, 40_000)).toEqual(body);
+  expect(assembly.isIdle(70_001)).toBe(true);
+});

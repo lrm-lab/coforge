@@ -95,7 +95,10 @@ class PiChatWorkerProcess {
   close() {
     if (!this.#closed) {
       this.#closed = true;
-      this.#killTimer = setTimeout(() => this.#child.kill(), PI_CHAT_SHUTDOWN_GRACE_MS + 5000);
+      this.#killTimer = setTimeout(
+        () => this.#child.kill("SIGKILL"),
+        PI_CHAT_SHUTDOWN_GRACE_MS + 5000,
+      );
       this.#child.stdin.end();
       for (const pending of this.#pending.values()) {
         clearTimeout(pending.timer);
