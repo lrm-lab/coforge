@@ -53,6 +53,15 @@ attention 或确认旧投递；意外退出仍沿用原有的身份和恢复语�
 强制终止，再等待最多 5 秒确认退出。进程树无法确认退出时停止失败，阻止替换启动并
 显示已有的停止失败 Activity。Grok 的原生后台等待不因此改变。
 
+## 模型请求等待
+
+Pi／内置 Agent 在 SDK 的公开 `agent.streamFunction` 调用处上报 `model_request_started`，
+涵盖工具结束后的下一轮请求；普通 lifecycle/progress 不替代此事实，compaction 保留自己的阶段。
+该观察写入历史，Web 中英文显示“等待模型响应”。仅云端 display 仍是等待时按该条历史时间
+计时，心跳不重置；后续同一 launch 的历史给出阶段耗时。租约过期时显示等待状态更新，
+不据此判定模型故障。计时是 best-effort 观察间隔，不是服务端精确首 token 延迟。
+请求发起本身不是模型已就绪，不结束首次启动的 120 秒截止，也不算输入已得到回答。
+
 ## 错误与重连的单一转换点
 
 `AgentRuntimeEvent`（`packages/agent/src/contract.ts`）的 `error` 成员
