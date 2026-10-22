@@ -167,7 +167,7 @@ export async function startAppNotificationQueueIfNeeded(
 /**
  * Starts the queue where it is needed now, and again whenever a reloaded flag file makes it needed.
  * A failed start is logged and retried with backoff (`QUEUE_START_RETRY`), so a database that was
- * not ready yet does not leave recording failing closed until a restart. Returns the function that
+ * not ready yet does not leave recording skipped until a restart. Returns the function that
  * stops listening and retrying; the shutdown hook calls it too.
  */
 export function startAppNotificationQueueAtServerStart(

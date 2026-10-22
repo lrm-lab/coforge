@@ -41,9 +41,21 @@ map server to workspace), so the same events are `workspace.*` here.
   Postgres write (Redis-lease status changes) are not part of this slice and would be best effort.
 - A flag-off Workspace records nothing: `record` returns before it writes a job, so it can never
   fail the domain transaction and needs no `DATABASE_URL` for pg-boss.
-- **Fail closed:** for a flag-on Workspace, `record` throws `AppNotificationsUnavailable` when the
-  queue is not running in this process (it never starts it). The domain transaction rolls back, so
-  an event is never lost silently; the user retries once the queue is up.
+- **Best effort, never blocking:** notifications never affect the operation that emits them
+  (admitting a Workspace member must not fail because of them). For a flag-on Workspace, `record`
+  never throws and never aborts the caller's transaction. When the queue is not running in this
+  process (it never starts it) or the send fails, the event is skipped and logged as
+  `app_notifications:record_skipped` (`reason`, `type`, `workspace_id`, `event_id`; no personal
+  data) and the domain transaction commits. The send runs in a `SAVEPOINT` in the caller's
+  transaction, so a failed send rolls back only to it. Events of that moment are not delivered
+  while the queue is down and are not replayed later. A send that succeeds is atomic with the
+  domain transaction.
+
+## Enabling
+
+Before turning `app-notifications` on in staging or production, confirm the database user can
+`CREATE` a schema (pg-boss creates `pgboss` on its first start), then enable the flag for one test
+Workspace first and check that its events appear as jobs.
 
 ## The `pgboss` schema and when the queue starts
 
@@ -62,7 +74,7 @@ has settled successfully), so the queue starts outside any, in two places:
 
 A deployment whose flag file never defines the flag gets no schema. A start that fails is logged
 (`app_notifications:queue_start_failed`) and retried with backoff (1 s doubling to 30 s, 24 retries,
-`QUEUE_START_RETRY`), so a database that was not ready does not leave recording failing closed until
+`QUEUE_START_RETRY`), so a database that was not ready does not leave recording skipped until
 a restart; after the last retry only a flag file reload or a restart tries again. On shutdown one
 hook stops listening for reloads and retrying first, forbids any later start, then stops the queue.
 The database user needs `CREATE` on the database for the first start (staging and production
@@ -93,4 +105,4 @@ events are not recorded at all.
 (`APP_NOTIFICATIONS_TEST_DATABASE_URL`, and `DATABASE_URL` naming the same database, which
 `mise run test:integration:web` sets). `app-notifications-dark.integration.test.ts` creates and
 migrates its own database to prove the dark, server start, flag reload, retry, shutdown and
-fail-closed behaviour above.
+skip-and-log behaviour above.

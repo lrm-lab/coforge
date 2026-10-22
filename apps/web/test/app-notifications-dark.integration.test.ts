@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,10 +16,7 @@ import {
   stopAppNotificationQueue,
 } from "#src/server/app-notifications/app-notification-queue.server";
 import { newAppNotificationEvent } from "#src/server/app-notifications/app-notification-event";
-import {
-  AppNotifications,
-  AppNotificationsUnavailable,
-} from "#src/server/app-notifications/app-notifications.server";
+import { AppNotifications } from "#src/server/app-notifications/app-notifications.server";
 import { PrismaAppNotificationQueueSchema } from "#src/server/db/repositories/app-notification-queue-schema.repositories.server";
 import {
   isFeatureDefined,
@@ -33,7 +30,8 @@ import { admitWorkspaceMember } from "#src/server/workspaces/member-admission.se
  * `app-notifications` ships dark: while the flag file does not define the flag nothing starts
  * pg-boss or creates its `pgboss` schema. The queue starts at server start once the flag is defined or the
  * schema exists, and when a reloaded flag file first defines the flag; never inside a domain
- * transaction, so a flag-on event with the queue stopped fails the transaction. Needs a database that never saw pg-boss, so it makes its own from the
+ * transaction. A flag-on event with the queue stopped is skipped and logged; it never fails the
+ * domain transaction. Needs a database that never saw pg-boss, so it makes its own from the
  * server named by `APP_NOTIFICATIONS_TEST_DATABASE_URL` and migrates it.
  */
 const adminUrl = Bun.env.APP_NOTIFICATIONS_TEST_DATABASE_URL;
@@ -45,7 +43,7 @@ let flagDirectory: string | undefined;
 let flagsPath = "";
 let stopListening: (() => void) | undefined;
 let previousDatabaseUrl: string | undefined;
-const ON_SLUGS = [0, 1, 2, 3].map((index) => `dark-on-${databaseName}-${index}`);
+const ON_SLUGS = [0, 1, 2, 3, 4].map((index) => `dark-on-${databaseName}-${index}`);
 
 /** The flag file, with `app-notifications` defined (on for `ON_SLUGS`) or not. The file always
  * defines another flag, so it is a valid flagd file either way. */
@@ -183,23 +181,45 @@ testWithDatabase(
   FLAG_RELOAD_DEADLINE_MS + 30_000,
 );
 
+/** Collects the JSON lines `record` logs as `app_notifications:record_skipped`. */
+function captureSkipped() {
+  const lines: Record<string, unknown>[] = [];
+  const spy = spyOn(console, "warn").mockImplementation((line: unknown) => {
+    const parsed = JSON.parse(String(line)) as Record<string, unknown>;
+    if (parsed.event === "app_notifications:record_skipped") lines.push(parsed);
+  });
+  return { lines, restore: () => spy.mockRestore() };
+}
+
 testWithDatabase(
-  "with the flag on and the queue not started, admission fails and records nothing",
+  "with the flag on and the queue not started, admission succeeds, records no job and logs the skip",
   async () => {
     await stopAppNotificationQueue();
     expect(isAppNotificationQueueStarted()).toBe(false);
     const { workspace, joiner } = await workspaceWith(ON_SLUGS[0]!);
-    await expect(
-      db!.$transaction((tx) =>
+    const captured = captureSkipped();
+    try {
+      await db!.$transaction((tx) =>
         admitWorkspaceMember(tx, { workspace, userId: joiner.id, role: "member" }),
-      ),
-    ).rejects.toBeInstanceOf(AppNotificationsUnavailable);
-    expect(await db!.workspaceMembership.count({ where: { userId: joiner.id } })).toBe(0);
+      );
+    } finally {
+      captured.restore();
+    }
+    expect(await db!.workspaceMembership.count({ where: { userId: joiner.id } })).toBe(1);
+    expect(captured.lines).toHaveLength(1);
+    expect(captured.lines[0]).toMatchObject({
+      reason: "queue_not_started",
+      type: "workspace.member_added",
+      workspace_id: workspace.id,
+    });
+    expect(typeof captured.lines[0]!.event_id).toBe("string");
+    expect(JSON.stringify(captured.lines[0])).not.toContain(joiner.id);
+    expect(await schema().exists()).toBe(true);
   },
 );
 
 testWithDatabase(
-  "a record while the queue's start is in flight fails without waiting for the start",
+  "a record while the queue's start is in flight is skipped without waiting for the start",
   async () => {
     const { workspace, joiner } = await workspaceWith(ON_SLUGS[1]!);
     const event = newAppNotificationEvent({
@@ -210,12 +230,21 @@ testWithDatabase(
     const start = startAppNotificationQueue(url);
     // The start has begun but not settled: the queue is not usable, and record must not wait.
     expect(startedAppNotificationQueue()).toBeUndefined();
-    await expect(
-      db!.$transaction((tx) => AppNotifications.record(tx, workspace, event)),
-    ).rejects.toBeInstanceOf(AppNotificationsUnavailable);
+    const captured = captureSkipped();
+    try {
+      await db!.$transaction((tx) => AppNotifications.record(tx, workspace, event));
+    } finally {
+      captured.restore();
+    }
+    expect(captured.lines).toHaveLength(1);
     expect(startedAppNotificationQueue()).toBeUndefined();
     await start;
     expect(startedAppNotificationQueue()).toBeDefined();
+    expect(
+      await startedAppNotificationQueue()!.findJobs(APP_NOTIFICATION_EVENT_QUEUE, {
+        data: { workspaceId: workspace.id },
+      }),
+    ).toHaveLength(0);
     await stopAppNotificationQueue();
   },
   FLAG_RELOAD_DEADLINE_MS,
@@ -261,6 +290,52 @@ testWithDatabase(
     expect(jobs).toHaveLength(1);
   },
   FLAG_RELOAD_DEADLINE_MS + 30_000,
+);
+
+testWithDatabase(
+  "a send that fails inside the transaction is rolled back to its savepoint: admission commits, no job, skip logged",
+  async () => {
+    const boss = startedAppNotificationQueue()!;
+    const { workspace, joiner } = await workspaceWith(ON_SLUGS[3]!);
+    // The send reaches the database and fails there, which aborts a transaction without a savepoint.
+    const send = spyOn(boss, "send").mockImplementationOnce((async (...args: unknown[]) => {
+      const options = args[2] as { db: { executeSql(text: string): Promise<unknown> } };
+      await options.db.executeSql("SELECT 1/0");
+    }) as unknown as typeof boss.send);
+    const captured = captureSkipped();
+    try {
+      await db!.$transaction((tx) =>
+        admitWorkspaceMember(tx, { workspace, userId: joiner.id, role: "member" }),
+      );
+    } finally {
+      captured.restore();
+      send.mockRestore();
+    }
+    expect(await db!.workspaceMembership.count({ where: { userId: joiner.id } })).toBe(1);
+    expect(captured.lines).toHaveLength(1);
+    expect(captured.lines[0]).toMatchObject({ reason: "send_failed", workspace_id: workspace.id });
+    expect(
+      await boss.findJobs(APP_NOTIFICATION_EVENT_QUEUE, { data: { workspaceId: workspace.id } }),
+    ).toHaveLength(0);
+  },
+);
+
+testWithDatabase(
+  "a healthy send stays atomic with the domain transaction: a rolled-back admission leaves no job",
+  async () => {
+    const boss = startedAppNotificationQueue()!;
+    const { workspace, joiner } = await workspaceWith(ON_SLUGS[4]!);
+    await expect(
+      db!.$transaction(async (tx) => {
+        await admitWorkspaceMember(tx, { workspace, userId: joiner.id, role: "member" });
+        throw new Error("domain rollback");
+      }),
+    ).rejects.toThrow("domain rollback");
+    expect(await db!.workspaceMembership.count({ where: { userId: joiner.id } })).toBe(0);
+    expect(
+      await boss.findJobs(APP_NOTIFICATION_EVENT_QUEUE, { data: { workspaceId: workspace.id } }),
+    ).toHaveLength(0);
+  },
 );
 
 testWithDatabase(
