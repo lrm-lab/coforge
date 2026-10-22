@@ -38,13 +38,13 @@ export function productionCloudComputers(db: PrismaClient = requireDatabaseClien
     cluster: directory,
     keys: new PrismaDaemonKeys(db),
     accounts: {
-      username: async (userId) =>
+      displayName: async (userId) =>
         (
           await db.user.findUnique({
             where: { id: userId },
-            select: { username: true },
+            select: { displayName: true },
           })
-        )?.username,
+        )?.displayName,
     },
     disk: {
       clear: async (computerId) => {

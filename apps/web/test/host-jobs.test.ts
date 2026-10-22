@@ -12,11 +12,11 @@ import { createHostJobHttpHandler } from "#src/server/hosts/host-job-http.server
 
 const now = new Date("2026-09-30T06:00:00.000Z");
 const daemonKey = `dk_${"b".repeat(43)}`;
-const ownerUsername = "ada";
-const defaultCloudName = `${ownerUsername}的默认云电脑`;
-const extraCloudName = `${ownerUsername}的新建云电脑`;
+const ownerDisplayName = "Ada Lovelace";
+const defaultCloudName = `${ownerDisplayName}的默认云电脑`;
+const extraCloudName = `${ownerDisplayName}的新建云电脑`;
 const accounts = {
-  username: async (userId: string) => (userId === "user-a" ? ownerUsername : undefined),
+  displayName: async (userId: string) => (userId === "user-a" ? ownerDisplayName : undefined),
 };
 
 function hostsFor(
@@ -141,6 +141,7 @@ function harness(input?: {
   member?: boolean;
   accepting?: boolean;
   clearDisk?: (computerId: string) => Promise<void>;
+  accounts?: typeof accounts;
 }) {
   const fleet = new MemoryFleet();
   const jobs = new MemoryJobs();
@@ -166,7 +167,7 @@ function harness(input?: {
         return daemonKey;
       },
     },
-    accounts,
+    accounts: input?.accounts ?? accounts,
     ...(input?.clearDisk ? { disk: { clear: input.clearDisk } } : {}),
   });
   return {
@@ -183,6 +184,15 @@ function harness(input?: {
 const request = { userId: "user-a", workspaceId: "workspace-1", now };
 
 describe("cloud computer quota", () => {
+  test("a submitted nickname names the computer once", async () => {
+    let nickname = "Ada Lovelace";
+    const { hosts } = harness({ accounts: { displayName: async () => nickname } });
+    const created = await hosts.ensureDefault({ ...request, displayName: "李建" });
+    expect(created.name).toBe("李建的默认云电脑");
+    nickname = "别人";
+    expect((await hosts.ensureDefault(request)).name).toBe(created.name);
+  });
+
   test("the first request creates the default computer and the cluster claims its daemon key", async () => {
     const { hosts, jobs, issued } = harness();
     const created = await hosts.ensureDefault(request);

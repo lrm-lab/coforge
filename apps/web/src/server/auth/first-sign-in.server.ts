@@ -56,6 +56,8 @@ export type CloudComputerStart = (input: {
   userId: string;
   workspaceId: string;
   now: Date;
+  /** The nickname just confirmed. Present only at first sign-in, before it is stored. */
+  displayName?: string;
 }) => Promise<unknown>;
 
 export type WeeklyReportAssistantBind = (input: {
@@ -130,6 +132,7 @@ export class FirstSignIn {
       userId: input.user.id,
       workspaceId,
       now: new Date(),
+      displayName: checked.name,
     });
     const computerId = defaultCloudComputerId(started);
     if (computerId)

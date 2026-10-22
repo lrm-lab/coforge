@@ -100,9 +100,9 @@ export interface DaemonKeys {
   issue(input: { userId: string; workspaceId: string; computerId: string }): Promise<string>;
 }
 
-/** The account username a new cloud computer's name is built from. */
+/** The saved nickname a new cloud computer's name is built from. */
 export interface AccountUsernames {
-  username(userId: string): Promise<string | undefined>;
+  displayName(userId: string): Promise<string | undefined>;
 }
 
 const OPERATION_ORDER: Record<HostJobOperation, number> = {
@@ -130,6 +130,8 @@ export class HostJobs {
     userId: string;
     workspaceId: string;
     now: Date;
+    /** The nickname just confirmed, before it is stored. Later calls read the saved one. */
+    displayName?: string;
   }): Promise<CloudComputerView> {
     const workspace = await this.#workspace(input.workspaceId, input.userId);
     const clusterId = await this.deps.cluster.id();
@@ -145,7 +147,7 @@ export class HostJobs {
       workspace,
       clusterId,
       "default",
-      cloudComputerName(await this.#ownerUsername(input.userId), "default"),
+      cloudComputerName(await this.#ownerDisplayName(input.userId, input.displayName), "default"),
       input.now,
     );
   }
@@ -173,7 +175,7 @@ export class HostJobs {
       workspace,
       await this.deps.cluster.id(),
       "extra",
-      cloudComputerName(await this.#ownerUsername(input.userId), "extra"),
+      cloudComputerName(await this.#ownerDisplayName(input.userId), "extra"),
       input.now,
     );
   }
@@ -478,10 +480,12 @@ export class HostJobs {
     };
   }
 
-  async #ownerUsername(userId: string): Promise<string> {
-    const username = (await this.deps.accounts.username(userId))?.trim();
-    if (!username) throw new HostJobError(404, "cloud computer owner not found");
-    return username;
+  async #ownerDisplayName(userId: string, given?: string): Promise<string> {
+    const supplied = given?.trim();
+    if (supplied) return supplied;
+    const stored = (await this.deps.accounts.displayName(userId))?.trim();
+    if (!stored) throw new HostJobError(404, "cloud computer owner not found");
+    return stored;
   }
 
   async #workspace(workspaceId: string, userId: string): Promise<{ id: string; slug: string }> {
@@ -497,8 +501,8 @@ export function compareJobs(left: HostJobRecord, right: HostJobRecord): number {
   return left.createdAt.getTime() - right.createdAt.getTime();
 }
 
-function cloudComputerName(username: string, slot: CloudSlot): string {
-  return slot === "default" ? `${username}的默认云电脑` : `${username}的新建云电脑`;
+function cloudComputerName(displayName: string, slot: CloudSlot): string {
+  return slot === "default" ? `${displayName}的默认云电脑` : `${displayName}的新建云电脑`;
 }
 
 function active(computers: CloudComputer[]): CloudComputer[] {
