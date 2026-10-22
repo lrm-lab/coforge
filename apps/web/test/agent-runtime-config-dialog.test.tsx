@@ -35,6 +35,7 @@ test("an unbound Agent's setup form shows the Computer picker and setup title", 
       saving={false}
       error=""
       onSave={() => {}}
+      onClose={() => {}}
     />,
   );
   expect(markup).toContain(m.agent_profile_setup_runtime());
@@ -75,6 +76,7 @@ test("Save starts disabled: nothing has changed away from the Agent's current ru
       saving={false}
       error=""
       onSave={() => {}}
+      onClose={() => {}}
     />,
   );
   // The submit (Save) button is the last <button>...</button> in the footer; assert it carries
@@ -93,6 +95,7 @@ test("Save reads the saving copy and stays disabled while the panel is saving", 
       saving
       error=""
       onSave={() => {}}
+      onClose={() => {}}
     />,
   );
   expect(markup).toContain(m.agent_profile_saving());
@@ -109,6 +112,7 @@ test("a failed save shows an inline alert line, never a toast", () => {
       saving={false}
       error={m.agent_form_runtime_unavailable()}
       onSave={() => {}}
+      onClose={() => {}}
     />,
   );
   expect(markup).toContain('role="alert"');
@@ -124,6 +128,7 @@ test("a non-owner viewer (no `environment` prop) never renders the env disclosur
       saving={false}
       error=""
       onSave={() => {}}
+      onClose={() => {}}
     />,
   );
   expect(markup).not.toContain(m.agent_env_more());
@@ -144,6 +149,7 @@ test("the owner's env disclosure renders closed by default, with its section cop
       saving={false}
       error=""
       onSave={() => {}}
+      onClose={() => {}}
     />,
   );
   expect(markup).toContain(m.agent_env_more());
@@ -164,6 +170,7 @@ test("Save stays disabled while the owner's env query has not loaded yet, showin
       saving={false}
       error=""
       onSave={() => {}}
+      onClose={() => {}}
     />,
   );
   expect(markup).toContain(m.agent_env_loading());
@@ -191,6 +198,7 @@ test("Pi offers Configured, DeepSeek and OpenRouter as Provider options, with no
       saving={false}
       error=""
       onSave={() => {}}
+      onClose={() => {}}
     />,
   );
   expect(markup).toContain(m.agent_form_pi_provider_configured());
@@ -219,6 +227,7 @@ test("a saved Pi built-in provider with a stored credential shows the preserve-k
       saving={false}
       error=""
       onSave={() => {}}
+      onClose={() => {}}
     />,
   );
   expect(markup).toContain(m.agent_runtime_api_key({ provider: "deepseek" }));
@@ -245,6 +254,7 @@ test("a saved Pi provider outside the built-in set (e.g. zai) is still offered, 
       saving={false}
       error=""
       onSave={() => {}}
+      onClose={() => {}}
     />,
   );
   expect(markup).toContain("zai");

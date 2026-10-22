@@ -71,7 +71,7 @@ export function AgentRuntimeConfigForm({
   environment?: AgentEnvironmentState;
   saving: boolean;
   error: string;
-  onClose?: () => void;
+  onClose: () => void;
   onSave: (form: FormData, changed: { runtime: boolean; environment: boolean }) => void;
 }) {
   const [selectedComputerId, setSelectedComputerId] = useState(

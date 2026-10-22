@@ -34,13 +34,17 @@ export function AgentOptionCard({
 function optionCardClassName({
   isSelected,
   isDisabled,
+  isFocusVisible,
 }: {
   isSelected: boolean;
   isDisabled: boolean;
+  isFocusVisible: boolean;
 }) {
+  // The base checkbox outlines only its box; keyboard focus outlines the whole card.
   return cx(
     "min-w-0 cursor-pointer rounded-lg p-3 ring-1 ring-secondary ring-inset",
     isSelected && "ring-2 ring-brand",
+    isFocusVisible && "outline-2 outline-offset-2 outline-focus-ring",
     isDisabled && "cursor-not-allowed",
   );
 }
