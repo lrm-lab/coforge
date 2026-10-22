@@ -19,7 +19,7 @@ export class PiChatGateway {
   constructor(
     private readonly ports: {
       canUse(scope: PiChatScope): Promise<boolean>;
-      online(scope: PiChatScope): Promise<boolean>;
+      online(scope: PiChatScope, command: PiChatCommand): Promise<boolean>;
       publish(request: PiChatRequest): Promise<void>;
       results: PiChatResults;
     },
@@ -35,7 +35,7 @@ export class PiChatGateway {
     const request: PiChatRequest = { ...scope, requestId: crypto.randomUUID(), command };
     const { results } = this.ports;
     try {
-      if (!(await this.ports.online(scope))) throw new Error("Pi chat daemon unavailable");
+      if (!(await this.ports.online(scope, command))) throw new Error("Pi chat daemon unavailable");
       await results.begin(request);
       await this.ports.publish(request);
       const deadline = this.timing.now() + this.timing.timeoutMs;

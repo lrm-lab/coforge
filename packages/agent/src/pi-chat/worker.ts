@@ -7,7 +7,7 @@ import {
   PI_CHAT_SHUTDOWN_GRACE_MS,
   type PiChatUpdate,
 } from "@lrm/coforge-sdk/internal/pi-chat";
-import { createPiChatRuntime } from "./runtime";
+import { createPiChatRuntime, listPiChatModels } from "./runtime";
 import { FilePiChatStore } from "./storage";
 import { PiChatSessions } from "./sessions";
 
@@ -59,8 +59,9 @@ export async function runPiChatWorker(
   };
   const sessions = new PiChatSessions(
     new FilePiChatStore(cwd),
-    (id) => createPiChatRuntime(cwd, id, undefined, notify),
+    (id, model) => createPiChatRuntime(cwd, id, undefined, notify, model),
     notify,
+    () => listPiChatModels(cwd),
   );
   let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
   const beginShutdown = () => {

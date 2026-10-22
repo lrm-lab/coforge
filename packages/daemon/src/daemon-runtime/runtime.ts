@@ -87,7 +87,7 @@ export type DaemonConfig = {
 export type WorkspaceConfig = DaemonConfig;
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
 import { PiChatRelay } from "#src/pi-chat/relay";
-import { PI_CHAT_CAPABILITY } from "@lrm/coforge-sdk/internal/pi-chat-wire";
+import { readyCapabilities } from "./ready-capabilities";
 import type {
   DaemonConnectionClient,
   DaemonConnectionClientFactory,
@@ -122,9 +122,6 @@ import {
   AGENT_SERVICE_TIER_OBSERVED,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type UsageScanResponse,
-  REMINDER_CAPABILITY,
-  AGENT_MIGRATION_CAPABILITY,
-  APP_CONFIG_CAPABILITY,
   CLEANER_APP_ID,
   type AgentReminderOperationRequest,
   type LocalReminderRequest,
@@ -1272,12 +1269,7 @@ export class DaemonRuntime {
           ...readOperatingSystem(),
           recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds ?? [],
           recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds ?? [],
-          capabilities: [
-            PI_CHAT_CAPABILITY,
-            REMINDER_CAPABILITY,
-            APP_CONFIG_CAPABILITY,
-            ...(this.#migrations ? [AGENT_MIGRATION_CAPABILITY] : []),
-          ],
+          capabilities: readyCapabilities(!!this.#migrations),
         }),
         signal,
       );

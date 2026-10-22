@@ -8,18 +8,31 @@ import { PiChatMessage } from "./pi-chat-message";
 import { usePiChatDisclosure } from "./pi-chat-disclosure";
 
 /** Group each user turn so execution details do not drown out the answer. */
-export function PiChatTranscript({ messages, busy }: { messages: Message[]; busy: boolean }) {
+export function PiChatTranscript({
+  messages,
+  busy,
+  status,
+}: {
+  messages: Message[];
+  busy: boolean;
+  status?: string;
+}) {
   const turns: Message[][] = [];
   for (const message of messages) {
     if (message.role === "user" || !turns.length) turns.push([]);
     turns.at(-1)!.push(message);
   }
   return turns.map((turn, index) => (
-    <Turn key={turn[0]!.id} messages={turn} busy={busy && index === turns.length - 1} />
+    <Turn
+      key={turn[0]!.id}
+      messages={turn}
+      busy={busy && index === turns.length - 1}
+      status={status}
+    />
   ));
 }
 
-function Turn({ messages, busy }: { messages: Message[]; busy: boolean }) {
+function Turn({ messages, busy, status }: { messages: Message[]; busy: boolean; status?: string }) {
   const { open: expanded, toggle } = usePiChatDisclosure(`turn:${messages[0]!.id}`, busy);
   const user = messages[0]?.role === "user" ? messages[0] : undefined;
   const responses = messages.slice(user ? 1 : 0);
@@ -79,7 +92,7 @@ function Turn({ messages, busy }: { messages: Message[]; busy: boolean }) {
             {busy && (
               <p role="status" className="mt-3 flex items-center gap-2 text-xs text-tertiary">
                 <span aria-hidden="true" className="size-1.5 rounded-full bg-brand-solid" />
-                {m.pi_chat_running()}
+                {status ?? m.pi_chat_running()}
               </p>
             )}
           </div>

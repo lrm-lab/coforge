@@ -2,11 +2,28 @@ import { getAgentDir, SessionManager } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 import { join } from "node:path";
 import { rename, rm } from "node:fs/promises";
-import type { PiChatMessage, PiChatUpdate } from "@lrm/coforge-sdk/internal/pi-chat";
-import { createSession } from "#src/runner";
+import type {
+  PiChatMessage,
+  PiChatUpdate,
+  PiChatModel,
+  PiChatProgress,
+} from "@lrm/coforge-sdk/internal/pi-chat";
+import { createSession, discoverPiModels } from "#src/runner";
 import { PI_SESSION_DIR } from "#src/paths";
 import type { PiChatRuntime } from "./sessions";
 import { recoverPiChatTurn } from "./recovery";
+
+export async function listPiChatModels(cwd: string, agentDir = getAgentDir()) {
+  const models = await discoverPiModels(cwd, {
+    agentDir,
+    environment: Object.fromEntries(
+      Object.entries(Bun.env).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    ),
+  });
+  return models.map(({ provider, id, name }) => ({ provider, id, name }));
+}
 
 const nativeMessage = z.object({
   role: z.string(),
@@ -98,6 +115,7 @@ export async function createPiChatRuntime(
   id?: string,
   agentDir = getAgentDir(),
   onUpdate?: (update: PiChatUpdate) => void,
+  selectedModel?: PiChatModel,
 ): Promise<PiChatRuntime> {
   const runtime = await createSession({
     cwd,
@@ -106,12 +124,26 @@ export async function createPiChatRuntime(
     sessionDir: join(cwd, PI_SESSION_DIR),
     sessionId: id,
     sessionMode: id ? "resume" : "create",
+    ...(selectedModel ? { modelProvider: selectedModel.provider, model: selectedModel.id } : {}),
     instructions:
       "You are a helpful coding assistant working in the user's cloud computer. Answer in the user's language. Use tools when useful and explain the result clearly.",
   });
   if (id && runtime.sessionId !== id) {
     await runtime.dispose();
     throw new Error("saved session is unavailable");
+  }
+  if (selectedModel) {
+    const model = runtime.services.modelRuntime.getModel(selectedModel.provider, selectedModel.id);
+    if (!model) {
+      await runtime.dispose();
+      throw new Error("Pi model is unavailable");
+    }
+    try {
+      await runtime.session.setModel(model, { persist: false });
+    } catch (error) {
+      await runtime.dispose();
+      throw error;
+    }
   }
   // Pi lazily creates JSONL on the first message. Persist the empty native
   // session before accepting a request so a preflight failure can still resume.
@@ -133,6 +165,7 @@ export async function createPiChatRuntime(
   let pending: PiChatMessage | undefined;
   let failed = false;
   const tools = new Map<string, PiChatMessage>();
+  let progress: PiChatProgress = { phase: "waiting", updatedAt: Date.now() };
   const emit = (update: Omit<PiChatUpdate, "sessionId">) => {
     try {
       onUpdate?.({ sessionId: runtime.sessionId, ...update });
@@ -141,6 +174,32 @@ export async function createPiChatRuntime(
     }
   };
   const unsubscribe = runtime.session.subscribe((event) => {
+    if (event.type === "queue_update")
+      emit({ queue: { steering: [...event.steering], followUp: [...event.followUp] } });
+    const phase =
+      event.type === "tool_execution_start"
+        ? "tool"
+        : event.type === "auto_retry_start"
+          ? "retrying"
+          : event.type === "compaction_start"
+            ? "compacting"
+            : event.type === "message_update"
+              ? event.assistantMessageEvent.type.startsWith("thinking")
+                ? "thinking"
+                : "answering"
+              : ["turn_start", "tool_execution_end", "auto_retry_end", "compaction_end"].includes(
+                    event.type,
+                  )
+                ? "waiting"
+                : undefined;
+    if (phase) {
+      progress = {
+        phase,
+        updatedAt: Date.now(),
+        ...(event.type === "tool_execution_start" ? { toolName: event.toolName } : {}),
+      };
+      emit({ progress });
+    }
     if (event.type === "message_update") {
       pending = chatMessage("streaming", event.message);
       if (pending) emit({ messages: [pending] });
@@ -193,6 +252,14 @@ export async function createPiChatRuntime(
   });
   return {
     id: runtime.sessionId,
+    progress: () => progress,
+    queue: () => ({
+      steering: [...runtime.session.getSteeringMessages()],
+      followUp: [...runtime.session.getFollowUpMessages()],
+    }),
+    takeQueue: () => runtime.session.clearQueue(),
+    enqueue: (text, mode) =>
+      mode === "steer" ? runtime.session.steer(text) : runtime.session.followUp(text),
     model: () =>
       runtime.session.model ? `${runtime.session.model.provider}/${runtime.session.model.id}` : "",
     messages: () => [
@@ -210,7 +277,10 @@ export async function createPiChatRuntime(
       await recoverPiChatTurn(runtime.session, checkpoint);
       if (failed) throw new Error("Pi model request failed");
     },
-    abort: () => runtime.session.abort(),
+    abort: () => {
+      runtime.session.clearQueue();
+      return runtime.session.abort();
+    },
     dispose: async () => {
       unsubscribe();
       await runtime.dispose();

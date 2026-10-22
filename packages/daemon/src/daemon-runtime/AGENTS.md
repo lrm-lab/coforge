@@ -5,7 +5,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 
 ## Boundary
 
-- `agent-workspace-queries.ts` owns serialized Skills and workspace-file observations and safe diagnostics.
+- `agent-workspace-queries.ts` owns Skills/file observations; `ready-capabilities.ts` declares feature support.
 - This directory owns one Workspace child's cloud-facing use cases and Agent
   runtime operations. The machine Coordinator is in `supervisor/`; transport
   mechanics are in `connection/`.
