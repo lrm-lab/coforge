@@ -42,23 +42,3 @@ export function appliedServiceTier(requested: unknown): string | null {
   if (requested === "fast" || requested === "priority") return "priority";
   return requested === undefined ? "default" : null;
 }
-
-/**
- * Models that differ only in how they report speed tiers, served by the `catalog-speed-tiers`
- * mode of `codex-app-server.ts`: a service tier, a speed tier alone, neither, a tier that is not
- * Fast, and an older Codex that reports no tier field at all.
- */
-export const CODEX_SPEED_TIER_MODEL_LIST = {
-  data: [
-    {
-      model: "tier-service",
-      displayName: "Tier service",
-      serviceTiers: [{ id: "priority", name: "Fast", description: "2x speed" }],
-    },
-    { model: "tier-speed", additionalSpeedTiers: ["fast"], serviceTiers: [] },
-    { model: "no-fast", serviceTiers: [], additionalSpeedTiers: [] },
-    { model: "other-tier", serviceTiers: [{ id: "flex", name: "Flex" }] },
-    { model: "legacy" },
-  ],
-  nextCursor: null,
-};

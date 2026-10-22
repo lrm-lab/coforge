@@ -447,7 +447,6 @@ describe("external Code Agent inventory", () => {
             reasoningEfforts: ["low", "medium", "high"],
             defaultReasoning: "low",
             recommended: true,
-            supportsFastMode: true,
           },
         ],
       },

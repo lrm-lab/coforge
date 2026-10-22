@@ -1,11 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  appliedServiceTier,
-  CODEX_MODEL_LIST,
-  CODEX_SPEED_TIER_MODEL_LIST,
-  hasExpectedThreadConfig,
-} from "./codex-models";
+import { appliedServiceTier, CODEX_MODEL_LIST, hasExpectedThreadConfig } from "./codex-models";
 import { readLines } from "./read-lines";
 
 const expectedSkill = process.argv
@@ -183,12 +178,7 @@ function handle(request: Request): void {
       write({ id: request.id, error: { code: -32001, message: "token=fixture-private-token" } });
       return;
     }
-    write({
-      id: request.id,
-      result: process.argv.includes("catalog-speed-tiers")
-        ? CODEX_SPEED_TIER_MODEL_LIST
-        : CODEX_MODEL_LIST,
-    });
+    write({ id: request.id, result: CODEX_MODEL_LIST });
     return;
   }
   if (request.method === "skills/list" && request.id && initialized) {

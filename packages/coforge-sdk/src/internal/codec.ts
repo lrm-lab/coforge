@@ -139,7 +139,6 @@ const decodedModelCatalog = (catalog: {
     reasoningEfforts: string[];
     defaultReasoning: string;
     recommended: boolean;
-    supportsFastMode?: boolean;
   }>;
 }): CodeAgentModelCatalog => ({
   provider: parseRuntimeProvider(catalog.provider),
@@ -151,9 +150,6 @@ const decodedModelCatalog = (catalog: {
     reasoningEfforts: [...model.reasoningEfforts],
     defaultReasoning: model.defaultReasoning,
     recommended: model.recommended,
-    // Absent stays absent: an older daemon never said whether the model supports Fast mode, and
-    // "unknown" must not read as a confirmed "no".
-    ...(model.supportsFastMode !== undefined ? { supportsFastMode: model.supportsFastMode } : {}),
   })),
 });
 

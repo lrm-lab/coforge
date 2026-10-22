@@ -376,10 +376,6 @@ export type CodeAgentModelMetadata = {
   reasoningEfforts: string[];
   defaultReasoning: string;
   recommended: boolean;
-  /** Whether the runtime accepts its Fast service tier for this model. Absent means the reported
-   * catalog said nothing about it (an older daemon, or a provider that does not report it): treat
-   * it as unknown, never as a confirmed "no". */
-  supportsFastMode?: boolean;
 };
 export type CodeAgentModelCatalog = {
   provider: RuntimeProvider;

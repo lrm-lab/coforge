@@ -202,8 +202,7 @@ message CodeAgentModelMetadata {
   repeated string reasoning_efforts = 5;
   string default_reasoning = 6;
   bool recommended = 7;
-  // Whether this model accepts the runtime's Fast service tier: Claude Code's own per-model
-  // `supportsFastMode`, or Codex's reported service tiers. Absent from an older daemon, so a
-  // consumer must treat "absent" as "unknown", not as "false". Additive: protocol_major stays 1.
-  optional bool supports_fast_mode = 8;
+  // Fast support is decided by runtime, not per model; an older daemon may still send this field.
+  reserved 8;
+  reserved "supports_fast_mode";
 }

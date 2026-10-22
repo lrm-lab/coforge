@@ -19,7 +19,6 @@ export type CatalogProgress = {
     | "initialized"
     | "model/list"
     | "get_available_models"
-    | "list_models"
     | "decode_catalog";
 };
 

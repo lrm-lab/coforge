@@ -12,7 +12,6 @@ export function modelMetadata(value: unknown): CodeAgentModelMetadata[] | undefi
     const reasoningEfforts = Reflect.get(candidate, "reasoningEfforts");
     const defaultReasoning = Reflect.get(candidate, "defaultReasoning");
     const recommended = Reflect.get(candidate, "recommended");
-    const supportsFastMode = Reflect.get(candidate, "supportsFastMode");
     if (
       typeof id !== "string" ||
       typeof displayName !== "string" ||
@@ -32,8 +31,6 @@ export function modelMetadata(value: unknown): CodeAgentModelMetadata[] | undefi
       reasoningEfforts,
       defaultReasoning,
       recommended,
-      // A non-boolean value is dropped on its own; it does not reject the whole catalog.
-      ...(typeof supportsFastMode === "boolean" ? { supportsFastMode } : {}),
     });
   }
   return models;
