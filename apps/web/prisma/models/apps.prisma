@@ -31,6 +31,12 @@ model App {
   /// SHA-256 (hex) of the client secret, whose plaintext is shown once.
   clientSecretHash String
   secretRotatedAt  DateTime?
+  /// The data the app may read where it is installed (`server/app-permissions/`): any of
+  /// `workspace`, `agent`, `channel` and `computer`, read-only, in that order
+  /// (`apps_permission_groups_check`). Separate from `allowedScopes`, which are about signing in.
+  permissionGroups String[]          @default([])
+  /// Goes up by one whenever `permissionGroups` changes, so an approval names what it approved.
+  permissionRevision Int             @default(0)
   createdByUserId  String?           @db.Uuid
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -54,13 +60,23 @@ model AppInstallation {
   appId             String    @db.Uuid
   workspaceId       String    @db.Uuid
   installedByUserId String?   @db.Uuid
+  /// The groups an owner or admin approved, as the app declared them at `approvedRevision`
+  /// (`app_installations_approved_groups_check`). The app reads only those it still declares; a
+  /// group it stops declaring leaves this list too, so declaring it again needs a new approval.
+  approvedGroups    String[]  @default([])
+  /// The app's `permissionRevision` that was approved; 0 before any approval.
+  approvedRevision  Int       @default(0)
+  approvedAt        DateTime?
+  approvedByUserId  String?   @db.Uuid
   createdAt         DateTime  @default(now())
   app               App       @relation(fields: [appId], references: [id], onDelete: Cascade)
   workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  installedBy       User?     @relation(fields: [installedByUserId], references: [id], onDelete: SetNull)
+  installedBy       User?     @relation("AppInstallationInstalledBy", fields: [installedByUserId], references: [id], onDelete: SetNull)
+  approvedBy        User?     @relation("AppInstallationApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([appId, workspaceId])
   @@index([workspaceId])
   @@index([installedByUserId])
+  @@index([approvedByUserId])
   @@map("app_installations")
 }

@@ -1,5 +1,5 @@
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma } from "#src/generated/prisma/client";
 import type { AppCategory } from "#src/features/apps/app-category";
 import type { AppRegistrationInput } from "#src/features/apps/app-registration";
 import type { AppChange, AppRegistryStore, AppView } from "#src/server/apps/app-registry.server";
@@ -33,16 +33,28 @@ const view = (row: Omit<AppView, "category"> & { category: string }): AppView =>
  * another Workspace's. */
 const owned = (workspaceId: string, key: string) => ({ key, ownerWorkspaceId: workspaceId });
 
+/** The person's role in the Workspace and the Workspace's slug (a feature-flag rule may match it);
+ * `undefined` for a non-member. The one membership read of the app modules. */
+export async function findAppMember(
+  db: Prisma.TransactionClient,
+  workspaceId: string,
+  userId: string,
+) {
+  const row = await db.workspaceMembership.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+    select: { role: true, workspace: { select: { slug: true } } },
+  });
+  return row && isWorkspaceMemberRole(row.role)
+    ? { role: row.role, workspaceSlug: row.workspace.slug }
+    : undefined;
+}
+
 /** App registry rows; who may change which app, and input rules, stay in `server/apps/`. */
 export class PrismaAppRegistryStore implements AppRegistryStore {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(private readonly db: Prisma.TransactionClient) {}
 
   async findMemberRole(workspaceId: string, userId: string) {
-    const row = await this.db.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { role: true },
-    });
-    return row && isWorkspaceMemberRole(row.role) ? row.role : undefined;
+    return (await findAppMember(this.db, workspaceId, userId))?.role;
   }
 
   async listForWorkspace(workspaceId: string) {

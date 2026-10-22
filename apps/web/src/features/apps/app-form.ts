@@ -1,5 +1,6 @@
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { APP_PERMISSIONS_CHANGED } from "./app-permissions";
 import { appInputFieldOf, type AppInputField, type AppScope } from "./app-registration";
 
 /** What each field's rule asks for, shown beside the field it refuses; a `Record` so a new field
@@ -23,6 +24,11 @@ export const APP_SCOPE_DESCRIPTIONS: Record<AppScope, () => string> = {
   email: m.apps_scope_email,
 };
 
+/** Whether `cause` is the refusal of a permissions change made on a declaration that has moved on. */
+export function isPermissionsChanged(cause: unknown): boolean {
+  return isAppErrorCode(cause, "CONFLICT") && cause.errorId === APP_PERMISSIONS_CHANGED;
+}
+
 /**
  * A refused register or change as the form shows it: beside `field` when the refusal names an input
  * field (the registry's `app-<field>-invalid`, or a taken key), else in the form's notice strip,
@@ -38,6 +44,7 @@ export function appFormProblem(
   if (!isAppError(cause)) return { field: null, message: fallback() };
   if (isAppErrorCode(cause, "CONFLICT") && cause.errorId === "app-key-taken")
     return { field: "key", message: m.apps_error_key_taken() };
+  if (isPermissionsChanged(cause)) return { field: null, message: m.apps_permissions_changed() };
   const field = isAppErrorCode(cause, "INVALID_INPUT") ? appInputFieldOf(cause.errorId) : undefined;
   if (field) return { field, message: APP_FIELD_PROBLEMS[field]() };
   if (isAppErrorCode(cause, "ACCESS_DENIED"))

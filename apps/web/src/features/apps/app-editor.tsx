@@ -22,6 +22,8 @@ import { EMPTY_APP_DRAFT, draftOf, inputOf, type AppDraft } from "./app-draft";
 import { APP_FIELD_PROBLEMS, appFormProblem } from "./app-form";
 import { AppLogo } from "./app-logo";
 import { AppLogoField } from "./app-logo-field";
+import { PermissionFields } from "./app-editor-permissions";
+import type { AppPermissionGroup } from "./app-permissions";
 import {
   APP_WHEN_TO_USE_MAX_LENGTH,
   refusedAppFields,
@@ -32,9 +34,10 @@ import type { AppSummary } from "./apps.functions";
 
 /**
  * Registers an app (`app` absent) or edits one, in one wide form: a section nav beside Profile,
- * Login with CoForge and, when editing, the Danger zone. One Save sends the form; regenerating the
- * secret and deleting act at once. A click outside never closes it; Escape and the close button
- * do, except while a save runs.
+ * Login with CoForge and, when editing, App permissions (where the app's summary carries them: the
+ * `app-data-permissions` flag is on) and the Danger zone. One Save sends the form; approving a
+ * permissions update, regenerating the secret and deleting act at once. A click outside never
+ * closes it; Escape and the close button do, except while a save runs.
  */
 export function AppEditor({
   open,
@@ -46,19 +49,24 @@ export function AppEditor({
   onDelete,
   onUploadLogo,
   onResetLogo,
+  onApprovePermissions,
 }: {
   open: boolean;
   app?: AppSummary;
   /** A secret regenerated for this app, shown in the editor's notice strip. */
   issued: IssuedSecret | null;
   onClose: () => void;
-  /** Sends the input: the whole registration, or the change without the key. Throws when refused. */
-  onSubmit: (input: AppRegistrationInput) => Promise<void>;
+  /** Sends the input: the whole registration, or the change without the key, with the data groups
+   * declared when the section is shown. Throws when refused. */
+  onSubmit: (input: AppRegistrationInput, permissionGroups?: AppPermissionGroup[]) => Promise<void>;
   onRegenerate: (app: AppSummary) => Promise<void>;
   onDelete: (app: AppSummary) => Promise<void>;
   /** Replace or reset the app's logo at once, outside Save. Throw when refused. */
   onUploadLogo: (app: AppSummary, file: File) => Promise<void>;
   onResetLogo: (app: AppSummary) => Promise<void>;
+  /** Approves the app's saved permissions at `revision`, the one shown, for this Workspace, at
+   * once. Throws when refused. */
+  onApprovePermissions: (app: AppSummary, revision: number) => Promise<void>;
 }) {
   const [saving, guard] = useSubmitGuard();
   return (
@@ -85,6 +93,7 @@ export function AppEditor({
               onDelete={onDelete}
               onUploadLogo={onUploadLogo}
               onResetLogo={onResetLogo}
+              onApprovePermissions={onApprovePermissions}
             />
           )}
         </Dialog>
@@ -106,20 +115,30 @@ function AppEditorForm({
   onDelete,
   onUploadLogo,
   onResetLogo,
+  onApprovePermissions,
 }: {
   app?: AppSummary;
   issued: IssuedSecret | null;
   saving: boolean;
   guard: ReturnType<typeof useSubmitGuard>[1];
   onClose: () => void;
-  onSubmit: (input: AppRegistrationInput) => Promise<void>;
+  onSubmit: (input: AppRegistrationInput, permissionGroups?: AppPermissionGroup[]) => Promise<void>;
   onRegenerate: (app: AppSummary) => Promise<void>;
   onDelete: (app: AppSummary) => Promise<void>;
   onUploadLogo: (app: AppSummary, file: File) => Promise<void>;
   onResetLogo: (app: AppSummary) => Promise<void>;
+  onApprovePermissions: (app: AppSummary, revision: number) => Promise<void>;
 }) {
   const editing = app !== undefined;
   const [draft, setDraft] = useState<AppDraft>(() => (app ? draftOf(app) : EMPTY_APP_DRAFT));
+  const permissions = app?.permissions;
+  const [groups, setGroups] = useState<AppPermissionGroup[]>(() => permissions?.declared ?? []);
+  // A newer declaration (the list was read again after a refused approval) replaces the selection.
+  const [shownRevision, setShownRevision] = useState(permissions?.revision);
+  if (permissions && permissions.revision !== shownRevision) {
+    setShownRevision(permissions.revision);
+    setGroups(permissions.declared);
+  }
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
@@ -127,11 +146,13 @@ function AppEditorForm({
   const ids = {
     profile: `${idPrefix}profile`,
     login: `${idPrefix}login`,
+    permissions: `${idPrefix}permissions`,
     danger: `${idPrefix}danger`,
   };
   const sections: Section[] = [
     { id: ids.profile, title: m.apps_section_profile() },
     { id: ids.login, title: m.apps_section_login() },
+    ...(permissions ? [{ id: ids.permissions, title: m.apps_section_permissions() }] : []),
     ...(editing ? [{ id: ids.danger, title: m.apps_section_danger() }] : []),
   ];
   const [active, setActive] = useActiveSection(scroller, sections);
@@ -156,7 +177,7 @@ function AppEditorForm({
     }
     void guard(async () => {
       try {
-        await onSubmit(input);
+        await onSubmit(input, permissions ? groups : undefined);
       } catch (cause) {
         const problem = appFormProblem(
           cause,
@@ -273,6 +294,22 @@ function AppEditorForm({
           >
             <LoginFields {...fields} />
           </EditorSection>
+          {app && permissions && (
+            <EditorSection
+              id={ids.permissions}
+              title={m.apps_section_permissions()}
+              status={m.apps_permissions_selected({ count: groups.length })}
+              description={m.apps_section_permissions_description()}
+            >
+              <PermissionFields
+                groups={groups}
+                permissions={permissions}
+                isDisabled={saving}
+                onChange={setGroups}
+                onApprove={() => guard(() => onApprovePermissions(app, permissions.revision))}
+              />
+            </EditorSection>
+          )}
           {editing && (
             <EditorSection
               id={ids.danger}

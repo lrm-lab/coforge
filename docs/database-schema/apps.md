@@ -4,8 +4,9 @@ The app registry (`apps/web/src/server/apps/`) holds the third-party apps Worksp
 is an OpenID Connect client of CoForge's authorization server, its key the `client_id`. There is no
 marketplace: a registered app is installed only in the Workspace that registered it. Migrations
 `20261020120000_app_registry`, `20261020130000_app_category_identity_scope` (the category, the
-`identity` scope, and no resource URI) and `20261020140000_app_homepage_optional` (an app needs only
-a name) and `20261021120000_app_logo` (its uploaded logo).
+`identity` scope, and no resource URI), `20261020140000_app_homepage_optional` (an app needs only a
+name), `20261021120000_app_logo` (its uploaded logo) and `20261021180000_app_data_permissions` (the
+data it may read where it is installed).
 
 The built-in Agent Apps (`system.reminder`, `system.cleaner`) are not rows. They are the SDK's
 `BUILT_IN_APPS` (`packages/coforge-sdk/src/internal/app-config.ts`), run by the daemon, and
@@ -29,6 +30,8 @@ The built-in Agent Apps (`system.reminder`, `system.cleaner`) are not rows. They
 | `logoContentType` | TEXT | The logo's checked type (`image/jpeg`, `image/png`, `image/gif` or `image/webp`), served with its bytes; set and cleared with `logoObjectKey`. |
 | `clientSecretHash` | TEXT | SHA-256 (hex) of the client secret `cfa_secret_…`, whose plaintext is returned once at registration or rotation. |
 | `secretRotatedAt` | TIMESTAMP(3) | Last rotation. |
+| `permissionGroups` | TEXT[] | The data the app declares it reads where it is installed: any of `workspace`, `agent`, `channel` and `computer`, each read-only, once each (`apps_permission_groups_check` only limits the values to those four; the application keeps them in that order); empty by default. Separate from `allowedScopes`. |
+| `permissionRevision` | INTEGER | 0 at first, one more each time `permissionGroups` changes (saving the same set leaves it). |
 | `createdByUserId` | UUID | Set null when the User is deleted. |
 | `createdAt`, `updatedAt` | TIMESTAMP(3) | |
 
@@ -51,6 +54,28 @@ the app is installed. The consent page shows the logo; the page for a person wit
 does not. A logo that does not load falls back to the monogram.
 
 `app_installations` — an app installed in a Workspace: `appId` (cascade), `workspaceId` (cascade),
-`installedByUserId` (set null), `createdAt`, unique (`appId`, `workspaceId`). Today only the
-registering Workspace installs its app; the table is where a later install elsewhere goes. A
-Workspace's delete removes its apps and installations.
+`installedByUserId` (set null), `approvedGroups` (TEXT[], empty by default;
+`app_installations_approved_groups_check` limits the values to the four groups, the application keeps
+their order), `approvedRevision` (INTEGER, 0 before any approval), `approvedAt`, `approvedByUserId` (set null when the User is deleted), `createdAt`, unique (`appId`,
+`workspaceId`). Today only the registering Workspace installs its app; the table is where a later
+install elsewhere goes. A Workspace's delete removes its apps and installations.
+
+## Data permissions
+
+Behind the `app-data-permissions` feature flag ([feature flags](../feature-flags.md)), owned by
+`apps/web/src/server/app-permissions/`. The registering Workspace's owners and admins declare the
+app's `permissionGroups` in its editor; an owner or admin of a Workspace where it is installed
+approves them there. An approval sends the `permissionRevision` it was shown and records that
+revision, the groups declared at it, who approved and when; a revision that is no longer current is
+refused (`CONFLICT`, `app-permissions-changed`).
+
+- Effective groups, what the app may read in that Workspace: `approvedGroups` ∩ `permissionGroups`.
+- Pending groups, waiting for approval: `permissionGroups` not in `approvedGroups`.
+- A declaration that drops a group takes effect at once, with no approval, and removes the group from
+  every installation's `approvedGroups` in the same transaction, so declaring it again is pending
+  until approved again.
+- The editor's Save writes the profile fields and the declaration in one transaction: a refused field
+  leaves the declaration, its revision and the approvals as they were.
+- While the flag is off for a Workspace, its members see none of this, declaring and approving are
+  refused (`ACCESS_DENIED`, `app-data-permissions-off`), and saving an app leaves these columns as
+  they are.

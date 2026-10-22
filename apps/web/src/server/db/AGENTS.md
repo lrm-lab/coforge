@@ -34,6 +34,12 @@ These rules apply to `src/server/db/`.
 - `app.repositories.server.ts` persists the app registry: only the apps Workspaces register.
   A read for display never selects `clientSecretHash`, and every write is scoped to an app its
   Workspace owns, so it cannot reach another Workspace's; who may write stays in `server/apps/`.
+- `app-permissions.repositories.server.ts` persists app data permissions: a declaration is one
+  compare-and-set on the app's `permissionRevision` that also narrows every installation's approval
+  to the groups still declared (one raw `UPDATE`, so an approval committed meanwhile is narrowed
+  too), and an approval is one update conditional on that revision. Its `db` may be an open transaction
+  (`transaction.server.ts`: `inTransaction` joins it instead of nesting). Who may write stays in
+  `server/app-permissions/`.
 - `oauth-authorization.repositories.server.ts` persists the authorization endpoint's rows: apps
   read as OIDC clients, the Workspaces a person may authorize an app in, consents and authorization
   codes (only a code's hash). What a request may do stays in `server/authorization-server/`.

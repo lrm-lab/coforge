@@ -26,13 +26,16 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AppCard } from "./app-card";
 import { AppEditor } from "./app-editor";
+import { isPermissionsChanged } from "./app-form";
 import { APP_CATEGORY_LABELS, filterApps } from "./app-list";
 import { APP_CATEGORIES, type AppCategory } from "./app-category";
+import type { AppPermissionGroup } from "./app-permissions";
 import type { AppRegistrationInput } from "./app-registration";
 import { AppSecretPanel, type IssuedSecret } from "./app-secret-panel";
 import { useAppsLayout } from "./apps-layout";
 import { APPS_VIEWS, type AppsView } from "./apps-settings-search";
 import {
+  approveWorkspaceAppPermissions,
   deleteWorkspaceApp,
   loadWorkspaceApps,
   registerWorkspaceApp,
@@ -76,6 +79,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
   const remove = useServerFn(deleteWorkspaceApp);
   const resetLogo = useServerFn(resetWorkspaceAppLogo);
   const uploadLogo = useServerFn(uploadWorkspaceAppLogo);
+  const approve = useServerFn(approveWorkspaceAppPermissions);
 
   /** Reads the apps again; a failed read keeps what is on screen, and the failure shows inline. */
   const refresh = useCallback(async () => {
@@ -118,13 +122,13 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
     setEditorOpen(true);
   }
 
-  async function submit(input: AppRegistrationInput) {
+  async function submit(input: AppRegistrationInput, permissionGroups?: AppPermissionGroup[]) {
     if (editor?.mode === "edit") {
       // The key is the app's client ID: never part of a change.
       const { key: _key, ...patch } = input;
       const { key } = editor.app;
-      await refreshingOnNotFound(async () => {
-        const app = await update({ data: { key, patch } });
+      await refreshingWhenStale(async () => {
+        const app = await update({ data: { key, patch, permissionGroups } });
         setEditorOpen(false);
         setApps((current) => current?.map((held) => (held.key === app.key ? app : held)));
       });
@@ -137,24 +141,26 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
     await refresh();
   }
 
-  /** A change on an app that is already gone leaves this list behind: read it again. */
-  async function refreshingOnNotFound(action: () => Promise<void>) {
+  /** A change on an app that is already gone, or whose permissions changed meanwhile, leaves this
+   * list (and the open editor) behind: read it again. */
+  async function refreshingWhenStale(action: () => Promise<void>) {
     try {
       await action();
     } catch (cause) {
       if (isAppErrorCode(cause, "NOT_FOUND")) void refresh();
+      if (isPermissionsChanged(cause)) await refresh();
       throw cause;
     }
   }
 
   const regenerate = (app: AppSummary) =>
-    refreshingOnNotFound(async () => {
+    refreshingWhenStale(async () => {
       const { clientSecret } = await rotate({ data: { key: app.key } });
       setIssued({ key: app.key, appName: app.name, secret: clientSecret });
     });
 
   const deleteApp = (app: AppSummary) =>
-    refreshingOnNotFound(async () => {
+    refreshingWhenStale(async () => {
       await remove({ data: { key: app.key } });
       setEditorOpen(false);
       setIssued(null);
@@ -172,7 +178,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
   }
 
   const uploadAppLogo = (app: AppSummary, file: File) =>
-    refreshingOnNotFound(async () => {
+    refreshingWhenStale(async () => {
       const form = new FormData();
       form.set("key", app.key);
       form.set("file", file);
@@ -180,15 +186,28 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
     });
 
   const resetAppLogo = (app: AppSummary) =>
-    refreshingOnNotFound(async () => {
+    refreshingWhenStale(async () => {
       showLogo(app.key, (await resetLogo({ data: { key: app.key } })).logoUrl);
+    });
+
+  /** Approves the saved permissions the editor shows, at the revision it shows. */
+  const approvePermissions = (app: AppSummary, revision: number) =>
+    refreshingWhenStale(async () => {
+      const permissions = await approve({ data: { key: app.key, revision } });
+      setApps((current) =>
+        current?.map((held) => (held.key === app.key ? { ...held, permissions } : held)),
+      );
     });
 
   const all = apps ?? [];
   const shown = filterApps(all, { query, category });
   // Phase 1: a Workspace installs only the apps it registered, so both lists hold the same apps.
   const counts: Record<AppsView, number> = { installed: all.length, mine: all.length };
-  const editing = editor?.mode === "edit" ? editor.app : undefined;
+  // The editor shows the app as the list now holds it, so a refresh reaches it too.
+  const editing =
+    editor?.mode === "edit"
+      ? (apps?.find((held) => held.key === editor.app.key) ?? editor.app)
+      : undefined;
 
   return (
     <div className="w-full px-page pb-8">
@@ -360,6 +379,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
           onDelete={deleteApp}
           onUploadLogo={uploadAppLogo}
           onResetLogo={resetAppLogo}
+          onApprovePermissions={approvePermissions}
         />
       )}
     </div>

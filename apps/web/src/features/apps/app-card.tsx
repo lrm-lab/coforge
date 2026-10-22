@@ -6,6 +6,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { permissionGroupList } from "./app-permission-copy";
 import { APP_CATEGORY_LABELS } from "./app-list";
 import { AppLogo } from "./app-logo";
 import type { AppsLayout } from "./apps-layout";
@@ -15,7 +16,9 @@ import type { AppSummary } from "./apps.functions";
  * One app on Settings → Applications. `installed`: as the Installed list shows it (where it comes
  * from, its visibility and that it is this Workspace's own); `mine`: as My apps shows it. The grid
  * shows the homepage when the app has one; the list the description, clamped to two lines with all
- * of it in a tooltip. `onEdit` only for an owner or admin.
+ * of it in a tooltip. Where the app's data permissions are shown (`app-data-permissions`), every
+ * member sees what it reads here and whether an update waits for approval. `onEdit` only for an
+ * owner or admin.
  */
 export function AppCard({
   app,
@@ -53,7 +56,17 @@ export function AppCard({
                 {m.apps_this_workspace()}
               </Badge>
             )}
+            {app.permissions && app.permissions.pending.length > 0 && (
+              <Badge size="sm" color="warning">
+                {m.apps_card_pending()}
+              </Badge>
+            )}
           </div>
+          {app.permissions && app.permissions.effective.length > 0 && (
+            <p className="text-sm text-tertiary">
+              {m.apps_card_reads({ groups: permissionGroupList(app.permissions.effective) })}
+            </p>
+          )}
           {layout === "list" && app.description && (
             <Tooltip title={app.description} placement="bottom start">
               <TooltipTrigger className="mt-1 w-full cursor-default rounded-sm text-left outline-focus-ring focus-visible:outline-2">
