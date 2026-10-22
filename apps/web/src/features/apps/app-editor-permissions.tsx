@@ -74,6 +74,7 @@ export function PermissionFields({
           permissions={permissions}
           unsaved={!samePermissionGroups(groups, permissions.declared)}
           isDisabled={isDisabled}
+          canManage
           onApprove={onApprove}
         />
       )}
@@ -81,17 +82,23 @@ export function PermissionFields({
   );
 }
 
-/** What this Workspace's installation reads now, and the update waiting for approval. A refusal
+/** What this Workspace's installation reads now, and the update waiting for approval (shared by
+ * the editor and the read-only app detail). A refusal
  * because the app declared again since is explained once the editor shows the latest. */
-function InstallationApproval({
+export function InstallationApproval({
   permissions,
-  unsaved,
-  isDisabled,
+  unsaved = false,
+  isDisabled = false,
+  canManage,
   onApprove,
 }: {
   permissions: AppPermissionsSummary;
-  unsaved: boolean;
-  isDisabled: boolean;
+  unsaved?: boolean;
+  isDisabled?: boolean;
+  /** An owner or admin may approve; everyone else only reads (the pending text says an owner or
+   * admin approves). */
+  canManage: boolean;
+  /** Approves the declaration shown; throws when refused. */
   onApprove: () => Promise<void>;
 }) {
   const [approving, setApproving] = useState(false);
@@ -160,17 +167,19 @@ function InstallationApproval({
             </>
           }
           actions={
-            <Button
-              type="button"
-              size="sm"
-              color="primary"
-              isDisabled={isDisabled || approving}
-              isLoading={approving}
-              showTextWhileLoading
-              onPress={() => void approve()}
-            >
-              {approving ? m.apps_installation_approving() : m.apps_installation_approve()}
-            </Button>
+            canManage && (
+              <Button
+                type="button"
+                size="sm"
+                color="primary"
+                isDisabled={isDisabled || approving}
+                isLoading={approving}
+                showTextWhileLoading
+                onPress={() => void approve()}
+              >
+                {approving ? m.apps_installation_approving() : m.apps_installation_approve()}
+              </Button>
+            )
           }
         />
       )}

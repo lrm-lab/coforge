@@ -80,6 +80,7 @@ export function SetupSection({
           url={setup.url}
           description={setup.description}
           unsaved={unsaved}
+          canManage
           onRefresh={onRefresh}
         />
       )}
@@ -87,20 +88,24 @@ export function SetupSection({
   );
 }
 
-/** This Workspace's installation's saved setup status, with the page to continue or manage it on
+/** This Workspace's installation's saved setup status (also the read-only app detail's), with the page to continue or manage it on
  * (opened in a new tab) and a refresh, since the app reports completion on its own. */
-function SetupStatusCard({
+export function SetupStatusCard({
   installation,
   url,
   description,
-  unsaved,
+  unsaved = false,
+  canManage,
   onRefresh,
 }: {
   installation: NonNullable<AppSetupSummary["installation"]>;
   /** The saved page and instructions the installer is shown. */
   url: string | null;
   description: string;
-  unsaved: boolean;
+  unsaved?: boolean;
+  /** An owner or admin: the link to continue or manage setup is theirs; everyone else is told
+   * an owner or admin manages it (Refresh status stays for all: it only reads). */
+  canManage: boolean;
   onRefresh: () => Promise<void>;
 }) {
   const [refreshing, setRefreshing] = useState(false);
@@ -129,8 +134,15 @@ function SetupStatusCard({
       )}
       {unsaved && <p className="text-sm text-tertiary">{m.apps_setup_unsaved()}</p>}
       {failed && <Alert color="warning" title={m.apps_setup_refresh_error()} />}
+      {!canManage && (
+        <p className="text-sm text-tertiary">
+          {installation.status === "complete"
+            ? m.apps_setup_admin_manages_note()
+            : m.apps_setup_member_note()}
+        </p>
+      )}
       <div className="flex flex-wrap gap-3">
-        {installation.link && (
+        {canManage && installation.link && (
           <Button
             size="sm"
             color="secondary"
@@ -154,7 +166,7 @@ function SetupStatusCard({
           {refreshing ? m.apps_setup_refreshing() : m.apps_setup_refresh()}
         </Button>
       </div>
-      {installation.link && (
+      {canManage && installation.link && (
         <p className="text-sm text-tertiary">
           {m.apps_setup_opens_in_new_tab({ host: new URL(installation.link).host })}
         </p>

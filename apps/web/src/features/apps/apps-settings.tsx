@@ -25,6 +25,7 @@ import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AppCard } from "./app-card";
+import { AppDetail } from "./app-detail";
 import { AppEditor } from "./app-editor";
 import { isPermissionsChanged, type AppEditorSubmission } from "./app-form";
 import { APP_CATEGORY_LABELS, filterApps } from "./app-list";
@@ -69,6 +70,8 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
   const [editor, setEditor] = useState<EditorState | null>(null);
   // Closing keeps `editor`, so the dialog keeps its words while it fades out.
   const [editorOpen, setEditorOpen] = useState(false);
+  // The app whose read-only detail is open; closing keeps `key` so the dialog fades out with its words.
+  const [detail, setDetail] = useState<{ key?: string; open: boolean }>({ open: false });
   // A new client secret, shown once: on the page after a register, in the editor after a
   // regenerate. A new register, or opening another app, drops it.
   const [issued, setIssued] = useState<(IssuedSecret & { key: string }) | null>(null);
@@ -372,6 +375,11 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
                       view={id}
                       layout={layout}
                       onEdit={canManage ? () => openEditor({ mode: "edit", app }) : undefined}
+                      onOpen={
+                        id === "installed"
+                          ? () => setDetail({ key: app.key, open: true })
+                          : undefined
+                      }
                     />
                   ))}
                 </ul>
@@ -380,6 +388,16 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
           ))}
         </Tabs>
       </section>
+
+      <AppDetail
+        open={detail.open}
+        app={apps?.find((held) => held.key === detail.key)}
+        declares={declares}
+        canManage={canManage}
+        onClose={() => setDetail((prev) => ({ ...prev, open: false }))}
+        onApprovePermissions={approvePermissions}
+        onRefreshSetup={refreshSetup}
+      />
 
       {canManage && (
         <AppEditor

@@ -224,5 +224,11 @@
   "apps_installation_shown_above": "This Workspace's installation is shown under Installation setup.",
   "apps_installation_pending_all": "Approving the update approves all of these:",
   "apps_installation_new_badge": "New",
-  "apps_permissions_register_hint": "These start as pending: an owner or admin approves them for this Workspace after the app is registered."
+  "apps_permissions_register_hint": "These start as pending: an owner or admin approves them for this Workspace after the app is registered.",
+  "apps_detail_close": "Close app details",
+  "apps_detail_homepage": "Homepage",
+  "apps_detail_no_description": "This app has no description.",
+  "apps_detail_login_summary": "Signing in with CoForge, this app may ask for these scopes.",
+  "apps_detail_eyebrow": "Installed app",
+  "apps_setup_admin_manages_note": "An owner or admin manages this app's configuration."
 }

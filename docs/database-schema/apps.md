@@ -76,7 +76,7 @@ transaction as the registration (`AppEditorSave.register`); the registering Work
 then starts with them pending, since registering is not an approval (Raft's registration-time
 approval is unverified, so the approval stays a separate act).
 
-Deliberate departures from Raft: the groups are four read-only checkboxes (Raft: a Resource | Access table of five rows, the fifth, agent reminders, writable); the reminders write group is not offered until a product decision. Approval happens on the installation card in the app editor, because apps are private to their Workspace (Raft: the installed-app detail or the marketplace install modal). No Suspended or App disabled installation state exists. Members see the summary on the app card.
+Deliberate departures from Raft: the groups are four read-only checkboxes (Raft: a Resource | Access table of five rows, the fifth, agent reminders, writable); the reminders write group is not offered until a product decision. Approval happens on the installation card in the app editor, because apps are private to their Workspace (Raft: the installed-app detail or the marketplace install modal). No Suspended or App disabled installation state exists. Members see the summary on the app card and can open a read-only app detail (every role can: description, homepage, Login with CoForge scopes, setup status, what it reads and any pending update; Continue/Manage, Approve update and the installation ID are for owners and admins).
 
 - Effective groups, what the app may read in that Workspace: `approvedGroups` ∩ `permissionGroups`.
 - Pending groups, waiting for approval: `permissionGroups` not in `approvedGroups`.

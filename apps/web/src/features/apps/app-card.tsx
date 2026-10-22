@@ -26,11 +26,14 @@ export function AppCard({
   view,
   layout,
   onEdit,
+  onOpen,
 }: {
   app: AppSummary;
   view: "installed" | "mine";
   layout: AppsLayout;
   onEdit?: () => void;
+  /** Opens the read-only detail (Installed apps, every role) from the app name. */
+  onOpen?: () => void;
 }) {
   const category = APP_CATEGORY_LABELS[app.category]();
   const installationSetup = app.setup?.installation;
@@ -45,7 +48,18 @@ export function AppCard({
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <AppLogo name={app.name} url={app.logoUrl} size={layout === "grid" ? "md" : "sm"} />
         <div className="grid min-w-0 flex-1 gap-1">
-          <p className="truncate text-sm font-semibold text-primary">{app.name}</p>
+          {onOpen ? (
+            <Button
+              color="link-gray"
+              size="sm"
+              onPress={onOpen}
+              className="w-fit max-w-full justify-start font-semibold text-primary"
+            >
+              <span className="truncate">{app.name}</span>
+            </Button>
+          ) : (
+            <p className="truncate text-sm font-semibold text-primary">{app.name}</p>
+          )}
           <p className="truncate text-sm text-tertiary">
             {view === "installed" ? m.apps_installed_byline({ category }) : category}
           </p>

@@ -18,6 +18,7 @@ import { APP_SCOPE_DESCRIPTIONS } from "./app-form";
 import { APP_CATEGORY_LABELS } from "./app-list";
 import {
   APP_FIXED_SCOPES,
+  appLoginScopes,
   APP_KEY_MAX_LENGTH,
   APP_WHEN_TO_USE_MAX_LENGTH,
   MAX_REDIRECT_URIS,
@@ -174,7 +175,7 @@ export function LoginFields({ draft, change, errors }: FieldsProps) {
   const scopesLabelId = useId();
   const rows = draft.redirectUris;
   const refusedRows = errors.redirectUris ? refusedRedirectRows(rows) : new Set<number>();
-  const email = draft.allowedScopes.includes("email");
+  const email = appLoginScopes(draft.allowedScopes).includes("email");
   return (
     <>
       <div role="group" aria-labelledby={redirectLabelId} className="grid gap-1.5">

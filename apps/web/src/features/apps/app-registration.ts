@@ -27,6 +27,14 @@ export const APP_FIXED_SCOPES = [
   "identity",
 ] as const satisfies readonly AppScope[];
 
+/** The scopes Login with CoForge lets an app with `allowed` ask for: the fixed ones and any
+ * optional one it is allowed, in `APP_SCOPES` order (the editor and the app detail both show it). */
+export function appLoginScopes(allowed: readonly string[]): AppScope[] {
+  return APP_SCOPES.filter(
+    (scope) => (APP_FIXED_SCOPES as readonly string[]).includes(scope) || allowed.includes(scope),
+  );
+}
+
 export const MAX_REDIRECT_URIS = 10;
 /** The hosts a redirect URI may reach over plain http: a native or development client on the
  * user's own machine (RFC 8252 §7.3). */
