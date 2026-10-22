@@ -100,7 +100,11 @@ function AgentCard({
   const data = profile.data;
   // Read only once the profile says the viewer gets the panel's Activity tab, as the server does.
   const canSeeActivity = Boolean(data && !data.deletedAt && canManageAgent(data));
-  const activity = useAgentRecentActivity(agentId, conversationId, canSeeActivity);
+  const activity = useAgentRecentActivity(
+    agentId,
+    conversationId,
+    canSeeActivity && Boolean(onOpenActivity),
+  );
   // The live display once a publication has arrived; until then the profile read's own snapshot,
   // as the profile panel does.
   const display = useLiveAgentDisplay(agentId) ?? data?.display;

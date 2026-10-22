@@ -2,10 +2,9 @@ import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
 
-test("chat activity history uses a compact parameterized member-scoped query", async () => {
+test("chat activity history uses a compact parameterized manager-scoped query", async () => {
   let query: unknown[] = [];
   const db = {
-    workspaceMembership: { findUnique: async () => ({ role: "member" }) },
     agent: {
       // The ids of the Agents the viewer manages are read once, through the shared
       // `managedAgentWhere` seam, and passed into the CTE's WHERE — never re-derived in SQL.
@@ -82,7 +81,6 @@ test("chat activity history uses a compact parameterized member-scoped query", a
 test("chat activity history never runs the compact query when the viewer manages no Agent", async () => {
   let queried = false;
   const db = {
-    workspaceMembership: { findUnique: async () => ({ role: "member" }) },
     agent: { findMany: async () => [] },
     $queryRaw: async () => {
       queried = true;

@@ -105,3 +105,11 @@ test("an Agent's Activity feed is for its creator and a Workspace owner or admin
   for (const userId of [users.owner, users.admin])
     expect(await feed(userId, agents.assistant)).toBeUndefined();
 });
+
+test("an archived Agent's Activity is nobody's to read", async () => {
+  await db.agent.update({ where: { id: agents.members }, data: { deletedAt: new Date() } });
+  expect(
+    await repository.feedForManager(workspaceId, users.member, agents.members),
+  ).toBeUndefined();
+  expect(await repository.listForManager(workspaceId, users.member)).toEqual([]);
+});
