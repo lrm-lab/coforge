@@ -74,6 +74,20 @@ describe("desktop route", () => {
     expect(html).toContain("new RFB");
   });
 
+  test("a connected desktop hides the connecting overlay even when the page sets display:flex", () => {
+    const page = `<!DOCTYPE html>
+<style>#msg { display: flex; }</style>
+<p id="msg">正在连接桌面…</p>
+<script type="module">
+    import RFB from "./core/rfb.js";
+</script>
+`;
+    const html = adaptDesktopHtml(page);
+    expect(html).toContain("#msg[hidden]{display:none!important}");
+    expect(html).toContain("msg.hidden = true");
+    expect(html).toContain("正在连接桌面…");
+  });
+
   test("a page that already loads RFB relatively still gets the reconnect control", () => {
     const currentPage = `<!DOCTYPE html>
 <script type="module">
