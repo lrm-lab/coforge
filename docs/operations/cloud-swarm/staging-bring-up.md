@@ -38,7 +38,7 @@ gh workflow run release-staging.yml --repo lrm-lab/coforge --ref main \
 
 `host` 使用 `--no-resolve-image`。节点上没有 `coforge-computer:staging` 时不会去仓库拉。这次的 Swarm 只有管理节点 `ubuntu`，镜像就构建在这台机器上。
 
-已经在跑的云电脑不会自动换成新镜像。`host` 心跳上报节点镜像和每台容器的镜像 id，电脑页在两者不一致时提示更新。用户确认后，`host` 对现有服务做 `docker service update --image --force`，命名数据卷留下。管理节点上的 `~/.coforge-host/coforge-computer` 也要换成带 `update` 任务的那一版，心跳才会带上镜像信息。
+已经在跑的云电脑不会自动换成新镜像。`host` 心跳上报节点镜像 id 和每台容器的镜像 id（不是镜像里的运行时版本），电脑页在层不一致时提示更新。用户确认后，`host` 对现有服务做 `docker service update --image --force`，命名数据卷留下。管理节点上的 `~/.coforge-host/coforge-computer` 也要换成带心跳镜像报告的那一版，心跳才会带上镜像信息。
 
 ## 启动 host
 

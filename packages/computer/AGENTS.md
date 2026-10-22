@@ -135,8 +135,8 @@ that environment; login, setup, and lifecycle adapters share that public seam.
   Removing the service also removes that named volume. A disk format is this
   removal, then a create of the same computer id. An `update` job runs
   `docker service update --image --force` on that service and does not remove
-  the volume. Heartbeats report the node image and each running computer's image
-  id from Swarm tasks named `coforge-<id>` so Web can offer a replace when they differ.
+  the volume. Heartbeats report node and `coforge-<id>` task image ids so Web
+  can offer a replace when layers differ; the runtime version is display-only.
   `docker/Dockerfile` is the local image; its entrypoint is `coforge-computer foreground`.
 - `workspace/` owns the direct Workspace lookup used by setup intent. Computer
   never lists or interactively selects Workspaces; do not add a picker or a

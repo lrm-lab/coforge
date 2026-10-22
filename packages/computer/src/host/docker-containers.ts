@@ -152,8 +152,12 @@ export function dockerCloudPlacementInspectArgs(containerIds: string[]): string[
   ];
 }
 
-export function dockerImageVersionArgs(image: string): string[] {
-  return ["run", "--rm", "--network", "none", "--entrypoint", "coforge-computer", image, "-V"];
+const IMAGE_LAYER = /(?:^|@)(sha256:[0-9a-f]{64})$/i;
+
+/** The content-addressed layer, whether the value is a raw id or a tagged digest. */
+export function imageLayerId(reference: string): string | undefined {
+  const match = IMAGE_LAYER.exec(reference.trim());
+  return match?.[1]?.toLowerCase();
 }
 
 export function dockerDesktopInspectArgs(containerId: string): string[] {
@@ -272,18 +276,21 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       );
       const parsed = parseImageInspect(inspected.stdout);
       if (!parsed) throw new Error("docker image inspect returned an empty image id");
-      const version = parsed.version || (await readImageVersion(spawn, image, parsed.id));
       const list = await spawn(dockerCloudContainerListArgs());
       if (list.exitCode !== 0) throw new Error(list.stderr || "docker ps failed");
       const containerIds = ids(list.stdout);
-      if (containerIds.length === 0) return { image: { id: parsed.id, version }, computers: [] };
+      if (containerIds.length === 0)
+        return {
+          image: { id: imageLayerId(parsed.id) ?? parsed.id, version: parsed.version },
+          computers: [],
+        };
       const details = await run(
         spawn,
         dockerCloudPlacementInspectArgs(containerIds),
         "docker inspect failed",
       );
       return {
-        image: { id: parsed.id, version },
+        image: { id: imageLayerId(parsed.id) ?? parsed.id, version: parsed.version },
         computers: parsePlacement(details.stdout),
       };
     },
@@ -294,18 +301,6 @@ async function localImageReference(spawn: DockerSpawn, image: string): Promise<s
   if (image.includes("@")) return image;
   const inspected = await run(spawn, dockerImageDigestArgs(image), "docker image inspect failed");
   return pinnedImageReference(image, inspected.stdout);
-}
-
-const imageVersions = new Map<string, string>();
-
-async function readImageVersion(spawn: DockerSpawn, image: string, imageId: string) {
-  const cached = imageVersions.get(imageId);
-  if (cached) return cached;
-  const result = await run(spawn, dockerImageVersionArgs(image), "computer version probe failed");
-  const version = result.stdout.trim();
-  if (!version) throw new Error("computer version probe returned no version");
-  imageVersions.set(imageId, version);
-  return version;
 }
 
 function parseImageInspect(stdout: string): { id: string; version: string } | undefined {
@@ -324,7 +319,8 @@ function parsePlacement(stdout: string): Array<{ computerId: string; imageId: st
     const space = trimmed.indexOf(" ");
     if (space < 1) continue;
     const computerId = computerIdFromServiceName(trimmed.slice(0, space));
-    const imageId = trimmed.slice(space + 1).trim();
+    const rawImage = trimmed.slice(space + 1).trim();
+    const imageId = imageLayerId(rawImage) ?? rawImage;
     if (!computerId || !imageId) continue;
     computers.push({ computerId, imageId });
   }

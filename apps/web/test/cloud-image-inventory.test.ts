@@ -27,6 +27,19 @@ describe("host image report", () => {
       computers: [{ computerId: "computer-1", imageId: "sha256:old" }],
     });
   });
+
+  test("a heartbeat with an image id and no runtime version is still a snapshot", () => {
+    expect(
+      parseHostImageReport({
+        accepting: true,
+        image: { id: "sha256:new" },
+        computers: [{ computerId: "computer-1", imageId: "sha256:old" }],
+      }),
+    ).toEqual({
+      image: { id: "sha256:new", version: "" },
+      computers: [{ computerId: "computer-1", imageId: "sha256:old" }],
+    });
+  });
 });
 
 describe("cloud image update availability", () => {
@@ -41,6 +54,63 @@ describe("cloud image update availability", () => {
       version: "0.1.3-dev.2",
     });
     expect(cloudImageUpdateAvailable("sha256:old", "sha256:new")).toBe(true);
+  });
+
+  test("the same runtime version on a different image layer is still an update", () => {
+    const rebuilt = {
+      image: { id: "sha256:new", version: "0.1.7-dev.8" },
+      computers: [{ computerId: "computer-1", imageId: "sha256:old" }],
+    };
+    expect(cloudImageUpdateFor(rebuilt, "computer-1")).toEqual({
+      imageId: "sha256:new",
+      version: "0.1.7-dev.8",
+    });
+  });
+
+  test("a tagged digest and a raw image id that name the same layer are not an update", () => {
+    const digest = `sha256:${"ab".repeat(32)}`;
+    expect(
+      cloudImageUpdateFor(
+        {
+          image: { id: digest, version: "0.1.7-dev.8" },
+          computers: [
+            {
+              computerId: "computer-1",
+              imageId: `coforge-computer:staging@${digest}`,
+            },
+          ],
+        },
+        "computer-1",
+      ),
+    ).toBeUndefined();
+  });
+
+  test("without a runtime version the offer names the node image id", () => {
+    expect(
+      cloudImageUpdateFor(
+        {
+          image: { id: "sha256:newlayer", version: "" },
+          computers: [{ computerId: "computer-1", imageId: "sha256:old" }],
+        },
+        "computer-1",
+      ),
+    ).toEqual({
+      imageId: "sha256:newlayer",
+      version: "sha256:newlayer",
+    });
+    const digest = `sha256:${"ef".repeat(32)}`;
+    expect(
+      cloudImageUpdateFor(
+        {
+          image: { id: digest, version: "" },
+          computers: [{ computerId: "computer-1", imageId: "sha256:old" }],
+        },
+        "computer-1",
+      ),
+    ).toEqual({
+      imageId: digest,
+      version: "efefefefefef",
+    });
   });
 
   test("a computer already on the node image is not offered an update", () => {

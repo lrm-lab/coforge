@@ -431,6 +431,28 @@ describe("swarm service arguments", () => {
     });
   });
 
+  test("placement reports image ids without probing the runtime version", async () => {
+    const calls: string[][] = [];
+    const digest = `sha256:${"cd".repeat(32)}`;
+    const runtime = createDockerContainers(async (args) => {
+      calls.push(args);
+      if (args[0] === "image") return { exitCode: 0, stdout: `${digest}\n`, stderr: "" };
+      if (args[0] === "ps") return { exitCode: 0, stdout: "ctr-1\n", stderr: "" };
+      if (args[0] === "inspect")
+        return {
+          exitCode: 0,
+          stdout: `coforge-computer-1 coforge-computer:staging@${digest}\n`,
+          stderr: "",
+        };
+      return { exitCode: 1, stdout: "", stderr: `unexpected ${args.join(" ")}` };
+    });
+    expect(await runtime.inspectPlacement("coforge-computer:staging")).toEqual({
+      image: { id: digest, version: "" },
+      computers: [{ computerId: "computer-1", imageId: digest }],
+    });
+    expect(calls.some((args) => args[0] === "run")).toBe(false);
+  });
+
   test("removing a service also removes its disk volume", async () => {
     const calls: string[][] = [];
     const containers = createDockerContainers(async (args) => {

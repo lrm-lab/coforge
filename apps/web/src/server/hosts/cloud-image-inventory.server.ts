@@ -1,3 +1,4 @@
+import { cloudImageOfferLabel, sameImageLayer } from "#src/features/computers/cloud-image-update";
 import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 
@@ -21,8 +22,8 @@ export function parseHostImageReport(
   const image = body.image;
   if (!image || typeof image !== "object" || Array.isArray(image)) return undefined;
   const id = text((image as Record<string, unknown>).id);
-  const version = text((image as Record<string, unknown>).version);
-  if (!id || !version) return undefined;
+  if (!id) return undefined;
+  const version = text((image as Record<string, unknown>).version) ?? "";
   const computers: CloudImageSnapshot["computers"] = [];
   if (Array.isArray(body.computers)) {
     for (const item of body.computers) {
@@ -42,8 +43,8 @@ export function cloudImageUpdateFor(
   computerId: string,
 ): CloudImageUpdate | undefined {
   const running = snapshot.computers.find((computer) => computer.computerId === computerId);
-  if (!running || running.imageId === snapshot.image.id) return undefined;
-  return { imageId: snapshot.image.id, version: snapshot.image.version };
+  if (!running || sameImageLayer(running.imageId, snapshot.image.id)) return undefined;
+  return { imageId: snapshot.image.id, version: cloudImageOfferLabel(snapshot.image) };
 }
 
 export class CloudImageInventory {
@@ -63,13 +64,11 @@ export class CloudImageInventory {
     if (!raw) return undefined;
     try {
       const value = JSON.parse(raw) as CloudImageSnapshot;
-      if (
-        !text(value?.image?.id) ||
-        !text(value?.image?.version) ||
-        !Array.isArray(value.computers)
-      )
-        return undefined;
-      return value;
+      if (!text(value?.image?.id) || !Array.isArray(value.computers)) return undefined;
+      return {
+        image: { id: value.image.id.trim(), version: value.image.version?.trim() ?? "" },
+        computers: value.computers,
+      };
     } catch {
       return undefined;
     }

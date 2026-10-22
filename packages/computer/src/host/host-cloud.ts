@@ -2,7 +2,7 @@ export type HostJobOperation = "create" | "delete" | "attach" | "update";
 
 export type HostHeartbeatReport = {
   accepting: boolean;
-  image?: { id: string; version: string };
+  image?: { id: string; version?: string };
   computers?: Array<{ computerId: string; imageId: string }>;
 };
 
