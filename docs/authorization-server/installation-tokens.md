@@ -6,7 +6,10 @@ endpoint with the OAuth `client_credentials` grant (RFC 6749 §4.4), naming the 
 resource (RFC 8707 §2). The code is `apps/web/src/server/authorization-server/installation-tokens.server.ts`
 and `issued-tokens.server.ts`; the token endpoint only maps its refusals to errors. The grant is
 behind the `app-data-permissions` flag ([feature flags](../feature-flags.md)), evaluated for the
-installation's Workspace.
+installation's Workspace, or behind `app-installation-setup` for a token that asks for no data group
+(the [setup API](app-installation-setup.md) needs a token and no data).
+
+Deliberate departure from Raft: Raft issues the token from a bespoke `POST /api/oauth/installation-token` with the installation id and groups in a JSON body; CoForge uses the standard OAuth `client_credentials` grant at the existing token endpoint, with the installation named by an RFC 8707 `resource`, because the authorization server already speaks, discovers and rate-limits that endpoint, and a standard grant needs no CoForge-specific client code.
 
 ## Requesting a token
 
@@ -26,7 +29,7 @@ authentication (`invalid_client`, 401, as for a code):
 | Refusal (400) | When |
 | --- | --- |
 | `invalid_target` | `resource` missing (RFC 8707 §2 leaves a missing resource to the server; this one requires it), not an installation URI under the issuer's origin, naming no installation, or an installation of another app (answered like a missing one) |
-| `unauthorized_client` | The flag is off for the installation's Workspace: RFC 6749 §5.2 says the client may not use this grant type, which is true there. The grant is not per-Workspace, so discovery advertises it regardless |
+| `unauthorized_client` | Both flags are off for the installation's Workspace, or only `app-installation-setup` is on and `scope` names a data group: RFC 6749 §5.2 says the client may not use this grant type, which is true there. The grant is not per-Workspace, so discovery advertises it regardless |
 | `invalid_scope` | A scope that is not one of the four, or a group outside the installation's effective groups: approved and still declared; a declared group waiting for approval is outside them |
 
 A form that repeats a parameter (two `resource` values included) is `invalid_request`. Every issue
@@ -50,19 +53,21 @@ An RFC 9068 JWT (`typ: at+jwt`, ES256, the first signing key, `kid`) valid ten m
 
 ## Verifying
 
-`InstallationTokens.verify(token, installationId, now)` is what a read API calls with the bearer
-token and the installation id of its path. It checks the signature, `iss`, `typ`, `aud` (that
+`InstallationTokens.verify(token, installationId, now, flag)` is what an API calls with the bearer
+token, the installation id of its path and the flag it is behind (`app-data-permissions` for data,
+`app-installation-setup` for setup). It checks the signature, `iss`, `typ`, `aud` (that
 installation's URI), `exp` and `type`, then reads the installation again, so the token holds only
 while the facts hold. It answers `verified` with `{installationId, workspaceId, appKey, groups}` or
 a refusal by RFC 6750 §3.1:
 
 - `invalid_token` (401): the token does not verify, names another installation, the installation is
-  gone (uninstalled) or belongs to another app, or the flag went off for the Workspace.
+  gone (uninstalled) or belongs to another app, or `flag` went off for the Workspace.
 - `insufficient_scope` (403): a group of the token is no longer effective, because the approval
   narrowed or the app stopped declaring it. A read of a group the token never had is the read API's
   own check against the returned `groups`.
 
-The four read routes call it: [installed app data](app-installation-data.md).
+The four read routes ([installed app data](app-installation-data.md)) and the
+[setup API](app-installation-setup.md) call it.
 
 ## Rate limit
 
@@ -73,7 +78,7 @@ reads 120 a minute ([installed app data](app-installation-data.md#rate-limit)). 
 
 - **What counts.** A `client_credentials` request counts after client authentication succeeds
   (including requests that then fail with `invalid_target` or `invalid_scope`); the
-  `authorization_code` grant is not limited. A read counts after its token verifies. Nothing
+  `authorization_code` grant is not limited. A read counts after its token verifies. The setup API (GET and PUT) is not limited: it is the app's own installation report, not a data read, and is not counted. Nothing
   unauthenticated counts, so a flood cannot exhaust an app's budget; and nothing limits that flood
   either: Caddy applies no rate limit today, so a stream of bad secrets or tokens still costs a
   client lookup or a signature check per request.

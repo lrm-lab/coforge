@@ -400,22 +400,31 @@ test.skipIf(!db)(
 
       // The groups would narrow the approval; the patch is what is refused.
       expect(
-        await refusal(editor.save(app.actor("owner"), app.key, { name: "" }, ["workspace"])),
+        await refusal(
+          editor.save(app.actor("owner"), app.key, {
+            patch: { name: "" },
+            permissionGroups: ["workspace"],
+          }),
+        ),
       ).toMatchObject({ code: "INVALID_INPUT" });
       expect(await app.stored()).toEqual(before);
 
       // Groups that are refused leave the profile as it was.
       expect(
         await refusal(
-          editor.save(app.actor("owner"), app.key, { description: "Changed." }, ["messages"]),
+          editor.save(app.actor("owner"), app.key, {
+            patch: { description: "Changed." },
+            permissionGroups: ["messages"],
+          }),
         ),
       ).toEqual({ code: "INVALID_INPUT", errorId: "app-permission-groups-invalid" });
       expect((await db!.app.findUniqueOrThrow({ where: { key: app.key } })).description).toBe("");
 
       // Both valid: both written, and the narrowing with them.
-      const saved = await editor.save(app.actor("owner"), app.key, { description: "Changed." }, [
-        "workspace",
-      ]);
+      const saved = await editor.save(app.actor("owner"), app.key, {
+        patch: { description: "Changed." },
+        permissionGroups: ["workspace"],
+      });
       expect(saved.app.description).toBe("Changed.");
       expect(saved.permissions).toMatchObject({ declared: ["workspace"], revision: 2 });
       expect(await app.stored()).toMatchObject({
@@ -425,7 +434,9 @@ test.skipIf(!db)(
       });
 
       // Without groups, only the profile changes.
-      const renamed = await editor.save(app.actor("admin"), app.key, { name: "Renamed" });
+      const renamed = await editor.save(app.actor("admin"), app.key, {
+        patch: { name: "Renamed" },
+      });
       expect(renamed.permissions).toMatchObject({ declared: ["workspace"], revision: 2 });
     } finally {
       await app.cleanup();

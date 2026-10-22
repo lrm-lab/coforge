@@ -4,6 +4,7 @@ import {
   type AppRateLimit,
 } from "#src/server/app-rate-limits/app-rate-limit.server";
 import {
+  INSTALLATION_FLAGS,
   InstallationTokens,
   installationResource,
   type TokenInstallation,
@@ -38,7 +39,8 @@ export function installationEndpoints({ limit = NO_RATE_LIMIT }: { limit?: AppRa
     appId: "app-2",
     appKey: "other-app",
   };
-  const flag = { on: true };
+  /** `on` is `app-data-permissions`, `setup` is `app-installation-setup`. */
+  const flag = { on: true, setup: false };
   const installationTokens = new InstallationTokens(
     {
       async findInstallation(id) {
@@ -48,7 +50,7 @@ export function installationEndpoints({ limit = NO_RATE_LIMIT }: { limit?: AppRa
           : undefined;
       },
     },
-    async () => flag.on,
+    async (name) => (name === INSTALLATION_FLAGS.data ? flag.on : flag.setup),
     { issuer: ISSUER, signingKeys: SIGNING_KEYS },
   );
   const tokenEndpoint = new TokenEndpoint(base.store, base.options, installationTokens, limit);

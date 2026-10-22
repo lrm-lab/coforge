@@ -9,6 +9,7 @@ import { m } from "#src/paraglide/messages";
 import { permissionGroupList } from "./app-permission-copy";
 import { APP_CATEGORY_LABELS } from "./app-list";
 import { AppLogo } from "./app-logo";
+import { SetupDirections, SetupStatusBadge } from "./setup-status-badge";
 import type { AppsLayout } from "./apps-layout";
 import type { AppSummary } from "./apps.functions";
 
@@ -32,6 +33,7 @@ export function AppCard({
   onEdit?: () => void;
 }) {
   const category = APP_CATEGORY_LABELS[app.category]();
+  const installationSetup = app.setup?.installation;
   const homepage = app.homepageUrl === null ? null : new URL(app.homepageUrl);
   return (
     <li
@@ -56,6 +58,9 @@ export function AppCard({
                 {m.apps_this_workspace()}
               </Badge>
             )}
+            {installationSetup && installationSetup.status !== "not_required" && (
+              <SetupStatusBadge status={installationSetup.status} />
+            )}
             {app.permissions && app.permissions.pending.length > 0 && (
               <Badge size="sm" color="warning">
                 {m.apps_card_pending()}
@@ -66,6 +71,12 @@ export function AppCard({
             <p className="text-sm text-tertiary">
               {m.apps_card_reads({ groups: permissionGroupList(app.permissions.effective) })}
             </p>
+          )}
+          {!onEdit && installationSetup?.status === "pending" && app.setup?.url && (
+            <div className="grid gap-1">
+              <SetupDirections url={app.setup.url} description={app.setup.description} />
+              <p className="text-sm text-tertiary">{m.apps_setup_member_note()}</p>
+            </div>
           )}
           {layout === "list" && app.description && (
             <Tooltip title={app.description} placement="bottom start">

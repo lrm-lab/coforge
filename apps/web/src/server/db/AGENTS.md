@@ -40,6 +40,13 @@ These rules apply to `src/server/db/`.
   too), and an approval is one update conditional on that revision. Its `db` may be an open transaction
   (`transaction.server.ts`: `inTransaction` joins it instead of nesting). Who may write stays in
   `server/app-permissions/`.
+- `app-installation-setup.repositories.server.ts` persists installation setup rows. Its raw
+  `UPDATE`s are needed because Prisma cannot express them as one statement: a declaration bumps
+  `setupRevision` only when `setupUrl` differs from the stored value (`IS DISTINCT FROM`, null
+  included), and a report is a compare-and-set on the app's current `setupRevision` that keeps an
+  earlier completion time. Both must read the stored row inside the write, so concurrent declares
+  and reports cannot lose a bump or record a stale revision. Who may write stays in
+  `server/app-installation-setup/`.
 - `app-installation-data.repositories.server.ts` reads what an installed app may see, filtering
   private data out in the query itself and selecting only the projected columns. The projections
   and the bearer check stay in `server/app-installation-data/`.

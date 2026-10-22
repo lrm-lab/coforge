@@ -10,6 +10,8 @@ import type { FeatureFlagsConfiguration } from "./configuration.server";
  */
 export const FEATURE_FLAGS = {
   "app-data-permissions": "Applications phase 2: the data permissions a Workspace grants an app",
+  "app-installation-setup":
+    "Applications phase 2: the page an app is set up on after installation, and its status",
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS;

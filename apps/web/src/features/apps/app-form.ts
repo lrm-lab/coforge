@@ -1,7 +1,13 @@
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
-import { APP_PERMISSIONS_CHANGED } from "./app-permissions";
-import { appInputFieldOf, type AppInputField, type AppScope } from "./app-registration";
+import { setupFieldOf, type AppSetupField, type AppSetupInput } from "./app-installation-setup";
+import { APP_PERMISSIONS_CHANGED, type AppPermissionGroup } from "./app-permissions";
+import {
+  appInputFieldOf,
+  type AppInputField,
+  type AppRegistrationInput,
+  type AppScope,
+} from "./app-registration";
 
 /** What each field's rule asks for, shown beside the field it refuses; a `Record` so a new field
  * cannot ship without its copy. */
@@ -29,6 +35,20 @@ export function isPermissionsChanged(cause: unknown): boolean {
   return isAppErrorCode(cause, "CONFLICT") && cause.errorId === APP_PERMISSIONS_CHANGED;
 }
 
+/** What is wrong with each Installation setup field the rules refuse. */
+export const SETUP_FIELD_PROBLEMS: Record<AppSetupField, () => string> = {
+  url: m.apps_setup_url_error,
+  description: m.apps_setup_description_error,
+};
+
+/** What the editor's Save sends: the app's fields, and the data groups and setup page it declares
+ * where the editor shows them. */
+export type AppEditorSubmission = {
+  input: AppRegistrationInput;
+  permissionGroups?: AppPermissionGroup[];
+  setup?: AppSetupInput;
+};
+
 /**
  * A refused register or change as the form shows it: beside `field` when the refusal names an input
  * field (the registry's `app-<field>-invalid`, or a taken key), else in the form's notice strip,
@@ -39,6 +59,8 @@ export function appFormProblem(
   fallback: () => string = m.apps_error_update,
 ): {
   field: AppInputField | null;
+  /** The Installation setup field the refusal names, shown beside it. */
+  setupField?: AppSetupField;
   message: string;
 } {
   if (!isAppError(cause)) return { field: null, message: fallback() };
@@ -47,6 +69,15 @@ export function appFormProblem(
   if (isPermissionsChanged(cause)) return { field: null, message: m.apps_permissions_changed() };
   const field = isAppErrorCode(cause, "INVALID_INPUT") ? appInputFieldOf(cause.errorId) : undefined;
   if (field) return { field, message: APP_FIELD_PROBLEMS[field]() };
+  const setupField = isAppErrorCode(cause, "INVALID_INPUT")
+    ? setupFieldOf(cause.errorId)
+    : undefined;
+  if (setupField)
+    return {
+      field: null,
+      setupField,
+      message: SETUP_FIELD_PROBLEMS[setupField](),
+    };
   if (isAppErrorCode(cause, "ACCESS_DENIED"))
     return { field: null, message: m.apps_error_access_denied() };
   if (isAppErrorCode(cause, "NOT_FOUND")) return { field: null, message: m.apps_error_not_found() };

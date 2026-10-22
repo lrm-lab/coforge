@@ -151,6 +151,9 @@ export class AppRegistry {
         chosen === ""
           ? appKeyFromName(typeof input.name === "string" ? input.name : "", this.keySuffix())
           : chosen;
+      // A made key already taken is skipped before the insert, so a registration inside a
+      // transaction (`AppEditorSave.register`) is not left with a failed statement to retry after.
+      if (chosen === "" && (await this.store.find(key))) continue;
       const created = await create(checked(checkAppInput({ ...input, key }, "registration")));
       if (created) return { app: created, clientSecret: secret };
     }

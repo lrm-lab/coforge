@@ -9,7 +9,11 @@ import {
   credentialsRequest,
   installationEndpoints,
 } from "./oidc-installation-token-fixture";
-import { installationResource } from "#src/server/authorization-server/installation-tokens.server";
+import {
+  INSTALLATION_FLAGS,
+  installationResource,
+  type InstallationTokenFlag,
+} from "#src/server/authorization-server/installation-tokens.server";
 
 /**
  * Installation tokens at the token endpoint (RFC 6749 §4.4 with the RFC 8707 resource) and their
@@ -123,6 +127,90 @@ test("with the flag off for the Workspace the grant is unauthorized_client", asy
   expect((await refusal(response)).error).toBe("unauthorized_client");
 });
 
+test("with only the setup flag on, a token with no data group is issued and one asking for data is not", async () => {
+  const { tokenEndpoint, installationTokens, flag, clock } = installationEndpoints();
+  flag.on = false;
+  flag.setup = true;
+  const bare = await tokenEndpoint.exchange(credentialsRequest({ form: { scope: undefined } }));
+  expect(bare.status).toBe(200);
+  const { access_token } = (await bare.json()) as { access_token: string };
+  const verify = (name: InstallationTokenFlag) =>
+    installationTokens.verify(access_token, INSTALLATION_ID, clock.now, name);
+  expect(await verify(INSTALLATION_FLAGS.setup)).toMatchObject({ status: "verified", groups: [] });
+  // The same token reads no data while that flag is off.
+  expect(await verify(INSTALLATION_FLAGS.data)).toEqual({
+    status: "refused",
+    error: "invalid_token",
+  });
+  const data = await tokenEndpoint.exchange(credentialsRequest());
+  expect(data.status).toBe(400);
+  expect((await refusal(data)).error).toBe("unauthorized_client");
+  // And the setup API stops with its flag.
+  flag.setup = false;
+  expect(await verify(INSTALLATION_FLAGS.setup)).toEqual({
+    status: "refused",
+    error: "invalid_token",
+  });
+});
+
+test("a token is issued by the flags and the scope: data groups need the data flag, the setup flag alone allows only an empty scope", async () => {
+  const cells = [
+    // [data flag, setup flag, scope, expected]
+    [false, false, "", "unauthorized_client"],
+    [false, false, "installation:workspace", "unauthorized_client"],
+    [false, true, "", "issued"],
+    [false, true, "installation:workspace", "unauthorized_client"],
+    [true, false, "", "issued"],
+    [true, false, "installation:workspace", "issued"],
+    [true, true, "", "issued"],
+    [true, true, "installation:workspace", "issued"],
+  ] as const;
+  for (const [data, setupOn, scope, expected] of cells) {
+    const { tokenEndpoint, flag } = installationEndpoints();
+    flag.on = data;
+    flag.setup = setupOn;
+    const response = await tokenEndpoint.exchange(
+      credentialsRequest({ form: { scope: scope || undefined } }),
+    );
+    const label = `data=${data} setup=${setupOn} scope="${scope}"`;
+    if (expected === "issued") {
+      expect(response.status, label).toBe(200);
+      expect(await response.json(), label).toMatchObject({ scope });
+    } else {
+      expect(response.status, label).toBe(400);
+      expect((await refusal(response)).error, label).toBe(expected);
+    }
+  }
+});
+
+test("a token verifies behind the flag its API names, whatever the other flag says", async () => {
+  for (const scope of ["", "installation:workspace"]) {
+    for (const data of [false, true]) {
+      for (const setupOn of [false, true]) {
+        for (const api of Object.values(INSTALLATION_FLAGS)) {
+          const e = installationEndpoints();
+          const response = await e.tokenEndpoint.exchange(
+            credentialsRequest({ form: { scope: scope || undefined } }),
+          );
+          const { access_token } = (await response.json()) as { access_token: string };
+          e.flag.on = data;
+          e.flag.setup = setupOn;
+          const on = api === INSTALLATION_FLAGS.data ? data : setupOn;
+          const result = await e.installationTokens.verify(
+            access_token,
+            INSTALLATION_ID,
+            e.clock.now,
+            api,
+          );
+          const label = `scope="${scope}" data=${data} setup=${setupOn} api=${api}`;
+          if (on) expect(result, label).toMatchObject({ status: "verified" });
+          else expect(result, label).toEqual({ status: "refused", error: "invalid_token" });
+        }
+      }
+    }
+  }
+});
+
 test("a wrong secret is invalid_client, and no resource is looked up first", async () => {
   const { tokenEndpoint } = installationEndpoints();
   const response = await tokenEndpoint.exchange(
@@ -151,7 +239,9 @@ test("each issue and refusal logs one JSON line naming the app, installation and
 
 test("a token verifies for its installation while the approval stands", async () => {
   const { e, token } = await issued();
-  expect(await e.installationTokens.verify(token, INSTALLATION_ID, e.clock.now)).toEqual({
+  expect(
+    await e.installationTokens.verify(token, INSTALLATION_ID, e.clock.now, INSTALLATION_FLAGS.data),
+  ).toEqual({
     status: "verified",
     installationId: INSTALLATION_ID,
     workspaceId: "ws-acme",
@@ -168,7 +258,7 @@ test("a token is invalid_token for another installation, garbage, or after it ex
     ["not.a.jwt", INSTALLATION_ID, e.clock.now],
     [token, INSTALLATION_ID, later],
   ] as const)
-    expect(await e.installationTokens.verify(bearer, id, at)).toEqual({
+    expect(await e.installationTokens.verify(bearer, id, at, INSTALLATION_FLAGS.data)).toEqual({
       status: "refused",
       error: "invalid_token",
     });
@@ -194,34 +284,54 @@ test("a person's access token is not an installation token", async () => {
   );
   const { access_token } = (await response.json()) as { access_token: string };
   expect(
-    (await e.installationTokens.verify(access_token, INSTALLATION_ID, e.clock.now)).status,
+    (
+      await e.installationTokens.verify(
+        access_token,
+        INSTALLATION_ID,
+        e.clock.now,
+        INSTALLATION_FLAGS.data,
+      )
+    ).status,
   ).toBe("refused");
 });
 
 test("narrowing the approval makes a token insufficient_scope at once", async () => {
   const { e, token } = await issued();
   e.installation.current!.approved = ["workspace"];
-  expect(await e.installationTokens.verify(token, INSTALLATION_ID, e.clock.now)).toEqual({
+  expect(
+    await e.installationTokens.verify(token, INSTALLATION_ID, e.clock.now, INSTALLATION_FLAGS.data),
+  ).toEqual({
     status: "refused",
     error: "insufficient_scope",
   });
   e.installation.current!.approved = ["workspace", "agent"];
   e.installation.current!.declared = ["workspace"];
-  expect((await e.installationTokens.verify(token, INSTALLATION_ID, e.clock.now)).status).toBe(
-    "refused",
-  );
+  expect(
+    (
+      await e.installationTokens.verify(
+        token,
+        INSTALLATION_ID,
+        e.clock.now,
+        INSTALLATION_FLAGS.data,
+      )
+    ).status,
+  ).toBe("refused");
 });
 
 test("an uninstalled app's token, or one for a Workspace whose flag went off, is invalid_token", async () => {
   const { e, token } = await issued();
   e.flag.on = false;
-  expect(await e.installationTokens.verify(token, INSTALLATION_ID, e.clock.now)).toEqual({
+  expect(
+    await e.installationTokens.verify(token, INSTALLATION_ID, e.clock.now, INSTALLATION_FLAGS.data),
+  ).toEqual({
     status: "refused",
     error: "invalid_token",
   });
   e.flag.on = true;
   e.installation.current = undefined;
-  expect(await e.installationTokens.verify(token, INSTALLATION_ID, e.clock.now)).toEqual({
+  expect(
+    await e.installationTokens.verify(token, INSTALLATION_ID, e.clock.now, INSTALLATION_FLAGS.data),
+  ).toEqual({
     status: "refused",
     error: "invalid_token",
   });

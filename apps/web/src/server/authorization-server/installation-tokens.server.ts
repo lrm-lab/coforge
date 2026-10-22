@@ -13,7 +13,8 @@ import {
 /** Where an installation's data is read, under the issuer's origin: the token's audience (RFC 8707
  * resource indicator). */
 const INSTALLATION_RESOURCE_PATH = "/api/app-installations/";
-const INSTALLATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** A UUID: an installation's or a Workspace's id. */
+export const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SCOPE_PREFIX = "installation:";
 
 /** An app installed in a Workspace, with what it declares and what that installation approved. */
@@ -31,11 +32,21 @@ export interface InstallationTokenStore {
   findInstallation(id: string): Promise<TokenInstallation | undefined>;
 }
 
-/** Whether `app-data-permissions` is on for the Workspace. */
-export type AppDataPermissionsEnabled = (workspace: {
-  workspaceId: string;
-  workspaceSlug: string;
-}) => Promise<boolean>;
+/** The flags an installation token works behind: `data` (`app-data-permissions`) for reading the
+ * data a Workspace approved, `setup` (`app-installation-setup`) for the app's own setup status.
+ * An API names the one it is behind with `verify`. */
+export const INSTALLATION_FLAGS = {
+  data: "app-data-permissions",
+  setup: "app-installation-setup",
+} as const;
+
+export type InstallationTokenFlag = (typeof INSTALLATION_FLAGS)[keyof typeof INSTALLATION_FLAGS];
+
+/** Whether `flag` is on for the Workspace. */
+export type InstallationFlagEnabled = (
+  flag: InstallationTokenFlag,
+  workspace: { workspaceId: string; workspaceSlug: string },
+) => Promise<boolean>;
 
 /** RFC 6749 §5.2 and RFC 8707 §2 refusals of a `client_credentials` request. */
 export type InstallationTokenRefusal =
@@ -76,13 +87,14 @@ export function installationResource(issuer: string, installationId: string): st
  * Installation tokens (RFC 6749 §4.4 `client_credentials`, RFC 8707 resource, RFC 9068 JWT): a
  * short-lived token with which an app reads its installation's Workspace data, in the groups the
  * Workspace approved. The token only records what was true when it was issued; verifying it reads
- * the installation again, so an uninstall or a narrowed approval ends it at once. Behind the
- * `app-data-permissions` flag.
+ * the installation again, so an uninstall or a narrowed approval ends it at once. The grant is
+ * behind `app-data-permissions`, or `app-installation-setup` for a token with no data group (the
+ * setup API needs a token and no data); each API that verifies a token names the flag it is behind.
  */
 export class InstallationTokens {
   constructor(
     private readonly store: InstallationTokenStore,
-    private readonly appDataPermissionsEnabled: AppDataPermissionsEnabled,
+    private readonly flagEnabled: InstallationFlagEnabled,
     private readonly options: TokenIssuer,
   ) {}
 
@@ -129,10 +141,18 @@ export class InstallationTokens {
     // Another app's installation is answered like one that does not exist.
     if (!installation || installation.appId !== client.id)
       return refuse("invalid_target", "resource is not an installation of this app");
-    if (!(await this.appDataPermissionsEnabled(installation)))
+    const [dataOn, setupOn] = await Promise.all([
+      this.flagEnabled(INSTALLATION_FLAGS.data, installation),
+      this.flagEnabled(INSTALLATION_FLAGS.setup, installation),
+    ]);
+    if (!dataOn && !setupOn)
       return refuse("unauthorized_client", "the client may not use this grant type here");
     const groups = requestedGroups(scope);
     if (!groups) return refuse("invalid_scope", "scope names a group that does not exist");
+    // Data groups require `app-data-permissions`; the setup flag alone allows only an empty scope
+    // (a token for the setup API, which reads no data group).
+    if (groups.length > 0 && !dataOn)
+      return refuse("unauthorized_client", "the client may not read data here");
     if (!withinEffective(groups, installation))
       return refuse("invalid_scope", "scope names a group that is not approved");
     const grantedScope = groups.map(installationScope).join(" ");
@@ -164,15 +184,17 @@ export class InstallationTokens {
   /**
    * Whether `token` lets its app read the installation `installationId` now. The signature,
    * `iss`, `typ`, `aud` (this installation's resource URI, which pins the installation), `exp`
-   * and claims are checked, then the installation: still installed for this app, the flag still
-   * on, and every group of the token still approved and declared.
+   * and claims are checked, then the installation: still installed for this app, `flag` (the one
+   * the API reading with the token is behind) still on, and every group of the token still
+   * approved and declared.
    */
   async verify(
     token: string,
     installationId: string,
     now: Date,
+    flag: InstallationTokenFlag,
   ): Promise<InstallationTokenVerification> {
-    if (!INSTALLATION_ID.test(installationId)) return refuseVerify("invalid_token");
+    if (!ID_PATTERN.test(installationId)) return refuseVerify("invalid_token");
     const claims = await verifyInstallationAccessToken(
       this.options,
       token,
@@ -187,7 +209,7 @@ export class InstallationTokens {
       !installation ||
       installation.appKey !== claims.appKey ||
       installation.workspaceId !== claims.workspaceId ||
-      !(await this.appDataPermissionsEnabled(installation))
+      !(await this.flagEnabled(flag, installation))
     )
       return refuseVerify("invalid_token");
     if (!withinEffective(groups, installation)) return refuseVerify("insufficient_scope");
@@ -205,7 +227,7 @@ export class InstallationTokens {
     const prefix = installationResource(this.options.issuer, "");
     if (!resource.startsWith(prefix)) return undefined;
     const id = resource.slice(prefix.length);
-    return INSTALLATION_ID.test(id) ? id : undefined;
+    return ID_PATTERN.test(id) ? id : undefined;
   }
 }
 

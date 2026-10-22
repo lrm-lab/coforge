@@ -66,7 +66,7 @@ const REFUSE = { ok: false as const };
  * points. Control and bidirectional characters are refused (the rule for a person's name), except
  * line breaks where `lines` allows them; a required text must not be only invisible characters.
  */
-const text =
+export const text =
   (min: number, max: number, { lines = false } = {}): FieldCheck<string> =>
   (value) => {
     if (typeof value !== "string") return REFUSE;

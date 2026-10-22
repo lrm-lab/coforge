@@ -37,6 +37,15 @@ model App {
   permissionGroups String[]          @default([])
   /// Goes up by one whenever `permissionGroups` changes, so an approval names what it approved.
   permissionRevision Int             @default(0)
+  /// Where an owner or admin continues setting the app up after installing it (`server/app-installation-setup/`):
+  /// https, or http on loopback, at most 2000 characters, canonical, no user info or fragment
+  /// (`apps_setup_url_check`). Null: the app needs no setup.
+  setupUrl         String?
+  /// One line telling installers what the setup page is for, at most 500 characters.
+  setupDescription String            @default("")
+  /// Goes up by one only when `setupUrl` changes (setup turned on or off included), so a
+  /// completion names the setup it finished; a change of the description leaves it.
+  setupRevision    Int               @default(0)
   createdByUserId  String?           @db.Uuid
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -68,6 +77,12 @@ model AppInstallation {
   approvedRevision  Int       @default(0)
   approvedAt        DateTime?
   approvedByUserId  String?   @db.Uuid
+  /// The app's `setupRevision` this installation finished setting up, as the app reported it; null
+  /// while it has not (and for a new installation: completion is never inherited).
+  setupCompletedRevision Int?
+  /// When the app first reported that revision complete; set and cleared with `setupCompletedRevision`
+  /// (`app_installations_setup_completion_check`).
+  setupCompletedAt  DateTime?
   createdAt         DateTime  @default(now())
   app               App       @relation(fields: [appId], references: [id], onDelete: Cascade)
   workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

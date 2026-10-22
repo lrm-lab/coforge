@@ -6,8 +6,7 @@ import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Alert } from "#src/components/ui/alert";
 import { m } from "#src/paraglide/messages";
 import { isPermissionsChanged } from "./app-form";
-import { CopyValueButton } from "./copy-value-button";
-import { APP_PERMISSION_GROUP_COPY, permissionGroupList } from "./app-permission-copy";
+import { APP_PERMISSION_GROUP_COPY } from "./app-permission-copy";
 import {
   APP_PERMISSION_GROUPS,
   samePermissionGroups,
@@ -17,8 +16,9 @@ import {
 
 /**
  * App permissions: the four data groups, each a checkbox for read-only access, saved with the
- * form's Save. Below them, this Workspace's installation: its ID, what the app reads now and, when
- * the saved declaration asks for more, the groups waiting and Approve update, which acts at once.
+ * form's Save. Below them, once the app is installed here: what it reads now and, when the saved
+ * declaration asks for more, every group it asks for (the new ones marked) and Approve update,
+ * which acts at once. The installation itself is `InstallationCard`.
  */
 export function PermissionFields({
   groups,
@@ -26,15 +26,18 @@ export function PermissionFields({
   isDisabled,
   onChange,
   onApprove,
+  installationShownAbove,
 }: {
   /** The groups chosen in the form, saved or not. */
   groups: AppPermissionGroup[];
-  /** The app's saved permissions and this Workspace's approval of them. */
-  permissions: AppPermissionsSummary;
+  /** The app's saved permissions and this Workspace's approval of them; none while registering. */
+  permissions: AppPermissionsSummary | undefined;
   isDisabled: boolean;
   onChange: (groups: AppPermissionGroup[]) => void;
   /** Approves the saved declaration at its revision; throws when refused. */
   onApprove: () => Promise<void>;
+  /** The installation card is in the section above, so this one points to it. */
+  installationShownAbove: boolean;
 }) {
   return (
     <>
@@ -59,21 +62,28 @@ export function PermissionFields({
           );
         })}
         <p className="text-sm text-tertiary">{m.apps_permissions_hint()}</p>
+        {!permissions && (
+          <p className="text-sm text-tertiary">{m.apps_permissions_register_hint()}</p>
+        )}
+        {installationShownAbove && (
+          <p className="text-sm text-tertiary">{m.apps_installation_shown_above()}</p>
+        )}
       </div>
-      <InstallationCard
-        permissions={permissions}
-        unsaved={!samePermissionGroups(groups, permissions.declared)}
-        isDisabled={isDisabled}
-        onApprove={onApprove}
-      />
+      {permissions && (
+        <InstallationApproval
+          permissions={permissions}
+          unsaved={!samePermissionGroups(groups, permissions.declared)}
+          isDisabled={isDisabled}
+          onApprove={onApprove}
+        />
+      )}
     </>
   );
 }
 
-/** This Workspace's installation of the app: its ID, what it reads now, and the update waiting
- * for approval. A refusal because the app declared again since is explained once the editor shows
- * the latest. */
-function InstallationCard({
+/** What this Workspace's installation reads now, and the update waiting for approval. A refusal
+ * because the app declared again since is explained once the editor shows the latest. */
+function InstallationApproval({
   permissions,
   unsaved,
   isDisabled,
@@ -113,19 +123,6 @@ function InstallationCard({
 
   return (
     <div className="grid gap-3 rounded-xl border border-secondary p-4">
-      <p className="text-sm font-semibold text-primary">{m.apps_installation_title()}</p>
-      <div className="grid gap-1.5">
-        <p className="text-sm text-tertiary">{m.apps_installation_id()}</p>
-        <div className="flex items-center gap-1">
-          <code className="min-w-0 break-all text-sm text-secondary">
-            {permissions.installationId}
-          </code>
-          <CopyValueButton
-            value={permissions.installationId}
-            label={m.apps_copy_installation_id()}
-          />
-        </div>
-      </div>
       <div className="grid gap-1.5">
         <p className="text-sm text-tertiary">{m.apps_installation_reads()}</p>
         <div className="flex flex-wrap gap-1.5">
@@ -147,7 +144,18 @@ function InstallationCard({
           title={m.apps_installation_pending_title()}
           description={
             <>
-              {m.apps_installation_pending_description({ groups: permissionGroupList(pending) })}
+              {m.apps_installation_pending_description()}
+              <span className="mt-2 block">{m.apps_installation_pending_all()}</span>
+              <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                {permissions.declared.map((group) => (
+                  <li key={group}>
+                    <Badge size="sm" color={pending.includes(group) ? "warning" : "gray"}>
+                      {APP_PERMISSION_GROUP_COPY[group].label()}
+                      {pending.includes(group) && ` · ${m.apps_installation_new_badge()}`}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
               {unsaved && <span className="mt-1 block">{m.apps_installation_unsaved()}</span>}
             </>
           }

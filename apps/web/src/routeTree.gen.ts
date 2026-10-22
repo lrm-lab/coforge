@@ -35,6 +35,7 @@ import { Route as OidcTokenRouteImport } from './routes/oidc.token'
 import { Route as WWorkspaceSlugRouteImport } from './routes/w.$workspaceSlug'
 import { Route as WorkspacesNewRouteImport } from './routes/workspaces.new'
 import { Route as DotwellKnownOauthAuthorizationServerOidcRouteImport } from './routes/[.]well-known.oauth-authorization-server_.oidc'
+import { Route as ApiAppInstallationsLookupRouteImport } from './routes/api.app-installations.lookup'
 import { Route as ApiAttachmentsAttachmentIdRouteImport } from './routes/api/attachments.$attachmentId'
 import { Route as ApiComputerAttachRouteImport } from './routes/api/computer/attach'
 import { Route as ApiComputerWorkspaceRouteImport } from './routes/api/computer/workspace'
@@ -77,6 +78,7 @@ import { Route as ApiAgentV1WorkspaceRouteImport } from './routes/api/agent/v1/w
 import { Route as ApiAppInstallationsInstallationIdAgentsRouteImport } from './routes/api.app-installations.$installationId.agents'
 import { Route as ApiAppInstallationsInstallationIdChannelsRouteImport } from './routes/api.app-installations.$installationId.channels'
 import { Route as ApiAppInstallationsInstallationIdComputersRouteImport } from './routes/api.app-installations.$installationId.computers'
+import { Route as ApiAppInstallationsInstallationIdSetupRouteImport } from './routes/api.app-installations.$installationId.setup'
 import { Route as ApiAppInstallationsInstallationIdWorkspaceRouteImport } from './routes/api.app-installations.$installationId.workspace'
 import { Route as ApiComputersComputerIdCreatorAvatarRouteImport } from './routes/api/computers/$computerId/creator-avatar'
 import { Route as ApiE2eWorkspacesSlugRouteImport } from './routes/api/e2e/workspaces.$slug'
@@ -269,6 +271,12 @@ const DotwellKnownOauthAuthorizationServerOidcRoute =
   DotwellKnownOauthAuthorizationServerOidcRouteImport.update({
     id: '/.well-known/oauth-authorization-server_/oidc',
     path: '/.well-known/oauth-authorization-server/oidc',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAppInstallationsLookupRoute =
+  ApiAppInstallationsLookupRouteImport.update({
+    id: '/api/app-installations/lookup',
+    path: '/api/app-installations/lookup',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiAttachmentsAttachmentIdRoute =
@@ -493,6 +501,12 @@ const ApiAppInstallationsInstallationIdComputersRoute =
   ApiAppInstallationsInstallationIdComputersRouteImport.update({
     id: '/api/app-installations/$installationId/computers',
     path: '/api/app-installations/$installationId/computers',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAppInstallationsInstallationIdSetupRoute =
+  ApiAppInstallationsInstallationIdSetupRouteImport.update({
+    id: '/api/app-installations/$installationId/setup',
+    path: '/api/app-installations/$installationId/setup',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiAppInstallationsInstallationIdWorkspaceRoute =
@@ -883,6 +897,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug': typeof WWorkspaceSlugRouteWithChildren
   '/workspaces/new': typeof WorkspacesNewRoute
   '/.well-known/oauth-authorization-server/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
+  '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -923,6 +938,7 @@ export interface FileRoutesByFullPath {
   '/api/app-installations/$installationId/agents': typeof ApiAppInstallationsInstallationIdAgentsRoute
   '/api/app-installations/$installationId/channels': typeof ApiAppInstallationsInstallationIdChannelsRoute
   '/api/app-installations/$installationId/computers': typeof ApiAppInstallationsInstallationIdComputersRoute
+  '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
   '/api/app-installations/$installationId/workspace': typeof ApiAppInstallationsInstallationIdWorkspaceRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
@@ -1012,6 +1028,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug': typeof WWorkspaceSlugChatIndexRoute
   '/workspaces/new': typeof WorkspacesNewRoute
   '/.well-known/oauth-authorization-server/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
+  '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -1051,6 +1068,7 @@ export interface FileRoutesByTo {
   '/api/app-installations/$installationId/agents': typeof ApiAppInstallationsInstallationIdAgentsRoute
   '/api/app-installations/$installationId/channels': typeof ApiAppInstallationsInstallationIdChannelsRoute
   '/api/app-installations/$installationId/computers': typeof ApiAppInstallationsInstallationIdComputersRoute
+  '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
   '/api/app-installations/$installationId/workspace': typeof ApiAppInstallationsInstallationIdWorkspaceRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
@@ -1140,6 +1158,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug': typeof WWorkspaceSlugRouteWithChildren
   '/workspaces/new': typeof WorkspacesNewRoute
   '/.well-known/oauth-authorization-server_/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
+  '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -1182,6 +1201,7 @@ export interface FileRoutesById {
   '/api/app-installations/$installationId/agents': typeof ApiAppInstallationsInstallationIdAgentsRoute
   '/api/app-installations/$installationId/channels': typeof ApiAppInstallationsInstallationIdChannelsRoute
   '/api/app-installations/$installationId/computers': typeof ApiAppInstallationsInstallationIdComputersRoute
+  '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
   '/api/app-installations/$installationId/workspace': typeof ApiAppInstallationsInstallationIdWorkspaceRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
@@ -1273,6 +1293,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug'
     | '/workspaces/new'
     | '/.well-known/oauth-authorization-server/oidc'
+    | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
     | '/api/computer/workspace'
@@ -1313,6 +1334,7 @@ export interface FileRouteTypes {
     | '/api/app-installations/$installationId/agents'
     | '/api/app-installations/$installationId/channels'
     | '/api/app-installations/$installationId/computers'
+    | '/api/app-installations/$installationId/setup'
     | '/api/app-installations/$installationId/workspace'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/e2e/workspaces/$slug'
@@ -1402,6 +1424,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug'
     | '/workspaces/new'
     | '/.well-known/oauth-authorization-server/oidc'
+    | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
     | '/api/computer/workspace'
@@ -1441,6 +1464,7 @@ export interface FileRouteTypes {
     | '/api/app-installations/$installationId/agents'
     | '/api/app-installations/$installationId/channels'
     | '/api/app-installations/$installationId/computers'
+    | '/api/app-installations/$installationId/setup'
     | '/api/app-installations/$installationId/workspace'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/e2e/workspaces/$slug'
@@ -1529,6 +1553,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug'
     | '/workspaces/new'
     | '/.well-known/oauth-authorization-server_/oidc'
+    | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
     | '/api/computer/workspace'
@@ -1571,6 +1596,7 @@ export interface FileRouteTypes {
     | '/api/app-installations/$installationId/agents'
     | '/api/app-installations/$installationId/channels'
     | '/api/app-installations/$installationId/computers'
+    | '/api/app-installations/$installationId/setup'
     | '/api/app-installations/$installationId/workspace'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/e2e/workspaces/$slug'
@@ -1661,6 +1687,7 @@ export interface RootRouteChildren {
   WWorkspaceSlugRoute: typeof WWorkspaceSlugRouteWithChildren
   WorkspacesNewRoute: typeof WorkspacesNewRoute
   DotwellKnownOauthAuthorizationServerOidcRoute: typeof DotwellKnownOauthAuthorizationServerOidcRoute
+  ApiAppInstallationsLookupRoute: typeof ApiAppInstallationsLookupRoute
   ApiComputerAttachRoute: typeof ApiComputerAttachRoute
   ApiComputerWorkspaceRoute: typeof ApiComputerWorkspaceRoute
   ApiDaemonAgentMigrationsRoute: typeof ApiDaemonAgentMigrationsRoute
@@ -1692,6 +1719,7 @@ export interface RootRouteChildren {
   ApiAppInstallationsInstallationIdAgentsRoute: typeof ApiAppInstallationsInstallationIdAgentsRoute
   ApiAppInstallationsInstallationIdChannelsRoute: typeof ApiAppInstallationsInstallationIdChannelsRoute
   ApiAppInstallationsInstallationIdComputersRoute: typeof ApiAppInstallationsInstallationIdComputersRoute
+  ApiAppInstallationsInstallationIdSetupRoute: typeof ApiAppInstallationsInstallationIdSetupRoute
   ApiAppInstallationsInstallationIdWorkspaceRoute: typeof ApiAppInstallationsInstallationIdWorkspaceRoute
   ApiComputersComputerIdCreatorAvatarRoute: typeof ApiComputersComputerIdCreatorAvatarRoute
   ApiE2eWorkspacesSlugRoute: typeof ApiE2eWorkspacesSlugRoute
@@ -1912,6 +1940,13 @@ declare module '@tanstack/react-router' {
       path: '/.well-known/oauth-authorization-server/oidc'
       fullPath: '/.well-known/oauth-authorization-server/oidc'
       preLoaderRoute: typeof DotwellKnownOauthAuthorizationServerOidcRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/app-installations/lookup': {
+      id: '/api/app-installations/lookup'
+      path: '/api/app-installations/lookup'
+      fullPath: '/api/app-installations/lookup'
+      preLoaderRoute: typeof ApiAppInstallationsLookupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/attachments/$attachmentId': {
@@ -2206,6 +2241,13 @@ declare module '@tanstack/react-router' {
       path: '/api/app-installations/$installationId/computers'
       fullPath: '/api/app-installations/$installationId/computers'
       preLoaderRoute: typeof ApiAppInstallationsInstallationIdComputersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/app-installations/$installationId/setup': {
+      id: '/api/app-installations/$installationId/setup'
+      path: '/api/app-installations/$installationId/setup'
+      fullPath: '/api/app-installations/$installationId/setup'
+      preLoaderRoute: typeof ApiAppInstallationsInstallationIdSetupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/app-installations/$installationId/workspace': {
@@ -2834,6 +2876,7 @@ const rootRouteChildren: RootRouteChildren = {
   WorkspacesNewRoute: WorkspacesNewRoute,
   DotwellKnownOauthAuthorizationServerOidcRoute:
     DotwellKnownOauthAuthorizationServerOidcRoute,
+  ApiAppInstallationsLookupRoute: ApiAppInstallationsLookupRoute,
   ApiComputerAttachRoute: ApiComputerAttachRoute,
   ApiComputerWorkspaceRoute: ApiComputerWorkspaceRoute,
   ApiDaemonAgentMigrationsRoute: ApiDaemonAgentMigrationsRoute,
@@ -2870,6 +2913,8 @@ const rootRouteChildren: RootRouteChildren = {
     ApiAppInstallationsInstallationIdChannelsRoute,
   ApiAppInstallationsInstallationIdComputersRoute:
     ApiAppInstallationsInstallationIdComputersRoute,
+  ApiAppInstallationsInstallationIdSetupRoute:
+    ApiAppInstallationsInstallationIdSetupRoute,
   ApiAppInstallationsInstallationIdWorkspaceRoute:
     ApiAppInstallationsInstallationIdWorkspaceRoute,
   ApiComputersComputerIdCreatorAvatarRoute:

@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppEditorSave } from "#src/server/app-permissions/app-editor-save.server";
+import { createAppInstallationSetup } from "#src/server/app-installation-setup/app-installation-setup-composition.server";
 import { AppPermissions } from "#src/server/app-permissions/app-permissions.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { PrismaAppPermissionsStore } from "#src/server/db/repositories/app-permissions.repositories.server";
@@ -17,11 +18,15 @@ export function createAppPermissions(db: DatabaseScope) {
   );
 }
 
-/** The editor's Save over PostgreSQL: one transaction for the profile and the permissions. */
+/** The editor's Save over PostgreSQL: one transaction for the profile, the permissions and the setup. */
 export function createAppEditorSave(db: PrismaClient) {
   return new AppEditorSave((work) =>
     inTransaction(db, (tx) =>
-      work({ registry: createAppRegistry(tx), permissions: createAppPermissions(tx) }),
+      work({
+        registry: createAppRegistry(tx),
+        permissions: createAppPermissions(tx),
+        setup: createAppInstallationSetup(tx),
+      }),
     ),
   );
 }

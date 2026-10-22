@@ -15,6 +15,8 @@ routes are `apps/web/src/routes/api.app-installations.$installationId.*.ts`. The
 | `/channels` | `channel` | `{installation_id, channels: [{id, name, description, created_at}]}` |
 | `/computers` | `computer` | `{installation_id, computers: [{id, name, kind, computer_version, online}]}` |
 
+Deliberate departures from Raft: the paths carry the installation id (Raft: `/api/app-installation/…`, bound only by the token), because the token's audience is the installation resource ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)); `workspace` is Raft's `server`.
+
 Lists are ordered oldest first. `created_at` is ISO 8601 UTC. `picture_url`, `avatar_url` and
 `computer_version` are `null` when there is none.
 

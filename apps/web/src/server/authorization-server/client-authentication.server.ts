@@ -1,3 +1,7 @@
+import { appClientSecretMatches } from "#src/server/apps/app-client-secret.server";
+import type { GrantStore, TokenClient } from "./grants.server";
+import { NO_STORE } from "./http-headers.server";
+
 /** What a token request presented to authenticate its app: one method's credentials, more than
  * one method (RFC 6749 §2.3: `invalid_request`), or none it can read (`invalid_client`). */
 export type PresentedClientCredentials =
@@ -48,4 +52,38 @@ function formDecode(value: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Authenticates the app that made `request` with the credentials it presented (RFC 6749 §2.3):
+ * the app, or the response that refuses it. Two methods at once are 400 `invalid_request`; no
+ * readable credentials, an unknown app and a wrong secret alike are 401 `invalid_client`, which
+ * names the `Basic` scheme (RFC 9110 §15.5.2) whichever method the app tried. `form` carries
+ * `client_secret_post` credentials, when the request has a form. An unknown `client_id` is
+ * refused without a secret comparison: client ids are public, so timing reveals nothing secret.
+ */
+export async function authenticateClient(
+  request: Request,
+  store: Pick<GrantStore, "findClient">,
+  issuer: string,
+  form: URLSearchParams = new URLSearchParams(),
+): Promise<{ client: TokenClient; clientId: string } | Response> {
+  const credentials = readClientCredentials(request.headers.get("authorization"), form);
+  if (credentials.status === "ambiguous")
+    return Response.json(
+      { error: "invalid_request", error_description: "use one client authentication method" },
+      { status: 400, headers: NO_STORE },
+    );
+  const client =
+    credentials.status === "presented" ? await store.findClient(credentials.clientId) : undefined;
+  if (
+    credentials.status !== "presented" ||
+    !client ||
+    !appClientSecretMatches(client.clientSecretHash, credentials.clientSecret)
+  )
+    return Response.json(
+      { error: "invalid_client", error_description: "client authentication failed" },
+      { status: 401, headers: { ...NO_STORE, "www-authenticate": `Basic realm="${issuer}"` } },
+    );
+  return { client, clientId: credentials.clientId };
 }

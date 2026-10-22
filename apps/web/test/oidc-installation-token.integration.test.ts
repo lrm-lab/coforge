@@ -7,6 +7,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { createAppPermissions } from "#src/server/app-permissions/app-permissions-composition.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
+import { INSTALLATION_FLAGS } from "#src/server/authorization-server/installation-tokens.server";
 import { createTokenEndpoints } from "#src/server/authorization-server/token-endpoint-composition.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
@@ -124,7 +125,12 @@ test.skipIf(!db)(
       expect(response.status).toBe(200);
       const { access_token } = (await response.json()) as { access_token: string };
       const verify = () =>
-        f.endpoints.installationTokens.verify(access_token, f.installationId, new Date());
+        f.endpoints.installationTokens.verify(
+          access_token,
+          f.installationId,
+          new Date(),
+          INSTALLATION_FLAGS.data,
+        );
       expect(await verify()).toMatchObject({
         status: "verified",
         appKey: f.key,

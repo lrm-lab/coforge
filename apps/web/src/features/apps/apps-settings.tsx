@@ -26,13 +26,12 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AppCard } from "./app-card";
 import { AppEditor } from "./app-editor";
-import { isPermissionsChanged } from "./app-form";
+import { isPermissionsChanged, type AppEditorSubmission } from "./app-form";
 import { APP_CATEGORY_LABELS, filterApps } from "./app-list";
 import { APP_CATEGORIES, type AppCategory } from "./app-category";
-import type { AppPermissionGroup } from "./app-permissions";
-import type { AppRegistrationInput } from "./app-registration";
 import { AppSecretPanel, type IssuedSecret } from "./app-secret-panel";
 import { useAppsLayout } from "./apps-layout";
+import { useRefreshOnFocus } from "./use-refresh-on-focus";
 import { APPS_VIEWS, type AppsView } from "./apps-settings-search";
 import {
   approveWorkspaceAppPermissions,
@@ -43,6 +42,7 @@ import {
   rotateWorkspaceAppSecret,
   uploadWorkspaceAppLogo,
   updateWorkspaceApp,
+  type AppDeclarations,
   type AppSummary,
 } from "./apps.functions";
 
@@ -59,6 +59,7 @@ const settingsRoute = getRouteApi("/w/$workspaceSlug/settings");
 export function AppsSettings({ actorRole }: { actorRole: string }) {
   const canManage = canManageApps(actorRole);
   const [apps, setApps] = useState<AppSummary[]>();
+  const [declares, setDeclares] = useState<AppDeclarations>({ permissions: false, setup: false });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const { appsTab: view = "installed", appsCategory: category = "all" } = settingsRoute.useSearch();
@@ -81,22 +82,34 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
   const uploadLogo = useServerFn(uploadWorkspaceAppLogo);
   const approve = useServerFn(approveWorkspaceAppPermissions);
 
+  /** Reads the apps, and which declarations this Workspace shows, into the page. */
+  const read = useCallback(async () => {
+    const loaded = await load();
+    setApps(loaded.apps);
+    setDeclares(loaded.declares);
+  }, [load]);
+
   /** Reads the apps again; a failed read keeps what is on screen, and the failure shows inline. */
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setApps(await load());
+      await read();
       setLoadFailed(false);
     } catch {
       setLoadFailed(true);
     } finally {
       setLoading(false);
     }
-  }, [load]);
+  }, [read]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  /** Reads the apps again without the loading note; a failure throws for the caller to show. An
+   * app reports its setup on its own, so the page re-reads it on Refresh status and on focus. */
+  const refreshSetup = read;
+  useRefreshOnFocus(refreshSetup, apps?.some((app) => app.setup) ?? false);
 
   function showList(next: { view?: AppsView; category?: AppCategory | "all" }) {
     void navigate({
@@ -122,19 +135,19 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
     setEditorOpen(true);
   }
 
-  async function submit(input: AppRegistrationInput, permissionGroups?: AppPermissionGroup[]) {
+  async function submit({ input, permissionGroups, setup }: AppEditorSubmission) {
     if (editor?.mode === "edit") {
       // The key is the app's client ID: never part of a change.
       const { key: _key, ...patch } = input;
       const { key } = editor.app;
       await refreshingWhenStale(async () => {
-        const app = await update({ data: { key, patch, permissionGroups } });
+        const app = await update({ data: { key, patch, permissionGroups, setup } });
         setEditorOpen(false);
         setApps((current) => current?.map((held) => (held.key === app.key ? app : held)));
       });
       return;
     }
-    const { app, clientSecret } = await register({ data: input });
+    const { app, clientSecret } = await register({ data: { ...input, permissionGroups, setup } });
     setEditorOpen(false);
     showList({ view: "mine" });
     setIssued({ key: app.key, appName: app.name, secret: clientSecret });
@@ -372,6 +385,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
         <AppEditor
           open={editorOpen}
           app={editing}
+          declares={declares}
           issued={issued && editing && issued.key === editing.key ? issued : null}
           onClose={() => setEditorOpen(false)}
           onSubmit={submit}
@@ -380,6 +394,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
           onUploadLogo={uploadAppLogo}
           onResetLogo={resetAppLogo}
           onApprovePermissions={approvePermissions}
+          onRefreshSetup={refreshSetup}
         />
       )}
     </div>
