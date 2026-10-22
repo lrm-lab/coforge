@@ -4,16 +4,6 @@ import { EVAL_ARMS, type EvalArm } from "./types";
 export const PI_DEEPSEEK_V4_FLASH_PROVIDER = "lenovo-deepseek-v4-flash";
 export const PI_DEEPSEEK_V4_FLASH_MODEL = "DeepSeek";
 
-export const DEFAULT_MANIFESTS: Record<string, string> = {
-  evoagentbench:
-    "/home/zhoujie22/river2_0/evol_bench/EvoAgentBench/data/evo-code-implementation.jsonl",
-  agentstream:
-    "/home/zhoujie22/river2_0/evol_bench/AgentStream/data/agentstream-interleaved-seed1.jsonl",
-  skilllearnbench: "/home/zhoujie22/river2_0/evol_bench/SkillLearnBench/data/slb-full.jsonl",
-  past_bench: "/home/zhoujie22/river2_0/evol_bench/PAST-Bench/data/past-notes-memory.jsonl",
-  earthbench: "/home/zhoujie22/river2_0/evol_bench/EarthBench/data/eb-smoke.jsonl",
-};
-
 export type EvalEnv = {
   manifestPath: string;
   manifestBenchmark: string | null;

@@ -24,17 +24,3 @@ export function serializeSliceToMarkdown(editor: Editor, slice: Slice) {
     return fallback();
   }
 }
-
-export function serializeRangeToMarkdown(editor: Editor, from: number, to: number) {
-  const docSize = editor.state.doc.content.size;
-  const safeFrom = Math.max(0, Math.min(from, docSize));
-  const safeTo = Math.max(safeFrom, Math.min(to, docSize));
-  if (safeFrom === safeTo) return "";
-  return serializeSliceToMarkdown(editor, editor.state.doc.slice(safeFrom, safeTo));
-}
-
-export function serializeSelectionToMarkdown(editor: Editor) {
-  const { selection } = editor.state;
-  if (selection.empty) return "";
-  return serializeSliceToMarkdown(editor, selection.content());
-}

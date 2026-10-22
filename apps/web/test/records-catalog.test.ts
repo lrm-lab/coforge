@@ -308,41 +308,6 @@ test("applyTemplate activates one stream without clearing other applied rows", a
   expect(ops).not.toContain("updateMany");
 });
 
-test("setTemplateScheduleEnabled keeps applied in sync with scheduleEnabled", async () => {
-  let updated: Record<string, unknown> | undefined;
-  const db = {
-    workspaceMembership: {
-      findUnique: async () => ({ role: "owner" }),
-    },
-    weeklyReportTemplate: {
-      findFirst: async () => ({
-        id: "settings-1",
-        name: "算法汇报",
-        applied: false,
-        dimensions: [],
-      }),
-      update: async (query: { data: Record<string, unknown> }) => {
-        updated = query.data;
-        return {};
-      },
-    },
-    weeklyReport: {
-      findFirst: async () => ({ id: "format-1" }),
-      update: async () => ({}),
-    },
-  } as unknown as PrismaClient;
-
-  const result = await new RecordCatalog(db).setTemplateScheduleEnabled({
-    workspaceId: "workspace-1",
-    userId: "leader",
-    templateId: "settings-1",
-    scheduleEnabled: true,
-  });
-
-  expect(result).toEqual({ id: "settings-1", scheduleEnabled: true, active: true });
-  expect(updated).toEqual({ scheduleEnabled: true, applied: true });
-});
-
 test("createTemplate with scheduleEnabled writes applied and ensures a format", async () => {
   const createdTemplates: Array<Record<string, unknown>> = [];
   const createdReports: Array<Record<string, unknown>> = [];

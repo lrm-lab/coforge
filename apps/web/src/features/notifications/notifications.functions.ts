@@ -17,7 +17,6 @@ import {
   browserNotificationPreferenceInput,
   browserPushSubscriptionInput,
   browserPushTestInput,
-  browserPushUnsubscribeInput,
   messageNotificationInput,
 } from "./notifications.schemas";
 
@@ -66,14 +65,6 @@ export const subscribeBrowserPush = createServerFn({ method: "POST" })
       auth: data.keys.auth,
       expirationTime: data.expirationTime ? new Date(data.expirationTime) : null,
     });
-  });
-
-export const unsubscribeBrowserPush = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(browserPushUnsubscribeInput)
-  .handler(async ({ data, context }) => {
-    const { user, subscriptions } = notificationContext(context.user);
-    await subscriptions.removeSubscription(user.id, data.endpoint);
   });
 
 export const sendTestBrowserNotification = createServerFn({ method: "POST" })

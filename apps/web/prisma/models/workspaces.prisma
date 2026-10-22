@@ -8,7 +8,6 @@ model Workspace {
   members                WorkspaceMembership[]
   joinLinks              WorkspaceJoinLink[]
   computers              WorkspaceComputer[]
-  serverConnection       WorkspaceServerConnection?
   hostJobs               HostJob[]
   computerRuntimes       ComputerRuntime[]
   modelCatalogs          ComputerModelCatalog[]

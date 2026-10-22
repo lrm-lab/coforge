@@ -49,10 +49,9 @@ These rules apply to `src/server/workspaces/`.
   Workspace, including after a Workspace is created, and binds that User's
   weekly-report assistant to it. A deployment without a cluster still returns
   the Workspace and leaves the assistant unconfigured.
-- `server-connection.server.ts` stores one submitted connection per Workspace
-  and builds the cloud computer service page: the install command and the
-  system unit, neither of which carries a secret. The light is on only while
-  that host's heartbeat is under 90 seconds old.
+- `server-connection.server.ts` builds the cloud computer service page: the
+  install command and the system unit, neither of which carries a secret. The
+  light is on only while that host's heartbeat is under 90 seconds old.
 - `cloud-service-access.server.ts` checks the deployment operating password
   (`COFORGE_CLOUD_SERVICE_PASSWORD`) and seals a short-lived unlock cookie.
   The settings page withholds the install script until that cookie is valid.

@@ -40,17 +40,6 @@ export const loadRecordsCatalog = createServerFn({ method: "GET" })
     return recordCatalog(db).loadCatalog({ workspaceId, userId: user.id });
   });
 
-export const createTemplateChildReport = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(z.object({ templateId: z.uuid() }))
-  .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).createSubmissionUnderTemplate({
-      workspaceId,
-      userId: user.id,
-      templateId: data.templateId,
-    });
-  });
-
 export const loadWeeklyReportAssistantStatus = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
@@ -84,17 +73,6 @@ async function readWeeklyReportAssistantStatus(
   };
 }
 
-export const deleteTemplateWeeklyReport = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(z.object({ reportId: z.uuid() }))
-  .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).deleteTemplateReport({
-      workspaceId,
-      userId: user.id,
-      reportId: data.reportId,
-    });
-  });
-
 export const deleteMemberWeeklyReport = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
@@ -120,17 +98,6 @@ export const setWeeklyReportFavorite = createServerFn({ method: "POST" })
       userId: user.id,
       reportId: data.reportId,
       favorited: data.favorited,
-    });
-  });
-
-export const deleteWeeklyCycle = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(z.object({ cycleId: z.uuid() }))
-  .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).deleteCycle({
-      workspaceId,
-      userId: user.id,
-      cycleId: data.cycleId,
     });
   });
 
@@ -179,44 +146,6 @@ export const loadWeeklyReportAssistantContext = createServerFn({ method: "GET" }
       userId: user.id,
       subjectType: data.subjectType,
       subjectId: data.subjectId,
-    });
-  });
-
-export const listWeeklyReportAssistantReports = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({
-      cycleId: z.uuid().optional(),
-      cursor: z.uuid().optional(),
-      limit: z.number().int().min(1).max(50).optional(),
-    }),
-  )
-  .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).listAssistantVisibleReports({
-      workspaceId,
-      userId: user.id,
-      cycleId: data.cycleId,
-      cursor: data.cursor,
-      limit: data.limit,
-    });
-  });
-
-export const readWeeklyReportAssistantSection = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({
-      reportId: z.uuid(),
-      section: z.string().trim().min(1).max(100),
-      maxCharacters: z.number().int().min(1).max(12_000).optional(),
-    }),
-  )
-  .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).readAssistantReportSection({
-      workspaceId,
-      userId: user.id,
-      reportId: data.reportId,
-      section: data.section,
-      maxCharacters: data.maxCharacters,
     });
   });
 
@@ -492,23 +421,6 @@ export const applyWeeklyTemplate = createServerFn({ method: "POST" })
     });
   });
 
-export const setWeeklyTemplateScheduleEnabled = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({
-      templateId: z.uuid(),
-      scheduleEnabled: z.boolean(),
-    }),
-  )
-  .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).setTemplateScheduleEnabled({
-      workspaceId,
-      userId: user.id,
-      templateId: data.templateId,
-      scheduleEnabled: data.scheduleEnabled,
-    });
-  });
-
 const templateSectionSchema = z.object({
   title: z.string(),
   children: z.array(z.string()),
@@ -586,25 +498,6 @@ export const loadWeeklyReportDashboard = createServerFn({ method: "GET" })
       workspaceId,
       userId: user.id,
       limit: data.limit,
-    });
-  });
-
-export const loadRecordComments = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({
-      subjectType: z.enum(["report", "cycle"]),
-      subjectId: z.uuid(),
-      assistantSessionId: z.uuid().optional(),
-    }),
-  )
-  .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).listComments({
-      workspaceId,
-      userId: user.id,
-      subjectType: data.subjectType,
-      subjectId: data.subjectId,
-      assistantSessionId: data.assistantSessionId,
     });
   });
 

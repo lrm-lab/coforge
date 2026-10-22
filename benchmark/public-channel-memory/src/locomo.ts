@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { type LocomoQuestion, type LocomoSample } from "./types";
-import { parseLocomoDateTime, turnBody } from "./locomo-time";
+import { parseLocomoDateTime } from "./locomo-time";
 
 // Eval-side knob: which QA categories to enumerate (default keeps the original
 // headline scope 1-4; set COFORGE_EVAL_LOCOMO_CATEGORIES=5 for adversarial-only).
@@ -98,11 +98,4 @@ export async function loadLocomoSample(
     if (questions.length >= qaLimit) break;
   }
   return { sampleId, speakerA, speakerB, sessions, questions };
-}
-
-export function formatTurnLine(
-  speaker: string,
-  turn: LocomoSample["sessions"][number]["turns"][number],
-) {
-  return `${speaker}: ${turnBody(turn)}`;
 }
