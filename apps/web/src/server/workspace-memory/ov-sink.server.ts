@@ -64,6 +64,7 @@ export function admittedSessionWriteFromDelivery(
     tags,
     messages: delivery.turns.map((turn) => {
       const derived = delivery.offerMessageIds?.has(turn.messageId) ?? false;
+      const extra = delivery.turnEnrichment?.get(turn.messageId);
       return {
         role: turn.senderKind === "agent" ? "assistant" : "user",
         content: derived ? derivedOfferContent(turn.body) : turn.body,
@@ -71,8 +72,13 @@ export function admittedSessionWriteFromDelivery(
         sourceMessageIds: [turn.messageId],
         ...(turn.senderKind === "agent" ? { peerId: `coforge__${turn.senderHandle}` } : {}),
         ...(derived ? { derived: true } : {}),
+        ...(extra?.toolExchanges?.length ? { toolExchanges: extra.toolExchanges } : {}),
+        ...(extra?.deliveries?.length ? { deliveries: extra.deliveries } : {}),
       };
     }),
+    ...(delivery.outcomeEvaluatorResults?.length
+      ? { outcomeEvaluatorResults: delivery.outcomeEvaluatorResults }
+      : {}),
   };
 }
 

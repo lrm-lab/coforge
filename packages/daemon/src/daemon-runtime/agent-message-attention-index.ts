@@ -26,6 +26,7 @@ import type {
   AgentConsumedSeqEntry,
   AgentConsumedSeqPort,
 } from "#src/persistence/agent-consumed-seq-store";
+import type { AgentAttentionDecisionPort } from "#src/persistence/agent-attention-decision-store";
 import { diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
@@ -182,6 +183,7 @@ export class AgentMessageAttentionIndex {
   readonly #pendingWindow = new Map<string, Map<string, PendingWindowEntry[]>>();
   /** Durable snapshots of the same aggregate; each consumption operation writes at most once. */
   readonly #consumedSeqs?: AgentConsumedSeqPort;
+  readonly #attentionDecisions?: AgentAttentionDecisionPort;
   readonly #workspaceId: string;
   readonly #runtimes: Pick<AgentProcessManager, "session"> &
     Partial<Pick<AgentProcessManager, "runtime">>;
@@ -221,12 +223,15 @@ export class AgentMessageAttentionIndex {
       /** The Agent's durable consumed cursor (`consumed-seqs.json`). Without it the index is
        * exactly as volatile as it was: the cursor then only lives as long as this process. */
       consumedSeqs?: AgentConsumedSeqPort;
+      /** Optional append-only journal of every attention decision (`attention-decisions.jsonl`). */
+      attentionDecisions?: AgentAttentionDecisionPort;
     } = { shouldHold: () => false, enqueue: () => {}, busy: () => {} },
     updateOptions: { schedule?: MemoryChannelUpdateSchedule } = {},
   ) {
     this.#workspaceId = workspaceId;
     this.#runtimes = runtimes;
     this.#consumedSeqs = hold.consumedSeqs;
+    this.#attentionDecisions = hold.attentionDecisions;
     this.#memoryUpdates = new MemoryChannelUpdates(
       async (messages) => {
         const pending = messages
@@ -340,6 +345,15 @@ export class AgentMessageAttentionIndex {
    */
   logDecision(message: AgentMessageDelivery, outcome: AttentionDecisionOutcome): void {
     const target = message.target ?? "";
+    this.#attentionDecisions?.append({
+      at: new Date().toISOString(),
+      agentId: message.agentId,
+      messageId: message.messageId,
+      deliveryId: message.deliveryId,
+      target,
+      sequence: message.sequence,
+      outcome,
+    });
     logger.info("Agent delivery attention decided", {
       event: "agent.message.attention_decision",
       workspace_id: message.workspaceId,

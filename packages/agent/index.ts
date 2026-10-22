@@ -17,6 +17,13 @@ export {
   type AgentTrainingStep,
   type AgentTrainingTrajectory,
 } from "#src/training-trajectory";
+export {
+  channelTraceFromSteps,
+  exportAgentChannelTrace,
+  type AgentChannelTrace,
+  type ChannelSendTrace,
+  type ChannelToolExchange,
+} from "#src/channel-turn-trace";
 export { classifyPiLaunchFailure, PiLaunchError, piLaunchTrace } from "#src/launch-error";
 export type { PiLaunchCategory, PiLaunchTrace } from "#src/launch-error";
 export { getAgentDir, VERSION as PI_SDK_VERSION } from "@earendil-works/pi-coding-agent";

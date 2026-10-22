@@ -38,8 +38,14 @@ export type EvalEnv = {
   /** Appended to every episode prompt after %TASK_ID%/%EPISODE_ID%/%%SIDECAR%%
    * substitution — used for env-sidecar wiring (SkillLearnBench, ...). */
   envNote: string | null;
-  /** Env sidecar that can verify an episode (POST /verify {episode_id}). */
+  /** Env sidecar that can verify an episode (POST /verify {episode_id}). Its verdict may carry
+   * an optional `feedback` (the judge report), which is committed with the session. */
   verifySidecarUrl: string | null;
+  /** Reward at or above which a graded verdict is committed as `pass`. */
+  outcomePassReward: number;
+  /** Opt-in: write each agent's tool calls and delivery facts into the OpenViking ledger
+   * (ADR-0047). Off by default so existing runs stay byte-comparable. */
+  recordTrajectoryAos: boolean;
   /** Shard filter for order-independent episode streams: "N:k" keeps episodes
    * whose zero-based manifest index satisfies index % N === k. */
   episodeMod: string | null;
@@ -109,6 +115,8 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     episodeClosure: (env.COFORGE_EVAL_EPISODE_CLOSURE ?? "1") !== "0",
     envNote: env.COFORGE_EVAL_ENV_NOTE?.trim() || null,
     verifySidecarUrl: env.COFORGE_EVAL_VERIFY_SIDECAR?.trim() || null,
+    outcomePassReward: Number(env.COFORGE_EVAL_OUTCOME_PASS_REWARD ?? "0.6"),
+    recordTrajectoryAos: (env.COFORGE_EVAL_TRAJECTORY_AOS ?? "0") === "1",
     episodeMod: env.COFORGE_EVAL_EPISODE_MOD?.trim() || null,
     abortQuietMs: Number(env.COFORGE_EVAL_ABORT_QUIET_MS ?? "600000"),
     resultDir: env.COFORGE_EVAL_RESULT_DIR ?? new URL("../result", import.meta.url).pathname,

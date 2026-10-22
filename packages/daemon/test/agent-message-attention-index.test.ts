@@ -1786,3 +1786,22 @@ test("Memory coalesced delivery separates conversations while preserving thread 
   expect(beta.text).toContain("#beta");
   expect(beta.text).not.toContain("#alpha");
 });
+
+test("journals every attention decision when a decision port is composed", async () => {
+  const written: Array<{ messageId: string; outcome: string }> = [];
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session() },
+    async () => {},
+    () => {},
+    {
+      shouldHold: () => false,
+      enqueue: () => {},
+      busy: () => {},
+      attentionDecisions: { append: (row) => written.push(row), read: () => [] },
+    },
+  );
+  await index.receive(delivery("journal"));
+  expect(written.length).toBeGreaterThan(0);
+  expect(written[0]!.messageId).toBe("message-journal");
+});

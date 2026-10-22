@@ -10,6 +10,13 @@ import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/a
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
 import { startAgent, startEvalDaemon, type EvalDaemon } from "./eval-daemon";
 import { runEpisode, type EpisodeResult } from "./eval-qa";
+import { AgentAttentionDecisionStore } from "../../../packages/daemon/src/persistence/agent-attention-decision-store";
+import {
+  deriveTurnEnrichment,
+  evaluatorResultFromVerdict,
+  loadEnrichmentAgents,
+  type SidecarVerdict,
+} from "./enrichment";
 import { createEvalDispatcher, drainEpisodeToMemory } from "./ingest";
 import type { OpenVikingEvaluatorResult } from "../../../apps/web/src/server/openviking/typed-session-extract.server";
 import { episodesForArm, groupFamilies, loadManifest } from "./manifest";
@@ -334,6 +341,32 @@ async function releaseFamily(arm: "warm" | "cold", provisioned: FamilyWorkspace)
   });
 }
 
+async function episodeEnrichment(provisioned: FamilyWorkspace) {
+  const { workspace } = provisioned;
+  const agentRows = await workspace.db.agent.findMany({
+    where: { id: { in: [workspace.memoryAgentId, workspace.taskAgentId] } },
+    select: { id: true, name: true, currentSessionId: true },
+  });
+  const agents = await loadEnrichmentAgents({
+    agents: agentRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      sessionId: row.currentSessionId,
+      cwd: join(provisioned.daemon.workspaceRoot, workspace.workspaceId, "agents", row.id),
+    })),
+    decisions: new AgentAttentionDecisionStore(),
+    warn: (message) => console.warn(sanitizeDiagnostic(message)),
+  });
+  const messages = await workspace.db.message.findMany({
+    where: { conversationId: workspace.channelId },
+    select: { id: true, sender: { select: { agentId: true } } },
+  });
+  return deriveTurnEnrichment({
+    agents,
+    messages: messages.map((row) => ({ id: row.id, senderAgentId: row.sender?.agentId ?? null })),
+  });
+}
+
 async function executeEpisode(
   arm: "warm" | "cold",
   family: EpisodeFamily,
@@ -357,6 +390,7 @@ async function executeEpisode(
   });
   const mechanism = classifyMechanism(result);
   let sidecarVerification: AttemptRow["sidecar_verification"] | undefined;
+  let sidecarVerdict: SidecarVerdict | undefined;
   if (env.verifySidecarUrl) {
     try {
       const response = await fetch(new URL("/verify", env.verifySidecarUrl), {
@@ -369,7 +403,9 @@ async function executeEpisode(
         reward?: number;
         graded?: boolean;
         error?: string;
+        feedback?: string;
       };
+      sidecarVerdict = verdict;
       sidecarVerification = {
         episode_id: episode.episodeId,
         reward: Number(verdict.reward ?? 0),
@@ -448,9 +484,21 @@ async function executeEpisode(
   episodeEvaluatorResults = drainEvaluatorResults(drainOutcomeMode, row.status, episode.episodeId);
   const coldDrain = arm === "cold" ? provisioned.drainDispatcher : undefined;
   if ((arm === "warm" && !frozenKnowledge) || coldDrain) {
+    const outcomeEvaluatorResults =
+      arm === "warm" && sidecarVerdict
+        ? evaluatorResultFromVerdict({
+            episodeId: episode.episodeId,
+            verdict: sidecarVerdict,
+            passReward: env.outcomePassReward,
+          })
+        : [];
+    const turnEnrichment =
+      arm === "warm" && env.recordTrajectoryAos ? await episodeEnrichment(provisioned) : undefined;
     const drained = await drainEpisodeToMemory({
       workspace: provisioned.workspace,
       dispatcher: coldDrain ?? provisioned.dispatcher,
+      ...(turnEnrichment ? { turnEnrichment } : {}),
+      ...(outcomeEvaluatorResults.length ? { outcomeEvaluatorResults } : {}),
       channelName:
         family.familyId
           .toLowerCase()

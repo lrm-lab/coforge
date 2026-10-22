@@ -177,6 +177,7 @@ import {
   type TrackedMentionDelivery,
 } from "./mention-delivery-tracker";
 import { AgentInboxStateMachine } from "./agent-inbox-state-machine";
+import { AgentAttentionDecisionStore } from "#src/persistence/agent-attention-decision-store";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import { AgentMessageDraftStore } from "#src/persistence/agent-message-draft-store";
 import { AgentAppInbox, type MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
@@ -612,6 +613,7 @@ export class DaemonRuntime {
         // the next hold, the `seenUpToSeq` a fresh send inherits, and whether a top-level send
         // under a thread-read parent needs confirming.
         consumedSeqs: new AgentConsumedSeqStore(),
+        attentionDecisions: new AgentAttentionDecisionStore(),
       },
     );
     this.agentRequests = new AgentRequestForwarder({
