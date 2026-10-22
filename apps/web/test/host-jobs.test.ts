@@ -141,7 +141,7 @@ function harness(input?: {
   member?: boolean;
   accepting?: boolean;
   clearDisk?: (computerId: string) => Promise<void>;
-  accounts?: typeof accounts;
+  accounts?: { displayName(userId: string): Promise<string | undefined> };
 }) {
   const fleet = new MemoryFleet();
   const jobs = new MemoryJobs();
