@@ -105,9 +105,7 @@ test("Pi resolves native provider environment auth below stored auth and Agent k
 });
 
 test("Pi reports a raw error event, not a classified activity, when the provider request fails", async () => {
-  // The provider reports the raw fact only; the daemon core (agent-runtime/
-  // runtime-error-activity.ts) is the single place that turns it into a
-  // visible runtime_error Activity for every provider, Pi included.
+  // Request-start Activity is informational; failure classification belongs to the daemon.
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-error-"));
   const agentDir = join(root, "host-config");
   const workspace = join(root, "workspace");
@@ -132,7 +130,9 @@ test("Pi reports a raw error event, not a classified activity, when the provider
     try {
       await session.sendMessage("hello").catch(() => {});
       expect(events.some((event) => event.type === "error")).toBe(true);
-      expect(events.some((event) => event.type === "activity")).toBe(false);
+      expect(
+        events.some((event) => event.type === "activity" && event.activity.level === "error"),
+      ).toBe(false);
       expect(events.some((event) => event.type === "completed" && event.status === "failed")).toBe(
         true,
       );

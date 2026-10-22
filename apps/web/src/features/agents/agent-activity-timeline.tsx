@@ -1,6 +1,7 @@
 import { memo, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { replaceEqualDeep } from "@tanstack/react-query";
 import { Activity as ActivityIcon, ChevronRight } from "@untitledui/icons";
+import { AGENT_ACTIVITY_DETAIL_KIND, type AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import {
@@ -13,8 +14,10 @@ import {
 import { ClockTime } from "#src/components/ui/relative-time";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import type { ActivityEntry } from "./agent-activity";
 import { ACTIVITY_MARKER_CLASS, ActivityMarker } from "./activity-marker";
+import { ModelResponseWait } from "./model-response-wait";
 import {
   presentActivityRows,
   subagentBadgeLabel,
@@ -26,15 +29,18 @@ import {
  * kept scrolled to the newest row. */
 export function AgentActivityTimeline({
   activity,
+  display,
   timeZone,
 }: {
   activity: ActivityEntry[];
+  display?: AgentDisplaySnapshot;
   timeZone: string | null;
 }) {
   // Each live frame re-presents the whole feed into fresh objects. Handing an unchanged row its
   // previous object back lets `memo` skip it, so a frame re-renders only the rows it added or
   // grew.
   const previous = useRef<Map<string, PresentedActivityRow>>(undefined);
+  const locale = getLocale();
   const rows = useMemo(() => {
     const reusable = previous.current ?? new Map<string, PresentedActivityRow>();
     const next = new Map<string, PresentedActivityRow>();
@@ -46,7 +52,16 @@ export function AgentActivityTimeline({
     });
     previous.current = next;
     return timeline;
-  }, [activity]);
+  }, [activity, locale]);
+  const observations = useMemo(
+    () =>
+      new Map<string, { entry: ActivityEntry; index: number }>(
+        activity.map(
+          (entry, index) => [`${entry.launchId}:${entry.clientSeq}:0`, { entry, index }] as const,
+        ),
+      ),
+    [activity],
+  );
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const newest = rows.at(-1);
@@ -76,9 +91,46 @@ export function AgentActivityTimeline({
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto">
       <ol aria-label="Activity timeline" className="list-none px-5 py-3">
-        {rows.map((row) => (
-          <ActivityTimelineRow key={row.key} row={row} timeZone={timeZone} />
-        ))}
+        {rows.map((row) => {
+          const observation = observations.get(row.key);
+          const entry = observation?.entry;
+          const entryIndex = observation?.index ?? -1;
+          const waiting =
+            entry?.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED &&
+            entry.detail === "Waiting for model response";
+          // This is elapsed history, never a source of current Agent state. Only the cloud
+          // display authorizes a live clock; missing history yields a label without timing.
+          const next = waiting
+            ? activity
+                .slice(0, entryIndex)
+                .reverse()
+                .find(
+                  (candidate) =>
+                    candidate.launchId === entry.launchId &&
+                    candidate.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.MESSAGE_RECEIVED &&
+                    candidate.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.TOOL_END,
+                )
+            : undefined;
+          const expiresAt =
+            waiting &&
+            entryIndex === 0 &&
+            display?.activityKind === "working" &&
+            display.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED
+              ? (display.expiresAt ?? undefined)
+              : undefined;
+          return (
+            <ActivityTimelineRow
+              key={row.key}
+              row={row}
+              timeZone={timeZone}
+              modelWait={
+                waiting
+                  ? { startedAtMs: entry.observedAtMs, endedAtMs: next?.observedAtMs, expiresAt }
+                  : undefined
+              }
+            />
+          );
+        })}
       </ol>
     </div>
   );
@@ -96,9 +148,11 @@ const ROW_RENDER_COST: CSSProperties = {
 const ActivityTimelineRow = memo(function ActivityTimelineRow({
   row,
   timeZone,
+  modelWait,
 }: {
   row: PresentedActivityRow;
   timeZone: string | null;
+  modelWait?: { startedAtMs: number; endedAtMs?: number; expiresAt?: number };
 }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
@@ -136,6 +190,7 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
       <div className="min-w-0">
         <div className="text-sm wrap-anywhere">
           {label}
+          {modelWait && <ModelResponseWait {...modelWait} />}
           {row.subagent && (
             <Badge type="modern" size="sm" color="gray" className="ml-1.5 inline-flex">
               {subagentBadgeLabel(row.subagent)}

@@ -1,0 +1,6 @@
+{
+  "agent_activity_waiting_model": "Waiting for model response",
+  "agent_activity_model_wait_elapsed": "· {seconds}s elapsed",
+  "agent_activity_model_wait_duration": "· Waited {seconds}s",
+  "agent_activity_model_wait_status_pending": "Awaiting status update"
+}

@@ -11,6 +11,7 @@ import {
   toolActivityLabel,
 } from "@lrm/coforge-sdk/internal";
 import type { StatusTone } from "#src/components/ui/status-dot";
+import { m } from "#src/paraglide/messages";
 
 export type ActivityObservation = Pick<
   ActivityEntry,
@@ -166,6 +167,27 @@ function presentEntryItem(
 
 function activityAtoms(observation: ActivityObservation): ActivityAtom[] {
   const { detailKind: kind, level, detail } = observation;
+  if (
+    kind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED &&
+    level !== "error" &&
+    (!detail || detail === "Waiting for model response")
+  ) {
+    const label = m.agent_activity_waiting_model();
+    return [
+      {
+        row: {
+          label,
+          detail: "",
+          recentLabel: label,
+          currentLabel: label,
+          tone: "working",
+          recentTone: "working",
+          detailOnOwnLine: false,
+          expandable: false,
+        },
+      },
+    ];
+  }
   // The daemon reclassifies a frame with subagent-scoped entries as subagent_activity. Its
   // entries show as their own rows, as the main Agent's do (tool and system rows carry the
   // subagent badge); the Agent's current label stays the one "Subagent working…" signal. A

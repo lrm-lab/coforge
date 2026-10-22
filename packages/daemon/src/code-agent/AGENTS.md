@@ -174,8 +174,8 @@ Behavior, compatibility and native verification: [`docs/agents/grok-acp.md`](../
 - Pi's Provider embeds the bundled Pi SDK and keeps the user's Pi models,
   settings, packages, extensions, skills, and authentication.
 - An explicit Agent key overrides host authentication only in that session's
-  in-memory model runtime. Never write it to disk or pass it in process
-  arguments.
+  in-memory model runtime. Never write it to disk or pass it in process arguments.
+- Pi and the built-in Agent report `model_request_started` at the public SDK `agent.streamFunction` seam; lifecycle/progress is not a request start, and compaction keeps its own phase.
 - Pi session files stay in the Agent's `.pi-sessions` directory. The built-in
   CoForge Agent uses its isolated bundled resources and `.builtin-sessions`;
   for skills, the Pi SDK still loads the user's `~/.agents/skills`, so that is

@@ -28,7 +28,7 @@ export function AgentActivityTab({
       </div>
       <div className="min-h-0 flex-1">
         {feed.data ? (
-          <AgentActivityTimeline activity={feed.data} timeZone={timeZone} />
+          <AgentActivityTimeline activity={feed.data} display={display} timeZone={timeZone} />
         ) : feed.isError && !feed.isFetching ? (
           <PanelMessage text={m.agent_activity_error()} alert onRetry={() => void feed.refetch()} />
         ) : (

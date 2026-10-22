@@ -18,6 +18,7 @@ export function safeRuntimeActivityMessage(
   if (activity === AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND)
     return truncateCodePoints(scrubRuntimeErrorText(message), 200);
   if (
+    activity === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED ||
     activity === AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED ||
     activity === AGENT_ACTIVITY_DETAIL_KIND.CHECKING_MESSAGES ||
     activity === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING ||

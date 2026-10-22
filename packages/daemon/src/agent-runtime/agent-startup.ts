@@ -95,6 +95,7 @@ export class AgentStartup {
       event.type === "notice-undelivered" ||
       (event.type === "activity" &&
         (event.activity.detailKind === "starting" ||
+          event.activity.detailKind === "model_request_started" ||
           event.activity.detailKind === "runtime_progress"))
     )
       return;
