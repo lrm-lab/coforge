@@ -35,6 +35,7 @@ Staging and production do not set these variables yet; setting them turns on eve
 | `POST /oidc/auth` | The same request sent as a form (OIDC Core §3.1.2.1): a 303 to the GET with its parameters |
 | `POST /oidc/token` | The token endpoint: redeems a code once for an access token and an ID token ([the token and UserInfo endpoints](token-and-userinfo.md)); with `client_credentials`, issues an app's [installation token](installation-tokens.md) |
 | `GET`, `POST /oidc/me` | The UserInfo endpoint: the signed-in person's claims for an access token |
+| `GET /api/app-installations/<id>/{workspace,agents,channels,computers}` | What an installed app reads with its installation token: [installed app data](app-installation-data.md) (not under `/oidc`) |
 
 The metadata advertises only endpoints that exist. Its fixed policy: the `code` response
 type in the query response mode, the `authorization_code` and `client_credentials` grant

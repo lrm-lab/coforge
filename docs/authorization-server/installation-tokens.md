@@ -62,4 +62,4 @@ a refusal by RFC 6750 §3.1:
   narrowed or the app stopped declaring it. A read of a group the token never had is the read API's
   own check against the returned `groups`.
 
-No read route exists yet.
+The four read routes call it: [installed app data](app-installation-data.md).

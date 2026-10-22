@@ -40,6 +40,9 @@ These rules apply to `src/server/db/`.
   too), and an approval is one update conditional on that revision. Its `db` may be an open transaction
   (`transaction.server.ts`: `inTransaction` joins it instead of nesting). Who may write stays in
   `server/app-permissions/`.
+- `app-installation-data.repositories.server.ts` reads what an installed app may see, filtering
+  private data out in the query itself and selecting only the projected columns. The projections
+  and the bearer check stay in `server/app-installation-data/`.
 - `oauth-authorization.repositories.server.ts` persists the authorization endpoint's rows: apps
   read as OIDC clients, the Workspaces a person may authorize an app in, consents and authorization
   codes (only a code's hash). What a request may do stays in `server/authorization-server/`.
