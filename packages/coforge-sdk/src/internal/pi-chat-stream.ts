@@ -41,9 +41,15 @@ export class PiChatLiveHistory {
     this.#bytes += size;
     return recover ? "recover" : "changed";
   }
-  merge(snapshot: PiChatResult): PiChatResult {
+  async read(readSnapshot: () => Promise<PiChatResult>): Promise<PiChatResult> {
+    const streamAtStart = this.#streamId;
+    const snapshot = await readSnapshot();
     if (!snapshot.stream) return snapshot;
-    if (this.#retired.has(snapshot.stream.id))
+    if (
+      this.#retired.has(snapshot.stream.id) ||
+      // A worker learned while this read was in flight wins over a different, delayed snapshot.
+      (snapshot.stream.id !== this.#streamId && this.#streamId !== streamAtStart)
+    )
       throw new Error("Pi chat worker was replaced; read current history");
     if (!this.#streamId) this.#streamId = snapshot.stream.id;
     if (snapshot.stream.id !== this.#streamId) this.#replace(snapshot.stream.id);

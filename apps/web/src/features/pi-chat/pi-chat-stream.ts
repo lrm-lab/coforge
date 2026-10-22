@@ -82,5 +82,5 @@ export function usePiChatStream(scope: PiChatScope, workspaceSlug: string, sessi
       }
     },
   });
-  return useCallback((snapshot: PiChatResult) => live.current.merge(snapshot), []);
+  return useCallback((read: () => Promise<PiChatResult>) => live.current.read(read), []);
 }
