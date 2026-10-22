@@ -47,6 +47,7 @@ export class UpgradeComputer {
       if (!image) throw new AppError("CONFLICT");
       const registered = await this.upgrades.begin(scope, input.requestId, image.version, {
         completeOnIdentity: true,
+        expectedImageId: image.imageId,
       });
       if (!registered.created) return registered.status;
       try {

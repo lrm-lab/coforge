@@ -343,6 +343,13 @@ export class HostJobs {
       await this.deps.fleet.markReady(job.computerId);
       await this.#attachLinkedWorkspaces(job, input.now);
     }
+    if (job.operation === "update") {
+      const created = await this.deps.jobs.findLatestCreate(job.computerId);
+      await this.#attachLinkedWorkspaces(
+        created ? { ...job, workspaceId: created.workspaceId } : job,
+        input.now,
+      );
+    }
     if (job.operation === "delete" && job.idempotencyKey.startsWith("cloud-format:")) {
       await this.deps.fleet.forgetContainer(job.computerId);
       await this.deps.disk?.clear(job.computerId);

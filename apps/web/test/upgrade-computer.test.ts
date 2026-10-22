@@ -176,6 +176,49 @@ test("a cloud computer image replace is queued on the host and never published t
   expect(publications).toEqual([]);
 });
 
+test("a cloud image replace completes once the host reports the offered image layer", async () => {
+  const store = new RedisComputerUpgradeStore(memoryRedis(), Date.now, async () => "sha256:new");
+  const scope = { workspaceId: "workspace-1", computerId: "computer-1" };
+  await store.ready(scope, identity("old", "0.1.8-dev.2", 1), []);
+  const { upgrade } = upgradeComputer({
+    upgrades: store,
+    online: true,
+    cloud: {
+      available: async () => ({ imageId: "sha256:new", version: "0.1.8-dev.2" }),
+      enqueue: async () => {},
+    },
+  });
+  await upgrade.execute(
+    { workspaceId: "workspace-1", userId: "user-a" },
+    { computerId: "computer-1", requestId: "upgrade-1", placement: "cloud" },
+  );
+  expect(await store.status(scope, "upgrade-1")).toMatchObject({
+    status: "completed",
+    expectedVersion: "0.1.8-dev.2",
+    computerVersion: "0.1.8-dev.2",
+  });
+});
+
+test("a cloud image replace that already swapped does not time out waiting for a version string", async () => {
+  let now = 1000;
+  const store = new RedisComputerUpgradeStore(
+    memoryRedis(),
+    () => now,
+    async () => "sha256:new",
+  );
+  const scope = { workspaceId: "workspace-1", computerId: "computer-1" };
+  await store.ready(scope, identity("old", "0.1.7-dev.3", 1), []);
+  await store.begin(scope, "upgrade-1", "0.1.8-dev.2", {
+    completeOnIdentity: true,
+    expectedImageId: "sha256:new",
+  });
+  now += 10 * 60 * 1000;
+  expect(await store.status(scope, "upgrade-1")).toMatchObject({
+    status: "completed",
+    expectedVersion: "0.1.8-dev.2",
+  });
+});
+
 test("polling a cloud image replace completes after the computer returns on the expected version", async () => {
   const store = new RedisComputerUpgradeStore(memoryRedis());
   const scope = { workspaceId: "workspace-1", computerId: "computer-1" };

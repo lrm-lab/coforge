@@ -100,4 +100,86 @@ describe("cloud image update job", () => {
       errorId: "cloud-image-id-invalid",
     });
   });
+
+  test("reporting an image replace reattaches workspaces that were only exec'd into the old task", async () => {
+    const computers: CloudComputer[] = [];
+    const records: HostJobRecord[] = [];
+    const linked = new Map<string, Array<{ id: string; slug: string }>>();
+    const jobs = new HostJobs({
+      workspaces: {
+        findMember: async (workspaceId, userId) =>
+          userId === "user-a" && (workspaceId === "workspace-1" || workspaceId === "workspace-2")
+            ? { id: workspaceId, slug: workspaceId === "workspace-1" ? "alpha" : "beta" }
+            : undefined,
+      },
+      fleet: {
+        list: async (ownerId) => computers.filter((computer) => computer.ownerId === ownerId),
+        insert: async (computer) => {
+          computers.push({ ...computer });
+        },
+        markReady: async (id) => {
+          const computer = computers.find((item) => item.id === id);
+          if (computer) computer.containerReady = true;
+        },
+        markDeleted: async () => undefined,
+        forgetContainer: async () => undefined,
+        linkedWorkspaces: async (computerId) => linked.get(computerId) ?? [],
+        isLinked: async (computerId, workspaceId) =>
+          (linked.get(computerId) ?? []).some((workspace) => workspace.id === workspaceId),
+        link: async (computerId, workspaceId, slug) => {
+          const current = linked.get(computerId) ?? [];
+          if (!current.some((workspace) => workspace.id === workspaceId))
+            current.push({ id: workspaceId, slug });
+          linked.set(computerId, current);
+        },
+      },
+      jobs: {
+        findLatestCreate: async () => undefined,
+        findByIdempotency: async (ownerId, idempotencyKey) =>
+          records.find((job) => job.ownerId === ownerId && job.idempotencyKey === idempotencyKey),
+        findOpenFormat: async () => undefined,
+        insert: async (record) => {
+          records.push({ ...record });
+        },
+        abandon: async () => undefined,
+        next: async () => records.find((job) => job.reportedAt === null),
+        save: async (record) => {
+          const index = records.findIndex((job) => job.id === record.id);
+          if (index >= 0) records[index] = { ...record };
+        },
+        findById: async (id) => records.find((job) => job.id === id),
+      },
+      cluster: {
+        id: async () => "cluster-1",
+        authenticate: async () => ({ id: "cluster-1", accepting: true }),
+      },
+      keys: { issue: async () => `dk_${"b".repeat(43)}` },
+      accounts: { displayName: async () => "Ada Lovelace" },
+    });
+    const created = await jobs.ensureDefault({
+      userId: "user-a",
+      workspaceId: "workspace-1",
+      now,
+    });
+    await jobs.report({
+      token: "cluster-token",
+      jobId: records[0]!.id,
+      containerId: "service-1",
+      now,
+    });
+    await jobs.ensureDefault({ userId: "user-a", workspaceId: "workspace-2", now });
+    const attach = records.find((job) => job.operation === "attach");
+    if (attach) await jobs.report({ token: "cluster-token", jobId: attach.id, now });
+    const updated = await jobs.requestImageUpdate({
+      userId: "user-a",
+      workspaceId: "workspace-1",
+      computerId: created.computerId,
+      imageId: "sha256:new",
+      now,
+    });
+    await jobs.report({ token: "cluster-token", jobId: updated.jobId!, now });
+    expect(
+      records.filter((job) => job.operation === "attach").map((job) => job.workspaceId),
+    ).toEqual(["workspace-2", "workspace-2"]);
+  });
 });

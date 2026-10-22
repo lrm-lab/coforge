@@ -2,8 +2,10 @@ import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { sanitizeUpgradeErrorText } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
+import { sameImageLayer } from "#src/features/computers/cloud-image-update";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
 import type { ComputerUpgradeStatus } from "#src/features/computers/computer.schemas";
+import { getCloudImageInventory } from "#src/server/hosts/cloud-image-inventory.server";
 
 type Scope = { workspaceId: string; computerId: string };
 /** One Computer upgrade operation's terminal receipt, as the Daemon reported it. */
@@ -25,6 +27,8 @@ type Stored = ComputerUpgradeStatus & {
   previousWorkerInstanceId?: string;
   /** Cloud image replace: the daemon reconnects without recovering this request. */
   completeOnIdentity?: true;
+  /** Cloud image replace: complete when the host heartbeat shows this layer. */
+  expectedImageId?: string;
 };
 /** An upgrade request's deadline, long enough to poll a Computer to completion, and how long a
  * settled record survives. */
@@ -79,6 +83,7 @@ export class RedisComputerUpgradeStore {
       send(command: "EVAL", args: string[]): Promise<unknown>;
     },
     private readonly now = Date.now,
+    private readonly runningImage?: (computerId: string) => Promise<string | undefined>,
   ) {}
   async identity(scope: Scope): Promise<Identity | undefined> {
     return this.parseIdentity(await this.redis.get(this.identityKey(scope)));
@@ -87,7 +92,7 @@ export class RedisComputerUpgradeStore {
     scope: Scope,
     requestId: string,
     expectedVersion: string,
-    options?: { completeOnIdentity?: boolean },
+    options?: { completeOnIdentity?: boolean; expectedImageId?: string },
   ) {
     const existingRaw = await this.redis.get(this.requestKey(scope, requestId));
     const existing = existingRaw ? this.parse(existingRaw) : undefined;
@@ -101,6 +106,7 @@ export class RedisComputerUpgradeStore {
       expiresAt: new Date(this.now() + REQUEST_TTL * 1000).toISOString(),
       previousWorkerInstanceId: current.workerInstanceId,
       ...(options?.completeOnIdentity ? { completeOnIdentity: true as const } : {}),
+      ...(options?.expectedImageId ? { expectedImageId: options.expectedImageId } : {}),
     };
     const result = await this.redis.set(
       this.requestKey(scope, requestId),
@@ -200,13 +206,13 @@ export class RedisComputerUpgradeStore {
     if (!raw) return undefined;
     const current = this.parse(raw);
     if (!current) return { requestId, status: "unknown", reason: "corrupt" };
-    if (current.status === "accepted" && Date.parse(current.expiresAt) <= this.now()) {
-      const failed = { requestId, status: "failed" as const, reason: "timeout" as const };
-      if (await this.replace(scope, requestId, failed)) return failed;
-    }
     if (current.status === "accepted" && current.completeOnIdentity) {
       const completed = await this.completeFromIdentity(scope, requestId, raw, current);
       if (completed) return this.public(completed);
+    }
+    if (current.status === "accepted" && Date.parse(current.expiresAt) <= this.now()) {
+      const failed = { requestId, status: "failed" as const, reason: "timeout" as const };
+      if (await this.replace(scope, requestId, failed)) return failed;
     }
     return this.public(current);
   }
@@ -256,6 +262,26 @@ export class RedisComputerUpgradeStore {
   ): Promise<Stored | undefined> {
     if (current.status !== "accepted") return undefined;
     const identity = await this.identity(scope);
+    const runningImageId = current.expectedImageId
+      ? await this.runningImage?.(scope.computerId)
+      : undefined;
+    const imageReplaced =
+      Boolean(current.expectedImageId) &&
+      sameImageLayer(current.expectedImageId ?? "", runningImageId ?? "");
+    if (imageReplaced) {
+      const record: Stored = {
+        requestId,
+        status: "completed",
+        expectedVersion: current.expectedVersion,
+        computerVersion: current.expectedVersion,
+        daemonVersion: identity?.daemonVersion ?? current.expectedVersion,
+        workerInstanceId:
+          identity?.workerInstanceId ?? current.previousWorkerInstanceId ?? requestId,
+        completedAt: new Date(this.now()).toISOString(),
+      };
+      if (await this.replace(scope, requestId, record)) return record;
+      return undefined;
+    }
     if (
       !identity ||
       current.previousWorkerInstanceId === identity.workerInstanceId ||
@@ -331,6 +357,7 @@ export class RedisComputerUpgradeStore {
   private public({
     previousWorkerInstanceId: _previous,
     completeOnIdentity: _completeOnIdentity,
+    expectedImageId: _expectedImageId,
     ...value
   }: Stored) {
     return value;
@@ -420,6 +447,13 @@ function requestId(result: ReportedComputerUpgradeResult): string {
 let singleton: RedisComputerUpgradeStore | undefined;
 export function getComputerUpgradeStore() {
   const url = redisUrlFor("Computer upgrade status");
-  singleton ??= new RedisComputerUpgradeStore(openRedisClient(url));
+  singleton ??= new RedisComputerUpgradeStore(
+    openRedisClient(url),
+    Date.now,
+    async (computerId) => {
+      const snapshot = await getCloudImageInventory().snapshot();
+      return snapshot?.computers.find((computer) => computer.computerId === computerId)?.imageId;
+    },
+  );
   return singleton;
 }
