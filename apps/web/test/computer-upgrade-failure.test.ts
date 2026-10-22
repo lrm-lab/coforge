@@ -179,6 +179,16 @@ test("an unavailable release feed reads as its own sentence", () => {
   expect(copy.errorId).toBeUndefined();
 });
 
+test("a refused cloud image update says why, and keeps the reference id", () => {
+  const copy = describeUpgradeRequestError(
+    new AppError("NOT_FOUND", { errorId: "cloud-computer-missing" }),
+  );
+
+  expect(copy.headline).toBe(m.computer_cloud_image_update_missing());
+  expect(copy.headline).not.toContain("NOT_FOUND");
+  expect(copy.errorId).toBe("cloud-computer-missing");
+});
+
 test("an unrelated AppError falls back to a generic sentence but keeps its reference id discoverable", () => {
   const copy = describeUpgradeRequestError(new AppError("INTERNAL_ERROR", { errorId: "xyz" }));
 

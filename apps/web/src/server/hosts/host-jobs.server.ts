@@ -1,3 +1,5 @@
+import { AppError } from "#src/lib/app-error";
+
 export class HostJobError extends Error {
   constructor(
     readonly status: 401 | 403 | 404 | 409 | 422 | 503,
@@ -6,6 +8,17 @@ export class HostJobError extends Error {
     super(message);
     this.name = "HostJobError";
   }
+}
+
+/** The page copy for a refused image update. The host finds the service by name, so a missing create report is not one of these. */
+export function cloudImageUpdateError(error: HostJobError): {
+  code: "NOT_FOUND" | "ACCESS_DENIED" | "INVALID_INPUT" | "CONFLICT";
+  errorId: string;
+} {
+  if (error.status === 404) return { code: "NOT_FOUND", errorId: "cloud-computer-missing" };
+  if (error.status === 403) return { code: "ACCESS_DENIED", errorId: "cloud-computer-forbidden" };
+  if (error.status === 422) return { code: "INVALID_INPUT", errorId: "cloud-image-id-invalid" };
+  return { code: "CONFLICT", errorId: "cloud-image-update-refused" };
 }
 
 export type CloudSlot = "default" | "extra";
@@ -255,12 +268,27 @@ export class HostJobs {
     imageId: string;
     now: Date;
   }): Promise<CloudComputerView> {
+    try {
+      return await this.#enqueueImageUpdate(input);
+    } catch (error) {
+      if (!(error instanceof HostJobError)) throw error;
+      const mapped = cloudImageUpdateError(error);
+      throw new AppError(mapped.code, { errorId: mapped.errorId });
+    }
+  }
+
+  async #enqueueImageUpdate(input: {
+    userId: string;
+    workspaceId: string;
+    computerId: string;
+    imageId: string;
+    now: Date;
+  }): Promise<CloudComputerView> {
     const workspace = await this.#workspace(input.workspaceId, input.userId);
     const computer = (await this.deps.fleet.list(input.userId)).find(
       (item) => item.id === input.computerId && item.deletedAt === null,
     );
     if (!computer) throw new HostJobError(404, "cloud computer not found");
-    if (!computer.containerReady) throw new HostJobError(409, "cloud computer is not ready");
     const imageId = requireText(input.imageId, "invalid image id");
     const key = `cloud-update:${computer.id}:${imageId}`;
     const existing = await this.deps.jobs.findByIdempotency(input.userId, key);

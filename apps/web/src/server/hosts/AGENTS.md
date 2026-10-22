@@ -9,7 +9,7 @@ These rules apply to `src/server/hosts/`.
 - Completing first sign-in starts the account's default cloud computer for the personal Workspace. Creating another Workspace does the same. The Computers page runs the same ensure again. Joining another workspace attaches that workspace to the existing computer. It does not create another container.
 - A Workspace linked while its default cloud Computer is still creating is recorded immediately; the create report attaches all of those Workspaces when ready.
 - Formatting a cloud computer queues a delete that removes the service and its volume, then places the same computer again. The typed name must match the name the owner sees. It does not delete the computer row. After the new container is reported, other linked Workspaces are attached again.
-- Claim order is delete, then attach, then update, then create. A cluster that is not accepting skips create and update and still claims delete and attach. An `update` replaces the running image and keeps the named volume.
+- Claim order is delete, then attach, then update, then create. A cluster that is not accepting skips create and update and still claims delete and attach. An `update` replaces the running image and keeps the named volume. It does not wait for the create job to report a container id; the host finds `coforge-<computer id>`.
 - The daemon key is returned only when the cluster claims a create or attach, and it is cleared when the job is reported. Browser and list APIs never return it.
 - `host-production.server.ts` wires the database and the token. Routes stay thin adapters over it.
 - Operator steps for a new deployment are in `docs/operations/cloud-swarm/README.md`.

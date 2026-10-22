@@ -267,6 +267,30 @@ export type UpgradeRequestErrorCopy = UpgradeFailureView & { errorId?: string };
  */
 export function describeUpgradeRequestError(error: unknown): UpgradeRequestErrorCopy {
   if (isAppError(error)) {
+    if (error.errorId === "cloud-computer-missing")
+      return {
+        headline: m.computer_cloud_image_update_missing(),
+        steps: [],
+        errorId: error.errorId,
+      };
+    if (error.errorId === "cloud-computer-forbidden")
+      return {
+        headline: m.computer_cloud_image_update_forbidden(),
+        steps: [],
+        errorId: error.errorId,
+      };
+    if (error.errorId === "cloud-image-id-invalid")
+      return {
+        headline: m.computer_cloud_image_update_invalid(),
+        steps: [],
+        errorId: error.errorId,
+      };
+    if (error.errorId === "cloud-image-update-refused")
+      return {
+        headline: m.computer_cloud_image_update_refused(),
+        steps: [],
+        errorId: error.errorId,
+      };
     if (error.code === "COMPUTER_OFFLINE")
       return {
         headline: m.computer_upgrade_offline(),
