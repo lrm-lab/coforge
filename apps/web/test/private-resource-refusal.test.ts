@@ -32,14 +32,26 @@ async function refusal(response: Response) {
 }
 
 async function withDevSkipAuth<T>(enabled: boolean, run: () => Promise<T>): Promise<T> {
-  const previous = process.env.COFORGE_DEV_SKIP_AUTH;
-  if (enabled) process.env.COFORGE_DEV_SKIP_AUTH = "1";
-  else delete process.env.COFORGE_DEV_SKIP_AUTH;
+  const previousSkip = process.env.COFORGE_DEV_SKIP_AUTH;
+  const previousNodeEnv = process.env.NODE_ENV;
+
+  // `isDevSkipAuthEnabled` refuses to skip in production, so the switch this helper promises only
+  // exists outside it. Pin NODE_ENV here instead of relying on the ambient one, as the other
+  // dev-skip tests do; otherwise the same test passes or fails depending on who runs it.
+  if (enabled) {
+    process.env.NODE_ENV = "development";
+    process.env.COFORGE_DEV_SKIP_AUTH = "1";
+  } else {
+    delete process.env.COFORGE_DEV_SKIP_AUTH;
+  }
+
   try {
     return await run();
   } finally {
-    if (previous === undefined) delete process.env.COFORGE_DEV_SKIP_AUTH;
-    else process.env.COFORGE_DEV_SKIP_AUTH = previous;
+    if (previousSkip === undefined) delete process.env.COFORGE_DEV_SKIP_AUTH;
+    else process.env.COFORGE_DEV_SKIP_AUTH = previousSkip;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
   }
 }
 
