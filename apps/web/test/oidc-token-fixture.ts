@@ -5,6 +5,7 @@ import { mintAuthorizationCode } from "#src/server/authorization-server/authoriz
 import { publicJwks, type SigningKey } from "#src/server/authorization-server/signing-keys.server";
 import type { StoredAuthorizationCode } from "#src/server/authorization-server/authorization-codes.server";
 import type { GrantStore, GrantSubject } from "#src/server/authorization-server/grants.server";
+import { InstallationTokens } from "#src/server/authorization-server/installation-tokens.server";
 import { TokenEndpoint } from "#src/server/authorization-server/token-endpoint.server";
 import { UserInfoEndpoint } from "#src/server/authorization-server/userinfo-endpoint.server";
 
@@ -129,7 +130,12 @@ export function endpoints({ signingKeys = SIGNING_KEYS }: { signingKeys?: Signin
     },
   };
   const options = { issuer: ISSUER, signingKeys, now: () => clock.now };
-  const tokenEndpoint = new TokenEndpoint(store, options);
+  const tokenEndpoint = new TokenEndpoint(
+    store,
+    options,
+    // Installation tokens are exercised in oidc-installation-token.test.ts: here no installation exists.
+    new InstallationTokens({ findInstallation: async () => undefined }, async () => false, options),
+  );
   const userInfoEndpoint = new UserInfoEndpoint(store, options);
 
   /** Issues a code as the authorization endpoint would, and returns it. */

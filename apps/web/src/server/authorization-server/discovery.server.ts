@@ -4,6 +4,7 @@ import {
   TOKEN_ENDPOINT_PATH,
   USERINFO_ENDPOINT_PATH,
 } from "#src/lib/oidc-paths";
+import { INSTALLATION_SCOPES } from "./installation-tokens.server";
 import { SIGNING_ALGORITHM } from "./signing-keys.server";
 
 /** The issuer's metadata: OpenID Connect Discovery 1.0 §3, served unchanged as RFC 8414 §2
@@ -19,13 +20,14 @@ export function discoveryDocument(issuer: string) {
     jwks_uri: `${issuer}/jwks`,
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
-    grant_types_supported: ["authorization_code"],
+    grant_types_supported: ["authorization_code", "client_credentials"],
     subject_types_supported: ["public"],
     id_token_signing_alg_values_supported: [SIGNING_ALGORITHM],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post"],
-    // The scopes an app may be allowed (`features/apps/app-registration.ts`).
-    scopes_supported: [...APP_SCOPES],
+    // The scopes an app may be allowed (`features/apps/app-registration.ts`), then the
+    // `client_credentials` grant's installation scopes (installation-tokens.server.ts).
+    scopes_supported: [...APP_SCOPES, ...INSTALLATION_SCOPES],
     // The ID token's claims, then what the scopes release at UserInfo (`scopeClaims` in
     // grants.server.ts).
     claims_supported: [

@@ -4,6 +4,7 @@ import type {
   AppPermissionsStore,
   InstalledAppPermissions,
 } from "#src/server/app-permissions/app-permissions.server";
+import type { TokenInstallation } from "#src/server/authorization-server/installation-tokens.server";
 import { findAppMember } from "#src/server/db/repositories/app.repositories.server";
 import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.server";
 
@@ -15,6 +16,14 @@ const INSTALLED = {
   app: {
     select: { key: true, ownerWorkspaceId: true, permissionGroups: true, permissionRevision: true },
   },
+} as const;
+
+/** An installation by id also names its app and Workspace, for an installation token. */
+const INSTALLED_BY_ID = {
+  ...INSTALLED,
+  appId: true,
+  workspaceId: true,
+  workspace: { select: { slug: true } },
 } as const;
 
 type InstalledRow = {
@@ -66,6 +75,25 @@ export class PrismaAppPermissionsStore implements AppPermissionsStore {
       select: INSTALLED,
     });
     return row ? installed(row) : undefined;
+  }
+
+  /** An installation by id, as an installation token sees it. */
+  async findInstallation(id: string): Promise<TokenInstallation | undefined> {
+    const row = await this.db.appInstallation.findUnique({
+      where: { id },
+      select: INSTALLED_BY_ID,
+    });
+    if (!row) return undefined;
+    const { declared, approved } = installed(row);
+    return {
+      id: row.id,
+      appId: row.appId,
+      appKey: row.app.key,
+      workspaceId: row.workspaceId,
+      workspaceSlug: row.workspace.slug,
+      declared,
+      approved,
+    };
   }
 
   async declare(input: {

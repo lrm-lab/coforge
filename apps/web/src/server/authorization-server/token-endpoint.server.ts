@@ -2,6 +2,7 @@ import { isFormRequest } from "#src/lib/form-request";
 import { appClientSecretMatches } from "#src/server/apps/app-client-secret.server";
 import { hashAuthorizationCode } from "./authorization-codes.server";
 import { readClientCredentials } from "./client-authentication.server";
+import type { InstallationTokenRefusal, InstallationTokens } from "./installation-tokens.server";
 import { activeGrant, type GrantStore } from "./grants.server";
 import { NO_STORE } from "./http-headers.server";
 import { verifierMatchesChallenge } from "./pkce.server";
@@ -17,11 +18,13 @@ type TokenErrorCode =
   | "invalid_request"
   | "invalid_client"
   | "invalid_grant"
-  | "unsupported_grant_type";
+  | "unsupported_grant_type"
+  | InstallationTokenRefusal;
 
 /**
  * The token endpoint (RFC 6749 §4.1.3–4.1.4, OIDC Core §3.1.3): an app redeems an authorization
- * code once for an access token and an ID token. No refresh token is issued.
+ * code once for an access token and an ID token. An app also gets an installation token by
+ * `client_credentials` (RFC 6749 §4.4). No refresh token is issued.
  */
 export class TokenEndpoint {
   private readonly now: () => Date;
@@ -29,6 +32,7 @@ export class TokenEndpoint {
   constructor(
     private readonly store: GrantStore,
     private readonly options: TokenIssuer & { now?: () => Date },
+    private readonly installationTokens: InstallationTokens,
   ) {
     this.now = options.now ?? (() => new Date());
   }
@@ -54,6 +58,8 @@ export class TokenEndpoint {
       return this.unauthenticated();
 
     if (!grantType) return tokenError("invalid_request", "grant_type is required");
+    if (grantType === "client_credentials")
+      return this.issueInstallationToken({ id: client.id, key: credentials.clientId }, form);
     if (grantType !== "authorization_code")
       return tokenError("unsupported_grant_type", "only authorization_code is supported");
     if (!presentedCode || !redirectUri)
@@ -104,6 +110,16 @@ export class TokenEndpoint {
       },
       { headers: NO_STORE },
     );
+  }
+
+  /** RFC 6749 §4.4: the app's own installation token; no refresh token (§4.4.3). */
+  private async issueInstallationToken(
+    client: { id: string; key: string },
+    form: URLSearchParams,
+  ): Promise<Response> {
+    const result = await this.installationTokens.issue(client, form, this.now());
+    if (result.status === "refused") return tokenError(result.error, result.description);
+    return Response.json(result.body, { headers: NO_STORE });
   }
 
   private unauthenticated(): Response {
