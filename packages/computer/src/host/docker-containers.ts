@@ -110,6 +110,33 @@ export function dockerImageInspectArgs(image: string): string[] {
   ];
 }
 
+/** Repo digest when the image was pushed or built with one, otherwise the local image id. */
+export function dockerImageDigestArgs(image: string): string[] {
+  return [
+    "image",
+    "inspect",
+    "-f",
+    "{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}{{.Id}}{{end}}",
+    image,
+  ];
+}
+
+const IMAGE_DIGEST = /^sha256:[0-9a-f]{64}$/;
+
+/**
+ * Swarm still asks Docker Hub for a `name:tag`, even with `--no-resolve-image`.
+ * Pinning the local digest makes the node start the image it already has.
+ */
+export function pinnedImageReference(image: string, inspectLine: string): string {
+  if (image.includes("@")) return image;
+  const token = inspectLine.trim().split(/\s+/)[0] ?? "";
+  const digest = token.includes("@") ? token.slice(token.lastIndexOf("@") + 1) : token;
+  if (!IMAGE_DIGEST.test(digest)) {
+    throw new Error("docker image inspect returned an unusable image id");
+  }
+  return `${image}@${digest}`;
+}
+
 export function dockerCloudContainerListArgs(): string[] {
   return ["ps", "-q", "--filter", `label=${COMPUTER_ID_LABEL}`];
 }
@@ -191,7 +218,7 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
     async createService(input) {
       const result = await run(
         spawn,
-        dockerServiceCreateArgs(input),
+        dockerServiceCreateArgs({ ...input, image: await localImageReference(spawn, input.image) }),
         "docker service create failed",
       );
       const id = firstId(result);
@@ -212,7 +239,11 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       await run(spawn, dockerAttachExecArgs(containerId, input.env), "docker exec failed");
     },
     async updateServiceImage(computerId, image) {
-      await run(spawn, dockerServiceUpdateArgs(computerId, image), "docker service update failed");
+      await run(
+        spawn,
+        dockerServiceUpdateArgs(computerId, await localImageReference(spawn, image)),
+        "docker service update failed",
+      );
     },
     async desktopEndpoint(computerId) {
       const listed = await spawn(dockerTaskFindArgs(computerId));
@@ -255,6 +286,12 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       };
     },
   };
+}
+
+async function localImageReference(spawn: DockerSpawn, image: string): Promise<string> {
+  if (image.includes("@")) return image;
+  const inspected = await run(spawn, dockerImageDigestArgs(image), "docker image inspect failed");
+  return pinnedImageReference(image, inspected.stdout);
 }
 
 const imageVersions = new Map<string, string>();
