@@ -68,11 +68,19 @@ removes its native transcript and index record; files created by its tools
 remain in the working directory. Content-free accepted request IDs are retained
 after deletion so delayed retries cannot recreate the chat or replay its tools.
 
-The page reads updates every 700 ms while its selected session runs. Closing
+The page reads updates every 700 ms while its selected session runs. Failed
+history/list reads retry every three seconds, including a first load during
+Computer downtime. Send mutations are never automatically retried. Closing
 the page does not cancel a turn. Reopening reads the worker/native history.
-An accepted request ID is persisted before execution; retries reuse it and
-never automatically replay tools. A worker restart marks unfinished runs
-interrupted. Users explicitly send a new message to continue.
+Before accepting a turn, the worker saves its request ID, message and native
+history boundary in a private checkpoint beside the index. After a restart,
+unfinished turns automatically continue from committed native history; accepted
+input missing from that history is delivered once. A committed final answer
+settles without another model call. Explicit Stop is persisted before abort
+and never resumes automatically. Worker shutdown preserves continuation intent.
+If a tool has no committed result, or its result reports failure, recovery
+keeps the turn interrupted rather than risk repeating an uncertain operation.
+Older interrupted conversations without a checkpoint still need a new message.
 Empty native sessions are saved before accepting the first request, so fixing
 model credentials after a preflight failure allows the same chat to continue.
 
@@ -100,8 +108,9 @@ the volume. No Agent session or database backfill is needed.
 - Four concurrent turns per worker; 64 workers per host.
 - Workers expire after 30 minutes without a request; active work is stopped
   during worker cleanup. Host shutdown also closes its workers' input streams.
-  Cleanup gets 30 seconds before worker exit; unfinished sessions recover as
-  interrupted. A stuck docker-exec client is terminated after another 5 seconds.
+  Cleanup gets 30 seconds before worker exit; unfinished sessions continue when
+  the scope's worker is reopened, subject to the uncertainty rule above. A stuck
+  docker-exec client is terminated after another 5 seconds.
 - One request accepts at most 100,000 message characters and a 512 KB HTTP body.
 - History loads 50 messages per page; a worker response has a 32 MB safety bound.
   Exceeding that bound is an explicit request failure, never silent truncation.

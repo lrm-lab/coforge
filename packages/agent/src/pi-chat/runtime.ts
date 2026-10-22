@@ -6,6 +6,7 @@ import type { PiChatMessage } from "@lrm/coforge-sdk/internal/pi-chat";
 import { createSession } from "#src/runner";
 import { PI_SESSION_DIR } from "#src/paths";
 import type { PiChatRuntime } from "./sessions";
+import { recoverPiChatTurn } from "./recovery";
 
 const nativeMessage = z.object({
   role: z.string(),
@@ -174,6 +175,11 @@ export async function createPiChatRuntime(
     prompt: async (text) => {
       failed = false;
       await runtime.session.prompt(text);
+      if (failed) throw new Error("Pi model request failed");
+    },
+    resume: async (checkpoint) => {
+      failed = false;
+      await recoverPiChatTurn(runtime.session, checkpoint);
       if (failed) throw new Error("Pi model request failed");
     },
     abort: () => runtime.session.abort(),
