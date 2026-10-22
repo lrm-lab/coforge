@@ -514,7 +514,6 @@ export function AgentRuntimeFields({
       {reasoningVisible && (
         <Select
           label={m.agent_form_reasoning()}
-          hint={m.agent_form_reasoning_help()}
           size="md"
           className="min-w-0"
           selectedKey={reasoning}
