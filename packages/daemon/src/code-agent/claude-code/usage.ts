@@ -7,6 +7,14 @@ import {
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { maskEmail } from "#src/code-agent/mask-email";
 import { claudeCliEnvironment, runClaudeCli as run } from "./process";
+import {
+  ClaudeStructuredUsageUnsupportedError,
+  ClaudeUsageTimeoutError,
+  readStructuredUsage,
+  supportsStructuredUsage,
+} from "./usage-control";
+
+export { ClaudeUsageTimeoutError };
 
 export async function readClaudeCodeUsage(
   workingDirectory: string,
@@ -17,13 +25,31 @@ export async function readClaudeCodeUsage(
   } = {},
 ): Promise<UsageSnapshot | null> {
   const baseCommand = options.command ?? ["claude"];
-  const timeoutMs = options.timeoutMs ?? 5_000;
+  // One deadline bounds the whole read: the capability check, the structured exchange and, after
+  // a capability fallback, each text command get only the time left. The default is above the old
+  // 5s because the structured read starts a process and a quota request (about two seconds live);
+  // it matches the scan's own bound.
+  const deadline = Date.now() + (options.timeoutMs ?? 10_000);
+  const remaining = (): number => {
+    const left = deadline - Date.now();
+    if (left <= 0) throw new ClaudeUsageTimeoutError();
+    return left;
+  };
   const environment = claudeCliEnvironment(options.environment);
+  // The text path below is only for a Claude Code that lacks the structured protocol. Auth
+  // failures, crashes, timeouts and malformed protocol surface as they are, never as a retry.
+  if (await supportsStructuredUsage(baseCommand, workingDirectory, environment, remaining())) {
+    try {
+      return await readStructuredUsage(baseCommand, workingDirectory, environment, remaining());
+    } catch (error) {
+      if (!(error instanceof ClaudeStructuredUsageUnsupportedError)) throw error;
+    }
+  }
   const auth = await run(
     [...baseCommand, "auth", "status", "--json"],
     workingDirectory,
     environment,
-    timeoutMs,
+    remaining(),
   );
   if (auth.timedOut) throw new ClaudeUsageTimeoutError();
   if (auth.exitCode !== 0 || !loggedIn(auth.stdout)) return null;
@@ -31,7 +57,7 @@ export async function readClaudeCodeUsage(
     [...baseCommand, "-p", "/usage", "--output-format", "json"],
     workingDirectory,
     environment,
-    timeoutMs,
+    remaining(),
   );
   if (usage.timedOut) throw new ClaudeUsageTimeoutError();
   // Authentication succeeded above; a failed quota read must not request another sign-in.
@@ -39,12 +65,6 @@ export async function readClaudeCodeUsage(
   const snapshot = parseUsage(usage.stdout);
   if (!snapshot) throw new UsageUnavailableError();
   return { ...snapshot, ...account(auth.stdout) };
-}
-
-export class ClaudeUsageTimeoutError extends Error {
-  constructor() {
-    super("Claude Code usage request timed out");
-  }
 }
 
 function loggedIn(output: string): boolean {
