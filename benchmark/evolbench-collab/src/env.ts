@@ -39,6 +39,9 @@ export type EvalEnv = {
   /** Opt-in: write each agent's tool calls and delivery facts into the OpenViking ledger
    * (ADR-0047). Off by default so existing runs stay byte-comparable. */
   recordTrajectoryAos: boolean;
+  /** Address Task only and ask Memory to publish an ordinary message, so its tool calls have an
+   * anchor message (ADR-0047 D-002) even when no cited Offer is possible. */
+  memoryObserver: boolean;
   /** Shard filter for order-independent episode streams: "N:k" keeps episodes
    * whose zero-based manifest index satisfies index % N === k. */
   episodeMod: string | null;
@@ -110,6 +113,7 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     verifySidecarUrl: env.COFORGE_EVAL_VERIFY_SIDECAR?.trim() || null,
     verifyRegisterWorkspace: (env.COFORGE_EVAL_VERIFY_REGISTER_WORKSPACE ?? "0") === "1",
     outcomePassReward: Number(env.COFORGE_EVAL_OUTCOME_PASS_REWARD ?? "0.6"),
+    memoryObserver: (env.COFORGE_EVAL_MEMORY_OBSERVER ?? "0") === "1",
     recordTrajectoryAos: (env.COFORGE_EVAL_TRAJECTORY_AOS ?? "0") === "1",
     episodeMod: env.COFORGE_EVAL_EPISODE_MOD?.trim() || null,
     abortQuietMs: Number(env.COFORGE_EVAL_ABORT_QUIET_MS ?? "600000"),

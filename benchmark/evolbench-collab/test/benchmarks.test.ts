@@ -155,6 +155,31 @@ describe("episodePrompt", () => {
     expect(prompt.startsWith("@task @memory Summarize the notes.")).toBe(true);
     expect(prompt).toContain("Channel note:");
   });
+
+  test("observer mode addresses Task only and asks Memory to publish what it consulted", () => {
+    const prompt = episodePrompt(
+      {
+        benchmark: "evoagentbench",
+        episodeId: "e",
+        taskId: "t",
+        familyId: "f",
+        domain: "knowledge_work",
+        split: "train",
+        role: "qa",
+        order: 1,
+        prompt: "Write the contract.",
+        grader: { kind: "x" },
+        stageFiles: [],
+      },
+      reminderForEpisode("evoagentbench", "knowledge_work"),
+      null,
+      true,
+    );
+    expect(prompt.startsWith("@task Write the contract.")).toBe(true);
+    expect(prompt).not.toContain("@memory");
+    expect(prompt).toContain("Memory Agent:");
+    expect(prompt).toContain("send_channel_message");
+  });
 });
 
 describe("classifyMechanism", () => {

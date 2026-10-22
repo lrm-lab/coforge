@@ -15,10 +15,17 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+const MEMORY_OBSERVER_NOTE = [
+  "Memory Agent: you observe this channel. Consult prior experience with ov_experience_find and",
+  "ov_fork_find, then publish one short channel message with send_channel_message saying what you",
+  "consulted and what applies to this task, or that nothing applied. Do not invent evidence.",
+].join(" ");
+
 export function episodePrompt(
   episode: ManifestEpisode,
   reminder: string,
   envNote?: string | null,
+  memoryObserver = false,
 ): string {
   const note = envNote
     ? `\n\n${envNote
@@ -29,8 +36,14 @@ export function episodePrompt(
     episode.domain === "information_retrieval"
       ? episode.prompt.split("## How to call search in this environment")[0]!.trimEnd()
       : episode.prompt;
-  const body = `${prompt}${note}\n\n${reminder}`.replace(/@memory\b/g, "Memory Agent");
-  return `@task @memory ${body}`;
+  const observerNote = memoryObserver ? `\n\n${MEMORY_OBSERVER_NOTE}` : "";
+  const body = `${prompt}${note}\n\n${reminder}${observerNote}`.replace(
+    /@memory\b/g,
+    "Memory Agent",
+  );
+  // An explicit @memory question can only be answered by a cited Offer, which an empty
+  // corpus cannot give; observer mode leaves Memory to publish an ordinary channel message.
+  return memoryObserver ? `@task ${body}` : `@task @memory ${body}`;
 }
 
 export async function postEpisodePrompt(input: {
@@ -39,8 +52,9 @@ export async function postEpisodePrompt(input: {
   episode: ManifestEpisode;
   reminder: string;
   envNote?: string | null;
+  memoryObserver?: boolean;
 }): Promise<{ triggerId: string; createdAt: Date }> {
-  const body = episodePrompt(input.episode, input.reminder, input.envNote);
+  const body = episodePrompt(input.episode, input.reminder, input.envNote, input.memoryObserver);
   if (input.redisUrl) {
     const redis = new RedisClient(input.redisUrl);
     try {
@@ -190,6 +204,7 @@ export async function runEpisode(input: {
     episode: input.episode,
     reminder: input.reminder,
     envNote: input.env.envNote,
+    memoryObserver: input.env.memoryObserver,
   });
   const deadline = Date.now() + input.episodeTimeoutMs;
   const abortQuietMs = input.env.abortQuietMs;
