@@ -5,7 +5,7 @@ These rules extend the repository root instructions for `packages/agent`.
 ## Module map
 
 - `src/runner.ts`: assemble Pi sessions, authentication, storage and native tools.
-- `src/pi-chat/`: own independent cloud chat sessions, native history, durable turn checkpoints/recovery and the stdio worker.
+- `src/pi-chat/`: own independent cloud chat sessions, native history, durable turn checkpoints/recovery and native live updates on the stdio worker.
 - `src/memory-agent-turn.ts`: own per-trigger Offer accounting and evidence-progress feedback without a retrieval count cap.
 - `src/channel-turn-policy.ts`: settle idle channel turns and completed Offers or published diagnosis reports through the Pi SDK finish hook, preserving queued input and prior hooks.
 - `src/runtime-provider.ts`: bind provider authentication, proxy and TLS to each session.

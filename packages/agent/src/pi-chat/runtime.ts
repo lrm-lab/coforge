@@ -2,7 +2,7 @@ import { getAgentDir, SessionManager } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 import { join } from "node:path";
 import { rename, rm } from "node:fs/promises";
-import type { PiChatMessage } from "@lrm/coforge-sdk/internal/pi-chat";
+import type { PiChatMessage, PiChatUpdate } from "@lrm/coforge-sdk/internal/pi-chat";
 import { createSession } from "#src/runner";
 import { PI_SESSION_DIR } from "#src/paths";
 import type { PiChatRuntime } from "./sessions";
@@ -97,6 +97,7 @@ export async function createPiChatRuntime(
   cwd: string,
   id?: string,
   agentDir = getAgentDir(),
+  onUpdate?: (update: PiChatUpdate) => void,
 ): Promise<PiChatRuntime> {
   const runtime = await createSession({
     cwd,
@@ -132,12 +133,34 @@ export async function createPiChatRuntime(
   let pending: PiChatMessage | undefined;
   let failed = false;
   const tools = new Map<string, PiChatMessage>();
+  const emit = (update: Omit<PiChatUpdate, "sessionId">) => {
+    try {
+      onUpdate?.({ sessionId: runtime.sessionId, ...update });
+    } catch {
+      /* Observation cannot fail a native turn. */
+    }
+  };
   const unsubscribe = runtime.session.subscribe((event) => {
-    if (event.type === "message_update") pending = chatMessage("streaming", event.message);
+    if (event.type === "message_update") {
+      pending = chatMessage("streaming", event.message);
+      if (pending) emit({ messages: [pending] });
+    }
     if (event.type === "message_end") {
       if (event.message.role === "assistant") failed = event.message.stopReason === "error";
       pending = undefined;
       if (event.message.role === "toolResult") tools.delete(event.message.toolCallId);
+      // Pi notifies listeners before appending the native entry. Read after that synchronous append.
+      queueMicrotask(() => {
+        const message = storedChatMessages(runtime.session.sessionManager).at(-1);
+        if (message)
+          emit({
+            messages: [message],
+            removeIds:
+              event.message.role === "toolResult"
+                ? [`running:${event.message.toolCallId}`]
+                : ["streaming"],
+          });
+      });
     }
     if (event.type === "tool_execution_end")
       runtime.session.sessionManager.appendCustomEntry("pi-chat-tool-outcome", {
@@ -145,7 +168,7 @@ export async function createPiChatRuntime(
         durationMs: event.durationMs,
         parentToolCallId: event.parentToolCallId,
       });
-    if (event.type === "tool_execution_start")
+    if (event.type === "tool_execution_start") {
       tools.set(event.toolCallId, {
         id: `running:${event.toolCallId}`,
         role: "tool",
@@ -153,6 +176,8 @@ export async function createPiChatRuntime(
         toolName: event.toolName,
         toolCallId: event.toolCallId,
       });
+      emit({ messages: [tools.get(event.toolCallId)!] });
+    }
     if (event.type === "tool_execution_update") {
       const partial = chatMessage(`running:${event.toolCallId}`, {
         ...event.partialResult,
@@ -160,7 +185,10 @@ export async function createPiChatRuntime(
         toolName: event.toolName,
         toolCallId: event.toolCallId,
       });
-      if (partial) tools.set(event.toolCallId, partial);
+      if (partial) {
+        tools.set(event.toolCallId, partial);
+        emit({ messages: [partial] });
+      }
     }
   });
   return {

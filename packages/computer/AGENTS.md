@@ -21,9 +21,9 @@ recover` runs the installer's `recover`.
 
 ## Module map
 
-`host/pi-chat-http.ts` authenticates the platform's scoped chat requests;
-`host/pi-chat-workers.ts` relays them over docker-exec stdio to `__pi-chat` in
-the user's cloud Computer. This mode uses Pi directly without a Daemon session.
+`host/pi-chat-http.ts` and `host/pi-chat-workers.ts` retain the legacy adapter.
+Current Pi Chat uses Workspace Daemon WSS; `packages/daemon/src/pi-chat/` owns
+worker lifecycle. `__pi-chat` clears platform capabilities before using Pi.
 
 Keep `src` organized by responsibility. New code belongs in the owning module;
 do not grow `cli.ts` or `setup/` into an application god module. Paths are

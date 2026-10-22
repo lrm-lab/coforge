@@ -23,6 +23,8 @@ export const getPiChatComputers = createServerFn({ method: "GET" })
       orderBy: [{ cloudSlot: "asc" }, { id: "asc" }],
     });
     return {
+      workspaceId: context.workspaceId,
+      userId: context.user.id,
       configured: !!piChatConfiguration(),
       computers: computers.map((computer) => ({
         id: computer.id,

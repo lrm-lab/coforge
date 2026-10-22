@@ -3,6 +3,7 @@ import type {
   PiChatMessage,
   PiChatResult,
   PiChatSession,
+  PiChatUpdate,
 } from "@lrm/coforge-sdk/internal/pi-chat";
 import type { PiChatCheckpoint } from "./checkpoint";
 import { PiChatTurn } from "./turn";
@@ -39,6 +40,7 @@ export class PiChatSessions {
   constructor(
     private readonly store: PiChatStore,
     private readonly createRuntime: (id?: string) => Promise<PiChatRuntime>,
+    private readonly onUpdate: (update: PiChatUpdate) => void = () => {},
   ) {
     this.#ready = this.#restore();
   }
@@ -143,10 +145,12 @@ export class PiChatSessions {
     await this.store.save({ ...row, status: "running" });
     row.status = "running";
     this.#records.set(row.id, row);
+    this.#notify({ sessionId: row.id, session: { ...row } });
     this.#active.set(
       row.id,
       new PiChatTurn(runtime, row, this.store, run, () => {
         this.#active.delete(row.id);
+        this.#notify({ sessionId: row.id, session: { ...row }, removeIds: ["streaming"] });
         if (!this.#closing && this.#recovery.length)
           void this.#exclusive(() => this.#drainRecovery()).catch(() => {});
       }),
@@ -176,6 +180,7 @@ export class PiChatSessions {
       const next = { ...row, title, updatedAt: Date.now() };
       await this.store.save(next);
       Object.assign(row, next);
+      this.#notify({ sessionId: id, session: { ...row } });
       return next;
     });
   }
@@ -185,6 +190,7 @@ export class PiChatSessions {
       if (this.#active.has(id)) throw new Error("session is busy");
       await this.store.remove(id);
       this.#records.delete(id);
+      this.#notify({ sessionId: id, deleted: true });
     });
   }
   async execute(command: PiChatCommand): Promise<PiChatResult> {
@@ -208,6 +214,13 @@ export class PiChatSessions {
     const row = this.#records.get(id);
     if (!row) throw new Error("session not found");
     return row;
+  }
+  #notify(update: PiChatUpdate) {
+    try {
+      this.onUpdate(update);
+    } catch {
+      /* Live feedback is repaired from native history. */
+    }
   }
   #exclusive<T>(operation: () => Promise<T>): Promise<T> {
     const task = this.#mutating.then(async () => {

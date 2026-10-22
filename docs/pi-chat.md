@@ -37,20 +37,27 @@ cloud conversation contract; no upstream UI source is copied.
 
 ## Execution and data
 
-The Web application authenticates each Server Function, verifies current
-Workspace membership and ownership of the selected cloud Computer, and signs
-the command and scope with the deployment's cloud-cluster secret. The host
-checks the signature and a 30-second timestamp window before executing it.
-Credentials and host addresses are never returned to the browser.
+The Web application authenticates every Server Function and rechecks current
+Workspace membership and ownership of the selected cloud Computer. Commands use
+versioned CoForge RPC on that Workspace Daemon's existing outbound WSS connection.
+The server checks the `pi-chat:v1` ready capability and live connection before
+publishing; it never connects to the internal host's desktop HTTP origin.
 
-The existing host HTTP listener forwards chat commands over `docker exec` stdio
-to the Computer binary's internal `__pi-chat` mode in the user's container.
-This mode uses the Pi SDK directly and opens neither a Daemon connection nor
-another TCP listener. Each User/Workspace has its own worker and working
-directory under the Computer state directory's `pi-chat/<workspace>/<user>`.
-The worker removes inherited `COFORGE_*` capabilities before loading Pi. A
-local SQLite exclusive lock admits one writer per scope even after a host
-restart; replacement workers cannot touch a previous worker's sessions.
+The Daemon owns an independent child running the same Computer binary's internal
+`__pi-chat` mode. This child uses the Pi SDK directly and opens no TCP listener or
+additional cloud connection. Each User/Workspace keeps the existing worker and
+working directory under the Computer state directory's `pi-chat/<workspace>/<user>`.
+Inherited `COFORGE_*` capabilities are cleared before loading Pi. A SQLite
+exclusive lock admits one writer per scope even after a restart; a replacement
+cannot take over a live worker's sessions. Ordinary Agent sessions are separate.
+
+Native message updates, model-provided thinking and tool execution updates are
+coalesced over at most 40 ms into changed-message events. The Daemon sends them
+through scoped RPC; Web rechecks the authenticated Daemon principal and current
+ownership, then publishes only to the owner's existing private user channel.
+The browser uses its shared Workspace realtime connection. Streaming does not
+wait for a complete model answer. Active process, thinking and tool-output
+sections start expanded; the viewer can collapse them and retain that choice.
 
 Pi uses that container's existing Pi model/settings/auth configuration
 (`PI_CODING_AGENT_DIR` or Pi's default). Model Factory DeepSeek needs no new
@@ -68,8 +75,10 @@ removes its native transcript and index record; files created by its tools
 remain in the working directory. Content-free accepted request IDs are retained
 after deletion so delayed retries cannot recreate the chat or replay its tools.
 
-The page reads updates every 700 ms while its selected session runs. Failed
-history/list reads retry every three seconds, including a first load during
+Live content arrives as events. A ten-second active-session watchdog, subscription
+recovery and detected event gaps read native history again. Worker stream IDs and
+sequence cursors prevent an older read from erasing newer streamed content.
+Failed history/list reads retry every three seconds, including a first load during
 Computer downtime. Send mutations are never automatically retried. Closing
 the page does not cancel a turn. Reopening reads the worker/native history.
 Before accepting a turn, the worker saves its request ID, message and native
@@ -86,32 +95,34 @@ model credentials after a preflight failure allows the same chat to continue.
 
 ## Deployment
 
-Deploy the Web change through the normal Web track. Update the host Computer
-binary and rebuild/update cloud Computer images through their existing release
-tracks so both sides provide `__pi-chat`. Publishing this code alone does not
-update running images. Existing Agents and their sessions are unaffected.
+Deploy Web through the normal Web track, then rebuild/update the selected cloud
+Computer image through its existing release track. Both Web and that Computer's
+embedded Daemon need the new RPC contract. Publishing code alone does not update
+running images. Replacing the Computer container also releases any legacy
+host-launched worker's lock; its persistent volume and native sessions survive.
+The Docker engine does not need restarting.
 
-The Web backend uses `COFORGE_PI_CHAT_ORIGIN` when configured, otherwise the
-existing `COFORGE_CLOUD_DESKTOP_ORIGIN`. For the checked-in staging topology the
-latter points to the existing host at `10.110.158.143:6090`. Web and host use
-the same existing cluster secret (`COFORGE_CLOUD_CLUSTER_TOKEN` on Web,
-`COFORGE_CLUSTER_TOKEN` on the host). Keep the host origin on the private
-network or use HTTPS. Never put the secret in a URL or browser environment.
-
-With no origin/cluster secret the page shows an unavailable state. With an old
-host/image it shows a connection error and a retry action. Roll back by
-reverting the Web/Computer versions; the additive session files can remain on
-the volume. No Agent session or database backfill is needed.
+Web uses its existing Centrifugo API and Redis configuration. Pi Chat requires
+neither `COFORGE_PI_CHAT_ORIGIN` nor the desktop origin nor a new network tunnel.
+An offline Computer or one without `pi-chat:v1` is refused immediately. The
+legacy signed host adapter remains available to an older Web during rollback;
+the current Web never falls back to it. Roll back Web and the Computer image
+together; there is no database migration or session backfill.
 
 ## Limits
 
-- Four concurrent turns per worker; 64 workers per host.
-- Workers expire after 30 minutes without a request; active work is stopped
-  during worker cleanup. Host shutdown also closes its workers' input streams.
-  Cleanup gets 30 seconds before worker exit; unfinished sessions continue when
-  the scope's worker is reopened, subject to the uncertainty rule above. A stuck
-  docker-exec client is terminated after another 5 seconds.
-- One request accepts at most 100,000 message characters and a 512 KB HTTP body.
+- Four concurrent turns per worker; at most four workers per Workspace Daemon.
+  Workers live until the Daemon stops. Shutdown closes their input, preserving
+  continuation intent; a stuck worker is killed after its 30-second cleanup
+  grace plus five seconds.
+- Commands accept at most 100,000 message characters and 512 KB encoded input.
+  Replies and event bodies have a 32 MB safety bound and cross WSS in 256 KB
+  chunks, without changing the shared transport limit. Oversized reads fail
+  explicitly; oversized live observations are repaired from paged history.
+- Live relay buffering is volatile and bounded to 64 observations / 32 MB.
+  Redis stores only content-free pending reply scopes and reply chunks for
+  30 seconds, never a command mailbox or canonical transcript. Closing a browser
+  does not stop Pi; reconnect reads native history rather than replaying tools.
 - History loads 50 messages per page; a worker response has a 32 MB safety bound.
   Exceeding that bound is an explicit request failure, never silent truncation.
 - Tool output is the complete result returned by Pi. Pi's own tool limits,
@@ -123,10 +134,16 @@ the volume. No Agent session or database backfill is needed.
 
 Run the `pi-chat-*` tests under `packages/agent/test`, `packages/computer/test`
 and `apps/web/test` through `mise run test:file -- <paths>`. They exercise
-native SDK tool execution and reload, worker stdio lifecycle, signature
-validation, scope authorization, session separation and accepted-send
+native SDK tool execution and reload, worker stdio lifecycle, scoped RPC
+validation, event/read ordering, session separation and accepted-send
 deduplication. They use local model fixtures, not a paid provider or a live
 user's cloud Computer.
+
+The opt-in `apps/web/test/pi-chat-daemon.integration.ts` runs with an isolated
+`PI_CHAT_TEST_REDIS_URL`. It verifies live thinking/partial answers before model
+completion, real file tools, request deduplication and native reload after a
+worker restart. Its model and WSS adapter are controlled fixtures; Redis and Pi
+are real. It writes `.amp/e2e/pi-chat-daemon.json` as repeatable evidence.
 
 UI acceptance follows [the repository policy](agents/testing.md); no UI unit
 tests are added. Before deployment acceptance:
@@ -162,9 +179,11 @@ tests are added. Before deployment acceptance:
 CoForge already pins Pi SDK 1.3.0 (MIT) and Bun 1.4.3. This feature reuses both.
 The existing Computer binary carries the worker; it adds no installed product.
 Host process/memory use and native-session storage grow with active chats;
-the bounds above limit worker/turn concurrency. Existing transport and
-Activity remain unchanged.
+the bounds above limit worker/turn concurrency. The existing WSS connections and Activity contract are retained; Pi Chat adds
+its own versioned RPC methods and `pi-chat:v1` capability.
 
 - [Pi SDK 1.3.0: sessions, streaming, cancellation and Bun support](https://github.com/earendil-works/pi/blob/v1.3.0/packages/coding-agent/docs/sdk.md)
 - [Pi session format](https://github.com/earendil-works/pi/blob/v1.3.0/packages/coding-agent/docs/session-format.md)
 - [Bun subprocess API](https://bun.com/docs/runtime/child-process)
+
+- [Centrifugo Server API and private publication](https://centrifugal.dev/docs/server/server_api)

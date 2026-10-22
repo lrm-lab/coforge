@@ -54,6 +54,7 @@ export const piChatMessageSchema = z.object({
 });
 export type PiChatMessage = z.infer<typeof piChatMessageSchema>;
 export const piChatResultSchema = z.object({
+  stream: z.object({ id: z.uuid(), sequence: z.number().int().nonnegative() }).optional(),
   sessions: z.array(piChatSessionSchema).optional(),
   session: piChatSessionSchema.optional(),
   messages: z.array(piChatMessageSchema).optional(),
@@ -61,3 +62,22 @@ export const piChatResultSchema = z.object({
   ok: z.boolean().optional(),
 });
 export type PiChatResult = z.infer<typeof piChatResultSchema>;
+export const piChatWorkerReplySchema = z.object({
+  id: z.uuid(),
+  result: piChatResultSchema.optional(),
+  error: z.string().optional(),
+});
+
+/** Replace only the changed native message, never retransmit the entire conversation per token. */
+export const piChatUpdateSchema = z.object({
+  sessionId: id,
+  session: piChatSessionSchema.optional(),
+  messages: z.array(piChatMessageSchema).optional(),
+  removeIds: z.array(z.string()).optional(),
+  deleted: z.boolean().optional(),
+});
+export type PiChatUpdate = z.infer<typeof piChatUpdateSchema>;
+export const piChatEventSchema = piChatUpdateSchema.extend({
+  stream: z.object({ id: z.uuid(), sequence: z.number().int().positive() }),
+});
+export type PiChatEvent = z.infer<typeof piChatEventSchema>;

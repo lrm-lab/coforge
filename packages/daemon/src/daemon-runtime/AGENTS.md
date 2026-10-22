@@ -5,6 +5,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 
 ## Boundary
 
+- `agent-workspace-queries.ts` owns serialized Skills and workspace-file observations and safe diagnostics.
 - This directory owns one Workspace child's cloud-facing use cases and Agent
   runtime operations. The machine Coordinator is in `supervisor/`; transport
   mechanics are in `connection/`.
@@ -13,9 +14,8 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   identity and launch references for already-authorized wakes.
 - A launch this runtime initiates itself follows the launch-identity rules in
   [`agent-runtime/AGENTS.md`](../agent-runtime/AGENTS.md).
-- `code-agent-inventory-sync.ts` owns Code Agent runtime and catalog reports,
-  including the liveness re-check and refresh serialization. `runtime.ts` only
-  decides when to report; Agent traffic never waits for a report.
+- `code-agent-inventory-sync.ts` owns inventory/catalog reports, liveness checks and
+  refresh serialization. `runtime.ts` decides when to report; Agent traffic never waits.
 - `session-invalidate-activity.ts` narrates the cold-start Activity after a session invalidate. `runtime.ts` only publishes it.
 - A start that fails stops its transport before replacing it, so a connection
   that came up never keeps reporting the Computer online for a Workspace that

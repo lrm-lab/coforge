@@ -7,6 +7,7 @@ export {};
 if (Bun.argv[2] === "__pi-chat") {
   const workspaceId = Bun.env.COFORGE_PI_CHAT_WORKSPACE_ID ?? "";
   const userId = Bun.env.COFORGE_PI_CHAT_USER_ID ?? "";
+  const stream = Bun.env.COFORGE_PI_CHAT_STREAM === "1";
   // This standalone session has no platform Agent identity or Daemon capabilities.
   for (const key of Object.keys(Bun.env)) if (key.startsWith("COFORGE_")) delete Bun.env[key];
   const { homedir } = await import("node:os");
@@ -18,7 +19,7 @@ if (Bun.argv[2] === "__pi-chat") {
     homeDirectory: homedir(),
     environment: Bun.env,
   });
-  await runPiChatWorker(join(state, "pi-chat"), workspaceId, userId);
+  await runPiChatWorker(join(state, "pi-chat"), workspaceId, userId, { stream });
 } else if (Bun.argv[2] === "__agent-cli") {
   const { runAgentCli } = await import("@lrm/coforge/runner");
   await runAgentCli(Bun.argv.slice(3));
