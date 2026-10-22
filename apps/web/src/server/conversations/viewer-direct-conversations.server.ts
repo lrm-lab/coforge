@@ -1,6 +1,7 @@
 import { Prisma } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import { directMessageAgentWhere } from "#src/server/agents/agent-visibility.server";
 
 /**
  * The direct conversations a viewer's Direct messages list holds, by `DirectConversations.authorize`'s
@@ -15,14 +16,7 @@ export function viewerDirectConversationWhere(userId: string) {
       { directKey: { startsWith: "user:", contains: `user:${userId}` } },
       {
         directKey: { endsWith: `|user:${userId}` },
-        members: {
-          some: {
-            agent: {
-              OR: [{ visibility: AGENT_VISIBILITY.PUBLIC }, { ownerId: userId }],
-              ...ACTIVE_AGENT_WHERE,
-            },
-          },
-        },
+        members: { some: { agent: { ...directMessageAgentWhere(userId), ...ACTIVE_AGENT_WHERE } } },
       },
     ],
   } satisfies Prisma.ConversationWhereInput;

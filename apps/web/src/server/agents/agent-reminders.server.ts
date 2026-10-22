@@ -1,7 +1,7 @@
-import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { paginated } from "#src/server/db/pagination.server";
-import { WORKSPACE_ADMIN_ROLES } from "#src/features/workspaces/workspace-roles";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
+import { managedAgentWhere } from "./agent-visibility.server";
 
 export const AGENT_REMINDER_PAGE_SIZE = 50;
 
@@ -62,21 +62,6 @@ export class AgentRemindersQuery {
   }
 }
 
-/** An Agent whose reminders `viewer` may read: their own, or any when they are a Workspace
- * owner/admin, and only while they are still a member. */
-function readableAgentWhere(viewer: AgentReminderViewer): Prisma.AgentWhereInput {
-  return {
-    OR: [
-      { ownerId: viewer.userId, workspace: { members: { some: { userId: viewer.userId } } } },
-      {
-        workspace: {
-          members: { some: { userId: viewer.userId, role: { in: [...WORKSPACE_ADMIN_ROLES] } } },
-        },
-      },
-    ],
-  };
-}
-
 export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderReadStore {
   return {
     canReadAgent: async (viewer, agentId) =>
@@ -84,8 +69,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
         await db.agent.findFirst({
           where: {
             id: agentId,
-            workspaceId: viewer.workspaceId,
-            ...readableAgentWhere(viewer),
+            ...managedAgentWhere(viewer),
             ...ACTIVE_AGENT_WHERE,
           },
           select: { id: true },
@@ -97,7 +81,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
           where: {
             workspaceId: viewer.workspaceId,
             ownerAgentId: agentId,
-            ownerAgent: readableAgentWhere(viewer),
+            ownerAgent: managedAgentWhere(viewer),
             status: "scheduled",
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],

@@ -307,7 +307,6 @@ export class WorkspaceMembers {
         handle: agent.name,
         name: shownAgentName(agent),
         avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
-        ownedByCurrentUser: agent.ownerId === userId,
         /** Whether the viewer may open a direct conversation with it (`DirectConversations.open`). */
         canMessage: canDirectMessageAgent(userId, agent),
         /** Visibility and the weekly-report flag, so a channel picker offers only the Agents a

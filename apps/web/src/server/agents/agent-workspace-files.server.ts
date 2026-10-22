@@ -8,7 +8,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
-import { WORKSPACE_ADMIN_ROLES } from "#src/features/workspaces/workspace-roles";
+import { managedAgentWhere } from "./agent-visibility.server";
 
 export type WorkspaceFilesViewer = { userId: string; workspaceId: string };
 export type WorkspaceFilesAssignment = { computerId: string; revision: string };
@@ -278,18 +278,7 @@ export async function findWorkspaceFilesAssignment(
   const agent = await db.agent.findFirst({
     where: {
       id,
-      workspaceId: viewer.workspaceId,
-      OR: [
-        {
-          ownerId: viewer.userId,
-          workspace: { members: { some: { userId: viewer.userId } } },
-        },
-        {
-          workspace: {
-            members: { some: { userId: viewer.userId, role: { in: [...WORKSPACE_ADMIN_ROLES] } } },
-          },
-        },
-      ],
+      ...managedAgentWhere(viewer),
       computer: { workspaces: { some: { workspaceId: viewer.workspaceId } } },
       // Same live-view rule as `findOwnedSkillsAssignment`.
       ...ACTIVE_AGENT_WHERE,
