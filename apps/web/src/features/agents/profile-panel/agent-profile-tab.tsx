@@ -41,9 +41,7 @@ function maskEnvValue(value: string) {
 
 type AgentProfile = Awaited<ReturnType<typeof getAgentProfile>>;
 
-/** A small chip-style badge for Runtime / Model / Reasoning and the Role field — the prototype's
- * `.chip`; the app has no separate chip primitive, so this reuses the official `Badge` at
- * `color="gray"`, the same "short fact" vocabulary `docs/design/color-status-typography.md` §11 already uses. */
+/** Gray badge for a short fact such as runtime, model, reasoning, or role. */
 function FactBadge({
   children,
   icon,
@@ -253,6 +251,7 @@ export function AgentProfileTab({
             <AgentDesktopButton
               computerId={profile.computer.id}
               agentId={profile.id}
+              title={profile.displayName}
               kind={profile.computer.kind}
               online={profile.computer.online === true}
               owned={profile.computer.ownedByViewer === true}

@@ -11,6 +11,7 @@ import { cloudDesktopUrl, openCloudDesktopWindow } from "./cloud-desktop-url";
  * Opens this Agent's screen on its cloud computer, in its own window.
  * Shown to the computer's owner when this deployment has a desktop proxy.
  * The address is `/desktop/<computer id>/<agent id>/` and carries no token.
+ * `title` is the Agent's name and becomes the window title.
  */
 export function AgentDesktopButton({
   computerId,
@@ -18,12 +19,14 @@ export function AgentDesktopButton({
   kind,
   online,
   owned,
+  title,
 }: {
   computerId: string;
   agentId: string;
   kind: string;
   online: boolean;
   owned: boolean;
+  title: string;
 }) {
   const loadOrigin = useServerFn(getCloudDesktopOrigin);
   const origin = useQuery({
@@ -33,7 +36,7 @@ export function AgentDesktopButton({
     staleTime: 60_000,
   });
   if (kind !== "cloud" || !owned) return null;
-  const url = origin.data ? cloudDesktopUrl(origin.data, computerId, agentId) : undefined;
+  const url = origin.data ? cloudDesktopUrl(origin.data, computerId, agentId, title) : undefined;
   if (!url) return null;
   return (
     <Button

@@ -73,6 +73,23 @@ const RELATIVE_PAGE_SCRIPT = `
     });
 `;
 
+/** 80 is the Agent display-name cap. A crafted address cannot set a longer title. */
+const DESKTOP_TITLE_MAX_LENGTH = 80;
+
+/** The window title for one desktop page. Markup in the name stays text. */
+export function withDesktopTitle(html: string, title: string | undefined): string {
+  const text = title
+    ?.replace(/[\u0000-\u001F\u007F]/g, "")
+    .trim()
+    .slice(0, DESKTOP_TITLE_MAX_LENGTH);
+  if (!text) return html;
+  const safe = text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  if (html.includes("<title>")) {
+    return html.replace(/<title>[\s\S]*?<\/title>/, `<title>${safe}</title>`);
+  }
+  return `<title>${safe}</title>${html}`;
+}
+
 /** Older images require a token in the address and load noVNC from the site root. */
 export function adaptDesktopHtml(html: string): string {
   if (!html.includes('from "/core/rfb.js"') && !html.includes("缺少连接令牌")) return html;
@@ -164,14 +181,21 @@ async function proxyHttp(
     headers.delete(name);
   }
   headers.set("x-vnc-token", target.token);
-  const upstream = await fetch(`http://${target.host}:${target.port}${upstreamPath}${search}`, {
-    method: request.method,
-    headers,
-    body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
-    redirect: "manual",
-  });
+  const params = new URLSearchParams(search);
+  const title = params.get("title") ?? undefined;
+  params.delete("title");
+  const rest = params.toString();
+  const upstream = await fetch(
+    `http://${target.host}:${target.port}${upstreamPath}${rest.length > 0 ? `?${rest}` : ""}`,
+    {
+      method: request.method,
+      headers,
+      body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+      redirect: "manual",
+    },
+  );
   if (!upstreamPath.endsWith("/desktop.html") && upstreamPath !== "/desktop.html") return upstream;
-  const html = adaptDesktopHtml(await upstream.text());
+  const html = withDesktopTitle(adaptDesktopHtml(await upstream.text()), title);
   const outHeaders = new Headers(upstream.headers);
   outHeaders.delete("content-length");
   return new Response(html, { status: upstream.status, headers: outHeaders });
