@@ -1,11 +1,15 @@
 import type { AppPermissionGroup } from "#src/features/apps/app-permissions";
+import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
 import {
   bearerChallenge,
   bearerToken,
   isBearerScheme,
   type BearerError,
 } from "#src/server/authorization-server/bearer-challenge.server";
-import { NO_STORE } from "#src/server/authorization-server/http-headers.server";
+import {
+  NO_STORE,
+  refuseIfRateLimited,
+} from "#src/server/authorization-server/http-headers.server";
 import {
   installationScope,
   type InstallationTokens,
@@ -28,14 +32,16 @@ const DESCRIPTIONS: Record<BearerError, string> = {
  * projection with `no-store`. Every refusal is RFC 6750 §3: a missing token gets the bare
  * challenge, an unusable one (including an installation id that is malformed, unknown or another
  * token's) 401 `invalid_token`, a token without the group 403 `insufficient_scope` naming the
- * scope.
+ * scope. Once the token verifies, a request counts against the installation's rate limit; over it
+ * the answer is 429 with `Retry-After`.
  */
 export class AppInstallationApi {
   constructor(
     private readonly tokens: Pick<InstallationTokens, "verify">,
     private readonly data: AppInstallationData,
     private readonly issuer: string,
-    private readonly now: () => Date = () => new Date(),
+    private readonly now: () => Date,
+    private readonly installationLimit: AppRateLimit,
   ) {}
 
   async read(
@@ -48,10 +54,14 @@ export class AppInstallationApi {
     const token = bearerToken(authorization);
     if (!token) return this.refuse(400, "invalid_request");
     const verified = await this.tokens.verify(token, installationId, this.now());
-    if (verified.status === "refused" && verified.error === "invalid_token")
-      return this.refuse(401, "invalid_token");
-    if (verified.status === "refused" || !verified.groups.includes(group))
-      return this.refuse(403, "insufficient_scope", group);
+    if (verified.status === "refused")
+      return verified.error === "invalid_token"
+        ? this.refuse(401, "invalid_token")
+        : this.refuse(403, "insufficient_scope", group);
+    // Counted once the token verifies, so a flood of bad tokens cannot spend an installation's budget.
+    const limited = await refuseIfRateLimited(this.installationLimit, verified.installationId);
+    if (limited) return limited;
+    if (!verified.groups.includes(group)) return this.refuse(403, "insufficient_scope", group);
     return this.respond(verified.installationId, verified.workspaceId, group);
   }
 

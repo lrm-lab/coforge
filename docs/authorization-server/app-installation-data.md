@@ -6,7 +6,7 @@ resource URI, `<issuer origin>/api/app-installations/<installation id>` (the aud
 `apps/web/src/server/app-installation-data/` (`AppInstallationApi` authenticates, `AppInstallationData`
 projects) over `db/repositories/app-installation-data.repositories.server.ts` (the filtering). The
 routes are `apps/web/src/routes/api.app-installations.$installationId.*.ts`. They are behind the
-`app-data-permissions` flag, which token verification enforces, and have no rate limit yet.
+`app-data-permissions` flag, which token verification enforces. A rate limit applies ([below](#rate-limit)).
 
 | `GET` | Group (scope) | Answer |
 | --- | --- | --- |
@@ -52,3 +52,11 @@ A token is checked whole: once any group it carries is no longer approved, every
 including those whose group is still approved. The app mints a new token for the groups it still has.
 
 404 `not_found` only where this deployment runs no authorization server.
+
+## Rate limit
+
+Each installation may make 120 reads a minute across the four endpoints (`APP_INSTALLATION_LIMIT_PER_MINUTE`). A request counts once its
+token verifies, so a flood of bad or missing tokens cannot spend an installation's budget. Past the
+limit the answer is 429 `{"error":"rate_limited"}` with `Retry-After` (seconds until the window
+ends) and `Cache-Control: no-store`. The mechanism, window and failure mode are
+[installation tokens: rate limit](installation-tokens.md#rate-limit).

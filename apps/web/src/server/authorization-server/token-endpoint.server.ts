@@ -4,7 +4,8 @@ import { hashAuthorizationCode } from "./authorization-codes.server";
 import { readClientCredentials } from "./client-authentication.server";
 import type { InstallationTokenRefusal, InstallationTokens } from "./installation-tokens.server";
 import { activeGrant, type GrantStore } from "./grants.server";
-import { NO_STORE } from "./http-headers.server";
+import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
+import { NO_STORE, refuseIfRateLimited } from "./http-headers.server";
 import { verifierMatchesChallenge } from "./pkce.server";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
@@ -33,6 +34,7 @@ export class TokenEndpoint {
     private readonly store: GrantStore,
     private readonly options: TokenIssuer & { now?: () => Date },
     private readonly installationTokens: InstallationTokens,
+    private readonly clientCredentialsLimit: AppRateLimit,
   ) {
     this.now = options.now ?? (() => new Date());
   }
@@ -117,6 +119,9 @@ export class TokenEndpoint {
     client: { id: string; key: string },
     form: URLSearchParams,
   ): Promise<Response> {
+    // Counted only for an authenticated client, so a flood of bad secrets cannot spend an app's budget.
+    const refusal = await refuseIfRateLimited(this.clientCredentialsLimit, client.id);
+    if (refusal) return refusal;
     const result = await this.installationTokens.issue(client, form, this.now());
     if (result.status === "refused") return tokenError(result.error, result.description);
     return Response.json(result.body, { headers: NO_STORE });

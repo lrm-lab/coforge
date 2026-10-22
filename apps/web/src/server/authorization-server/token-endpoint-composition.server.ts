@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { PrismaGrantStore } from "#src/server/db/repositories/oauth-grant.repositories.server";
 import { PrismaAppPermissionsStore } from "#src/server/db/repositories/app-permissions.repositories.server";
@@ -30,7 +31,7 @@ export function createTokenEndpoints({
     options,
   );
   return {
-    token: new TokenEndpoint(store, options, installationTokens),
+    token: new TokenEndpoint(store, options, installationTokens, getAppRateLimits().token),
     userInfo: new UserInfoEndpoint(store, options),
     installationTokens,
   };

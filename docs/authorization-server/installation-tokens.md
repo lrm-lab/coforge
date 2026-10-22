@@ -63,3 +63,32 @@ a refusal by RFC 6750 §3.1:
   own check against the returned `groups`.
 
 The four read routes call it: [installed app data](app-installation-data.md).
+
+## Rate limit
+
+The `client_credentials` grant allows 30 requests a minute per app (client), and each installation's
+reads 120 a minute ([installed app data](app-installation-data.md#rate-limit)). The code is
+`apps/web/src/server/app-rate-limits/`; the two numbers are `APP_TOKEN_LIMIT_PER_MINUTE` and
+`APP_INSTALLATION_LIMIT_PER_MINUTE` in its composition file, changed together with this page.
+
+- **What counts.** A `client_credentials` request counts after client authentication succeeds
+  (including requests that then fail with `invalid_target` or `invalid_scope`); the
+  `authorization_code` grant is not limited. A read counts after its token verifies. Nothing
+  unauthenticated counts, so a flood cannot exhaust an app's budget; and nothing limits that flood
+  either: Caddy applies no rate limit today, so a stream of bad secrets or tokens still costs a
+  client lookup or a signature check per request.
+- **Over the limit.** 429 with `Retry-After` (seconds), `Cache-Control: no-store`, and
+  `{"error":"rate_limited","error_description":...}`. OAuth has no error code for it, so
+  `rate_limited` is this server's, as RFC 6585 §4 allows.
+- **Mechanism.** A fixed-window counter in Redis (`INCR`, `PEXPIRE` on the first request, one
+  atomic `EVAL`) under `coforge:ratelimit:app-token:v1:<client id>` and
+  `coforge:ratelimit:app-installation:v1:<installation id>`. The window starts at an id's first
+  request, so a burst across a boundary can reach twice the limit. `rate-limiter-flexible` 11.2.3
+  was not adopted: its Redis store needs an ioredis- or node-redis-shaped client, and Bun's
+  `RedisClient` has no `multi()` and a different `eval`, so it would need a shim as long as the
+  counter.
+- **Redis unavailable.** The request is admitted (fail open: a counter outage must not take the
+  apps' endpoints down, and a reply that is not the script's two numbers counts as an outage) and
+  one JSON line, `app_rate_limit:redis_unavailable`, is logged at most once a minute across both
+  limits. When `REDIS_URL` is unset nothing is limited and the same line is logged once, at the
+  first request.

@@ -1,5 +1,9 @@
 import type { AppPermissionGroup } from "#src/features/apps/app-permissions";
 import {
+  NO_RATE_LIMIT,
+  type AppRateLimit,
+} from "#src/server/app-rate-limits/app-rate-limit.server";
+import {
   InstallationTokens,
   installationResource,
   type TokenInstallation,
@@ -15,7 +19,7 @@ export const INSTALLATION_ID = "0192d3a0-0000-7000-8000-000000000001";
 export const OTHER_INSTALLATION_ID = "0192d3a0-0000-7000-8000-000000000002";
 export const RESOURCE = installationResource(ISSUER, INSTALLATION_ID);
 
-export function installationEndpoints() {
+export function installationEndpoints({ limit = NO_RATE_LIMIT }: { limit?: AppRateLimit } = {}) {
   const base = endpoints();
   const installation: { current: TokenInstallation | undefined } = {
     current: {
@@ -47,7 +51,7 @@ export function installationEndpoints() {
     async () => flag.on,
     { issuer: ISSUER, signingKeys: SIGNING_KEYS },
   );
-  const tokenEndpoint = new TokenEndpoint(base.store, base.options, installationTokens);
+  const tokenEndpoint = new TokenEndpoint(base.store, base.options, installationTokens, limit);
   return { ...base, tokenEndpoint, installationTokens, installation, flag };
 }
 

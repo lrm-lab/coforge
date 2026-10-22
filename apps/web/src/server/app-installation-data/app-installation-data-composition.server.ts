@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
 import { authorizationServerConfiguration } from "#src/server/authorization-server/configuration.server";
 import { NO_STORE } from "#src/server/authorization-server/http-headers.server";
 import { createTokenEndpoints } from "#src/server/authorization-server/token-endpoint-composition.server";
@@ -29,7 +30,8 @@ export function createAppInstallationApi({
     installationTokens,
     new AppInstallationData(new PrismaAppInstallationDataStore(db), presence),
     issuer,
-    now,
+    now ?? (() => new Date()),
+    getAppRateLimits().installation,
   );
 }
 

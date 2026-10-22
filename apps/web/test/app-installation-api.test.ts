@@ -5,6 +5,7 @@ import {
   type InstallationDataGroup,
 } from "#src/server/app-installation-data/app-installation-api.server";
 import type { AppInstallationData } from "#src/server/app-installation-data/app-installation-data.server";
+import { NO_RATE_LIMIT } from "#src/server/app-rate-limits/app-rate-limit.server";
 import { ISSUER } from "./oidc-token-fixture";
 import {
   INSTALLATION_ID,
@@ -32,7 +33,13 @@ async function setup() {
   const e = installationEndpoints();
   const response = await e.tokenEndpoint.exchange(credentialsRequest());
   const { access_token: token } = (await response.json()) as { access_token: string };
-  const api = new AppInstallationApi(e.installationTokens, data, ISSUER, () => e.clock.now);
+  const api = new AppInstallationApi(
+    e.installationTokens,
+    data,
+    ISSUER,
+    () => e.clock.now,
+    NO_RATE_LIMIT,
+  );
   const read = (
     group: InstallationDataGroup,
     headers: Record<string, string> = { authorization: `Bearer ${token}` },
