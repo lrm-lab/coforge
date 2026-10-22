@@ -11,9 +11,9 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
-import { Toggle } from "#src/components/base/toggle/toggle";
 import { refreshComputerRuntimeCatalog } from "#src/features/computers/computers.functions";
 import { m } from "#src/paraglide/messages";
+import { AgentFastModeField } from "./agent-fast-mode-field";
 import { KEYED_MODEL_PROVIDERS, PI_BUILTIN_MODEL_PROVIDERS } from "./agent.schemas";
 import { modelProviderDisplayName } from "./model-provider-display";
 import {
@@ -512,20 +512,10 @@ export function AgentRuntimeFields({
       )}
       <input type="hidden" name="reasoning" value={submittedReasoning} />
       <input type="hidden" name="fastMode" value={submittedFastMode ? "true" : ""} />
-      {fastModeVisible && (
-        <div className="min-w-0 sm:col-span-2">
-          <Toggle
-            size="md"
-            label={m.agent_form_fast_mode()}
-            hint={m.agent_form_fast_mode_help()}
-            isSelected={fastMode}
-            onChange={setFastMode}
-          />
-        </div>
-      )}
       {reasoningVisible && (
         <Select
           label={m.agent_form_reasoning()}
+          hint={m.agent_form_reasoning_help()}
           size="sm"
           className="min-w-0 sm:col-span-2"
           selectedKey={reasoning}
@@ -537,6 +527,7 @@ export function AgentRuntimeFields({
           ))}
         </Select>
       )}
+      {fastModeVisible && <AgentFastModeField isSelected={fastMode} onChange={setFastMode} />}
     </>
   );
 }

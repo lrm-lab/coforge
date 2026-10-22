@@ -255,9 +255,10 @@ export function AgentRuntimeConfigForm({
           </p>
         )}
       </div>
-      {/* The footer is the save action alone; the dialog is dismissed by its header X, Esc or the
-          overlay (all already wired, and already blocked while saving). */}
       <div className="flex justify-end gap-3 border-t border-secondary px-6 py-4">
+        <Button type="button" color="secondary" isDisabled={saving} onPress={onClose}>
+          {m.controls_cancel()}
+        </Button>
         <Button
           type="submit"
           isDisabled={

@@ -2,7 +2,8 @@
   "agent_form_fast_mode": "Fast mode",
   "agent_form_mode": "Mode",
   "agent_form_default_value": "Default",
-  "agent_form_fast_mode_help": "Run this Agent at the runtime's highest speed. It costs more per token, and only some models offer it.",
+  "agent_form_fast_mode_help": "Run faster, at a higher cost per token. Only some models offer it.",
   "agent_form_fast_mode_not_applied": "Not applied",
+  "agent_form_reasoning_help": "Available values depend on the selected model.",
   "agent_migration_error_fast_mode_unsupported": "{runtime} on {computer} reports that {model} does not support Fast mode, which this Agent uses. Turn Fast mode off, or choose another Computer."
 }
