@@ -12,6 +12,7 @@ import { RUNTIME_PROVIDER, type AgentServiceTierObserved } from "@lrm/coforge-sd
 import { readClaudeCodeUsage } from "./usage";
 import { readClaudeCodeContextReport } from "./context-report";
 import type { AgentContextReport } from "@lrm/coforge-sdk/internal";
+import { claudeLaunchCommand, withoutClaudeCodeMarker } from "./launch-args";
 import { createPromptFile } from "./prompt-file";
 import { claudeStreamEvents } from "./stream-events";
 import { claudeAssistantEvents, claudeToolResults } from "./message-events";
@@ -66,28 +67,24 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
     const prompt = await createPromptFile(options.instructions);
     let process: JsonlProcess | undefined;
     try {
-      const command = (resumeSessionId?: string, createSessionId?: string) => [
-        ...this.#command,
-        "--dangerously-skip-permissions",
-        "--permission-mode",
-        "bypassPermissions",
-        ...(resumeSessionId ? ["--resume", resumeSessionId] : []),
-        ...(createSessionId ? ["--session-id", createSessionId] : []),
-        "--append-system-prompt-file",
-        prompt.path,
-        ...(options.runtime?.model ? ["--model", options.runtime.model] : []),
-        ...(options.runtime?.reasoning ? ["--effort", options.runtime.reasoning] : []),
-        ...(options.runtime?.fastMode ? ["--settings", JSON.stringify({ fastMode: true })] : []),
-      ];
+      const command = (resumeSessionId?: string, createSessionId?: string) =>
+        claudeLaunchCommand(this.#command, {
+          promptPath: prompt.path,
+          runtime: options.runtime,
+          resumeSessionId,
+          createSessionId,
+        });
       const initialFreshSessionId = options.sessionId ? undefined : crypto.randomUUID();
       const spawn = (sessionId?: string, freshSessionId?: string) =>
         new JsonlProcess(
           command(sessionId, freshSessionId),
           options.agentWorkspaceDirectory,
-          agentEnvironment(options.environment, Bun.env, undefined, {
-            envVars: options.runtime?.envVars,
-            gitHooks: options.gitHooks,
-          }),
+          withoutClaudeCodeMarker(
+            agentEnvironment(options.environment, Bun.env, undefined, {
+              envVars: options.runtime?.envVars,
+              gitHooks: options.gitHooks,
+            }),
+          ),
         );
       process = spawn(options.sessionId, initialFreshSessionId);
       const session = new ClaudeCodeAgentSession(

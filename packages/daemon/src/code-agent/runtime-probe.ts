@@ -1,5 +1,6 @@
 import { RUNTIME_PROVIDER, type RuntimeMetadata } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "./environment";
+import { withoutClaudeCodeMarker } from "#src/code-agent/claude-code/launch-args";
 import { JsonlProcess } from "./jsonl-process";
 import {
   probeClaudeCodeVersion,
@@ -94,7 +95,7 @@ async function probeRuntimeVersion(
   }
   if (provider === RUNTIME_PROVIDER.CLAUDE_CODE) {
     const version = await probeClaudeCodeVersion(executable, (child) =>
-      probe.spawn(child, probeEnvironment),
+      probe.spawn(child, withoutClaudeCodeMarker(probeEnvironment)),
     );
     return version ? { provider, version, displayName: "Claude Code" } : undefined;
   }

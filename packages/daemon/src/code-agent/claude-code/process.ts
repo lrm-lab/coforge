@@ -1,4 +1,5 @@
 import { agentEnvironment } from "#src/code-agent/environment";
+import { withoutClaudeCodeMarker } from "./launch-args";
 
 /**
  * The environment every one-shot Claude Code CLI invocation (`/usage`, `/context`) runs with:
@@ -12,7 +13,7 @@ export function claudeCliEnvironment(
   const username = Bun.env.USER;
   return {
     ...(username ? { USER: username } : {}),
-    ...agentEnvironment(overrides),
+    ...withoutClaudeCodeMarker(agentEnvironment(overrides)),
     TZ: "UTC",
   };
 }
