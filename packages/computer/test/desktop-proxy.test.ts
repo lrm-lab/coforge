@@ -65,6 +65,28 @@ describe("desktop route", () => {
     expect(html).toContain("/websockify");
   });
 
+  test("a dropped desktop session offers a centered control that connects again", () => {
+    const html = adaptDesktopHtml(oldPage);
+    expect(html).toContain('id="coforge-desktop-reconnect"');
+    expect(html).toContain("重新连接");
+    expect(html).not.toContain("msg.remove()");
+    expect(html).toContain('addEventListener("click"');
+    expect(html).toContain("new RFB");
+  });
+
+  test("a page that already loads RFB relatively still gets the reconnect control", () => {
+    const currentPage = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    const rfb = new RFB(document.getElementById("screen"), "ws://example/websockify");
+    rfb.addEventListener("connect", () => msg.remove());
+</script>
+`;
+    const html = adaptDesktopHtml(currentPage);
+    expect(html).toContain('id="coforge-desktop-reconnect"');
+    expect(html).not.toContain("msg.remove()");
+  });
+
   test("the page title becomes the requested name, and markup in it stays text", () => {
     const page = "<title>云电脑桌面</title><script>ok</script>";
     expect(withDesktopTitle(page, "小明")).toBe("<title>小明</title><script>ok</script>");
