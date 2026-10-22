@@ -42,6 +42,7 @@ function Detail({
   meta,
   children,
   error,
+  defaultOpen = false,
 }: {
   disclosureKey: string;
   label: string;
@@ -49,8 +50,9 @@ function Detail({
   meta?: ReactNode;
   children: ReactNode;
   error?: boolean;
+  defaultOpen?: boolean;
 }) {
-  const { open, toggle } = usePiChatDisclosure(disclosureKey);
+  const { open, toggle } = usePiChatDisclosure(disclosureKey, defaultOpen);
   const id = useId();
   return (
     <div className="my-2 min-w-0 overflow-hidden rounded-lg border border-secondary">
@@ -111,7 +113,11 @@ export function PiChatMessage({ message }: { message: Message }) {
   return (
     <div className="min-w-0">
       {message.thinking && (
-        <Detail disclosureKey={`${message.id}:thinking`} label={m.pi_chat_thinking()}>
+        <Detail
+          disclosureKey={`${message.id}:thinking`}
+          label={m.pi_chat_thinking()}
+          defaultOpen={message.id === "streaming"}
+        >
           <Raw text={message.thinking} />
         </Detail>
       )}
@@ -119,6 +125,7 @@ export function PiChatMessage({ message }: { message: Message }) {
         <Detail
           disclosureKey={`${message.id}:result`}
           label={message.toolName || m.pi_chat_tool_result()}
+          defaultOpen={running}
           error={message.isError}
           meta={
             <>

@@ -2,7 +2,11 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { Database } from "bun:sqlite";
-import { piChatCommandSchema, PI_CHAT_SHUTDOWN_GRACE_MS } from "@lrm/coforge-sdk/internal/pi-chat";
+import {
+  piChatCommandSchema,
+  PI_CHAT_SHUTDOWN_GRACE_MS,
+  type PiChatUpdate,
+} from "@lrm/coforge-sdk/internal/pi-chat";
 import { createPiChatRuntime } from "./runtime";
 import { FilePiChatStore } from "./storage";
 import { PiChatSessions } from "./sessions";
@@ -12,7 +16,7 @@ export async function runPiChatWorker(
   root: string,
   workspaceId: string,
   userId: string,
-  options: { shutdownTimeoutMs?: number } = {},
+  options: { shutdownTimeoutMs?: number; stream?: boolean } = {},
 ) {
   const cwd = join(root, z.uuid().parse(workspaceId), z.uuid().parse(userId));
   await mkdir(cwd, { recursive: true, mode: 0o700 });
@@ -24,8 +28,39 @@ export async function runPiChatWorker(
     owner.close();
     throw error;
   }
-  const sessions = new PiChatSessions(new FilePiChatStore(cwd), (id) =>
-    createPiChatRuntime(cwd, id),
+  const write = process.stdout.write.bind(process.stdout);
+  const streamId = crypto.randomUUID();
+  let sequence = 0;
+  const updates = new Map<string, PiChatUpdate>();
+  let updateTimer: ReturnType<typeof setTimeout> | undefined;
+  const flushUpdates = () => {
+    clearTimeout(updateTimer);
+    updateTimer = undefined;
+    for (const update of updates.values())
+      write(
+        `${JSON.stringify({ event: { ...update, stream: { id: streamId, sequence: ++sequence } } })}\n`,
+      );
+    updates.clear();
+  };
+  const notify = (update: PiChatUpdate) => {
+    if (!options.stream) return;
+    const previous = updates.get(update.sessionId);
+    const messages = new Map((previous?.messages ?? []).map((message) => [message.id, message]));
+    for (const id of update.removeIds ?? []) messages.delete(id);
+    for (const message of update.messages ?? []) messages.set(message.id, message);
+    updates.set(update.sessionId, {
+      ...previous,
+      ...update,
+      messages: [...messages.values()],
+      removeIds: [...new Set([...(previous?.removeIds ?? []), ...(update.removeIds ?? [])])],
+    });
+    if (update.session || update.deleted) flushUpdates();
+    else updateTimer ??= setTimeout(flushUpdates, 40);
+  };
+  const sessions = new PiChatSessions(
+    new FilePiChatStore(cwd),
+    (id) => createPiChatRuntime(cwd, id, undefined, notify),
+    notify,
   );
   let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
   const beginShutdown = () => {
@@ -43,7 +78,6 @@ export async function runPiChatWorker(
   const envelope = z.object({ id: z.uuid(), command: piChatCommandSchema });
   const jobs = new Set<Promise<void>>();
   // SDK extensions may log; protocol output uses the saved writer, all logs go to stderr.
-  const write = process.stdout.write.bind(process.stdout);
   const log = console.log;
   console.log = console.error;
   try {
@@ -57,9 +91,13 @@ export async function runPiChatWorker(
         const line = pending.slice(0, newline);
         pending = pending.slice(newline + 1);
         const request = envelope.parse(JSON.parse(line));
+        flushUpdates();
+        const stream = { id: streamId, sequence };
         const task = sessions.execute(request.command).then(
           (result) => {
-            write(`${JSON.stringify({ id: request.id, result })}\n`);
+            write(
+              `${JSON.stringify({ id: request.id, result: options.stream ? { ...result, stream } : result })}\n`,
+            );
           },
           (error: unknown) => {
             const message =
@@ -79,6 +117,7 @@ export async function runPiChatWorker(
     try {
       await Promise.allSettled(jobs);
       await sessions.dispose();
+      flushUpdates();
     } finally {
       clearTimeout(shutdownTimer);
       owner.close();

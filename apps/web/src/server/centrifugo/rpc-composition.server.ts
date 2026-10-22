@@ -1,3 +1,4 @@
+import { daemonCapabilityLeases } from "./capability-composition.server";
 import {
   AGENT_SESSION_METHOD,
   AGENT_SESSION_INVALIDATE_METHOD,
@@ -14,6 +15,9 @@ import {
   APP_CONFIG_SNAPSHOT_METHOD,
 } from "@lrm/coforge-sdk/internal";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { PI_CHAT_FRAME_METHOD } from "@lrm/coforge-sdk/internal/pi-chat-wire";
+import { createPiChatFrameMethod } from "#src/server/pi-chat/pi-chat-frame-receiver.server";
+import { canUsePiChat, getPiChatResults } from "#src/server/pi-chat/pi-chat-production.server";
 import { createAgentSkillsListResultMethod } from "./agent-skills-cache.server";
 import {
   createAgentWorkspaceFileReadResultMethod,
@@ -77,7 +81,6 @@ import {
   createMentionDeliveryTransitionMethod,
 } from "./rpc-handler.server";
 import { AgentDeliveryRejections } from "#src/server/agents/agent-delivery-rejection.server";
-import { getAgentMigrationCapabilityLease } from "#src/server/agent-migrations/agent-migration-capability.server";
 import { agentMigrationOrchestrator } from "#src/server/agent-migrations/agent-migration-composition.server";
 import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
@@ -113,8 +116,6 @@ import { createAgentControlResultMethod } from "./agent-control-receiver.server"
 import { agentReadingMethods } from "./agent-reading-methods";
 import { PrismaReminderRepository } from "#src/server/db/repositories/reminder.repositories.server";
 import { Reminders } from "#src/server/reminders/reminders.server";
-import { getReminderCapabilityLease } from "#src/server/reminders/reminder-capability.server";
-import { getAppConfigCapabilityLease } from "#src/server/agent-app-configs/app-config-capability.server";
 import { createAgentAppConfigs } from "#src/server/agent-app-configs/agent-app-configs-composition.server";
 import { daemonControlChannel } from "./server-api.server";
 import { encodeReminderSync } from "@lrm/coforge-sdk/internal";
@@ -258,18 +259,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
       mentionReports,
     );
     const reminderRepository = new PrismaReminderRepository(db);
-    const reminderLease = getReminderCapabilityLease();
-    const migrationLease = getAgentMigrationCapabilityLease();
-    const appConfigLease = getAppConfigCapabilityLease();
-    const leases = [reminderLease, migrationLease, appConfigLease];
-    // Each ready records, and each heartbeat keeps alive, every capability the server asks about.
-    const capabilityLeases = {
-      record: (workspaceId: string, computerId: string, capabilities: readonly string[]) =>
-        Promise.all(leases.map((lease) => lease.record(workspaceId, computerId, capabilities))),
-      refresh: async (workspaceId: string, computerId: string) => {
-        await Promise.all(leases.map((lease) => lease.refresh(workspaceId, computerId)));
-      },
-    };
+    const { reminderLease, capabilityLeases } = daemonCapabilityLeases();
     const appConfigs = createAgentAppConfigs(db, centrifugo);
     const reminders = new Reminders(reminderRepository, reminderLease, (sync) =>
       centrifugo.publish(
@@ -289,6 +279,11 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
     });
     return new CentrifugoRpcHandler({
       methods: {
+        [PI_CHAT_FRAME_METHOD]: createPiChatFrameMethod({
+          canUse: (scope) => canUsePiChat(db, scope),
+          results: getPiChatResults(),
+          publish: (channel, bytes) => centrifugo.publish(channel, bytes),
+        }),
         [AGENT_SESSION_METHOD]: createAgentSessionMethod(sessions, sessionReceiver),
         [AGENT_SESSION_INVALIDATE_METHOD]: createAgentSessionInvalidateMethod(sessionReceiver),
         ...agentReadingMethods({

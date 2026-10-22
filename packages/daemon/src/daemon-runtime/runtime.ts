@@ -86,6 +86,8 @@ export type DaemonConfig = {
 /** @deprecated wire-facing callers should use DaemonConfig internally. */
 export type WorkspaceConfig = DaemonConfig;
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
+import { PiChatRelay } from "#src/pi-chat/relay";
+import { PI_CHAT_CAPABILITY } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import type {
   DaemonConnectionClient,
   DaemonConnectionClientFactory,
@@ -131,10 +133,6 @@ import {
   type TaskCommand,
   type TaskResult,
   parseUpgradeErrorCode,
-  type AgentWorkspaceFilesListRequest,
-  type AgentWorkspaceFilesListResult,
-  type AgentWorkspaceFileReadRequest,
-  type AgentWorkspaceFileReadResult,
   type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceDeleteResult,
   type AgentContextScanRequest,
@@ -162,12 +160,8 @@ import {
   contextHandoffActivity,
 } from "#src/agent-runtime/context-handoff";
 import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
-import { listAgentSkills } from "#src/code-agent/agent-skills";
-import {
-  deleteAgentWorkspaceFiles,
-  listAgentWorkspaceFiles,
-  readAgentWorkspaceFile,
-} from "#src/agent-runtime/agent-workspace-files";
+import { AgentWorkspaceQueries } from "./agent-workspace-queries";
+import { deleteAgentWorkspaceFiles } from "#src/agent-runtime/agent-workspace-files";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import {
   ProviderProgress,
@@ -352,9 +346,6 @@ export class DaemonRuntime {
   #subscriptions: Array<() => void> = [];
   readonly #agentControl: AgentControl;
   readonly #agentSessions: AgentSessions;
-  #skillsScanning = false;
-  /** One Workspace Files list/read at a time per daemon, mirroring `#skillsScanning`. */
-  #workspaceFilesScanning = false;
   readonly #messageAttention: AgentMessageAttentionIndex;
   readonly #messageOperations: AgentMessageOperations;
   /** The Agent requests the daemon only authorizes and forwards over Agent HTTPS. */
@@ -519,6 +510,10 @@ export class DaemonRuntime {
   };
   readonly #codeAgentInventory: CodeAgentInventorySync;
   readonly #upgradeResults: UpgradeResultReporter;
+  #piChat?: PiChatRelay;
+  readonly #workspaceQueries = new AgentWorkspaceQueries(
+    (agentId) => this.#agentProcessManager.runtime(agentId)?.config.provider,
+  );
 
   constructor(
     connection: DaemonConfig,
@@ -1048,6 +1043,22 @@ export class DaemonRuntime {
         }),
       );
       const transport = this.#transport;
+      this.#piChat ??= new PiChatRelay(connection, async (frame) => {
+        if (this.#stopping || !this.#transport.sendPiChatFrame)
+          throw new Error("Pi chat connection unavailable");
+        await this.#transport.sendPiChatFrame(frame);
+      });
+      this.#subscribe(
+        transport.onPiChatRequest?.(async (request) => {
+          if (
+            this.#stopping ||
+            request.workspaceId !== connection.workspaceId ||
+            request.computerId !== connection.computerId
+          )
+            return;
+          await this.#piChat?.execute(request);
+        }),
+      );
       this.#subscribe(
         transport.onSkillsList?.(async (request) => {
           if (
@@ -1056,7 +1067,7 @@ export class DaemonRuntime {
             request.computerId !== connection.computerId
           )
             return;
-          const result = await this.#listAgentSkills(connection, request);
+          const result = await this.#workspaceQueries.listSkills(connection, request);
           if (!this.#stopping && this.#transport === transport)
             await transport.sendSkillsListResult?.({
               ...request,
@@ -1073,7 +1084,7 @@ export class DaemonRuntime {
             request.computerId !== connection.computerId
           )
             return;
-          const result = await this.#listWorkspaceFiles(connection, request);
+          const result = await this.#workspaceQueries.listFiles(connection, request);
           if (!this.#stopping && this.#transport === transport)
             await transport.sendWorkspaceFilesListResult?.({ ...request, ...result });
         }),
@@ -1086,7 +1097,7 @@ export class DaemonRuntime {
             request.computerId !== connection.computerId
           )
             return;
-          const result = await this.#readWorkspaceFile(connection, request);
+          const result = await this.#workspaceQueries.readFile(connection, request);
           if (!this.#stopping && this.#transport === transport)
             await transport.sendWorkspaceFileReadResult?.({ ...request, ...result });
         }),
@@ -1262,6 +1273,7 @@ export class DaemonRuntime {
           recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds ?? [],
           recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds ?? [],
           capabilities: [
+            PI_CHAT_CAPABILITY,
             REMINDER_CAPABILITY,
             APP_CONFIG_CAPABILITY,
             ...(this.#migrations ? [AGENT_MIGRATION_CAPABILITY] : []),
@@ -1340,95 +1352,6 @@ export class DaemonRuntime {
         ...(errorCode ? { errorCode } : {}),
       });
       throw error;
-    }
-  }
-
-  async #listAgentSkills(
-    connection: DaemonConfig,
-    request: { agentId: string; provider: RuntimeProvider },
-  ): Promise<Awaited<ReturnType<typeof listAgentSkills>>> {
-    const unavailable = { status: "error" as const, entries: [], directories: [] };
-    const config = this.#agentProcessManager.runtime(request.agentId)?.config;
-    if (this.#skillsScanning || (config && config.provider !== request.provider))
-      return { global: unavailable, workspace: unavailable };
-    this.#skillsScanning = true;
-    try {
-      // Launch only adds COFORGE_* capabilities to agentEnvironment;
-      // it does not override HOME or provider-native config roots.
-      return await listAgentSkills({
-        provider: request.provider,
-        agentWorkspaceDirectory: agentWorkspaceDirectory(
-          connection.workspaceRoot,
-          connection.workspaceId,
-          request.agentId,
-        ),
-      });
-    } catch {
-      // Return safe diagnostics, never file contents or raw filesystem errors.
-      return { global: unavailable, workspace: unavailable };
-    } finally {
-      this.#skillsScanning = false;
-    }
-  }
-
-  async #listWorkspaceFiles(
-    connection: DaemonConfig,
-    request: Pick<AgentWorkspaceFilesListRequest, "agentId" | "dirPath" | "includeHidden">,
-  ): Promise<Pick<AgentWorkspaceFilesListResult, "status" | "rootPath" | "entries">> {
-    const unavailable = { status: "error" as const, rootPath: "", entries: [] };
-    if (this.#workspaceFilesScanning) return unavailable;
-    this.#workspaceFilesScanning = true;
-    try {
-      return await listAgentWorkspaceFiles({
-        agentWorkspaceDirectory: agentWorkspaceDirectory(
-          connection.workspaceRoot,
-          connection.workspaceId,
-          request.agentId,
-        ),
-        dirPath: request.dirPath,
-        includeHidden: request.includeHidden,
-      });
-    } catch {
-      // Return safe diagnostics, never file contents or raw filesystem errors.
-      return unavailable;
-    } finally {
-      this.#workspaceFilesScanning = false;
-    }
-  }
-
-  async #readWorkspaceFile(
-    connection: DaemonConfig,
-    request: Pick<AgentWorkspaceFileReadRequest, "agentId" | "path">,
-  ): Promise<
-    Pick<
-      AgentWorkspaceFileReadResult,
-      "status" | "sizeBytes" | "modifiedAtMs" | "text" | "contentType" | "contentBase64"
-    >
-  > {
-    const unavailable = {
-      status: "error" as const,
-      sizeBytes: 0,
-      modifiedAtMs: 0,
-      text: "",
-      contentType: "",
-      contentBase64: "",
-    };
-    if (this.#workspaceFilesScanning) return unavailable;
-    this.#workspaceFilesScanning = true;
-    try {
-      return await readAgentWorkspaceFile({
-        agentWorkspaceDirectory: agentWorkspaceDirectory(
-          connection.workspaceRoot,
-          connection.workspaceId,
-          request.agentId,
-        ),
-        path: request.path,
-      });
-    } catch {
-      // Return safe diagnostics, never file contents or raw filesystem errors.
-      return unavailable;
-    } finally {
-      this.#workspaceFilesScanning = false;
     }
   }
 
@@ -4328,6 +4251,9 @@ export class DaemonRuntime {
   }
 
   async #stop(shutdownReason: DaemonShutdownReason): Promise<void> {
+    const piChat = this.#piChat;
+    this.#piChat = undefined;
+    const piChatClosed = piChat?.close();
     // No retry timer may outlive this daemon instance: a launch that was mid-cooldown left a
     // "starting" record behind, which the next instance repairs and recovers (`recover()`).
     this.#agentControl.dispose();
@@ -4373,6 +4299,7 @@ export class DaemonRuntime {
     // work already running settles alongside too, on the same bound, before the transport closes.
     await Promise.all([
       this.#settleReminders(),
+      piChatClosed,
       this.#settleMigrations(),
       this.#connection.computerId
         ? this.#transport.sendShutdownNotice?.({

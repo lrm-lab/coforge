@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createPiChatRuntime } from "#src/pi-chat/runtime";
 import { FilePiChatStore } from "#src/pi-chat/storage";
-import { piChatResultSchema } from "@lrm/coforge-sdk/internal/pi-chat";
+import { piChatResultSchema, type PiChatUpdate } from "@lrm/coforge-sdk/internal/pi-chat";
 
 test("native Pi streams a tool call and preserves full tool output and reply after reopening", async () => {
   const root = await mkdtemp(join(await realpath(tmpdir()), "pi-chat-native-"));
@@ -13,6 +13,7 @@ test("native Pi streams a tool call and preserves full tool output and reply aft
   const reply = "Complete answer ".repeat(700);
   const source = "complete-file-content ".repeat(350);
   let calls = 0;
+  const updates: PiChatUpdate[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -80,9 +81,25 @@ test("native Pi streams a tool call and preserves full tool output and reply aft
         retry: { enabled: false },
       }),
     );
-    runtime = await createPiChatRuntime(cwd, undefined, agentDir);
+    runtime = await createPiChatRuntime(cwd, undefined, agentDir, (update) => updates.push(update));
     await runtime.prompt("Read fixture.txt, then answer.");
     const messages = runtime.messages();
+    expect(
+      updates.some((update) => update.messages?.some((message) => message.id === "streaming")),
+    ).toBe(true);
+    expect(
+      updates.some((update) =>
+        update.messages?.some((message) => message.id === "running:call_read"),
+      ),
+    ).toBe(true);
+    expect(updates.some((update) => update.removeIds?.includes("running:call_read"))).toBe(true);
+    expect(
+      updates
+        .flatMap((update) => update.messages ?? [])
+        .some(
+          (message) => message.toolName === "edit" && message.details?.includes("+++ fixture.txt"),
+        ),
+    ).toBe(true);
     expect(messages.find((message) => message.role === "tool")?.text).toContain(source);
     expect(typeof messages.find((message) => message.role === "tool")?.durationMs).toBe("number");
     expect(messages.at(-1)?.text).toBe(reply);

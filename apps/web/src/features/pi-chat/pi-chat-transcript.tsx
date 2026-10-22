@@ -20,7 +20,7 @@ export function PiChatTranscript({ messages, busy }: { messages: Message[]; busy
 }
 
 function Turn({ messages, busy }: { messages: Message[]; busy: boolean }) {
-  const { open: expanded, toggle } = usePiChatDisclosure(`turn:${messages[0]!.id}`);
+  const { open: expanded, toggle } = usePiChatDisclosure(`turn:${messages[0]!.id}`, busy);
   const user = messages[0]?.role === "user" ? messages[0] : undefined;
   const responses = messages.slice(user ? 1 : 0);
   const last = responses.at(-1);
