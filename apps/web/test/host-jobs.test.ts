@@ -12,6 +12,34 @@ import { createHostJobHttpHandler } from "#src/server/hosts/host-job-http.server
 
 const now = new Date("2026-09-30T06:00:00.000Z");
 const daemonKey = `dk_${"b".repeat(43)}`;
+const ownerUsername = "ada";
+const defaultCloudName = `${ownerUsername}的默认云电脑`;
+const extraCloudName = `${ownerUsername}的新建云电脑`;
+const accounts = {
+  username: async (userId: string) => (userId === "user-a" ? ownerUsername : undefined),
+};
+
+function hostsFor(
+  fleet: MemoryFleet,
+  jobs: MemoryJobs,
+  findMember: (
+    workspaceId: string,
+    userId: string,
+  ) => Promise<{ id: string; slug: string } | undefined> = async (workspaceId) =>
+    workspaceId === "workspace-2" ? { id: workspaceId, slug: "beta" } : undefined,
+) {
+  return new HostJobs({
+    workspaces: { findMember },
+    fleet,
+    jobs,
+    cluster: {
+      id: async () => "cluster-1",
+      authenticate: async () => ({ id: "cluster-1", accepting: true }),
+    },
+    keys: { issue: async () => daemonKey },
+    accounts,
+  });
+}
 
 class MemoryFleet {
   computers: CloudComputer[] = [];
@@ -138,6 +166,7 @@ function harness(input?: {
         return daemonKey;
       },
     },
+    accounts,
     ...(input?.clearDisk ? { disk: { clear: input.clearDisk } } : {}),
   });
   return {
@@ -160,7 +189,7 @@ describe("cloud computer quota", () => {
 
     expect(created).toMatchObject({
       slot: "default",
-      name: "Cloud",
+      name: defaultCloudName,
       containerReady: false,
     });
     expect(JSON.stringify(created)).not.toContain(daemonKey);
@@ -200,19 +229,7 @@ describe("cloud computer quota", () => {
       now,
     });
 
-    const hostsWithBeta = new HostJobs({
-      workspaces: {
-        findMember: async (workspaceId) =>
-          workspaceId === "workspace-2" ? { id: workspaceId, slug: "beta" } : undefined,
-      },
-      fleet,
-      jobs,
-      cluster: {
-        id: async () => "cluster-1",
-        authenticate: async () => ({ id: "cluster-1", accepting: true }),
-      },
-      keys: { issue: async () => daemonKey },
-    });
+    const hostsWithBeta = hostsFor(fleet, jobs);
     const attached = await hostsWithBeta.ensureDefault({
       userId: "user-a",
       workspaceId: "workspace-2",
@@ -236,16 +253,7 @@ describe("cloud computer quota", () => {
     async (raceReport, format) => {
       const { hosts, fleet, jobs } = harness();
       const created = await hosts.ensureDefault(request);
-      const beta = new HostJobs({
-        workspaces: { findMember: async () => ({ id: "workspace-2", slug: "beta" }) },
-        fleet,
-        jobs,
-        cluster: {
-          id: async () => "cluster-1",
-          authenticate: async () => ({ id: "cluster-1", accepting: true }),
-        },
-        keys: { issue: async () => daemonKey },
-      });
+      const beta = hostsFor(fleet, jobs, async () => ({ id: "workspace-2", slug: "beta" }));
       const betaRequest = { ...request, workspaceId: "workspace-2" };
       if (format) {
         const first = await hosts.claim({ token: "host-token" });
@@ -259,7 +267,11 @@ describe("cloud computer quota", () => {
         const oldAttach = await hosts.claim({ token: "host-token" });
         await hosts.report({ token: "host-token", jobId: oldAttach!.jobId, now });
         fleet.links = fleet.links.filter((link) => link.workspaceId !== "workspace-2");
-        await hosts.format({ ...request, computerId: created.computerId, confirmName: "Cloud" });
+        await hosts.format({
+          ...request,
+          computerId: created.computerId,
+          confirmName: defaultCloudName,
+        });
         const removal = await hosts.claim({ token: "host-token" });
         await hosts.report({ token: "host-token", jobId: removal!.jobId, now });
       }
@@ -303,7 +315,7 @@ describe("cloud computer quota", () => {
     });
 
     const extra = await hosts.addExtra(request);
-    expect(extra.slot).toBe("extra");
+    expect(extra).toMatchObject({ slot: "extra", name: extraCloudName });
     await expect(hosts.addExtra(request)).rejects.toEqual(
       new HostJobError(409, "an extra cloud computer already exists"),
     );
@@ -321,19 +333,7 @@ describe("cloud computer quota", () => {
     });
     const first = await hosts.addExtra(request);
 
-    const hostsWithBeta = new HostJobs({
-      workspaces: {
-        findMember: async (workspaceId) =>
-          workspaceId === "workspace-2" ? { id: workspaceId, slug: "beta" } : undefined,
-      },
-      fleet,
-      jobs,
-      cluster: {
-        id: async () => "cluster-1",
-        authenticate: async () => ({ id: "cluster-1", accepting: true }),
-      },
-      keys: { issue: async () => daemonKey },
-    });
+    const hostsWithBeta = hostsFor(fleet, jobs);
     const second = await hostsWithBeta.addExtra({
       userId: "user-a",
       workspaceId: "workspace-2",
@@ -392,19 +392,7 @@ describe("cloud computer quota", () => {
       containerId: "service-1",
       now,
     });
-    const hostsWithBeta = new HostJobs({
-      workspaces: {
-        findMember: async (workspaceId) =>
-          workspaceId === "workspace-2" ? { id: workspaceId, slug: "beta" } : undefined,
-      },
-      fleet,
-      jobs,
-      cluster: {
-        id: async () => "cluster-1",
-        authenticate: async () => ({ id: "cluster-1", accepting: true }),
-      },
-      keys: { issue: async () => daemonKey },
-    });
+    const hostsWithBeta = hostsFor(fleet, jobs);
     await hostsWithBeta.ensureDefault({ userId: "user-a", workspaceId: "workspace-2", now });
 
     await expect(
@@ -413,12 +401,12 @@ describe("cloud computer quota", () => {
     const formatted = await hosts.format({
       ...request,
       computerId: created.computerId,
-      confirmName: "Cloud",
+      confirmName: defaultCloudName,
     });
     const again = await hosts.format({
       ...request,
       computerId: created.computerId,
-      confirmName: "Cloud",
+      confirmName: defaultCloudName,
     });
     expect(again.jobId).toBe(formatted.jobId);
     expect(fleet.computers).toHaveLength(1);

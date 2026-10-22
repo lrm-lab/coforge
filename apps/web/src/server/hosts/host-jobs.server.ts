@@ -100,6 +100,11 @@ export interface DaemonKeys {
   issue(input: { userId: string; workspaceId: string; computerId: string }): Promise<string>;
 }
 
+/** The account username a new cloud computer's name is built from. */
+export interface AccountUsernames {
+  username(userId: string): Promise<string | undefined>;
+}
+
 const OPERATION_ORDER: Record<HostJobOperation, number> = {
   delete: 0,
   attach: 1,
@@ -115,6 +120,7 @@ export class HostJobs {
       jobs: ClusterJobs;
       cluster: ClusterAuth;
       keys: DaemonKeys;
+      accounts: AccountUsernames;
       /** Drops provider sessions stored for this computer once its disk is gone. */
       disk?: { clear(computerId: string): Promise<void> };
     },
@@ -134,7 +140,14 @@ export class HostJobs {
       await this.#attachIfNeeded(existing, workspace, input.userId, clusterId, input.now);
       return view(existing, null);
     }
-    return this.#create(input.userId, workspace, clusterId, "default", "Cloud", input.now);
+    return this.#create(
+      input.userId,
+      workspace,
+      clusterId,
+      "default",
+      cloudComputerName(await this.#ownerUsername(input.userId), "default"),
+      input.now,
+    );
   }
 
   async addExtra(input: {
@@ -160,7 +173,7 @@ export class HostJobs {
       workspace,
       await this.deps.cluster.id(),
       "extra",
-      "Cloud 2",
+      cloudComputerName(await this.#ownerUsername(input.userId), "extra"),
       input.now,
     );
   }
@@ -465,6 +478,12 @@ export class HostJobs {
     };
   }
 
+  async #ownerUsername(userId: string): Promise<string> {
+    const username = (await this.deps.accounts.username(userId))?.trim();
+    if (!username) throw new HostJobError(404, "cloud computer owner not found");
+    return username;
+  }
+
   async #workspace(workspaceId: string, userId: string): Promise<{ id: string; slug: string }> {
     const workspace = await this.deps.workspaces.findMember(workspaceId, userId);
     if (!workspace) throw new HostJobError(403, "workspace access denied");
@@ -476,6 +495,10 @@ export function compareJobs(left: HostJobRecord, right: HostJobRecord): number {
   const operation = OPERATION_ORDER[left.operation] - OPERATION_ORDER[right.operation];
   if (operation !== 0) return operation;
   return left.createdAt.getTime() - right.createdAt.getTime();
+}
+
+function cloudComputerName(username: string, slot: CloudSlot): string {
+  return slot === "default" ? `${username}的默认云电脑` : `${username}的新建云电脑`;
 }
 
 function active(computers: CloudComputer[]): CloudComputer[] {

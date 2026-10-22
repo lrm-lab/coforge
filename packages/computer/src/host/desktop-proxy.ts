@@ -68,10 +68,8 @@ const RELATIVE_PAGE_SCRIPT = `
     rfb.addEventListener("securityfailure", (ev) => {
       msg.textContent = ev.detail?.reason || "桌面连接失败";
     });
-    rfb.addEventListener("disconnect", (ev) => {
-      if (!ev.detail?.clean && document.body.contains(msg)) {
-        msg.textContent = "桌面连接已断开";
-      }
+    rfb.addEventListener("disconnect", () => {
+      if (document.body.contains(msg)) msg.textContent = "桌面连接已断开";
     });
 `;
 
