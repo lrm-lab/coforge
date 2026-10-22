@@ -37,6 +37,15 @@ export function productionCloudComputers(db: PrismaClient = requireDatabaseClien
     jobs: new PrismaHostJobStore(db),
     cluster: directory,
     keys: new PrismaDaemonKeys(db),
+    accounts: {
+      username: async (userId) =>
+        (
+          await db.user.findUnique({
+            where: { id: userId },
+            select: { username: true },
+          })
+        )?.username,
+    },
     disk: {
       clear: async (computerId) => {
         await db.agentSession.deleteMany({ where: { computerId } });
