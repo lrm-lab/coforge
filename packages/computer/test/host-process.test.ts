@@ -5,12 +5,14 @@ import {
   dockerAttachExecArgs,
   dockerCloudContainerListArgs,
   dockerCloudPlacementInspectArgs,
+  dockerImageDigestArgs,
   dockerImageInspectArgs,
   dockerServiceCreateArgs,
   dockerServiceFindArgs,
   dockerServiceRemoveArgs,
   dockerServiceUpdateArgs,
   dockerVolumeRemoveArgs,
+  pinnedImageReference,
   swarmAccepting,
   type ContainerRuntime,
 } from "#src/host/docker-containers";
@@ -349,15 +351,54 @@ describe("swarm service arguments", () => {
     ]);
   });
 
-  test("updating a service image does not remove the disk volume", async () => {
+  test("creating or updating a service pins the local image digest", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     const calls: string[][] = [];
     const runtime = createDockerContainers(async (args) => {
       calls.push(args);
-      return { exitCode: 0, stdout: "", stderr: "" };
+      if (args[0] === "image") {
+        return { exitCode: 0, stdout: `coforge-computer@${digest}\n`, stderr: "" };
+      }
+      return { exitCode: 0, stdout: "service-1\n", stderr: "" };
+    });
+    await runtime.createService({
+      computerId: "computer-1",
+      image: "coforge-computer:staging",
+      env: {},
     });
     await runtime.updateServiceImage("computer-1", "coforge-computer:staging");
-    expect(calls).toEqual([dockerServiceUpdateArgs("computer-1", "coforge-computer:staging")]);
+    const pinned = `coforge-computer:staging@${digest}`;
+    expect(calls).toEqual([
+      dockerImageDigestArgs("coforge-computer:staging"),
+      dockerServiceCreateArgs({
+        computerId: "computer-1",
+        image: pinned,
+        env: {},
+      }),
+      dockerImageDigestArgs("coforge-computer:staging"),
+      dockerServiceUpdateArgs("computer-1", pinned),
+    ]);
     expect(calls.some((args) => args[0] === "volume")).toBe(false);
+  });
+
+  test("an image reference that already has a digest is not inspected again", async () => {
+    const digest = `sha256:${"b".repeat(64)}`;
+    const pinned = `coforge-computer:staging@${digest}`;
+    const calls: string[][] = [];
+    const runtime = createDockerContainers(async (args) => {
+      calls.push(args);
+      return { exitCode: 0, stdout: "service-1\n", stderr: "" };
+    });
+    await runtime.createService({ computerId: "computer-1", image: pinned, env: {} });
+    expect(calls).toEqual([
+      dockerServiceCreateArgs({ computerId: "computer-1", image: pinned, env: {} }),
+    ]);
+    expect(pinnedImageReference("coforge-computer:staging", `sha256:${"c".repeat(64)}`)).toBe(
+      `coforge-computer:staging@sha256:${"c".repeat(64)}`,
+    );
+    expect(() => pinnedImageReference("coforge-computer:staging", "not-a-digest")).toThrow(
+      /unusable image id/,
+    );
   });
 
   test("placement reports the node image and each running computer's image id", async () => {
