@@ -157,7 +157,8 @@ These rules apply to `src/features/agents/`.
 - While the display says `error`, the profile panel shows the provider's
   original error text (not translated or summarized) in a banner under its
   header on every tab (`agent-error-banner.tsx`), with the Activity tab's
-  diagnostics copy and a way to that tab. Nothing else in the panel repeats it.
+  diagnostics copy and a way to that tab
+  for whoever gets that tab. Nothing else in the panel repeats it.
 - `deleted-agent.tsx` owns archived-sender rendering (grey avatar and `ARCHIVED`
   badge) for every message-history surface. Use it rather than local styling.
 - `agent-avatar-dialog.tsx` is the creator's change-avatar dialog, opened by
