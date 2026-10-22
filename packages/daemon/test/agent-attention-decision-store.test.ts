@@ -14,9 +14,27 @@ test("appends decisions per agent and reads them back in order", () => {
   roots.push(root);
   const store = new AgentAttentionDecisionStore(root);
   const base = { deliveryId: "d", target: "#t", sequence: 1 };
-  store.append({ ...base, at: "2026-10-22T00:00:00Z", agentId: "agent-1", messageId: "m1", outcome: "held" });
-  store.append({ ...base, at: "2026-10-22T00:00:01Z", agentId: "agent-1", messageId: "m1", outcome: "notified" });
-  store.append({ ...base, at: "2026-10-22T00:00:02Z", agentId: "agent-2", messageId: "m2", outcome: "consumed" });
+  store.append({
+    ...base,
+    at: "2026-10-22T00:00:00Z",
+    agentId: "agent-1",
+    messageId: "m1",
+    outcome: "held",
+  });
+  store.append({
+    ...base,
+    at: "2026-10-22T00:00:01Z",
+    agentId: "agent-1",
+    messageId: "m1",
+    outcome: "notified",
+  });
+  store.append({
+    ...base,
+    at: "2026-10-22T00:00:02Z",
+    agentId: "agent-2",
+    messageId: "m2",
+    outcome: "consumed",
+  });
   expect(store.read("agent-1").map((row) => row.outcome)).toEqual(["held", "notified"]);
   expect(store.read("agent-2").map((row) => row.messageId)).toEqual(["m2"]);
   expect(store.read("agent-3")).toEqual([]);

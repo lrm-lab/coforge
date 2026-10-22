@@ -17,12 +17,37 @@ describe("channelTraceFromSteps", () => {
     const sent2 = "0197aaaa-cccc-7ccc-8ddd-eeeeeeeeeeee";
     const trace = channelTraceFromSteps("s1", [
       { kind: "user", text: "[CoForge inbox notice: ...]" },
-      tool("c1", "bash", { command: "coforge message check" }, "[target=#t msg=0197aaaa-bbb time=x type=human] u: hi\n\nNo more new messages."),
+      tool(
+        "c1",
+        "bash",
+        { command: "coforge message check" },
+        "[target=#t msg=0197aaaa-bbb time=x type=human] u: hi\n\nNo more new messages.",
+      ),
       tool("c2", "ov_fork_find", { query: "q" }, "result"),
-      tool("c3", "bash", { command: "coforge message send --target '#t' --text hi" }, `Message sent to #t. Message ID: ${sent1}`),
+      tool(
+        "c3",
+        "bash",
+        { command: "coforge message send --target '#t' --text hi" },
+        `Message sent to #t. Message ID: ${sent1}`,
+      ),
       tool("c4", "bash", { command: "ls" }, "a.txt"),
-      tool("c5", OPENVIKING_TOOL_NAMES.offer, {}, JSON.stringify({ protocol: OPENVIKING_AGENT_PROTOCOL, op: "offer", published: true, messageId: sent2 })),
-      tool("c6", "bash", { command: "coforge message read --target '#t'" }, "[target=#t msg=0197aaaa-ccc time=x type=agent] a: x"),
+      tool(
+        "c5",
+        OPENVIKING_TOOL_NAMES.offer,
+        {},
+        JSON.stringify({
+          protocol: OPENVIKING_AGENT_PROTOCOL,
+          op: "offer",
+          published: true,
+          messageId: sent2,
+        }),
+      ),
+      tool(
+        "c6",
+        "bash",
+        { command: "coforge message read --target '#t'" },
+        "[target=#t msg=0197aaaa-ccc time=x type=agent] a: x",
+      ),
     ]);
     expect(trace.sends.map((send) => send.messageId)).toEqual([sent1, sent2]);
     expect(trace.sends[0]!.toolExchanges.map((e) => e.toolCallId)).toEqual(["c1", "c2"]);
@@ -34,8 +59,18 @@ describe("channelTraceFromSteps", () => {
   test("native memory-agent message tools count as reads and sends", () => {
     const sent = "0197aaaa-dddd-7ccc-8ddd-eeeeeeeeeeee";
     const trace = channelTraceFromSteps("s3", [
-      tool("c1", "message_read", { target: "#t" }, "[target=#t msg=0197aaaa-bbb time=x type=human] u: hi"),
-      tool("c2", "send_channel_message", { target: "#t", content: "ok" }, `Message sent to #t. Message ID: ${sent}`),
+      tool(
+        "c1",
+        "message_read",
+        { target: "#t" },
+        "[target=#t msg=0197aaaa-bbb time=x type=human] u: hi",
+      ),
+      tool(
+        "c2",
+        "send_channel_message",
+        { target: "#t", content: "ok" },
+        `Message sent to #t. Message ID: ${sent}`,
+      ),
     ]);
     expect(trace.sends).toHaveLength(1);
     expect(trace.sends[0]!.receivedShortIds).toEqual(["0197aaaa-bbb"]);

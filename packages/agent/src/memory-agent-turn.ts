@@ -5,7 +5,13 @@ import {
   type OpenVikingAgentResponse,
 } from "@lrm/coforge-sdk/agent";
 
-const MEMORY_READ_OPS = new Set(["fork_find", "search_context", "read", "expand"]);
+const MEMORY_READ_OPS = new Set([
+  "fork_find",
+  "experience_find",
+  "search_context",
+  "read",
+  "expand",
+]);
 
 /** Per-trigger Offer budget and read accounting for the Memory Agent fence. */
 export class MemoryAgentTurnBudget {

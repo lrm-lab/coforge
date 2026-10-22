@@ -216,6 +216,7 @@ ${offerOnly ? "- For retrieval questions, strict evaluation order: check/read â†
 Copy the arguments JSON below exactly, replacing angle-bracket placeholders. Put every argument in the arguments JSON. An empty object is invalid. ${OPENVIKING_OPERATION_ID_RULE}
 
 ov_fork_find: ${OPENVIKING_ARGUMENT_EXAMPLES.fork_find}
+ov_experience_find: ${OPENVIKING_ARGUMENT_EXAMPLES.experience_find}
 ov_expand: ${OPENVIKING_ARGUMENT_EXAMPLES.expand}
 memory_diagnose: ${OPENVIKING_ARGUMENT_EXAMPLES.diagnose}
 memory_offer: ${OPENVIKING_ARGUMENT_EXAMPLES.offer}

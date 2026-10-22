@@ -75,6 +75,7 @@ const EXPECTED_CLASSIFICATION: Record<string, GatewayRouteClassification> = {
   "POST /api/v1/content/set_tags": "data-plane",
   "POST /api/v1/search/expand": "data-plane",
   "POST /api/v1/search/find": "data-plane",
+  "POST /api/v1/experience/find": "data-plane",
   "POST /api/v1/search/search": "data-plane",
   "POST /api/v1/search/recall": "denied",
   "POST /api/v1/search/grep": "data-plane",
@@ -84,6 +85,7 @@ const EXPECTED_CLASSIFICATION: Record<string, GatewayRouteClassification> = {
 const MEMORY_AGENT_READS = new Set([
   "POST /api/v1/search/expand",
   "POST /api/v1/search/find",
+  "POST /api/v1/experience/find",
   "POST /api/v1/search/search",
   "GET /api/v1/content/read",
   "GET /api/v1/content/abstract",
@@ -110,9 +112,9 @@ function expectAllowed(kind: ContentFamilyActorKind, method: string, path: strin
 }
 
 test("every pinned resources/filesystem/content/search route is classified exactly once", () => {
-  expect(PINNED_CONTENT_FAMILY_ROUTES).toHaveLength(24);
-  expect(CONTENT_FAMILY_ROUTES).toHaveLength(24);
-  expect(Object.keys(EXPECTED_CLASSIFICATION)).toHaveLength(24);
+  expect(PINNED_CONTENT_FAMILY_ROUTES).toHaveLength(25);
+  expect(CONTENT_FAMILY_ROUTES).toHaveLength(25);
+  expect(Object.keys(EXPECTED_CLASSIFICATION)).toHaveLength(25);
 
   const seen = new Set<string>();
   for (const route of CONTENT_FAMILY_ROUTES) {
@@ -181,6 +183,7 @@ test("Memory Agent may only use the approved read routes in this family", () => 
     "GET /api/v1/content/overview",
     "POST /api/v1/search/expand",
     "POST /api/v1/search/find",
+    "POST /api/v1/experience/find",
     "POST /api/v1/search/search",
   ]);
 

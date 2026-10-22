@@ -20,6 +20,7 @@ test("keeps the Agent tool fence distinct from Workspace Memory Profile persiste
 test("exposes Fork and AIG retrieval, Offer, and diagnosis on the memory fence", () => {
   expect(toolsForMemoryFence(OPENVIKING_TOOL_PROFILE)).toEqual([
     OPENVIKING_TOOL_NAMES.forkFind,
+    OPENVIKING_TOOL_NAMES.experienceFind,
     OPENVIKING_TOOL_NAMES.expand,
     OPENVIKING_TOOL_NAMES.offer,
     OPENVIKING_TOOL_NAMES.diagnose,
@@ -31,6 +32,7 @@ test("exposes Fork and AIG retrieval, Offer, and diagnosis on the memory fence",
 
 test("Memory Agent discovery exposes Fork and AIG traversal", () => {
   expect(toolsForMemoryFence("openviking-memory")).toContain("ov_fork_find");
+  expect(toolsForMemoryFence("openviking-memory")).toContain("ov_experience_find");
   expect(toolsForMemoryFence("openviking-memory")).toContain("ov_expand");
   expect(toolsForMemoryFence("openviking-memory")).not.toContain("ov_find");
   expect(toolsForMemoryFence("openviking-memory")).not.toContain("ov_search_context");

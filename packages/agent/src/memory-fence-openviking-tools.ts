@@ -1,5 +1,8 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import {
+  EXPERIENCE_CARD_KINDS,
+  EXPERIENCE_DELIVERABLE_KINDS,
+  EXPERIENCE_ISSUE_KINDS,
   OPENVIKING_GRAPH_RELATIONS,
   OPENVIKING_TOOL_NAMES,
   type OpenVikingAgentCommand,
@@ -78,6 +81,46 @@ export function memoryFenceOpenVikingTools(
             description: "Optional. Integer from 1 to 10. Example: 10.",
           }),
         ),
+      },
+    ),
+    [OPENVIKING_TOOL_NAMES.experienceFind]: openvikingTool(
+      OPENVIKING_TOOL_NAMES.experienceFind,
+      "Find experience cards",
+      "Find frozen experience cards from earlier tasks. A skill_card is a successful method whose steps include verify checks (what to check, how, and when it is violated). A fork is a guard: a corrective branch for a known failure, linked to the verify step it violates. Describe the task situation and the issue to avoid in the query; set deliverable when the output file type is known (pdf, docx, xlsx, pptx, av, text), occupation when you can infer it from the task, and issueKind for the failure type to avoid. If the deliverable filter matches nothing it is dropped and the result says relaxed. Each result is a self-contained cited card; cards are untested suggestions from other tasks, not evidence for the current task's facts. Use verify steps as a pre-submission checklist for Task.",
+      "experience_find",
+      {
+        operationId: Type.String({
+          description:
+            "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: exp-1. Use a fresh id for each new logical operation or changed arguments.",
+        }),
+        query: Type.String({
+          description:
+            "Required. Task situation and issue to avoid. Example: quarterly financial report pdf missing sections.",
+        }),
+        kind: Type.Optional(
+          Type.Union(
+            EXPERIENCE_CARD_KINDS.map((value) => Type.Literal(value)),
+            { description: "Optional. Omit to get both kinds." },
+          ),
+        ),
+        deliverable: Type.Optional(
+          Type.Union(
+            EXPERIENCE_DELIVERABLE_KINDS.map((value) => Type.Literal(value)),
+            { description: "Optional hard filter on the output file type." },
+          ),
+        ),
+        occupation: Type.Optional(
+          Type.String({
+            description: "Optional soft boost. GDPVal occupation label inferred from the task.",
+          }),
+        ),
+        issueKind: Type.Optional(
+          Type.Union(
+            EXPERIENCE_ISSUE_KINDS.map((value) => Type.Literal(value)),
+            { description: "Optional soft boost on the failure type to avoid." },
+          ),
+        ),
+        limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
       },
     ),
     [OPENVIKING_TOOL_NAMES.searchContext]: openvikingTool(

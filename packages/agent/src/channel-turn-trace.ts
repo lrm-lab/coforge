@@ -42,7 +42,9 @@ function commandOf(step: Extract<AgentTrainingStep, { kind: "tool" }>): string {
 }
 
 /** The id of the channel message a successful send-like tool call published, if any. */
-function publishedMessageId(step: Extract<AgentTrainingStep, { kind: "tool" }>): string | undefined {
+function publishedMessageId(
+  step: Extract<AgentTrainingStep, { kind: "tool" }>,
+): string | undefined {
   if (step.isError) return undefined;
   if (
     (step.toolName === "bash" && SEND_COMMAND.test(commandOf(step))) ||

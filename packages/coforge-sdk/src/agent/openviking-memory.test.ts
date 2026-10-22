@@ -35,6 +35,7 @@ test("freezes the OpenViking agent protocol, fence, tools, and turn budget", () 
   expect(OPENVIKING_TOOL_PROFILE).toBe("openviking-memory");
   expect(OPENVIKING_TOOL_NAMES).toEqual({
     forkFind: "ov_fork_find",
+    experienceFind: "ov_experience_find",
     searchContext: "ov_search_context",
     read: "ov_read",
     expand: "ov_expand",
@@ -43,6 +44,7 @@ test("freezes the OpenViking agent protocol, fence, tools, and turn budget", () 
   });
   expect(OPENVIKING_AGENT_OPERATIONS).toEqual([
     "fork_find",
+    "experience_find",
     "search_context",
     "read",
     "expand",
@@ -118,6 +120,53 @@ test("accepts a numeric string limit inside the candidate cap", () => {
       limit: "11",
     }),
   ).toThrow("invalid openviking fork_find limit");
+});
+
+test("experience_find validates the ADR-0046 slot vocabularies", () => {
+  const base = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "experience_find",
+    operationId: "exp-1",
+    query: "pdf report missing sections",
+  };
+  expect(
+    decodeOpenVikingAgentCommand({
+      ...base,
+      deliverable: "pdf",
+      issueKind: "missing_section",
+      kind: "skill_card",
+      occupation: "Financial Analyst",
+      limit: "3",
+    }),
+  ).toMatchObject({ op: "experience_find", deliverable: "pdf", limit: 3 });
+  expect(() => decodeOpenVikingAgentCommand({ ...base, deliverable: "zip" })).toThrow(
+    "invalid openviking experience_find deliverable",
+  );
+  expect(() => decodeOpenVikingAgentCommand({ ...base, issueKind: "slow" })).toThrow(
+    "invalid openviking experience_find issueKind",
+  );
+  expect(() => decodeOpenVikingAgentCommand({ ...base, targetUri: "viking://x" })).toThrow(
+    "fixed namespace",
+  );
+  expect(
+    decodeOpenVikingAgentResponse("experience_find", {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "experience_find",
+      operationId: "exp-1",
+      duplicate: false,
+      items: [],
+      relaxed: true,
+    }),
+  ).toMatchObject({ relaxed: true });
+  expect(() =>
+    decodeOpenVikingAgentResponse("experience_find", {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "experience_find",
+      operationId: "exp-1",
+      duplicate: false,
+      items: [],
+    }),
+  ).toThrow("relaxed");
 });
 
 test("rejects credential fields and candidate limits above ten", () => {

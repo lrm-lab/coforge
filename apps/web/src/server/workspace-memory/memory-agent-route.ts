@@ -167,6 +167,26 @@ async function handleOpenViking(
   input: { workspaceId: string; agentId: string },
   command: OpenVikingAgentCommand,
 ): Promise<OpenVikingAgentResponse> {
+  if (command.op === "experience_find") {
+    const result = await deps.openviking.experienceFind({
+      workspaceId: input.workspaceId,
+      agentId: input.agentId,
+      operationId: command.operationId,
+      query: command.query,
+      ...(command.kind === undefined ? {} : { kind: command.kind }),
+      ...(command.deliverable === undefined ? {} : { deliverable: command.deliverable }),
+      ...(command.occupation === undefined ? {} : { occupation: command.occupation }),
+      ...(command.issueKind === undefined ? {} : { issueKind: command.issueKind }),
+      ...(command.limit === undefined ? {} : { limit: command.limit }),
+    });
+    return {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "experience_find",
+      operationId: command.operationId,
+      duplicate: false,
+      ...result,
+    };
+  }
   if (command.op === "fork_find") {
     const result = await deps.openviking.forkFind({
       workspaceId: input.workspaceId,

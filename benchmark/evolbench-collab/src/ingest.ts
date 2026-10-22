@@ -128,13 +128,13 @@ export async function drainEpisodeToMemory(input: {
     for (let attempt = 1; outcome.outcome === "retryable_failure" && attempt <= 2; attempt += 1) {
       console.log(`drain retry ${attempt}`);
       outcome = await input.dispatcher.dispatch({
-      profile,
-      detected: segment,
-      ...(input.turnEnrichment ? { turnEnrichment: input.turnEnrichment } : {}),
-      ...(input.outcomeEvaluatorResults?.length
-        ? { outcomeEvaluatorResults: input.outcomeEvaluatorResults }
-        : {}),
-    });
+        profile,
+        detected: segment,
+        ...(input.turnEnrichment ? { turnEnrichment: input.turnEnrichment } : {}),
+        ...(input.outcomeEvaluatorResults?.length
+          ? { outcomeEvaluatorResults: input.outcomeEvaluatorResults }
+          : {}),
+      });
     }
     if (outcome.outcome !== "dispatched" && outcome.outcome !== "replayed") {
       const detail = outcome.outcome === "skipped" ? outcome.reason : outcome.sanitizedError;
