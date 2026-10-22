@@ -61,36 +61,19 @@ test("model known with reasoning levels: field shown, current reasoning submitte
   });
 });
 
-test("Fast mode is offered only by a supporting runtime and a model that accepts it", () => {
-  const supporting = model({ supportsFastMode: true });
-  expect(fastModeFieldState(supporting, RUNTIME_PROVIDER.CLAUDE_CODE, true)).toEqual({
+test("Fast mode is offered by Codex and Claude Code for every model, as the reference does", () => {
+  // The runtime alone decides, so every model offers it, the runtime's default and a model still
+  // loading included; a saved request is submitted as it stands.
+  expect(fastModeFieldState(RUNTIME_PROVIDER.CLAUDE_CODE, true)).toEqual({
     visible: true,
     submitted: true,
   });
-  expect(fastModeFieldState(supporting, RUNTIME_PROVIDER.CODEX, false)).toEqual({
+  expect(fastModeFieldState(RUNTIME_PROVIDER.CODEX, false)).toEqual({
     visible: true,
-    submitted: false,
-  });
-  // The model is there but does not accept it: the request is cleared, not carried.
-  expect(fastModeFieldState(model(), RUNTIME_PROVIDER.CLAUDE_CODE, true)).toEqual({
-    visible: false,
     submitted: false,
   });
   // A runtime whose adapter applies no tier never offers it, whatever the model claims.
-  expect(fastModeFieldState(supporting, RUNTIME_PROVIDER.PI, true)).toEqual({
-    visible: false,
-    submitted: false,
-  });
-});
-
-test("an unloaded model keeps the saved Fast request, so opening the dialog cannot clear it", () => {
-  // `selectedModel` is undefined until the catalog load resolves; submitting `false` here would
-  // make an already-Fast Agent open dirty and let a Save switch Fast mode off by accident.
-  expect(fastModeFieldState(undefined, RUNTIME_PROVIDER.CLAUDE_CODE, true)).toEqual({
-    visible: false,
-    submitted: true,
-  });
-  expect(fastModeFieldState(undefined, RUNTIME_PROVIDER.PI, false)).toEqual({
+  expect(fastModeFieldState(RUNTIME_PROVIDER.PI, true)).toEqual({
     visible: false,
     submitted: false,
   });

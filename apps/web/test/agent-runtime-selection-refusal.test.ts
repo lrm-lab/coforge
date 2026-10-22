@@ -55,15 +55,13 @@ test("each reason a Computer cannot run the Agent is told apart, as the referenc
   expect(agentRuntimeSelectionRefusal(claude, inventory({ models: [] }))).toBe("model_missing");
 });
 
-test("a Fast mode selection is refused when the model does not accept it, and allowed when it does", () => {
+test("Fast mode is accepted for any Claude Code or Codex model, and refused by other runtimes", () => {
   const fastClaude = { ...claude, fastMode: true };
-  // The model is there; what it cannot do is the Fast tier, so that is the refusal named.
-  expect(agentRuntimeSelectionRefusal(fastClaude, inventory())).toBe("fast_mode_unsupported");
+  // The reference offers it for every model of the two runtimes, reported as Fast-capable or not.
+  expect(agentRuntimeSelectionRefusal(fastClaude, inventory())).toBeNull();
+  // The runtime's default model, too.
   expect(
-    agentRuntimeSelectionRefusal(
-      fastClaude,
-      inventory({ models: [{ ...sonnet, supportsFastMode: true }] }),
-    ),
+    agentRuntimeSelectionRefusal({ ...fastClaude, model: "", modelProvider: "" }, inventory()),
   ).toBeNull();
   // A runtime whose adapter applies no service tier never offers it, whatever the model claims.
   expect(

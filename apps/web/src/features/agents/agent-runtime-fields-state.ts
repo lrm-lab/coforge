@@ -44,21 +44,16 @@ export function reasoningFieldState(
 }
 
 /**
- * Whether the Fast mode switch renders and what the form submits for it. Only the runtimes whose
- * adapters apply a service tier offer it (Claude Code, Codex), and only for a model the Computer
- * reported as accepting it. While the model is not in the catalog (loading, load failed, or a
- * saved model the catalog no longer lists) the saved value is submitted unchanged, so merely
- * opening the dialog cannot switch Fast mode off; a catalog model that does not accept it clears
- * the request.
+ * Whether the Fast mode choice renders and what the form submits for it. As in the reference, the
+ * runtime alone decides: the ones whose adapters apply a service tier (Claude Code, Codex) offer it
+ * for every model, including the runtime's default, and any other runtime clears the request. A
+ * model that turns out not to accept it is reported after launch, not refused here.
  */
 export function fastModeFieldState(
-  selectedModel: CodeAgentModelMetadata | undefined,
   provider: RuntimeProvider,
   fastMode: boolean,
 ): { visible: boolean; submitted: boolean } {
-  if (!selectedModel) return { visible: false, submitted: fastMode };
-  const visible =
-    RUNTIME_PROVIDER_SUPPORTS_FAST_MODE[provider] && selectedModel.supportsFastMode === true;
+  const visible = RUNTIME_PROVIDER_SUPPORTS_FAST_MODE[provider];
   return { visible, submitted: visible ? fastMode : false };
 }
 

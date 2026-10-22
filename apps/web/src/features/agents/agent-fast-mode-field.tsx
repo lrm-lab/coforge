@@ -21,7 +21,7 @@ export function AgentFastModeField({
       onChange={onChange}
       className={({ isSelected: selected }) =>
         cx(
-          "min-w-0 cursor-pointer rounded-lg p-3 ring-1 ring-secondary ring-inset sm:col-span-2",
+          "min-w-0 cursor-pointer rounded-lg p-3 ring-1 ring-secondary ring-inset",
           selected && "ring-2 ring-brand",
         )
       }

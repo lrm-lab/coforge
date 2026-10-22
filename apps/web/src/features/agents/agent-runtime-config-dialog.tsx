@@ -169,7 +169,7 @@ export function AgentRuntimeConfigForm({
           // heading, one line saying what environment variables do, then the rows and the add
           // action. The heading and the line together replace what used to be a bordered box with
           // a trailing hint, which read as a stray control rather than a section of the form.
-          <Disclosure className="sm:col-span-2">
+          <Disclosure>
             <Button
               slot="trigger"
               type="button"
@@ -250,7 +250,7 @@ export function AgentRuntimeConfigForm({
           </Disclosure>
         )}
         {error && (
-          <p role="alert" className="text-sm text-error-primary sm:col-span-2">
+          <p role="alert" className="text-sm text-error-primary">
             {error}
           </p>
         )}

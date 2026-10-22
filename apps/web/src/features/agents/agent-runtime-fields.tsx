@@ -246,7 +246,6 @@ export function AgentRuntimeFields({
     reasoning,
   );
   const { visible: fastModeVisible, submitted: submittedFastMode } = fastModeFieldState(
-    selectedModel,
     provider,
     fastMode,
   );
@@ -283,7 +282,7 @@ export function AgentRuntimeFields({
       <input type="hidden" name="provider" value={provider} />
       <Select
         label={m.agent_form_provider()}
-        size="sm"
+        size="md"
         className="min-w-0"
         selectedKey={provider}
         onSelectionChange={(key) => {
@@ -314,7 +313,7 @@ export function AgentRuntimeFields({
         <Input
           label={m.agent_form_model_provider()}
           name="modelProvider"
-          size="sm"
+          size="md"
           isRequired={provider === RUNTIME_PROVIDER.COFORGE}
           maxLength={100}
           defaultValue={modelProvider}
@@ -329,7 +328,7 @@ export function AgentRuntimeFields({
       {!failed && !RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider] && (
         <Select
           label={m.agent_form_model_provider()}
-          size="sm"
+          size="md"
           className="min-w-0"
           isDisabled={!options}
           // The Pi provider picker carries no hint: the sentence that used to sit here explained
@@ -368,20 +367,20 @@ export function AgentRuntimeFields({
         <Input
           label={m.agent_form_model()}
           name="model"
-          size="sm"
+          size="md"
           isRequired
           maxLength={200}
           defaultValue={initial?.model}
-          className="min-w-0 sm:col-span-2"
+          className="min-w-0"
           onChange={() => setManualDirty(true)}
         />
       ) : (
         <>
           <input type="hidden" name="model" value={modelValue} />
-          <div className="relative min-w-0 sm:col-span-2">
+          <div className="relative min-w-0">
             <Select
               label={m.agent_form_model()}
-              size="sm"
+              size="md"
               wrapValue
               className="min-w-0 [&_[data-label]]:pr-8"
               popoverClassName="min-w-(--trigger-width) w-max max-w-[min(36rem,calc(100vw-3rem))]"
@@ -444,7 +443,7 @@ export function AgentRuntimeFields({
             </div>
           </div>
           {refreshFailedComputerId === computerId && (
-            <p role="alert" className="text-sm text-error-primary sm:col-span-2">
+            <p role="alert" className="text-sm text-error-primary">
               {m.agent_form_model_refresh_failed()}
             </p>
           )}
@@ -453,8 +452,8 @@ export function AgentRuntimeFields({
       {piConfigured && customModelActive && (
         <Input
           label={m.agent_form_model_custom_id()}
-          size="sm"
-          className="min-w-0 sm:col-span-2"
+          size="md"
+          className="min-w-0"
           placeholder="provider/model-id"
           value={customModelText}
           onChange={setCustomModelText}
@@ -469,8 +468,8 @@ export function AgentRuntimeFields({
       {showApiKeyField && (
         <Input
           label={m.agent_runtime_api_key({ provider: apiKeyProviderId })}
-          size="sm"
-          className="min-w-0 sm:col-span-2"
+          size="md"
+          className="min-w-0"
           name="apiKey"
           type="password"
           value={apiKey}
@@ -490,7 +489,7 @@ export function AgentRuntimeFields({
         />
       )}
       {failed && (
-        <div role="alert" className="grid gap-2 sm:col-span-2">
+        <div role="alert" className="grid gap-2">
           <p className="text-sm text-error-primary">{m.agent_form_catalog_manual_help()}</p>
           <Button
             type="button"
@@ -516,8 +515,8 @@ export function AgentRuntimeFields({
         <Select
           label={m.agent_form_reasoning()}
           hint={m.agent_form_reasoning_help()}
-          size="sm"
-          className="min-w-0 sm:col-span-2"
+          size="md"
+          className="min-w-0"
           selectedKey={reasoning}
           onSelectionChange={(key) => key !== null && setReasoning(String(key))}
         >

@@ -120,9 +120,9 @@ export function AgentCreateDialog({
                   onClose={close}
                   className="px-4 pt-4 sm:px-6 sm:pt-6"
                 />
-                <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 sm:gap-4 sm:px-6 sm:py-6">
+                <div className="grid gap-3 px-4 py-4 sm:gap-4 sm:px-6 sm:py-6">
                   {joinsChannelName && (
-                    <p className="text-sm text-secondary sm:col-span-2">
+                    <p className="text-sm text-secondary">
                       {m.agent_form_joins_channel({ channel: joinsChannelName })}
                     </p>
                   )}
@@ -132,7 +132,7 @@ export function AgentCreateDialog({
                     isDisabled={computerLocked}
                     size="md"
                     label={m.agent_form_computer()}
-                    className="min-w-0 sm:col-span-2"
+                    className="min-w-0"
                     selectedKey={computerId}
                     onSelectionChange={(key) => {
                       if (key !== null) setComputerId(String(key));
@@ -170,7 +170,7 @@ export function AgentCreateDialog({
                         ? `${m.agent_form_username_hint()} ${nameNote}`
                         : m.agent_form_username_hint()
                     }
-                    className="min-w-0 sm:col-span-2"
+                    className="min-w-0"
                   />
                   <TextArea
                     label={m.agent_profile_description()}
@@ -178,7 +178,7 @@ export function AgentCreateDialog({
                     rows={2}
                     defaultValue={defaults?.description}
                     placeholder={m.agent_form_description_placeholder()}
-                    className="min-w-0 sm:col-span-2"
+                    className="min-w-0"
                   />
                   <AgentRuntimeFields
                     key={computerId}
@@ -193,7 +193,6 @@ export function AgentCreateDialog({
                     })}
                   />
                   <Checkbox
-                    className="sm:col-span-2"
                     label={m.agent_form_visibility_private()}
                     hint={m.agent_form_visibility_private_hint()}
                     isDisabled={visibilityLocked}
@@ -203,7 +202,7 @@ export function AgentCreateDialog({
                   {/* A plain alert, not `HintText`: outside a field its "errorMessage" slot is not
                       one the enclosing Dialog offers, and rendering it crashes the page. */}
                   {error && (
-                    <p role="alert" className="text-sm text-error-primary sm:col-span-2">
+                    <p role="alert" className="text-sm text-error-primary">
                       {error}
                     </p>
                   )}

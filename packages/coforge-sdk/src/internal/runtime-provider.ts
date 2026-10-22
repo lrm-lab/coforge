@@ -61,7 +61,7 @@ export const RUNTIME_PROVIDER_USES_EXTERNAL_CLI: Record<RuntimeProvider, boolean
  * `--settings {"fastMode":true}`, Codex with `serviceTier:"fast"` on thread/start. The one
  * definition every surface reads — the Web's runtime picker and a saved-selection check, the
  * Daemon's model catalog, and the reference Computer's own `{claude, codex}` set all agree here.
- * A model must still report that it accepts the tier (`CodeAgentModelMetadata.supportsFastMode`).
+ * As in the reference, the runtime alone gates it: every model of these runtimes offers it.
  */
 export const RUNTIME_PROVIDER_SUPPORTS_FAST_MODE: Record<RuntimeProvider, boolean> = {
   [RUNTIME_PROVIDER.COFORGE]: false,
