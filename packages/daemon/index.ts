@@ -82,14 +82,12 @@ export { readCodexUsage } from "#src/code-agent/codex/usage";
 export { readClaudeCodeUsage } from "#src/code-agent/claude-code/usage";
 export { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
 export { KiroProvider } from "#src/code-agent/kiro/provider";
+export { startDaemonLocalRpcServer } from "#src/local-rpc";
+export { startAgentProxy } from "#src/agent-proxy";
 export {
   COORDINATOR_SERVICE,
   coordinatorServiceName,
   createDaemonHost,
-} from "#src/daemon-host/index";
-export { startDaemonLocalRpcServer } from "#src/local-rpc";
-export { startAgentProxy } from "#src/agent-proxy";
-export {
   LaunchdDaemonHost,
   launchdPlist,
   SystemdUserDaemonHost,
@@ -124,6 +122,11 @@ export {
   PROCESS_LOCK_STATEMENTS,
 } from "#src/platform/process-lock";
 export { readOperatingSystem } from "#src/platform/operating-system";
+export { writeLoginShellPathProbe } from "#src/platform/login-shell-path";
+export {
+  readLoginShellPath,
+  type LoginShellPathRecord,
+} from "#src/platform/login-shell-path-state";
 export type { ProcessLock } from "#src/platform/process-lock";
 export type {
   DaemonLauncher,
@@ -143,29 +146,33 @@ export type {
   AgentStateTransition,
   AgentStatus as AgentStateStatus,
 } from "#src/agent-runtime/agent-state-machine";
-export { DaemonRuntime } from "#src/daemon-runtime/runtime";
+export {
+  DaemonRuntime,
+  type DaemonConfig,
+  type WorkspaceConfig,
+} from "#src/daemon-runtime/runtime";
 export {
   SystemdWorkspaceInstance,
   workspaceUnit,
 } from "#src/supervisor/systemd-workspace-instance";
 export { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
-export { AgentAppInbox } from "#src/agent-app-inbox/agent-app-inbox";
-export type { AgentAppItem, MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
-export type { DaemonConfig, WorkspaceConfig } from "#src/daemon-runtime/runtime";
+export {
+  AgentAppInbox,
+  type AgentAppItem,
+  type MintAppItem,
+} from "#src/agent-app-inbox/agent-app-inbox";
 export {
   InMemoryDaemonCredentialStore,
   FileDaemonCredentialStore,
+  type DaemonCredentialStore,
 } from "#src/credentials/credential-store";
-export type { DaemonCredentialStore } from "#src/credentials/credential-store";
-export type {
-  DaemonConnectionClient,
-  DaemonConnectionConfig,
-  DaemonConnectionClientFactory,
-} from "#src/connection/daemon-connection";
 export type { AgentMessageHttpClient } from "#src/connection/agent-http-clients";
 export {
   DaemonConnection,
   defaultCentrifugeWorkspaceClientFactory,
+  type DaemonConnectionClient,
+  type DaemonConnectionConfig,
+  type DaemonConnectionClientFactory,
 } from "#src/connection/daemon-connection";
 export { COFORGE_DAEMON_SERVER_URL, daemonConnectionEndpoint } from "#src/connection/built-server";
 

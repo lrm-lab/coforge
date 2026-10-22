@@ -8,7 +8,7 @@ These rules extend the repository root `AGENTS.md` for this package component.
 a desktop UI, a cloud WebSocket client, or the owner of Daemon business logic.
 The Computer starts or reuses the Daemon and talks to it through the local versioned RPC boundary. It may perform the one-time user-authorized setup registration, but the Daemon owns ongoing Workspace and Agent operation.
 The executable dispatches `__daemon` to the Daemon runtime, `__agent-cli` to
-the existing `@lrm/coforge/runner`, `__lifecycle` to the installer's read-only
+the existing `@lrm/coforge/runner`, `__print-path` to the Daemon's login-shell PATH writer, `__lifecycle` to the installer's read-only
 surface, and all normal invocations to the Computer management CLI. These internal modes do not make Daemon or Agent CLI public
 management commands.
 Normal lifecycle commands request startup through the platform user process

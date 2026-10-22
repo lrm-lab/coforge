@@ -45,6 +45,7 @@ import { COFORGE_DAEMON_SERVER_URL } from "#src/connection/built-server";
 import { launchComputerUpgrade } from "#src/platform/computer-upgrade-launcher";
 import { sweepLeftoverComputerUpgradeJobs } from "#src/platform/computer-upgrade-sweep";
 import { UpgradeLaunchFailedError } from "./upgrade-error";
+import { startLoginShellPathImport } from "./login-shell-path-import";
 import {
   sweepComputerUpgradeReceipts,
   watchComputerUpgradeReceipt,
@@ -80,12 +81,13 @@ export async function runMachineSupervisor(
       async () => {
         const lock = await acquireSupervisorLock(stateDirectory);
         const logger = getLogger(["coforge", "daemon", "supervisor"]);
+        const loginShellPath = startLoginShellPathImport(stateDirectory);
         try {
           logger.info("Coordinator process started", { event: "coordinator:started" });
-          // Best-effort: a leftover one-shot upgrade job never respawns, but it can still hold a
-          // stale `launchctl list` entry and plist across restarts until this sweep clears it.
-          // Windows: do not await — accumulated upgrade-result files used to drive serial
-          // schtasks /Delete that exceeded the ~10s local handshake budget and failed upgrades.
+          // Best-effort: a leftover one-shot upgrade job never respawns but can hold a stale
+          // `launchctl list` entry and plist across restarts until this sweep clears it.
+          // Windows: do not await — accumulated upgrade-result files drove serial schtasks
+          // /Delete calls that exceeded the ~10s local handshake budget and failed upgrades.
           const leftoverSweep = sweepLeftoverComputerUpgradeJobs({
             platform: process.platform,
             stateDirectory,
@@ -98,6 +100,7 @@ export async function runMachineSupervisor(
           if (process.platform !== "win32") await leftoverSweep;
           await runWithSupervisorLock(socketPath, stateDirectory, createBindings(stateDirectory));
         } finally {
+          await loginShellPath.stop();
           lock.release();
           logger.info("Coordinator process stopped", { event: "coordinator:stopped" });
         }
@@ -210,8 +213,7 @@ async function runWithSupervisorLock(
    * receipt already on disk, or the pending TTL already passed, settles it right there instead of
    * refusing the new request. Captures the answer through `sweepComputerUpgradeReceipts`'
    * `complete` callback rather than calling back into the supervisor - this runs inside
-   * `recordUpgrade`'s own serialized mutation, which a call to `supervisor.completeUpgrade` would
-   * deadlock against.
+   * `recordUpgrade`'s own serialized mutation, where `supervisor.completeUpgrade` would deadlock.
    */
   const settlePendingUpgrade = async (
     workspaceId: string,
@@ -256,14 +258,12 @@ async function runWithSupervisorLock(
     {
       async start(binding, options = {}) {
         const directory = workspaceDirectory(binding.workspaceId);
-        // A degraded Workspace must fail fast, not spend up to 30s discovering the OS unit will
-        // never open local RPC: the replacement child would itself observe the same latch and
-        // exit 0 immediately (see `guardWorkspaceRunnerStart`), so waiting out that readiness
-        // budget here only delays every other binding behind it in `#reconcileBindings` and, in
-        // turn, this Coordinator's own local RPC from ever opening (measured: a degraded
-        // Workspace stalled Coordinator recovery for ~37s and the client-side handshake gave up
-        // after its own 10s timeout with a misleading "did not accept the local handshake"
-        // message, never seeing the real reason at all).
+        // A degraded Workspace must fail fast, not spend up to 30s waiting for local RPC the OS
+        // unit will never open: the replacement child would observe the same latch and exit 0
+        // (see `guardWorkspaceRunnerStart`). Waiting out that readiness budget delayed every
+        // other binding behind it in `#reconcileBindings` (measured ~37s) and, in turn, this
+        // Coordinator's own local RPC, until the client-side handshake gave up after 10s with a
+        // misleading "did not accept the local handshake" message that hid the real reason.
         // A parked Workspace never gets here: `MachineSupervisor` checks `parkedReason` first.
         const health = await workspaceHealth(binding.workspaceId).state();
         if (health.status === "degraded") {
@@ -402,8 +402,8 @@ async function runWithSupervisorLock(
     );
   /** After every lifecycle mutation queued so far: what the Coordinator's own steps act on. */
   const snapshot = async () => runtimes(await supervisor.snapshot());
-  /** Without waiting behind a mutation still under way: what an operator reads (`status`, a
-   * command's answer), so it never outlasts the local lifecycle client. */
+  /** What an operator reads (`status`, a command's answer), without waiting behind a mutation,
+   * so it never outlasts the local lifecycle client. */
   const view = async () => runtimes(await supervisor.view());
   const completeUpgrade = async (
     workspaceId: string,

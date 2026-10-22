@@ -16,6 +16,12 @@ Rules for the machine Coordinator in `src/supervisor/`. They extend
 - Neither the Coordinator nor a Workspace runtime scans transcripts to start
   Agents on its own.
 
+## Login-shell PATH import
+
+- `login-shell-path-import.ts` starts the probe once per Coordinator process,
+  in the background: startup and operator commands never wait for it, and a
+  Workspace rescan or restart does not rerun it.
+
 ## Binding registry
 
 - `binding-store.ts` is the only adapter that validates and atomically

@@ -18,6 +18,7 @@ function fakePorts(overrides: Partial<StatusPorts> = {}): StatusPorts {
     activeBinaryPath: "/home/user/.coforge/computer/install/active/coforge-computer",
     coordinatorLabel: "cn.coforge.computer.daemon",
     readActiveInstall: async () => ({ kind: "present", current: "1.4.2", previous: "1.4.1" }),
+    readLoginShellPath: () => ({ state: "imported", shell: "/bin/zsh", entryCount: 7 }),
     locateBinaryOnPath: async () => "/home/user/.local/bin/coforge-computer",
     // Both the PATH shim and the active symlink resolve to the same real file: a healthy install.
     resolveRealPath: async () =>

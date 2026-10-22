@@ -87,6 +87,16 @@ if (Bun.argv[2] === "__pi-chat") {
     console.error("attach environment is incomplete");
     process.exit(1);
   }
+} else if (Bun.argv[2] === "__print-path") {
+  // Run by the login shell the Coordinator probes: records this process's PATH, nothing else.
+  const { writeLoginShellPathProbe } =
+    await import("@lrm/coforge-daemon/src/platform/login-shell-path");
+  try {
+    await writeLoginShellPathProbe(Bun.argv[3] ?? "", Bun.argv[4] ?? "");
+    process.exit(0);
+  } catch {
+    process.exit(1);
+  }
 } else if (Bun.argv[2] === "__lifecycle") {
   const { runLifecycleCommand } = await import("#src/release/lifecycle-command");
   process.exitCode = await runLifecycleCommand(Bun.argv.slice(3));

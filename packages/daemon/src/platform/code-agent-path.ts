@@ -1,9 +1,13 @@
 import { readdirSync } from "node:fs";
 import { posix, win32 } from "node:path";
+import { loginShellPathDirectories, supervisorStateDirectory } from "./login-shell-path-state";
 
 export function codeAgentExecutableSearchPath(
   environment: Readonly<Record<string, string | undefined>>,
   platform: NodeJS.Platform = process.platform,
+  /** Where the Coordinator keeps the PATH it imported from the login shell; a Workspace Daemon
+   * knows it from its own process environment. */
+  stateDirectory: string | undefined = supervisorStateDirectory(),
 ): string {
   const paths = platform === "win32" ? win32 : posix;
   const homeDirectory = environment.HOME ?? environment.USERPROFILE;
@@ -34,7 +38,11 @@ export function codeAgentExecutableSearchPath(
       : platform === "win32" && environment.APPDATA
         ? [paths.join(environment.APPDATA, "npm")]
         : ["/usr/local/bin"];
-  return [environment.PATH, ...userDirectories, ...platformDirectories]
+  // Current PATH first, then what the login shell added (rc-file installs), then the defaults.
+  // Candidates found there still go through the usual executable validation and probe.
+  const loginShellDirectories =
+    platform === "win32" ? [] : loginShellPathDirectories(stateDirectory);
+  return [environment.PATH, ...loginShellDirectories, ...userDirectories, ...platformDirectories]
     .filter((value): value is string => Boolean(value))
     .join(executablePathDelimiter(platform));
 }

@@ -21,6 +21,7 @@ const REPORT: ComputerStatusReport = {
     socketPath: "/home/user/.coforge/daemon/daemon.sock",
     rpc: { reachable: true, runtimeCount: 1 },
   },
+  loginShellPath: { state: "imported", shell: "/bin/zsh", entryCount: 7 },
   workspaces: {
     readable: true,
     workspaces: [
@@ -84,6 +85,7 @@ test("renderStatusHuman prints short aligned sections, one fact per line", () =>
   expect(text).toContain("Coordinator job:       cn.coforge.computer.daemon");
   expect(text).toContain("PID:                   4821");
   expect(text).toContain("Local RPC:             reachable (1 workspace runtime(s))");
+  expect(text).toContain("PATH source:           imported from /bin/zsh (7 entries)");
   expect(text).toContain("Workspaces (1)");
   expect(text).toContain("ws-1");
   expect(text).toContain("pid=111 (daemon-snapshot)  cloud=connected");
@@ -99,6 +101,20 @@ test("renderStatusHuman prints short aligned sections, one fact per line", () =>
   expect(text).toContain("Supervisor lock:       held (owner pid 4821)");
   expect(text).toContain("Leftover upgrade jobs");
   expect(text).toContain("none");
+});
+
+test("renderStatusHuman states why the login-shell PATH is not in use", () => {
+  const pathLine = (loginShellPath: ComputerStatusReport["loginShellPath"]) =>
+    renderStatusHuman({ ...REPORT, loginShellPath }).find((line) => line.includes("PATH source"));
+  expect(pathLine({ state: "failed", reason: "timeout", shell: "/bin/zsh" })).toContain(
+    "failed: timeout",
+  );
+  expect(pathLine({ state: "failed", reason: "internal_error" })).toContain(
+    "failed: internal_error",
+  );
+  expect(pathLine({ state: "failed", reason: "disabled" })).toContain("  disabled");
+  expect(pathLine({ state: "failed", reason: "skipped" })).toContain("  skipped");
+  expect(pathLine({ state: "not_probed" })).toContain("not yet probed");
 });
 
 test("renderStatusHuman reports an unreadable install without crashing", () => {

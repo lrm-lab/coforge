@@ -6,6 +6,7 @@ import {
   FileBindingStore,
   isLockContention,
   LocalDaemonLauncher,
+  readLoginShellPath,
   resolveDaemonExecutablePath,
   workspaceHealthJournalPath,
   workspaceSocketPath,
@@ -27,6 +28,7 @@ import type {
   BindingsLoad,
   DaemonSnapshotProbe,
   LockState,
+  LoginShellPathStatus,
   StatusBinding,
   StatusPorts,
   SupportedStatusPlatform,
@@ -74,6 +76,17 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
     coordinatorLabel,
     async readActiveInstall(): Promise<ActiveInstallRead> {
       return readActiveInstall(join(input.installDirectory, "active.json"));
+    },
+    readLoginShellPath(): LoginShellPathStatus {
+      const record = readLoginShellPath(input.stateDirectory);
+      if (!record) return { state: "not_probed" };
+      return record.ok
+        ? { state: "imported", shell: record.shell, entryCount: record.path.length }
+        : {
+            state: "failed",
+            reason: record.reason,
+            ...(record.shell ? { shell: record.shell } : {}),
+          };
     },
     async locateBinaryOnPath(): Promise<string | null> {
       return locateBinaryOnPath(input.platform, binaryName, environment.PATH ?? "");

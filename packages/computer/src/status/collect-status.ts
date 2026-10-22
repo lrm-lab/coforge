@@ -31,6 +31,7 @@ export async function collectComputerStatus(ports: StatusPorts): Promise<Compute
     platform: ports.platform,
     install,
     supervisor,
+    loginShellPath: ports.readLoginShellPath(),
     workspaces,
     agents,
     locks: {

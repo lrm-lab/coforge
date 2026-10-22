@@ -70,7 +70,16 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
         ? `reachable (${supervisor.rpc.runtimeCount} workspace runtime(s))`
         : `unreachable (${terminalText(supervisor.rpc.error)})`
     }`,
+    `  PATH source:           ${renderLoginShellPath(report.loginShellPath)}`,
   ];
+}
+
+function renderLoginShellPath(status: ComputerStatusReport["loginShellPath"]): string {
+  if (status.state === "imported")
+    return `imported from ${terminalText(status.shell)} (${status.entryCount} entries)`;
+  if (status.state === "not_probed") return "not yet probed";
+  if (status.reason === "disabled" || status.reason === "skipped") return status.reason;
+  return `failed: ${terminalText(status.reason)}`;
 }
 
 function renderWorkspaces(report: ComputerStatusReport): string[] {

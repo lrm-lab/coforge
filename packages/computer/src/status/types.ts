@@ -117,12 +117,19 @@ export type LocksStatus = {
   supervisorLock: { present: boolean; ownerPid: number | null };
 };
 
+/** Where the executable search PATH of Workspace Daemons gets its login-shell directories. */
+export type LoginShellPathStatus =
+  | { state: "imported"; shell: string; entryCount: number }
+  | { state: "failed"; reason: string; shell?: string }
+  | { state: "not_probed" };
+
 export type ComputerStatusReport = {
   schemaVersion: 1;
   generatedAt: string;
   platform: SupportedStatusPlatform;
   install: InstallStatus;
   supervisor: SupervisorStatus;
+  loginShellPath: LoginShellPathStatus;
   workspaces: WorkspacesStatus;
   agents: AgentsStatus;
   locks: LocksStatus;
@@ -174,6 +181,8 @@ export interface StatusPorts {
   releaseFeedUrl: string;
   socketPath: string;
   readActiveInstall(): Promise<ActiveInstallRead>;
+  /** The latest result the Coordinator recorded for its login-shell PATH import. */
+  readLoginShellPath(): LoginShellPathStatus;
   locateBinaryOnPath(): Promise<string | null>;
   resolveRealPath(path: string): Promise<string | null>;
   activeBinaryPath: string;

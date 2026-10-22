@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 /**
@@ -13,4 +14,19 @@ import { dirname } from "node:path";
 export async function writePrivateFile(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await writeFile(path, content, { encoding: "utf8", mode: 0o600 });
+}
+
+/**
+ * Like `writePrivateFile`, but a reader never sees a partial file: the content goes to a sibling
+ * temporary file (created `0600`) that is then renamed over `path`.
+ */
+export async function writePrivateFileAtomic(path: string, content: string): Promise<void> {
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writePrivateFile(temporary, content);
+    await rename(temporary, path);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
 }
