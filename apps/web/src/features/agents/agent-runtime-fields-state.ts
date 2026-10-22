@@ -44,8 +44,8 @@ export function reasoningFieldState(
 }
 
 /**
- * Whether the Fast mode choice renders and what the form submits for it. As in the reference, the
- * runtime alone decides: the ones whose adapters apply a service tier (Claude Code, Codex) offer it
+ * Whether the Fast mode choice renders and what the form submits for it. The runtime alone
+ * decides: the ones whose adapters apply a service tier (Claude Code, Codex) offer it
  * for every model, including the runtime's default, and any other runtime clears the request. A
  * model that turns out not to accept it is reported after launch, not refused here.
  */

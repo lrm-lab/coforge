@@ -3,8 +3,8 @@ import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { cx } from "#src/utils/cx";
 
 /**
- * A yes/no choice in the Agent forms, drawn as the reference's option card: a bordered checkbox
- * whose description wraps inside the border, so a long hint never widens the dialog.
+ * A yes/no choice in the Agent forms, drawn as an option card: a bordered checkbox whose
+ * description wraps inside the border, so a long hint never widens the dialog.
  */
 export function AgentOptionCard({
   label,
@@ -26,13 +26,21 @@ export function AgentOptionCard({
       isSelected={isSelected}
       isDisabled={isDisabled}
       onChange={onChange}
-      className={({ isSelected: selected, isDisabled: disabled }) =>
-        cx(
-          "min-w-0 cursor-pointer rounded-lg p-3 ring-1 ring-secondary ring-inset",
-          selected && "ring-2 ring-brand",
-          disabled && "cursor-not-allowed",
-        )
-      }
+      className={optionCardClassName}
     />
+  );
+}
+
+function optionCardClassName({
+  isSelected,
+  isDisabled,
+}: {
+  isSelected: boolean;
+  isDisabled: boolean;
+}) {
+  return cx(
+    "min-w-0 cursor-pointer rounded-lg p-3 ring-1 ring-secondary ring-inset",
+    isSelected && "ring-2 ring-brand",
+    isDisabled && "cursor-not-allowed",
   );
 }
