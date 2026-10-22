@@ -15,8 +15,8 @@ import {
   deriveTurnEnrichment,
   evaluatorResultFromVerdict,
   loadEnrichmentAgents,
-  type SidecarVerdict,
 } from "./enrichment";
+import { verifyWithSidecar } from "./sidecar";
 import { createEvalDispatcher, drainEpisodeToMemory } from "./ingest";
 import type { OpenVikingEvaluatorResult } from "../../../apps/web/src/server/openviking/typed-session-extract.server";
 import { episodesForArm, groupFamilies, loadManifest } from "./manifest";
@@ -389,40 +389,13 @@ async function executeEpisode(
     runtimeDiagnostics: provisioned.daemon.runtimeDiagnostics,
   });
   const mechanism = classifyMechanism(result);
-  let sidecarVerification: AttemptRow["sidecar_verification"] | undefined;
-  let sidecarVerdict: SidecarVerdict | undefined;
-  if (env.verifySidecarUrl) {
-    try {
-      const response = await fetch(new URL("/verify", env.verifySidecarUrl), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ episode_id: episode.episodeId }),
-      });
-      const verdict = (await response.json()) as {
-        episode_id?: string;
-        reward?: number;
-        graded?: boolean;
-        error?: string;
-        feedback?: string;
-      };
-      sidecarVerdict = verdict;
-      sidecarVerification = {
-        episode_id: episode.episodeId,
-        reward: Number(verdict.reward ?? 0),
-        graded: Boolean(verdict.graded),
-        error: verdict.error ?? null,
-      };
-      console.log(
-        sanitizeDiagnostic(
-          `${arm} ${episode.episodeId} sidecar reward=${sidecarVerification.reward} graded=${sidecarVerification.graded}`,
-        ),
-      );
-    } catch (error) {
-      console.warn(
-        sanitizeDiagnostic(`sidecar verify failed for ${episode.episodeId}: ${String(error)}`),
-      );
-    }
-  }
+  const sidecar = await verifyWithSidecar({
+    sidecarUrl: env.verifySidecarUrl,
+    registerWorkspaceDir: env.verifyRegisterWorkspace ? provisioned.agentWorkspaceDir : undefined,
+    episodeId: episode.episodeId,
+    arm,
+  });
+  const { verification: sidecarVerification, verdict: sidecarVerdict } = sidecar;
   const row = attemptRow({
     arm,
     family,
@@ -484,16 +457,17 @@ async function executeEpisode(
   episodeEvaluatorResults = drainEvaluatorResults(drainOutcomeMode, row.status, episode.episodeId);
   const coldDrain = arm === "cold" ? provisioned.drainDispatcher : undefined;
   if ((arm === "warm" && !frozenKnowledge) || coldDrain) {
-    const outcomeEvaluatorResults =
-      arm === "warm" && sidecarVerdict
-        ? evaluatorResultFromVerdict({
-            episodeId: episode.episodeId,
-            verdict: sidecarVerdict,
-            passReward: env.outcomePassReward,
-          })
-        : [];
-    const turnEnrichment =
-      arm === "warm" && env.recordTrajectoryAos ? await episodeEnrichment(provisioned) : undefined;
+    // Every drained arm: warm, and cold when it drains into the shared corpus account.
+    const outcomeEvaluatorResults = sidecarVerdict
+      ? evaluatorResultFromVerdict({
+          episodeId: episode.episodeId,
+          verdict: sidecarVerdict,
+          passReward: env.outcomePassReward,
+        })
+      : [];
+    const turnEnrichment = env.recordTrajectoryAos
+      ? await episodeEnrichment(provisioned)
+      : undefined;
     const drained = await drainEpisodeToMemory({
       workspace: provisioned.workspace,
       dispatcher: coldDrain ?? provisioned.dispatcher,

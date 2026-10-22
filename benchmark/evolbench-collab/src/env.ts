@@ -31,6 +31,9 @@ export type EvalEnv = {
   /** Env sidecar that can verify an episode (POST /verify {episode_id}). Its verdict may carry
    * an optional `feedback` (the judge report), which is committed with the session. */
   verifySidecarUrl: string | null;
+  /** Register each episode's task-Agent workspace with the sidecar (`POST /env`) before
+   * `/verify`, for scorers that read the deliverables themselves (the kw official evaluator). */
+  verifyRegisterWorkspace: boolean;
   /** Reward at or above which a graded verdict is committed as `pass`. */
   outcomePassReward: number;
   /** Opt-in: write each agent's tool calls and delivery facts into the OpenViking ledger
@@ -105,6 +108,7 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     episodeClosure: (env.COFORGE_EVAL_EPISODE_CLOSURE ?? "1") !== "0",
     envNote: env.COFORGE_EVAL_ENV_NOTE?.trim() || null,
     verifySidecarUrl: env.COFORGE_EVAL_VERIFY_SIDECAR?.trim() || null,
+    verifyRegisterWorkspace: (env.COFORGE_EVAL_VERIFY_REGISTER_WORKSPACE ?? "0") === "1",
     outcomePassReward: Number(env.COFORGE_EVAL_OUTCOME_PASS_REWARD ?? "0.6"),
     recordTrajectoryAos: (env.COFORGE_EVAL_TRAJECTORY_AOS ?? "0") === "1",
     episodeMod: env.COFORGE_EVAL_EPISODE_MOD?.trim() || null,
