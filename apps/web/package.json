@@ -98,6 +98,7 @@
     "input-otp": "^1.5.0",
     "jose": "^6.2.10",
     "katex": "^0.16.22",
+    "loading-dev": "^0.3.6",
     "lowlight": "^3.3.0",
     "mermaid": "^11.6.0",
     "micromark-util-decode-numeric-character-reference": "^2.0.2",

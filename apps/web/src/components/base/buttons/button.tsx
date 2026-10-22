@@ -2,6 +2,8 @@ import type { FC, ReactElement, ReactNode } from "react";
 import { isValidElement } from "react";
 import type { ButtonProps as AriaButtonProps, LinkProps as AriaLinkProps } from "react-aria-components";
 import { Button as AriaButton, Link as AriaLink } from "react-aria-components";
+import { ClassicV2 } from "loading-dev";
+import { useLoadingVisible } from "#src/components/ui/loading";
 import { cx, sortCx } from "#src/utils/cx";
 import { isReactComponent } from "#src/utils/is-react-component";
 
@@ -190,33 +192,24 @@ export const Button: {
 
     noTextPadding = isLinkType || noTextPadding;
 
+    // The control looks busy the moment `loading` turns on (data-loading, pointer-events-none,
+    // isPending below); only the indicator itself waits, so a quick action never flashes one.
+    const showLoadingIndicator = useLoadingVisible(Boolean(loading));
+
     const commonChildren = (
         <>
             {/* Leading icon */}
             {isValidElement(IconLeading) && IconLeading}
             {isReactComponent(IconLeading) && <IconLeading data-icon="leading" className={styles.common.icon} />}
 
-            {loading && (
-                <svg
-                    fill="none"
+            {showLoadingIndicator && (
+                <span
                     data-icon="loading"
-                    viewBox="0 0 20 20"
-                    className={cx(styles.common.icon, !showTextWhileLoading && "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2")}
+                    className={cx(styles.common.icon, "inline-flex", !showTextWhileLoading && "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2")}
                 >
-                    {/* Background circle */}
-                    <circle className="stroke-current opacity-30" cx="10" cy="10" r="8" fill="none" strokeWidth="2" />
-                    {/* Spinning circle */}
-                    <circle
-                        className="origin-center animate-spin stroke-current"
-                        cx="10"
-                        cy="10"
-                        r="8"
-                        fill="none"
-                        strokeWidth="2"
-                        strokeDasharray="12.5 50"
-                        strokeLinecap="round"
-                    />
-                </svg>
+                    {/* Its viewBox is 16×16, so it also lands on the `xs` scale's 16px icon box. */}
+                    <ClassicV2 size={size === "xs" ? 16 : 20} />
+                </span>
             )}
 
             {children && (
@@ -242,8 +235,10 @@ export const Button: {
             styles.colors[color].root,
             isLinkType && styles.sizes[size].linkRoot,
             (loading || (href && (disabled || loading))) && "pointer-events-none",
-            // If in `loading` state, hide everything except the loading icon (and text if `showTextWhileLoading` is true).
-            loading && (showTextWhileLoading ? "[&>*:not([data-icon=loading]):not([data-text])]:hidden" : "[&>*:not([data-icon=loading])]:invisible"),
+            // Hide everything except the loading icon (and text if `showTextWhileLoading` is
+            // true) once that icon is actually on screen. Until then the label stays put: the
+            // control already reads as busy, and blanking it early would look stalled.
+            showLoadingIndicator && (showTextWhileLoading ? "[&>*:not([data-icon=loading]):not([data-text])]:hidden" : "[&>*:not([data-icon=loading])]:invisible"),
             className,
         ),
         children: commonChildren,

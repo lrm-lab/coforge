@@ -2,15 +2,19 @@
 
 - 公开首页 `features/landing` 保留已安装的 Spell / Magic UI 动效组件，其余控件同样只用官方组件；本节其余规则针对产品界面。
 - 组件通过 `npx untitledui@latest add <name>` 安装到 `src/components/base/` 和 `src/components/application/`，**源码不改**。要改外观，在调用处传 `className`；要改行为，改调用方。
-- 官方安装文件仅有三处限定修补：
+- 官方安装文件仅有四处限定修补：
   - 用户明确要求移除历史 lint 豁免后，`base/badges/badges.tsx` 和
     `application/app-navigation/base-components/nav-account-card.tsx` 的原生按钮替换为
     React Aria Button，保留官方样式和公开接口（未使用的 `base/select/select-native.tsx` 已移除）。
   - `src/utils/cx.ts` 的 `extendTailwindMerge` 在 `theme` 中加 `spacing: ["page"]`，让 `cx`/`cn` 把
     `px-page`（`styles.css` 的 `--spacing-page`，取值自 `--page-gutter`）识别为内边距；缺了它，
     合并类名时 `px-page` 覆盖不了 `px-4`。
+  - 用户明确要求引入 `loading-dev` 后，`base/buttons/button.tsx` 的 loading 指示器换成
+    `loading-dev` 的 `ClassicV2`，何时显示由 `src/components/ui/loading.ts` 决定。该文件其余行为
+    不变：`data-loading`、`pointer-events-none`、`isPending` 仍在 `isLoading` 打开时**立即**生效，
+    只有指示器本身延后出现，所以按钮在等待期间不会变空。
 
-  这不是任意修改官方源码的许可；升级或重新 init 时保留这三处限定修补并重新验证。
+  这不是任意修改官方源码的许可；升级或重新 init 时保留这四处限定修补并重新验证。
 - 例外：`application/app-navigation/sidebar-navigation/` 下的 `sidebar-simple.tsx`、`sidebar-slim.tsx`
   和 `base-components/mobile-header.tsx` 是官方的**演示模板**（写死 Untitled 自己的 logo、搜索框、假账号卡片、固定像素宽度），不是可参数化的
   组件。这两个文件允许复制到 `src/components/layout/sidebar/` 后按需修改；复制之后就是 CoForge 自己
@@ -18,9 +22,10 @@
   （`NavItemBase`、`NavButton`、`NavList`、`MobileNavigationHeader` 等）和 `components/base/**`
   仍然原样不改。
 - 升级用 `npx untitledui@latest upgrade`，升级后跑 `bun run check` 和 `mise run test:web`。
-- 允许自写的只有官方没有对应物的原语，放在 `src/components/ui/`：Empty、Skeleton、Toast 包装、RelativeTime、InputOTP、HoverPopover，以及官方只在 PRO 版提供的 Alert 和 ProgressSteps（CLI 添加 `alerts`、`progress-steps` 需要 PRO 授权）。自写原语只能组合 React Aria 和官方组件，不能复制官方文件再改。
+- 允许自写的只有官方没有对应物的原语，放在 `src/components/ui/`：Empty、Skeleton、Loading（延迟显示指示器的策略）、Toast 包装、RelativeTime、InputOTP、HoverPopover，以及官方只在 PRO 版提供的 Alert 和 ProgressSteps（CLI 添加 `alerts`、`progress-steps` 需要 PRO 授权）。自写原语只能组合 React Aria 和官方组件，不能复制官方文件再改。
 - `src/components/ui/README.md` 维护"偏离官方组件清单"：每个自写文件一行，写明为什么官方没有。清单之外不允许出现非官方组件。
 - 图标只用 `@untitledui/icons`。文件类型图标用 `@untitledui/file-icons`，产品代码只通过 `src/features/files/file-type-icon.tsx`（`FileTypeIcon`）使用。厂商 logo（Claude Code、Codex 等）用 `@lobehub/icons-static-svg`。
+- 「正在进行」的 loading 指示器用 `loading-dev`（用户明确要求），何时显示由 `src/components/ui/loading.ts` 统一决定；选哪一款由调用处按场景决定（按钮用 `ClassicV2`），不逐个替换、也不新增第二种来源。骨架屏仍归 `ui/skeleton.tsx`，它负责"内容还没到"，指示器只负责"动作正在进行"。
 - `.oxlintrc.json` / `scripts/oxlint-plugin.js` 不得新增或扩大豁免，除非事先获得用户明确同意，
   官方组件也不例外。申请时写明具体文件、规则、原因和失去的检查；历史豁免不构成授权。
   产品代码（`src/features/**`、`src/components/ui/**`、`src/components/layout/**`、路由、测试）
