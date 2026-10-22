@@ -47,15 +47,15 @@ export function AppCard({
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <AppLogo name={app.name} url={app.logoUrl} size={layout === "grid" ? "md" : "sm"} />
-        <div className="grid min-w-0 flex-1 gap-1">
+        <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-1">
           {onOpen ? (
             <Button
               color="link-gray"
               size="sm"
               onPress={onOpen}
-              className="w-fit max-w-full justify-start font-semibold text-primary"
+              className="w-fit max-w-full min-w-0 justify-start font-semibold text-primary *:data-text:truncate"
             >
-              <span className="truncate">{app.name}</span>
+              {app.name}
             </Button>
           ) : (
             <p className="truncate text-sm font-semibold text-primary">{app.name}</p>
