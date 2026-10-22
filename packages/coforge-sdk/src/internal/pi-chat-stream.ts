@@ -4,11 +4,17 @@ export function applyPiChatEvent(current: PiChatResult, event: PiChatEvent): PiC
   const messages = new Map((current.messages ?? []).map((message) => [message.id, message]));
   for (const id of event.removeIds ?? []) messages.delete(id);
   for (const message of event.messages ?? []) messages.set(message.id, message);
+  const settled = event.session && event.session.status !== "running";
+  if (settled)
+    for (const id of messages.keys())
+      if (id === "streaming" || id.startsWith("running:")) messages.delete(id);
   return {
     ...current,
     session: event.session ?? current.session,
     messages: [...messages.values()],
     stream: event.stream,
+    progress: settled ? undefined : (event.progress ?? current.progress),
+    queue: settled ? { steering: [], followUp: [] } : (event.queue ?? current.queue),
   };
 }
 

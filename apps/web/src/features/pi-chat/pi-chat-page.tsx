@@ -19,7 +19,7 @@ type Props = {
   userId: string;
   workspaceId: string;
   workspaceSlug: string;
-  computers: { id: string; name: string }[];
+  computers: { id: string; name: string; controls?: boolean }[];
   configured: boolean;
   computerId?: string;
   sessionId?: string;
@@ -29,6 +29,7 @@ type Props = {
 export function PiChatPage(props: Props) {
   const { workspaceSlug, computers, configured, sessionId, select } = props;
   const computerId = props.computerId ?? computers[0]?.id;
+  const controls = computers.find((computer) => computer.id === computerId)?.controls ?? false;
   const [search, setSearch] = useState("");
   const [drafts, setDrafts] = useState<Record<string, PiChatDraft>>({});
   const key = `${workspaceSlug}:${computerId}:${sessionId ?? "new"}`;
@@ -145,6 +146,13 @@ export function PiChatPage(props: Props) {
               computerId={computerId}
               sessionId={sessionId}
               clearSearch={() => setSearch("")}
+              controls={controls}
+              onChanged={() => {
+                void sessions.refetch();
+              }}
+              onDeleted={(id) => {
+                if (id === sessionId) select(computerId);
+              }}
             />
           )}
         </div>
@@ -153,6 +161,7 @@ export function PiChatPage(props: Props) {
         <PiChatConversation
           key={key}
           computerId={computerId}
+          controls={controls}
           userId={props.userId}
           workspaceId={props.workspaceId}
           sessionId={sessionId}

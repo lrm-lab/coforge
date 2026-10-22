@@ -9,7 +9,7 @@ import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { PiChatGateway } from "./pi-chat-gateway.server";
 import { RedisPiChatResults } from "./pi-chat-results.server";
-import { getPiChatCapabilityLease } from "./pi-chat-capability.server";
+import { getPiChatCapabilityLease, getPiChatControlsLease } from "./pi-chat-capability.server";
 
 export function piChatConfiguration() {
   return !!(
@@ -43,8 +43,15 @@ export function productionPiChat(db: PrismaClient) {
   const api = createCentrifugoServerApi();
   return new PiChatGateway({
     canUse: (scope) => canUsePiChat(db, scope),
-    online: async (scope) =>
+    online: async (scope, command) =>
       (await getPiChatCapabilityLease().supports(scope.workspaceId, scope.computerId)) &&
+      (!(
+        command.action === "models" ||
+        command.action === "take_queue" ||
+        (command.action === "start" && (command.mode || command.model)) ||
+        (command.action === "delete" && command.stop)
+      ) ||
+        (await getPiChatControlsLease().supports(scope.workspaceId, scope.computerId))) &&
       (await api.presence(daemonControlChannel(scope.workspaceId, scope.computerId))).length > 0,
     publish: (request) =>
       api.publish(

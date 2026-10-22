@@ -15,6 +15,7 @@ import { RPC_METHODS } from "./rpc-methods";
 export const PI_CHAT_EXECUTE_METHOD = RPC_METHODS.daemonPiChatExecute;
 export const PI_CHAT_FRAME_METHOD = RPC_METHODS.daemonPiChatFrame;
 export const PI_CHAT_CAPABILITY = "pi-chat:v1";
+export const PI_CHAT_CONTROLS_CAPABILITY = "pi-chat-controls:v1";
 export const PI_CHAT_MAX_BYTES = 32_000_000;
 export const PI_CHAT_PART_BYTES = 256_000;
 export const PI_CHAT_MAX_PARTS = Math.ceil(PI_CHAT_MAX_BYTES / PI_CHAT_PART_BYTES);

@@ -1,25 +1,15 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  ArrowDown,
-  ArrowLeft,
-  DotsHorizontal,
-  Edit03,
-  Send01,
-  StopCircle,
-  Trash01,
-} from "@untitledui/icons";
+import { ArrowDown, ArrowLeft } from "@untitledui/icons";
 import type { PiChatCommand, PiChatSession, PiChatResult } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { Input } from "#src/components/base/input/input";
-import { TextArea } from "#src/components/base/textarea/textarea";
 import { PageHeader } from "#src/components/layout/page-header";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { executePiChat } from "./pi-chat.functions";
 import { PiChatTranscript } from "./pi-chat-transcript";
+import { PiChatComposer } from "./pi-chat-composer";
+import { PiChatSessionActions } from "./pi-chat-session-actions";
 import { usePiChatScroll } from "./pi-chat-scroll";
 import { PiChatDisclosureContext } from "./pi-chat-disclosure";
 import { usePiChatStream } from "./pi-chat-stream";
@@ -41,6 +31,7 @@ export function PiChatConversation({
   onSelect,
   viewport,
   initialSession,
+  controls = false,
 }: {
   userId: string;
   workspaceId: string;
@@ -49,6 +40,7 @@ export function PiChatConversation({
   workspaceSlug: string;
   viewport: PiChatView;
   initialSession?: PiChatSession;
+  controls?: boolean;
   draft: PiChatDraft;
   onDraft(value: PiChatDraft): void;
   onSelect(id?: string): void;
@@ -57,9 +49,14 @@ export function PiChatConversation({
   const queryClient = useQueryClient();
   const [error, setError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [renaming, setRenaming] = useState(false);
-  const [title, setTitle] = useState("");
-  const [deleting, setDeleting] = useState(false);
+  const [pendingSend, setPendingSend] = useState<{ id: string; text: string }>();
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
+  const updateDraft = (value: PiChatDraft) => {
+    latestDraft.current = value;
+    onDraft(value);
+  };
+  const [now, setNow] = useState(Date.now);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const queryKey = ["pi-chat", workspaceSlug, computerId, "session", sessionId];
   const reconcile = usePiChatStream({ userId, workspaceId, computerId }, workspaceSlug, sessionId);
@@ -80,24 +77,40 @@ export function PiChatConversation({
           ? 10_000 // Watchdog/recovery only; live content arrives on the shared realtime connection.
           : false,
   });
+  const models = useQuery({
+    queryKey: ["pi-chat", workspaceSlug, computerId, "models"],
+    queryFn: () => execute({ data: { computerId, command: { action: "models" } } }),
+    enabled: controls,
+    staleTime: 60_000,
+    retry: false,
+  });
   const session = history.data?.session;
   const busy = session?.status === "running";
+  useEffect(() => {
+    if (!busy) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(timer);
+  }, [busy]);
   const messages = [
     ...(history.data?.messages ?? []),
-    ...(submitting && draft.request && !history.data?.session?.requestIds.includes(draft.request.id)
-      ? [{ id: `pending:${draft.request.id}`, role: "user" as const, text: draft.request.text }]
+    ...(pendingSend && !history.data?.session?.requestIds.includes(pendingSend.id)
+      ? [{ id: `pending:${pendingSend.id}`, role: "user" as const, text: pendingSend.text }]
       : []),
   ];
   const position = usePiChatScroll(history.data, sessionId === "new" || !!history.data, viewport);
-  const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["pi-chat", workspaceSlug, computerId] });
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey });
+    void queryClient.invalidateQueries({
+      queryKey: ["pi-chat", workspaceSlug, computerId, "sessions"],
+    });
   };
   const mutate = async (command: PiChatCommand) => {
     setError(false);
     setSubmitting(true);
     try {
       const result = await execute({ data: { computerId, command } });
-      await refresh();
+      refresh();
       return result;
     } catch {
       setError(true);
@@ -107,21 +120,43 @@ export function PiChatConversation({
     }
   };
   const send = async () => {
-    const text = draft.text.trim();
-    if (!text || busy || submitting) return;
-    const prepared = preparePiChatSend(draft);
-    onDraft(prepared);
+    const text = latestDraft.current.text.trim();
+    if (!text || submitting || (busy && !controls)) return;
+    const prepared = preparePiChatSend(latestDraft.current);
+    updateDraft(prepared);
+    setPendingSend(prepared.request);
     const result = await mutate({
       action: "start",
       sessionId: sessionId === "new" ? undefined : sessionId,
       requestId: prepared.request!.id,
       message: text,
+      ...(busy ? { mode: prepared.mode ?? "steer" } : {}),
+      ...(!busy && prepared.model ? { model: prepared.model } : {}),
     });
+    setPendingSend(undefined);
     if (result?.session) {
-      onDraft({ text: "" });
+      if (latestDraft.current === prepared)
+        updateDraft({ ...prepared, text: "", request: undefined });
       position.followLatest();
-      onSelect(result.session.id);
+      if (sessionId === "new") onSelect(result.session.id);
     }
+  };
+  const takeQueue = async () => {
+    const result = await mutate({ action: "take_queue", sessionId });
+    if (!result?.takenQueue) return;
+    const { steering, followUp } = result.takenQueue;
+    if (!steering.length && !followUp.length) return;
+    const restored = [...steering, ...followUp].join("\n\n");
+    const current = latestDraft.current;
+    updateDraft({
+      ...current,
+      text:
+        current.text === restored || current.text.startsWith(`${restored}\n\n`)
+          ? current.text
+          : [restored, current.text].filter(Boolean).join("\n\n"),
+      mode: steering.length ? "steer" : "followUp",
+      request: undefined,
+    });
   };
   const loadOlder = async () => {
     const cursor = history.data?.before;
@@ -165,93 +200,17 @@ export function PiChatConversation({
           />
         }
         actions={
-          session && (
-            <Dropdown.Root>
-              <Button
-                color="tertiary"
-                size="sm"
-                iconLeading={DotsHorizontal}
-                aria-label={m.pi_chat_actions()}
-                isDisabled={busy || submitting}
-              />
-              <Dropdown.Popover>
-                <Dropdown.Menu aria-label={m.pi_chat_actions()}>
-                  <Dropdown.Item
-                    id="rename"
-                    icon={Edit03}
-                    onAction={() => {
-                      setTitle(session.title);
-                      setRenaming(true);
-                      setDeleting(false);
-                    }}
-                  >
-                    {m.pi_chat_rename()}
-                  </Dropdown.Item>
-                  <Dropdown.Item
-                    id="delete"
-                    icon={Trash01}
-                    onAction={() => {
-                      setDeleting(true);
-                      setRenaming(false);
-                    }}
-                  >
-                    {m.pi_chat_delete()}
-                  </Dropdown.Item>
-                </Dropdown.Menu>
-              </Dropdown.Popover>
-            </Dropdown.Root>
+          (session ?? initialSession) && (
+            <PiChatSessionActions
+              session={(session ?? initialSession)!}
+              computerId={computerId}
+              controls={controls}
+              onChanged={refresh}
+              onDeleted={() => onSelect()}
+            />
           )
         }
       />
-      {renaming && (
-        <form
-          className="flex gap-2 border-b border-secondary p-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void mutate({ action: "rename", sessionId, title }).then((result) => {
-              if (result) setRenaming(false);
-            });
-          }}
-        >
-          <Input
-            aria-label={m.pi_chat_name()}
-            value={title}
-            onChange={setTitle}
-            maxLength={120}
-            autoFocus
-            className="min-w-0 flex-1"
-          />
-          <Button type="submit" size="sm" isDisabled={!title.trim() || submitting}>
-            {m.pi_chat_save()}
-          </Button>
-          <Button size="sm" color="secondary" onClick={() => setRenaming(false)}>
-            {m.pi_chat_cancel()}
-          </Button>
-        </form>
-      )}
-      {deleting && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-3 border-b border-secondary p-3 text-sm text-primary"
-        >
-          <p>{m.pi_chat_delete_confirm()}</p>
-          <Button
-            color="primary-destructive"
-            size="sm"
-            isDisabled={submitting}
-            onClick={() =>
-              void mutate({ action: "delete", sessionId }).then((result) => {
-                if (result) onSelect();
-              })
-            }
-          >
-            {m.pi_chat_delete()}
-          </Button>
-          <Button size="sm" color="secondary" onClick={() => setDeleting(false)}>
-            {m.pi_chat_cancel()}
-          </Button>
-        </div>
-      )}
       {(error || history.isError) && (
         <div
           role="alert"
@@ -268,6 +227,16 @@ export function PiChatConversation({
           >
             {m.pi_chat_retry()}
           </Button>
+        </div>
+      )}
+      {!!session?.interruptedInputs?.length && (
+        <div role="alert" className="border-b border-secondary p-3 text-sm text-warning-primary">
+          <p>{m.pi_chat_inputs_interrupted()}</p>
+          <ul className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap wrap-anywhere">
+            {session.interruptedInputs.map((input) => (
+              <li key={input.id}>{input.text}</li>
+            ))}
+          </ul>
         </div>
       )}
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -302,7 +271,16 @@ export function PiChatConversation({
                 onInspect: position.pauseFollowing,
               }}
             >
-              <PiChatTranscript messages={messages} busy={busy || submitting} />
+              <PiChatTranscript
+                messages={messages}
+                busy={busy}
+                status={busy ? progressLabel(history.data, now) : undefined}
+              />
+              {pendingSend && !busy && (
+                <p role="status" className="text-xs text-tertiary">
+                  {m.pi_chat_sending()}
+                </p>
+              )}
             </PiChatDisclosureContext>
             {messages.length === 0 &&
               !history.isError &&
@@ -328,72 +306,24 @@ export function PiChatConversation({
           </div>
         )}
       </div>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void send();
+      <PiChatComposer
+        draft={draft}
+        onDraft={updateDraft}
+        busy={busy}
+        pending={submitting}
+        controls={controls}
+        models={models.data?.models}
+        modelError={models.isError}
+        sessionModel={session?.model}
+        queue={history.data?.queue}
+        heldQueue={session?.heldQueue}
+        onSend={send}
+        onStop={async () => {
+          await mutate({ action: "stop", sessionId });
         }}
-        className="shrink-0 px-page pt-2 pb-4"
-      >
-        <div className="mx-auto max-w-[48rem] space-y-2">
-          {session?.status && (
-            <p
-              role="status"
-              className={cn(
-                "text-xs text-tertiary",
-                session.status === "error" && "text-error-primary",
-              )}
-            >
-              {statusLabel(session.status)}
-            </p>
-          )}
-          <div className="overflow-hidden rounded-xl border border-primary bg-primary shadow-xs focus-within:border-secondary">
-            <TextArea
-              aria-label={m.pi_chat_message()}
-              placeholder={m.pi_chat_placeholder()}
-              value={draft.text}
-              onChange={(text) => onDraft({ ...draft, text })}
-              maxLength={100_000}
-              rows={1}
-              textAreaClassName="min-h-12 max-h-48 resize-none rounded-none bg-transparent text-sm shadow-none ring-0 focus:ring-0 [field-sizing:content]"
-              isDisabled={submitting}
-              onTextAreaKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  void send();
-                }
-              }}
-            />
-            <div className="flex items-center justify-between gap-3 px-3 pb-3">
-              <span className="min-w-0 text-xs text-tertiary wrap-anywhere">
-                {session?.model || m.pi_chat_model_default()}
-              </span>
-              {busy ? (
-                <Button
-                  color="secondary"
-                  size="sm"
-                  iconLeading={StopCircle}
-                  isDisabled={submitting}
-                  onClick={() => void mutate({ action: "stop", sessionId })}
-                >
-                  {m.pi_chat_stop()}
-                </Button>
-              ) : (
-                <Button
-                  type="submit"
-                  size="sm"
-                  iconLeading={Send01}
-                  isDisabled={!draft.text.trim() || submitting || (sessionId !== "new" && !session)}
-                  isLoading={submitting}
-                >
-                  {m.pi_chat_send()}
-                </Button>
-              )}
-            </div>
-          </div>
-          <p className="text-xs text-tertiary">{m.pi_chat_keyboard_hint()}</p>
-        </div>
-      </form>
+        onTakeQueue={takeQueue}
+        terminalStatus={session && !busy ? statusLabel(session.status) : undefined}
+      />
     </section>
   );
 }
@@ -410,5 +340,26 @@ function statusLabel(status: PiChatSession["status"]) {
       return m.pi_chat_failed();
     case "idle":
       return m.pi_chat_ready();
+  }
+}
+
+function progressLabel(result: PiChatResult | undefined, now: number) {
+  const progress = result?.progress;
+  if (!progress) return m.pi_chat_phase_waiting();
+  const seconds = Math.max(0, Math.floor((now - progress.updatedAt) / 1000));
+  if (seconds >= 30) return m.pi_chat_phase_wait({ seconds: String(seconds) });
+  switch (progress.phase) {
+    case "waiting":
+      return m.pi_chat_phase_waiting();
+    case "thinking":
+      return m.pi_chat_phase_thinking();
+    case "answering":
+      return m.pi_chat_phase_answering();
+    case "tool":
+      return m.pi_chat_phase_tool({ tool: progress.toolName ?? "…" });
+    case "retrying":
+      return m.pi_chat_phase_retrying();
+    case "compacting":
+      return m.pi_chat_phase_compacting();
   }
 }

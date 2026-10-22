@@ -1,7 +1,10 @@
 import { getAgentMigrationCapabilityLease } from "#src/server/agent-migrations/agent-migration-capability.server";
 import { getReminderCapabilityLease } from "#src/server/reminders/reminder-capability.server";
 import { getAppConfigCapabilityLease } from "#src/server/agent-app-configs/app-config-capability.server";
-import { getPiChatCapabilityLease } from "#src/server/pi-chat/pi-chat-capability.server";
+import {
+  getPiChatCapabilityLease,
+  getPiChatControlsLease,
+} from "#src/server/pi-chat/pi-chat-capability.server";
 
 /** Every ready and heartbeat updates the same set of feature capability leases. */
 export function daemonCapabilityLeases() {
@@ -11,6 +14,7 @@ export function daemonCapabilityLeases() {
     getAgentMigrationCapabilityLease(),
     getAppConfigCapabilityLease(),
     getPiChatCapabilityLease(),
+    getPiChatControlsLease(),
   ];
   return {
     reminderLease,

@@ -3,7 +3,8 @@
 The **AI workbench** at `/w/<workspace>/pi-chat` opens independent native Pi
 conversations in the current user's cloud Computer. It supports new chats,
 search, rename, deletion, stopping a turn, earlier-message paging, Markdown,
-thinking returned by the model, complete SDK tool arguments/results (including
+model selection, native steering/follow-up queues, thinking returned by the model,
+complete SDK tool arguments/results (including
 structured details such as edit diffs and patches), and tool
 duration. It does not reset or reuse an ordinary Agent's session.
 
@@ -20,8 +21,16 @@ process details. Thinking, intermediate replies, complete tool arguments and
 results remain inspectable; tool failures are indicated even while the process
 is collapsed. Code fences have language labels, syntax highlighting and copy;
 answers and tool results can also be copied. The highlighter loads on demand.
-The composer grows with its text. Enter sends, Shift+Enter inserts a newline,
-and IME confirmation does not send.
+The composer grows with its text. Enter sends, Shift+Enter adds a newline; IME confirmation does not send. Session menus are available in both the list
+and conversation header, including Stop and delete for running chats.
+
+While Pi runs, the composer stays editable. Steer is delivered at Pi's next
+assistant/tool boundary; Follow-up waits until the current work finishes. The
+native pending queue is visible. Take back to edit (Alt+Up) removes still-pending
+inputs and returns text to the composer; a saved copy survives lost replies and
+reloads until the next accepted send. It cannot undo consumed inputs.
+The selector lists models configured in that Computer's Pi installation.
+Selection applies to this conversation and does not change global Pi defaults.
 
 Replies follow the latest content while the reader is at the bottom. Scrolling
 up pauses following; “Back to latest” resumes it. Loading earlier history keeps
@@ -29,11 +38,8 @@ the reading position instead of jumping to the end. Expanding process/tool detai
 pauses following so the revealed content stays in view.
 
 The interaction reference is [Pi Agent Desktop](https://pi-desktop.app/),
-especially its [session sidebar](https://github.com/DLYZZT/pi-desktop/blob/v0.4.1/src/renderer/components/SessionSidebar.tsx),
-[process grouping](https://github.com/DLYZZT/pi-desktop/blob/v0.4.1/src/renderer/components/ProcessDetailsGroup.tsx)
-and [chat viewport](https://github.com/DLYZZT/pi-desktop/blob/v0.4.1/src/renderer/hooks/useChatViewport.ts).
-CoForge implements these patterns with its existing Untitled UI components and
-cloud conversation contract; no upstream UI source is copied.
+especially its [session sidebar](https://github.com/DLYZZT/pi-desktop/blob/v0.4.1/src/renderer/components/SessionSidebar.tsx).
+CoForge uses existing Untitled UI components; no upstream UI source is copied.
 
 ## Execution and data
 
@@ -63,7 +69,8 @@ Pi uses that container's existing Pi model/settings/auth configuration
 (`PI_CODING_AGENT_DIR` or Pi's default). Model Factory DeepSeek needs no new
 provider integration when it already works in that environment. This mode
 does not inherit an individual Agent's runtime overrides or platform identity.
-The chosen model is displayed in the conversation. Coding tools act inside
+Model/provider names and IDs are public; keys stay in Pi's private configuration.
+Coding tools act inside
 the user's cloud Computer; this is not an additional filesystem sandbox.
 
 Pi's native `.pi-sessions` JSONL files remain authoritative for model context
@@ -89,6 +96,10 @@ settles without another model call. Explicit Stop is persisted before abort
 and never resumes automatically. Worker shutdown preserves continuation intent.
 If a tool has no committed result, or its result reports failure, recovery
 keeps the turn interrupted rather than risk repeating an uncertain operation.
+Queued inputs retain accepted IDs and durable intent. After an uncertain worker
+restart they are shown as interrupted inputs, without automatic replay; inspect
+native history before explicitly sending again. This also applies when native
+input hooks finish after a turn settles. Stop cancels pending inputs.
 Older interrupted conversations without a checkpoint still need a new message.
 Empty native sessions are saved before accepting the first request, so fixing
 model credentials after a preflight failure allows the same chat to continue.
@@ -100,7 +111,10 @@ Computer image through its existing release track. Both Web and that Computer's
 embedded Daemon need the new RPC contract. Publishing code alone does not update
 running images. Replacing the Computer container also releases any legacy
 host-launched worker's lock; its persistent volume and native sessions survive.
-The Docker engine does not need restarting.
+Docker needs no engine restart. Controls require `pi-chat-controls:v1`;
+an older Computer keeps basic chat and prompts for an update. Model switching reads the configured Pi agent directory. Keep
+provider credentials on a private persistent volume, set `PI_CODING_AGENT_DIR`
+to that directory, and preserve existing model defaults when adding a provider.
 
 Web uses its existing Centrifugo API and Redis configuration. Pi Chat requires
 neither `COFORGE_PI_CHAT_ORIGIN` nor the desktop origin nor a new network tunnel.
@@ -111,6 +125,7 @@ together; there is no database migration or session backfill.
 
 ## Limits
 
+- At most 20 additional inputs per admitted run, including already-consumed inputs.
 - Four concurrent turns per worker; at most four workers per Workspace Daemon.
   Workers live until the Daemon stops. Shutdown closes their input, preserving
   continuation intent; a stuck worker is killed after its 30-second cleanup
@@ -127,17 +142,15 @@ together; there is no database migration or session backfill.
   Exceeding that bound is an explicit request failure, never silent truncation.
 - Tool output is the complete result returned by Pi. Pi's own tool limits,
   full-output files, provider context limits and compaction still apply.
-- Attachments, editing/retrying past turns, model switching, and importing an
-  existing Agent's history are not part of this version.
+- Attachments/file browsing, editing/retrying past turns, context usage controls,
+  and importing an existing Agent's history remain follow-up work.
 
 ## Validation
 
 Run the `pi-chat-*` tests under `packages/agent/test`, `packages/computer/test`
-and `apps/web/test` through `mise run test:file -- <paths>`. They exercise
-native SDK tool execution and reload, worker stdio lifecycle, scoped RPC
-validation, event/read ordering, session separation and accepted-send
-deduplication. They use local model fixtures, not a paid provider or a live
-user's cloud Computer.
+and `apps/web/test` through `mise run test:file -- <paths>`. Local fixtures verify
+native tools, reload, scoped RPC, event/read ordering and deduplication, plus real
+tool-boundary steering, follow-up ordering and conversation-only model persistence.
 
 The opt-in `apps/web/test/pi-chat-daemon.integration.ts` runs with an isolated
 `PI_CHAT_TEST_REDIS_URL`. It verifies live thinking/partial answers before model
@@ -145,13 +158,11 @@ completion, real file tools, request deduplication and native reload after a
 worker restart. Its model and WSS adapter are controlled fixtures; Redis and Pi
 are real. It writes `.amp/e2e/pi-chat-daemon.json` as repeatable evidence.
 
-UI acceptance follows [the repository policy](agents/testing.md); no UI unit
-tests are added. Before deployment acceptance:
+UI acceptance follows [the repository policy](agents/testing.md). Before deployment:
 
 - [ ] Verify the navigation and list/detail flow at desktop and mobile sizes,
   in both themes, including direct links and returning to the list.
-- [ ] Search across date groups, clear a no-results query, and verify grouping
-  around midnight in the saved time zone in both interface languages.
+- [ ] Search across date groups, clear a no-results query, and check both languages.
 - [ ] Expand process details and tool input/output; verify a failed tool remains
   indicated when collapsed, and all output/diff/patch text remains available.
 - [ ] Copy a reply, code block and tool result; verify the clipboard and feedback.
@@ -162,13 +173,14 @@ tests are added. Before deployment acceptance:
 - [ ] Open the conversation menu with keyboard and touch; rename and cancel delete.
 - [ ] Start two chats; verify independent context, actual model display,
   Markdown/code rendering, and drafts retained when switching conversations.
-- [ ] Expand long thinking/tool arguments/results and verify complete content,
-  duration, scroll behavior, and earlier-message loading.
-- [ ] Run an edit and expand its result; verify both the diff and patch remain
-  visible after switching chats and reloading the page.
+- [ ] Verify complete edit diffs and patches survive switching chats and reloading.
 - [ ] Fail the first send with missing model credentials, repair the credentials,
   and verify a new message continues the same chat without replaying the failure.
-- [ ] Stop, rename, cancel deletion, confirm deletion, and reload the page.
+- [ ] Stop, rename, cancel deletion, confirm deletion from both menus, and reload.
+- [ ] Queue Steer/Follow-up during a tool, take back pending text with Alt+Up,
+  then switch model while idle; verify queued ordering and model persistence.
+- [ ] Delay a history refresh after send acceptance; ensure sending clears,
+  terminal state removes temporary activity, and native progress remains accurate.
 - [ ] Disconnect/reconnect while sending; retry the same message without
   duplicate tool execution. Switch Users/Workspaces and verify isolation.
 - [ ] Check unavailable configuration, an old host/image, offline Computer,
@@ -177,13 +189,11 @@ tests are added. Before deployment acceptance:
 ## Upstream contracts
 
 CoForge already pins Pi SDK 1.3.0 (MIT) and Bun 1.4.3. This feature reuses both.
-The existing Computer binary carries the worker; it adds no installed product.
-Host process/memory use and native-session storage grow with active chats;
-the bounds above limit worker/turn concurrency. The existing WSS connections and Activity contract are retained; Pi Chat adds
-its own versioned RPC methods and `pi-chat:v1` capability.
+The existing Computer binary carries the worker; memory and storage grow with
+active chats within the bounds above. Existing WSS and Activity contracts remain;
+Pi Chat uses its own RPC methods and `pi-chat:v1` / `pi-chat-controls:v1` capabilities.
 
 - [Pi SDK 1.3.0: sessions, streaming, cancellation and Bun support](https://github.com/earendil-works/pi/blob/v1.3.0/packages/coding-agent/docs/sdk.md)
 - [Pi session format](https://github.com/earendil-works/pi/blob/v1.3.0/packages/coding-agent/docs/session-format.md)
 - [Bun subprocess API](https://bun.com/docs/runtime/child-process)
-
 - [Centrifugo Server API and private publication](https://centrifugal.dev/docs/server/server_api)

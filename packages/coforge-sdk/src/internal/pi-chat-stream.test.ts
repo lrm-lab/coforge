@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { PiChatLiveHistory } from "./pi-chat-stream";
+import { PiChatLiveHistory, applyPiChatEvent } from "./pi-chat-stream";
 import type { PiChatEvent, PiChatResult } from "./pi-chat";
 
 test("a delayed initial snapshot cannot retire a newly observed worker", async () => {
@@ -86,4 +86,34 @@ test("overflow requires a fresh native snapshot rather than accepting an incompl
   expect(
     (await live.read(async () => ({ stream: { id, sequence: 513 }, messages: [] }))).messages,
   ).toEqual([]);
+});
+
+test("settlement removes stale in-progress output and queue state even when a final tool event was missed", () => {
+  const sessionId = crypto.randomUUID();
+  const current: PiChatResult = {
+    session: {
+      id: sessionId,
+      title: "Weather",
+      updatedAt: 1,
+      status: "running",
+      model: "factory/deepseek",
+      requestIds: [],
+    },
+    messages: [
+      { id: "streaming", role: "assistant", text: "partial" },
+      { id: "running:tool", role: "tool", text: "pending" },
+    ],
+    progress: { phase: "tool", updatedAt: 1, toolName: "search" },
+    queue: { steering: ["hi"], followUp: [] },
+  };
+  const settled = applyPiChatEvent(current, {
+    sessionId,
+    stream: { id: crypto.randomUUID(), sequence: 5 },
+    session: { ...current.session!, status: "idle" },
+    messages: [{ id: "final", role: "assistant", text: "done" }],
+  });
+  expect(settled.session?.status).toBe("idle");
+  expect(settled.messages?.map((message) => message.id)).toEqual(["final"]);
+  expect(settled.progress).toBeUndefined();
+  expect(settled.queue).toEqual({ steering: [], followUp: [] });
 });

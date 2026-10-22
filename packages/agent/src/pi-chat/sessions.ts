@@ -4,6 +4,9 @@ import type {
   PiChatResult,
   PiChatSession,
   PiChatUpdate,
+  PiChatModel,
+  PiChatQueue,
+  PiChatProgress,
 } from "@lrm/coforge-sdk/internal/pi-chat";
 import type { PiChatCheckpoint } from "./checkpoint";
 import { PiChatTurn } from "./turn";
@@ -17,6 +20,10 @@ export interface PiChatRuntime {
   resume(checkpoint: PiChatCheckpoint): Promise<void>;
   abort(): Promise<void>;
   dispose(): Promise<void>;
+  enqueue?(text: string, mode: "steer" | "followUp"): Promise<"queued" | "handled">;
+  queue?(): PiChatQueue;
+  takeQueue?(): PiChatQueue;
+  progress?(): PiChatProgress;
 }
 export interface PiChatStore {
   list(): Promise<PiChatSession[]>;
@@ -39,8 +46,9 @@ export class PiChatSessions {
   readonly #recovery: { row: PiChatSession; checkpoint: PiChatCheckpoint }[] = [];
   constructor(
     private readonly store: PiChatStore,
-    private readonly createRuntime: (id?: string) => Promise<PiChatRuntime>,
+    private readonly createRuntime: (id?: string, model?: PiChatModel) => Promise<PiChatRuntime>,
     private readonly onUpdate: (update: PiChatUpdate) => void = () => {},
+    private readonly listModels: () => Promise<(PiChatModel & { name: string })[]> = async () => [],
   ) {
     this.#ready = this.#restore();
   }
@@ -60,6 +68,23 @@ export class PiChatSessions {
         row.status = "stopped";
         await this.store.save(row);
         await this.store.clearCheckpoint(row.id);
+        continue;
+      }
+      // Native queues are volatile. A restart cannot prove whether an accepted queued input
+      // crossed a tool boundary: keep it visible and require an explicit new send, never replay it.
+      if (checkpoint.queued?.length) {
+        row.interruptedInputs = [
+          ...new Map(
+            [...(row.interruptedInputs ?? []), ...checkpoint.queued].map((input) => [
+              input.id,
+              input,
+            ]),
+          ).values(),
+        ];
+        row.requestIds = [
+          ...new Set([...row.requestIds, ...checkpoint.queued.map((input) => input.id)]),
+        ];
+        await this.store.save(row);
         continue;
       }
       if (!row.requestIds.includes(checkpoint.requestId)) continue;
@@ -99,9 +124,21 @@ export class PiChatSessions {
     const messages = active ? active.messages() : await this.store.messages(id);
     const end = Math.min(before ?? messages.length, messages.length);
     const start = Math.max(0, end - 50);
-    return { session: { ...session }, messages: messages.slice(start, end), before: start };
+    return {
+      session: { ...session },
+      messages: messages.slice(start, end),
+      before: start,
+      queue: active?.queue() ?? { steering: [], followUp: [] },
+      progress: active?.progress(),
+    };
   }
-  start(input: { sessionId?: string; requestId: string; message: string }) {
+  start(input: {
+    sessionId?: string;
+    requestId: string;
+    message: string;
+    mode?: "steer" | "followUp";
+    model?: PiChatModel;
+  }) {
     return this.#exclusive(async () => {
       if (this.#closing) throw new Error("chat worker is stopping");
       const old = [...this.#records.values()].find((row) =>
@@ -115,9 +152,15 @@ export class PiChatSessions {
       if (await this.store.wasAccepted(input.requestId))
         throw new Error("request belongs to a deleted session");
       if (input.sessionId) this.#record(input.sessionId);
+      const active = input.sessionId ? this.#active.get(input.sessionId) : undefined;
+      if (active && input.mode) {
+        if (active.acceptingInput)
+          return this.#enqueue(this.#record(input.sessionId!), active, input);
+        await active.done;
+      }
       if ((input.sessionId && this.#active.has(input.sessionId)) || this.#active.size >= 4)
         throw new Error("session is busy");
-      const runtime = await this.createRuntime(input.sessionId);
+      const runtime = await this.createRuntime(input.sessionId, input.model);
       const previous = this.#records.get(runtime.id);
       const row: PiChatSession = {
         id: runtime.id,
@@ -139,6 +182,70 @@ export class PiChatSessions {
         throw error;
       }
       return { ...row };
+    });
+  }
+  async #enqueue(
+    row: PiChatSession,
+    active: PiChatTurn,
+    input: { requestId: string; message: string; mode?: "steer" | "followUp"; model?: PiChatModel },
+  ) {
+    if (input.model) throw new Error("cannot change model during a turn");
+    const release = active.reserveInput();
+    const accepted = { id: input.requestId, text: input.message, mode: input.mode! };
+    let persisted = false;
+    try {
+      const checkpoint = await this.store.checkpoint(row.id);
+      if (!checkpoint || (checkpoint.queued?.length ?? 0) >= 20)
+        throw new Error("Pi input queue unavailable");
+      await this.store.saveCheckpoint(row.id, {
+        ...checkpoint,
+        queued: [...(checkpoint.queued ?? []), accepted],
+      });
+      persisted = true;
+      row.requestIds.push(input.requestId);
+      row.updatedAt = Date.now();
+      row.heldQueue = undefined;
+      await this.store.save(row);
+      await active.enqueue(input.message, input.mode!);
+      this.#notify({ sessionId: row.id, session: { ...row }, queue: active.queue() });
+      return { ...row };
+    } catch (error) {
+      if (persisted) {
+        row.interruptedInputs = [...(row.interruptedInputs ?? []), accepted];
+        await this.store.save(row);
+        this.#notify({ sessionId: row.id, session: { ...row } });
+      }
+      throw error;
+    } finally {
+      release();
+    }
+  }
+  takeQueue(id: string) {
+    return this.#exclusive(async () => {
+      const row = this.#record(id);
+      let active = this.#active.get(id);
+      if (active && !active.acceptingInput) {
+        await active.done;
+        active = undefined;
+      }
+      const release = active?.reserveInput();
+      try {
+        const pending = active?.takeQueue() ?? { steering: [], followUp: [] };
+        const takenQueue = {
+          steering: [...(row.heldQueue?.steering ?? []), ...pending.steering],
+          followUp: [...(row.heldQueue?.followUp ?? []), ...pending.followUp],
+        };
+        // Keep the original checkpoint until the taken text has a durable home.
+        // Lost replies are recoverable by read/repeated take, including after restart.
+        row.heldQueue = takenQueue;
+        await this.store.save(row);
+        const checkpoint = await this.store.checkpoint(id);
+        if (checkpoint) await this.store.saveCheckpoint(id, { ...checkpoint, queued: [] });
+        this.#notify({ sessionId: id, session: { ...row }, queue: { steering: [], followUp: [] } });
+        return { takenQueue, queue: { steering: [], followUp: [] } };
+      } finally {
+        release?.();
+      }
     });
   }
   async #admit(row: PiChatSession, runtime: PiChatRuntime, run: () => Promise<void>) {
@@ -197,6 +304,10 @@ export class PiChatSessions {
     switch (command.action) {
       case "list":
         return { sessions: await this.list() };
+      case "models":
+        return { models: await this.listModels() };
+      case "take_queue":
+        return this.takeQueue(command.sessionId);
       case "read":
         return this.read(command.sessionId, command.before);
       case "start":
@@ -206,6 +317,7 @@ export class PiChatSessions {
       case "rename":
         return { session: await this.rename(command.sessionId, command.title) };
       case "delete":
+        if (command.stop) await this.stop(command.sessionId);
         await this.remove(command.sessionId);
         return { ok: true };
     }

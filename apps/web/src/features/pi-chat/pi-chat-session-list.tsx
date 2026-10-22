@@ -7,6 +7,7 @@ import { RelativeTime } from "#src/components/ui/relative-time";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { PiChatSessionActions } from "./pi-chat-session-actions";
 
 export function PiChatSessionList({
   sessions,
@@ -15,6 +16,9 @@ export function PiChatSessionList({
   computerId,
   sessionId,
   clearSearch,
+  controls,
+  onChanged,
+  onDeleted,
 }: {
   sessions: PiChatSession[];
   search: string;
@@ -22,6 +26,9 @@ export function PiChatSessionList({
   computerId: string;
   sessionId?: string;
   clearSearch(): void;
+  controls: boolean;
+  onChanged(): void;
+  onDeleted(id: string): void;
 }) {
   const hydrated = useHydrated();
   const zone = useTimeZone();
@@ -71,34 +78,42 @@ export function PiChatSessionList({
           <h2 className="px-3 py-2 text-xs font-medium text-tertiary">{labels[index]}</h2>
         )}
         {group.map((session) => (
-          <Link
-            key={session.id}
-            to="/w/$workspaceSlug/pi-chat"
-            params={{ workspaceSlug }}
-            search={{ computer: computerId, session: session.id }}
-            aria-current={sessionId === session.id ? "page" : undefined}
-            className={cn(
-              "mb-1 block rounded-lg px-3 py-2 text-sm text-primary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2",
-              sessionId === session.id && "bg-active",
-            )}
-          >
-            <p className="truncate font-medium">{session.title}</p>
-            <div className="mt-1 flex items-center gap-2 text-xs text-tertiary">
-              {session.status === "running" ? (
-                <span className="flex items-center gap-1.5">
-                  <span aria-hidden="true" className="size-1.5 rounded-full bg-brand-solid" />
-                  {m.pi_chat_running()}
-                </span>
-              ) : (
-                <RelativeTime value={new Date(session.updatedAt)} timeZone={zone} plain />
+          <div key={session.id} className="mb-1 flex items-center rounded-lg">
+            <Link
+              to="/w/$workspaceSlug/pi-chat"
+              params={{ workspaceSlug }}
+              search={{ computer: computerId, session: session.id }}
+              aria-current={sessionId === session.id ? "page" : undefined}
+              className={cn(
+                "block min-w-0 flex-1 rounded-lg px-3 py-2 text-sm text-primary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2",
+                sessionId === session.id && "bg-active",
               )}
-              {session.status === "error" && (
-                <span className="text-error-primary">{m.pi_chat_tool_failed()}</span>
-              )}
-              {session.status === "interrupted" && <span>{m.pi_chat_session_interrupted()}</span>}
-              {session.status === "stopped" && <span>{m.pi_chat_stopped()}</span>}
-            </div>
-          </Link>
+            >
+              <p className="truncate font-medium">{session.title}</p>
+              <div className="mt-1 flex items-center gap-2 text-xs text-tertiary">
+                {session.status === "running" ? (
+                  <span className="flex items-center gap-1.5">
+                    <span aria-hidden="true" className="size-1.5 rounded-full bg-brand-solid" />
+                    {m.pi_chat_running()}
+                  </span>
+                ) : (
+                  <RelativeTime value={new Date(session.updatedAt)} timeZone={zone} plain />
+                )}
+                {session.status === "error" && (
+                  <span className="text-error-primary">{m.pi_chat_tool_failed()}</span>
+                )}
+                {session.status === "interrupted" && <span>{m.pi_chat_session_interrupted()}</span>}
+                {session.status === "stopped" && <span>{m.pi_chat_stopped()}</span>}
+              </div>
+            </Link>
+            <PiChatSessionActions
+              session={session}
+              computerId={computerId}
+              controls={controls}
+              onChanged={onChanged}
+              onDeleted={() => onDeleted(session.id)}
+            />
+          </div>
         ))}
       </section>
     ) : null,
