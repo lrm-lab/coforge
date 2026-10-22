@@ -30,24 +30,47 @@ import { readWeeklyReportScheduleTickMs } from "#src/server/records/weekly-repor
  * definition file is a boot failure.
  */
 export async function assertStartupConfig(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const config = await readStartupConfig(env);
+  if (env === process.env) await installStartupConfig(config);
+  console.info(JSON.stringify(startupConfigSummary(config)));
+}
+
+/** Validates the configuration in `env` and installs nothing, logs nothing: the boot-time check. */
+export async function validateStartupConfig(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  await readStartupConfig(env);
+}
+
+async function readStartupConfig(env: NodeJS.ProcessEnv) {
   const delivery = await readFileDeliveryConfig(env);
-  if (env === process.env) rememberFileDeliveryConfig(delivery);
   const imageDelivery = readPublicImageDeliveryConfig(env);
   const imageStorage = await readPublicImageStorageConfig(env);
   const weeklyReportScheduleTickMs = readWeeklyReportScheduleTickMs(env);
   const authorizationServer = await readAuthorizationServerConfiguration(env);
-  if (env === process.env) rememberAuthorizationServerConfiguration(authorizationServer);
   const featureFlags = await readFeatureFlagsConfiguration(env);
-  if (env === process.env) await installFeatureFlags(featureFlags);
-  console.info(
-    JSON.stringify({
-      event: "startup_config_checked",
-      file_delivery: delivery ? "configured" : "disabled",
-      public_image_delivery: imageDelivery ? "configured" : "disabled",
-      public_image_bucket: imageStorage ? "configured" : "shared",
-      weekly_report_schedule_tick_ms: weeklyReportScheduleTickMs ?? null,
-      authorization_server: authorizationServer.status === "ready" ? "configured" : "disabled",
-      feature_flags: featureFlags.status,
-    }),
-  );
+  return {
+    delivery,
+    imageDelivery,
+    imageStorage,
+    weeklyReportScheduleTickMs,
+    authorizationServer,
+    featureFlags,
+  };
+}
+
+async function installStartupConfig(config: Awaited<ReturnType<typeof readStartupConfig>>) {
+  rememberFileDeliveryConfig(config.delivery);
+  rememberAuthorizationServerConfiguration(config.authorizationServer);
+  await installFeatureFlags(config.featureFlags);
+}
+
+function startupConfigSummary(config: Awaited<ReturnType<typeof readStartupConfig>>) {
+  return {
+    event: "startup_config_checked",
+    file_delivery: config.delivery ? "configured" : "disabled",
+    public_image_delivery: config.imageDelivery ? "configured" : "disabled",
+    public_image_bucket: config.imageStorage ? "configured" : "shared",
+    weekly_report_schedule_tick_ms: config.weeklyReportScheduleTickMs ?? null,
+    authorization_server: config.authorizationServer.status === "ready" ? "configured" : "disabled",
+    feature_flags: config.featureFlags.status,
+  };
 }

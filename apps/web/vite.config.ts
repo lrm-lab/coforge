@@ -164,6 +164,11 @@ const config = defineConfig({
       // initializes. Keep client splitting; only the final server bundle is inlined.
       // https://github.com/TanStack/router/issues/8031
       inlineDynamicImports: true,
+      // Runs at server start, unlike `src/server.ts`, which loads on the first request.
+      // https://nitro.build/docs/plugins
+      plugins: [
+        fileURLToPath(new URL("./src/server/runtime/boot-config-check.server.ts", import.meta.url)),
+      ],
     }),
     tailwindcss(),
     viteReact(),

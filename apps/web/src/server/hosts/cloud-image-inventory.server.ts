@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 
 export type CloudImageSnapshot = {
@@ -99,6 +99,6 @@ function text(value: unknown): string | undefined {
 let singleton: CloudImageInventory | undefined;
 export function getCloudImageInventory() {
   const url = redisUrlFor("cloud computer image");
-  singleton ??= new CloudImageInventory(new RedisClient(url));
+  singleton ??= new CloudImageInventory(openRedisClient(url));
   return singleton;
 }

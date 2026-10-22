@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import type {
   AgentActivity,
@@ -512,13 +512,7 @@ export class RedisAgentDisplay implements AgentDisplay {
   }
 
   private keyPrefix(scope: Scope) {
-    return workspaceRedisKey({
-      workspaceId: scope.workspaceId,
-      computerId: scope.computerId,
-      agentId: scope.agentId,
-      name: "display",
-      version: "v1",
-    });
+    return workspaceRedisKey({ ...scope, name: "display", version: "v1" });
   }
 }
 
@@ -526,6 +520,6 @@ let singleton: RedisAgentDisplay | undefined;
 
 export function getAgentDisplay(): AgentDisplay {
   const redisUrl = redisUrlFor("Agent display");
-  singleton ??= new RedisAgentDisplay(new RedisClient(redisUrl));
+  singleton ??= new RedisAgentDisplay(openRedisClient(redisUrl));
   return singleton;
 }

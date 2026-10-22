@@ -1,4 +1,5 @@
-import { RedisClient } from "bun";
+import type { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import {
   decodeAgentSkillsListResult,
@@ -31,7 +32,7 @@ export class RedisAgentSkillsResults
 let singleton: RedisAgentSkillsResults | undefined;
 export function getAgentSkillsResults() {
   if (!singleton) {
-    singleton = new RedisAgentSkillsResults(new RedisClient(redisUrlFor("Skills queries")));
+    singleton = new RedisAgentSkillsResults(openRedisClient(redisUrlFor("Skills queries")));
   }
   return singleton;
 }

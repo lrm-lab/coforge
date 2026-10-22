@@ -62,7 +62,9 @@ RUN mkdir -p /data/attachments && chown -R bun:bun /data
 USER bun
 # Exercise the actual isolated runtime payload before an image can be published.
 # No source tree, workspace dependencies, or deployment secrets are available.
-RUN --network=none --mount=type=bind,source=apps/web/test/production.integration.ts,target=/tmp/production.integration.ts \
+RUN --network=none \
+    --mount=type=bind,source=apps/web/test/production.integration.ts,target=/tmp/production.integration.ts \
+    --mount=type=bind,source=apps/web/test/helpers/built-server.ts,target=/tmp/helpers/built-server.ts \
     bun test /tmp/production.integration.ts
 
 EXPOSE 3000

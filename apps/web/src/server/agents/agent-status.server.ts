@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import type { AgentStatus } from "@lrm/coforge-sdk/internal";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
@@ -168,6 +168,6 @@ let singleton: RedisAgentStatusCache | undefined;
 
 export function getAgentStatusCache(): AgentStatusCache {
   const redisUrl = redisUrlFor("Agent status");
-  singleton ??= new RedisAgentStatusCache(new RedisClient(redisUrl));
+  singleton ??= new RedisAgentStatusCache(openRedisClient(redisUrl));
   return singleton;
 }

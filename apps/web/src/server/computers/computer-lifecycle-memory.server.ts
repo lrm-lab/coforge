@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import { DAEMON_SHUTDOWN_REASONS, type DaemonShutdownReason } from "@lrm/coforge-sdk/internal";
 
 import { redisUrlFor } from "#src/server/redis-url.server";
@@ -88,6 +88,6 @@ function parseInstance(value: unknown) {
 let memory: RedisComputerLifecycleMemory | undefined;
 
 export function getComputerLifecycleMemory() {
-  memory ??= new RedisComputerLifecycleMemory(new RedisClient(redisUrlFor("Computer lifecycle")));
+  memory ??= new RedisComputerLifecycleMemory(openRedisClient(redisUrlFor("Computer lifecycle")));
   return memory;
 }

@@ -1,5 +1,6 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { PrismaOpenVikingBindingStore } from "#src/server/db/repositories/openviking-binding.repositories.server";
 import { PrismaWorkspaceMemoryAdmissionStore } from "#src/server/db/repositories/workspace-memory-admission.repositories.server";
@@ -140,6 +141,7 @@ export function composeWorkspaceMemoryLifecycle(input: {
 }
 
 let singleton: WorkspaceMemoryLifecycle | undefined;
+let stopRegistered = false;
 
 export function ensureWorkspaceMemoryLifecycle(): WorkspaceMemoryLifecycle | undefined {
   const redisUrl = Bun.env.REDIS_URL;
@@ -147,8 +149,13 @@ export function ensureWorkspaceMemoryLifecycle(): WorkspaceMemoryLifecycle | und
   if (!redisUrl || !db) return undefined;
   singleton ??= composeWorkspaceMemoryLifecycle({
     db,
-    lock: new RedisWorkspaceMemorySweepLock(new RedisClient(redisUrl)),
+    lock: new RedisWorkspaceMemorySweepLock(openRedisClient(redisUrl)),
   });
+  if (!stopRegistered) {
+    stopRegistered = true;
+    const lifecycle = singleton;
+    onServerShutdown(() => lifecycle.stop());
+  }
   singleton.start();
   return singleton;
 }

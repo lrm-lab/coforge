@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 import {
   isServerTimingEnabled,
   recordDatabaseQuery,
@@ -10,7 +11,16 @@ let client: PrismaClient | undefined;
 export function getDatabaseClient(): PrismaClient | undefined {
   const url = process.env.DATABASE_URL;
   if (!url) return undefined;
-  return (client ??= createDatabaseClient(url));
+  if (!client) {
+    const created = createDatabaseClient(url);
+    client = created;
+    // Close the pool when the process stops. A later `getDatabaseClient()` would build a new one.
+    onServerShutdown(async () => {
+      if (client === created) client = undefined;
+      await created.$disconnect();
+    });
+  }
+  return client;
 }
 
 /**

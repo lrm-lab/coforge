@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import type {
   MessageRequestIdempotency,
   MessageRequestRecord,
@@ -160,6 +160,6 @@ let singleton: RedisMessageRequestIdempotency | undefined;
 export function getMessageRequestIdempotency() {
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) throw new Error("REDIS_URL is required to send messages");
-  singleton ??= new RedisMessageRequestIdempotency(new RedisClient(redisUrl));
+  singleton ??= new RedisMessageRequestIdempotency(openRedisClient(redisUrl));
   return singleton;
 }

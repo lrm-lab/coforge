@@ -1,4 +1,4 @@
-import { RedisClient } from "bun";
+import { openRedisClient } from "#src/server/redis-client.server";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import {
   SCAN_RESULT_STALE_AFTER_MS,
@@ -115,6 +115,6 @@ export class RedisAgentContextCache implements AgentContextCache {
 
 let singleton: RedisAgentContextCache | undefined;
 export function getAgentContextCache() {
-  singleton ??= new RedisAgentContextCache(new RedisClient(redisUrlFor("Agent context cache")));
+  singleton ??= new RedisAgentContextCache(openRedisClient(redisUrlFor("Agent context cache")));
   return singleton;
 }
