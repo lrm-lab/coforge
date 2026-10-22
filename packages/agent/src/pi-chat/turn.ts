@@ -61,6 +61,7 @@ export class PiChatTurn {
     settled: () => void,
   ) {
     let status: PiChatSession["status"] = "error";
+    const earlierInputs = new Set(row.interruptedInputs?.map((input) => input.id));
     try {
       await run();
       status = this.#ending ?? "idle";
@@ -75,7 +76,9 @@ export class PiChatTurn {
         const queue = this.queue();
         if (
           !this.#ending &&
-          (queue.steering.length || queue.followUp.length || row.interruptedInputs?.length)
+          (queue.steering.length ||
+            queue.followUp.length ||
+            row.interruptedInputs?.some((input) => !earlierInputs.has(input.id)))
         ) {
           status = "interrupted";
           row.interruptedInputs = [

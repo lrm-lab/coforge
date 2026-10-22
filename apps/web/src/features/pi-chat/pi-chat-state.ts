@@ -14,6 +14,9 @@ export type PiChatDraft = {
   request?: { id: string; text: string };
 };
 
+export type PiChatPendingMessage = { id: string; text: string; after?: string };
+export type PiChatHistory = PiChatResult & { pendingMessages?: PiChatPendingMessage[] };
+
 /** Keep the id with the retained draft, rather than with a mounted conversation panel. */
 export function preparePiChatSend(draft: PiChatDraft): PiChatDraft {
   const text = draft.text.trim();
@@ -29,10 +32,16 @@ function finalized(message: PiChatMessage) {
 
 /** Merge moving native-history windows, fetching until the old and new windows overlap. */
 export async function loadPiChatHistory(
-  previous: PiChatResult | undefined,
+  previous: PiChatHistory | undefined,
   read: (before?: number) => Promise<PiChatResult>,
-): Promise<PiChatResult> {
-  const newest = await read();
+): Promise<PiChatHistory> {
+  const snapshot = await read();
+  const newest: PiChatHistory = {
+    ...snapshot,
+    pendingMessages: previous?.pendingMessages?.filter(
+      (message) => !snapshot.session?.requestIds.includes(message.id),
+    ),
+  };
   const old = previous?.messages?.filter(finalized) ?? [];
   if (!old.length) return newest;
   const oldIds = new Set(old.map((message) => message.id));

@@ -17,6 +17,8 @@ import {
   loadPiChatHistory,
   preparePiChatSend,
   type PiChatDraft,
+  type PiChatHistory,
+  type PiChatPendingMessage,
   type PiChatView,
 } from "./pi-chat-state";
 
@@ -49,7 +51,7 @@ export function PiChatConversation({
   const queryClient = useQueryClient();
   const [error, setError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [pendingSend, setPendingSend] = useState<{ id: string; text: string }>();
+  const [pendingSend, setPendingSend] = useState<PiChatPendingMessage>();
   const latestDraft = useRef(draft);
   latestDraft.current = draft;
   const updateDraft = (value: PiChatDraft) => {
@@ -60,11 +62,11 @@ export function PiChatConversation({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const queryKey = ["pi-chat", workspaceSlug, computerId, "session", sessionId];
   const reconcile = usePiChatStream({ userId, workspaceId, computerId }, workspaceSlug, sessionId);
-  const history = useQuery({
+  const history = useQuery<PiChatHistory>({
     queryKey,
     queryFn: () =>
       reconcile(() =>
-        loadPiChatHistory(queryClient.getQueryData<PiChatResult>(queryKey), (before) =>
+        loadPiChatHistory(queryClient.getQueryData<PiChatHistory>(queryKey), (before) =>
           execute({ data: { computerId, command: { action: "read", sessionId, before } } }),
         ),
       ),
@@ -92,25 +94,77 @@ export function PiChatConversation({
     const timer = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(timer);
   }, [busy]);
+  const nativeMessages = history.data?.messages ?? [];
+  const pendingMessages = new Map(
+    [...(history.data?.pendingMessages ?? []), ...(pendingSend ? [pendingSend] : [])].map(
+      (message) => [message.id, message],
+    ),
+  );
+  const positions = new Map(nativeMessages.map((message, index) => [message.id, index]));
+  const unseenMessages = [...pendingMessages.values()];
+  nativeMessages.forEach((message, index) => {
+    if (message.role !== "user") return;
+    const matched = unseenMessages.findIndex(
+      (pending) =>
+        pending.text === message.text && (positions.get(pending.after ?? "") ?? -1) < index,
+    );
+    if (matched >= 0) unseenMessages.splice(matched, 1);
+  });
   const messages = [
-    ...(history.data?.messages ?? []),
-    ...(pendingSend && !history.data?.session?.requestIds.includes(pendingSend.id)
-      ? [{ id: `pending:${pendingSend.id}`, role: "user" as const, text: pendingSend.text }]
-      : []),
+    ...nativeMessages,
+    ...unseenMessages.map((message) => ({
+      id: `pending:${message.id}`,
+      role: "user" as const,
+      text: message.text,
+    })),
   ];
   const position = usePiChatScroll(history.data, sessionId === "new" || !!history.data, viewport);
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey });
+  const refresh = (id = sessionId) => {
+    void queryClient.invalidateQueries({
+      queryKey: ["pi-chat", workspaceSlug, computerId, "session", id],
+    });
     void queryClient.invalidateQueries({
       queryKey: ["pi-chat", workspaceSlug, computerId, "sessions"],
     });
   };
-  const mutate = async (command: PiChatCommand) => {
+  const mutate = async (command: PiChatCommand, pending?: PiChatPendingMessage) => {
     setError(false);
     setSubmitting(true);
     try {
       const result = await execute({ data: { computerId, command } });
-      refresh();
+      const accepted = result.session;
+      if (accepted) {
+        const acceptedKey = ["pi-chat", workspaceSlug, computerId, "session", accepted.id];
+        // An older in-flight read must not overwrite the acknowledged session state.
+        await queryClient.cancelQueries({ queryKey: acceptedKey, exact: true });
+        queryClient.setQueryData<PiChatHistory>(acceptedKey, (current) => {
+          const observed =
+            current?.session &&
+            ((command.action === "start" &&
+              current.session.requestIds.includes(command.requestId)) ||
+              current.session.updatedAt > accepted.updatedAt);
+          const session = observed ? current.session! : accepted;
+          const pendingMessages = new Map(
+            (current?.pendingMessages ?? []).map((message) => [message.id, message]),
+          );
+          if (pending) pendingMessages.set(pending.id, pending);
+          return {
+            ...current,
+            session,
+            pendingMessages: [...pendingMessages.values()],
+            ...(session.status !== "running"
+              ? {
+                  messages: current?.messages?.filter(
+                    (message) => message.id !== "streaming" && !message.id.startsWith("running:"),
+                  ),
+                  queue: { steering: [], followUp: [] },
+                  progress: undefined,
+                }
+              : {}),
+          };
+        });
+      }
+      refresh(accepted?.id);
       return result;
     } catch {
       setError(true);
@@ -124,15 +178,24 @@ export function PiChatConversation({
     if (!text || submitting || (busy && !controls)) return;
     const prepared = preparePiChatSend(latestDraft.current);
     updateDraft(prepared);
-    setPendingSend(prepared.request);
-    const result = await mutate({
-      action: "start",
-      sessionId: sessionId === "new" ? undefined : sessionId,
-      requestId: prepared.request!.id,
-      message: text,
-      ...(busy ? { mode: prepared.mode ?? "steer" } : {}),
-      ...(!busy && prepared.model ? { model: prepared.model } : {}),
-    });
+    const pending = {
+      ...prepared.request!,
+      after: nativeMessages
+        .filter((message) => message.id !== "streaming" && !message.id.startsWith("running:"))
+        .at(-1)?.id,
+    };
+    setPendingSend(pending);
+    const result = await mutate(
+      {
+        action: "start",
+        sessionId: sessionId === "new" ? undefined : sessionId,
+        requestId: prepared.request!.id,
+        message: text,
+        ...(busy ? { mode: prepared.mode ?? "steer" } : {}),
+        ...(!busy && prepared.model ? { model: prepared.model } : {}),
+      },
+      pending,
+    );
     setPendingSend(undefined);
     if (result?.session) {
       if (latestDraft.current === prepared)

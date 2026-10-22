@@ -87,6 +87,7 @@ export class PiChatSessions {
         await this.store.save(row);
         continue;
       }
+      if (row.interruptedInputs?.length) continue;
       if (!row.requestIds.includes(checkpoint.requestId)) continue;
       this.#recovery.push({ row, checkpoint });
     }
@@ -169,6 +170,7 @@ export class PiChatSessions {
         status: "running",
         requestIds: [...(previous?.requestIds ?? []), input.requestId],
         model: runtime.model(),
+        interruptedInputs: previous?.interruptedInputs,
       };
       try {
         await this.store.saveCheckpoint(row.id, {

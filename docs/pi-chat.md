@@ -96,11 +96,11 @@ settles without another model call. Explicit Stop is persisted before abort
 and never resumes automatically. Worker shutdown preserves continuation intent.
 If a tool has no committed result, or its result reports failure, recovery
 keeps the turn interrupted rather than risk repeating an uncertain operation.
-Queued inputs retain accepted IDs and durable intent. After an uncertain worker
-restart they are shown as interrupted inputs, without automatic replay; inspect
-native history before explicitly sending again. This also applies when native
-input hooks finish after a turn settles. Stop cancels pending inputs.
-Older interrupted conversations without a checkpoint still need a new message.
+Queued inputs retain accepted IDs and durable intent. After a worker restart,
+uncertain inputs stay visible and block automatic continuation, even after take-back.
+Inspect native history before explicitly sending again. New sends preserve earlier
+interrupted inputs; late native input hooks receive the same treatment. Stop cancels
+pending inputs. Older interrupted chats without a checkpoint still need a new message.
 Empty native sessions are saved before accepting the first request, so fixing
 model credentials after a preflight failure allows the same chat to continue.
 
@@ -179,8 +179,9 @@ UI acceptance follows [the repository policy](agents/testing.md). Before deploym
 - [ ] Stop, rename, cancel deletion, confirm deletion from both menus, and reload.
 - [ ] Queue Steer/Follow-up during a tool, take back pending text with Alt+Up,
   then switch model while idle; verify queued ordering and model persistence.
-- [ ] Delay a history refresh after send acceptance; ensure sending clears,
-  terminal state removes temporary activity, and native progress remains accurate.
+- [ ] Delay history refresh with realtime disconnected; accepted text stays visible, Stop appears
+  immediately, and another send uses Steer/Follow-up. Verify no duplicates after refresh and no
+  regression to running after a delayed send reply arrives behind a newer terminal state.
 - [ ] Disconnect/reconnect while sending; retry the same message without
   duplicate tool execution. Switch Users/Workspaces and verify isolation.
 - [ ] Check unavailable configuration, an old host/image, offline Computer,
@@ -188,10 +189,9 @@ UI acceptance follows [the repository policy](agents/testing.md). Before deploym
 
 ## Upstream contracts
 
-CoForge already pins Pi SDK 1.3.0 (MIT) and Bun 1.4.3. This feature reuses both.
-The existing Computer binary carries the worker; memory and storage grow with
-active chats within the bounds above. Existing WSS and Activity contracts remain;
-Pi Chat uses its own RPC methods and `pi-chat:v1` / `pi-chat-controls:v1` capabilities.
+Pi Chat reuses Pi SDK 1.3.0 (MIT) and Bun 1.4.3 in the existing Computer binary.
+Memory and storage grow with active chats within the bounds above. Existing WSS and
+Activity contracts remain; Pi Chat has its own RPC and `pi-chat:v1` / `pi-chat-controls:v1` capabilities.
 
 - [Pi SDK 1.3.0: sessions, streaming, cancellation and Bun support](https://github.com/earendil-works/pi/blob/v1.3.0/packages/coding-agent/docs/sdk.md)
 - [Pi session format](https://github.com/earendil-works/pi/blob/v1.3.0/packages/coding-agent/docs/session-format.md)

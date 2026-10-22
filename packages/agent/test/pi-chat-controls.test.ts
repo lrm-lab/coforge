@@ -372,6 +372,8 @@ test("taking back a later input does not erase an earlier unconfirmed input", as
     await sessions.dispose();
     sessions = new PiChatSessions(f.store, f.factory, f.onUpdate);
     const restored = await sessions.read(first.id);
+    expect(f.created()).toBe(1);
+    expect(restored.session.status).toBe("interrupted");
     expect(restored.session.interruptedInputs).toContainEqual({
       id: a.requestId,
       text: a.message,
@@ -410,6 +412,54 @@ test("restart merges older unconfirmed inputs with the latest durable queued int
     expect(row.interruptedInputs).toEqual([older, latest]);
     expect(row.requestIds).toContain(latest.id);
   } finally {
+    await sessions.dispose();
+  }
+});
+
+test("a new turn preserves earlier unconfirmed inputs through settlement and reload", async () => {
+  const f = fixture(),
+    id = crypto.randomUUID(),
+    requestId = crypto.randomUUID();
+  const uncertain = { id: crypto.randomUUID(), text: "unconfirmed A", mode: "steer" as const };
+  await f.store.save({
+    id,
+    title: "interrupted",
+    status: "interrupted",
+    model: "fixture/model",
+    updatedAt: 1,
+    requestIds: [requestId, uncertain.id],
+    interruptedInputs: [uncertain],
+  });
+  await f.store.saveCheckpoint(id, {
+    requestId,
+    message: "original",
+    messageCount: 0,
+    queued: [],
+  });
+  let sessions = new PiChatSessions(f.store, f.factory, f.onUpdate);
+  try {
+    const nextRequestId = crypto.randomUUID();
+    const next = await sessions.start({
+      sessionId: id,
+      requestId: nextRequestId,
+      message: "an unrelated new question",
+    });
+    expect(next.interruptedInputs).toEqual([uncertain]);
+    expect(f.records.get(id)?.interruptedInputs).toEqual([uncertain]);
+    expect(next.requestIds).toEqual([requestId, uncertain.id, nextRequestId]);
+    f.done.resolve();
+    await f.settled.promise;
+    expect((await sessions.read(id)).session).toMatchObject({
+      status: "idle",
+      interruptedInputs: [uncertain],
+    });
+    await sessions.dispose();
+    sessions = new PiChatSessions(f.store, f.factory, f.onUpdate);
+    expect((await sessions.read(id)).session.interruptedInputs).toEqual([uncertain]);
+    expect(f.created()).toBe(1);
+    expect(f.queued()).toBe(0);
+  } finally {
+    f.done.resolve();
     await sessions.dispose();
   }
 });
