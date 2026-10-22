@@ -21,9 +21,9 @@ recover` runs the installer's `recover`.
 
 ## Module map
 
-`host/pi-chat-http.ts` and `host/pi-chat-workers.ts` retain the legacy adapter.
-Current Pi Chat uses Workspace Daemon WSS; `packages/daemon/src/pi-chat/` owns
-worker lifecycle. `__pi-chat` clears platform capabilities before using Pi.
+`host/pi-chat-http.ts` and `host/pi-chat-workers.ts` retain the legacy adapter; `host/desktop-page.ts` adapts noVNC HTML.
+`host/desktop-proxy.ts` owns desktop routes and forwarding. Current Pi Chat uses Workspace Daemon
+WSS; `packages/daemon/src/pi-chat/` owns worker lifecycle. `__pi-chat` clears platform capabilities before using Pi.
 
 Keep `src` organized by responsibility. New code belongs in the owning module;
 do not grow `cli.ts` or `setup/` into an application god module. Paths are
