@@ -7,9 +7,14 @@ import {
   recordDatabaseQuery,
 } from "#src/server/observability/server-timing.server";
 
+/** The database the server connects to, or nothing where none is configured. */
+export function configuredDatabaseUrl(): string | undefined {
+  return Bun.env.DATABASE_URL || undefined;
+}
+
 let client: PrismaClient | undefined;
 export function getDatabaseClient(): PrismaClient | undefined {
-  const url = process.env.DATABASE_URL;
+  const url = configuredDatabaseUrl();
   if (!url) return undefined;
   if (!client) {
     const created = createDatabaseClient(url);

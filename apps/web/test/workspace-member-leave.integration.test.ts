@@ -78,7 +78,7 @@ async function setup() {
   // Bob joins (again, after he has left) the way anyone is admitted.
   const admit = () =>
     db.$transaction((tx) =>
-      admitWorkspaceMember(tx, { workspaceId: workspace.id, userId: bob.id, role: "member" }),
+      admitWorkspaceMember(tx, { workspace, userId: bob.id, role: "member" }),
     );
   await admit();
   const team = await channels.create(workspace.id, owner.id, `team-${suffix}`);

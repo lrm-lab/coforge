@@ -50,6 +50,8 @@ These rules apply to `src/server/db/`.
 - `app-installation-data.repositories.server.ts` reads what an installed app may see, filtering
   private data out in the query itself and selecting only the projected columns. The projections
   and the bearer check stay in `server/app-installation-data/`.
+- `app-notification-subscribers.repositories.server.ts` reads the Workspace and the installations an app notification is for; the flag and fan-out stay in `server/app-notifications/`.
+- `app-notification-queue-schema.repositories.server.ts` asks whether pg-boss's `pgboss` schema exists (the only raw SQL on it); starting the queue stays in `server/app-notifications/`.
 - `oauth-authorization.repositories.server.ts` persists the authorization endpoint's rows: apps
   read as OIDC clients, the Workspaces a person may authorize an app in, consents and authorization
   codes (only a code's hash). What a request may do stays in `server/authorization-server/`.

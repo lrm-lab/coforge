@@ -7,7 +7,9 @@ import { OpenFeature, ProviderEvents } from "@openfeature/server-sdk";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import {
   installFeatureFlags,
+  isFeatureDefined,
   isFeatureEnabled,
+  onFeatureFlagsChanged,
 } from "#src/server/feature-flags/feature-flags.server";
 
 const FRANK = { workspaceId: "0199a0b0-0000-7000-8000-000000000001", workspaceSlug: "frank" };
@@ -118,6 +120,54 @@ test(
     } finally {
       OpenFeature.removeHandler(ProviderEvents.ConfigurationChanged, onChanged);
     }
+  },
+  FILE_POLL_BOUND_MS,
+);
+
+test("a flag is defined only while the loaded file marks it ENABLED", async () => {
+  expect(isFeatureDefined("app-notifications")).toBe(false);
+  await installFeatureFlags(await readFeatureFlagsConfiguration({}));
+  expect(isFeatureDefined("app-notifications")).toBe(false);
+
+  await installFile(definitions("app-data-permissions", ["frank"]));
+  expect(isFeatureDefined("app-data-permissions")).toBe(true);
+  expect(isFeatureDefined("app-notifications")).toBe(false);
+
+  await installFile(
+    JSON.stringify({
+      $schema: "https://flagd.dev/schema/v0/flags.json",
+      flags: {
+        "app-notifications": {
+          state: "DISABLED",
+          variants: { on: true, off: false },
+          defaultVariant: "off",
+        },
+      },
+    }),
+  );
+  expect(isFeatureDefined("app-notifications")).toBe(false);
+
+  await installFeatureFlags({ status: "disabled" });
+  expect(isFeatureDefined("app-data-permissions")).toBe(false);
+});
+
+test(
+  "a reload adds and removes defined flags, and tells listeners after it re-read the file",
+  async () => {
+    const path = await installFile(definitions("app-data-permissions", ["frank"]));
+    const changed = () => {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      const stop = onFeatureFlagsChanged(() => {
+        stop();
+        resolve();
+      });
+      return promise;
+    };
+    const added = changed();
+    await Bun.write(path, definitions("app-notifications", ["frank"]));
+    await added;
+    expect(isFeatureDefined("app-notifications")).toBe(true);
+    expect(isFeatureDefined("app-data-permissions")).toBe(false);
   },
   FILE_POLL_BOUND_MS,
 );

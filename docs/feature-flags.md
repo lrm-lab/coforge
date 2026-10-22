@@ -8,7 +8,9 @@ rules in JSON Logic. There is no flagd service and no database table.
 
 The code is `apps/web/src/server/feature-flags/`. Server code asks one question,
 `isFeatureEnabled(flag, { workspaceId, workspaceSlug? })`, and never imports OpenFeature
-itself. The answer is off unless the file turns the flag on.
+itself. The answer is off unless the file turns the flag on. Two more seams serve a feature that needs setup
+before its first use: `isFeatureDefined(flag)` (does the loaded file mark the flag ENABLED, whoever it targets) and
+`onFeatureFlagsChanged(listener)` (the polled file was reloaded).
 
 ## Configuration
 

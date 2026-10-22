@@ -2,6 +2,7 @@ import handler from "@tanstack/react-start/server-entry";
 
 import { isRawHttpPath } from "#src/lib/non-localized-path";
 import { paraglideMiddleware } from "#src/paraglide/server";
+import { startAppNotificationQueueAtServerStartFromEnv } from "#src/server/app-notifications/app-notification-queue.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
 import { installServerLifecycle } from "#src/server/runtime/server-lifecycle.server";
 import { assertStartupConfig } from "#src/server/startup-config.server";
@@ -21,6 +22,9 @@ ensureWorkspaceMemoryLifecycle();
 // COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS is set; external HTTP cron remains valid.
 startWeeklyReportScheduleTickFromEnv();
 startWorkspaceAssistantOnboarding();
+// The app notification outbox's pg-boss workers run in the process that serves requests. This
+// entry loads on the first request, which the deployment's health check makes at start.
+startAppNotificationQueueAtServerStartFromEnv();
 
 /** Requests Paraglide never sees: raw HTTP without a locale prefix. The unprefixed pages go
  * through it to render in the visitor's locale, without a redirect. */

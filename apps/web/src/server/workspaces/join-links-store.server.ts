@@ -124,10 +124,10 @@ export class PrismaWorkspaceJoinLinkStore implements WorkspaceJoinLinkStore {
         if (counted.count !== 1) return { status: "inactive" as const };
         const link = await tx.workspaceJoinLink.findUniqueOrThrow({
           where: { id: input.linkId },
-          select: { workspaceId: true },
+          select: { workspace: { select: { id: true, slug: true } } },
         });
         const { joinedChannelIds } = await admitWorkspaceMember(tx, {
-          workspaceId: link.workspaceId,
+          workspace: link.workspace,
           userId: input.userId,
           role: "member",
         });
