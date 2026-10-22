@@ -2,6 +2,8 @@ import { sanitizeDiagnostic } from "../../public-channel-memory/src/sanitize";
 import type { SidecarVerdict } from "./enrichment";
 import type { AttemptRow } from "./types";
 
+const VERIFY_TIMEOUT_MS = 20 * 60_000;
+
 export interface SidecarOutcome {
   verification: AttemptRow["sidecar_verification"] | undefined;
   verdict: SidecarVerdict | undefined;
@@ -32,6 +34,8 @@ export async function verifyWithSidecar(input: {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ episode_id: input.episodeId }),
+      // The judge may take minutes; fetch's default timeout would drop the verdict.
+      signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
     });
     const verdict = (await response.json()) as SidecarVerdict;
     const verification = {
