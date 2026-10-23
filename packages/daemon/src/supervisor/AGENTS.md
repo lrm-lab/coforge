@@ -20,7 +20,9 @@ Rules for the machine Coordinator in `src/supervisor/`. They extend
 
 - `login-shell-path-import.ts` starts the probe once per Coordinator process,
   in the background: startup and operator commands never wait for it, and a
-  Workspace rescan or restart does not rerun it.
+  Workspace rescan or restart does not rerun it. A `timeout`, `spawn_failed` or
+  `temp_dir_failed` probe is retried after 30 s, 2 min and 10 min (4 attempts at
+  most); `stop()` cancels a pending wait. Nothing awaits `done` at startup.
 
 ## Binding registry
 
