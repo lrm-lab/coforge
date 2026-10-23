@@ -20,7 +20,8 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-RETRYABLE = {408, 429, 500, 502, 503, 504}
+RETRYABLE = {408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524}
+MODELS = {'gemma-4-31b-it', 'google/gemma-4-31b-it'}
 CAPACITIES = {'lenovo-gemma': 4, 'gemma-4-31b-it-2gpu-1': 8, 'gemma-4-31b-it-2gpu-2': 8}
 
 
@@ -36,6 +37,9 @@ class LlmPool:
         self.active = collections.Counter()
         self.peak = self.waiting = self.started = self.finished = self.retries = 0
         self.cursor = 0
+        # Optional even split between endpoint groups (e.g. openrouter vs lenovo); work-conserving.
+        self.groups = list(dict.fromkeys(e['group'] for e in endpoints if e.get('group')))
+        self.group_cursor = 0
         self.sleep = sleep
         self.budget_seconds = budget_seconds
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({} if proxy == '' else None))
@@ -88,7 +92,12 @@ class LlmPool:
                                  * (1+3*state['consecutive_failures']))
                         candidates.append((score, offset, index, endpoint))
                     if candidates:
+                        if len(self.groups) > 1:
+                            preferred = self.groups[self.group_cursor % len(self.groups)]
+                            candidates = [c for c in candidates if c[3].get('group') == preferred] or candidates
                         _, _, index, endpoint = min(candidates, key=lambda item: item[:2])
+                        if len(self.groups) > 1 and endpoint.get('group') in self.groups:
+                            self.group_cursor = self.groups.index(endpoint['group']) + 1
                         state = self.health[endpoint['name']]
                         if state['open_until']: state['probe'] = True
                         self.cursor = (index+1) % len(self.endpoints)
@@ -123,6 +132,15 @@ class LlmPool:
             self.finished += 1
             self.condition.notify_all()
 
+    @staticmethod
+    def payload_for(endpoint, body):
+        """Per-endpoint model id and routing fields; untouched when the endpoint sets neither."""
+        if not endpoint.get('model') and not endpoint.get('extra_body'): return body
+        payload = json.loads(body)
+        if endpoint.get('model'): payload['model'] = endpoint['model']
+        payload.update(endpoint.get('extra_body') or {})
+        return json.dumps(payload).encode()
+
     def complete(self, body, client):
         request_id = uuid.uuid4().hex
         deadline = self.clock()+self.budget_seconds
@@ -133,8 +151,8 @@ class LlmPool:
             retry = False
             try:
                 self.record('request_started', request_id=request_id, client=client, endpoint=endpoint['name'], attempt=attempt)
-                request = urllib.request.Request(endpoint['url'], data=body, headers={'Authorization': 'Bearer '+endpoint['key'], 'Content-Type': 'application/json'})
-                with self.opener.open(request, timeout=max(.1, min(120, deadline-self.clock()))) as response:
+                request = urllib.request.Request(endpoint['url'], data=self.payload_for(endpoint, body), headers={'Authorization': 'Bearer '+endpoint['key'], 'Content-Type': 'application/json'})
+                with endpoint.get('opener', self.opener).open(request, timeout=max(.1, min(120, deadline-self.clock()))) as response:
                     status = response.status
                     content_type = response.headers.get('Content-Type', 'application/json')
                     # urllib exposes the underlying socket through its HTTPResponse buffer.
@@ -163,6 +181,9 @@ class LlmPool:
                     else:
                         payload = json.loads(blob)
                         usage = payload.get('usage') if isinstance(payload, dict) else None
+                        # A 200 whose body is only a provider error envelope is a failed attempt.
+                        if isinstance(payload, dict) and payload.get('error') and not payload.get('choices'):
+                            raise http.client.HTTPException('provider_error_envelope')
             except urllib.error.HTTPError as error:
                 status = error.code
                 retry = status in RETRYABLE
@@ -217,7 +238,7 @@ class PoolHandler(BaseHTTPRequestHandler):
         if not 0 < length <= 16*1024*1024: return self.reply(413, 'application/json', b'{}')
         body = self.rfile.read(length)
         try:
-            if json.loads(body).get('model', '').lower() != 'gemma-4-31b-it':
+            if json.loads(body).get('model', '').lower() not in MODELS:
                 return self.reply(400, 'application/json', b'{"error":"unsupported_model"}')
             result = self.server.pool.complete(body, self.headers.get('X-Coforge-LLM-Client', 'unspecified')[:128])
         except (TimeoutError, ConnectionError):
@@ -228,19 +249,47 @@ class PoolHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionError): pass
 
 
+def https_opener(cafile, proxy):
+    import ssl
+    context = ssl.create_default_context(cafile=cafile) if cafile else ssl.create_default_context()
+    return urllib.request.build_opener(urllib.request.ProxyHandler({} if proxy == '' else None), urllib.request.HTTPSHandler(context=context))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=18740)
+    parser.add_argument('--listen', default='127.0.0.1', help='comma-separated bind addresses sharing one pool')
     parser.add_argument('--directory', type=Path, required=True)
+    parser.add_argument('--openrouter-capacity', type=int, default=0, help='0 keeps the Lenovo-only pool')
+    parser.add_argument('--openrouter-provider', default='CoreWeave')
+    parser.add_argument('--openrouter-ca', help='CA bundle for OpenRouter TLS (through the host proxy)')
+    parser.add_argument('--lenovo-ca', default=str(Path.home()/'.pi/lenovo-ca-bundle.pem'))
+    parser.add_argument('--lenovo-proxy', choices=['env', 'direct'], default='env')
+    parser.add_argument('--lenovo-endpoints', default=','.join(CAPACITIES), help='comma-separated subset of the Lenovo providers')
     args = parser.parse_args()
     providers = json.loads((Path.home()/'.pi/agent/models.json').read_text())['providers']
+    mixed = args.openrouter_capacity > 0
+    lenovo_opener = https_opener(args.lenovo_ca if Path(args.lenovo_ca).exists() else None, '' if args.lenovo_proxy == 'direct' else None) if mixed else None
     endpoints = []
+    chosen = set(args.lenovo_endpoints.split(','))
     for name, capacity in CAPACITIES.items():
+        if name not in chosen: continue
         provider = providers[name]
-        endpoints.append({'name': name, 'capacity': capacity, 'url': provider['baseUrl'].rstrip('/')+'/chat/completions', 'key': provider['apiKey']})
+        endpoint = {'name': name, 'capacity': capacity, 'url': provider['baseUrl'].rstrip('/')+'/chat/completions', 'key': provider['apiKey']}
+        if mixed: endpoint.update(group='lenovo', model='gemma-4-31B-it', opener=lenovo_opener)
+        endpoints.append(endpoint)
+    if mixed:
+        provider = providers['openrouter']
+        endpoints.append({'name': 'openrouter-gemma', 'group': 'openrouter', 'capacity': args.openrouter_capacity,
+                          'url': provider['baseUrl'].rstrip('/')+'/chat/completions', 'key': provider['apiKey'],
+                          'model': 'google/gemma-4-31b-it', 'opener': https_opener(args.openrouter_ca, None),
+                          'extra_body': {'provider': {'only': [args.openrouter_provider], 'require_parameters': True, 'allow_fallbacks': False}}})
     pool = LlmPool(endpoints, args.directory)
-    server = PoolServer(('127.0.0.1', args.port), pool)
-    public = {'pid': os.getpid(), 'url': f'http://127.0.0.1:{args.port}', **pool.snapshot()}
+    addresses = [a.strip() for a in args.listen.split(',') if a.strip()]
+    servers = [PoolServer((address, args.port), pool) for address in addresses]
+    for extra in servers[1:]: threading.Thread(target=extra.serve_forever, daemon=True).start()
+    server = servers[0]
+    public = {'pid': os.getpid(), 'url': f'http://{addresses[0]}:{args.port}', 'listen': addresses, **pool.snapshot()}
     (args.directory/'server.json').write_text(json.dumps(public, indent=2)+'\n')
     print(json.dumps(public), flush=True)
     server.serve_forever()
