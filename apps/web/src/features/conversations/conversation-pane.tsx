@@ -24,6 +24,12 @@ import { getLocale } from "#src/paraglide/runtime";
 import { attachmentFileNameSummary } from "./attachment-file-name";
 import { useSavedMessages } from "./conversation-host";
 import { conversationOpenPosition, unreadBoundary } from "./conversation-open-position";
+import {
+  captureScrollAnchor,
+  restoreScrollAnchor,
+  type ScrollAnchor,
+} from "./conversation-scroll-anchor";
+import { newerPageCommit, positionJumpDecision } from "./conversation-thread-search";
 import { latestTopLevelSequence } from "./conversation-unread";
 import { streamState, type StreamRead } from "./stream-state";
 import { MessageComposer } from "./message-composer";
@@ -40,7 +46,6 @@ import { groupSystemMessages } from "./system-message-groups";
 import { useMessageOutbox, useOutboxEntries } from "./use-message-outbox";
 import { OwnMessagesMenu, useOwnMessagesIndex } from "./own-messages-menu";
 import { isViewerMessage } from "./own-message";
-import { positionJumpDecision } from "./conversation-thread-search";
 import { replyCountLabel } from "./conversation-labels";
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
@@ -217,9 +222,7 @@ export function ConversationPane({
   /** The reading position to restore after a load changes the list's height at either end:
    * the row at the top of the viewport and its content's offset, before the change. See the
    * layout effect below for why a raw height delta is not enough once eviction is in play. */
-  const historyScrollAnchorRef = useRef<
-    { rowId?: string; offset: number; height: number; top: number } | undefined
-  >(undefined);
+  const historyScrollAnchorRef = useRef<ScrollAnchor | undefined>(undefined);
   const pendingMessageIdRef = useRef<string | undefined>(undefined);
   // The row a position jump just landed on, highlighted for a moment: `?message=` deliberately
   // carries no hash (#713), so the landed row has no `:target` to take the anchor highlight from
@@ -239,6 +242,13 @@ export function ConversationPane({
   // observer retries it once the pane is laid out.
   const pendingOpenMessageIdRef = useRef<string | undefined>(undefined);
   const pendingLatestRef = useRef(false);
+  // The row the reader is on during a newer-page fetch, refreshed as they scroll, and whether
+  // that fetch started while they were following the latest. Applied once, when the fetch's own
+  // commit runs — not on an unrelated message update that lands while it is in flight.
+  const newerAnchorRef = useRef<ScrollAnchor | undefined>(undefined);
+  const newerStartedFollowingRef = useRef(false);
+  const [newerCommit, setNewerCommit] = useState(0);
+  const appliedNewerCommitRef = useRef(0);
   // The initial-position decision is made once per conversation open: with unread messages,
   // Slack's default lands on the first one and draws the divider; otherwise at the latest.
   // Consumed by the mount effect below (open positioning) and by the divider snapshot, and
@@ -493,42 +503,29 @@ export function ConversationPane({
     return () => observer.disconnect();
   }, [conversation.conversationId, conversation.messages.length === 0]);
 
-  // A load changes the list's height at one end *and*, once the window is full, removes a page at
-  // the other: paging up prepends history and evicts the newest page; paging down appends the tail
-  // and evicts the oldest. A raw `scrollHeight` delta would then move the reader by the evicted
-  // page's height too, which is not where they were reading. So the anchor is the row at the top of
-  // the viewport and its offset; restoring that row to the same offset keeps the reading position
-  // whatever moved at either end. The offset is measured on the row's content (`scrollAnchorOf`),
-  // not its edges: a load changes what surrounds the text — the window's first row carries the day
-  // divider until an older page takes it, a same-sender message before a row drops its header and
-  // padding — while an image or reaction settling below the text changes the bottom. The height
-  // delta stays as the fallback for the one case the row cannot cover: the anchor row itself was
-  // evicted.
+  // A load changes the list's height at one end and, once the window is full, removes a page at
+  // the other. Restoring the anchored row keeps the reading position; see conversation-scroll-anchor.
   useLayoutEffect(() => {
     const anchor = historyScrollAnchorRef.current;
     const history = historyRef.current;
     if (!anchor || !history) return;
     historyScrollAnchorRef.current = undefined;
-    if (anchor.rowId) {
-      // A folded system group is one row for all its notices, and its row id is its first notice:
-      // a page that extends the group backwards gives it a new first notice. The group that still
-      // holds the anchored notice is the same row the reader was looking at. A notice's own row
-      // comes first: an open group lists the notices it shows and shares its first one's id.
-      const id = CSS.escape(anchor.rowId);
-      const row =
-        history.querySelector<HTMLElement>(
-          `li[data-message-id="${id}"]:not([data-system-group])`,
-        ) ?? history.querySelector<HTMLElement>(`li[data-system-group-members~="${id}"]`);
-      if (row) {
-        const containerTop = history.getBoundingClientRect().top;
-        const delta =
-          scrollAnchorOf(row).getBoundingClientRect().top - (containerTop + anchor.offset);
-        if (delta) history.scrollTop += delta;
-        return;
-      }
-    }
-    history.scrollTop = anchor.top + (history.scrollHeight - anchor.height);
+    restoreScrollAnchor(history, anchor);
   }, [conversation.messages]);
+
+  useLayoutEffect(() => {
+    if (newerCommit === appliedNewerCommitRef.current) return;
+    appliedNewerCommitRef.current = newerCommit;
+    const startedFollowing = newerStartedFollowingRef.current;
+    const anchor = newerAnchorRef.current;
+    newerStartedFollowingRef.current = false;
+    newerAnchorRef.current = undefined;
+    if (newerPageCommit(startedFollowing, followingLatestRef.current) === "pin-bottom") {
+      scrollTwice(() => scrollToLatest("instant"));
+      return;
+    }
+    restoreScrollAnchor(historyRef.current, anchor);
+  }, [newerCommit]);
 
   // Asking for the next page when the sentinel comes into view, rather than from a scroll
   // handler: an IntersectionObserver also fires when the pane is laid out already showing the
@@ -671,24 +668,6 @@ export function ConversationPane({
   loadOlderRef.current = () => loadOlder();
   loadNewerRef.current = () => loadNewer();
 
-  /** Snapshot the reading position before a load changes the list: the row at the top of the
-   * viewport and its content's offset, plus the raw height/scrollTop as a fallback. */
-  function captureScrollAnchor(history: HTMLDivElement) {
-    const containerTop = history.getBoundingClientRect().top;
-    let rowId: string | undefined;
-    let offset = 0;
-    for (const row of history.querySelectorAll<HTMLElement>("li[data-message-id]")) {
-      const rect = row.getBoundingClientRect();
-      // The first row that is not entirely above the container's top edge is the one the reader
-      // is looking at; the ones before it are already scrolled off.
-      if (rect.bottom <= containerTop) continue;
-      rowId = row.dataset.messageId;
-      offset = scrollAnchorOf(row).getBoundingClientRect().top - containerTop;
-      break;
-    }
-    return { rowId, offset, height: history.scrollHeight, top: history.scrollTop };
-  }
-
   function trackReadingPosition() {
     const history = historyRef.current;
     if (!history) return;
@@ -699,6 +678,9 @@ export function ConversationPane({
     const followingLatest = distance <= 48;
     const wasFollowingLatest = followingLatestRef.current;
     setFollowingLatest(followingLatest);
+    // A newer page is about to change both ends of the list. Keep the snapshot on the row they
+    // have scrolled to, not the row where the fetch started.
+    if (loadingNewerRef.current) newerAnchorRef.current = captureScrollAnchor(history);
     if (followingLatest) setNewMessageCount(0);
     // A genuine scroll transition into the latest run is the only signal that the user read
     // through it. Open positioning sets `followingLatest` directly and never passes through here.
@@ -728,11 +710,14 @@ export function ConversationPane({
     if (root || !history || !conversation.hasNewer || !onLoadNewer || loadingNewerRef.current)
       return;
     setLoadingNewer(true);
-    historyScrollAnchorRef.current = captureScrollAnchor(history);
+    newerStartedFollowingRef.current = followingLatestRef.current;
+    newerAnchorRef.current = captureScrollAnchor(history);
     try {
       await onLoadNewer();
+      setNewerCommit((commit) => commit + 1);
     } catch {
-      historyScrollAnchorRef.current = undefined;
+      newerAnchorRef.current = undefined;
+      newerStartedFollowingRef.current = false;
     } finally {
       setLoadingNewer(false);
     }
@@ -1156,10 +1141,4 @@ export function ConversationPane({
       </div>
     </div>
   );
-}
-
-/** The part of a row the reading position holds still: its text (`data-scroll-anchor`), or the
- * row itself for a row that marks none. A folded group's summary comes before any of its rows. */
-function scrollAnchorOf(row: HTMLElement): HTMLElement {
-  return row.querySelector<HTMLElement>("[data-scroll-anchor]") ?? row;
 }

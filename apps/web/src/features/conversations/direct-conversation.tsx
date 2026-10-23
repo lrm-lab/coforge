@@ -121,7 +121,10 @@ export function DirectConversation({
   onChanged,
   ...props
 }: ConversationProps &
-  Pick<ThreadedConversationProps, "channels" | "taskPopup" | "jumpMessage"> & {
+  Pick<
+    ThreadedConversationProps,
+    "channels" | "taskPopup" | "jumpMessage" | "onJumpMessageConsumed"
+  > & {
     onChanged: () => Promise<void>;
   }) {
   const { conversation } = props;

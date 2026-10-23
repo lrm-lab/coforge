@@ -191,6 +191,7 @@ export function ChannelConversation({
   channels,
   taskPopup,
   jumpMessage,
+  onJumpMessageConsumed,
 }: {
   conversation: ChannelConversationView;
   onSend: (
@@ -242,6 +243,8 @@ export function ChannelConversation({
   taskPopup?: TaskPopupControls;
   /** The message the stream lands on, kept by the host (see `ThreadedConversation`). */
   jumpMessage?: string;
+  /** Clears that landing once the pane has used it (see `ThreadedConversation`). */
+  onJumpMessageConsumed?: () => void;
 }) {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState(false);
@@ -320,6 +323,7 @@ export function ChannelConversation({
       channels={channels}
       taskPopup={taskPopup}
       jumpMessage={jumpMessage}
+      onJumpMessageConsumed={onJumpMessageConsumed}
       canSendAsTask={Boolean(conversation.senderMemberId) && canSendAsTask}
       onToggleReaction={conversation.senderMemberId ? onToggleReaction : undefined}
       threadContext={`#${conversation.name}`}

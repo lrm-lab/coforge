@@ -113,3 +113,24 @@ export function positionJumpDecision(
   if (consumed === jumpMessage) return { action: "ignore" };
   return hash ? { action: "consume", id: jumpMessage } : { action: "show", id: jumpMessage };
 }
+
+/**
+ * A hosted `msg` landing is one-shot on a conversation, the same as Chat's `message` param.
+ * A standalone thread keeps it: there `msg` is the thread's root, not a landing to forget.
+ */
+export function hostedLandingAfterConsume(threadAlone: boolean): "keep" | "clear" {
+  return threadAlone ? "keep" : "clear";
+}
+
+/**
+ * A newer page always snapshots the viewport row. Commit pins the bottom only when the reader
+ * was following the latest at the fetch and still is when the page arrives. Leaving the bottom
+ * while the fetch is in flight restores that row: the window may have evicted the oldest page,
+ * and a raw scroll offset would not be the row they moved to.
+ */
+export function newerPageCommit(
+  startedFollowing: boolean,
+  stillFollowing: boolean,
+): "pin-bottom" | "keep-anchor" {
+  return startedFollowing && stillFollowing ? "pin-bottom" : "keep-anchor";
+}

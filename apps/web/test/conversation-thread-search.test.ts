@@ -8,6 +8,8 @@ import {
   conversationSearchWithThread,
   openTaskParamSchema,
   messageIdFromHash,
+  hostedLandingAfterConsume,
+  newerPageCommit,
   positionJumpDecision,
   resolveConversationThreadRoot,
   threadRootFromMessageAnchor,
@@ -134,6 +136,31 @@ describe("positionJumpDecision", () => {
       action: "show",
       id: "message-1",
     });
+  });
+});
+
+describe("hostedLandingAfterConsume", () => {
+  test("a conversation landing clears, so a remount follows the open rule instead of the old msg", () => {
+    expect(hostedLandingAfterConsume(false)).toBe("clear");
+  });
+
+  test("a standalone thread keeps msg, because it is the thread root", () => {
+    expect(hostedLandingAfterConsume(true)).toBe("keep");
+  });
+});
+
+describe("newerPageCommit", () => {
+  test("still following the latest when the page arrives pins the bottom", () => {
+    expect(newerPageCommit(true, true)).toBe("pin-bottom");
+  });
+
+  test("leaving the bottom while the fetch is in flight keeps the snapshotted row", () => {
+    expect(newerPageCommit(true, false)).toBe("keep-anchor");
+  });
+
+  test("a reader who was not following keeps their row", () => {
+    expect(newerPageCommit(false, false)).toBe("keep-anchor");
+    expect(newerPageCommit(false, true)).toBe("keep-anchor");
   });
 });
 

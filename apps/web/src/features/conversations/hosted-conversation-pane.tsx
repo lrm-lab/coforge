@@ -32,6 +32,7 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   loadingLabel,
   failedText,
   standaloneBelowLg = false,
+  onJumpMessageConsumed,
   ref,
 }: {
   target: HostedConversationTarget;
@@ -43,6 +44,8 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   failedText: string;
   /** The pane fills the page below `lg`, with no list beside it (so no divider there). */
   standaloneBelowLg?: boolean;
+  /** Clears the host's landing id once the stream has used it. */
+  onJumpMessageConsumed?: () => void;
   ref?: Ref<HTMLElement>;
 }) {
   const [failed, setFailed] = useState(false);
@@ -69,7 +72,11 @@ export const HostedConversationPane = memo(function HostedConversationPane({
             onCatch={() => setFailed(true)}
           >
             <Suspense fallback={<ConversationPending label={loadingLabel} />}>
-              <HostedConversation target={target} search={search} />
+              <HostedConversation
+                target={target}
+                search={search}
+                onJumpMessageConsumed={onJumpMessageConsumed}
+              />
             </Suspense>
           </CatchBoundary>
         </ClientOnly>
@@ -85,9 +92,11 @@ export const HostedConversationPane = memo(function HostedConversationPane({
 function HostedConversation({
   target,
   search,
+  onJumpMessageConsumed,
 }: {
   target: HostedConversationTarget;
   search: ConversationPageSearch;
+  onJumpMessageConsumed?: () => void;
 }) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const channels = useSuspenseQuery(channelNamesQuery(workspaceId)).data;
@@ -102,6 +111,7 @@ function HostedConversation({
         target={{ kind: target.kind, id: target.id }}
         search={search}
         jumpMessage={target.messageId}
+        onJumpMessageConsumed={onJumpMessageConsumed}
       />
     </ConversationHostProvider>
   );

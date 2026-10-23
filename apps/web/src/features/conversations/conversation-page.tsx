@@ -34,6 +34,8 @@ type ConversationPageProps = {
   search: ConversationPageSearch;
   /** The message the stream lands on, for a host that keeps it itself (the hosted pane). */
   jumpMessage?: string;
+  /** Clears the host's landing once the pane has used it. */
+  onJumpMessageConsumed?: () => void;
 };
 
 /**
@@ -171,6 +173,7 @@ function PeopleDirectConversationPage({
       // No Agent profile here (a member DM has no Agent to open), only the people's own.
       conversation={({
         jumpMessage,
+        onJumpMessageConsumed,
         tasksPane,
         onShowTasks,
         onShowFiles,
@@ -184,6 +187,7 @@ function PeopleDirectConversationPage({
           {...data.conversationProps}
           conversation={conversation}
           jumpMessage={jumpMessage}
+          onJumpMessageConsumed={onJumpMessageConsumed}
           tasksPane={tasksPane}
           onShowTasks={onShowTasks}
           onShowFiles={onShowFiles}
@@ -271,6 +275,7 @@ type ConversationPageBodyProps = {
   conversation: (
     chat: {
       jumpMessage?: string;
+      onJumpMessageConsumed?: () => void;
       tasksPane?: ReactNode;
       onShowTasks: () => void;
       onShowFiles: () => void;
@@ -287,6 +292,7 @@ type ConversationPageBodyProps = {
 function ConversationPageBody({
   search: pageSearch,
   jumpMessage,
+  onJumpMessageConsumed,
   unreadKey,
   page,
   taskView,
@@ -375,6 +381,7 @@ function ConversationPageBody({
     ) : undefined;
   return renderConversation({
     jumpMessage,
+    onJumpMessageConsumed,
     tasksPane,
     onShowTasks: showTasks,
     onShowFiles: showFiles,

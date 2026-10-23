@@ -177,6 +177,9 @@ export type ThreadedConversationProps = Omit<ConversationProps, "conversation" |
   /** The message the stream lands on, for a host that keeps it itself (the hosted pane) instead
    * of the conversation's one-shot `message` search param. */
   jumpMessage?: string;
+  /** Clears the host's landing id once the pane has used it. Omitted for a standalone thread,
+   * whose landing id is the thread root and stays. */
+  onJumpMessageConsumed?: () => void;
 };
 
 /** Which Task's popup is open, and how to open another or close it. */

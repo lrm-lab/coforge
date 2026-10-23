@@ -72,6 +72,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     channels,
     taskPopup,
     jumpMessage,
+    onJumpMessageConsumed,
     ...conversationProps
   } = props;
   const detailVisible = useConversationDetailVisible();
@@ -279,7 +280,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         channelNames={channelNames}
         channels={channelList}
         jumpMessage={jumpMessage ?? jumpMessageId}
-        onJumpMessageConsumed={jumpMessage ? undefined : clearJumpMessage}
+        onJumpMessageConsumed={jumpMessage ? onJumpMessageConsumed : clearJumpMessage}
         onLoadMessageAround={onLoadMessageAround}
         onReadLatest={onReadLatest}
         header={header}

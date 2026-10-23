@@ -6,6 +6,7 @@ import {
   pickConversationPageSearch,
   type HostedConversationTarget,
 } from "#src/features/conversations/conversation-page-search";
+import { hostedLandingAfterConsume } from "#src/features/conversations/conversation-thread-search";
 import { HostedConversationPane } from "#src/features/conversations/hosted-conversation-pane";
 import { StandaloneThreadContext } from "#src/features/conversations/standalone-thread";
 import { m } from "#src/paraglide/messages";
@@ -37,6 +38,18 @@ export function ActivityConversationPane({
     select: pickConversationPageSearch,
     structuralSharing: true,
   });
+  const navigate = activityRoute.useNavigate();
+  // A conversation landing is one-shot. Leaving `msg` set makes the pane jump back to it every
+  // time Chat/Tasks remounts the stream. A standalone thread keeps `msg`: it is the root.
+  const clearLanding = useCallback(() => {
+    void navigate({
+      replace: true,
+      resetScroll: false,
+      search: (previous) => ({ ...previous, msg: undefined }),
+    });
+  }, [navigate]);
+  const onJumpMessageConsumed =
+    hostedLandingAfterConsume(Boolean(target.threadAlone)) === "clear" ? clearLanding : undefined;
   // The list is always mounted, so nothing closes it.
   const listControls = useMemo(
     () => ({ showList: onClose, closeList: () => {}, detailVisible: true }),
@@ -57,6 +70,7 @@ export function ActivityConversationPane({
           label={m.activity_conversation_pane()}
           loadingLabel={m.activity_conversation_loading()}
           failedText={m.activity_conversation_failed()}
+          onJumpMessageConsumed={onJumpMessageConsumed}
           standaloneBelowLg
         />
       </StandaloneThreadContext>
