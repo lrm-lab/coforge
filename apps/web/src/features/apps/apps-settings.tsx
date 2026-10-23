@@ -64,6 +64,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
     permissions: false,
     setup: false,
     notifications: false,
+    manifest: false,
   });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);

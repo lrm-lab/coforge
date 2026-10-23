@@ -120,6 +120,7 @@ const fields = {
   description: text(APP_DESCRIPTION_MAX_LENGTH),
   whenToUse: text(APP_WHEN_TO_USE_MAX_LENGTH),
   homepageUrl: url.nullable(),
+  agentManifestUrl: url.nullable().optional(),
   redirectUris: z.array(url).max(MAX_REDIRECT_URIS),
   // Chosen from a list, so a value outside it is a malformed request, not a field to correct.
   category: z.enum(APP_CATEGORIES),
@@ -136,8 +137,15 @@ const actorOf = ({ user, workspaceId }: WorkspaceUserContext): AppActor => ({
 
 /** Which declarations the editor shows in this Workspace: where the `app-data-permissions` and
  * `app-installation-setup` flags are on, and, with `app-data-permissions`, `app-notifications`
- * (the App notifications section and the events in the permissions). */
-export type AppDeclarations = { permissions: boolean; setup: boolean; notifications: boolean };
+ * (the App notifications section and the events in the permissions); `manifest` where
+ * `app-agent-manifest` is on. */
+export type AppDeclarations = {
+  permissions: boolean;
+  setup: boolean;
+  notifications: boolean;
+  /** The Agent manifest URL field and rows (`app-agent-manifest`). */
+  manifest: boolean;
+};
 
 /** The apps installed in the Workspace (the ones it registered), and the declarations it shows. */
 export const loadWorkspaceApps = createServerFn({ method: "GET" })
@@ -145,7 +153,7 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     declareNoStore();
     const actor = actorOf(context);
-    const [apps, permissions, setups] = await Promise.all([
+    const [{ apps, manifest }, permissions, setups] = await Promise.all([
       createAppRegistry(context.db).listWorkspaceApps(actor),
       createAppPermissions(context.db).workspacePermissions(actor),
       createAppInstallationSetup(context.db).workspaceSetups(actor),
@@ -163,6 +171,7 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
         permissions: permissions !== null,
         setup: setups !== null,
         notifications,
+        manifest,
       } satisfies AppDeclarations,
     };
   });

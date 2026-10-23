@@ -14,8 +14,9 @@ import { SetupStatusCard } from "./app-editor-setup";
 import { APP_SCOPE_DESCRIPTIONS } from "./app-form";
 import { APP_CATEGORY_LABELS } from "./app-list";
 import { AppLogo } from "./app-logo";
+import { resolveAgentManifest } from "./app-agent-manifest";
 import { appLoginScopes } from "./app-registration";
-import type { AppSummary } from "./apps.functions";
+import type { AppDeclarations, AppSummary } from "./apps.functions";
 
 /**
  * The detail of an installed app, read-only for every role: who it is, what it does, the scopes
@@ -37,7 +38,7 @@ export function AppDetail({
   open: boolean;
   /** The app as the list now holds it; kept while the dialog fades out. */
   app: AppSummary | undefined;
-  declares: { permissions: boolean; setup: boolean; notifications: boolean };
+  declares: AppDeclarations;
   /** An owner or admin: may continue setup, approve a pending update and see the installation ID. */
   canManage: boolean;
   onClose: () => void;
@@ -47,6 +48,7 @@ export function AppDetail({
   onRefreshSetup: () => Promise<void>;
 }) {
   const homepage = app?.homepageUrl ? new URL(app.homepageUrl) : null;
+  const manifest = app && declares.manifest ? resolveAgentManifest(app) : null;
   const permissions = app?.permissions;
   const setup = app?.setup;
   const installationId = permissions?.installationId ?? setup?.installation?.installationId;
@@ -102,6 +104,19 @@ export function AppDetail({
                         {homepage.host}
                       </span>
                     </AriaLink>
+                  </div>
+                )}
+                {manifest?.agentManifestUrl && (
+                  <div className="grid gap-1">
+                    <p className="text-sm text-tertiary">{m.apps_detail_agent_manifest()}</p>
+                    <p className="font-mono text-xs wrap-anywhere text-secondary">
+                      {manifest.agentManifestUrl}
+                    </p>
+                    {manifest.agentManifestUrlSource === "well_known" && (
+                      <p className="text-xs text-tertiary">
+                        {m.apps_detail_agent_manifest_derived()}
+                      </p>
+                    )}
                   </div>
                 )}
                 <section className="grid gap-2">

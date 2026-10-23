@@ -9,7 +9,10 @@ import type { AppSummary } from "./apps.functions";
 
 /** The editor's fields as typed, before they are trimmed into an input: a homepage left out is an
  * empty field. */
-export type AppDraft = Omit<AppRegistrationInput, "homepageUrl"> & { homepageUrl: string };
+export type AppDraft = Omit<AppRegistrationInput, "homepageUrl" | "agentManifestUrl"> & {
+  homepageUrl: string;
+  agentManifestUrl: string;
+};
 
 export const EMPTY_APP_DRAFT: AppDraft = {
   key: "",
@@ -17,6 +20,7 @@ export const EMPTY_APP_DRAFT: AppDraft = {
   description: "",
   whenToUse: "",
   homepageUrl: "",
+  agentManifestUrl: "",
   redirectUris: [""],
   category: "other" satisfies AppCategory,
   allowedScopes: [...APP_FIXED_SCOPES],
@@ -29,6 +33,7 @@ export function draftOf(app: AppSummary): AppDraft {
     description: app.description,
     whenToUse: app.whenToUse,
     homepageUrl: app.homepageUrl ?? "",
+    agentManifestUrl: app.agentManifestUrl ?? "",
     redirectUris: app.redirectUris.length > 0 ? app.redirectUris : [""],
     category: app.category,
     allowedScopes: app.allowedScopes,
@@ -36,14 +41,16 @@ export function draftOf(app: AppSummary): AppDraft {
 }
 
 /** What the draft sends: text trimmed, a blank homepage as none, blank redirect rows left out,
- * scopes in their order. */
-export function inputOf(draft: AppDraft): AppRegistrationInput {
+ * scopes in their order. The Agent manifest URL goes only where the editor shows its field
+ * (`withManifest`), so saving never clears one it did not offer. */
+export function inputOf(draft: AppDraft, withManifest = false): AppRegistrationInput {
   return {
     key: draft.key.trim(),
     name: draft.name.trim(),
     description: draft.description.trim(),
     whenToUse: draft.whenToUse.trim(),
     homepageUrl: draft.homepageUrl.trim() || null,
+    ...(withManifest && { agentManifestUrl: draft.agentManifestUrl.trim() || null }),
     redirectUris: draft.redirectUris.map((uri) => uri.trim()).filter(Boolean),
     category: draft.category,
     allowedScopes: APP_SCOPES.filter((scope) => draft.allowedScopes.includes(scope)),

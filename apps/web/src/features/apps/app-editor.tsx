@@ -36,7 +36,7 @@ import { refusedSetupFields, setupDraftOf, setupInputOf, type SetupDraft } from 
 import type { AppPermissionGroup } from "./app-permissions";
 import { APP_WHEN_TO_USE_MAX_LENGTH, refusedAppFields } from "./app-registration";
 import { AppSecretPanel, type IssuedSecret } from "./app-secret-panel";
-import type { AppSummary } from "./apps.functions";
+import type { AppDeclarations, AppSummary } from "./apps.functions";
 
 /**
  * Registers an app (`app` absent) or edits one, in one wide form: a section nav beside Profile,
@@ -80,7 +80,7 @@ type AppEditorProps = {
   app?: AppSummary;
   /** Which declarations this Workspace has the editor show: `app-data-permissions`,
    * `app-installation-setup` and `app-notifications` on. */
-  declares: { permissions: boolean; setup: boolean; notifications: boolean };
+  declares: AppDeclarations;
   /** A secret regenerated for this app, shown in the editor's notice strip. */
   issued: IssuedSecret | null;
   onClose: () => void;
@@ -173,7 +173,7 @@ function AppEditorForm({
   function submit(event: FormEvent) {
     event.preventDefault();
     setFormError("");
-    const input = inputOf(draft);
+    const input = inputOf(draft, declares.manifest);
     // A change never carries the key (it is the client ID), and a blank one asks for a made key.
     const { key, ...rest } = input;
     const refused = refusedAppFields(editing || key === "" ? rest : input);
@@ -314,7 +314,7 @@ function AppEditorForm({
             }
             description={m.apps_section_login_description()}
           >
-            <LoginFields {...fields} />
+            <LoginFields {...fields} manifest={declares.manifest} />
           </EditorSection>
           {declares.setup && (
             <EditorSection

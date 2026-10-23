@@ -203,7 +203,7 @@ test.skipIf(!db)(
       await registry.registerApp(mine.actor("owner"), registration(mineKey));
       await registry.registerApp(theirs.actor("owner"), registration(`theirs-${theirs.suffix}`));
 
-      const listed = await registry.listWorkspaceApps(mine.actor("member"));
+      const { apps: listed } = await registry.listWorkspaceApps(mine.actor("member"));
       expect(listed.map(({ key, ownerWorkspaceId }) => [key, ownerWorkspaceId])).toEqual([
         [mineKey, mine.workspace.id],
       ]);
@@ -331,12 +331,9 @@ test.skipIf(!db)(
     const taken = `t${fixture.suffix}`;
     const fresh = `f${fixture.suffix}`;
     const suffixes = [taken, fresh];
-    const registry = new AppRegistry(
-      new PrismaAppRegistryStore(db!),
-      memoryImages().images,
-      undefined,
-      () => suffixes.shift()!,
-    );
+    const registry = new AppRegistry(new PrismaAppRegistryStore(db!), memoryImages().images, {
+      keySuffix: () => suffixes.shift()!,
+    });
     try {
       await registry.registerApp(actor, registration(`acme-notes-${taken}`));
       const { app } = await registry.registerApp(actor, {
@@ -407,7 +404,7 @@ test.skipIf(!db)(
       expect([...objects.keys()]).toEqual([second.logoObjectKey!]);
       expect(first.logoObjectKey).not.toBe(second.logoObjectKey);
 
-      const [listed] = await registry.listWorkspaceApps(mine.actor("member"));
+      const [listed] = (await registry.listWorkspaceApps(mine.actor("member"))).apps;
       expect(listed?.logoObjectKey).toBe(second.logoObjectKey);
       const client = await new PrismaAuthorizationStore(db!).findClient(key);
       expect(client?.logoUrl).toBe(appLogoUrl(mine.workspace.id, key, second.logoObjectKey));

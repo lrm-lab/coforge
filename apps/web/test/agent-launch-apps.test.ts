@@ -13,6 +13,7 @@ type InstalledApp = {
   description: string;
   whenToUse: string;
   homepageUrl: string | null;
+  agentManifestUrl: string | null;
   logoUrl: string | null;
   allowedScopes: string[];
   agentAccess: "all" | "selected";
@@ -26,6 +27,7 @@ const app = (key: string, patch: Partial<InstalledApp> = {}): InstalledApp => ({
   description: `What ${key} is.`,
   whenToUse: `When ${key} helps.`,
   homepageUrl: "https://app.example/",
+  agentManifestUrl: "https://app.example/agents.json",
   logoUrl: null,
   allowedScopes: ["openid"],
   agentAccess: "all",
@@ -63,6 +65,15 @@ test("the launch directory is the Agent's Workspace's apps in the store's order,
       whenToUse: "When zeta-board helps.",
     },
   ]);
+});
+
+test("the launch directory never carries a URL, an app's Agent manifest included", async () => {
+  const directory = await listAgentLaunchApps(
+    storeOf([app("acme-notes")]),
+    "workspace-1",
+    "agent-1",
+  );
+  expect(JSON.stringify(directory)).not.toContain("https://");
 });
 
 test("a built-in Agent App never appears, even if a store returned one", async () => {

@@ -50,6 +50,10 @@ model App {
   /// Goes up by one only when `setupUrl` changes (setup turned on or off included), so a
   /// completion names the setup it finished; a change of the description leaves it.
   setupRevision    Int               @default(0)
+  /// Where the app's Agent manifest is (`features/apps/app-agent-manifest.ts`): an https URL, in
+  /// canonical form, at most 2000 characters, no user info or fragment (`apps_agent_manifest_url_check`).
+  /// Null: the app names none, and its location is derived from the homepage.
+  agentManifestUrl String?
   createdByUserId  String?           @db.Uuid
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt

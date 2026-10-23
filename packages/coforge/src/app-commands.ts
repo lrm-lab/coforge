@@ -92,6 +92,10 @@ function formatAppList(shown: readonly AgentAppView[], all: boolean): string {
     if (app.whenToUse) lines.push(`  When to use: ${app.whenToUse}`);
     if (app.description) lines.push(`  ${app.description.replaceAll("\n", "\n  ")}`);
     if (app.homepageUrl) lines.push(`  Homepage: ${app.homepageUrl}`);
+    if (app.agentManifestUrl)
+      lines.push(
+        `  Agent manifest: ${app.agentManifestUrl}${app.agentManifestUrlSource === "well_known" ? " (derived from the homepage; the app may not publish one)" : ""}`,
+      );
     if (app.access) lines.push(`  Access: ${ACCESS[app.access]}`);
     return lines.join("\n");
   });

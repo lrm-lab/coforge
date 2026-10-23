@@ -29,6 +29,7 @@ const ownApp: AppView = {
   description: "",
   whenToUse: "",
   homepageUrl: null,
+  agentManifestUrl: null,
   redirectUris: [],
   category: "other",
   allowedScopes: ["openid", "profile", "identity"],
@@ -92,7 +93,10 @@ function fixture(
   const contentTypes = new Map<string, string>();
   const { objects, storage } = memoryStorage();
   const store: AppRegistryStore = {
-    findMemberRole: async (_workspaceId, userId) => roles[userId],
+    findMember: async (_workspaceId, userId) => {
+      const role = roles[userId];
+      return role && { role, workspaceSlug: "acme" };
+    },
     listForWorkspace: async () => [...apps.values()],
     find: async (key) => {
       const app = apps.get(key);

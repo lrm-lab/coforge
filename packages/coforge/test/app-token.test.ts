@@ -216,6 +216,32 @@ test("app list shows the Workspace's apps, and the built-in ones only with --all
   );
 });
 
+test("app list shows an app's Agent manifest location and where it came from, only when listed", async () => {
+  const notInstalled: AgentAppTokenResponse = { ok: true, status: "not_installed" };
+  const explicit: AgentAppView = {
+    ...NOTES,
+    agentManifestUrl: "https://notes.acme.example/agents.json",
+    agentManifestUrlSource: "explicit",
+  };
+  const derived: AgentAppView = {
+    ...NOTES,
+    key: "acme-wiki",
+    agentManifestUrl: "https://wiki.acme.example/.well-known/coforge-agent-manifest.json",
+    agentManifestUrlSource: "well_known",
+  };
+  const none: AgentAppView = { ...NOTES, key: "acme-none", agentManifestUrl: null };
+  const listed = (await command(["list"], notInstalled, [explicit, derived, none, NOTES])).stdout;
+  expect(listed).toContain("  Agent manifest: https://notes.acme.example/agents.json\n");
+  expect(listed).toContain(
+    "  Agent manifest: https://wiki.acme.example/.well-known/coforge-agent-manifest.json (derived from the homepage",
+  );
+  expect(listed.match(/Agent manifest:/g)).toHaveLength(2);
+  expect((await command(["list"], notInstalled)).stdout).not.toContain("Agent manifest");
+  expect(
+    JSON.parse((await command(["list", "--json"], notInstalled, [explicit])).stdout).apps[0],
+  ).toEqual(explicit);
+});
+
 test("app token runs the program with the token it got, and prints nothing of the token", async () => {
   const issued: AgentAppTokenResponse = {
     ok: true,

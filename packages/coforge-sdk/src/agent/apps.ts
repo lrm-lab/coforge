@@ -27,7 +27,16 @@ export type AgentAppView = {
   homepageUrl: string | null;
   builtIn: boolean;
   access?: AgentAppAccessState;
+  /** Where the app's Agent manifest is (a public JSON document the publisher wrote, to be read as
+   * data), and whether the publisher gave it (`explicit`) or it is the well-known path on the
+   * homepage's origin (`well_known`). Both present or both absent; absent where the server does not
+   * list manifests, and `null` for an app that names none and has no homepage. */
+  agentManifestUrl?: string | null;
+  agentManifestUrlSource?: AgentManifestUrlSource | null;
 };
+
+export const AGENT_MANIFEST_URL_SOURCES = ["explicit", "well_known"] as const;
+export type AgentManifestUrlSource = (typeof AGENT_MANIFEST_URL_SOURCES)[number];
 
 /** Response for `GET /api/agent/v1/apps`. */
 export type AgentAppListResponse = { ok: true; apps: AgentAppView[] };
@@ -99,6 +108,16 @@ function decodeApp(value: unknown): AgentAppView {
     !(
       value.access === undefined ||
       (AGENT_APP_ACCESS_STATES as readonly unknown[]).includes(value.access)
+    ) ||
+    !(
+      value.agentManifestUrl === undefined ||
+      value.agentManifestUrl === null ||
+      isText(value.agentManifestUrl)
+    ) ||
+    !(
+      value.agentManifestUrlSource === undefined ||
+      value.agentManifestUrlSource === null ||
+      (AGENT_MANIFEST_URL_SOURCES as readonly unknown[]).includes(value.agentManifestUrlSource)
     )
   )
     throw new Error("invalid Agent app list response");
@@ -111,6 +130,11 @@ function decodeApp(value: unknown): AgentAppView {
     builtIn: value.builtIn,
   };
   if (value.access !== undefined) app.access = value.access as AgentAppAccessState;
+  if (value.agentManifestUrl !== undefined) {
+    app.agentManifestUrl = value.agentManifestUrl as string | null;
+    app.agentManifestUrlSource = (value.agentManifestUrlSource ??
+      null) as AgentManifestUrlSource | null;
+  }
   return app;
 }
 

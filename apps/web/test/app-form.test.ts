@@ -42,6 +42,7 @@ const actor = { workspaceId: "workspace-1", actorUserId: "owner" };
 function registry({ keyTaken = false } = {}) {
   const app: AppView = {
     ...valid,
+    agentManifestUrl: null,
     ownerWorkspaceId: actor.workspaceId,
     logoObjectKey: null,
     secretRotatedAt: null,
@@ -49,7 +50,7 @@ function registry({ keyTaken = false } = {}) {
     updatedAt: new Date("2026-10-20T00:00:00.000Z"),
   };
   const store: AppRegistryStore = {
-    findMemberRole: async () => "owner",
+    findMember: async () => ({ role: "owner", workspaceSlug: "acme" }),
     listForWorkspace: async () => [],
     find: async () => app,
     create: async () => (keyTaken ? undefined : app),
@@ -125,6 +126,7 @@ describe("an app form's homepage", () => {
   test("of an app without one, opens empty", () => {
     const app = {
       ...valid,
+      agentManifestUrl: null,
       homepageUrl: null,
       logoUrl: null,
       createdAt: "2026-10-20T00:00:00.000Z",

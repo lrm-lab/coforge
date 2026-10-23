@@ -21,6 +21,7 @@ const ownApp: AppView = {
   description: "",
   whenToUse: "",
   homepageUrl: "https://notes.acme.example/",
+  agentManifestUrl: null,
   redirectUris: ["https://notes.acme.example/cb"],
   category: "other",
   allowedScopes: ["openid", "profile", "identity"],
@@ -54,9 +55,10 @@ function storeWith(roles: Record<string, WorkspaceMemberRole>, { roleAfterApp = 
   const writes: string[] = [];
   const waitingForApp: (() => void)[] = [];
   const store: AppRegistryStore = {
-    async findMemberRole(_workspaceId, userId) {
+    async findMember(_workspaceId, userId) {
       if (roleAfterApp) await new Promise<void>((resolve) => waitingForApp.push(resolve));
-      return roles[userId];
+      const role = roles[userId];
+      return role && { role, workspaceSlug: "acme" };
     },
     async listForWorkspace() {
       return [ownApp];
@@ -164,7 +166,7 @@ describe("the app registry's authorization", () => {
 
   test("a plain member still lists the Workspace's apps", async () => {
     const { store } = storeWith({ member: "member" });
-    const apps = await new AppRegistry(store, NO_IMAGES).listWorkspaceApps({
+    const { apps } = await new AppRegistry(store, NO_IMAGES).listWorkspaceApps({
       workspaceId: WORKSPACE,
       actorUserId: "member",
     });
@@ -229,7 +231,7 @@ describe("a registration without a key", () => {
 
   test("gets a key made from the app's name", async () => {
     const { store, keys } = recordingStore([]);
-    const registry = new AppRegistry(store, NO_IMAGES, undefined, suffixes("x7k2q9"));
+    const registry = new AppRegistry(store, NO_IMAGES, { keySuffix: suffixes("x7k2q9") });
     const { app } = await registry.registerApp(actor, { ...registration, key: "" });
     expect(keys).toEqual(["acme-two-x7k2q9"]);
     expect(app.key).toBe("acme-two-x7k2q9");
@@ -237,12 +239,9 @@ describe("a registration without a key", () => {
 
   test("tries another suffix when the key it made is taken", async () => {
     const { store, keys } = recordingStore([true, true]);
-    const registry = new AppRegistry(
-      store,
-      NO_IMAGES,
-      undefined,
-      suffixes("aaaaaa", "bbbbbb", "cccccc"),
-    );
+    const registry = new AppRegistry(store, NO_IMAGES, {
+      keySuffix: suffixes("aaaaaa", "bbbbbb", "cccccc"),
+    });
     await registry.registerApp(actor, { ...registration, key: "  " });
     expect(keys).toEqual(["acme-two-aaaaaa", "acme-two-bbbbbb", "acme-two-cccccc"]);
   });

@@ -16,6 +16,8 @@ export const APP_WHEN_TO_USE_MAX_LENGTH = 160;
 /** The longest URL an app may give: what browsers and proxies reliably carry through a redirect
  * (the de facto 2,048-character limit). */
 export const APP_URL_MAX_LENGTH = 2048;
+/** The longest Agent manifest URL (Raft's bound). */
+export const APP_AGENT_MANIFEST_URL_MAX_LENGTH = 2000;
 
 /** The scopes an app may be allowed to request. */
 export const APP_SCOPES = ["openid", "profile", "identity", "email"] as const;
@@ -53,6 +55,9 @@ export type AppRegistrationInput = {
   redirectUris: string[];
   category: AppCategory;
   allowedScopes: string[];
+  /** Where the app's Agent manifest is (`app-agent-manifest.ts`): none (`null`) or an https URL.
+   * A registration may leave it out, which is none. */
+  agentManifestUrl?: string | null;
 };
 
 /** A change to a registered app: any field but its key. */
@@ -114,11 +119,24 @@ export const isCanonicalHttpsUrl = (value: unknown): value is string =>
 const homepageUrl: FieldCheck<string | null> = (value) =>
   value === null || isCanonicalHttpsUrl(value) ? accept(value as string | null) : REFUSE;
 
+/** A URL given as a location is compared and fetched as written, so it names no fragment. */
+const hasFragment = (url: string) => url.includes("#");
+
+/** An https URL with no fragment, up to `APP_AGENT_MANIFEST_URL_MAX_LENGTH`, or `null` for none. A
+ * blank string is refused: a form sends a blank field as `null`. */
+const agentManifestUrl: FieldCheck<string | null> = (value) =>
+  value === null ||
+  (isCanonicalHttpsUrl(value) &&
+    value.length <= APP_AGENT_MANIFEST_URL_MAX_LENGTH &&
+    !hasFragment(value))
+    ? accept(value as string | null)
+    : REFUSE;
+
 /** Whether one redirect URI passes the rule the list applies to each of its URIs. Compared later
  * by exact string match (RFC 9700 §2.1), so only accepted as written. */
 export function isRedirectUri(value: unknown): boolean {
   const url = canonicalUrl(value);
-  if (!url || url.href.includes("#")) return false;
+  if (!url || hasFragment(url.href)) return false;
   return (
     url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname))
   );
@@ -159,7 +177,11 @@ const FIELD_CHECKS: { [Field in AppInputField]: FieldCheck<AppRegistrationInput[
     return categories.includes(value) ? accept(value as AppCategory) : REFUSE;
   },
   allowedScopes,
+  agentManifestUrl,
 };
+
+/** The fields a registration may leave out. */
+const OPTIONAL_FIELDS: readonly AppInputField[] = ["agentManifestUrl"];
 
 const FIELDS = Object.keys(FIELD_CHECKS) as AppInputField[];
 
@@ -173,6 +195,7 @@ export const APP_INPUT_ERROR_IDS: Record<AppInputField, string> = {
   redirectUris: "app-redirect-uris-invalid",
   category: "app-category-invalid",
   allowedScopes: "app-allowed-scopes-invalid",
+  agentManifestUrl: "app-agent-manifest-url-invalid",
 };
 
 /** The field an `APP_INPUT_ERROR_IDS` id names, or `undefined` for any other id. */
@@ -188,7 +211,7 @@ function checkFields(input: Partial<Record<AppInputField, unknown>>, requireAll:
   for (const field of FIELDS) {
     const given = input[field];
     if (given === undefined) {
-      if (requireAll) refused.push(field);
+      if (requireAll && !OPTIONAL_FIELDS.includes(field)) refused.push(field);
       continue;
     }
     const outcome = FIELD_CHECKS[field](given);

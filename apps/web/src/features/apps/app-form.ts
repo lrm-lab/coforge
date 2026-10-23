@@ -21,6 +21,7 @@ export const APP_FIELD_PROBLEMS: Record<AppInputField, () => string> = {
   redirectUris: m.apps_error_redirect_uris,
   category: m.apps_error_category,
   allowedScopes: m.apps_error_scopes,
+  agentManifestUrl: m.apps_error_agent_manifest,
 };
 
 /** What a scope lets the app learn, as the form describes it beside the scope's name. */

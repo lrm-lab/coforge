@@ -14,6 +14,7 @@ const APP_VIEW = {
   description: true,
   whenToUse: true,
   homepageUrl: true,
+  agentManifestUrl: true,
   redirectUris: true,
   category: true,
   allowedScopes: true,
@@ -53,8 +54,8 @@ export async function findAppMember(
 export class PrismaAppRegistryStore implements AppRegistryStore {
   constructor(private readonly db: Prisma.TransactionClient) {}
 
-  async findMemberRole(workspaceId: string, userId: string) {
-    return (await findAppMember(this.db, workspaceId, userId))?.role;
+  findMember(workspaceId: string, userId: string) {
+    return findAppMember(this.db, workspaceId, userId);
   }
 
   async listForWorkspace(workspaceId: string) {

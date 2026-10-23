@@ -258,6 +258,8 @@ function GrantRow({
         </BadgeWithDot>
       }
       description={grant.appDescription}
+      manifestUrl={grant.agentManifestUrl ?? undefined}
+      manifestDerived={grant.agentManifestUrlSource === "well_known"}
       scopes={grant.scopes}
       actions={
         (revoke || homepage) && (
@@ -289,6 +291,8 @@ function AppRow({
   source,
   badge,
   description,
+  manifestUrl,
+  manifestDerived,
   scopes,
   actions,
 }: {
@@ -298,6 +302,10 @@ function AppRow({
   source?: string;
   badge: ReactNode;
   description?: string;
+  /** Where the app's Agent manifest is, when the server lists it. */
+  manifestUrl?: string;
+  /** Whether that URL was derived from the homepage rather than set by the publisher. */
+  manifestDerived?: boolean;
   scopes: string[];
   actions: ReactNode;
 }) {
@@ -314,6 +322,12 @@ function AppRow({
       </div>
       {description && (
         <p className="text-sm break-words whitespace-pre-line text-secondary">{description}</p>
+      )}
+      {manifestUrl && (
+        <p className="text-xs break-all text-tertiary">
+          {m.agent_apps_manifest({ url: manifestUrl })}
+          {manifestDerived && ` ${m.agent_apps_manifest_derived()}`}
+        </p>
       )}
       <div className="flex flex-wrap gap-1.5">
         {scopes.map((scope) => (

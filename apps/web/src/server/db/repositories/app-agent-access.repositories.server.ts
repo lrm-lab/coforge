@@ -16,6 +16,7 @@ const INSTALLED_APP = {
   description: true,
   whenToUse: true,
   homepageUrl: true,
+  agentManifestUrl: true,
   allowedScopes: true,
   ownerWorkspaceId: true,
   logoObjectKey: true,
@@ -100,9 +101,21 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
   async findAgent(workspaceId: string, agentId: string) {
     const row = await this.db.agent.findFirst({
       where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-      select: { ownerId: true, visibility: true, systemKind: true },
+      select: {
+        ownerId: true,
+        visibility: true,
+        systemKind: true,
+        workspace: { select: { slug: true } },
+      },
     });
-    return row ?? undefined;
+    return row
+      ? {
+          ownerId: row.ownerId,
+          visibility: row.visibility,
+          systemKind: row.systemKind,
+          workspaceSlug: row.workspace.slug,
+        }
+      : undefined;
   }
 
   async listInstalledApps(workspaceId: string) {
@@ -136,7 +149,15 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
         scopes: true,
         source: true,
         updatedAt: true,
-        app: { select: { ...LOGO, name: true, description: true, homepageUrl: true } },
+        app: {
+          select: {
+            ...LOGO,
+            name: true,
+            description: true,
+            homepageUrl: true,
+            agentManifestUrl: true,
+          },
+        },
       },
       orderBy: [{ app: { name: "asc" } }, { id: "asc" }],
     });
@@ -146,6 +167,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
       appName: row.app.name,
       appDescription: row.app.description,
       homepageUrl: row.app.homepageUrl,
+      agentManifestUrl: row.app.agentManifestUrl,
       appLogoUrl: logoUrlOf(row.app),
       scopes: row.scopes,
       // `app_agent_grants_source_check` admits only the three sources.

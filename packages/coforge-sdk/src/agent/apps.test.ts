@@ -40,6 +40,29 @@ test("a list names each app, a built-in one without an access state", () => {
     expect(() => decodeAgentAppListResponse({ ok: true, apps })).toThrow();
 });
 
+test("a list carries an app's Agent manifest location and its source, or neither", () => {
+  const explicit = {
+    ...notes,
+    agentManifestUrl: "https://acme.example/m.json",
+    agentManifestUrlSource: "explicit",
+  };
+  const none = { ...notes, key: "acme-none", agentManifestUrl: null, agentManifestUrlSource: null };
+  expect(decodeAgentAppListResponse({ ok: true, apps: [explicit, none, notes] }).apps).toEqual([
+    explicit,
+    none,
+    notes,
+  ] as AgentAppView[]);
+  const [plain] = decodeAgentAppListResponse({ ok: true, apps: [notes] }).apps;
+  expect(Object.hasOwn(plain!, "agentManifestUrl")).toBe(false);
+  for (const change of [
+    { agentManifestUrl: 3 },
+    { agentManifestUrl: "https://a.example/", agentManifestUrlSource: "guess" },
+  ])
+    expect(() =>
+      decodeAgentAppListResponse({ ok: true, apps: [{ ...notes, ...change }] }),
+    ).toThrow();
+});
+
 test("a token answer is a token, a wait for approval, or no such app", () => {
   const issued = {
     ok: true,
