@@ -1,3 +1,4 @@
+import { appEventConversation } from "#src/server/app-agent-events/app-event-target.server";
 import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
 import { WorkspaceAssistantCommands } from "#src/server/agents/workspace-assistant-commands.server";
 import {
@@ -32,7 +33,7 @@ import { agentHistoryModelSeenBoundary } from "#src/server/agents/agent-history-
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
-import { STORED_USERNAME_SOURCE } from "#src/lib/username-grammar";
+import { userIdOfUsernameTarget } from "./public-user-target.repositories.server";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
 import { messageAnchorWhere, messageIdMatchesAnchor } from "#src/server/db/message-anchor.server";
@@ -91,6 +92,7 @@ import {
   agentAttentionMaxSql,
   agentRecentContextSql,
   NOTIFIED_AGENT_WHERE,
+  pendingDeliveryWhere,
   unreadAgentMessagesFragment,
   type AgentAttentionScope,
 } from "#src/server/db/repositories/agent-attention.repositories.server";
@@ -190,7 +192,6 @@ export type PendingAgentDelivery = AgentRecoveryContext["resumeMessages"][number
 type AgentFacing<T extends { body: string }> = Omit<T, "body"> & { body: AgentReadableBody };
 
 const AGENT_RECOVERY_MESSAGE_LIMIT = 100;
-const PUBLIC_USERNAME_TARGET = new RegExp(`^@${STORED_USERNAME_SOURCE}$`);
 /** The message-id short forms (eight hex, dashed twelve hex) or a full UUID; both address a
  * Message. */
 const MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`);
@@ -503,18 +504,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
 
   async userIdForUsername(target: string) {
     const [parentTarget, root, extra] = target.split(":");
-    if (
-      !PUBLIC_USERNAME_TARGET.test(parentTarget!) ||
-      extra !== undefined ||
-      (root !== undefined && !MESSAGE_ANCHOR.test(root))
-    )
+    if (extra !== undefined || (root !== undefined && !MESSAGE_ANCHOR.test(root)))
       throw new Error("invalid message target");
-    const user = await this.db.user.findUnique({
-      where: { username: parentTarget!.slice(1) },
-      select: { id: true },
-    });
-    if (!user) throw new Error("target user not found");
-    return user.id;
+    return userIdOfUsernameTarget(this.db, parentTarget!);
   }
 
   private async resolveMessage(conversationId: string, anchor: string, rootOnly = false) {
@@ -654,6 +646,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     agentId: string,
     target: string,
   ): Promise<ResolvedAgentTarget> {
+    await appEventConversation(this.db, workspaceId, agentId, target.split(":")[0]!, {
+      send: true,
+    });
     const delegate = await workspaceAssistantUser(this.db, workspaceId, agentId);
     if (delegate && target.split(":")[0] !== `@${delegate.username}`) {
       const scope = await new WorkspaceAssistantCommands(this.db).target(
@@ -682,7 +677,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     const isChannel = parentTarget.startsWith("#");
     const conversation = isChannel
       ? await this.getAgentChannel(workspaceId, agentId, parentTarget)
-      : await directConversation(await this.userIdForUsername(target));
+      : ((await appEventConversation(this.db, workspaceId, agentId, parentTarget)) ??
+        (await directConversation(await this.userIdForUsername(target))));
     const threadRootId = await this.targetRoot(conversation.id, target);
     return {
       conversationId: conversation.id,
@@ -1408,17 +1404,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     const deliveries = await this.db.agentMessageDelivery.findMany({
       // Hidden-channel deliveries wait for restore. Left/removed/private-transition channel
       // memberships never replay; DMs and notified non-member channel messages still do.
-      where: {
-        workspaceId,
-        agentId,
-        ...selected,
-        conversation: VISIBLE_CONVERSATION_WHERE,
-        OR: [
-          { conversation: { channelName: null } },
-          { conversation: { members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } } } },
-          { message: { pendingMentionActions: { some: NOTIFIED_AGENT_WHERE(agentId) } } },
-        ],
-      },
+      where: await pendingDeliveryWhere(this.db, { workspaceId, agentId }, selected),
       orderBy: [{ createdAt: "asc" }, { deliveryId: "asc" }],
       select: {
         deliveryId: true,

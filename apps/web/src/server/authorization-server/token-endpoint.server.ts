@@ -1,6 +1,11 @@
 import { isFormRequest } from "#src/lib/form-request";
 import { hashAuthorizationCode } from "./authorization-codes.server";
 import { authenticateClient } from "./client-authentication.server";
+import {
+  AGENT_REQUEST_GRANT_TYPE,
+  type AgentInboundRefusal,
+  type AgentInboundTokens,
+} from "./agent-inbound-tokens.server";
 import type { InstallationTokenRefusal, InstallationTokens } from "./installation-tokens.server";
 import { activeGrant, type GrantStore } from "./grants.server";
 import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
@@ -18,7 +23,8 @@ type TokenErrorCode =
   | "invalid_request"
   | "invalid_grant"
   | "unsupported_grant_type"
-  | InstallationTokenRefusal;
+  | InstallationTokenRefusal
+  | AgentInboundRefusal;
 
 /**
  * The token endpoint (RFC 6749 §4.1.3–4.1.4, OIDC Core §3.1.3): an app redeems an authorization
@@ -33,6 +39,7 @@ export class TokenEndpoint {
     private readonly options: TokenIssuer & { now?: () => Date },
     private readonly installationTokens: InstallationTokens,
     private readonly clientCredentialsLimit: AppRateLimit,
+    private readonly agentInboundTokens?: AgentInboundTokens,
   ) {
     this.now = options.now ?? (() => new Date());
   }
@@ -54,8 +61,14 @@ export class TokenEndpoint {
     if (!grantType) return tokenError("invalid_request", "grant_type is required");
     if (grantType === "client_credentials")
       return this.issueInstallationToken({ id: client.id, key: clientId }, form);
+    if (grantType === AGENT_REQUEST_GRANT_TYPE && this.agentInboundTokens)
+      return this.issueAgentInboundToken(
+        this.agentInboundTokens,
+        { id: client.id, key: clientId },
+        form,
+      );
     if (grantType !== "authorization_code")
-      return tokenError("unsupported_grant_type", "only authorization_code is supported");
+      return tokenError("unsupported_grant_type", "the grant type is not supported");
     if (!presentedCode || !redirectUri)
       return tokenError("invalid_request", "code and redirect_uri are required");
 
@@ -115,6 +128,19 @@ export class TokenEndpoint {
     const refusal = await refuseIfRateLimited(this.clientCredentialsLimit, client.id);
     if (refusal) return refusal;
     const result = await this.installationTokens.issue(client, form, this.now());
+    if (result.status === "refused") return tokenError(result.error, result.description);
+    return Response.json(result.body, { headers: NO_STORE });
+  }
+
+  /** An approved Agent request exchanged once for a token bound to one Agent and Workspace. */
+  private async issueAgentInboundToken(
+    tokens: AgentInboundTokens,
+    client: { id: string; key: string },
+    form: URLSearchParams,
+  ): Promise<Response> {
+    const refusal = await refuseIfRateLimited(this.clientCredentialsLimit, client.id);
+    if (refusal) return refusal;
+    const result = await tokens.exchange(client, form, this.now());
     if (result.status === "refused") return tokenError(result.error, result.description);
     return Response.json(result.body, { headers: NO_STORE });
   }

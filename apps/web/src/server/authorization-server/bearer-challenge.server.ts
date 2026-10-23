@@ -38,3 +38,20 @@ export function bearerChallenge(
     },
   );
 }
+
+/**
+ * The Bearer token of a request's Authorization header (RFC 6750 §2.1), or the response to send:
+ * the bare challenge when the request names no Bearer scheme, `invalid_request` (400) when it
+ * names it but carries no well-formed credential.
+ */
+export function bearerFromRequest(request: Request, issuer: string): string | Response {
+  const authorization = request.headers.get("authorization");
+  if (!isBearerScheme(authorization)) return bearerChallenge(issuer, 401);
+  return (
+    bearerToken(authorization) ??
+    bearerChallenge(issuer, 400, {
+      error: "invalid_request",
+      description: "the Authorization header is not a Bearer token",
+    })
+  );
+}

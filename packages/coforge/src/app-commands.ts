@@ -1,4 +1,4 @@
-import { APP_SCOPES } from "@lrm/coforge-sdk/internal/app-scopes";
+import { APP_IDENTITY_SCOPES as APP_SCOPES } from "@lrm/coforge-sdk/internal/app-scopes";
 import type { AgentAppAccessState, AgentAppView } from "@lrm/coforge-sdk/agent";
 import type { AppClient } from "./app-client";
 import { runWithAppToken } from "./app-token-exec";

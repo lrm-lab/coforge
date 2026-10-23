@@ -46,6 +46,7 @@ The architecture invariants every change must respect are in
 | [docs/workspace-deletion.md](docs/workspace-deletion.md) | What deleting a Workspace removes, and when |
 | [docs/authorization-server/](docs/authorization-server/README.md) | "Login with CoForge": the OpenID Connect authorization server for third-party apps, its configuration and endpoints |
 | [docs/app-notifications.md](docs/app-notifications.md) | App notifications: the pg-boss outbox that records events in the domain transaction and fans them out to installed apps |
+| [docs/app-agent-events/](docs/app-agent-events/README.md) | App events for an Agent (Agent inbound): scopes, approval, the Agent-bound token, the dedicated conversation, and the HTTP API |
 | [docs/app-marketplace.md](docs/app-marketplace.md) | App Marketplace: publish and offline review, installing a listed app, private share links, the platform operator who decides, and the first operator's grant |
 | [docs/feature-flags.md](docs/feature-flags.md) | Feature flags: turning a dark feature on per Workspace with a flagd definition file |
 | [docs/observability/](docs/observability/README.md) | Agent Activity, status, and observability baseline |
@@ -59,6 +60,7 @@ The architecture invariants every change must respect are in
 | [docs/operations/aliyun-oss-cdn/](docs/operations/aliyun-oss-cdn/README.md) | OSS/CDN provisioning runbook |
 | [docs/operations/cdn-certificates/](docs/operations/cdn-certificates/README.md) | CDN certificate renewal runbook |
 | [docs/agents/testing.md](docs/agents/testing.md) | Testing guidance for agents |
+| [docs/agents/shared-agent-skills.md](docs/agents/shared-agent-skills.md) | Project skills, independent review, release and reference-research rules every agent follows |
 | [docs/agents/e2e-testing/](docs/agents/e2e-testing/README.md) | Live OpenRouter integration test |
 | [docs/agents/mise-tasks.md](docs/agents/mise-tasks.md) | Mise task policy |
 | [docs/agents/git-hooks/](docs/agents/git-hooks/README.md) | Pre-commit file size limit and its ratchet, the hard rules the hook and CI enforce, the hook check in `mise run check`, and marking generated files |

@@ -76,6 +76,9 @@ model App {
   consents         UserAppConsent[]
   agentGrants      AppAgentGrant[]
   agentAccessRequests AppAgentAccessRequest[]
+  inboundGrants    AppAgentInboundGrant[]
+  inboundRequests  AppAgentInboundRequest[]
+  agentEvents      AppAgentEvent[]
   webhook          AppWebhook?
   reviewRequests   AppReviewRequest[]
   shareLinks       AppShareLink[]

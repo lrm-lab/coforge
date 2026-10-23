@@ -14,6 +14,8 @@ import type { FeatureFlagsConfiguration } from "./configuration.server";
  * assertion that names it, once the feature is on everywhere (docs/feature-flags.md).
  */
 export const FEATURE_FLAGS = {
+  "app-agent-events":
+    "Applications phase 2: an installed app sends an event or a notification to one Agent",
   "app-agent-manifest":
     "Applications phase 2: an app's Agent manifest URL, shown to Agents and to the people granting access",
   "app-data-permissions": "Applications phase 2: the data permissions a Workspace grants an app",

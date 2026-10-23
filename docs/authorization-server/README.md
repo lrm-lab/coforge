@@ -33,15 +33,16 @@ Staging and production do not set these variables yet; setting them turns on eve
 | `GET /oidc/jwks` | The public keys, in configured order |
 | `GET /oidc/auth` | The authorization endpoint: a redirect back to the app (a code or an error), to sign-in, or the consent page; [the authorization endpoint](authorization-endpoint.md) |
 | `POST /oidc/auth` | The same request sent as a form (OIDC Core §3.1.2.1): a 303 to the GET with its parameters |
-| `POST /oidc/token` | The token endpoint: redeems a code once for an access token and an ID token ([the token and UserInfo endpoints](token-and-userinfo.md)); with `client_credentials`, issues an app's [installation token](installation-tokens.md) |
+| `POST /oidc/token` | The token endpoint: redeems a code once for an access token and an ID token ([the token and UserInfo endpoints](token-and-userinfo.md)); with `client_credentials`, issues an app's [installation token](installation-tokens.md); with the `agent_request` grant, an [Agent inbound token](../app-agent-events/README.md#token) |
 | `GET`, `PUT /api/app-installations/<id>/setup`, `POST /api/app-installations/lookup` | An app finds its installation in a Workspace and reads and reports its setup status ([installation setup](app-installation-setup.md)) |
 | `GET`, `POST /oidc/me` | The UserInfo endpoint: the signed-in person's claims for an access token |
+| `POST /api/app-agent-requests`, `GET /api/app-agent-requests/<id>`, `POST /api/app-agent-events` | An app asks to send events to one Agent, and sends them with the token it exchanged ([Agent inbound](../app-agent-events/http-api.md)) |
 | `GET /api/app-installations/<id>/{workspace,agents,channels,computers}` | What an installed app reads with its installation token: [installed app data](app-installation-data.md) (not under `/oidc`) |
 
 The metadata advertises only endpoints that exist. Its fixed policy: the `code` response
 type in the query response mode, the `authorization_code` and `client_credentials` grant
 types, PKCE with `S256` only, ES256 ID tokens, public subject identifiers,
-`client_secret_basic` and `client_secret_post` client authentication, and the `iss`
+`client_secret_basic` and `client_secret_post` client authentication (the `agent_request` grant is not advertised: the metadata lists standard grants), and the `iss`
 authorization response parameter (RFC 9207); `scopes_supported` adds the four
 `installation:` scopes; `claims_supported` lists the ID token's own claims and every claim a
 scope releases. It states `request_uri_parameter_supported: false`, because Discovery
@@ -62,7 +63,8 @@ it registered, compared as exact strings. Redirect URIs are optional: an app who
 tokens registers none, so no authorization request for it can name a redirect URI it accepts.
 
 Every app may ask for `openid`, `profile` and `identity`, and for `email` when the Workspace
-allowed it. The code flow needs PKCE (`S256`). A code lives ten minutes and is redeemed once at
+allowed it. An app may also declare `agent:event:write` and `agent:notification:write`; they are
+never requested here, and the authorization endpoint refuses them ([Agent inbound](../app-agent-events/README.md#scopes)). The code flow needs PKCE (`S256`). A code lives ten minutes and is redeemed once at
 `<issuer>/token`, which answers an access token and an ID token, each valid for an hour, and no
 refresh token. The ID token carries only who signed in (`sub`, the person's CoForge user id) and
 when (`auth_time`, `nonce`, `at_hash`); the profile comes from UserInfo at `<issuer>/me` with the

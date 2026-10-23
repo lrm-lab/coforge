@@ -1,0 +1,96 @@
+/// An app's standing authority to send events and notifications to one Agent (Agent inbound,
+/// `server/app-agent-events/`). One row per app and Agent, made when a request is approved
+/// automatically (`automatic`) or by a person (`approval`). A revoked row stays, so the app needs a
+/// person's approval for that Agent again instead of a new automatic grant.
+model AppAgentInboundGrant {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  appId           String    @db.Uuid
+  agentId         String    @db.Uuid
+  workspaceId     String    @db.Uuid
+  /// A non-empty subset of the Agent inbound scopes the app declares
+  /// (`agent:event:write`, `agent:notification:write`).
+  scopes          String[]
+  /// How the grant was last given: `automatic` or `approval` (`app_agent_inbound_grants_source_check`).
+  source          String
+  /// The person who approved it; null for an automatic grant, or once that person is deleted.
+  grantedByUserId String?   @db.Uuid
+  createdAt       DateTime  @default(now())
+  /// When it was last given or revoked.
+  updatedAt       DateTime  @updatedAt
+  /// Set when a person revoked it; cleared when it is given again.
+  revokedAt       DateTime?
+  revokedByUserId String?   @db.Uuid
+  app             App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  grantedBy       User?     @relation("AppAgentInboundGrantGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+  revokedBy       User?     @relation("AppAgentInboundGrantRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([appId, agentId])
+  @@index([agentId])
+  @@index([workspaceId])
+  @@index([grantedByUserId])
+  @@index([revokedByUserId])
+  @@map("app_agent_inbound_grants")
+}
+
+/// An app's request to send to one Agent, and the one-time handle it exchanges for a token. It is
+/// made `approved` at once when the grant covers it or the automatic rule holds, else it waits
+/// `pending` for a person who may manage the Agent's app access. `exchangedAt` is set by the one
+/// exchange for a token. At most one is pending per app and Agent.
+model AppAgentInboundRequest {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  appId           String    @db.Uuid
+  agentId         String    @db.Uuid
+  workspaceId     String    @db.Uuid
+  scopes          String[]
+  /// `pending`, `approved` or `denied` (`app_agent_inbound_requests_status_check`).
+  status          String
+  createdAt       DateTime  @default(now())
+  decidedAt       DateTime?
+  decidedByUserId String?   @db.Uuid
+  exchangedAt     DateTime?
+  app             App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decidedBy       User?     @relation("AppAgentInboundRequestDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([appId, agentId], map: "app_agent_inbound_requests_one_pending", where: raw("\"status\" = 'pending'"))
+  @@index([agentId, createdAt])
+  @@index([workspaceId])
+  @@index([appId])
+  @@index([decidedByUserId])
+  @@map("app_agent_inbound_requests")
+}
+
+/// An event or notification an app sent to an Agent, kept for the Agent's page and for the app's
+/// retry: its `externalEventId` is unique per app and Agent. The Message it became sits in the
+/// app's dedicated conversation with the Agent (`directKey` `app:<appId>|agent:<agentId>`).
+model AppAgentEvent {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  appId           String    @db.Uuid
+  agentId         String    @db.Uuid
+  workspaceId     String    @db.Uuid
+  conversationId  String    @db.Uuid
+  messageId       String    @unique @db.Uuid
+  /// `event` or `notification` (`app_agent_events_kind_check`).
+  kind            String
+  summary         String
+  payload         Json
+  /// SHA-256 (hex) of the payload as the app sent it, serialised canonically.
+  payloadHash     String
+  externalEventId String?
+  /// After this the event is stale: `ttlSeconds` after it was accepted.
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+  app             App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  message         Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([appId, agentId, externalEventId])
+  @@index([agentId, createdAt(sort: Desc)])
+  @@index([workspaceId])
+  @@index([appId])
+  @@map("app_agent_events")
+}

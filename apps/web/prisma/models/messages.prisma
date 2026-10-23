@@ -22,6 +22,7 @@ model Message {
   savedBy        SavedMessage[]
   task           Task?
   actionCard     ActionCard?
+  appAgentEvent  AppAgentEvent?
   /// Raised in each reaction write's transaction; pages show the newest summary.
   reactionVersion Int                  @default(0)
 

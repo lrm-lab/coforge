@@ -1,4 +1,8 @@
-import { Prisma } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import {
+  ACTIVE_MEMBER_WHERE,
+  VISIBLE_CONVERSATION_WHERE,
+} from "#src/server/conversations/active-member.server";
 
 /**
  * An Agent's attention rule: which messages it still owes attention to, as the Prisma filters and
@@ -14,6 +18,44 @@ export const NOTIFIED_AGENT_WHERE = (agentId: string) =>
     targetAgentId: agentId,
     notifiedAt: { not: null },
   }) satisfies Prisma.PendingMentionActionWhereInput;
+
+/**
+ * A delivery past its `expiresAt` is stale: the Agent owes it no attention and it is never pushed
+ * or replayed, though its Message stays in history (an app's event past its expiry). The one rule,
+ * on the database clock (`expiresAt` is stored as UTC without a zone) and on the delivery row, so a
+ * Message nobody but a delivery makes the Agent's concern (a system Message) drops out of every
+ * attention read without a rule of its own.
+ */
+export const liveDeliverySql = (alias: string) =>
+  Prisma.raw(`(${alias}."expiresAt" IS NULL OR ${alias}."expiresAt" > (now() AT TIME ZONE 'UTC'))`);
+
+/**
+ * The `where` of the Agent's unreplayed deliveries, from `selected` (which deliveries), less the
+ * stale ones (`liveDeliverySql`'s counterpart: Prisma cannot compare to the database clock).
+ */
+export async function pendingDeliveryWhere(
+  db: Pick<PrismaClient, "$queryRaw">,
+  scope: { workspaceId: string; agentId: string },
+  selected: Prisma.AgentMessageDeliveryWhereInput,
+): Promise<Prisma.AgentMessageDeliveryWhereInput> {
+  const { workspaceId, agentId } = scope;
+  const stale = await db.$queryRaw<{ deliveryId: string }[]>`
+    SELECT "deliveryId" FROM "agent_message_deliveries"
+    WHERE "agentId" = ${agentId}::uuid AND "receivedAt" IS NULL
+      AND "expiresAt" <= (now() AT TIME ZONE 'UTC')`;
+  return {
+    workspaceId,
+    agentId,
+    ...selected,
+    deliveryId: { notIn: stale.map((row) => row.deliveryId) },
+    conversation: VISIBLE_CONVERSATION_WHERE,
+    OR: [
+      { conversation: { channelName: null } },
+      { conversation: { members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } } } },
+      { message: { pendingMentionActions: { some: NOTIFIED_AGENT_WHERE(agentId) } } },
+    ],
+  };
+}
 
 /**
  * One target an Agent owes attention in: above `afterSequence` (no bound when absent), less
@@ -63,10 +105,11 @@ function agentAttentionSource(scope: AgentAttentionScope) {
       sequence,
       from: Prisma.sql`FROM "agent_message_deliveries" d
         JOIN "messages" m ON m."id" = d."messageId" AND m."threadRootId" IS NULL
-        WHERE d."agentId" = ${scope.agentId}::uuid AND d."conversationId" = ${scope.conversationId}::uuid${bounds}`,
+        WHERE d."agentId" = ${scope.agentId}::uuid AND d."conversationId" = ${scope.conversationId}::uuid
+          AND ${liveDeliverySql("d")}${bounds}`,
     };
   const delivered = Prisma.sql`EXISTS (SELECT 1 FROM "agent_message_deliveries" d
-    WHERE d."messageId" = m."id" AND d."agentId" = ${scope.agentId}::uuid)`;
+    WHERE d."messageId" = m."id" AND d."agentId" = ${scope.agentId}::uuid AND ${liveDeliverySql("d")})`;
   return {
     sequence,
     from: Prisma.sql`FROM "messages" m
@@ -257,6 +300,7 @@ export function unreadAgentMessagesFragment(
     LEFT JOIN "users" su ON su."id" = sm."userId"
     LEFT JOIN "agents" sa ON sa."id" = sm."agentId"
     LEFT JOIN "agent_message_deliveries" d ON d."messageId" = m."id" AND d."agentId" = ${agentId}::uuid
+      AND ${liveDeliverySql("d")}
     WHERE (am."id" IS NULL OR m."sequence" > CASE WHEN m."threadRootId" IS NULL
         THEN am."agentReadThroughSequence" ELSE COALESCE(tr."readThroughSequence", 0) END)
       AND (sm."userId" IS NOT NULL OR d."deliveryId" IS NOT NULL)

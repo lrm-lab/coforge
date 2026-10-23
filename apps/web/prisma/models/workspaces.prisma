@@ -59,6 +59,9 @@ model Workspace {
   appConsents            UserAppConsent[]
   appAgentGrants         AppAgentGrant[]
   appAgentAccessRequests AppAgentAccessRequest[]
+  appAgentInboundGrants  AppAgentInboundGrant[]
+  appAgentInboundRequests AppAgentInboundRequest[]
+  appAgentEvents         AppAgentEvent[]
 
   @@map("workspaces")
 }

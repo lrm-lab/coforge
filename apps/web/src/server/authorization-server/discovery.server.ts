@@ -1,4 +1,4 @@
-import { APP_SCOPES } from "#src/features/apps/app-registration";
+import { APP_IDENTITY_SCOPES } from "#src/features/apps/app-registration";
 import {
   AUTHORIZATION_ENDPOINT_PATH,
   TOKEN_ENDPOINT_PATH,
@@ -27,7 +27,7 @@ export function discoveryDocument(issuer: string) {
     token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post"],
     // The scopes an app may be allowed (`features/apps/app-registration.ts`), then the
     // `client_credentials` grant's installation scopes (installation-tokens.server.ts).
-    scopes_supported: [...APP_SCOPES, ...INSTALLATION_SCOPES],
+    scopes_supported: [...APP_IDENTITY_SCOPES, ...INSTALLATION_SCOPES],
     // The ID token's claims, then what the scopes release at UserInfo (`scopeClaims` in
     // grants.server.ts).
     claims_supported: [

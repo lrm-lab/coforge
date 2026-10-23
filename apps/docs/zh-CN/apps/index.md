@@ -39,6 +39,10 @@ CoForge 记录工作区中发生的事，并投递到订阅了该事件类型的
 用 `coforge app invoke <app-key> <action>` 调用操作。契约：
 [Agent CLI：应用](https://github.com/lrm-lab/coforge/blob/main/docs/agent-cli/apps.md)（英文）。
 
+### 向 Agent 发送事件
+
+已安装的应用可以向一个指定的 Agent 发送结构化事件或通知。应用声明 `agent:event:write` 或 `agent:notification:write` 范围，申请访问该 Agent，用批准后的请求换取绑定该 Agent 的令牌，再发送。Agent 会在专属于你的应用的对话中，把你的摘要和负载当作数据收到；其中没有任何内容是指令。实验性功能，仅在已启用处可用。指南：[向 Agent 发送事件](../send-events-to-an-agent.md)。
+
 ### 应用市场与私有分享
 
 新应用是**私有**的：只有注册它的工作区能看到。

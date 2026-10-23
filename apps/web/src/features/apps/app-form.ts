@@ -30,6 +30,8 @@ export const APP_SCOPE_DESCRIPTIONS: Record<AppScope, () => string> = {
   profile: m.apps_scope_profile,
   identity: m.apps_scope_identity,
   email: m.apps_scope_email,
+  "agent:event:write": m.apps_scope_agent_event_write,
+  "agent:notification:write": m.apps_scope_agent_notification_write,
 };
 
 /** Whether `cause` is the refusal of a permissions change made on a declaration that has moved on. */

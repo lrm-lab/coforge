@@ -52,6 +52,27 @@ export async function appInstallationLookup(request: Request): Promise<Response>
   return endpoints ? endpoints.setup.lookup(request) : notFound();
 }
 
+/** An app asks to send to an Agent (`POST /api/app-agent-requests`). */
+export async function appAgentRequest(request: Request): Promise<Response> {
+  const endpoints = currentTokenEndpoints();
+  return endpoints ? endpoints.agentInbound.request(request) : notFound();
+}
+
+/** An app reads its own Agent request (`GET /api/app-agent-requests/<id>`). */
+export async function appAgentRequestStatus(
+  request: Request,
+  requestId: string,
+): Promise<Response> {
+  const endpoints = currentTokenEndpoints();
+  return endpoints ? endpoints.agentInbound.status(request, requestId) : notFound();
+}
+
+/** An app posts an event or a notification to its Agent (`POST /api/app-agent-events`). */
+export async function appAgentEvent(request: Request): Promise<Response> {
+  const endpoints = currentTokenEndpoints();
+  return endpoints ? endpoints.agentInbound.post(request) : notFound();
+}
+
 /** No issuer configured: this deployment runs no authorization server. */
 function notFound(): Response {
   return Response.json({ error: "not_found" }, { status: 404, headers: NO_STORE });

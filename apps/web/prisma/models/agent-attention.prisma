@@ -25,6 +25,9 @@ model AgentMessageDelivery {
   mentionSessionId      String?
   /// When the outcome became delivered, lost or unknown.
   mentionSettledAt      DateTime?
+  /// After this the delivery is stale and no Agent attention read counts it (an app's event past its
+  /// expiry); null never expires. Set from the database clock when the delivery is written.
+  expiresAt      DateTime?
   createdAt      DateTime     @default(now())
   message        Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
   workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

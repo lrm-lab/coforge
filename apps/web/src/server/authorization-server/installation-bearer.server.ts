@@ -1,4 +1,4 @@
-import { bearerChallenge, bearerToken, isBearerScheme } from "./bearer-challenge.server";
+import { bearerChallenge, bearerFromRequest } from "./bearer-challenge.server";
 import type {
   InstallationTokenFlag,
   InstallationTokens,
@@ -29,14 +29,8 @@ export async function verifyInstallationBearer(
     scope?: string;
   },
 ): Promise<VerifiedInstallationToken | Response> {
-  const authorization = request.headers.get("authorization");
-  if (!isBearerScheme(authorization)) return bearerChallenge(api.issuer, 401);
-  const token = bearerToken(authorization);
-  if (!token)
-    return bearerChallenge(api.issuer, 400, {
-      error: "invalid_request",
-      description: "the Authorization header is not a Bearer token",
-    });
+  const token = bearerFromRequest(request, api.issuer);
+  if (token instanceof Response) return token;
   const verified = await api.tokens.verify(token, installationId, api.now, api.flag);
   if (verified.status === "verified") return verified;
   return verified.error === "insufficient_scope"

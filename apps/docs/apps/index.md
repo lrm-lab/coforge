@@ -46,6 +46,14 @@ read it with `coforge app invoke <app-key> --list-actions` and call an action wi
 `coforge app invoke <app-key> <action>`. Contract:
 [Agent CLI: apps](https://github.com/lrm-lab/coforge/blob/main/docs/agent-cli/apps.md).
 
+### Sending events to an Agent
+
+An installed App can send a structured event or notification to one selected Agent. It declares the
+`agent:event:write` or `agent:notification:write` scope, asks for access to that Agent, exchanges the
+approved request for a token bound to the Agent, and posts. The Agent receives your summary and
+payload as data in a conversation for your App; nothing in it is an instruction. Experimental, where
+enabled. Guide: [Send events to an Agent](../send-events-to-an-agent.md).
+
 ### Marketplace and private sharing
 
 A new App is **private**: only the Workspace that registered it sees it.

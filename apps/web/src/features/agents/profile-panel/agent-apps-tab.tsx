@@ -20,6 +20,7 @@ import {
 import { m } from "#src/paraglide/messages";
 import { AppLogo } from "#src/features/apps/app-logo";
 import { AgentAppGrantPanel } from "./agent-app-grant-panel";
+import { AgentAppEventsSection } from "./agent-app-events-section";
 import { AgentAppsEmpty } from "./agent-apps-empty";
 import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
 
@@ -232,6 +233,7 @@ export function AgentAppsTab({ agentId, timeZone }: { agentId: string; timeZone:
           </ul>
         )}
       </section>
+      <AgentAppEventsSection agentId={agentId} timeZone={timeZone} />
     </div>
   );
 }

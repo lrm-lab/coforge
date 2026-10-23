@@ -68,6 +68,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
     setup: false,
     notifications: false,
     manifest: false,
+    agentEvents: false,
     marketplace: false,
     reviewer: false,
   });

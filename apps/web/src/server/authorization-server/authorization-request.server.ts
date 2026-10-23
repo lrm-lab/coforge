@@ -1,3 +1,4 @@
+import { APP_IDENTITY_SCOPES } from "@lrm/coforge-sdk/internal/app-scopes";
 /** What the authorization endpoint needs of a registered app (the app registry's `apps` row). */
 export type AuthorizationClient = {
   key: string;
@@ -104,7 +105,14 @@ export async function parseAuthorizationRequest<Client extends AuthorizationClie
 
   const scopes = [...new Set((single(query, "scope") ?? "").split(" ").filter(Boolean))];
   if (!scopes.includes("openid")) return fail("invalid_scope", "scope must include openid");
-  if (scopes.some((scope) => !client.allowedScopes.includes(scope)))
+  // The Agent inbound scopes are declared but never granted by a person's consent.
+  if (
+    scopes.some(
+      (scope) =>
+        !client.allowedScopes.includes(scope) ||
+        !(APP_IDENTITY_SCOPES as readonly string[]).includes(scope),
+    )
+  )
     return fail("invalid_scope", "a requested scope is not allowed for this app");
 
   const codeChallenge = single(query, "code_challenge");

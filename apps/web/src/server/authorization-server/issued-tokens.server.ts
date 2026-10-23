@@ -1,4 +1,4 @@
-import { createLocalJWKSet, importJWK, jwtVerify, SignJWT, type JWK } from "jose";
+import { createLocalJWKSet, decodeJwt, importJWK, jwtVerify, SignJWT, type JWK } from "jose";
 
 import { USERINFO_ENDPOINT_PATH } from "#src/lib/oidc-paths";
 import { sha256Digest } from "#src/server/auth/opaque-token.server";
@@ -109,6 +109,91 @@ export async function mintInstallationAccessToken(
     },
     now,
   );
+}
+
+/** An Agent inbound token lives ten minutes, like an installation token. */
+export const AGENT_INBOUND_TOKEN_TTL_SECONDS = 600;
+
+/** What an Agent inbound token names (`type: "agent_inbound"`): the app, and the one Agent and
+ * Workspace it may send to. */
+export type AgentInboundTokenClaims = {
+  appKey: string;
+  agentId: string;
+  workspaceId: string;
+  requestId: string;
+  scope: string;
+};
+
+/** An RFC 9068 JWT access token for the app `claims.appKey` (its `sub` and `client_id`) to send
+ * events to the Agent `claims.agentId`: `audience` is the Workspace's agent-inbound resource URI. */
+export async function mintAgentInboundAccessToken(
+  { issuer, signingKeys }: TokenIssuer,
+  claims: AgentInboundTokenClaims,
+  audience: string,
+  now: Date,
+): Promise<string> {
+  return signAccessToken(
+    { issuer, signingKeys },
+    {
+      client_id: claims.appKey,
+      type: "agent_inbound",
+      agent_id: claims.agentId,
+      workspace_id: claims.workspaceId,
+      request_id: claims.requestId,
+      scope: claims.scope,
+    },
+    {
+      subject: claims.appKey,
+      audience,
+      ttlSeconds: AGENT_INBOUND_TOKEN_TTL_SECONDS,
+      jti: crypto.randomUUID(),
+    },
+    now,
+  );
+}
+
+/** The claims of an unexpired Agent inbound `at+jwt` this issuer signed; `undefined` otherwise. The
+ * audience a token must carry is derived from its own `workspace_id` by `audienceOf`, and checked
+ * by the signature verification, so a token for one Workspace's resource never passes for another's. */
+export async function verifyAgentInboundAccessToken(
+  { issuer, signingKeys }: TokenIssuer,
+  token: string,
+  audienceOf: (workspaceId: string) => string,
+  now: Date,
+): Promise<(AgentInboundTokenClaims & { subject: string }) | undefined> {
+  let workspaceId: unknown;
+  try {
+    workspaceId = decodeJwt(token).workspace_id;
+  } catch {
+    return undefined;
+  }
+  if (typeof workspaceId !== "string") return undefined;
+  const payload = await verifyAccessJwt(
+    { issuer, signingKeys },
+    token,
+    audienceOf(workspaceId),
+    ["client_id", "scope", "agent_id", "workspace_id", "request_id"],
+    now,
+  );
+  if (!payload) return undefined;
+  const { client_id, type, agent_id, workspace_id, request_id, scope } = payload;
+  if (
+    type !== "agent_inbound" ||
+    typeof client_id !== "string" ||
+    typeof agent_id !== "string" ||
+    workspace_id !== workspaceId ||
+    typeof request_id !== "string" ||
+    typeof scope !== "string"
+  )
+    return undefined;
+  return {
+    subject: payload.sub!,
+    appKey: client_id,
+    agentId: agent_id,
+    workspaceId,
+    requestId: request_id,
+    scope,
+  };
 }
 
 /** The claims of an unexpired `at+jwt` this issuer signed for `audience` as an installation token;

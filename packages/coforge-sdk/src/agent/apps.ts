@@ -4,7 +4,7 @@
  * Same `{ ok: false, errorCode, error }` error envelope as `app config`.
  */
 
-import { APP_SCOPES } from "#src/internal/app-scopes";
+import { APP_IDENTITY_SCOPES as APP_SCOPES } from "#src/internal/app-scopes";
 import { isRecord } from "#src/internal/json-record";
 import type { AgentAppRegistrationRequest } from "./app-registration";
 

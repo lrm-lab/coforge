@@ -49,6 +49,7 @@ These rules apply to `src/server/db/`.
   and reports cannot lose a bump or record a stale revision. Who may write stays in
   `server/app-installation-setup/`.
 - `app-installation-agent-scope.repositories.server.ts` persists an installation's `agentAccess` and its selected Agents: the mode and the selection are replaced in one transaction. Who may change it stays in `server/app-agent-access/`.
+- `app-agent-inbound.repositories.server.ts` persists an app's Agent inbound grants and requests: a request and its grant are written in one transaction, an approval is a conditional update on the pending request, one pending request exists per app and Agent (partial unique index), and `revokeAppAgentInbound` is the installation removal's call. `app-agent-event.repositories.server.ts` writes an accepted event with its Message, delivery and the dedicated conversation in one transaction (`directKey` `app:<app id>|agent:<Agent id>`). When an app may send and who may decide stay in `server/app-agent-events/`.
 - `app-installation-data.repositories.server.ts` reads what an installed app may see, filtering
   private data out in the query itself and selecting only the projected columns. The projections
   and the bearer check stay in `server/app-installation-data/`.

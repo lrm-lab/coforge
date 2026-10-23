@@ -336,7 +336,11 @@ function AppEditorForm({
             }
             description={m.apps_section_login_description()}
           >
-            <LoginFields {...fields} manifest={declares.manifest} />
+            <LoginFields
+              {...fields}
+              manifest={declares.manifest}
+              agentEvents={declares.agentEvents}
+            />
           </EditorSection>
           {declares.setup && (
             <EditorSection

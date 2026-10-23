@@ -3,6 +3,7 @@ import { allowedGrantScopes } from "#src/features/apps/agent-app-access";
 import { toAgentAccessMode } from "#src/features/apps/agent-access-scope";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import type { InstallationAgentScopeStore } from "#src/server/app-agent-access/installation-agent-scope.server";
+import { revokeExcludedAgentInbound } from "./app-agent-inbound.repositories.server";
 import { approvePendingRequest, SCOPE_SELECT } from "./app-agent-access.repositories.server";
 import { findWorkspaceMemberRole } from "./workspace-member-role.repositories.server";
 
@@ -49,6 +50,13 @@ export class PrismaInstallationAgentScopeStore implements InstallationAgentScope
         data: input.agentIds.map((agentId) => ({ installationId: input.installationId, agentId })),
       });
       const { appId, workspaceId } = installation;
+      if (input.mode === "selected")
+        await revokeExcludedAgentInbound(tx, {
+          appId,
+          workspaceId,
+          keepAgentIds: input.agentIds,
+          userId: input.userId,
+        });
       const waiting = await tx.appAgentAccessRequest.findMany({
         where: { appId, workspaceId, status: "pending", agent: ACTIVE_AGENT_WHERE },
         select: { id: true, agentId: true, scopes: true },

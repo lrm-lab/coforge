@@ -16,7 +16,9 @@ import { APP_CATEGORIES, type AppCategory } from "./app-category";
 import { refusedRedirectRows, type AppDraft } from "./app-draft";
 import { APP_SCOPE_DESCRIPTIONS } from "./app-form";
 import { APP_CATEGORY_LABELS } from "./app-list";
+import { isAgentInboundScope } from "./app-agent-events";
 import {
+  APP_AGENT_INBOUND_SCOPES,
   APP_FIXED_SCOPES,
   appLoginScopes,
   APP_KEY_MAX_LENGTH,
@@ -183,7 +185,8 @@ export function LoginFields({
   change,
   errors,
   manifest,
-}: FieldsProps & { manifest: boolean }) {
+  agentEvents,
+}: FieldsProps & { manifest: boolean; agentEvents: boolean }) {
   const redirectLabelId = useId();
   const redirectHintId = useId();
   const scopesLabelId = useId();
@@ -296,6 +299,35 @@ export function LoginFields({
               )
             }
           />
+          {(agentEvents || draft.allowedScopes.some((scope) => isAgentInboundScope(scope))) && (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium text-secondary">
+                  {m.apps_scope_group_agent_inbound()}
+                </p>
+                <Badge size="sm" color="brand">
+                  {m.agent_app_events_experimental()}
+                </Badge>
+              </div>
+              <p className="text-sm text-tertiary">{m.apps_scope_group_agent_inbound_hint()}</p>
+              {APP_AGENT_INBOUND_SCOPES.map((scope) => (
+                <Checkbox
+                  key={scope}
+                  isSelected={draft.allowedScopes.includes(scope)}
+                  label={<span className="font-mono">{scope}</span>}
+                  hint={APP_SCOPE_DESCRIPTIONS[scope]()}
+                  onChange={(selected) =>
+                    change(
+                      "allowedScopes",
+                      selected
+                        ? [...draft.allowedScopes, scope]
+                        : draft.allowedScopes.filter((held) => held !== scope),
+                    )
+                  }
+                />
+              ))}
+            </>
+          )}
           {errors.allowedScopes && (
             <p role="alert" className="text-sm text-error-primary">
               {errors.allowedScopes}

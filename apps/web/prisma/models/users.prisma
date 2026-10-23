@@ -60,6 +60,9 @@ model User {
   appAgentGrantsGiven         AppAgentGrant[]         @relation("AppAgentGrantGrantedBy")
   appAgentGrantsRevoked       AppAgentGrant[]         @relation("AppAgentGrantRevokedBy")
   appAgentAccessDecisions     AppAgentAccessRequest[]
+  appAgentInboundGrantsGiven  AppAgentInboundGrant[]  @relation("AppAgentInboundGrantGrantedBy")
+  appAgentInboundGrantsRevoked AppAgentInboundGrant[] @relation("AppAgentInboundGrantRevokedBy")
+  appAgentInboundDecisions    AppAgentInboundRequest[] @relation("AppAgentInboundRequestDecidedBy")
 
   @@map("users")
 }

@@ -2,7 +2,7 @@ import { APP_GRANT_AGENT_CARD_KIND } from "@lrm/coforge-sdk/agent";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { grantCovers, type AgentAppGrantSource } from "#src/features/apps/agent-app-access";
 import { toAgentAccessMode } from "#src/features/apps/agent-access-scope";
-import { APP_SCOPES } from "#src/features/apps/app-registration";
+import { APP_IDENTITY_SCOPES } from "#src/features/apps/app-registration";
 import { findWorkspaceMemberRole } from "./workspace-member-role.repositories.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import type { AppAgentAccessStore } from "#src/server/app-agent-access/app-agent-access.server";
@@ -324,7 +324,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
         WHERE "id" = ${input.requestId}::uuid AND "status" = 'pending' FOR UPDATE`;
       if (!row) return undefined;
       const wanted = new Set([...row.scopes, ...input.scopes]);
-      const scopes = APP_SCOPES.filter((scope) => wanted.has(scope));
+      const scopes = APP_IDENTITY_SCOPES.filter((scope) => wanted.has(scope));
       await tx.appAgentAccessRequest.update({ where: { id: input.requestId }, data: { scopes } });
       // The approval card shows what the request asks for.
       const card = await tx.actionCard.findFirst({
@@ -359,7 +359,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
       });
       if (active && grantCovers(active.scopes, grant.scopes)) return true;
       const scopes = active
-        ? APP_SCOPES.filter(
+        ? APP_IDENTITY_SCOPES.filter(
             (scope) => active.scopes.includes(scope) || grant.scopes.includes(scope),
           )
         : grant.scopes;

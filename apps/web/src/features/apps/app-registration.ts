@@ -1,4 +1,10 @@
-import { APP_FIXED_SCOPES, APP_SCOPES, type AppScope } from "@lrm/coforge-sdk/internal/app-scopes";
+import {
+  APP_AGENT_INBOUND_SCOPES,
+  APP_FIXED_SCOPES,
+  APP_IDENTITY_SCOPES,
+  APP_SCOPES,
+  type AppScope,
+} from "@lrm/coforge-sdk/internal/app-scopes";
 import { APP_KEY_PATTERN } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import { hasControlOrBidiCharacter, isInvisibleText } from "#src/features/profiles/person-name";
 import { nameToSlug } from "#src/lib/slug";
@@ -21,12 +27,18 @@ export const APP_URL_MAX_LENGTH = 2048;
 export const APP_AGENT_MANIFEST_URL_MAX_LENGTH = 2000;
 
 /** The scopes an app may be allowed to request (the SDK owns the vocabulary). */
-export { APP_SCOPES, APP_FIXED_SCOPES, type AppScope };
+export {
+  APP_SCOPES,
+  APP_FIXED_SCOPES,
+  APP_IDENTITY_SCOPES,
+  APP_AGENT_INBOUND_SCOPES,
+  type AppScope,
+};
 
 /** The scopes Login with CoForge lets an app with `allowed` ask for: the fixed ones and any
  * optional one it is allowed, in `APP_SCOPES` order (the editor and the app detail both show it). */
 export function appLoginScopes(allowed: readonly string[]): AppScope[] {
-  return APP_SCOPES.filter(
+  return APP_IDENTITY_SCOPES.filter(
     (scope) => (APP_FIXED_SCOPES as readonly string[]).includes(scope) || allowed.includes(scope),
   );
 }

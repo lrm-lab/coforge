@@ -1,4 +1,4 @@
-import { APP_SCOPES } from "#src/internal/app-scopes";
+import { APP_IDENTITY_SCOPES as APP_SCOPES } from "#src/internal/app-scopes";
 import {
   AGENT_MANIFEST_EFFECTS,
   AGENT_MANIFEST_KEYS as KEYS,

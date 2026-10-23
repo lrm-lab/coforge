@@ -24,6 +24,9 @@ model Conversation {
   projectId      String?                @db.Uuid
   coordinatorAgentId String?             @db.Uuid
   directKey      String?
+  /// What a conversation not made by people is for: `app_events`, an app's events for one Agent
+  /// (`server/app-agent-events/`; `conversations_kind_check`). Null for channels and direct conversations.
+  kind           String?
   channelName    String?
   description    String                 @default("")
   archivedAt     DateTime?

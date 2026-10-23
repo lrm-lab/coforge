@@ -15,6 +15,8 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './routes/[.]well-known.oauth-authorization-server'
 import { Route as ApiAgentApiKeysRouteImport } from './routes/api/agent-api-keys'
+import { Route as ApiAppAgentEventsRouteImport } from './routes/api.app-agent-events'
+import { Route as ApiAppAgentRequestsRouteImport } from './routes/api.app-agent-requests'
 import { Route as ApiAttachmentsRouteImport } from './routes/api/attachments'
 import { Route as ApiJwksRouteImport } from './routes/api/jwks'
 import { Route as ApiMeRouteImport } from './routes/api/me'
@@ -35,6 +37,7 @@ import { Route as OidcTokenRouteImport } from './routes/oidc.token'
 import { Route as WWorkspaceSlugRouteImport } from './routes/w.$workspaceSlug'
 import { Route as WorkspacesNewRouteImport } from './routes/workspaces.new'
 import { Route as DotwellKnownOauthAuthorizationServerOidcRouteImport } from './routes/[.]well-known.oauth-authorization-server_.oidc'
+import { Route as ApiAppAgentRequestsRequestIdRouteImport } from './routes/api.app-agent-requests.$requestId'
 import { Route as ApiAppInstallationsLookupRouteImport } from './routes/api.app-installations.lookup'
 import { Route as ApiAttachmentsAttachmentIdRouteImport } from './routes/api/attachments.$attachmentId'
 import { Route as ApiComputerAttachRouteImport } from './routes/api/computer/attach'
@@ -184,6 +187,16 @@ const ApiAgentApiKeysRoute = ApiAgentApiKeysRouteImport.update({
   path: '/api/agent-api-keys',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAppAgentEventsRoute = ApiAppAgentEventsRouteImport.update({
+  id: '/api/app-agent-events',
+  path: '/api/app-agent-events',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAppAgentRequestsRoute = ApiAppAgentRequestsRouteImport.update({
+  id: '/api/app-agent-requests',
+  path: '/api/app-agent-requests',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAttachmentsRoute = ApiAttachmentsRouteImport.update({
   id: '/api/attachments',
   path: '/api/attachments',
@@ -284,6 +297,12 @@ const DotwellKnownOauthAuthorizationServerOidcRoute =
     id: '/.well-known/oauth-authorization-server_/oidc',
     path: '/.well-known/oauth-authorization-server/oidc',
     getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAppAgentRequestsRequestIdRoute =
+  ApiAppAgentRequestsRequestIdRouteImport.update({
+    id: '/$requestId',
+    path: '/$requestId',
+    getParentRoute: () => ApiAppAgentRequestsRoute,
   } as any)
 const ApiAppInstallationsLookupRoute =
   ApiAppInstallationsLookupRouteImport.update({
@@ -958,6 +977,8 @@ export interface FileRoutesByFullPath {
   '/welcome': typeof WelcomeRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/api/agent-api-keys': typeof ApiAgentApiKeysRoute
+  '/api/app-agent-events': typeof ApiAppAgentEventsRoute
+  '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
@@ -978,6 +999,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug': typeof WWorkspaceSlugRouteWithChildren
   '/workspaces/new': typeof WorkspacesNewRoute
   '/.well-known/oauth-authorization-server/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
+  '/api/app-agent-requests/$requestId': typeof ApiAppAgentRequestsRequestIdRoute
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
@@ -1101,6 +1123,8 @@ export interface FileRoutesByTo {
   '/welcome': typeof WelcomeRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/api/agent-api-keys': typeof ApiAgentApiKeysRoute
+  '/api/app-agent-events': typeof ApiAppAgentEventsRoute
+  '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
@@ -1121,6 +1145,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug': typeof WWorkspaceSlugChatIndexRoute
   '/workspaces/new': typeof WorkspacesNewRoute
   '/.well-known/oauth-authorization-server/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
+  '/api/app-agent-requests/$requestId': typeof ApiAppAgentRequestsRequestIdRoute
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
@@ -1243,6 +1268,8 @@ export interface FileRoutesById {
   '/welcome': typeof WelcomeRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/api/agent-api-keys': typeof ApiAgentApiKeysRoute
+  '/api/app-agent-events': typeof ApiAppAgentEventsRoute
+  '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
@@ -1263,6 +1290,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug': typeof WWorkspaceSlugRouteWithChildren
   '/workspaces/new': typeof WorkspacesNewRoute
   '/.well-known/oauth-authorization-server_/oidc': typeof DotwellKnownOauthAuthorizationServerOidcRoute
+  '/api/app-agent-requests/$requestId': typeof ApiAppAgentRequestsRequestIdRoute
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
@@ -1390,6 +1418,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/.well-known/oauth-authorization-server'
     | '/api/agent-api-keys'
+    | '/api/app-agent-events'
+    | '/api/app-agent-requests'
     | '/api/attachments'
     | '/api/jwks'
     | '/api/me'
@@ -1410,6 +1440,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug'
     | '/workspaces/new'
     | '/.well-known/oauth-authorization-server/oidc'
+    | '/api/app-agent-requests/$requestId'
     | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
@@ -1533,6 +1564,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/.well-known/oauth-authorization-server'
     | '/api/agent-api-keys'
+    | '/api/app-agent-events'
+    | '/api/app-agent-requests'
     | '/api/attachments'
     | '/api/jwks'
     | '/api/me'
@@ -1553,6 +1586,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug'
     | '/workspaces/new'
     | '/.well-known/oauth-authorization-server/oidc'
+    | '/api/app-agent-requests/$requestId'
     | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
@@ -1674,6 +1708,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/.well-known/oauth-authorization-server'
     | '/api/agent-api-keys'
+    | '/api/app-agent-events'
+    | '/api/app-agent-requests'
     | '/api/attachments'
     | '/api/jwks'
     | '/api/me'
@@ -1694,6 +1730,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug'
     | '/workspaces/new'
     | '/.well-known/oauth-authorization-server_/oidc'
+    | '/api/app-agent-requests/$requestId'
     | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
@@ -1820,6 +1857,8 @@ export interface RootRouteChildren {
   WelcomeRoute: typeof WelcomeRoute
   DotwellKnownOauthAuthorizationServerRoute: typeof DotwellKnownOauthAuthorizationServerRoute
   ApiAgentApiKeysRoute: typeof ApiAgentApiKeysRoute
+  ApiAppAgentEventsRoute: typeof ApiAppAgentEventsRoute
+  ApiAppAgentRequestsRoute: typeof ApiAppAgentRequestsRouteWithChildren
   ApiAttachmentsRoute: typeof ApiAttachmentsRouteWithChildren
   ApiJwksRoute: typeof ApiJwksRoute
   ApiMeRoute: typeof ApiMeRouteWithChildren
@@ -1966,6 +2005,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentApiKeysRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/app-agent-events': {
+      id: '/api/app-agent-events'
+      path: '/api/app-agent-events'
+      fullPath: '/api/app-agent-events'
+      preLoaderRoute: typeof ApiAppAgentEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/app-agent-requests': {
+      id: '/api/app-agent-requests'
+      path: '/api/app-agent-requests'
+      fullPath: '/api/app-agent-requests'
+      preLoaderRoute: typeof ApiAppAgentRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/attachments': {
       id: '/api/attachments'
       path: '/api/attachments'
@@ -2105,6 +2158,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/.well-known/oauth-authorization-server/oidc'
       preLoaderRoute: typeof DotwellKnownOauthAuthorizationServerOidcRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/app-agent-requests/$requestId': {
+      id: '/api/app-agent-requests/$requestId'
+      path: '/$requestId'
+      fullPath: '/api/app-agent-requests/$requestId'
+      preLoaderRoute: typeof ApiAppAgentRequestsRequestIdRouteImport
+      parentRoute: typeof ApiAppAgentRequestsRoute
     }
     '/api/app-installations/lookup': {
       id: '/api/app-installations/lookup'
@@ -2928,6 +2988,17 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ApiAppAgentRequestsRouteChildren {
+  ApiAppAgentRequestsRequestIdRoute: typeof ApiAppAgentRequestsRequestIdRoute
+}
+
+const ApiAppAgentRequestsRouteChildren: ApiAppAgentRequestsRouteChildren = {
+  ApiAppAgentRequestsRequestIdRoute: ApiAppAgentRequestsRequestIdRoute,
+}
+
+const ApiAppAgentRequestsRouteWithChildren =
+  ApiAppAgentRequestsRoute._addFileChildren(ApiAppAgentRequestsRouteChildren)
+
 interface ApiAttachmentsRouteChildren {
   ApiAttachmentsAttachmentIdRoute: typeof ApiAttachmentsAttachmentIdRoute
 }
@@ -3105,6 +3176,8 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownOauthAuthorizationServerRoute:
     DotwellKnownOauthAuthorizationServerRoute,
   ApiAgentApiKeysRoute: ApiAgentApiKeysRoute,
+  ApiAppAgentEventsRoute: ApiAppAgentEventsRoute,
+  ApiAppAgentRequestsRoute: ApiAppAgentRequestsRouteWithChildren,
   ApiAttachmentsRoute: ApiAttachmentsRouteWithChildren,
   ApiJwksRoute: ApiJwksRoute,
   ApiMeRoute: ApiMeRouteWithChildren,
@@ -3237,3 +3310,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

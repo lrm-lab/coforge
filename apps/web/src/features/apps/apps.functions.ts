@@ -14,6 +14,7 @@ import { createAppInstallationSetup } from "#src/server/app-installation-setup/a
 import type { AppSetupView } from "#src/server/app-installation-setup/app-installation-setup.server";
 import { createAppWebhooks } from "#src/server/app-notifications/app-webhooks-composition.server";
 import { createAppPublishing } from "#src/server/app-marketplace/app-publishing-composition.server";
+import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import { createAppOwnerAgents } from "#src/server/apps/app-owner-agents-composition.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
@@ -169,6 +170,8 @@ export type AppDeclarations = {
   notifications: boolean;
   /** The Agent manifest URL field and rows (`app-agent-manifest`). */
   manifest: boolean;
+  /** The Agent inbound scopes in the Login section (`app-agent-events`). */
+  agentEvents: boolean;
   /** `app-marketplace` is on: the editor's Distribution section and the apps' publish status. */
   marketplace: boolean;
   /** The viewer reviews Marketplace requests (a platform operator), where it is on. */
@@ -220,6 +223,10 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
         setup: setups !== null,
         notifications,
         manifest,
+        agentEvents: await isFeatureEnabled("app-agent-events", {
+          workspaceId: actor.workspaceId,
+          workspaceSlug,
+        }),
         marketplace,
         reviewer,
       } satisfies AppDeclarations,

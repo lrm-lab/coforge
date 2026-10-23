@@ -69,6 +69,9 @@ model Agent {
   appConfigs                AgentAppConfig[]
   appGrants                 AppAgentGrant[]
   appAccessRequests         AppAgentAccessRequest[]
+  appInboundGrants          AppAgentInboundGrant[]
+  appInboundRequests        AppAgentInboundRequest[]
+  appEvents                 AppAgentEvent[]
   appInstallationSelections AppInstallationAgent[]
 
   @@unique([workspaceId, name])

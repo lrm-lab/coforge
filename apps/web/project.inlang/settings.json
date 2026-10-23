@@ -25,6 +25,7 @@
       "./messages/{locale}/apps.json",
       "./messages/{locale}/app-marketplace.json",
       "./messages/{locale}/app-notifications.json",
+      "./messages/{locale}/app-agent-events.json",
       "./messages/{locale}/authorization.json",
       "./messages/{locale}/onboarding.json"
     ]
