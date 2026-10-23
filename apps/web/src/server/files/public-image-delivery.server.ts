@@ -7,7 +7,7 @@ import { avatarPresetUrl, isAvatarPresetReference } from "#src/features/profiles
 import { errorType } from "#src/server/errors/error-type.server";
 
 /**
- * Public CDN delivery for profile images — user and Agent avatars, project icons, Workspace icons,
+ * Public CDN delivery for profile images — user avatars, project icons, Workspace icons,
  * and app logos.
  *
  * These images are addressed by an unguessable, immutable object key and rendered on every

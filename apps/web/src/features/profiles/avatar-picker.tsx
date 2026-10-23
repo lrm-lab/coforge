@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Radio, RadioGroup } from "react-aria-components";
+import { RadioGroup } from "react-aria-components";
 
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
-import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
+import { AvatarChoice } from "./avatar-choice";
 import { avatarPresets } from "./avatar-presets";
 
 /**
@@ -120,35 +120,13 @@ export function AvatarPicker({
             className="mt-6 grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 xl:grid-cols-6"
           >
             {avatarPresets.map((preset) => (
-              <Radio
+              <AvatarChoice
                 key={preset.id}
                 value={preset.id}
-                className="group flex cursor-pointer flex-col items-center gap-2 outline-hidden"
-              >
-                {({ isSelected, isFocusVisible }) => (
-                  <>
-                    <span
-                      className={cx(
-                        "rounded-2xl p-1 transition-colors",
-                        isSelected
-                          ? "bg-brand-primary ring-2 ring-focus-ring"
-                          : "group-hover:bg-secondary",
-                        isFocusVisible && "outline-2 outline-offset-2 outline-focus-ring",
-                      )}
-                    >
-                      <img
-                        src={preset.url}
-                        alt=""
-                        loading="lazy"
-                        className="aspect-square w-full rounded-xl object-cover"
-                      />
-                    </span>
-                    <span className="text-xs text-tertiary">
-                      {m.settings_avatar_preset_label({ number: preset.number })}
-                    </span>
-                  </>
-                )}
-              </Radio>
+                src={preset.url}
+                label={m.settings_avatar_preset_label({ number: preset.number })}
+                lazy
+              />
             ))}
           </RadioGroup>
         </section>

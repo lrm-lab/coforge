@@ -92,7 +92,7 @@ import {
   type ConversationRealtime,
 } from "./conversation-realtime.server";
 import { AgentMessageValidationError } from "./agent-message-validation-error.server";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { getFileStorage, type BulkFileRemoval } from "#src/server/files/file-storage.server";
 import { attachmentKeys, removeAttachmentFiles } from "#src/server/attachments/attachment.server";
@@ -584,7 +584,7 @@ export class PublicChannels {
           member: {
             select: {
               agent: {
-                select: { id: true, name: true, displayName: true, avatarObjectKey: true },
+                select: { id: true, name: true, displayName: true, avatarMascot: true },
               },
             },
           },
@@ -600,7 +600,7 @@ export class PublicChannels {
             id: agent.id,
             name: agent.name,
             displayName: agent.displayName.trim() || agent.name,
-            avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+            avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
           },
         ];
       })
@@ -1424,7 +1424,7 @@ export class PublicChannels {
               description: true,
               role: true,
               computerId: true,
-              avatarObjectKey: true,
+              avatarMascot: true,
             },
           },
         },
@@ -1453,7 +1453,7 @@ export class PublicChannels {
           name: true,
           displayName: true,
           description: true,
-          avatarObjectKey: true,
+          avatarMascot: true,
         },
         orderBy: [{ name: "asc" }, { id: "asc" }],
       }),
@@ -1520,7 +1520,7 @@ export class PublicChannels {
           name: row.agent!.name,
           displayName: row.agent!.displayName?.trim() || row.agent!.name,
           description: row.agent!.description,
-          avatarUrl: agentAvatarUrl(workspaceId, row.agent!.id, row.agent!.avatarObjectKey),
+          avatarUrl: agentAvatarUrl(row.agent!.id, row.agent!.avatarMascot),
           serverRole: row.agent!.role,
           channelRole: row.channelRole,
           channelAdminBasis: deriveChannelAdminBasis(row.agent!.role, row.channelRole),
@@ -1542,7 +1542,7 @@ export class PublicChannels {
             name: agent.name,
             displayName: agent.displayName?.trim() || agent.name,
             description: agent.description,
-            avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+            avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
           })),
       },
     };
@@ -1778,7 +1778,7 @@ export class PublicChannels {
               name: true,
               displayName: true,
               description: true,
-              avatarObjectKey: true,
+              avatarMascot: true,
             },
           },
         },
@@ -1867,7 +1867,7 @@ export class PublicChannels {
                 handle: row.agent!.name,
                 label: row.agent!.displayName?.trim() || row.agent!.name,
                 description: row.agent!.description.trim(),
-                avatarUrl: agentAvatarUrl(workspaceId, row.agent!.id, row.agent!.avatarObjectKey),
+                avatarUrl: agentAvatarUrl(row.agent!.id, row.agent!.avatarMascot),
                 mentionScore: mentionScores.get(`agent:${row.agent!.id}`) ?? 0,
               },
         )
@@ -1912,7 +1912,7 @@ export class PublicChannels {
               name: true,
               displayName: true,
               description: true,
-              avatarObjectKey: true,
+              avatarMascot: true,
             },
           },
         },
@@ -1938,7 +1938,7 @@ export class PublicChannels {
               handle: row.agent!.name,
               label: row.agent!.displayName?.trim() || row.agent!.name,
               description: row.agent!.description.trim(),
-              avatarUrl: agentAvatarUrl(workspaceId, row.agent!.id, row.agent!.avatarObjectKey),
+              avatarUrl: agentAvatarUrl(row.agent!.id, row.agent!.avatarMascot),
               mentionScore: mentionScores.get(`agent:${row.agent!.id}`) ?? 0,
             },
       )
@@ -1986,7 +1986,7 @@ export class PublicChannels {
           name: true,
           displayName: true,
           description: true,
-          avatarObjectKey: true,
+          avatarMascot: true,
         },
         orderBy: { name: "asc" },
       }),
@@ -2011,7 +2011,7 @@ export class PublicChannels {
         handle: agent.name,
         label: agent.displayName?.trim() || agent.name,
         description: agent.description.trim(),
-        avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+        avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
         mentionScore: 0,
         outsider: true as const,
       })),

@@ -27,6 +27,7 @@ import {
   type RecentActivityByAgent,
 } from "./agent-activity-queries";
 import { agentModelsQueryKey } from "./agent-models";
+import type { AgentMascot } from "./agent-mascot";
 
 const EMPTY_ACTIVITY: ActivityEntry[] = [];
 
@@ -35,6 +36,10 @@ export type LiveAgent = {
   name: string;
   displayName: string;
   avatarUrl?: string | null;
+  /** The mascot the Agent shows (`agentMascot`). Optional like `avatarUrl`: an `isExtra`
+   * placeholder does not know it, and an Agent shape from a path that never set it reads as the
+   * mascot its id chooses. */
+  mascot?: AgentMascot;
   status: AgentStatusView;
   display?: AgentDisplaySnapshot;
   /** Optional: an Agent shape that predates this field (or came from a path that never
@@ -275,6 +280,16 @@ export function useCurrentWorkspaceId(): string | undefined {
 export function useLiveAgent(agentId: string): LiveAgent | undefined {
   return useSelector(useContext(LiveAgentStoreContext), (agents) =>
     agents.find((agent) => agent.id === agentId),
+  );
+}
+
+/** One Agent's mascot from the live roster, or nothing for an Agent outside it (an `isExtra`
+ * placeholder, an archived Agent): its key is not known there, so its avatar stays a still
+ * picture. Repaints only when that key changes. */
+export function useLiveAgentMascot(agentId: string): AgentMascot | undefined {
+  return useSelector(
+    useContext(LiveAgentStoreContext),
+    (agents) => agents.find((agent) => agent.id === agentId && inRoster(agent))?.mascot,
   );
 }
 

@@ -69,7 +69,7 @@ import {
   visibleAgentWhere,
 } from "#src/server/agents/agent-visibility.server";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
 
@@ -187,7 +187,7 @@ export const listComputers = createServerFn({ method: "GET" })
                   id: true,
                   name: true,
                   displayName: true,
-                  avatarObjectKey: true,
+                  avatarMascot: true,
                   runtimeConfig: true,
                 },
                 orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -261,7 +261,7 @@ export const listComputers = createServerFn({ method: "GET" })
             id: agent.id,
             name: agent.name,
             displayName: agent.displayName,
-            avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+            avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
             provider: parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
             runtimeConfig: publicAgentRuntimeConfig(parseAgentRuntimeConfig(agent.runtimeConfig)),
             display: agentDisplayById.get(agent.id),

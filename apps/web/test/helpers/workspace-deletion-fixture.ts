@@ -129,7 +129,6 @@ export async function setup() {
     computerId: computer.id,
   });
   await db.daemonApiKey.create({ data: liveKey.record });
-  const agentAvatarKey = `workspaces/${workspace.id}/agents/a/avatars/${crypto.randomUUID()}/original`;
   const agent = await db.agent.create({
     data: {
       workspaceId: workspace.id,
@@ -137,7 +136,6 @@ export async function setup() {
       displayName: "Helper",
       ownerId: owner.id,
       computerId: computer.id,
-      avatarObjectKey: agentAvatarKey,
       runtimeConfig: {
         runtime: "pi",
         provider: { kind: "default" },
@@ -352,7 +350,7 @@ export async function setup() {
     team,
     memberRowId: memberRow.id,
     privateKeys: [attachmentKey, uploadKey],
-    imageKeys: [workspaceIconKey, projectIconKey, agentAvatarKey, appLogoKey],
+    imageKeys: [workspaceIconKey, projectIconKey, appLogoKey],
     cleanup,
   };
 }

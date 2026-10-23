@@ -109,7 +109,7 @@ export async function readWindowThreads(
                 },
               },
               agent: {
-                select: { name: true, displayName: true, deletedAt: true, avatarObjectKey: true },
+                select: { name: true, displayName: true, deletedAt: true, avatarMascot: true },
               },
             },
           },

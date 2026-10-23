@@ -4,7 +4,7 @@ import { isAppError } from "#src/lib/app-error";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";
 import { AgentChannelManagementError } from "#src/server/conversations/agent-channel-management-error.server";
-import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 
 const WORKSPACE_ID = "workspace-1";
 
@@ -13,7 +13,7 @@ function publicChannelsFixture(target: {
   name?: string;
   displayName?: string;
   description?: string;
-  avatarObjectKey?: string | null;
+  avatarMascot?: string | null;
   visibility: string;
 }) {
   const db = {
@@ -65,7 +65,7 @@ test("PublicChannels.members never offers a private Agent as an add-candidate (m
     name: "scout",
     displayName: "Scout",
     description: "Reads the web",
-    avatarObjectKey: null,
+    avatarMascot: null,
     visibility: "public",
   });
 
@@ -81,7 +81,7 @@ test("PublicChannels.members never offers a private Agent as an add-candidate (m
       name: "scout",
       displayName: "Scout",
       description: "Reads the web",
-      avatarUrl: defaultAgentAvatarUrl("agent-public"),
+      avatarUrl: agentAvatarUrl("agent-public"),
     },
   ]);
 });

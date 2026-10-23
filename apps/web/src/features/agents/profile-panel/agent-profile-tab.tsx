@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { DELETED_AGENT_AVATAR_CLASS, DeletedAgentBadge } from "#src/features/agents/deleted-agent";
+import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import {
   Camera01,
   Edit01,
@@ -10,7 +10,8 @@ import {
 } from "@untitledui/icons";
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
 import { AgentAvatarDialog } from "#src/features/agents/agent-avatar-dialog";
-import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
+import type { AgentMascot } from "#src/features/agents/agent-mascot";
+import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -68,8 +69,7 @@ export function AgentProfileTab({
   controls,
   onSaveDisplayName,
   onSaveDescription,
-  onAvatarChange,
-  onAvatarRemove,
+  onMascotChange,
   onSaveRole,
   onRequestVisibilityChange,
   runtimeCredentialDialog,
@@ -102,8 +102,7 @@ export function AgentProfileTab({
   onSaveDisplayName: (value: string) => Promise<void>;
   onSaveDescription: (value: string) => Promise<void>;
   /** Creator-only. Omitted for every other viewer, who still sees the picture. */
-  onAvatarChange?: (file: File) => Promise<void>;
-  onAvatarRemove?: () => Promise<void>;
+  onMascotChange?: (mascot: AgentMascot) => Promise<void>;
   onSaveRole?: (role: "admin" | "member") => Promise<void>;
   /** Opens the container's `AgentVisibilityConfirmDialog` for the given target visibility.
    * Present only for the creator or a human Workspace owner/admin. */
@@ -127,14 +126,12 @@ export function AgentProfileTab({
   const creatorName = humanLabel(profile.owner);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
   const profileAvatar = (
-    <Avatar
+    <AgentMascotAvatar
+      mascot={profile.mascot}
+      name={profile.displayName}
+      display={profile.display}
+      deleted={Boolean(profile.deletedAt)}
       size="xl"
-      src={profile.avatarUrl}
-      alt={profile.displayName}
-      initials={avatarInitial(profile.displayName)}
-      contentClassName={
-        profile.deletedAt ? DELETED_AGENT_AVATAR_CLASS : avatarToneClassName(profile.displayName)
-      }
     />
   );
   const ComputerIcon = profile.computer
@@ -150,7 +147,7 @@ export function AgentProfileTab({
     <div className="relative min-h-0 flex-1 overflow-y-auto">
       <section className="border-b border-secondary px-6 py-5">
         <div className="mb-5 flex flex-wrap items-center gap-4">
-          {onAvatarChange ? (
+          {onMascotChange ? (
             <Button
               color="link-gray"
               noTextPadding
@@ -159,22 +156,21 @@ export function AgentProfileTab({
               onPress={() => setAvatarDialogOpen(true)}
             >
               {profileAvatar}
-              <span className="absolute inset-0 grid place-items-center rounded-full bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                <Camera01 className="size-5" />
+              <span className="absolute -right-1 -bottom-1 grid size-6 place-items-center rounded-full bg-primary text-fg-secondary shadow-xs ring-1 ring-secondary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                <Camera01 className="size-3.5" />
               </span>
             </Button>
           ) : (
             profileAvatar
           )}
           {profile.deletedAt && <DeletedAgentBadge />}
-          {onAvatarChange && (
+          {onMascotChange && (
             <AgentAvatarDialog
               name={profile.displayName}
-              avatarUrl={profile.avatarUrl ?? defaultAgentAvatarUrl(profile.id)}
+              mascot={profile.mascot}
               open={avatarDialogOpen}
               onOpenChange={setAvatarDialogOpen}
-              onUpload={onAvatarChange}
-              onRemove={profile.avatarObjectKey ? onAvatarRemove : undefined}
+              onSave={onMascotChange}
             />
           )}
         </div>

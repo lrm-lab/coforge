@@ -8,6 +8,7 @@
       "./messages/{locale}/common.json",
       "./messages/{locale}/agents.json",
       "./messages/{locale}/agent-activity.json",
+      "./messages/{locale}/agent-mascots.json",
       "./messages/{locale}/agent-runtime.json",
       "./messages/{locale}/conversations.json",
       "./messages/{locale}/direct-settings.json",

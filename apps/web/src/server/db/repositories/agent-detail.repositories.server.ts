@@ -53,7 +53,7 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
             avatarObjectKey: true,
           },
         },
-        avatarObjectKey: true,
+        avatarMascot: true,
       },
     });
     if (!agent) return undefined;

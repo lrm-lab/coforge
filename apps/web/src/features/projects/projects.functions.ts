@@ -12,7 +12,7 @@ import { z } from "zod";
 import { createProjectInput, projectIconUploadInput, updateProjectInput } from "./projects.schemas";
 import { ProjectImages, withProjectIconUrl } from "#src/server/projects/project-images.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import {
   PROJECT_DETAIL_SELECT,
@@ -154,11 +154,7 @@ export const getProject = createServerFn({ method: "GET" })
             : sender.agent
               ? {
                   name: sender.agent.displayName,
-                  avatarUrl: agentAvatarUrl(
-                    workspaceId,
-                    sender.agent.id,
-                    sender.agent.avatarObjectKey,
-                  ),
+                  avatarUrl: agentAvatarUrl(sender.agent.id, sender.agent.avatarMascot),
                 }
               : null
           : null;

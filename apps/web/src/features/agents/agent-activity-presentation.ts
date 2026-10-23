@@ -88,8 +88,21 @@ const COMPUTER_LIFECYCLE: Readonly<
 };
 
 /** Working and thinking are the busy tones: an Agent avatar's status dot pulses for them. */
-function isBusyTone(tone: StatusTone): boolean {
+export function isBusyTone(tone: StatusTone): boolean {
   return tone === "working" || tone === "thinking";
+}
+
+/**
+ * An Agent's current label as it reads after its name ("Atlas running command"): no trailing
+ * ellipsis, and a lowercase first letter unless the second is a capital too (an acronym such as
+ * "MCP call").
+ */
+export function activitySentenceLabel(label: string): string {
+  const text = label.replace(/(?:…|\.\.\.)+$/, "").trim();
+  const [first = "", second = ""] = text;
+  if (second !== "" && second === second.toUpperCase() && second !== second.toLowerCase())
+    return text;
+  return first.toLowerCase() + text.slice(1);
 }
 
 /** One atom of a presented activity frame: 0 or 1 visible row, plus (for text/thinking

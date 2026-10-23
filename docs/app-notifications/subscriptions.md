@@ -46,7 +46,7 @@ secret. Its keys are snake_case in the stored event and on the wire alike
 | `channel.member_removed` | `channel_id`, and `user_id` or `agent_id` | `softLeaveMember` in `channel-changes.server.ts` (leave, removal, the Agent CLI), a Workspace member leaving or removed (each channel), an Agent made private or deleted (each channel) |
 | `channel.config_updated` | `channel_id`, `fields` (`name`, `description`), `name` when renamed | `updateChannelInfo` (only a value that differs) |
 | `thread.created` | `channel_id`, `thread_root_id`, `message_id` | the first reply to a message in a channel: `PublicChannels.send`, `sendAgentMessage` |
-| `agent.profile_updated` | `agent_id`, `fields` (`display_name`, `description`, `avatar`) | `AgentRepository.update`, `resolveAgentProfileUpdate`, `AgentAvatars` (upload and removal), the weekly-report assistant's rename (`WorkspaceMembers`) |
+| `agent.profile_updated` | `agent_id`, `fields` (`display_name`, `description`, `avatar`) | `AgentRepository.update`, `resolveAgentProfileUpdate`, `AgentMascots` (a mascot pick), the weekly-report assistant's rename (`WorkspaceMembers`) |
 | `agent.runtime_changed` | `agent_id`, `previous_runtime`, `runtime` | `AgentRepository.update` (runtime config diff) |
 | `agent.model_changed` | `agent_id`, `fields` (`model`, `model_provider`, `reasoning`, `fast_mode`), `previous_model`, `model` | `AgentRepository.update` (runtime config diff) |
 | `computer.version_changed` | `computer_id`, `previous_version`, `version` | `recordComputerObservation`, once per Workspace the Computer is linked to |

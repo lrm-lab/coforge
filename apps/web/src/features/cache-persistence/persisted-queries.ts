@@ -25,7 +25,7 @@ import { CONVERSATION_WINDOW_PAGE_SIZE } from "#src/lib/conversation-window";
  * the network. `test/query-cache-stored-shape.test.ts` fails on a change to a kept kind's shape
  * until this is bumped and the new shape pinned there.
  */
-export const STORED_SHAPE_VERSION = 7;
+export const STORED_SHAPE_VERSION = 8;
 export const storedShapeBuster = String(STORED_SHAPE_VERSION);
 
 export const STORED_KINDS = [

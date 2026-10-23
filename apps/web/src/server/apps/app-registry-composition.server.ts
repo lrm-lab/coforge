@@ -6,7 +6,7 @@ import { getPublicImageStorage } from "#src/server/files/public-image-storage.se
 import { PrismaAppRegistryStore } from "#src/server/db/repositories/app.repositories.server";
 import { PrismaAppPublishingStore } from "#src/server/db/repositories/app-publishing.repositories.server";
 
-/** The app registry over PostgreSQL (`db` may be an open transaction), keeping logos in the public image store (as Agent avatars
+/** The app registry over PostgreSQL (`db` may be an open transaction), keeping logos in the public image store (as user avatars
  * are) and reporting an old logo it could not remove as a server error. A platform reviewer also
  * reads the logo of an app with a request waiting (`server/app-marketplace/`). */
 export function createAppRegistry(db: Prisma.TransactionClient) {

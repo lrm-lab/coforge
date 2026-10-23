@@ -33,6 +33,7 @@ import { newerPageCommit, positionJumpDecision } from "./conversation-thread-sea
 import { latestTopLevelSequence } from "./conversation-unread";
 import { streamState, type StreamRead } from "./stream-state";
 import { MessageComposer } from "./message-composer";
+import { useMentionCandidates } from "./mention-candidates";
 import { ThreadPaneHeader, type ThreadFollow } from "./thread-pane-header";
 import { makeReferenceBodyFormatter } from "./mention-text";
 import type { ChipMention } from "./message-markdown";
@@ -96,6 +97,7 @@ export function ConversationPane({
   jumpMessage,
   onJumpMessageConsumed,
   mentionCompletion = true,
+  aboveComposer,
 }: Omit<ConversationProps, "conversation" | "agentStatus"> & {
   conversation: Omit<DirectConversationView, "agent">;
   header?: React.ReactNode;
@@ -138,17 +140,10 @@ export function ConversationPane({
   /** Called exactly once per consumed jump, to strip the param one-shot like a hash. */
   onJumpMessageConsumed?: () => void;
 }) {
-  // The candidate list keeps every member, the viewer included, because it is also what *resolves*
-  // a mention of the viewer in a body or preview. Offering the viewer to the viewer is a different
-  // question, and the composer answers it with its own rule: you never mention yourself.
-  const mentionCandidates = useMemo(
-    () =>
-      mentionCompletion
-        ? conversation.mentionables?.filter(
-            (mention) => !(mention.kind === "user" && mention.id === conversation.viewerId),
-          )
-        : undefined,
-    [mentionCompletion, conversation.mentionables, conversation.viewerId],
+  const mentionCandidates = useMentionCandidates(
+    conversation.mentionables,
+    conversation.viewerId,
+    mentionCompletion,
   );
   // Days and times follow the viewer's locale and time zone (their saved one, else the browser's).
   // The pane is only ever rendered in the browser, so the locale is known at once.
@@ -1122,6 +1117,7 @@ export function ConversationPane({
       </div>
 
       <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
+        {canCompose && !root && aboveComposer}
         {readOnlyNotice ?? (
           <MessageComposer
             conversationId={conversation.conversationId}

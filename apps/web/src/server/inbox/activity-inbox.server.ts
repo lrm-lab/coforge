@@ -4,7 +4,7 @@ import type {
   ActivityInboxFilter,
   ActivityItemDone,
 } from "#src/features/inbox/activity-inbox.schemas";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { channelListMembers } from "#src/server/conversations/channel-list-preview.server";
 import {
@@ -482,7 +482,7 @@ export class ActivityInbox {
       }),
       this.db.agent.findMany({
         where: { id: { in: [...agentIds] }, workspaceId },
-        select: { id: true, name: true, displayName: true, avatarObjectKey: true },
+        select: { id: true, name: true, displayName: true, avatarMascot: true },
       }),
       // By the key, not a membership: the member stays named after leaving the Workspace.
       this.db.user.findMany({
@@ -516,7 +516,7 @@ export class ActivityInbox {
           kind: "agent" as const,
           agentId: agent.id,
           displayName: agent.displayName.trim() || agent.name,
-          avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+          avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
         },
       ]),
     );

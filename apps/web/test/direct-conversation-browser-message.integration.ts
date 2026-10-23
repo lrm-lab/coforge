@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { toggleUserMessageReaction } from "#src/server/conversations/user-message-reactions.server";
 import {
@@ -52,14 +52,14 @@ test("a direct conversation's page and poll return the same browser message shap
     data: { slug: id, name: "DM view", members: { create: { userId: user.id } } },
   });
   try {
-    const agentAvatarKey = `avatars/agents/${id}/v3/avatar.png`;
+    const agentMascot = "pink";
     const agent = await db.agent.create({
       data: {
         workspaceId: workspace.id,
         ownerId: user.id,
         name: "helper",
         displayName: "Helper",
-        avatarObjectKey: agentAvatarKey,
+        avatarMascot: agentMascot,
         runtimeConfig: {},
       },
     });
@@ -167,7 +167,7 @@ test("a direct conversation's page and poll return the same browser message shap
         senderAgentId: agent.id,
         senderUserId: undefined,
         senderDeleted: false,
-        senderAvatarUrl: agentAvatarUrl(workspace.id, agent.id, agentAvatarKey),
+        senderAvatarUrl: agentAvatarUrl(agent.id, agentMascot),
         body: `on it <@human:${user.id}>`,
         createdAt: reply.createdAt.toISOString(),
         mentions: [

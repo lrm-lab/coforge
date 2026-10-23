@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 
-import { AgentAvatars } from "#src/server/agents/agent-avatar.server";
 import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { createOwnedWorkspace } from "#src/server/db/repositories/workspace-slugs.repositories.server";
@@ -111,27 +110,6 @@ const environment = defineEmitterCases([
       column: "userId",
       value: user.id,
     }),
-  }),
-  emitterCase({
-    type: "agent.profile_updated",
-    label: "the owner removes the picture",
-    setup: async (env, fixture) => {
-      const agent = await agentIn(env, fixture);
-      await env.db.agent.update({
-        where: { id: agent.id },
-        data: { avatarObjectKey: `agents/${agent.id}/a`, avatarContentType: "image/png" },
-      });
-      return agent;
-    },
-    act: (env, fixture, agent) =>
-      new AgentAvatars(env.db, async () => ({
-        put: async () => {},
-        open: async () => null,
-        remove: async () => {},
-        head: async () => null,
-      })).remove(fixture.workspace.id, fixture.owner.id, agent.id),
-    data: (_fixture, agent) => ({ agent_id: agent.id, fields: ["avatar"] }),
-    refuse: (_fixture, agent) => ({ table: "agents", column: "id", value: agent.id }),
   }),
 ]);
 

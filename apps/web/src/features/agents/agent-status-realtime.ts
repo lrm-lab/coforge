@@ -13,6 +13,7 @@ import { publicationData } from "#src/features/realtime/publication-data";
 import { subscriptionGap } from "#src/features/realtime/subscription-gap";
 import { AGENT_VISIBILITY } from "./agent-visibility";
 import { ACTIVITY_PROBE_TIMEOUT_MS } from "./activity-probe-timeout";
+import { isBusyTone } from "./agent-activity-presentation";
 
 export type AgentStatusEvent = {
   agentId: string;
@@ -295,8 +296,11 @@ export function nextDisplayRefreshDelayMs<T extends StatusTrackedAgent>(
     ...agents.flatMap((agent) => {
       const display = agent.display;
       if (!display || typeof display.expiresAt !== "number") return [];
-      const isBusy = display.activityKind === "working" || display.activityKind === "thinking";
-      return [isBusy ? display.expiresAt + ACTIVITY_PROBE_TIMEOUT_MS + 1_000 : display.expiresAt];
+      return [
+        isBusyTone(display.activityKind)
+          ? display.expiresAt + ACTIVITY_PROBE_TIMEOUT_MS + 1_000
+          : display.expiresAt,
+      ];
     }),
   );
   if (!Number.isFinite(deadline)) return undefined;

@@ -1,8 +1,9 @@
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { isMascotPicture } from "#src/features/agents/mascot-contract";
 import { cx } from "#src/utils/cx";
 import { collageLayout } from "./collage-layout";
 
-/** One member a channel's group avatar shows: its photo, or its initial when it has none. */
+/** One member a channel's group avatar shows: its photo (an Agent's mascot, whole), or its initial when it has none. */
 export type GroupAvatarMember = {
   kind: "user" | "agent";
   id: string;
@@ -11,6 +12,8 @@ export type GroupAvatarMember = {
 };
 
 const CIRCLE_CLASS = "absolute overflow-hidden rounded-full";
+/** A mascot is drawn whole on its own: no circle clipping it and no separator ring around it. */
+const MASCOT_CLASS = "absolute";
 /** The separator between overlapping circles; a lone member fills the frame and needs none. */
 const SEPARATOR_CLASS = "ring-2 ring-bg-primary";
 
@@ -46,6 +49,18 @@ export function GroupAvatar({
         }
         // A non-overflow slot exists only for a member at its index.
         const member = members[index]!;
+        if (isMascotPicture(member.avatarUrl)) {
+          return (
+            <span key={member.id} className={MASCOT_CLASS} style={placed.css}>
+              <img
+                src={member.avatarUrl!}
+                alt=""
+                loading="lazy"
+                className="size-full object-contain"
+              />
+            </span>
+          );
+        }
         return (
           <span
             key={member.id}

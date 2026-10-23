@@ -49,8 +49,11 @@ test("every declared tool is locked for each required platform", () => {
 
 test("the lockfile pins no tool that mise.toml has dropped", () => {
   // A task's own `tools` (https://mise.jdx.dev/tasks/toml-tasks.html) are locked too.
+  // A tool's inline options (`http:rive-cli[url=…]`) are not part of its locked name.
   const taskTools = Object.values(config.tasks ?? {}).flatMap((task) =>
-    Object.keys((task as { tools?: Record<string, string> }).tools ?? {}),
+    Object.keys((task as { tools?: Record<string, string> }).tools ?? {}).map((tool) =>
+      tool.replace(/\[.*\]$/, ""),
+    ),
   );
   const declared = new Set([...Object.keys(config.tools ?? {}), ...taskTools]);
   for (const tool of Object.keys(lockfile.tools ?? {})) {

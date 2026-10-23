@@ -109,7 +109,7 @@ export type AppLogoLookup = (input: {
   viewerUserId: string;
 }) => Promise<{ objectKey: string; contentType: string } | undefined>;
 
-/** Where the registry keeps logos (the image store, as for Agent avatars), and who hears of an
+/** Where the registry keeps logos (the image store, as for user avatars), and who hears of an
  * old logo's object that could not be removed after its change was committed. */
 export type AppLogoImages = {
   storage(): Promise<FileStorage>;

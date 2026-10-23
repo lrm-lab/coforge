@@ -563,17 +563,17 @@ export const MessageRow = memo(function MessageRow({
   // Its profile still opens, read-only.
   // An Agent's avatar in the stream carries the same online/working/thinking/error/offline dot the
   // sidebar, conversation header and @-mention popup use, so you can tell whether the Agent that
-  // wrote a message is around right now without opening its profile. The avatar reads that one
-  // Agent from the app shell's live Agent store (`LiveAgentAvatar`). A person's avatar
-  // stays plain here (people's presence is drawn on the Members page); a deleted Agent shows no dot
-  // either (`AgentDisplayAvatar` greys it and drops the dot) — a deletion is not a presence state.
-  const avatar =
+  // wrote a message is around right now without opening its profile. It reads that one Agent from
+  // the live store and its mascot moves with it. A person's avatar stays plain here (presence is on
+  // the Members page); a deleted Agent shows no dot — not a presence state.
+  const senderAvatar = (animated: boolean) =>
     message.senderKind === "agent" && message.senderAgentId ? (
       <LiveAgentAvatar
         agentId={message.senderAgentId}
         name={message.senderName}
         src={message.senderAvatarUrl}
         deleted={deleted}
+        animated={animated}
       />
     ) : (
       <Avatar
@@ -586,6 +586,7 @@ export const MessageRow = memo(function MessageRow({
         }
       />
     );
+  const avatar = senderAvatar(true);
   // Reply-to-selection: the browser owns the highlight, this row only decides whether to *offer*
   // the action. The offer is made from a completed pointer gesture, so a drag that merely passes
   // over this message while selecting another one never raises it.
@@ -1127,7 +1128,7 @@ export const MessageRow = memo(function MessageRow({
                 {/* The tapped message, quoted in a muted card at the top — the Slack/Discord
                     mobile signature that tells you which message the actions belong to. */}
                 <div className="mx-3 mt-3 flex gap-2.5 rounded-xl bg-secondary/60 p-3">
-                  <span className="shrink-0">{avatar}</span>
+                  <span className="shrink-0">{senderAvatar(false)}</span>
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <p className="flex items-baseline gap-2">
                       <span className="min-w-0 truncate text-sm font-semibold text-primary">

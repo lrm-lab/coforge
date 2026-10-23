@@ -1,0 +1,34 @@
+/*
+ * The busy-Agents line above the composer: with several busy Agents, one mascot hands over to the
+ * next. Offsets are in rem (0.25rem is 4px). The mascots animate themselves; with reduced motion
+ * they are still pictures and the component neither cycles nor fades.
+ */
+@keyframes busy-avatar-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes busy-avatar-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+  }
+}
+
+.busy-avatar-in {
+  animation: busy-avatar-in 1000ms ease-in-out both;
+}
+
+.busy-avatar-out {
+  animation: busy-avatar-out 1000ms ease-in-out both;
+}

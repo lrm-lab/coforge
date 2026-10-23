@@ -16,20 +16,22 @@ object key 本身。这一节是它
 1. 按[第 4 节](oss-origins.md)创建 `${IMAGES_BUCKET}`（同账号、同 Region、`private`、Block Public
    Access），logging prefix `oss/images/`。该 bucket 只允许
    `users/{user_id}/avatars/{avatar_id}/original`、
-   `workspaces/{workspace_id}/agents/{agent_id}/avatars/{avatar_id}/original`、
    `workspaces/{workspace_id}/projects/{project_id}/icons/{icon_id}/original`、
    `workspaces/{workspace_id}/icons/{icon_id}/original` 与
-   `workspaces/{workspace_id}/apps/{app_key}/logos/{logo_id}/original`（应用 logo，可以是 GIF）五种 key。
-   已经按四种 key 配好 bucket 策略的环境，必须先把第五种加进允许列表，应用 logo 才能经 CDN 读到；
+   `workspaces/{workspace_id}/apps/{app_key}/logos/{logo_id}/original`（应用 logo，可以是 GIF）四种 key。
+   已经按三种 key 配好 bucket 策略的环境，必须先把第四种加进允许列表，应用 logo 才能经 CDN 读到；
    在此之前它的 CDN URL 读不出来，页面上回退成名字生成的字母图标（monogram）。
+   Agent 不再有上传头像（`agent_mascot` 迁移删除了对应列），没有代码写
+   `workspaces/{workspace_id}/agents/{agent_id}/avatars/` 前缀；已有对象是不再被引用的遗留数据，
+   不复制、不新建策略，按 lifecycle 或人工清理。
 2. 在该 bucket 创建图片样式，名字必须与代码里的 `PROFILE_IMAGE_STYLES` 完全一致：
    `avatar192`（等比缩放宽 192，不放大）与 `icon256`（等比缩放宽 256，不放大）。
    Web 发出的每个 profile image URL 都带 `?x-oss-process=style/<name>`，样式不存在就是
    全站头像 400。存原图不做变体是不可接受的：上传上限 5 MB，而头像最大只画到约 96px。
-3. 把现有对象从 `${FILES_BUCKET}` 复制到 `${IMAGES_BUCKET}`：上述五种 key 前缀（含
+3. 把现有对象从 `${FILES_BUCKET}` 复制到 `${IMAGES_BUCKET}`：上述四种 key 前缀（含
    `workspaces/{workspace_id}/apps/{app_key}/logos/`），key 保持完全不变（两个 bucket 布局相同，
    所以不改数据库、不改 key、不需要发版）。确认逐个对象的 SHA-256 一致后，再从
-   `${FILES_BUCKET}` 删除这五种前缀。
+   `${FILES_BUCKET}` 删除这四种前缀。
 4. 按[第 5 节](cdn-domains.md)添加域名：staging 是 `images-staging.coforge.cn` 回源
    `coforge-images-staging`，生产是 `images.coforge.cn` 回源生产 `${IMAGES_BUCKET}`。单一 origin
    指向 `${IMAGES_BUCKET}`，开启同账号 STS 私有回源，**不启用** URL 鉴权，缓存与响应头

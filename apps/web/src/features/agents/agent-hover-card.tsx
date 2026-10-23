@@ -11,7 +11,7 @@ import { HoverPopover, useClosePreview } from "#src/components/ui/hover-popover"
 import { ClockTime } from "#src/components/ui/relative-time";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { StatusDot } from "#src/components/ui/status-dot";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { avatarInitial } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { agentDisplay, presentActivityRows } from "./agent-activity-presentation";
 import { ActivityMarker } from "./activity-marker";
@@ -23,8 +23,12 @@ import {
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { runtimeProviderLabel } from "./runtime-provider-display";
 import type { ActivityEntry } from "./agent-activity";
-import { useAgentRecentActivity, useLiveAgentDisplay } from "./workspace-agents-realtime";
-import { defaultAgentAvatarUrl } from "./agent-default-avatar";
+import {
+  useAgentRecentActivity,
+  useLiveAgentDisplay,
+  useLiveAgentMascot,
+} from "./workspace-agents-realtime";
+import { AgentMascotAvatar } from "./agent-mascot-avatar";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -109,19 +113,20 @@ function AgentCard({
   // The live display once a publication has arrived; until then the profile read's own snapshot,
   // as the profile panel does.
   const display = useLiveAgentDisplay(agentId) ?? data?.display;
+  const liveMascot = useLiveAgentMascot(agentId);
   const view = agentDisplay(display);
+  const mascot = data?.mascot ?? liveMascot;
   const displayName = data?.displayName || name;
   const shownHandle = data?.name ?? handle;
   return (
     <>
       <div className="flex items-start gap-3 p-3">
-        <Avatar
-          size="md"
-          alt=""
-          src={data?.avatarUrl ?? src ?? defaultAgentAvatarUrl(agentId)}
-          initials={avatarInitial(displayName)}
-          contentClassName={avatarToneClassName(displayName)}
-        />
+        {mascot ? (
+          <AgentMascotAvatar mascot={mascot} name={displayName} display={display} size="md" />
+        ) : (
+          // An Agent outside the live roster whose profile has not landed: its still picture.
+          <Avatar size="md" alt="" src={src} initials={avatarInitial(displayName)} />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <Heading slot="title" className="truncate text-sm font-semibold text-primary">

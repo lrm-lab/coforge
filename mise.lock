@@ -132,6 +132,20 @@ url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-windows-x
 checksum = "sha256:0f20ce6674d4f2dbcc8c5d59fdf99f7ba45f8c3b367e0f5781cbfa30a1c78d99"
 url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-windows-x64-baseline.zip"
 
+[[tools."http:rive-cli"]]
+version = "1.7.0"
+backend = "http:rive-cli"
+specifiers = ["1.7.0"]
+
+[tools."http:rive-cli"."platforms.linux-x64"]
+url = "https://releases.rive.app/cli/v1.7.0/rive-linux-x64.tar.gz"
+
+[tools."http:rive-cli"."platforms.macos-arm64"]
+url = "https://releases.rive.app/cli/v1.7.0/rive-macos-arm64.tar.gz"
+
+[tools."http:rive-cli"."platforms.windows-x64"]
+url = "https://releases.rive.app/cli/v1.7.0/rive-windows-x64.tar.gz"
+
 [[tools.node]]
 version = "24.20.0"
 backend = "core:node"

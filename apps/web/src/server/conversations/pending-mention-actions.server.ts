@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { humanLabel } from "#src/lib/human-label";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
@@ -164,7 +164,7 @@ const PENDING_MENTION_ACTION_SELECT = {
     },
   },
   targetAgent: {
-    select: { displayName: true, avatarObjectKey: true, visibility: true, deletedAt: true },
+    select: { displayName: true, avatarMascot: true, visibility: true, deletedAt: true },
   },
 } satisfies Prisma.PendingMentionActionSelect;
 
@@ -212,7 +212,7 @@ function pendingMentionActionView(
       ? agent.displayName?.trim() || row.targetHandle
       : humanLabel({ displayName: row.targetUser?.displayName }),
     targetAvatarUrl: agent
-      ? agentAvatarUrl(workspaceId, targetId, agent.avatarObjectKey)
+      ? agentAvatarUrl(targetId, agent.avatarMascot)
       : workspaceUserAvatarUrl(workspaceId, targetId, row.targetUser?.avatarObjectKey ?? null),
     channelName: channel.name,
     // Notify once, add any time: a notified target can still be added. Whether the sender may add

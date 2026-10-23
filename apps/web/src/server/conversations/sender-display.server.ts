@@ -2,7 +2,7 @@ import { isValidMessageSender, type MessageSenderKind } from "@lrm/coforge-sdk/i
 import type { Prisma } from "#src/generated/prisma/client";
 import { SYSTEM_SENDER_LABEL } from "#src/features/profiles/person-name";
 import { humanLabel, type HumanNames } from "#src/lib/human-label";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 
 /**
@@ -38,7 +38,7 @@ type BrowserAvatarSender =
       userId?: string | null;
       agentId?: string | null;
       user?: { avatarObjectKey?: string | null } | null;
-      agent?: { avatarObjectKey?: string | null } | null;
+      agent?: { avatarMascot?: string | null } | null;
     }
   | null
   | undefined;
@@ -51,8 +51,7 @@ export function browserSenderAvatarUrl(
 ): string | null {
   if (sender?.userId)
     return workspaceUserAvatarUrl(workspaceId, sender.userId, sender.user?.avatarObjectKey ?? null);
-  if (sender?.agentId)
-    return agentAvatarUrl(workspaceId, sender.agentId, sender.agent?.avatarObjectKey ?? null);
+  if (sender?.agentId) return agentAvatarUrl(sender.agentId, sender.agent?.avatarMascot ?? null);
   return null;
 }
 

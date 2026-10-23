@@ -4,7 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AppInstallationData } from "#src/server/app-installation-data/app-installation-data.server";
 import { PrismaAppInstallationDataStore } from "#src/server/db/repositories/app-installation-data.repositories.server";
-import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 
 /**
  * What an installed app may read, against local PostgreSQL with migrations applied: the filtering
@@ -117,7 +117,7 @@ test.skipIf(!db)(
   async () => {
     const f = await workspaceFixture(db!);
     try {
-      const visible = await f.agent("scout", { avatarObjectKey: "agents/scout" });
+      const visible = await f.agent("scout", { avatarMascot: "orange" });
       const plain = await f.agent("plain");
       await f.agent("secret", { visibility: "private" });
       await f.agent("gone", { deletedAt: new Date() });
@@ -132,16 +132,16 @@ test.skipIf(!db)(
             handle: "scout",
             display_name: "SCOUT",
             description: "scout helps",
-            avatar_url: imageUrl("agents/scout", "avatar192"),
+            avatar_url: "https://coforge.example/agent-avatars/mascot-orange-2.webp",
             created_at: visible.createdAt.toISOString(),
           },
-          // An Agent without its own upload shows the platform default picture, as on the Web.
+          // An Agent whose creator picked no mascot shows the one its id chooses, as on the Web.
           {
             id: plain.id,
             handle: "plain",
             display_name: "PLAIN",
             description: "plain helps",
-            avatar_url: `https://coforge.example${defaultAgentAvatarUrl(plain.id)}`,
+            avatar_url: `https://coforge.example${agentAvatarUrl(plain.id)}`,
             created_at: plain.createdAt.toISOString(),
           },
         ]);

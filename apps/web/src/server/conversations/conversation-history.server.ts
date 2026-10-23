@@ -42,7 +42,7 @@ export const browserMessageFields = {
       user: {
         select: { username: true, displayName: true, avatarObjectKey: true },
       },
-      agent: { select: { name: true, displayName: true, deletedAt: true, avatarObjectKey: true } },
+      agent: { select: { name: true, displayName: true, deletedAt: true, avatarMascot: true } },
     },
   },
   mentions: BROWSER_MESSAGE_MENTIONS_SELECT,

@@ -6,7 +6,7 @@ import { AppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { weeklyReportAssistantDisplayName } from "#src/server/records/weekly-report-assistant.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import {
   canDirectMessageAgent,
   visibleAgentWhere,
@@ -58,7 +58,7 @@ function createdAgentsSelect(visibleAgents: Prisma.AgentWhereInput) {
       id: true,
       name: true,
       displayName: true,
-      avatarObjectKey: true,
+      avatarMascot: true,
       weeklyReportAssistant: { select: { id: true } },
     },
     orderBy: [{ name: "asc" as const }, { id: "asc" as const }],
@@ -67,12 +67,11 @@ function createdAgentsSelect(visibleAgents: Prisma.AgentWhereInput) {
 
 /** One of a person's created Agents as the directory and the profile show it. */
 function createdAgentView(
-  workspaceId: string,
   agent: {
     id: string;
     name: string;
     displayName: string;
-    avatarObjectKey: string | null;
+    avatarMascot: string | null;
     weeklyReportAssistant: { id: string } | null;
   },
   owner: { username: string; displayName: string | null },
@@ -80,7 +79,7 @@ function createdAgentView(
   return {
     id: agent.id,
     displayName: shownAgentName({ ...agent, owner }),
-    avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+    avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
   };
 }
 
@@ -184,7 +183,7 @@ export class WorkspaceMembers {
           name: true,
           displayName: true,
           description: true,
-          avatarObjectKey: true,
+          avatarMascot: true,
           createdAt: true,
           visibility: true,
           owner: {
@@ -217,7 +216,7 @@ export class WorkspaceMembers {
         name: agent.name,
         displayName: shownAgentName(agent),
         description: agent.description,
-        avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+        avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
         computerId: agent.computer?.workspaces.length ? agent.computer.id : null,
         computerName: agent.computer?.workspaces.length
           ? agent.computer.displayName.trim() || agent.computer.name.trim()
@@ -265,7 +264,7 @@ export class WorkspaceMembers {
           id: true,
           name: true,
           displayName: true,
-          avatarObjectKey: true,
+          avatarMascot: true,
           ownerId: true,
           visibility: true,
           owner: { select: { username: true, displayName: true } },
@@ -315,7 +314,7 @@ export class WorkspaceMembers {
         id: agent.id,
         handle: agent.name,
         name: shownAgentName(agent),
-        avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+        avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
         /** Whether the viewer may open a direct conversation with it (`DirectConversations.open`). */
         canMessage: canDirectMessageAgent(userId, agent),
         /** Visibility and the weekly-report flag, so a channel picker offers only the Agents a
@@ -375,7 +374,7 @@ export class WorkspaceMembers {
       isViewer,
       canChangeRole: manageable,
       canRemove: manageable && !isViewer,
-      createdAgents: person.agents.map((agent) => createdAgentView(workspaceId, agent, person)),
+      createdAgents: person.agents.map((agent) => createdAgentView(agent, person)),
     };
   }
 
@@ -412,7 +411,7 @@ export class WorkspaceMembers {
           total: person.agents.length,
           items: person.agents
             .slice(0, CREATED_AGENT_FACES)
-            .map((agent) => createdAgentView(workspaceId, agent, person)),
+            .map((agent) => createdAgentView(agent, person)),
         },
       })),
       limit,

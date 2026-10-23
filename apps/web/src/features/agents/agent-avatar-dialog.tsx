@@ -1,61 +1,60 @@
-import { useEffect, useState } from "react";
-import { Upload01, XClose as X } from "@untitledui/icons";
-import { Heading } from "react-aria-components";
+import { useState } from "react";
+import { XClose as X } from "@untitledui/icons";
+import { Heading, RadioGroup } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
-import { cx } from "#src/utils/cx";
+import { AvatarChoice } from "#src/features/profiles/avatar-choice";
+import { AGENT_MASCOTS, isAgentMascot, type AgentMascot } from "./agent-mascot";
+import { mascotStaticUrl } from "./mascot-contract";
+
+const MASCOT_LABELS: Record<AgentMascot, () => string> = {
+  blue: m.agent_mascot_blue,
+  orange: m.agent_mascot_orange,
+  pink: m.agent_mascot_pink,
+  green: m.agent_mascot_green,
+  purple: m.agent_mascot_purple,
+  black: m.agent_mascot_black,
+  yellow: m.agent_mascot_yellow,
+};
 
 /**
- * The creator's change-avatar dialog, opened by clicking the Agent's picture in its profile: an
- * upload tile beside a live preview. Nothing is written until Save; Cancel and Escape drop the
- * choice. Restoring the platform default picture is its own action and applies at once.
+ * The creator's mascot picker, opened by clicking the Agent's picture in its profile: the
+ * platform's mascots in a grid with the one the Agent shows now selected. Nothing is written
+ * until Save; Cancel and Escape drop the choice.
  */
 export function AgentAvatarDialog({
   name,
-  avatarUrl,
+  mascot,
   open,
   onOpenChange,
-  onUpload,
-  onRemove,
+  onSave,
 }: {
   name: string;
-  avatarUrl: string;
+  /** The mascot the Agent shows now. */
+  mascot: AgentMascot;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUpload: (file: File) => Promise<void>;
-  /** Present only while the Agent has its own picture to remove. */
-  onRemove?: () => Promise<void>;
+  onSave: (mascot: AgentMascot) => Promise<void>;
 }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [picked, setPicked] = useState<AgentMascot | null>(null);
   const [failed, setFailed] = useState(false);
   const [busy, guard] = useSubmitGuard();
-
-  // The preview of an uploaded file is an object URL, which must be revoked to free the blob.
-  useEffect(() => {
-    if (!file) {
-      setFilePreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setFilePreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+  const selected = picked ?? mascot;
 
   function reset() {
-    setFile(null);
+    setPicked(null);
     setFailed(false);
   }
 
-  function run(task: () => Promise<void>) {
+  function save() {
     setFailed(false);
     void guard(async () => {
       try {
-        await task();
+        await onSave(selected);
         reset();
         onOpenChange(false);
       } catch {
@@ -90,70 +89,43 @@ export function AgentAvatarDialog({
                   onClick={close}
                 />
               </div>
-              <div className="mt-5 flex items-center gap-6 px-6">
-                <div className="flex shrink-0 flex-col items-center gap-2 sm:w-32">
-                  <img
-                    src={filePreview ?? avatarUrl}
-                    alt=""
-                    className="size-28 rounded-2xl object-cover"
+              <p className="mt-1 truncate px-6 text-sm text-tertiary">{name}</p>
+              <RadioGroup
+                aria-label={m.agent_avatar_dialog_title()}
+                value={selected}
+                onChange={(value) => {
+                  if (isAgentMascot(value)) setPicked(value);
+                }}
+                isDisabled={busy}
+                orientation="horizontal"
+                className="mt-5 grid grid-cols-4 gap-x-3 gap-y-4 px-6"
+              >
+                {AGENT_MASCOTS.map((key) => (
+                  <AvatarChoice
+                    key={key}
+                    value={key}
+                    src={mascotStaticUrl(key)}
+                    label={MASCOT_LABELS[key]()}
                   />
-                  <p className="max-w-full truncate text-sm font-medium text-primary">{name}</p>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <label
-                    className={cx(
-                      "flex size-20 cursor-pointer items-center justify-center rounded-xl border border-dashed border-secondary text-tertiary transition-colors hover:bg-secondary has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus-ring",
-                      file &&
-                        "border-solid bg-brand-primary text-brand-secondary ring-2 ring-focus-ring",
-                      busy && "pointer-events-none opacity-50",
-                    )}
-                  >
-                    <Upload01 className="size-5" />
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      aria-label={m.agent_avatar_upload()}
-                      disabled={busy}
-                      className="sr-only"
-                      onChange={(event) => {
-                        const picked = event.currentTarget.files?.[0];
-                        event.currentTarget.value = "";
-                        if (picked) setFile(picked);
-                      }}
-                    />
-                  </label>
-                  <p className="mt-3 text-xs text-tertiary">{m.agent_avatar_help()}</p>
-                </div>
-              </div>
+                ))}
+              </RadioGroup>
               {failed && (
                 <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
                   {m.agent_avatar_save_error()}
                 </p>
               )}
-              <div className="mt-6 flex shrink-0 flex-wrap items-center gap-3 border-t border-secondary px-6 py-4">
-                {onRemove && (
-                  <Button
-                    color="tertiary"
-                    size="sm"
-                    isDisabled={busy}
-                    onPress={() => run(onRemove)}
-                  >
-                    {m.agent_avatar_remove()}
-                  </Button>
-                )}
-                <div className="ml-auto flex gap-3">
-                  <Button color="secondary" isDisabled={busy} onPress={close}>
-                    {m.controls_cancel()}
-                  </Button>
-                  <Button
-                    isDisabled={!file || busy}
-                    isLoading={busy}
-                    showTextWhileLoading
-                    onPress={() => file && run(() => onUpload(file))}
-                  >
-                    {m.agent_avatar_save()}
-                  </Button>
-                </div>
+              <div className="mt-6 flex shrink-0 items-center justify-end gap-3 border-t border-secondary px-6 py-4">
+                <Button color="secondary" isDisabled={busy} onPress={close}>
+                  {m.controls_cancel()}
+                </Button>
+                <Button
+                  isDisabled={selected === mascot || busy}
+                  isLoading={busy}
+                  showTextWhileLoading
+                  onPress={save}
+                >
+                  {m.agent_avatar_save()}
+                </Button>
               </div>
             </>
           )}

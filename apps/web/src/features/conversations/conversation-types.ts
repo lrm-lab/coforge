@@ -99,6 +99,8 @@ export type ConversationProps = {
   /** Whether the composer offers @-completion; off where a mention stays plain text (a DM between
    * members). The members still resolve names and fill a Task's assignee list. */
   mentionCompletion?: boolean;
+  /** Shown above the main composer, never above a thread's (the busy Agents' line). */
+  aboveComposer?: ReactNode;
   onSend: (
     body: string,
     idempotencyKey: string,

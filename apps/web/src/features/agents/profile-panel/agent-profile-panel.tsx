@@ -45,8 +45,7 @@ import {
 } from "#src/features/agents/agent-form";
 import {
   updateAgent,
-  uploadAgentAvatar,
-  removeAgentAvatar,
+  setAgentMascot,
   updateAgentRole,
   saveAgentRuntimeCredential,
   deleteAgentRuntimeCredential,
@@ -212,8 +211,7 @@ export function AgentProfilePanel({
   });
 
   const update = useServerFn(updateAgent);
-  const uploadAvatar = useServerFn(uploadAgentAvatar);
-  const removeAvatar = useServerFn(removeAgentAvatar);
+  const pickMascot = useServerFn(setAgentMascot);
   const updateRole = useServerFn(updateAgentRole);
   const saveCredential = useServerFn(saveAgentRuntimeCredential);
   const deleteCredential = useServerFn(deleteAgentRuntimeCredential);
@@ -431,22 +429,10 @@ export function AgentProfilePanel({
               await update({ data: baseUpdateInput({ description: value }) });
               await invalidate();
             }}
-            onAvatarChange={
+            onMascotChange={
               owned
-                ? async (file) => {
-                    const data = new FormData();
-                    data.set("agentId", agentId);
-                    data.set("file", file);
-                    await uploadAvatar({ data });
-                    await invalidate();
-                    await router.invalidate();
-                  }
-                : undefined
-            }
-            onAvatarRemove={
-              owned
-                ? async () => {
-                    await removeAvatar({ data: { agentId } });
+                ? async (mascot) => {
+                    await pickMascot({ data: { agentId, mascot } });
                     await invalidate();
                     await router.invalidate();
                   }

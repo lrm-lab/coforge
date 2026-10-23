@@ -39,7 +39,7 @@ type DetailAgent = {
   /** Who can see this Agent; optional so a caller that has not started selecting it
    * yet still satisfies this type. */
   visibility?: string;
-  avatarObjectKey?: string | null;
+  avatarMascot?: string | null;
   /** Set once the Agent is deleted; its profile stays readable. */
   deletedAt?: Date | null;
   /** Who deleted it, when that was recorded. */
@@ -107,7 +107,7 @@ export class AgentDetailQuery {
       isWeeklyReportAssistant: Boolean(agent.weeklyReportAssistant),
       stopped: Boolean(agent.stoppedAt),
       visibility: agent.visibility,
-      avatarObjectKey: agent.avatarObjectKey ?? null,
+      avatarMascot: agent.avatarMascot ?? null,
       deletedAt: agent.deletedAt ?? null,
       deletedBy: agent.deletedBy ?? null,
       /** The viewer may open a direct conversation with it (`DirectConversations.open`). */

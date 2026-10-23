@@ -5,7 +5,7 @@ import {
   latestTopLevelMessageRows,
 } from "#src/server/db/repositories/channel-list-preview.repositories.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 import {
   messagePreviewLine,
@@ -127,7 +127,7 @@ export async function channelListPreviews(
     agentIds.size
       ? db.agent.findMany({
           where: { id: { in: [...agentIds] } },
-          select: { id: true, name: true, displayName: true, avatarObjectKey: true },
+          select: { id: true, name: true, displayName: true, avatarMascot: true },
         })
       : [],
   ]);
@@ -182,7 +182,7 @@ export async function channelListMembers(
     agentIds.size
       ? db.agent.findMany({
           where: { id: { in: [...agentIds] } },
-          select: { id: true, name: true, displayName: true, avatarObjectKey: true },
+          select: { id: true, name: true, displayName: true, avatarMascot: true },
         })
       : [],
   ]);
@@ -206,7 +206,7 @@ type ChannelListMemberAgent = {
   id: string;
   name: string;
   displayName: string;
-  avatarObjectKey: string | null;
+  avatarMascot: string | null;
 };
 
 /** One active member row as a channel's collage shows it, or null when its person or Agent is
@@ -234,7 +234,7 @@ function channelListMember(
       kind: "agent",
       id: agent.id,
       name: browserSenderName({ agent }),
-      avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+      avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
     };
   }
   return null;

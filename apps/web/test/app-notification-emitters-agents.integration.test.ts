@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
 
 import { resolveAgentProfileUpdate } from "#src/server/agents/agent-profile.server";
-import { AgentAvatars } from "#src/server/agents/agent-avatar.server";
+import { AgentMascots } from "#src/server/agents/agent-mascot.server";
 import { ManageAgents } from "#src/server/agents/manage-agents.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
-import type { FileStorage } from "#src/server/files/file-storage.server";
 import {
   defineEmitterCases,
   emitterCase,
@@ -70,24 +69,6 @@ const edit = (
 
 const agentRow = (agentId: string) => ({ table: "agents", column: "id", value: agentId });
 
-const memoryStorage = (): FileStorage => {
-  const objects = new Map<string, Blob>();
-  return {
-    put: async (key, file) => void objects.set(key, file),
-    open: async (key) => {
-      const body = objects.get(key);
-      return body ? { body, contentType: body.type, sizeBytes: body.size } : null;
-    },
-    remove: async (key) => void objects.delete(key),
-    head: async (key) => {
-      const body = objects.get(key);
-      return body ? { sizeBytes: body.size, contentType: body.type || null } : null;
-    },
-  };
-};
-const png = () =>
-  new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1])], "a.png", { type: "image/png" });
-
 const environment = defineEmitterCases([
   emitterCase({
     type: "agent.profile_updated",
@@ -112,15 +93,10 @@ const environment = defineEmitterCases([
   }),
   emitterCase({
     type: "agent.profile_updated",
-    label: "the owner uploads a picture",
+    label: "the owner picks a mascot",
     setup: agentOf,
     act: (env, fixture, agent) =>
-      new AgentAvatars(env.db, async () => memoryStorage()).store(
-        fixture.workspace.id,
-        fixture.owner.id,
-        agent.id,
-        png(),
-      ),
+      new AgentMascots(env.db).set(fixture.workspace.id, fixture.owner.id, agent.id, "pink"),
     data: (_fixture, agent) => ({ agent_id: agent.id, fields: ["avatar"] }),
     refuse: (_fixture, agent) => agentRow(agent.id),
   }),

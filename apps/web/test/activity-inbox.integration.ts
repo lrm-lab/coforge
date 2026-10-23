@@ -7,7 +7,7 @@ import type { DirectConversationPeer } from "#src/server/conversations/direct-co
 import { ActivityInbox, type ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { openPeopleDirectConversation } from "#src/server/conversations/user-direct-conversations.server";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import type { ChannelListMember } from "#src/server/conversations/channel-list-preview.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 
@@ -337,8 +337,7 @@ test("a channel's items carry the members its group avatar shows, as the Chat si
         displayName: "Kiro",
         ownerId: alice.id,
         runtimeConfig: {},
-        avatarObjectKey: `avatars/${suffix}/kiro.png`,
-        avatarContentType: "image/png",
+        avatarMascot: "pink",
       },
     });
     const joined = Date.UTC(2025, 0, 1);
@@ -400,7 +399,7 @@ test("a channel's items carry the members its group avatar shows, as the Chat si
         kind: "agent",
         id: agent.id,
         name: "Kiro",
-        avatarUrl: agentAvatarUrl(workspace.id, agent.id, `avatars/${suffix}/kiro.png`),
+        avatarUrl: agentAvatarUrl(agent.id, "pink"),
       },
     ];
     const channelItem = page.items.find(

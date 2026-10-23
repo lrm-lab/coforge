@@ -134,7 +134,6 @@ import { Route as ApiAgentV1MessagesMessageIdMentionDeliveriesRouteImport } from
 import { Route as ApiAgentV1MessagesMessageIdReactionsRouteImport } from './routes/api/agent/v1/messages_.$messageId.reactions'
 import { Route as ApiAgentV1MessagesMessageIdResolveRouteImport } from './routes/api/agent/v1/messages_.$messageId.resolve'
 import { Route as ApiAgentV1ThreadsThreadUnfollowRouteImport } from './routes/api/agent/v1/threads_.$thread.unfollow'
-import { Route as ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRouteImport } from './routes/api/workspaces/$workspaceId/agents/$agentId/avatar'
 import { Route as ApiWorkspacesWorkspaceIdAppsAppKeyLogoRouteImport } from './routes/api/workspaces/$workspaceId/apps/$appKey/logo'
 import { Route as ApiWorkspacesWorkspaceIdUsersUserIdAvatarRouteImport } from './routes/api/workspaces/$workspaceId/users/$userId/avatar'
 import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRouteImport } from './routes/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
@@ -832,12 +831,6 @@ const ApiAgentV1ThreadsThreadUnfollowRoute =
     path: '/api/agent/v1/threads/$thread/unfollow',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRoute =
-  ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRouteImport.update({
-    id: '/api/workspaces/$workspaceId/agents/$agentId/avatar',
-    path: '/api/workspaces/$workspaceId/agents/$agentId/avatar',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute =
   ApiWorkspacesWorkspaceIdAppsAppKeyLogoRouteImport.update({
     id: '/api/workspaces/$workspaceId/apps/$appKey/logo',
@@ -1007,7 +1000,6 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/messages/$messageId/reactions': typeof ApiAgentV1MessagesMessageIdReactionsRoute
   '/api/agent/v1/messages/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
   '/api/agent/v1/threads/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
-  '/api/workspaces/$workspaceId/agents/$agentId/avatar': typeof ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
@@ -1138,7 +1130,6 @@ export interface FileRoutesByTo {
   '/api/agent/v1/messages/$messageId/reactions': typeof ApiAgentV1MessagesMessageIdReactionsRoute
   '/api/agent/v1/messages/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
   '/api/agent/v1/threads/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
-  '/api/workspaces/$workspaceId/agents/$agentId/avatar': typeof ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
@@ -1274,7 +1265,6 @@ export interface FileRoutesById {
   '/api/agent/v1/messages_/$messageId/reactions': typeof ApiAgentV1MessagesMessageIdReactionsRoute
   '/api/agent/v1/messages_/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
   '/api/agent/v1/threads_/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
-  '/api/workspaces/$workspaceId/agents/$agentId/avatar': typeof ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
@@ -1409,7 +1399,6 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages/$messageId/reactions'
     | '/api/agent/v1/messages/$messageId/resolve'
     | '/api/agent/v1/threads/$thread/unfollow'
-    | '/api/workspaces/$workspaceId/agents/$agentId/avatar'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
@@ -1540,7 +1529,6 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages/$messageId/reactions'
     | '/api/agent/v1/messages/$messageId/resolve'
     | '/api/agent/v1/threads/$thread/unfollow'
-    | '/api/workspaces/$workspaceId/agents/$agentId/avatar'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
@@ -1675,7 +1663,6 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages_/$messageId/reactions'
     | '/api/agent/v1/messages_/$messageId/resolve'
     | '/api/agent/v1/threads_/$thread/unfollow'
-    | '/api/workspaces/$workspaceId/agents/$agentId/avatar'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
@@ -1776,7 +1763,6 @@ export interface RootRouteChildren {
   ApiAgentV1MessagesMessageIdReactionsRoute: typeof ApiAgentV1MessagesMessageIdReactionsRoute
   ApiAgentV1MessagesMessageIdResolveRoute: typeof ApiAgentV1MessagesMessageIdResolveRoute
   ApiAgentV1ThreadsThreadUnfollowRoute: typeof ApiAgentV1ThreadsThreadUnfollowRoute
-  ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRoute: typeof ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRoute
   ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute: typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute: typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
@@ -2661,13 +2647,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1ThreadsThreadUnfollowRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/workspaces/$workspaceId/agents/$agentId/avatar': {
-      id: '/api/workspaces/$workspaceId/agents/$agentId/avatar'
-      path: '/api/workspaces/$workspaceId/agents/$agentId/avatar'
-      fullPath: '/api/workspaces/$workspaceId/agents/$agentId/avatar'
-      preLoaderRoute: typeof ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/workspaces/$workspaceId/apps/$appKey/logo': {
       id: '/api/workspaces/$workspaceId/apps/$appKey/logo'
       path: '/api/workspaces/$workspaceId/apps/$appKey/logo'
@@ -2997,8 +2976,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1MessagesMessageIdResolveRoute:
     ApiAgentV1MessagesMessageIdResolveRoute,
   ApiAgentV1ThreadsThreadUnfollowRoute: ApiAgentV1ThreadsThreadUnfollowRoute,
-  ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRoute:
-    ApiWorkspacesWorkspaceIdAgentsAgentIdAvatarRoute,
   ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute:
     ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute,
   ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute:

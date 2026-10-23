@@ -28,7 +28,7 @@ const LAST_MESSAGE_SELECT = {
       user: {
         select: { id: true, displayName: true, username: true, avatarObjectKey: true },
       },
-      agent: { select: { id: true, displayName: true, avatarObjectKey: true } },
+      agent: { select: { id: true, displayName: true, avatarMascot: true } },
     },
   },
 } satisfies Prisma.MessageSelect;

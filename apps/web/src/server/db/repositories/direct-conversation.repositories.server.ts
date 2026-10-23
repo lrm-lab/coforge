@@ -72,7 +72,7 @@ import {
   browserSenderName,
   MESSAGE_SENDER_SELECT,
 } from "#src/server/conversations/sender-display.server";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { workspaceUserAvatarUrl } from "./user-profile.repositories.server";
 import { attachmentView } from "#src/server/attachments/attachment-view.server";
 import {
@@ -1009,7 +1009,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
                 displayName: true,
                 description: true,
                 deletedAt: true,
-                avatarObjectKey: true,
+                avatarMascot: true,
                 // Not sent to the browser (see the trimmed `agent:` field of the open); read only
                 // to compute `dmWritable`.
                 ownerId: true,
@@ -1101,7 +1101,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
               name: agent.name,
               displayName: agent.displayName,
               deletedAt: agent.deletedAt,
-              avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey),
+              avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
             },
             // Whether this viewer may still send here: a private Agent's DM stays scoped to
             // its own creator, so an existing DM held by anyone else reads read-only once it goes
@@ -1149,11 +1149,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
                   handle: member.agent.name,
                   label: member.agent.displayName?.trim() || member.agent.name,
                   description: member.agent.description?.trim() ?? "",
-                  avatarUrl: agentAvatarUrl(
-                    workspaceId,
-                    member.agent.id,
-                    member.agent.avatarObjectKey,
-                  ),
+                  avatarUrl: agentAvatarUrl(member.agent.id, member.agent.avatarMascot),
                   mentionScore: 0,
                 }
               : undefined,

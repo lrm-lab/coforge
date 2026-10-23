@@ -295,7 +295,7 @@ export class WorkspaceDeletion {
     ]);
   }
 
-  /** The Workspace icon, its Project icons and its Agents' avatars, deleted Agents included. */
+  /** The Workspace icon, its Project icons and its Apps' logos. */
   async #imageKeys(
     tx: Prisma.TransactionClient,
     workspaceId: string,
@@ -305,10 +305,6 @@ export class WorkspaceDeletion {
       where: { workspaceId, iconObjectKey: { not: null } },
       select: { iconObjectKey: true },
     });
-    const agents = await tx.agent.findMany({
-      where: { workspaceId, avatarObjectKey: { not: null } },
-      select: { avatarObjectKey: true },
-    });
     const apps = await tx.app.findMany({
       where: { ownerWorkspaceId: workspaceId, logoObjectKey: { not: null } },
       select: { logoObjectKey: true },
@@ -316,7 +312,6 @@ export class WorkspaceDeletion {
     return [
       workspaceIconKey,
       ...projects.map(({ iconObjectKey }) => iconObjectKey),
-      ...agents.map(({ avatarObjectKey }) => avatarObjectKey),
       ...apps.map(({ logoObjectKey }) => logoObjectKey),
     ].filter((key): key is string => key !== null);
   }

@@ -5,7 +5,7 @@ import type {
   WorkspaceProfileRow,
 } from "#src/server/db/repositories/app-installation-data.repositories.server";
 import type { ComputerKind } from "#src/features/computers/computer-identity";
-import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import {
   PROFILE_IMAGE_STYLES,
   type ProfileImageStyle,
@@ -61,9 +61,7 @@ export class AppInstallationData {
       handle: agent.name,
       display_name: agent.displayName,
       description: agent.description,
-      avatar_url: agent.avatarObjectKey
-        ? this.picture(agent.avatarObjectKey, PROFILE_IMAGE_STYLES.avatar)
-        : new URL(defaultAgentAvatarUrl(agent.id), this.issuer).href,
+      avatar_url: new URL(agentAvatarUrl(agent.id, agent.avatarMascot), this.issuer).href,
       created_at: agent.createdAt.toISOString(),
     }));
   }

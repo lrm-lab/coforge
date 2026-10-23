@@ -7,8 +7,11 @@ model Agent {
   name                      String
   displayName               String
   description               String                     @default("")
-  /// Current picture in the shared image store. Bytes and delivery URLs stay out of PostgreSQL,
-  /// the same rule as User.avatarObjectKey.
+  /// The platform mascot its creator picked (a key of `AGENT_MASCOTS`, validated at the server
+  /// boundary); null shows the mascot the Agent's id chooses.
+  avatarMascot              String?
+  /// Unused since Agent pictures became mascots: kept only so the previous Web build still runs
+  /// against this schema during a deploy or rollback; a later migration drops both.
   avatarObjectKey           String?
   avatarContentType         String?
   /// Agent's own server role for management authority: owner | admin | member (never "owner" in

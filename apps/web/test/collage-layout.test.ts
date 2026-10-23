@@ -15,7 +15,7 @@ test("One member fills the circle", () => {
   expect([only.left, only.top, only.size, only.overflow]).toEqual([0, 0, 1, false]);
 });
 
-test("Two members sit diagonally, top-left under bottom-right, overlapping", () => {
+test("Two members sit diagonally, top-left under bottom-right, meeting at the corners", () => {
   const [first, second] = collageLayout(2) as [CollageSlot, CollageSlot];
   expect(first.left).toBeLessThan(second.left);
   expect(first.top).toBeLessThan(second.top);
@@ -32,7 +32,7 @@ test("Three members cluster: two on top, one centred below", () => {
   expect(c.left + c.size / 2).toBeCloseTo(0.5, 5);
 });
 
-test("Four members form an overlapping 2 by 2", () => {
+test("Four members form a 2 by 2 that just overlaps", () => {
   const [a, b, c, d] = collageLayout(4) as [CollageSlot, CollageSlot, CollageSlot, CollageSlot];
   expect(a.top).toBe(b.top);
   expect(c.top).toBe(d.top);
@@ -55,14 +55,37 @@ test("Never more than four slots; the fourth is the overflow dots only above fou
   }
 });
 
-test("Every slot stays inside the circle's frame", () => {
+test("Every slot stays inside the frame's square, its centre inside the round frame", () => {
   for (const count of [1, 2, 3, 4, 5]) {
     for (const slot of collageLayout(count)) {
-      const radius = slot.size / 2;
-      const dx = slot.left + radius - 0.5;
-      const dy = slot.top + radius - 0.5;
-      expect(Math.hypot(dx, dy) + radius).toBeLessThanOrEqual(0.5 + 1e-9);
+      expect(slot.left).toBeGreaterThanOrEqual(0);
+      expect(slot.top).toBeGreaterThanOrEqual(0);
+      expect(slot.left + slot.size).toBeLessThanOrEqual(1 + 1e-9);
+      expect(slot.top + slot.size).toBeLessThanOrEqual(1 + 1e-9);
+      const dx = slot.left + slot.size / 2 - 0.5;
+      const dy = slot.top + slot.size / 2 - 0.5;
+      expect(Math.hypot(dx, dy)).toBeLessThanOrEqual(0.5);
     }
+  }
+});
+
+test("Faces overlap by at most two units of the 48-unit frame, so each reads whole", () => {
+  for (const count of [2, 3, 4, 5]) {
+    const slots = collageLayout(count);
+    for (const [index, a] of slots.entries()) {
+      for (const b of slots.slice(index + 1)) {
+        const across = Math.min(a.left + a.size, b.left + b.size) - Math.max(a.left, b.left);
+        const down = Math.min(a.top + a.size, b.top + b.size) - Math.max(a.top, b.top);
+        expect(Math.min(across, down) * 48).toBeLessThanOrEqual(2 + 1e-9);
+      }
+    }
+  }
+});
+
+test("Four members are 22 to 23 units each", () => {
+  for (const slot of collageLayout(4)) {
+    expect(slot.size * 48).toBeGreaterThanOrEqual(22);
+    expect(slot.size * 48).toBeLessThanOrEqual(23);
   }
 });
 

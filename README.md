@@ -65,6 +65,7 @@ The architecture invariants every change must respect are in
 | [docs/agents/grok-acp.md](docs/agents/grok-acp.md) | Persistent Grok ACP behavior, compatibility and native verification |
 | [docs/research/](docs/research/README.md) | Evidence-backed research reports |
 | [apps/web/README.md](apps/web/README.md) | Web app setup and scripts |
+| [apps/web/assets/mascots/README.md](apps/web/assets/mascots/README.md) | Agent mascot Rive file: generator, runtime contract, static avatars, Rive CLI pin |
 | [apps/web/src/components/ui/README.md](apps/web/src/components/ui/README.md) | UI component inventory and exceptions |
 | [packages/computer/README.md](packages/computer/README.md) | `coforge-computer` package |
 | [packages/daemon/README.md](packages/daemon/README.md) | `coforge-daemon` package |

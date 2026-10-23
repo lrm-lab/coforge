@@ -5,7 +5,7 @@ import { isAppError } from "#src/lib/app-error";
  * with 401 for `ACCESS_DENIED` (no session), 404 for `NOT_FOUND` (absent, or not visible to this
  * viewer) and 503 for anything else. A thrown value that is not an `AppError` is rethrown.
  *
- * The Workspace icon, Agent avatar, Workspace member avatar, project icon and project raw-file
+ * The Workspace icon, Workspace member avatar, project icon and project raw-file
  * routes each wrote this out by hand. `/api/me/avatar` (which also answers 400 for an upload) and
  * the Computer creator avatar (403 rather than 401) refuse differently and keep their own.
  */

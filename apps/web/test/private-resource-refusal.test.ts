@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 
-import { Route as AgentAvatarRoute } from "#src/routes/api/workspaces/$workspaceId/agents/$agentId/avatar";
 import { Route as WorkspaceIconRoute } from "#src/routes/api/workspaces/$workspaceId/icon";
 import { Route as ProjectIconRoute } from "#src/routes/api/projects.$projectId.icon";
 import { Route as ProjectRawRoute } from "#src/routes/api/projects.$projectId.raw.$";
@@ -18,7 +17,6 @@ const get = (route: { options: { server?: unknown } }) =>
 
 const routes = [
   ["workspace icon", WorkspaceIconRoute, { workspaceId: "not-a-uuid" }],
-  ["Agent avatar", AgentAvatarRoute, { workspaceId: "not-a-uuid", agentId: "not-a-uuid" }],
   ["project icon", ProjectIconRoute, { projectId: "not-a-uuid" }],
   ["project raw file", ProjectRawRoute, { projectId: "not-a-uuid", _splat: "README.md" }],
 ] as const;

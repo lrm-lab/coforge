@@ -86,6 +86,8 @@ These rules apply to `src/features/agents/`.
   while the member timeline aggregates groups. Timeline rows show no conversation link (like
   every other Agent's); the lineage stays in the data. Unscoped historical rows keep their
   original meaning.
+- Mascots and the busy-Agents line above a main composer (`busy-agents-strip.tsx`) follow
+  [mascots.md](mascots.md).
 - The Agent card (`agent-hover-card.tsx`) peeks from the avatars in a message
   stream only; conversation and profile headers show a plain avatar. Its
   Recent activity goes only to the viewers who get the panel's Activity tab
@@ -161,10 +163,11 @@ These rules apply to `src/features/agents/`.
   for whoever gets that tab. Nothing else in the panel repeats it.
 - `deleted-agent.tsx` owns archived-sender rendering (grey avatar and `ARCHIVED`
   badge) for every message-history surface. Use it rather than local styling.
-- `agent-avatar-dialog.tsx` is the creator's change-avatar dialog, opened by
-  clicking the avatar in the Profile tab: an upload with a preview, saved only on
-  Save, and a restore-default action. Agent avatar components fall back to
-  `defaultAgentAvatarUrl(agentId)`, never initials, while an Agent's data is loading.
+- `agent-avatar-dialog.tsx` is the creator's mascot picker, opened by clicking
+  the avatar in the Profile tab: a grid of the platform mascots
+  (`agent-mascot.ts`) with the current one selected, saved only on Save. Agent
+  avatar components fall back to `agentAvatarUrl(agentId)`, never initials, while
+  an Agent's data is loading.
 - `agent-visibility.ts` holds the `AgentVisibility` vocabulary outside any
   `.server.ts` file so browser validators can import it.
 - The environment editor edits only user-declared Agent environment overrides.

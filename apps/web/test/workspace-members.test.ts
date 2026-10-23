@@ -4,7 +4,7 @@ import { AppError } from "#src/lib/app-error";
 import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { WorkspaceMembers } from "#src/server/workspaces/members.server";
 import { withFakePagination } from "./helpers/fake-paginated";
-import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 
 describe("WorkspaceMembers", () => {
   test("denies a User who is not a member before reading the directory", async () => {
@@ -62,7 +62,7 @@ describe("WorkspaceMembers", () => {
               name: "builder",
               displayName: "",
               description: "Builds releases",
-              avatarObjectKey: "workspaces/workspace-1/agents/other-agent/avatars/pic-1/original",
+              avatarMascot: "pink",
               ownerId: "another-user",
               visibility: "public",
               createdAt: new Date("2026-07-23T08:00:00.000Z"),
@@ -130,7 +130,7 @@ describe("WorkspaceMembers", () => {
         name: true,
         displayName: true,
         description: true,
-        avatarObjectKey: true,
+        avatarMascot: true,
         createdAt: true,
         owner: { select: { id: true, username: true, displayName: true, avatarObjectKey: true } },
         weeklyReportAssistant: { select: { id: true } },
@@ -165,7 +165,7 @@ describe("WorkspaceMembers", () => {
           name: "builder",
           displayName: "builder",
           description: "Builds releases",
-          avatarUrl: "/api/workspaces/workspace-1/agents/other-agent/avatar?v=pic-1",
+          avatarUrl: agentAvatarUrl("other-agent", "pink"),
           computerId: "office-mac-id",
           computerName: "Team workstation",
           createdAt: new Date("2026-07-23T08:00:00.000Z"),
@@ -182,7 +182,7 @@ describe("WorkspaceMembers", () => {
           name: "reviewer",
           displayName: "Ada Lovelace的周报助手",
           description: "Reviews changes",
-          avatarUrl: defaultAgentAvatarUrl("detached-agent"),
+          avatarUrl: agentAvatarUrl("detached-agent"),
           computerId: null,
           computerName: null,
           createdAt: new Date("2026-08-01T00:00:00.000Z"),
@@ -194,7 +194,7 @@ describe("WorkspaceMembers", () => {
     });
     expect(JSON.stringify(result)).not.toContain("private");
     expect(JSON.stringify(result)).not.toContain("ownerId");
-    expect(JSON.stringify(result)).not.toContain("avatarObjectKey");
+    expect(JSON.stringify(result)).not.toContain("avatarMascot");
   });
 
   test("hides a private Agent owned by someone else from a plain member's directory", async () => {
@@ -278,7 +278,7 @@ describe("WorkspaceMembers", () => {
               id: "agent-1",
               name: "atlas",
               displayName: "Atlas Bot",
-              avatarObjectKey: null,
+              avatarMascot: null,
               ownerId: "viewer",
             },
           ],
@@ -374,7 +374,7 @@ describe("WorkspaceMembers", () => {
                   name: "cobol",
                   displayName: "COBOL",
                   description: "Writes reports",
-                  avatarObjectKey: null,
+                  avatarMascot: null,
                   weeklyReportAssistant: null,
                 },
               ],
@@ -426,7 +426,7 @@ describe("WorkspaceMembers", () => {
           {
             id: "agent-1",
             displayName: "COBOL",
-            avatarUrl: defaultAgentAvatarUrl("agent-1"),
+            avatarUrl: agentAvatarUrl("agent-1"),
           },
         ],
       });

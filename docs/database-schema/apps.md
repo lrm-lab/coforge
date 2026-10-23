@@ -49,7 +49,7 @@ shown. A non-canonical spelling is refused, not rewritten (`https:evil.example/c
 `http://0x7f.1/cb`, `https://ACME.example/`), so a bare origin is written with its slash:
 `https://acme.example/`.
 
-An app's logo is set, replaced and reset by its Workspace's owners and admins, as an Agent's avatar
+An app's logo is set, replaced and reset by its Workspace's owners and admins, as a person's avatar
 is: the same image store and checks (at most 5 MB, bytes sniffed), but a GIF (`GIF87a`/`GIF89a`)
 is taken too, as Raft takes one (`APP_LOGO_UPLOAD_TYPES`; avatars and icons still refuse it); the old
 object removed on a replace, a reset or the app's delete (the key the deleted row had, so a logo

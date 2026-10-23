@@ -118,6 +118,15 @@ run = "bun run --cwd packages/coforge-sdk generate && cd apps/web && bun run che
 description = "Build the Web package"
 run = "bun run --cwd packages/coforge-sdk generate && cd apps/web && bun run build"
 
+[tasks."build:mascots"]
+description = "Regenerate the Agent mascot Rive file and static avatars (apps/web/assets/mascots/README.md)"
+# The Rive CLI is not in mise's registry: the http backend pins the release artifact, and the URL
+# template follows its macos-arm64 / linux-x64 / windows-x64 names
+# (https://mise.jdx.dev/dev-tools/backends/http.html, https://releases.rive.app/cli/v1.7.0/manifest.json).
+# Like powershell above it is declared on its task, so `mise install` elsewhere never downloads it.
+tools = { "http:rive-cli[url=https://releases.rive.app/cli/v{{ version }}/rive-{{ os() }}-{{ arch() }}.tar.gz]" = "1.7.0" }
+run = "cd apps/web && bun run build:mascots"
+
 [tasks."verify:oss-cdn"]
 description = "Verify OSS/CDN acceptance evidence"
 run = "bun run verify:oss-cdn"

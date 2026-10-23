@@ -44,6 +44,8 @@
         "@react-stately/utils": "^3.12.1",
         "@react-types/overlays": "^3.10.0",
         "@react-types/shared": "^3.36.1",
+        "@rive-app/canvas-lite": "2.44.0",
+        "@rive-app/react-canvas-lite": "4.36.0",
         "@tailwindcss/typography": "^0.5.20",
         "@tanstack/query-db-collection": "1.2.15",
         "@tanstack/query-persist-client-core": "5.102.8",
@@ -838,6 +840,10 @@
     "@react-types/shared": ["@react-types/shared@3.36.1", "", { "peerDependencies": { "react": "^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1" } }, "sha512-AzsuD9OfxTOZMMvTRhlN3oHBwOmFN7tDh27LzqmHt4+uOgPhJT7ZM7/kVs/8/o0WxayMUIk3hBmCFRHv1FUoag=="],
 
     "@remirror/core-constants": ["@remirror/core-constants@3.0.0", "", {}, "sha512-42aWfPrimMfDKDi4YegyS7x+/0tlzaqwPQCULLanv3DMIlu96KTJR0fM5isWX2UViOqlGnX6YFgqWepcX+XMNg=="],
+
+    "@rive-app/canvas-lite": ["@rive-app/canvas-lite@2.44.0", "", {}, "sha512-ywsdoYLsC+8RIZ+aMCvHQQgGRxnBHojReaOxDqI5ZL2Y/nRKdySAbLFnSrJIAbGygdkuQdJVUNF3AF01mxGhEA=="],
+
+    "@rive-app/react-canvas-lite": ["@rive-app/react-canvas-lite@4.36.0", "", { "dependencies": { "@rive-app/canvas-lite": "2.44.0" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0" } }, "sha512-xGcYV/gNq1nHesSWkJ0tOOy6pRzKi/y9ISiY1h4vd48+WleXlYWLyHd1zsnmmXBOHedlKSMnI6G0j8Vf9hcw+w=="],
 
     "@rolldown/binding-android-arm-eabi": ["@rolldown/binding-android-arm-eabi@1.2.6", "", { "os": "android", "cpu": "arm" }, "sha512-b+jTcARdTiFLI6jB4a5XjTm0RWd6KcRfQj/I2356fxUZemiho9zQLxo0RtCuMDAyKcLo6cEltkgbQp6d1+sjjQ=="],
 

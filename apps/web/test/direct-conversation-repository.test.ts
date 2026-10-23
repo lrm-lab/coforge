@@ -8,7 +8,7 @@ import {
   type AgentRecoveryContext,
   type PendingAgentDelivery,
 } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import type { AgentMessageRecord } from "#src/server/agents/agent-messages.server";
 
 describe("PrismaDirectConversationRepository", () => {
@@ -298,7 +298,7 @@ describe("PrismaDirectConversationRepository", () => {
                     name: "helper",
                     displayName: "Helper",
                     description: "",
-                    avatarObjectKey: null,
+                    avatarMascot: null,
                   },
                 },
               ],
@@ -350,7 +350,7 @@ describe("PrismaDirectConversationRepository", () => {
         handle: "helper",
         label: "Helper",
         description: "",
-        avatarUrl: defaultAgentAvatarUrl("agent-1"),
+        avatarUrl: agentAvatarUrl("agent-1"),
         mentionScore: 0,
       },
     ]);
@@ -422,7 +422,7 @@ describe("PrismaDirectConversationRepository", () => {
                 userId: null,
                 agentId: "agent-helper",
                 user: null,
-                agent: { name: "helper", displayName: "Helper", avatarObjectKey: null },
+                agent: { name: "helper", displayName: "Helper", avatarMascot: null },
               },
             },
           ];

@@ -91,15 +91,14 @@ describe("ManageAgents", () => {
     computerId: "computer-1",
   };
 
-  // Frank, 2026-10-22: a new Agent stores no picture of its own; it shows the platform default
-  // (`defaultAgentAvatarUrl`) until its creator uploads one.
-  test("a new Agent is created with no avatar object of its own", async () => {
+  // Frank, 2026-10-24: a new Agent stores no mascot pick; it shows the one its id chooses
+  // (`agentAvatarUrl`) until its creator picks one.
+  test("a new Agent is created with no mascot pick of its own", async () => {
     const { agentManagement, records } = fixture();
 
     await agentManagement.create(principal, input);
 
-    expect(records[0]?.avatarObjectKey ?? null).toBeNull();
-    expect(records[0]?.avatarContentType ?? null).toBeNull();
+    expect(records[0]?.avatarMascot ?? null).toBeNull();
   });
 
   test("an Agent a person creates owes them an introduction", async () => {

@@ -28,7 +28,7 @@ test("Agent collection cards survive message history reads without exposing the 
         name: "assistant",
         displayName: "Assistant",
         deletedAt: null,
-        avatarObjectKey: null,
+        avatarMascot: null,
       },
     },
   });
@@ -63,7 +63,7 @@ test("a send-prompt envelope is a confirm card and the chat hides the fence", ()
         name: "weekly-report",
         displayName: "周报助手",
         deletedAt: null,
-        avatarObjectKey: null,
+        avatarMascot: null,
       },
     },
   });
@@ -184,7 +184,7 @@ test("an Agent-sent channel message carries senderAgentId", () => {
       sender: {
         userId: null,
         agentId: "agent-builder",
-        agent: { name: "builder", displayName: "Builder", deletedAt: null, avatarObjectKey: null },
+        agent: { name: "builder", displayName: "Builder", deletedAt: null, avatarMascot: null },
         user: null,
       },
     }),
@@ -286,7 +286,7 @@ test("an Agent's message is attributed to its display name, falling back to its 
       sender: {
         userId: null,
         agentId: "agent-builder",
-        agent: { name: "builder", displayName: "Builder", deletedAt: null, avatarObjectKey: null },
+        agent: { name: "builder", displayName: "Builder", deletedAt: null, avatarMascot: null },
         user: null,
       },
     }),
@@ -300,7 +300,7 @@ test("an Agent's message is attributed to its display name, falling back to its 
         userId: null,
         agentId: "agent-builder",
         // `Agent.displayName` is a required column; unset is the empty string.
-        agent: { name: "builder", displayName: "", deletedAt: null, avatarObjectKey: null },
+        agent: { name: "builder", displayName: "", deletedAt: null, avatarMascot: null },
         user: null,
       },
     }),
@@ -332,7 +332,7 @@ test("a person's message names its sender's user id, which opens their profile; 
         userId: null,
         agentId: "assistant",
         user: null,
-        agent: { name: "bot", displayName: "Bot", deletedAt: null, avatarObjectKey: null },
+        agent: { name: "bot", displayName: "Bot", deletedAt: null, avatarMascot: null },
       },
     }),
     WORKSPACE_ID,
@@ -347,7 +347,7 @@ test("an Agent's message carries its own member row and no user id, so it is nev
       sender: {
         userId: null,
         agentId: "agent-helper",
-        agent: { name: "helper", displayName: "Helper", deletedAt: null, avatarObjectKey: null },
+        agent: { name: "helper", displayName: "Helper", deletedAt: null, avatarMascot: null },
         user: null,
       },
     }),

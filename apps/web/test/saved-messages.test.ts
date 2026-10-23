@@ -99,7 +99,7 @@ describe("savedMessageView", () => {
               name: "muse",
               displayName: "Muse",
               deletedAt: new Date("2026-09-20T00:00:00Z"),
-              avatarObjectKey: null,
+              avatarMascot: null,
             },
           },
         },

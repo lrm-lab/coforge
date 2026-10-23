@@ -24,7 +24,7 @@ import {
   chatSectionOrderQuery,
   chatSectionsQuery,
 } from "#src/features/conversations/chat-sections";
-import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 
 /**
  * What the browser's copy of the Query cache holds is read back by later builds, so the shape of
@@ -158,7 +158,7 @@ const fixtures = [
           name: "helper",
           displayName: "Helper",
           deletedAt: null,
-          avatarUrl: defaultAgentAvatarUrl("agent-1"),
+          avatarUrl: agentAvatarUrl("agent-1"),
         },
         dmWritable: true,
         messages: [message],
@@ -377,6 +377,19 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
   },
   // An Agent's `avatarUrl` is never `null`: one without its own upload carries the default picture.
   7: {
+    "channel window": "e7aded67e38ffb44",
+    "direct window with an Agent": "1725081943acee05",
+    "direct window with a person": "4b31a9f0b0c38386",
+    "sidebar channels": "91afa2f21eb4ec87",
+    "sidebar directs": "5205999212e744be",
+    "channel names": "331d221481674004",
+    "saved messages": "af3437c73adfddaa",
+    "agent workspace scan": "d45d053aa4368e73",
+    "chat sections": "4c7716ab24622fdc",
+    "chat section order": "89829726781b01aa",
+  }, // An Agent's `avatarUrl` is a platform mascot's: the route that served an uploaded picture is gone,
+  // so a stored URL for it would no longer load. The shapes are those of version 7.
+  8: {
     "channel window": "e7aded67e38ffb44",
     "direct window with an Agent": "1725081943acee05",
     "direct window with a person": "4b31a9f0b0c38386",

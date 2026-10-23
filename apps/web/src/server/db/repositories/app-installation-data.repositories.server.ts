@@ -15,7 +15,7 @@ const AGENT_SELECT = {
   name: true,
   displayName: true,
   description: true,
-  avatarObjectKey: true,
+  avatarMascot: true,
   createdAt: true,
 } satisfies Prisma.AgentSelect;
 const CHANNEL_SELECT = {

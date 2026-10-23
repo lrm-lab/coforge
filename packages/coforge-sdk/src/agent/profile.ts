@@ -2,9 +2,9 @@
  * Wire contract for `coforge profile show [<target>]` and `coforge profile update`. Uses the same
  * `{ ok: false, errorCode, error }` error envelope as the Agent Manual and `user info` routes.
  *
- * The profile carries no avatar: a person's and an Agent's picture (`User.avatarObjectKey`,
- * `Agent.avatarObjectKey`) are uploaded in the Web app, so there is no `avatarUrl` field or
- * `--avatar-url` update flag here. A human
+ * The profile carries no avatar: a person's picture (`User.avatarObjectKey`) is set in the Web
+ * app and an Agent's mascot (`Agent.avatarMascot`) is picked there by its creator, so there is no
+ * `avatarUrl` field or `--avatar-url` update flag here. A human
  * profile's `createdAgents` lists Agents the human owns (`Agent.ownerId`); an Agent profile never
  * carries `createdAgents` itself, because `Agent.ownerId` always references a human `User` in
  * CoForge's schema — an Agent can never own another Agent (Agent creation is

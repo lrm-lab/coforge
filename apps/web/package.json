@@ -30,7 +30,8 @@
     "precheck": "bun run db:generate",
     "prebuild": "bun run db:generate",
     "dev:hmr": "bun run ./scripts/dev-web-hmr.ts",
-    "local-servers": "bun run ./scripts/local-servers.ts"
+    "local-servers": "bun run ./scripts/local-servers.ts",
+    "build:mascots": "bun ./assets/mascots/generate.ts --build"
   },
   "dependencies": {
     "@alicloud/credentials": "2.4.7",
@@ -56,6 +57,8 @@
     "@react-stately/utils": "^3.12.1",
     "@react-types/overlays": "^3.10.0",
     "@react-types/shared": "^3.36.1",
+    "@rive-app/canvas-lite": "2.44.0",
+    "@rive-app/react-canvas-lite": "4.36.0",
     "@tailwindcss/typography": "^0.5.20",
     "@tanstack/query-db-collection": "1.2.15",
     "@tanstack/query-persist-client-core": "5.102.8",

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
-import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 
 const membership = { id: "workspace-member-1" };
 
@@ -233,7 +233,7 @@ describe("ConversationHistory", () => {
               userId: null,
               agentId: "agent-builder",
               user: null,
-              agent: { name: "builder", displayName: "Build Assistant", avatarObjectKey: null },
+              agent: { name: "builder", displayName: "Build Assistant", avatarMascot: null },
             }
           : {
               userId: "user-1",
@@ -318,7 +318,7 @@ describe("ConversationHistory", () => {
     expect(page.messages.map(({ senderAvatarUrl }) => senderAvatarUrl)).toEqual([
       "/api/workspaces/workspace-1/users/user-1/avatar?v=avatar-1",
       "/api/workspaces/workspace-1/users/user-1/avatar?v=avatar-1",
-      defaultAgentAvatarUrl("agent-builder"),
+      agentAvatarUrl("agent-builder"),
     ]);
   });
   test("an around read anchored on a reply centres on its thread's root and names it", async () => {

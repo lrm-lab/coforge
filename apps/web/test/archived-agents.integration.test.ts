@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { listArchivedAgents } from "#src/server/agents/archived-agents.server";
 
 /**
@@ -82,7 +82,7 @@ test.skipIf(!connectionString)(
       ) => ({
         id: agentRow.id,
         displayName,
-        avatarUrl: agentAvatarUrl(workspace.id, agentRow.id, null),
+        avatarUrl: agentAvatarUrl(agentRow.id),
         archivedAt,
         computerName,
       });

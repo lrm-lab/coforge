@@ -28,7 +28,8 @@ import { setAgentRole } from "#src/server/agents/agent-role.server";
 import { AppError, isAppErrorCode } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { listVisibleAgentModels } from "#src/server/agents/agent-models.server";
-import { AgentAvatars, agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
+import { AGENT_MASCOTS, agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
+import { AgentMascots } from "#src/server/agents/agent-mascot.server";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
@@ -154,9 +155,11 @@ export const listAgents = createServerFn({ method: "GET" })
     return agents.map((agent) => {
       const status = statusByAgentId.get(agent.id);
       const displaySnapshot = displayByAgentId.get(agent.id);
+      const mascot = agentMascot(agent.id, agent.avatarMascot);
       return {
         ...agent,
-        avatarUrl: agentAvatarUrl(workspaceId, agent.id, agent.avatarObjectKey ?? null),
+        mascot,
+        avatarUrl: agentAvatarUrl(agent.id, mascot),
         stopped: Boolean(agent.stoppedAt),
         ...(displaySnapshot ? { display: displaySnapshot } : {}),
         status: {
@@ -481,7 +484,8 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
         result.owner.avatarObjectKey ?? null,
       ),
     },
-    avatarUrl: agentAvatarUrl(workspaceId, result.id, result.avatarObjectKey ?? null),
+    mascot: agentMascot(result.id, result.avatarMascot),
+    avatarUrl: agentAvatarUrl(result.id, result.avatarMascot ?? null),
     runtimeConfig: publicAgentRuntimeConfig(runtimeConfig),
     ownedByCurrentUser,
     runtimeCredential,
@@ -516,44 +520,24 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
   };
 }
 
-/** The Agent profile panel's data seam (see `features/agents/profile-panel/`): the Members
- * directory and every conversation panel share this one query. */
-const avatarFileSchema = z.custom<File>(
-  (value) => typeof File !== "undefined" && value instanceof File,
-);
+const setAgentMascotInput = z.object({ agentId: agentIdSchema, mascot: z.enum(AGENT_MASCOTS) });
 
-/** The creator replaces this Agent's picture. Bytes stay in the image store; the row keeps the key. */
-export const uploadAgentAvatar = createServerFn({ method: "POST" })
+/** The creator picks which platform mascot this Agent shows. */
+export const setAgentMascot = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator((data: unknown) => {
-    if (!(data instanceof FormData)) throw new AppError("INVALID_INPUT");
-    const agentId = agentIdSchema.safeParse(data.get("agentId"));
-    const file = avatarFileSchema.safeParse(data.get("file"));
-    if (!agentId.success || !file.success) throw new AppError("INVALID_INPUT");
-    return { agentId: agentId.data, file: file.data };
-  })
+  .validator(setAgentMascotInput)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    const result = await new AgentAvatars(db).store(workspaceId, user.id, data.agentId, data.file);
+    const result = await new AgentMascots(db).set(workspaceId, user.id, data.agentId, data.mascot);
     try {
       await publishAgentDirectoryChanged(workspaceId, data.agentId, "updated");
     } catch {
-      // The avatar write is already committed; a missed directory signal is repaired by reconnect/focus.
+      // The mascot write is already committed; a missed directory signal is repaired by reconnect/focus.
     }
     return result;
   });
 
-export const removeAgentAvatar = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(agentIdInputSchema)
-  .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    await new AgentAvatars(db).remove(workspaceId, user.id, data.agentId);
-    try {
-      await publishAgentDirectoryChanged(workspaceId, data.agentId, "updated");
-    } catch {
-      // The avatar write is already committed; a missed directory signal is repaired by reconnect/focus.
-    }
-  });
-
+/** The Agent profile panel's data seam (see `features/agents/profile-panel/`): the Members
+ * directory and every conversation panel share this one query. */
 export const getAgentProfile = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(agentIdSchema)

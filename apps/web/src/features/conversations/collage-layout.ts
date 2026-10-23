@@ -1,9 +1,10 @@
 /**
- * Where each member circle of a channel's group avatar sits inside its round frame. `left`, `top`
- * and `size` are fractions of the frame's side, so one layout serves every frame size; `css` is the
+ * Where each member of a channel's group avatar sits inside its round frame. `left`, `top` and
+ * `size` are fractions of the frame's side, so one layout serves every frame size; `css` is the
  * same placement as ready inline-style values (the frame's side is the `--avatar-group-size`
- * custom property, which scales the initials). Circles overlap and later ones draw over earlier
- * ones. At most four are shown; above four members the first three are shown and the fourth slot
+ * custom property, which scales the initials). Slots overlap by at most two units of 48 so each
+ * face reads whole (an Agent's mascot is drawn unclipped, a person's photo in a circle); later
+ * ones draw over earlier ones. At most four are shown; above four members the first three are shown and the fourth slot
  * is the overflow "…" circle (`overflow: true`). No members has no collage (`[]`): the row shows
  * the channel's icon instead.
  */
@@ -38,20 +39,20 @@ function slot(left: number, top: number, size: number, overflow = false): Collag
 }
 
 const FOUR: readonly CollageSlot[] = [
-  // Overlapping 2 by 2.
-  slot(5, 5, 24),
-  slot(19, 5, 24),
-  slot(5, 19, 24),
-  slot(19, 19, 24),
+  // 2 by 2, one unit of overlap; the corners lie just outside the round frame's edge.
+  slot(1.5, 1.5, 23),
+  slot(23.5, 1.5, 23),
+  slot(1.5, 23.5, 23),
+  slot(23.5, 23.5, 23),
 ];
 
 const LAYOUTS: readonly (readonly CollageSlot[])[] = [
   [],
   [slot(0, 0, 48)],
-  // Diagonal pair: top-left under bottom-right.
-  [slot(3, 3, 28), slot(17, 17, 28)],
+  // Diagonal pair: top-left under bottom-right, meeting at their corners.
+  [slot(1, 1, 24), slot(23, 23, 24)],
   // Two on top, one centred below.
-  [slot(5, 4, 26), slot(17, 4, 26), slot(11, 18, 26)],
+  [slot(2, 3, 22), slot(24, 3, 22), slot(13, 24, 22)],
   FOUR,
 ];
 

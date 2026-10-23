@@ -1,11 +1,12 @@
 import { Avatar, type AvatarProps } from "#src/components/base/avatar/avatar";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { StatusDot } from "#src/components/ui/status-dot";
+import { cx } from "#src/utils/cx";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
-import { DELETED_AGENT_AVATAR_CLASS } from "./deleted-agent";
+import { DELETED_AGENT_AVATAR_CLASS, DELETED_AGENT_PICTURE_CLASS } from "./deleted-agent";
 import { agentDisplay } from "./agent-activity-presentation";
-import { defaultAgentAvatarUrl } from "./agent-default-avatar";
+import { agentAvatarUrl } from "./agent-mascot";
 
 export type AvatarSize = NonNullable<AvatarProps["size"]>;
 
@@ -49,9 +50,13 @@ export function AgentDisplayAvatar({
         size={size}
         className={className}
         alt=""
-        src={src ?? defaultAgentAvatarUrl(agentId)}
+        src={src ?? agentAvatarUrl(agentId)}
         initials={avatarInitial(name)}
-        contentClassName={deleted ? DELETED_AGENT_AVATAR_CLASS : avatarToneClassName(name)}
+        contentClassName={
+          deleted
+            ? cx(DELETED_AGENT_AVATAR_CLASS, DELETED_AGENT_PICTURE_CLASS)
+            : avatarToneClassName(name)
+        }
         badge={
           cornerDot && display && !deleted ? (
             <StatusDot tone={view.tone} pulse={view.pulse} className="avatar-status-dot absolute" />
@@ -62,7 +67,8 @@ export function AgentDisplayAvatar({
   );
 }
 
-/** One face in an overlapping stack of Agents: no status dot, which the overlap would half cover. */
+/** One face in an overlapping stack of Agents: no status dot, which the overlap would half cover,
+ * and no separator ring, because a mascot stands alone. */
 export function AgentStackFace({
   agent,
 }: {
@@ -72,11 +78,9 @@ export function AgentStackFace({
     <Avatar
       size="xs"
       alt=""
-      src={agent.avatarUrl ?? defaultAgentAvatarUrl(agent.id)}
+      src={agent.avatarUrl ?? agentAvatarUrl(agent.id)}
       initials={avatarInitial(agent.displayName)}
       contentClassName={avatarToneClassName(agent.displayName)}
-      // The ring separates the overlapping faces, as an avatar group does.
-      className="ring-2 ring-bg-primary"
     />
   );
 }
