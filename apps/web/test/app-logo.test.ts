@@ -31,6 +31,7 @@ const ownApp: AppView = {
   whenToUse: "",
   homepageUrl: null,
   agentManifestUrl: null,
+  enableBot: false,
   redirectUris: [],
   category: "other",
   allowedScopes: ["openid", "profile", "identity"],

@@ -2,7 +2,7 @@ import { appNotificationsPossible } from "#src/server/app-notifications/app-noti
 import { recordAgentProfileUpdated } from "#src/server/app-notifications/agent-events.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
+import { ACTIVE_AGENT_WHERE, assertNotAppBot } from "./active-agent.server";
 import { agentAvatarUrl, type AgentMascot } from "#src/features/agents/agent-mascot";
 
 /**
@@ -46,9 +46,10 @@ export class AgentMascots {
   async #owned(workspaceId: string, userId: string, agentId: string) {
     const agent = await this.db.agent.findFirst({
       where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-      select: { ownerId: true, avatarMascot: true },
+      select: { ownerId: true, avatarMascot: true, systemKind: true },
     });
     if (!agent) throw new AppError("NOT_FOUND");
+    assertNotAppBot(agent);
     if (agent.ownerId !== userId) throw new AppError("ACCESS_DENIED");
     return agent;
   }

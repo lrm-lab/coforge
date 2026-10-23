@@ -65,6 +65,7 @@ import { agentModelsQueryKey } from "#src/features/agents/agent-models";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { AgentProfileHeader } from "./agent-profile-header";
 import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs";
+import { setupComputerOptions } from "./setup-computers";
 import { AgentProfileTab } from "./agent-profile-tab";
 import { profileRuntimeSelection, profileUpdateInput } from "./agent-profile-runtime";
 import { AgentWorkspaceTab } from "./agent-workspace-tab";
@@ -145,15 +146,12 @@ export function AgentProfilePanel({
   });
   const setupComputers =
     offerComputerPicker && computersQuery.isSuccess
-      ? (computersQuery.data ?? [])
-          .filter((computer) => !profile?.isWeeklyReportAssistant || computer.ownedByCurrentUser)
-          .map((computer) => ({
-            id: computer.id,
-            displayName: computer.displayName || computer.name || m.agent_computer_unnamed(),
-            online: Boolean(computer.online),
-          }))
+      ? setupComputerOptions(computersQuery.data ?? [], profile?.isWeeklyReportAssistant)
       : undefined;
-  const tabOrder = useAgentProfileTabOrder(canManage, Boolean(profile) && !deleted);
+  const tabOrder = useAgentProfileTabOrder(
+    canManage,
+    Boolean(profile) && !deleted && !profile?.appBot,
+  );
   const tab = resolveAgentProfileTab(requestedTab, tabOrder.tabs);
   // Opened without `agentTab`, the panel lands on the first tab of the viewer's order once their
   // permissions are known, and records it through `onTabChange` (the URL, or the embedding page's

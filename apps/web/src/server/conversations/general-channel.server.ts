@@ -9,7 +9,7 @@ import {
   channelMemberEvents,
   recordChannelMembersAdded,
 } from "#src/server/app-notifications/channel-events.server";
-import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 
 /** Nested creation keeps a new Workspace's `#general` inside the Workspace creation write, with
@@ -65,9 +65,15 @@ export async function enrollGeneralChannel(db: Prisma.TransactionClient, workspa
     where: { workspaceId },
     select: { agentId: true },
   });
+  // An app's bot is in no channel until a person adds it: it posts only where it was added.
   const agents = (
     await db.agent.findMany({
-      where: { workspaceId, visibility: AGENT_VISIBILITY.PUBLIC, ...ACTIVE_AGENT_WHERE },
+      where: {
+        workspaceId,
+        visibility: AGENT_VISIBILITY.PUBLIC,
+        ...ACTIVE_AGENT_WHERE,
+        ...ROSTER_AGENT_WHERE,
+      },
       select: { id: true },
     })
   ).filter((agent) => agent.id !== memoryAgent?.agentId);

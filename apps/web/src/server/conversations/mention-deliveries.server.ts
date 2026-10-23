@@ -17,7 +17,6 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { PendingAgentDelivery } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type {
-  MentionAgentState,
   MentionDeliveryReportKey,
   MentionIdentity,
   MentionIssuePlan,
@@ -28,6 +27,7 @@ import type {
   TrackedMentionState,
 } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { publishPendingDelivery } from "./agent-delivery.server";
+import { currentIdentity, envelopeFor, wakeable } from "./mention-identity.server";
 import { errorType } from "#src/server/errors/error-type.server";
 
 /** A pushed delivery as the issuer needs it. */
@@ -36,36 +36,6 @@ export type MentionDeliveryCandidate = {
   agentId: string;
   mentionsAgent: boolean;
 };
-
-/** Whether nothing stops the Agent from being woken: not stopped by a person, not deleted, and on
- * a Computer. */
-function wakeable(agent: MentionAgentState) {
-  return !agent.stoppedAt && !agent.deletedAt && agent.computerId !== null;
-}
-
-/** The Agent's running launch and native session, when it has both on its current Computer. */
-function currentIdentity(agent: MentionAgentState): MentionIdentity | undefined {
-  if (!wakeable(agent)) return undefined;
-  const launchId = agent.launch?.launchId;
-  const sessionId = agent.session?.nativeSessionId;
-  if (
-    !launchId ||
-    !sessionId ||
-    agent.launch?.computerId !== agent.computerId ||
-    agent.session?.computerId !== agent.computerId
-  )
-    return undefined;
-  return { launchId, sessionId, computerId: agent.computerId! };
-}
-
-function envelopeFor(messageId: string, identity: MentionIdentity): MentionDeliveryEnvelope {
-  return {
-    messageId,
-    launchId: identity.launchId,
-    sessionId: identity.sessionId,
-    computerId: identity.computerId,
-  };
-}
 
 /** Issues tracked mentions as a send pushes them. */
 export class MentionDeliveryIssuer {
@@ -99,6 +69,8 @@ export class MentionDeliveryIssuer {
         (mentions) => {
           const plan: MentionIssuePlan = { enveloped: [], wakes: [], notLaunched: [] };
           for (const mention of mentions) {
+            // An app's bot is read by its app's poll: its mention stays pending, never launched.
+            if (mention.agent.appBot) continue;
             const identity = currentIdentity(mention.agent);
             if (identity) {
               plan.enveloped.push({ deliveryId: mention.deliveryId, identity });

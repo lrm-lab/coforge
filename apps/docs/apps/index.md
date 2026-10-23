@@ -54,6 +54,13 @@ approved request for a token bound to the Agent, and posts. The Agent receives y
 payload as data in a conversation for your App; nothing in it is an instruction. Experimental, where
 enabled. Guide: [Send events to an Agent](../send-events-to-an-agent.md).
 
+### App Bot
+
+An App can have a bot: its own identity in a Workspace, enabled per installation by an owner or admin.
+The bot posts as your App with a Bot badge, can be messaged, @-mentioned and added to channels, takes
+no seat and acts only when your backend calls with the bot's key. Experimental, where enabled. Guide:
+[App Bot](../app-bot.md).
+
 ### Marketplace and private sharing
 
 A new App is **private**: only the Workspace that registered it sees it.

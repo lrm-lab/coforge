@@ -125,7 +125,18 @@ describe("WorkspaceMembers", () => {
       },
     });
     expect(queries.agents).toMatchObject({
-      where: { AND: [{ workspaceId: "workspace-1", deletedAt: null }, {}, {}] },
+      where: {
+        AND: [
+          {
+            AND: [
+              { workspaceId: "workspace-1", deletedAt: null },
+              { OR: [{ systemKind: null }, { systemKind: { not: "app-bot" } }] },
+            ],
+          },
+          {},
+          {},
+        ],
+      },
       select: {
         id: true,
         name: true,
@@ -223,7 +234,8 @@ describe("WorkspaceMembers", () => {
       limit: 24,
     });
 
-    const [visible] = (agentQuery as { where: { AND: object[] } }).where.AND;
+    const [roster] = (agentQuery as { where: { AND: Array<{ AND: object[] }> } }).where.AND;
+    const [visible] = roster.AND;
     expect(visible).toEqual({
       workspaceId: "workspace-1",
       deletedAt: null,
@@ -261,7 +273,8 @@ describe("WorkspaceMembers", () => {
       limit: 24,
     });
 
-    const [visible] = (agentQuery as { where: { AND: object[] } }).where.AND;
+    const [roster] = (agentQuery as { where: { AND: Array<{ AND: object[] }> } }).where.AND;
+    const [visible] = roster.AND;
     expect(visible).toEqual({
       workspaceId: "workspace-1",
       deletedAt: null,

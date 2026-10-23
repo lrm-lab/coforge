@@ -2,6 +2,8 @@ import { textResponse } from "#src/server/http/text-response.server";
 import { createMiddleware } from "@tanstack/react-start";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { authenticateAgentHttpRequest } from "./agent-api-http.server";
+import { authenticateAppBotRequest } from "#src/server/app-bots/app-bot-agent-api.server";
+import { createAppBots } from "#src/server/app-bots/app-bots-composition.server";
 import { handleWorkspaceAssistantCommand } from "./workspace-assistant-http.server";
 
 /**
@@ -40,6 +42,14 @@ export const agentAuthMiddleware = createMiddleware().server(async ({ next, requ
   const db = getDatabaseClient();
   if (!db) return textResponse("unauthorized", { status: 401, headers: NO_STORE });
   try {
+    // An app's bot presents its key alone and has no Computer; its calls are bounded by capability.
+    const bot = await authenticateAppBotRequest(request, createAppBots(db));
+    if (bot instanceof Response) return noStore(bot);
+    if (bot) {
+      const result = await next({ context: { principal: bot.principal, db } });
+      result.response = noStore(result.response);
+      return result;
+    }
     const principal = await authenticateAgentHttpRequest(request, db);
     const delegated = await handleWorkspaceAssistantCommand(request, principal, db);
     if (delegated) return noStore(delegated);

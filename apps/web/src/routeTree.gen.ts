@@ -82,6 +82,8 @@ import { Route as ApiAgentV1WeeklyReportMemoryRouteImport } from './routes/api/a
 import { Route as ApiAgentV1WeeklyReportsRouteImport } from './routes/api/agent/v1/weekly-reports'
 import { Route as ApiAgentV1WorkspaceRouteImport } from './routes/api/agent/v1/workspace'
 import { Route as ApiAppInstallationsInstallationIdAgentsRouteImport } from './routes/api.app-installations.$installationId.agents'
+import { Route as ApiAppInstallationsInstallationIdBotStatusRouteImport } from './routes/api.app-installations.$installationId.bot-status'
+import { Route as ApiAppInstallationsInstallationIdBotTokenRouteImport } from './routes/api.app-installations.$installationId.bot-token'
 import { Route as ApiAppInstallationsInstallationIdChannelsRouteImport } from './routes/api.app-installations.$installationId.channels'
 import { Route as ApiAppInstallationsInstallationIdComputersRouteImport } from './routes/api.app-installations.$installationId.computers'
 import { Route as ApiAppInstallationsInstallationIdSetupRouteImport } from './routes/api.app-installations.$installationId.setup'
@@ -536,6 +538,18 @@ const ApiAppInstallationsInstallationIdAgentsRoute =
   ApiAppInstallationsInstallationIdAgentsRouteImport.update({
     id: '/api/app-installations/$installationId/agents',
     path: '/api/app-installations/$installationId/agents',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAppInstallationsInstallationIdBotStatusRoute =
+  ApiAppInstallationsInstallationIdBotStatusRouteImport.update({
+    id: '/api/app-installations/$installationId/bot-status',
+    path: '/api/app-installations/$installationId/bot-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAppInstallationsInstallationIdBotTokenRoute =
+  ApiAppInstallationsInstallationIdBotTokenRouteImport.update({
+    id: '/api/app-installations/$installationId/bot-token',
+    path: '/api/app-installations/$installationId/bot-token',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiAppInstallationsInstallationIdChannelsRoute =
@@ -1042,6 +1056,8 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/weekly-reports': typeof ApiAgentV1WeeklyReportsRoute
   '/api/agent/v1/workspace': typeof ApiAgentV1WorkspaceRoute
   '/api/app-installations/$installationId/agents': typeof ApiAppInstallationsInstallationIdAgentsRoute
+  '/api/app-installations/$installationId/bot-status': typeof ApiAppInstallationsInstallationIdBotStatusRoute
+  '/api/app-installations/$installationId/bot-token': typeof ApiAppInstallationsInstallationIdBotTokenRoute
   '/api/app-installations/$installationId/channels': typeof ApiAppInstallationsInstallationIdChannelsRoute
   '/api/app-installations/$installationId/computers': typeof ApiAppInstallationsInstallationIdComputersRoute
   '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
@@ -1187,6 +1203,8 @@ export interface FileRoutesByTo {
   '/api/agent/v1/weekly-reports': typeof ApiAgentV1WeeklyReportsRoute
   '/api/agent/v1/workspace': typeof ApiAgentV1WorkspaceRoute
   '/api/app-installations/$installationId/agents': typeof ApiAppInstallationsInstallationIdAgentsRoute
+  '/api/app-installations/$installationId/bot-status': typeof ApiAppInstallationsInstallationIdBotStatusRoute
+  '/api/app-installations/$installationId/bot-token': typeof ApiAppInstallationsInstallationIdBotTokenRoute
   '/api/app-installations/$installationId/channels': typeof ApiAppInstallationsInstallationIdChannelsRoute
   '/api/app-installations/$installationId/computers': typeof ApiAppInstallationsInstallationIdComputersRoute
   '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
@@ -1335,6 +1353,8 @@ export interface FileRoutesById {
   '/api/agent/v1/weekly-reports': typeof ApiAgentV1WeeklyReportsRoute
   '/api/agent/v1/workspace': typeof ApiAgentV1WorkspaceRoute
   '/api/app-installations/$installationId/agents': typeof ApiAppInstallationsInstallationIdAgentsRoute
+  '/api/app-installations/$installationId/bot-status': typeof ApiAppInstallationsInstallationIdBotStatusRoute
+  '/api/app-installations/$installationId/bot-token': typeof ApiAppInstallationsInstallationIdBotTokenRoute
   '/api/app-installations/$installationId/channels': typeof ApiAppInstallationsInstallationIdChannelsRoute
   '/api/app-installations/$installationId/computers': typeof ApiAppInstallationsInstallationIdComputersRoute
   '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
@@ -1483,6 +1503,8 @@ export interface FileRouteTypes {
     | '/api/agent/v1/weekly-reports'
     | '/api/agent/v1/workspace'
     | '/api/app-installations/$installationId/agents'
+    | '/api/app-installations/$installationId/bot-status'
+    | '/api/app-installations/$installationId/bot-token'
     | '/api/app-installations/$installationId/channels'
     | '/api/app-installations/$installationId/computers'
     | '/api/app-installations/$installationId/setup'
@@ -1628,6 +1650,8 @@ export interface FileRouteTypes {
     | '/api/agent/v1/weekly-reports'
     | '/api/agent/v1/workspace'
     | '/api/app-installations/$installationId/agents'
+    | '/api/app-installations/$installationId/bot-status'
+    | '/api/app-installations/$installationId/bot-token'
     | '/api/app-installations/$installationId/channels'
     | '/api/app-installations/$installationId/computers'
     | '/api/app-installations/$installationId/setup'
@@ -1775,6 +1799,8 @@ export interface FileRouteTypes {
     | '/api/agent/v1/weekly-reports'
     | '/api/agent/v1/workspace'
     | '/api/app-installations/$installationId/agents'
+    | '/api/app-installations/$installationId/bot-status'
+    | '/api/app-installations/$installationId/bot-token'
     | '/api/app-installations/$installationId/channels'
     | '/api/app-installations/$installationId/computers'
     | '/api/app-installations/$installationId/setup'
@@ -1911,6 +1937,8 @@ export interface RootRouteChildren {
   ApiAgentV1WeeklyReportsRoute: typeof ApiAgentV1WeeklyReportsRoute
   ApiAgentV1WorkspaceRoute: typeof ApiAgentV1WorkspaceRoute
   ApiAppInstallationsInstallationIdAgentsRoute: typeof ApiAppInstallationsInstallationIdAgentsRoute
+  ApiAppInstallationsInstallationIdBotStatusRoute: typeof ApiAppInstallationsInstallationIdBotStatusRoute
+  ApiAppInstallationsInstallationIdBotTokenRoute: typeof ApiAppInstallationsInstallationIdBotTokenRoute
   ApiAppInstallationsInstallationIdChannelsRoute: typeof ApiAppInstallationsInstallationIdChannelsRoute
   ApiAppInstallationsInstallationIdComputersRoute: typeof ApiAppInstallationsInstallationIdComputersRoute
   ApiAppInstallationsInstallationIdSetupRoute: typeof ApiAppInstallationsInstallationIdSetupRoute
@@ -2472,6 +2500,20 @@ declare module '@tanstack/react-router' {
       path: '/api/app-installations/$installationId/agents'
       fullPath: '/api/app-installations/$installationId/agents'
       preLoaderRoute: typeof ApiAppInstallationsInstallationIdAgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/app-installations/$installationId/bot-status': {
+      id: '/api/app-installations/$installationId/bot-status'
+      path: '/api/app-installations/$installationId/bot-status'
+      fullPath: '/api/app-installations/$installationId/bot-status'
+      preLoaderRoute: typeof ApiAppInstallationsInstallationIdBotStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/app-installations/$installationId/bot-token': {
+      id: '/api/app-installations/$installationId/bot-token'
+      path: '/api/app-installations/$installationId/bot-token'
+      fullPath: '/api/app-installations/$installationId/bot-token'
+      preLoaderRoute: typeof ApiAppInstallationsInstallationIdBotTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/app-installations/$installationId/channels': {
@@ -3234,6 +3276,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1WorkspaceRoute: ApiAgentV1WorkspaceRoute,
   ApiAppInstallationsInstallationIdAgentsRoute:
     ApiAppInstallationsInstallationIdAgentsRoute,
+  ApiAppInstallationsInstallationIdBotStatusRoute:
+    ApiAppInstallationsInstallationIdBotStatusRoute,
+  ApiAppInstallationsInstallationIdBotTokenRoute:
+    ApiAppInstallationsInstallationIdBotTokenRoute,
   ApiAppInstallationsInstallationIdChannelsRoute:
     ApiAppInstallationsInstallationIdChannelsRoute,
   ApiAppInstallationsInstallationIdComputersRoute:

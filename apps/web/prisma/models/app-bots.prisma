@@ -1,0 +1,46 @@
+/// An app's bot in one Workspace (`server/app-bots/`): the managed Agent a Workspace owner or
+/// admin grants to one installation. The row is made by the first grant and kept by later ones, so
+/// the bot keeps one identity: revoking only flips `state`, and granting again moves `generation`
+/// on. The Agent has no Computer, so nothing launches it or pushes to it; its app reads its inbox
+/// with the bot key.
+model AppInstallationBot {
+  id              String             @id @default(uuid(7)) @db.Uuid
+  installationId  String             @unique @db.Uuid
+  /// The bot's Agent (`systemKind = app-bot`): its handle is the app's key, its name the app's.
+  agentId         String             @unique @db.Uuid
+  /// `granted` or `revoked` (`app_installation_bots_state_check`).
+  state           String             @default("granted")
+  /// Goes up by one at every grant after a revoke; a key belongs to one generation.
+  generation      Int                @default(1)
+  /// The one line the app publishes beside the bot (`PUT .../bot-status`), at most 160 UTF-16
+  /// units; cleared when the bot is revoked.
+  statusText      String?
+  grantedByUserId String?            @db.Uuid
+  grantedAt       DateTime           @default(now())
+  revokedAt       DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  installation    AppInstallation    @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  agent           Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  grantedBy       User?              @relation("AppInstallationBotGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+  credentials     AppBotCredential[]
+
+  @@index([grantedByUserId])
+  @@map("app_installation_bots")
+}
+
+/// A bot key: only its SHA-256 is stored (the plaintext is shown once, `sk_agent_` plus 43
+/// characters). Never expires; at most one is live per bot (`app_bot_credentials_one_live`), and
+/// it is revoked with its grant.
+model AppBotCredential {
+  id         String             @id @default(uuid(7)) @db.Uuid
+  botId      String             @db.Uuid
+  keyHash    String             @unique
+  generation Int
+  createdAt  DateTime           @default(now())
+  revokedAt  DateTime?
+  bot        AppInstallationBot @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@unique([botId], where: { revokedAt: null }, map: "app_bot_credentials_one_live")
+  @@map("app_bot_credentials")
+}

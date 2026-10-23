@@ -128,26 +128,7 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 
 ## Sessions
 
-- `AgentSession` is the sole persisted owner of the native session ID and
-  state, scoped by Agent, Workspace, Computer, and provider.
-  `Agent.runtimeSession` stores only the upstream fence fields and is hydrated
-  from that table.
-- Acknowledged `agent:session` WSS reports never travel as Activity.
-- Ready recovery selects Agents in the cloud, never by a local transcript scan.
-- Session snapshot acceptance (`agent-session.server.ts`) shares the control
-  authorization guard but never advances control operations. Sequenced
-  snapshots validate the upstream launch fence first. Control-result dispatch
-  stays separate.
-- Every accepted session (`AgentSessions.accept`, `AgentSessionReceiver.accept`,
-  and a `started` control result carrying an identity) then issues the Agent's
-  pending tracked @mentions for it. The two session classes take that port as a
-  required constructor argument, so the step cannot be skipped by omission.
-- `AgentSessionReceiver.invalidate` clears the Session association only on an
-  exact `launchId` and native `sessionId` match, with the same `clearSession`
-  primitive Reset Session uses. It leaves every other control-state field
-  untouched and never marks the state `recovered`. Its `currentDaemon`
-  constructor argument is required so the freshness check cannot be skipped.
-  A mismatch is an idempotent no-op; a genuine failure propagates.
+See [sessions.md](./sessions.md).
 
 ## Display and Activity
 
@@ -188,6 +169,11 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 - `agent-reminders.server.ts` is the creator's or Workspace owner/admin's
   browser read model of bounded, scheduled Reminders. Reminder lifecycle stays in
   `server/reminders/`.
+
+## App bots
+
+- An app's bot (`systemKind = app-bot`, `server/app-bots/`) is an Agent with no Computer, made and archived only by its grant. Nothing launches it: `AgentControl` does not find an Agent with no Computer, a delivery with no Computer is not pushed, and `SendDirectMessage` leaves a person's message to a bot for its app's poll. `assertNotAppBot` (`active-agent.server.ts`) refuses the ordinary edit and visibility controls; call it from any new control that could give a bot a Computer or change its visibility.
+- Its key authenticates through `authenticateAppBotRequest` before the Computer door, and works only on the routes `app-bot-capabilities.server.ts` lists. A new `/api/agent/v1` route is closed to bots until it is listed there.
 
 ## Workspace platform assistants
 

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import {
   Camera01,
@@ -32,6 +32,7 @@ import { InlineEditField, SECTION_CAPTION_CLASS } from "./inline-edit-field";
 import { ContextUsageItem, RUNTIME_PILL_PART_CLASS } from "./agent-context-usage-item";
 import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
 import { FactRow } from "./agent-fact-row";
+import { AppBotProfile } from "./app-bot-profile";
 import { RoleField, VisibilityField } from "./agent-profile-info-fields";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
@@ -61,7 +62,17 @@ function FactBadge({
  * Agent profile; no leading row icons. Managers/owners get the pencils, INFO's Role editor, RUNTIME CONFIG's credential
  * dialog and the ACTIONS section; everyone else sees a read-only Profile.
  */
-export function AgentProfileTab({
+export function AgentProfileTab(props: ComponentProps<typeof AgentProfileTabBody>) {
+  const { profile, timeZone } = props;
+  // An app's bot has no Computer or runtime to show or change.
+  return profile.appBot ? (
+    <AppBotProfile profile={{ ...profile, appBot: profile.appBot }} timeZone={timeZone} />
+  ) : (
+    <AgentProfileTabBody {...props} />
+  );
+}
+
+function AgentProfileTabBody({
   profile,
   timeZone,
   canManage,

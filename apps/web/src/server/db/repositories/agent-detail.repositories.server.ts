@@ -54,6 +54,19 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
           },
         },
         avatarMascot: true,
+        appBot: {
+          select: {
+            state: true,
+            statusText: true,
+            installation: {
+              select: {
+                app: {
+                  select: { key: true, name: true, ownerWorkspaceId: true, logoObjectKey: true },
+                },
+              },
+            },
+          },
+        },
       },
     });
     if (!agent) return undefined;

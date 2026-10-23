@@ -8,6 +8,7 @@ import {
 } from "#src/features/apps/app-publish-status";
 import type { AppRegistrationInput } from "#src/features/apps/app-registration";
 import type { AppChange, AppRegistryStore, AppView } from "#src/server/apps/app-registry.server";
+import { inTransaction } from "#src/server/db/transaction.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { isWorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 
@@ -27,6 +28,7 @@ const APP_VIEW = {
   publishStatus: true,
   secretRotatedAt: true,
   ownerAgentId: true,
+  enableBot: true,
   createdAt: true,
   updatedAt: true,
   ownerWorkspace: { select: { name: true } },
@@ -131,20 +133,33 @@ export class PrismaAppRegistryStore implements AppRegistryStore {
   }
 
   async delete(workspaceId: string, key: string) {
-    try {
-      return await this.db.app.delete({
-        where: { ...owned(workspaceId, key), publishStatus: { in: [...DELETABLE_STATUSES] } },
-        select: { logoObjectKey: true },
+    return inTransaction(this.db, async (tx) => {
+      // The bots' rows and keys go with the installations; their Agents are archived so their
+      // messages keep a sender (the same as `archiveAppBots` on an uninstall).
+      const bots = await tx.appInstallationBot.findMany({
+        where: { installation: { app: owned(workspaceId, key) } },
+        select: { agentId: true },
       });
-    } catch (error) {
-      if (!hasErrorCode(error, "P2025")) throw error;
-      // Nothing deleted: the app is not there, or it moved to a status that cannot be deleted.
-      const present = await this.db.app.findFirst({
-        where: owned(workspaceId, key),
-        select: { id: true },
-      });
-      return present ? ("blocked" as const) : undefined;
-    }
+      try {
+        const deleted = await tx.app.delete({
+          where: { ...owned(workspaceId, key), publishStatus: { in: [...DELETABLE_STATUSES] } },
+          select: { logoObjectKey: true },
+        });
+        await tx.agent.updateMany({
+          where: { id: { in: bots.map((bot) => bot.agentId) }, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        return deleted;
+      } catch (error) {
+        if (!hasErrorCode(error, "P2025")) throw error;
+        // Nothing deleted: the app is not there, or it moved to a status that cannot be deleted.
+        const present = await tx.app.findFirst({
+          where: owned(workspaceId, key),
+          select: { id: true },
+        });
+        return present ? ("blocked" as const) : undefined;
+      }
+    });
   }
 
   async replaceLogo(

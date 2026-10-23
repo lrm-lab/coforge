@@ -92,6 +92,11 @@ export function AppCard({
               <SetupStatusBadge status={installationSetup.status} />
             )}
             {app.webhookStatus && <WebhookStatusBadge status={app.webhookStatus} />}
+            {app.bot?.granted && (
+              <Badge size="sm" color="success">
+                {m.apps_bot_badge_enabled()}
+              </Badge>
+            )}
             {app.permissions &&
               (app.permissions.pending.length > 0 || app.permissions.pendingEvents.length > 0) && (
                 <Badge size="sm" color="warning">

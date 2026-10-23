@@ -1,4 +1,5 @@
 import type { Prisma } from "#src/generated/prisma/client";
+import { APP_BOT_KIND, isAppBot } from "#src/features/agents/agent-system-kind";
 import { AppError } from "#src/lib/app-error";
 
 /**
@@ -33,4 +34,23 @@ export const ACTIVE_AGENT_WHERE = { deletedAt: null } satisfies Prisma.AgentWher
  */
 export function assertAgentLive(agent: { deletedAt?: Date | null }): void {
   if (agent.deletedAt) throw new AppError("NOT_FOUND");
+}
+
+/**
+ * Agents but an app's bot: what people's Agent rosters list (the sidebar, the Members page, a
+ * person's own Agents). A bot shows on its app's detail and through its profile and mention card,
+ * and pickers that add members to a channel still offer it. A bare `not` would drop the `null` kind
+ * of every ordinary Agent.
+ */
+export const ROSTER_AGENT_WHERE = {
+  OR: [{ systemKind: null }, { systemKind: { not: APP_BOT_KIND } }],
+} satisfies Prisma.AgentWhereInput;
+
+/**
+ * Refuse an ordinary edit of an app's bot (`server/app-bots/`): it has no Computer and none may be
+ * chosen for it, and its visibility is the app's grant, not its creator's setting. The grant and
+ * revoke in Settings are its only controls.
+ */
+export function assertNotAppBot(agent: { systemKind?: string | null }): void {
+  if (isAppBot(agent)) throw new AppError("ACCESS_DENIED", { errorId: "app-bot-managed" });
 }

@@ -252,6 +252,8 @@ export class SendDirectMessage {
       !isPrintableSenderHandle(message.latestSenderHandle)
     )
       throw new Error("message sender must be a public @username");
+    // An app's bot has no Computer and no daemon: the message waits for its app's inbox poll.
+    if (message.appBot) return;
     if (!message.computerId) throw new Error("Agent is not assigned to a Computer");
     const [pushed] = await new AgentDeliveryPublisher(this.centrifugo, this.mentionIssuer).publish(
       message.workspaceId,

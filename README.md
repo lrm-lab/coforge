@@ -45,6 +45,7 @@ The architecture invariants every change must respect are in
 | [docs/reliable-message-delivery.md](docs/reliable-message-delivery.md) | Message delivery guarantees |
 | [docs/workspace-deletion.md](docs/workspace-deletion.md) | What deleting a Workspace removes, and when |
 | [docs/authorization-server/](docs/authorization-server/README.md) | "Login with CoForge": the OpenID Connect authorization server for third-party apps, its configuration and endpoints |
+| [docs/app-bot/](docs/app-bot/README.md) | App Bot: an app's managed Agent per Workspace - declare, grant, the bot key and status line, what the key may call |
 | [docs/app-notifications.md](docs/app-notifications.md) | App notifications: the pg-boss outbox that records events in the domain transaction and fans them out to installed apps |
 | [docs/app-agent-events/](docs/app-agent-events/README.md) | App events for an Agent (Agent inbound): scopes, approval, the Agent-bound token, the dedicated conversation, and the HTTP API |
 | [docs/app-marketplace.md](docs/app-marketplace.md) | App Marketplace: publish and offline review, installing a listed app, private share links, the platform operator who decides, and the first operator's grant |

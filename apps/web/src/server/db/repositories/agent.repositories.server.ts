@@ -8,7 +8,7 @@ import {
 } from "#src/server/app-notifications/agent-events.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import {
   parseAgentRuntimeConfig,
@@ -47,6 +47,8 @@ export type AgentRecord = {
   visibility?: AgentVisibility;
   /** The mascot its creator picked. Absent or null means the one its id chooses. */
   avatarMascot?: string | null;
+  /** Server-owned kind (`features/agents/agent-system-kind.ts`); null for an ordinary Agent. */
+  systemKind?: string | null;
 };
 
 function mapAgent(agent: {
@@ -64,6 +66,7 @@ function mapAgent(agent: {
   deletedAt?: Date | null;
   visibility?: string;
   avatarMascot?: string | null;
+  systemKind?: string | null;
 }): AgentRecord {
   let runtimeConfig;
   try {
@@ -93,6 +96,7 @@ function mapAgent(agent: {
         ? AGENT_VISIBILITY.PUBLIC
         : AGENT_VISIBILITY.PRIVATE,
     avatarMascot: agent.avatarMascot ?? null,
+    systemKind: agent.systemKind ?? null,
   };
 }
 
@@ -173,7 +177,7 @@ export class PrismaAgentRepository implements AgentRepository {
 
   async listOwnedInWorkspace(workspaceId: string, ownerId: string) {
     const agents = await this.db.agent.findMany({
-      where: { workspaceId, ownerId, ...ACTIVE_AGENT_WHERE },
+      where: { workspaceId, ownerId, ...ACTIVE_AGENT_WHERE, ...ROSTER_AGENT_WHERE },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     return agents.map(mapAgent);

@@ -9,7 +9,7 @@ import { AppError } from "#src/lib/app-error";
 import type { AgentRecord } from "#src/server/db/repositories/agent.repositories.server";
 import type { AgentRuntimeConfig, EncryptedAgentEnvironment } from "./agent-runtime-config.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
-import { assertAgentLive } from "./active-agent.server";
+import { assertAgentLive, assertNotAppBot } from "./active-agent.server";
 import { agentStartIntent, agentStopIntent } from "./manage-agents.server";
 
 const KEY_ID = "v1";
@@ -57,6 +57,7 @@ export class AgentEnvironment {
   ): Promise<{ restart: "published" | "deferred" }> {
     return this.runtimeLock.run(agentId, async () => {
       const agent = await this.agents.getById(agentId);
+      if (agent) assertNotAppBot(agent);
       if (
         !agent?.computerId ||
         agent.workspaceId !== principal.workspaceId ||

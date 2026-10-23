@@ -34,6 +34,16 @@ export function hashAgentApiKey(value: string): string {
   return new Bun.CryptoHasher("sha256").update(value).digest("hex");
 }
 
+/** A new key in the one Agent API key format. Callers store only `hashAgentApiKey` of it. */
+export function generateAgentApiKey(): string {
+  return `sk_agent_${randomBytes(32).toString("base64url")}`;
+}
+
+/** Whether `value` is shaped like an Agent API key (a daemon's or a bot's). */
+export function isAgentApiKeyShape(value: string): boolean {
+  return AGENT_API_KEY.test(value);
+}
+
 export function createAgentApiKey(input: {
   agentId: string;
   workspaceId: string;
@@ -41,7 +51,7 @@ export function createAgentApiKey(input: {
   computerId: string;
   repository: AgentApiKeyRepository;
 }): Promise<string> {
-  const apiKey = `sk_agent_${randomBytes(32).toString("base64url")}`;
+  const apiKey = generateAgentApiKey();
   // No explicit id: the Prisma client generates it from the schema's uuid(7)
   // default — API keys keep the project's one id-generation path end to end.
   return input.repository

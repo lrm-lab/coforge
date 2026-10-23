@@ -6,7 +6,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { AGENT_VISIBILITY, type AgentVisibility } from "#src/features/agents/agent-visibility";
-import { assertAgentLive } from "./active-agent.server";
+import { assertAgentLive, assertNotAppBot } from "./active-agent.server";
 import type {
   AgentRecord,
   AgentRepository,
@@ -173,6 +173,7 @@ export class ManageAgents {
       // A deleted Agent has no editable configuration. Refused here rather than only by
       // the restart below, so a stopped/deleted Agent cannot be silently rewritten either.
       assertAgentLive(current);
+      assertNotAppBot(current);
       // A Computer can be chosen only while the Agent has none; after that it moves through
       // the migration flow, never through this update.
       if (current.computerId && input.computerId && input.computerId !== current.computerId)

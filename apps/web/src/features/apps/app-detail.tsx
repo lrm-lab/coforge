@@ -2,6 +2,7 @@ import { Badge } from "#src/components/base/badges/badges";
 import { m } from "#src/paraglide/messages";
 import { AgentAccessScope } from "./agent-access-field";
 import { InstallationCard } from "./app-editor-installation";
+import { AppBotInstallation } from "./app-bot-grant";
 import { AppWebhookDelivery } from "./app-webhook-delivery";
 import { InstallationApproval } from "./app-editor-permissions";
 import { UninstallRow } from "./app-uninstall";
@@ -102,6 +103,12 @@ export function AppDetail({
             <LoginScopeList allowedScopes={app.allowedScopes} />
           </section>
           <AgentAccessScope appKey={app.key} canManage={canManage} />
+          <AppBotInstallation
+            declares={declares}
+            app={app}
+            canManage={canManage}
+            onChanged={onRefreshSetup}
+          />
           {declares.setup && setup?.installation && (
             <SetupStatusCard
               installation={setup.installation}

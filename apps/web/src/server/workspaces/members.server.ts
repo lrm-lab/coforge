@@ -5,7 +5,7 @@ import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { weeklyReportAssistantDisplayName } from "#src/server/records/weekly-report-assistant.server";
-import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import {
   canDirectMessageAgent,
@@ -102,7 +102,13 @@ export class WorkspaceMembers {
     // The same seam every Agent list applies, built from the membership role fetched
     // here — never a second role lookup.
     const visibility: AgentVisibilityViewer = { kind: "user", userId, role: membership.role };
-    return { role: membership.role, visibleAgents: this.visibleAgents(workspaceId, visibility) };
+    const visibleAgents = this.visibleAgents(workspaceId, visibility);
+    // The Members page lists people's Agents; an app's bot is not one of them.
+    return {
+      role: membership.role,
+      visibleAgents,
+      rosterAgents: { AND: [visibleAgents, ROSTER_AGENT_WHERE] },
+    };
   }
 
   private visibleAgents(workspaceId: string, viewer: AgentVisibilityViewer) {
@@ -144,23 +150,23 @@ export class WorkspaceMembers {
 
   /** Tab totals; unaffected by any filter or search. */
   async summary(workspaceId: string, userId: string) {
-    const { role, visibleAgents } = await this.viewer(workspaceId, userId);
+    const { role, rosterAgents } = await this.viewer(workspaceId, userId);
     const [agentCount, peopleCount] = await Promise.all([
-      this.db.agent.count({ where: visibleAgents }),
+      this.db.agent.count({ where: rosterAgents }),
       this.db.workspaceMembership.count({ where: { workspaceId } }),
     ]);
     return { workspaceId, actorRole: role, viewerId: userId, agentCount, peopleCount };
   }
 
   async agentPage(workspaceId: string, userId: string, input: AgentPageInput) {
-    const { visibleAgents } = await this.viewer(workspaceId, userId);
+    const { rosterAgents } = await this.viewer(workspaceId, userId);
     const query = input.query.trim();
     const limit = clampPageLimit(input.limit, MEMBER_PAGE_MAX);
     const [agents, meta] = await paginated(this.db)
       .agent.paginate({
         where: {
           AND: [
-            visibleAgents,
+            rosterAgents,
             input.owner === "mine" ? { ownerId: userId } : {},
             query
               ? {

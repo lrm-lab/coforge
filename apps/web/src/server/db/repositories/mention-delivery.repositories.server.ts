@@ -3,6 +3,7 @@ import type {
   AgentMentionDeliveryReasonCategory,
 } from "@lrm/coforge-sdk/agent";
 import type { MentionDeliveryEnvelope, MentionDeliveryStage } from "@lrm/coforge-sdk/internal";
+import { isAppBot } from "#src/features/agents/agent-system-kind";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
 import { parseRuntimeSessionReference } from "./agent-session.repositories.server";
@@ -34,6 +35,8 @@ export type MentionAgentState = {
   computerId: string | null;
   stoppedAt: Date | null;
   deletedAt: Date | null;
+  /** An app's bot: no Computer, read by its app's poll (`server/app-bots/`). */
+  appBot: boolean;
   /** The Computer and launch of the persisted launch fence, if any. */
   launch: { computerId: string; launchId?: string } | null;
   /** The current native Session, if any. */
@@ -102,6 +105,7 @@ const AGENT_STATE_SELECT = {
   computerId: true,
   stoppedAt: true,
   deletedAt: true,
+  systemKind: true,
   runtimeSession: true,
   currentSession: { select: { nativeSessionId: true, computerId: true } },
 } satisfies Prisma.AgentSelect;
@@ -114,6 +118,7 @@ function agentState(
     computerId: agent.computerId,
     stoppedAt: agent.stoppedAt,
     deletedAt: agent.deletedAt,
+    appBot: isAppBot(agent),
     launch: reference ? { computerId: reference.computerId, launchId: reference.launchId } : null,
     session: agent.currentSession,
   };

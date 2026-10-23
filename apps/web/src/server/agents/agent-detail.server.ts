@@ -1,6 +1,7 @@
 import type { Prisma } from "#src/generated/prisma/client";
 import type { AgentStatusCache } from "./agent-status.server";
 import type { AgentDisplay } from "./agent-display.server";
+import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import { canDirectMessageAgent } from "./agent-visibility.server";
 
 type DetailComputer = {
@@ -40,6 +41,14 @@ type DetailAgent = {
    * yet still satisfies this type. */
   visibility?: string;
   avatarMascot?: string | null;
+  /** Set for an app's bot (`server/app-bots/`): the app it speaks for, as it is now. */
+  appBot?: {
+    state: string;
+    statusText: string | null;
+    installation: {
+      app: { key: string; name: string; ownerWorkspaceId: string; logoObjectKey: string | null };
+    };
+  } | null;
   /** Set once the Agent is deleted; its profile stays readable. */
   deletedAt?: Date | null;
   /** Who deleted it, when that was recorded. */
@@ -63,6 +72,18 @@ function assignedComputer(agent: DetailAgent) {
     kind: computer.kind,
     computerVersion: computer.computerVersion ?? null,
     ...(computer.ownerId ? { ownerId: computer.ownerId } : {}),
+  };
+}
+
+/** What the profile shows of an app's bot: the app now, and the line the app published (while the
+ * grant stands). The logo is a URL, none shows the app's monogram. */
+function appBotIdentity(bot: NonNullable<DetailAgent["appBot"]>) {
+  const { app } = bot.installation;
+  return {
+    appKey: app.key,
+    appName: app.name,
+    logoUrl: appLogoUrl(app.ownerWorkspaceId, app.key, app.logoObjectKey),
+    statusText: bot.state === "granted" ? bot.statusText : null,
   };
 }
 
@@ -93,12 +114,15 @@ export class AgentDetailQuery {
       scope && this.display ? this.display.snapshot(scope).catch(() => undefined) : undefined,
     ]);
     const assigned = assignedComputer(agent);
+    const bot = agent.appBot && appBotIdentity(agent.appBot);
     return {
       id: agent.id,
       workspaceId: agent.workspaceId,
       name: agent.name,
-      displayName: agent.displayName,
+      // An app's bot takes the app's name and logo at read time, not the ones it was granted with.
+      displayName: bot?.appName ?? agent.displayName,
       description: agent.description,
+      appBot: bot ?? null,
       role: agent.role,
       createdAt: agent.createdAt,
       computerId: agent.computerId,

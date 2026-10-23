@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { AgentEventsResponse } from "@lrm/coforge-sdk/agent";
+import { handleAppBotEventsGet } from "#src/server/app-bots/app-bot-agent-api.server";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { agentIdempotencyKeyFromQuery } from "#src/server/agents/agent-http-routes.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
@@ -39,7 +40,10 @@ export const Route = createFileRoute("/api/agent/v1/events")({
     middleware: [agentAuthMiddleware],
     handlers: {
       GET: ({ request, context: { principal, db } }) =>
-        handleAgentEventsGet(request, principal, new PrismaDirectConversationRepository(db)),
+        // An app's bot reads its inbox without taking it (`AppBotInbox`).
+        "appBot" in principal
+          ? handleAppBotEventsGet(request, principal, db)
+          : handleAgentEventsGet(request, principal, new PrismaDirectConversationRepository(db)),
     },
   },
 });

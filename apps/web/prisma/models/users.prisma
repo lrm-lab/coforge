@@ -55,6 +55,7 @@ model User {
   createdApps                 App[]
   appInstallations            AppInstallation[]       @relation("AppInstallationInstalledBy")
   appInstallationsApproved    AppInstallation[]       @relation("AppInstallationApprovedBy")
+  appBotsGranted              AppInstallationBot[]    @relation("AppInstallationBotGrantedBy")
   oauthAuthorizationCodes     OAuthAuthorizationCode[]
   appConsents                 UserAppConsent[]
   appAgentGrantsGiven         AppAgentGrant[]         @relation("AppAgentGrantGrantedBy")

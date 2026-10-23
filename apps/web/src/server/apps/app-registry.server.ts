@@ -45,6 +45,8 @@ export type AppView = {
   secretRotatedAt: Date | null;
   /** The Agent that registered the app through an `app:register` card; Settings names it. */
   ownerAgentId?: string | null;
+  /** The app declares a bot (`server/app-bots/`); each Workspace's owner or admin may grant it. */
+  enableBot: boolean;
   createdAt: Date;
   updatedAt: Date;
 };

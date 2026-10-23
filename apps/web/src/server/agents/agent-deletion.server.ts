@@ -1,4 +1,5 @@
 import type { AgentStopIntent } from "@lrm/coforge-sdk/internal";
+import { assertNotAppBot } from "./active-agent.server";
 import { AppError } from "#src/lib/app-error";
 import {
   assertCanDeleteAgents,
@@ -84,6 +85,8 @@ export class AgentDeletion {
     const result = await this.runtimeLock.run(agentId, async () => {
       const agent = await this.agents.getById(agentId);
       if (!agent || agent.workspaceId !== principal.workspaceId) throw new AppError("NOT_FOUND");
+      // An app's bot is archived only by revoking its grant.
+      assertNotAppBot(agent);
       const outcome = await this.store.delete({
         agentId: agent.id,
         workspaceId: agent.workspaceId,

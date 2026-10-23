@@ -74,6 +74,6 @@ export async function appAgentEvent(request: Request): Promise<Response> {
 }
 
 /** No issuer configured: this deployment runs no authorization server. */
-function notFound(): Response {
+export function notFound(): Response {
   return Response.json({ error: "not_found" }, { status: 404, headers: NO_STORE });
 }

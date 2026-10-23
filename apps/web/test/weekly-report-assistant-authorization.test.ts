@@ -186,5 +186,6 @@ test("Members owned-agent listing includes the weekly-report assistant", async (
     workspaceId: "workspace-1",
     ownerId: "user-1",
     deletedAt: null,
+    OR: [{ systemKind: null }, { systemKind: { not: "app-bot" } }],
   });
 });

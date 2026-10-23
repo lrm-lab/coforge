@@ -10,6 +10,7 @@ import { revokeAppAgentAccess } from "#src/server/db/repositories/app-agent-acce
 import { revokeAppAgentInbound } from "#src/server/db/repositories/app-agent-inbound.repositories.server";
 import { revokeAppAuthorizations } from "#src/server/db/repositories/oauth-authorization.repositories.server";
 import { WORKSPACE_CAPABILITY_ROLES } from "#src/features/workspaces/workspace-roles";
+import { archiveAppBots } from "#src/server/db/repositories/app-bot.repositories.server";
 import { findAppMember } from "#src/server/db/repositories/app.repositories.server";
 
 /**
@@ -22,6 +23,8 @@ import { findAppMember } from "#src/server/db/repositories/app.repositories.serv
  *   (app-agent-access repository);
  * - `app_agent_inbound_grants` and `app_agent_inbound_requests`: `revokeAppAgentInbound`
  *   (app-agent-inbound repository);
+ * - `app_installation_bots`: `archiveAppBots` (app-bot repository), which archives the bot Agent;
+ *   the bot's row and keys go with the installation;
  * - `app_installations`: deleted last; installation tokens and Login with CoForge sessions are
  *   checked against it.
  * A new such table adds its revocation to its owner and a call here. `userId` is the person who
@@ -40,6 +43,7 @@ export async function removeAppInstallations(
   await revokeAppAuthorizations(tx, { appId, workspace, at });
   await revokeAppAgentAccess(tx, { appId, workspace, userId, at });
   await revokeAppAgentInbound(tx, { appId, workspace, userId, at });
+  await archiveAppBots(tx, { appId, workspace, userId, at });
   const { count } = await tx.appInstallation.deleteMany({
     where: { appId, workspaceId: workspace },
   });

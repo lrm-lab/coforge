@@ -17,13 +17,16 @@ import {
   TRACKED_MENTION_STATE_SELECT,
   type TrackedMentionState,
 } from "./mention-delivery.repositories.server";
+import {
+  MESSAGE_ANCHOR,
+  assertMessageAnchor,
+  onlyAnchorMatch,
+} from "./direct-conversation-anchor.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
+import { isAppBot } from "#src/features/agents/agent-system-kind";
 import { agentDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import {
   HELD_CONTEXT_LIMIT,
-  MESSAGE_ANCHOR_SOURCE,
-  UUID_LIKE_SOURCE,
-  type AgentMessageValidationMessage,
   type MessageSenderKind,
   type MessageTaskMetadata,
 } from "@lrm/coforge-sdk/internal";
@@ -192,10 +195,6 @@ export type PendingAgentDelivery = AgentRecoveryContext["resumeMessages"][number
 type AgentFacing<T extends { body: string }> = Omit<T, "body"> & { body: AgentReadableBody };
 
 const AGENT_RECOVERY_MESSAGE_LIMIT = 100;
-/** The message-id short forms (eight hex, dashed twelve hex) or a full UUID; both address a
- * Message. */
-const MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`);
-
 /** The `consumption_scope` of an Agent history read: which conversation it consumed, for
  * a direct conversation or a thread, whose target has more than one spelling. None for a channel's
  * top level. */
@@ -207,22 +206,6 @@ function agentHistoryConsumptionScope(
     return { agentId, conversationId, channelType: "thread", target: canonicalTarget };
   if (!isChannel) return { agentId, conversationId, channelType: "dm", target: canonicalTarget };
   return undefined;
-}
-
-function assertMessageAnchor(anchor: string) {
-  if (!MESSAGE_ANCHOR.test(anchor))
-    throw new AgentMessageValidationError(
-      "message anchor must be eight hexadecimal characters or a full UUID",
-    );
-}
-
-/** The single row an anchor lookup (`take: 2`) found; `notFound` is the miss message. */
-function onlyAnchorMatch<T>(rows: T[], notFound: AgentMessageValidationMessage): T {
-  if (rows.length > 1)
-    throw new AgentMessageValidationError("ambiguous message prefix; use the full UUID");
-  const row = rows[0];
-  if (!row) throw new AgentMessageValidationError(notFound);
-  return row;
 }
 
 /**
@@ -314,6 +297,8 @@ export type DirectConversationRepository = {
       workspaceId: string;
       agentId: string;
       computerId?: string;
+      /** The Agent is an app's bot: it has no Computer, and its app reads its inbox. */
+      appBot?: boolean;
       target?: string;
       deliveryTarget?: string;
       /** Always present, possibly empty; order matches send order. */
@@ -1234,7 +1219,15 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             userId: true,
             agentId: true,
             user: { select: { username: true, description: true } },
-            agent: { select: { name: true, computerId: true, ownerId: true, visibility: true } },
+            agent: {
+              select: {
+                name: true,
+                computerId: true,
+                ownerId: true,
+                visibility: true,
+                systemKind: true,
+              },
+            },
           },
         },
       },
@@ -1353,6 +1346,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       workspaceId: conversation.workspaceId,
       agentId: agents[0].agentId,
       computerId: agents[0].agent?.computerId ?? undefined,
+      appBot: isAppBot(agents[0].agent),
       target: `@${agents[0].agent?.name ?? "unknown"}`,
       latestSenderKind: senderIdentity.kind,
       latestSenderHandle: senderIdentity.handle,

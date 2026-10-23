@@ -23,6 +23,7 @@ const ownApp: AppView = {
   whenToUse: "",
   homepageUrl: "https://notes.acme.example/",
   agentManifestUrl: null,
+  enableBot: false,
   redirectUris: ["https://notes.acme.example/cb"],
   category: "other",
   allowedScopes: ["openid", "profile", "identity"],

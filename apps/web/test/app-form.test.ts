@@ -43,6 +43,7 @@ function registry({ keyTaken = false } = {}) {
   const app: AppView = {
     ...valid,
     agentManifestUrl: null,
+    enableBot: false,
     ownerWorkspaceId: actor.workspaceId,
     developer: "Acme",
     logoObjectKey: null,
@@ -129,6 +130,7 @@ describe("an app form's homepage", () => {
     const app = {
       ...valid,
       agentManifestUrl: null,
+      enableBot: false,
       homepageUrl: null,
       logoUrl: null,
       owned: true,

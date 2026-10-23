@@ -9,6 +9,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { HoverPopover, useClosePreview } from "#src/components/ui/hover-popover";
 import { ClockTime } from "#src/components/ui/relative-time";
+import { Badge } from "#src/components/base/badges/badges";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { m } from "#src/paraglide/messages";
@@ -127,17 +128,22 @@ function AgentCard({
   return (
     <>
       <div className="flex items-start gap-3 p-3">
-        {mascot ? (
+        {mascot && !data?.appBot ? (
           <AgentMascotAvatar mascot={mascot} name={displayName} display={display} size="md" />
         ) : (
           // An Agent outside the live roster whose profile has not landed: its still picture.
-          <IdentityAvatar size="md" alt="" src={src} name={displayName} />
+          <IdentityAvatar size="md" alt="" src={data?.appBot?.logoUrl ?? src} name={displayName} />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <Heading slot="title" className="truncate text-sm font-semibold text-primary">
               {displayName}
             </Heading>
+            {data?.appBot && (
+              <Badge size="sm" color="brand">
+                {m.agent_bot_badge()}
+              </Badge>
+            )}
             {display && (
               <span className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
                 <StatusDot tone={view.tone} pulse={view.pulse} className="size-1.5 shrink-0" />
@@ -153,6 +159,13 @@ function AgentCard({
             <p className="mt-2 border-t border-secondary pt-2 text-xs text-tertiary">
               {m.agent_card_unavailable()}
             </p>
+          ) : data?.appBot ? (
+            <div className="mt-2 grid gap-1 border-t border-secondary pt-2 text-xs text-tertiary">
+              <p>{m.agent_bot_managed_by_app({ app: data.appBot.appName })}</p>
+              {data.appBot.statusText && (
+                <p className="wrap-anywhere text-secondary">{data.appBot.statusText}</p>
+              )}
+            </div>
           ) : (
             <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-secondary pt-2 font-mono text-xs">
               <CardFact label={m.agent_profile_computer()}>

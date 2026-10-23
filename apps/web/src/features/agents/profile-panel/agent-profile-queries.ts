@@ -23,8 +23,10 @@ export function agentProfileQuery(agentId: string | undefined) {
 export function canManageAgent(profile: {
   canManageAgentRole: boolean;
   ownedByCurrentUser: boolean;
+  /** An app's bot is changed only by granting and revoking it in Settings → Applications. */
+  appBot?: { appKey: string } | null;
 }): boolean {
-  return profile.canManageAgentRole || profile.ownedByCurrentUser;
+  return !profile.appBot && (profile.canManageAgentRole || profile.ownedByCurrentUser);
 }
 
 /**

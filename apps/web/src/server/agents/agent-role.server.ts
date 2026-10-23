@@ -1,7 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { assertCanAssignRole } from "#src/server/workspaces/member-role.server";
-import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
+import { ACTIVE_AGENT_WHERE, assertNotAppBot } from "./active-agent.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 
 export type SetAgentRoleInput = {
@@ -29,9 +29,10 @@ export async function setAgentRole(
   );
   const agent = await db.agent.findFirst({
     where: { id: input.agentId, workspaceId: input.workspaceId, ...ACTIVE_AGENT_WHERE },
-    select: { id: true },
+    select: { id: true, systemKind: true },
   });
   if (!agent) throw new AppError("NOT_FOUND");
+  assertNotAppBot(agent);
   await db.agent.update({ where: { id: agent.id }, data: { role } });
   return { agentId: agent.id, role };
 }

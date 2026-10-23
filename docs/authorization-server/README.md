@@ -37,6 +37,7 @@ Staging and production do not set these variables yet; setting them turns on eve
 | `GET`, `PUT /api/app-installations/<id>/setup`, `POST /api/app-installations/lookup` | An app finds its installation in a Workspace and reads and reports its setup status ([installation setup](app-installation-setup.md)) |
 | `GET`, `POST /oidc/me` | The UserInfo endpoint: the signed-in person's claims for an access token |
 | `POST /api/app-agent-requests`, `GET /api/app-agent-requests/<id>`, `POST /api/app-agent-events` | An app asks to send events to one Agent, and sends them with the token it exchanged ([Agent inbound](../app-agent-events/http-api.md)) |
+| `POST /api/app-installations/<id>/bot-token`, `PUT /api/app-installations/<id>/bot-status` | An app's backend, with its client credentials, mints its bot's key and publishes the line shown beside the bot ([App Bot HTTP API](../app-bot/http-api.md)) |
 | `GET /api/app-installations/<id>/{workspace,agents,channels,computers}` | What an installed app reads with its installation token: [installed app data](app-installation-data.md) (not under `/oidc`) |
 
 The metadata advertises only endpoints that exist. Its fixed policy: the `code` response

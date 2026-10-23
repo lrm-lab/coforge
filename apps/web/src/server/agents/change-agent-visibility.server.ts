@@ -1,6 +1,6 @@
 import { AppError } from "#src/lib/app-error";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
-import { assertAgentLive } from "./active-agent.server";
+import { assertAgentLive, assertNotAppBot } from "./active-agent.server";
 import type { AgentInboxPurgePublisher } from "./agent-inbox-purge.server";
 import type { AgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
@@ -97,6 +97,7 @@ export class ChangeAgentVisibility {
     // A deleted Agent has no visibility left to change, the same "already inert" refusal every
     // other post-delete mutation gives.
     assertAgentLive(agent);
+    assertNotAppBot(agent);
     const isCreator = agent.ownerId === principal.userId;
     if (!isCreator && !isAdminLike(principal.role)) throw new AppError("ACCESS_DENIED");
     return agent;

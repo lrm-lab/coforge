@@ -73,6 +73,8 @@ model Agent {
   appInboundRequests        AppAgentInboundRequest[]
   appEvents                 AppAgentEvent[]
   appInstallationSelections AppInstallationAgent[]
+  /// Set for an app's bot (`systemKind = app-bot`): the installation it speaks for.
+  appBot                    AppInstallationBot?
 
   @@unique([workspaceId, name])
   @@unique([id, workspaceId])

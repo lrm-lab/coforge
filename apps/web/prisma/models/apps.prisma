@@ -67,6 +67,9 @@ model App {
   /// the column, but loses the right (`server/apps/app-owner-agents.server.ts` checks at call time).
   ownerAgentId     String?           @db.Uuid
   createdAt        DateTime          @default(now())
+  /// The app declares a bot (`server/app-bots/`): each Workspace's owner or admin may grant it to
+  /// the app's installation there. Turning it off revokes every grant.
+  enableBot        Boolean           @default(false)
   updatedAt        DateTime          @updatedAt
   ownerWorkspace   Workspace         @relation(fields: [ownerWorkspaceId], references: [id], onDelete: Cascade)
   ownerAgent       Agent?            @relation("AppOwnerAgent", fields: [ownerAgentId], references: [id], onDelete: SetNull)
@@ -124,6 +127,7 @@ model AppInstallation {
   approvedBy        User?     @relation("AppInstallationApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
   agents            AppInstallationAgent[]
   webhookStatus     AppInstallationWebhookStatus?
+  bot               AppInstallationBot?
 
   @@unique([appId, workspaceId])
   @@index([workspaceId])

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { useReducedMotion } from "motion/react";
 import { XClose } from "@untitledui/icons";
 import { Heading } from "react-aria-components";
@@ -28,6 +28,8 @@ import {
   type AppEditorSubmission,
 } from "./app-form";
 import { AppLogo } from "./app-logo";
+import { BotSection } from "./app-editor-bot";
+import { useActiveSection, type Section } from "./use-active-section";
 import { AppLogoField } from "./app-logo-field";
 import { InstallationCard } from "./app-editor-installation";
 import { NotificationsSection, useNotificationEvents } from "./app-editor-notifications";
@@ -104,8 +106,6 @@ type AppEditorProps = {
   onRequestUnpublish: (app: AppSummary) => Promise<void>;
 };
 
-type Section = { id: string; title: string };
-
 const EMPTY_SETUP_DRAFT: SetupDraft = { required: false, url: "", description: "" };
 
 function AppEditorForm({
@@ -154,6 +154,7 @@ function AppEditorForm({
     login: `${idPrefix}login`,
     permissions: `${idPrefix}permissions`,
     notifications: `${idPrefix}notifications`,
+    bot: `${idPrefix}bot`,
     setup: `${idPrefix}setup`,
     agentAccess: `${idPrefix}agent-access`,
     distribution: `${idPrefix}distribution`,
@@ -167,6 +168,7 @@ function AppEditorForm({
     ...(declares.notifications
       ? [{ id: ids.notifications, title: m.apps_notifications_section() }]
       : []),
+    ...(declares.bot ? [{ id: ids.bot, title: m.apps_bot_section() }] : []),
     ...(editing ? [{ id: ids.agentAccess, title: m.apps_agent_access_title() }] : []),
     ...(editing && declares.marketplace
       ? [{ id: ids.distribution, title: m.apps_section_distribution() }]
@@ -397,6 +399,15 @@ function AppEditorForm({
               onEventsChange={notificationEvents.setEvents}
             />
           )}
+          {declares.bot && (
+            <BotSection
+              id={ids.bot}
+              appKey={app?.key}
+              declared={app?.enableBot ?? false}
+              isDisabled={saving}
+              onChanged={onRefreshSetup}
+            />
+          )}
           {app && (
             <EditorSection
               id={ids.agentAccess}
@@ -455,46 +466,4 @@ function AppEditorForm({
       </div>
     </form>
   );
-}
-
-/** The section the form is scrolled to: the first one showing in the top of the scroll area, or
- * the last once the area is scrolled to its end (a short last section never reaches the top). */
-function useActiveSection(
-  scroller: React.RefObject<HTMLDivElement | null>,
-  sections: Section[],
-): [string, (id: string) => void] {
-  const ids = sections.map((section) => section.id).join(" ");
-  const [active, setActive] = useState(sections[0]!.id);
-  useEffect(() => {
-    const root = scroller.current;
-    if (!root || typeof IntersectionObserver === "undefined") return;
-    const visible = new Set<string>();
-    const order = ids.split(" ");
-    const atEnd = () => root.scrollTop + root.clientHeight >= root.scrollHeight - 2;
-    const choose = () => {
-      const first = order.find((id) => visible.has(id));
-      if (atEnd() && root.scrollTop > 0) setActive(order[order.length - 1]!);
-      else if (first) setActive(first);
-    };
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries)
-          if (entry.isIntersecting) visible.add(entry.target.id);
-          else visible.delete(entry.target.id);
-        choose();
-      },
-      // A section counts once it reaches the top two-fifths of the scroll area.
-      { root, rootMargin: "0px 0px -60% 0px" },
-    );
-    for (const id of order) {
-      const section = document.getElementById(id);
-      if (section) observer.observe(section);
-    }
-    root.addEventListener("scroll", choose, { passive: true });
-    return () => {
-      observer.disconnect();
-      root.removeEventListener("scroll", choose);
-    };
-  }, [scroller, ids]);
-  return [active, setActive];
 }

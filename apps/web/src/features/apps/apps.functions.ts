@@ -10,6 +10,8 @@ import {
   createAppPermissions,
 } from "#src/server/app-permissions/app-permissions-composition.server";
 import type { AppPermissionsView } from "#src/server/app-permissions/app-permissions.server";
+import { createAppBots } from "#src/server/app-bots/app-bots-composition.server";
+import type { AppBotView } from "#src/server/app-bots/app-bot-store";
 import { createAppInstallationSetup } from "#src/server/app-installation-setup/app-installation-setup-composition.server";
 import type { AppSetupView } from "#src/server/app-installation-setup/app-installation-setup.server";
 import { createAppWebhooks } from "#src/server/app-notifications/app-webhooks-composition.server";
@@ -27,6 +29,7 @@ import {
   SETUP_URL_MAX_LENGTH,
   type AppSetupSummary,
 } from "./app-installation-setup";
+import type { AppBotSummary } from "./app-bot";
 import type { WebhookStatus } from "./app-webhook";
 import { APP_NOTIFICATION_EVENT_NAMES } from "./app-notification-events";
 import { APP_PERMISSION_GROUPS, type AppPermissionsSummary } from "./app-permissions";
@@ -72,6 +75,9 @@ export type AppSummary = Omit<
   webhookStatus?: WebhookStatus;
   permissions?: AppPermissionsSummary;
   setup?: AppSetupSummary;
+  /** Where this Workspace's installation of the app stands on its bot; present only where
+   * `app-bot` is on and the app declares one. */
+  bot?: AppBotSummary;
   /** The Agent that registered the app and manages it with the Workspace's owners and admins;
    * present only for an app this Workspace owns, and only for a live public Agent. */
   ownerAgent?: { name: string };
@@ -111,6 +117,12 @@ const setupSummary = ({
   url,
   description,
   installation: { installationId, status, link, completedAt: completedAt?.toISOString() ?? null },
+});
+
+const botSummary = ({ installationId, granted, statusText }: AppBotView): AppBotSummary => ({
+  installationId,
+  granted,
+  statusText,
 });
 
 const summary = (
@@ -172,6 +184,8 @@ export type AppDeclarations = {
   manifest: boolean;
   /** The Agent inbound scopes in the Login section (`app-agent-events`). */
   agentEvents: boolean;
+  /** The editor's Bot section and the installation's Enable bot (`app-bot`). */
+  bot: boolean;
   /** `app-marketplace` is on: the editor's Distribution section and the apps' publish status. */
   marketplace: boolean;
   /** The viewer reviews Marketplace requests (a platform operator), where it is on. */
@@ -198,6 +212,11 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
       { workspaceId: actor.workspaceId, workspaceSlug },
       actor.actorUserId,
     );
+    const bot = await isFeatureEnabled("app-bot", {
+      workspaceId: actor.workspaceId,
+      workspaceSlug,
+    });
+    const bots = bot ? await createAppBots(context.db).workspaceBots(actor) : null;
     const notifications = permissions?.notifications ?? false;
     const webhookStatuses = notifications
       ? await createAppWebhooks(context.db).workspaceStatuses(actor)
@@ -213,6 +232,7 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
         ),
         ...(app.ownerWorkspaceId === actor.workspaceId &&
           ownerAgents.has(app.key) && { ownerAgent: { name: ownerAgents.get(app.key)! } }),
+        ...(bots?.get(app.key)?.declared && { bot: botSummary(bots.get(app.key)!) }),
         ...(webhookStatuses &&
           app.ownerWorkspaceId === actor.workspaceId && {
             webhookStatus: webhookStatuses.get(app.key) ?? "off",
@@ -227,6 +247,7 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
           workspaceId: actor.workspaceId,
           workspaceSlug,
         }),
+        bot,
         marketplace,
         reviewer,
       } satisfies AppDeclarations,
