@@ -13,7 +13,6 @@ import { Input } from "#src/components/base/input/input";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
-import { HoverPopover } from "#src/components/ui/hover-popover";
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
@@ -27,7 +26,7 @@ import { memberMatchesSearch } from "./channel-member-search";
 import { AddMembersView, useCreatedAgentJoin } from "./channel-add-members-view";
 import { useChannelMembers, type ChannelMembers, type RosterMember } from "./channel-members-query";
 import type { AgentProfileTab as AgentProfileTabId } from "#src/features/agents/profile-panel/profile-panel-search";
-import { MemberProfileCard } from "./channel-header-people";
+import { PersonHoverCard } from "./person-hover-card";
 import { channelMembersQueryKey } from "./conversation-query-keys";
 import { mentionKey } from "./mention-text";
 
@@ -365,7 +364,7 @@ const MemberRow = memo(function MemberRow({
           onOpenProfile={(agentId, tab) => onOpenProfile({ kind: "agent", id: agentId }, tab)}
         />
       ) : (
-        <HoverPopover
+        <PersonHoverCard
           label={m.member_person_open_profile({ name: member.displayName })}
           onPress={namePress}
           triggerClassName={avatarTriggerClassName}
@@ -378,16 +377,15 @@ const MemberRow = memo(function MemberRow({
               contentClassName={avatarToneClassName(member.displayName)}
             />
           }
-        >
-          <MemberProfileCard
-            userId={member.id}
-            name={member.displayName}
-            src={member.avatarUrl}
-            description={member.description}
-            serverRole={member.serverRole}
-            channelRole={member.channelRole}
-          />
-        </HoverPopover>
+          userId={member.id}
+          name={member.displayName}
+          loaded={{
+            src: member.avatarUrl,
+            description: member.description,
+            serverRole: member.serverRole,
+            channelRole: member.channelRole,
+          }}
+        />
       )}
       <AriaButton
         aria-label={

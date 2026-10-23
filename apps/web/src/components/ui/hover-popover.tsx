@@ -1,12 +1,14 @@
 import { forwardRef, useContext, type ReactNode } from "react";
 import {
   Button,
+  Focusable,
   OverlayTriggerStateContext,
   Popover,
   PreviewTrigger,
   type ButtonProps,
 } from "react-aria-components";
 
+import { chipControl } from "#src/lib/chip-control";
 import { cn } from "#src/lib/utils";
 
 // Untitled UI has no hover-triggered popover, but React Aria ships this exact interaction:
@@ -33,6 +35,7 @@ export function HoverPopover({
   onOpen,
   onPress,
   working,
+  inline,
 }: {
   label: string;
   trigger: ReactNode;
@@ -43,6 +46,10 @@ export function HoverPopover({
   /** The trigger's own action for a press (pointer or keyboard); the press also closes the peek. */
   onPress?: () => void;
   working?: boolean;
+  /** The trigger is an inline `<span role="button">` rather than a `<button>`, for a chip inside
+   * running text: a `<button>` cannot break across lines, and Firefox and Safari start no text
+   * selection from one. */
+  inline?: boolean;
 }) {
   return (
     <PreviewTrigger
@@ -54,14 +61,20 @@ export function HoverPopover({
         if (isOpen) onOpen?.();
       }}
     >
-      <PreviewTriggerButton
-        aria-label={label}
-        data-working={working}
-        className={triggerClassName}
-        onPress={onPress}
-      >
-        {trigger}
-      </PreviewTriggerButton>
+      {inline ? (
+        <PreviewTriggerInline label={label} className={triggerClassName} onPress={onPress}>
+          {trigger}
+        </PreviewTriggerInline>
+      ) : (
+        <PreviewTriggerButton
+          aria-label={label}
+          data-working={working}
+          className={triggerClassName}
+          onPress={onPress}
+        >
+          {trigger}
+        </PreviewTriggerButton>
+      )}
       <Popover
         placement="bottom start"
         offset={12}
@@ -99,6 +112,36 @@ const PreviewTriggerButton = forwardRef<HTMLButtonElement, ButtonProps>(
     );
   },
 );
+
+/** The inline trigger: `Focusable` hands the span `PreviewTrigger`'s hover, focus, keyboard and
+ * long-press props, and `chipControl` adds the button role with the press (click, Enter, Space). */
+function PreviewTriggerInline({
+  label,
+  className,
+  onPress,
+  children,
+}: {
+  label: string;
+  className?: string;
+  onPress?: () => void;
+  children: ReactNode;
+}) {
+  const closePreview = useClosePreview();
+  const control = chipControl(
+    onPress &&
+      (() => {
+        closePreview();
+        onPress();
+      }),
+  );
+  return (
+    <Focusable>
+      <span aria-label={label} className={className} {...control}>
+        {children}
+      </span>
+    </Focusable>
+  );
+}
 
 /** Closes the peek the calling content sits in; for an action inside the popover that moves the
  * reader somewhere else (the Agent card's "Recent activity" link opens the profile panel). */

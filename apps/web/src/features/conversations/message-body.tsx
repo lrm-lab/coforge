@@ -4,11 +4,15 @@ import Markdown, { type Components, type ExtraProps, type Options } from "react-
 import rehypeSanitize from "rehype-sanitize";
 import type { Element } from "hast";
 
-import { chipControl } from "#src/lib/chip-control";
 import { MESSAGE_REMARK_PLUGINS, escapeLiteralHtml } from "#src/lib/message-syntax";
+import { AgentMentionChip, PersonMentionChip } from "./mention-chip-hover";
 import { followInternalLinkClick, internalAppHref } from "./internal-app-href";
 import { mentionHandlesByToken, rehypeReferenceChips, type ChipMention } from "./message-markdown";
 import type { MentionRef } from "./mention-text";
+import type {
+  OpenAgentProfile,
+  OpenPersonProfile,
+} from "#src/features/agents/profile-panel/open-agent-profile";
 import { TaskReference } from "#src/features/tasks/task-reference";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import "./message-markdown.css";
@@ -53,9 +57,9 @@ export function MessageBody({
   /** Opens the Agent profile panel when an Agent mention chip is activated. Present only where
    * the conversation owns that slot; absent, Agent chips render as inert highlights (the
    * previous behavior), never dead controls. */
-  onOpenAgentProfile?: (agentId: string) => void;
+  onOpenAgentProfile?: OpenAgentProfile;
   /** Opens a person's profile from their mention chip; absent, a person's chip is inert. */
-  onOpenPersonProfile?: (userId: string) => void;
+  onOpenPersonProfile?: OpenPersonProfile;
   /** Opens a task reference's detail popup. Absent, a known Task's badge is not a control. */
   onOpenTask?: (number: number) => void;
   /** Every channel of the Workspace, id → current name (closed ones included), for a host that can
@@ -179,18 +183,19 @@ function ChannelChipLink({
 
 /**
  * The `span` renderer. A mention chip carries `data-mention-agent-id` (an Agent) or
- * `data-mention-user-id` (a person) and becomes a keyboard- and pointer-accessible control that
- * opens that profile when the matching handler is provided. A task reference
- * carries `data-task-reference-number` and renders as `TaskReference`. A channel-reference chip
- * carries `data-channel-id` and becomes a router link to that channel: it navigates, so it is a
- * real link (open in a new tab, copy the address) rather than a button. A thread-reference chip
- * carries `data-thread-channel-id` and `data-thread-root-id` and becomes a router link to that
- * channel with the thread pane open (`?threadRootId=`), the same URL state the thread opener
- * writes. All other spans render unchanged.
+ * `data-mention-user-id` (a person) and its resolved `data-mention-label`. With the matching
+ * handler it becomes a keyboard- and pointer-accessible control that opens that profile and peeks
+ * at the card on hover or focus; without one it stays an inert span. A task reference carries
+ * `data-task-reference-number` and renders as `TaskReference`. A channel-reference chip carries
+ * `data-channel-id` and becomes a router link to that channel: it navigates, so it is a real link
+ * (open in a new tab, copy the address) rather than a button. A thread-reference chip carries
+ * `data-thread-channel-id` and `data-thread-root-id` and becomes a router link to that channel
+ * with the thread pane open (`?threadRootId=`), the same URL state the thread opener writes. All
+ * other spans render unchanged.
  */
 function chipSpan(
-  onOpenAgentProfile?: (agentId: string) => void,
-  onOpenPersonProfile?: (userId: string) => void,
+  onOpenAgentProfile?: OpenAgentProfile,
+  onOpenPersonProfile?: OpenPersonProfile,
   onOpenTask?: (number: number) => void,
 ) {
   return function ChipSpan({
@@ -232,15 +237,33 @@ function chipSpan(
     }
     const agentId = (props as Record<string, unknown>)["data-mention-agent-id"];
     const userId = (props as Record<string, unknown>)["data-mention-user-id"];
-    const control = chipControl(
-      typeof agentId === "string" && onOpenAgentProfile
-        ? () => onOpenAgentProfile(agentId)
-        : typeof userId === "string" && onOpenPersonProfile
-          ? () => onOpenPersonProfile(userId)
-          : undefined,
-    );
+    const label = (props as Record<string, unknown>)["data-mention-label"];
+    if (typeof agentId === "string" && typeof label === "string" && onOpenAgentProfile) {
+      return (
+        <AgentMentionChip
+          agentId={agentId}
+          label={label}
+          className={className}
+          onOpenProfile={onOpenAgentProfile}
+        >
+          {children}
+        </AgentMentionChip>
+      );
+    }
+    if (typeof userId === "string" && typeof label === "string" && onOpenPersonProfile) {
+      return (
+        <PersonMentionChip
+          userId={userId}
+          label={label}
+          className={className}
+          onOpenProfile={onOpenPersonProfile}
+        >
+          {children}
+        </PersonMentionChip>
+      );
+    }
     return (
-      <span {...props} {...control} className={className}>
+      <span {...props} className={className}>
         {children}
       </span>
     );

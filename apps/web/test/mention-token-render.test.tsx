@@ -95,3 +95,41 @@ test("a referenced Task the conversation has becomes a control; any other number
   expect(outside).toContain(">task #68<");
   expect(outside).not.toContain("data-task-status");
 });
+
+const AGENT_ID = "2f1c8d1e-5d6b-4a52-9d11-6a2f7e0a9b11";
+
+/** A body with a person's and an Agent's mention, rendered where both profiles can be opened. */
+function mentionBody(open: boolean) {
+  const queryClient = new QueryClient();
+  return renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <MessageBody
+        body={`<@human:${HUMAN_ID}> and <@agent:${AGENT_ID}>`}
+        mentions={[mentionOf("user", HUMAN_ID, "andong"), mentionOf("agent", AGENT_ID, "scout")]}
+        onOpenAgentProfile={open ? () => {} : undefined}
+        onOpenPersonProfile={open ? () => {} : undefined}
+      />
+    </QueryClientProvider>,
+  );
+}
+
+test("a mention chip that can open a profile is an inline hover-card trigger, for Agents and people", () => {
+  const markup = mentionBody(true);
+  // An inline span, not a <button>, so the chip wraps and selects like the text around it.
+  expect(markup).not.toContain("<button");
+  for (const name of ["andong", "scout"]) {
+    expect(markup).toContain(`aria-label="@${name}"`);
+    expect(markup).toContain(`>@${name}</span>`);
+  }
+  expect(markup).toContain('aria-haspopup="dialog"');
+  expect(markup).toContain('role="button"');
+  expect(markup).toContain("message-markdown-mention-openable");
+});
+
+test("a mention chip with no profile to open stays an inert highlight", () => {
+  const markup = mentionBody(false);
+  expect(markup).toContain("message-markdown-mention");
+  expect(markup).not.toContain('role="button"');
+  expect(markup).not.toContain("aria-haspopup");
+  expect(markup).not.toContain("message-markdown-mention-openable");
+});

@@ -50,6 +50,8 @@ export function AgentHoverCard({
   trigger,
   onOpenProfile,
   triggerClassName,
+  label,
+  inline,
 }: {
   agentId: string;
   conversationId?: string;
@@ -60,10 +62,15 @@ export function AgentHoverCard({
   trigger: ReactNode;
   onOpenProfile?: OpenAgentProfile;
   triggerClassName?: string;
+  /** The trigger's accessible name; by default "Open <name>'s profile". */
+  label?: string;
+  /** The trigger is inline text (a mention chip) rather than a round avatar button. */
+  inline?: boolean;
 }) {
   return (
     <HoverPopover
-      label={m.agent_open_profile({ name })}
+      label={label ?? m.agent_open_profile({ name })}
+      inline={inline}
       onPress={onOpenProfile ? () => onOpenProfile(agentId) : undefined}
       triggerClassName={
         triggerClassName ??

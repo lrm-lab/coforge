@@ -1,24 +1,19 @@
 import { Link } from "@tanstack/react-router";
 import { Folder } from "@untitledui/icons";
-import { Heading } from "react-aria-components";
 
 import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
-import { Badge } from "#src/components/base/badges/badges";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
-import { HoverPopover } from "#src/components/ui/hover-popover";
 import { Skeleton } from "#src/components/ui/skeleton";
-import { StatusDot } from "#src/components/ui/status-dot";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import {
   useOpenAgentProfile,
   type OpenAgentProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
-import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
+import { PersonHoverCard } from "./person-hover-card";
 
 /** Faces kept in the header before the rest collapse into "+N". The mockup shows four. */
 export const CHANNEL_HEADER_FACE_LIMIT = 4;
@@ -35,85 +30,6 @@ export type ChannelHeaderFace = {
   serverRole?: string | null;
   channelRole?: string;
 };
-
-/** Owner and admin are Workspace roles; a channel admin is one by this channel's own role. */
-function roleLabel(member: { serverRole?: string | null; channelRole?: string }) {
-  if (member.serverRole === "owner") return m.channel_members_role_owner();
-  if (member.serverRole === "admin") return m.channel_members_role_admin();
-  if (member.channelRole === "admin") return m.channel_members_role_channel_admin();
-  return m.channel_members_role_member();
-}
-
-/**
- * The profile card shown on hover for a human member. Deliberately no actions on it (the boss's
- * ruling, task #210): the hover is for a quick look at a face. Shared with the members roster
- * (channel-members-page), whose avatar rows peek the same card.
- */
-export function MemberProfileCard({
-  userId,
-  name,
-  src,
-  description,
-  serverRole,
-  channelRole,
-}: {
-  userId?: string;
-  name: string;
-  src?: string | null;
-  description?: string | null;
-  serverRole?: string | null;
-  channelRole?: string;
-}) {
-  const online = userId ? useMemberOnline(userId) : undefined;
-
-  const roleText =
-    serverRole || channelRole
-      ? roleLabel({ serverRole, channelRole: channelRole ?? "member" })
-      : null;
-
-  return (
-    <>
-      <div className="flex items-start gap-3 p-3">
-        {userId ? (
-          <MemberAvatar size="md" userId={userId} name={name} src={src ?? null} />
-        ) : (
-          <IdentityAvatar
-            size="md"
-            alt=""
-            src={src ?? undefined}
-            initials={avatarInitial(name)}
-            contentClassName={avatarToneClassName(name)}
-          />
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Heading slot="title" className="truncate text-sm font-semibold text-primary">
-              {name}
-            </Heading>
-            {online !== undefined && (
-              <span className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
-                <StatusDot tone={online ? "online" : "offline"} className="size-1.5 shrink-0" />
-                <span className="truncate">{online ? m.member_online() : m.member_offline()}</span>
-              </span>
-            )}
-          </div>
-          {roleText && (
-            <div className="mt-1">
-              <Badge size="sm" color="gray">
-                {roleText}
-              </Badge>
-            </div>
-          )}
-        </div>
-      </div>
-      {description && (
-        <p className="border-t border-secondary px-3 py-2 text-xs text-secondary break-words line-clamp-3">
-          {description}
-        </p>
-      )}
-    </>
-  );
-}
 
 /** The project named on a channel, as a folder chip beside the title. Absent when the channel
  * has no project. */
@@ -198,23 +114,21 @@ export function ChannelHeaderFaces({
               (entry.key.startsWith("user:") ? entry.key.replace(/^user:/, "") : undefined);
 
             return (
-              <HoverPopover
+              <PersonHoverCard
                 key={entry.key}
                 label={entry.displayName}
                 trigger={avatarNode}
                 triggerClassName="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
-                className="w-70"
                 onPress={onOpenMembers}
-              >
-                <MemberProfileCard
-                  userId={userId}
-                  name={entry.displayName}
-                  src={entry.avatarUrl}
-                  description={entry.description}
-                  serverRole={entry.serverRole}
-                  channelRole={entry.channelRole}
-                />
-              </HoverPopover>
+                userId={userId}
+                name={entry.displayName}
+                loaded={{
+                  src: entry.avatarUrl,
+                  description: entry.description,
+                  serverRole: entry.serverRole,
+                  channelRole: entry.channelRole,
+                }}
+              />
             );
           })}
           {more > 0 && (

@@ -39,8 +39,8 @@ import type { Mentionable, MentionRef } from "./mention-text";
 const CHIP_BASE = "message-markdown-mention rounded-sm px-0.5 font-medium";
 export const MENTION_CHIP_CLASS = `${CHIP_BASE} bg-brand-primary text-brand-secondary`;
 export const MENTION_CHIP_SELF_CLASS = `${CHIP_BASE} bg-brand-solid text-white`;
-/** Added to every mention chip, an Agent's or a person's, so the stylesheet gives it the pointer
- * and hover affordance of a control that opens that profile. */
+/** Added by the renderer to a mention chip that opens a profile (a host passed the handler), so the
+ * stylesheet gives it the pointer and hover affordance of a control; an inert chip lacks it. */
 export const MENTION_CHIP_OPENABLE_CLASS = "message-markdown-mention-openable";
 
 /**
@@ -325,17 +325,17 @@ function referenceKinds(options: ReferenceChipOptions): ReferenceKind[] {
 }
 
 /** A mention chip: the self treatment for the viewer, and the id of the Agent or person whose
- * profile the renderer opens from it. */
+ * profile the renderer opens from it, and the label it shows. */
 function mentionChip(mention: ChipMention, viewerId: string | undefined): Element {
   // An Agent is never the viewer, whatever ids are compared.
   const self = Boolean(viewerId) && !mention.agentId && mention.actorId === viewerId;
   const className = (self ? MENTION_CHIP_SELF_CLASS : MENTION_CHIP_CLASS).split(" ");
-  className.push(MENTION_CHIP_OPENABLE_CLASS);
   return {
     type: "element",
     tagName: "span",
     properties: {
       className,
+      "data-mention-label": mention.label,
       ...(mention.agentId
         ? { "data-mention-agent-id": mention.agentId }
         : { "data-mention-user-id": mention.actorId }),
