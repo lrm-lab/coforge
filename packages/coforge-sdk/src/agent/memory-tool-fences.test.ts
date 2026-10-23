@@ -17,11 +17,9 @@ test("keeps the Agent tool fence distinct from Workspace Memory Profile persiste
   expect(isMemoryAgentToolProfile("all-tools")).toBe(false);
 });
 
-test("exposes Fork and AIG retrieval, Offer, and diagnosis on the memory fence", () => {
+test("exposes experience-card retrieval, Offer, and diagnosis on the memory fence", () => {
   expect(toolsForMemoryFence(OPENVIKING_TOOL_PROFILE)).toEqual([
-    OPENVIKING_TOOL_NAMES.forkFind,
     OPENVIKING_TOOL_NAMES.experienceFind,
-    OPENVIKING_TOOL_NAMES.expand,
     OPENVIKING_TOOL_NAMES.offer,
     OPENVIKING_TOOL_NAMES.diagnose,
   ]);
@@ -30,10 +28,10 @@ test("exposes Fork and AIG retrieval, Offer, and diagnosis on the memory fence",
   ).toBe(false);
 });
 
-test("Memory Agent discovery exposes Fork and AIG traversal", () => {
-  expect(toolsForMemoryFence("openviking-memory")).toContain("ov_fork_find");
+test("Memory Agent discovery uses ov_experience_find instead of the Fork chain tools", () => {
+  expect(toolsForMemoryFence("openviking-memory")).not.toContain("ov_fork_find");
   expect(toolsForMemoryFence("openviking-memory")).toContain("ov_experience_find");
-  expect(toolsForMemoryFence("openviking-memory")).toContain("ov_expand");
+  expect(toolsForMemoryFence("openviking-memory")).not.toContain("ov_expand");
   expect(toolsForMemoryFence("openviking-memory")).not.toContain("ov_find");
   expect(toolsForMemoryFence("openviking-memory")).not.toContain("ov_search_context");
   expect(toolsForMemoryFence("openviking-memory")).not.toContain("ov_read");

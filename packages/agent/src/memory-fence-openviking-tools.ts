@@ -126,7 +126,7 @@ export function memoryFenceOpenVikingTools(
     [OPENVIKING_TOOL_NAMES.searchContext]: openvikingTool(
       OPENVIKING_TOOL_NAMES.searchContext,
       "OpenViking search context",
-      "Retrieve documentary evidence with local embedding recall and native hierarchical context assembly within the shared token budget. Use entity clues or paraphrased factual questions here, then ov_read promising cited sources to verify missing constraints. Use ov_fork_find for methods and failure-pattern experience.",
+      "Retrieve documentary evidence with local embedding recall and native hierarchical context assembly within the shared token budget. Use entity clues or paraphrased factual questions here, then ov_read promising cited sources to verify missing constraints. Use ov_experience_find for methods and failure-pattern experience.",
       "search_context",
       {
         operationId: Type.String({

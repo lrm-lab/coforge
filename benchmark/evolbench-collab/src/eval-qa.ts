@@ -16,8 +16,8 @@ function delay(ms: number): Promise<void> {
 }
 
 const MEMORY_OBSERVER_NOTE = [
-  "Memory Agent: you observe this channel. Consult prior experience with ov_experience_find and",
-  "ov_fork_find, then publish one short channel message with send_channel_message saying what you",
+  "Memory Agent: you observe this channel. Consult prior experience with ov_experience_find,",
+  "then publish one short channel message with send_channel_message saying what you",
   "consulted and what applies to this task, or that nothing applied. Do not invent evidence.",
 ].join(" ");
 

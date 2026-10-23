@@ -197,6 +197,7 @@ export function createMemoryFenceTools(
     memoryOfferOnly?: boolean;
     conversation?: AgentConversationScope;
     controlSession?: boolean;
+    toolNames?: readonly string[];
   } = {},
 ) {
   if (options.controlSession) return [];
@@ -219,8 +220,7 @@ export function createMemoryFenceTools(
         }) as never,
       execute: async (_toolCallId, params, signal) => {
         signal?.throwIfAborted();
-        // Decode throws before consume, so an empty or invalid ov_* call does not
-        // spend the triggering message's read budget and never reaches OpenViking.
+        // Decode throws before consume: an invalid ov_* call spends no read budget.
         const command = decodeOpenVikingAgentCommand({
           protocol: OPENVIKING_AGENT_PROTOCOL,
           op,
@@ -317,7 +317,7 @@ export function createMemoryFenceTools(
 
   const openvikingByName = memoryFenceOpenVikingTools(openvikingTool);
 
-  const fenced = toolsForMemoryFence(profile).map((name) => {
+  const fenced = (options.toolNames ?? toolsForMemoryFence(profile)).map((name) => {
     const tool = openvikingByName[name];
     if (!tool) throw new Error(`unsupported Memory Agent tool: ${name}`);
     return tool;

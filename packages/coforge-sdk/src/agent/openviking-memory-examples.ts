@@ -11,7 +11,7 @@ export const OPENVIKING_ARGUMENT_EXAMPLES: Record<OpenVikingAgentOperation, stri
   expand:
     '{"operationId": "hop-1", "chainRef": "<ov_fork_find chainRef>", "uri": "<served node uri>", "relation": "anchor", "limit": 5}',
   offer:
-    '{"operationId": "offer-1", "citationRefs": ["<ov_fork_find/ov_expand 返回的 citation id>"], "body": "<给 @task 的正文>"}',
+    '{"operationId": "offer-1", "citationRefs": ["<ov_experience_find 返回的 citation id>"], "body": "<给 @task 的正文>"}',
 };
 
 /** Channel fence tools. Not OpenViking commands; kept beside the examples models copy. */

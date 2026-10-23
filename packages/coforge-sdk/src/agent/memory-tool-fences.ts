@@ -13,9 +13,9 @@ export const WORKSPACE_MEMORY_PROFILES = ["off", "openviking"] as const;
 export type WorkspaceMemoryProfileName = (typeof WORKSPACE_MEMORY_PROFILES)[number];
 
 const OPENVIKING_FENCE_TOOLS = [
-  OPENVIKING_TOOL_NAMES.forkFind,
+  // ov_fork_find / ov_expand stay in the SDK for other callers but are not on the Memory Agent
+  // fence: ov_experience_find serves both skill cards and fork guards as self-contained cited items.
   OPENVIKING_TOOL_NAMES.experienceFind,
-  OPENVIKING_TOOL_NAMES.expand,
   OPENVIKING_TOOL_NAMES.offer,
   OPENVIKING_TOOL_NAMES.diagnose,
 ] as const;

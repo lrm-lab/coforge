@@ -134,14 +134,14 @@ export class MemoryAgentTurnBudget {
         : undefined;
       feedback.push(
         this.#discoveriesWithoutRead > 3
-          ? `${this.#discoveriesWithoutRead} discovery calls without a new document read. Read and disconfirm a relevant candidate, or publish a partial cited memory_offer with explicit unknowns. For method gaps query viking://resources/causal/forks and expand applicable branch_steps. ${readExample ? `ov_read example: ${readExample}.` : "No factual candidate in this result: explain the mismatch before pivoting."}`
+          ? `${this.#discoveriesWithoutRead} discovery calls without a new document read. Read and disconfirm a relevant candidate, or publish a partial cited memory_offer with explicit unknowns. For method gaps call ov_experience_find. ${readExample ? `ov_read example: ${readExample}.` : "No factual candidate in this result: explain the mismatch before pivoting."}`
           : `${this.#discoveriesWithoutRead} discovery calls without a new document read. New snippets and new IDs do not verify the Task's constraints. Before another keyword variant, read a relevant candidate and test a specific unresolved constraint; also try to disconfirm the leading hypothesis. ` +
               (candidate
                 ? "For this returned document, ov_read accepts " +
                   readExample +
                   ". Choose by relevance; the first hit is not automatically correct. "
                 : "If no returned document is relevant, explain that mismatch and pivot to a different constraint. ") +
-              "Use ov_search_context for factual documentary clues; use ov_fork_find for abstract method gaps. Quotation marks and date ranges are not strict filters. If reading cannot resolve the gap, publish a partial cited memory_offer with supported findings and explicit unknowns rather than another list of near-identical queries. Repeated Task failures may warrant memory_diagnose anchored to an actual Task message. Retrieval remains unlimited.",
+              "Use ov_search_context for factual documentary clues; use ov_experience_find for abstract method gaps. Quotation marks and date ranges are not strict filters. If reading cannot resolve the gap, publish a partial cited memory_offer with supported findings and explicit unknowns rather than another list of near-identical queries. Repeated Task failures may warrant memory_diagnose anchored to an actual Task message. Retrieval remains unlimited.",
       );
     }
     if (
@@ -170,7 +170,7 @@ export class MemoryAgentTurnBudget {
       return feedback.length ? feedback.join("\n") : undefined;
     const next =
       this.#citationRefs.size > 0
-        ? "Publish a partial cited memory_offer with useful Fork/AIG findings and explicit unresolved constraints, or change strategy: use ov_fork_find with a materially different failure or reasoning pattern, then expand served branch_steps/next relations. If Task's observed state shows repeated failures or unresolved constraints, read its exact channel/thread update and decide whether memory_diagnose would help; do not diagnose your own Offer or routine progress. Do not wait to solve the entire Task before replying."
+        ? "Publish a partial cited memory_offer with useful experience-card findings and explicit unresolved constraints, or change strategy: use ov_experience_find with a materially different task situation, deliverable type or failure type. If Task's observed state shows repeated failures or unresolved constraints, read its exact channel/thread update and decide whether memory_diagnose would help; do not diagnose your own Offer or routine progress. Do not wait to solve the entire Task before replying."
         : "Use a materially different query. No citation has been retrieved; do not fabricate evidence or citations.";
     feedback.push(
       `No new evidence in ${this.#unchangedReads} consecutive retrievals. ${next} Available citationRefs: ${[...this.#citationRefs].slice(-10).join(", ")}`,

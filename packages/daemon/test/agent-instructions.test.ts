@@ -196,8 +196,7 @@ test("the openviking-memory profile queries before retrieval Offers and protects
 });
 
 const OPENVIKING_FENCE_TOOLS = [
-  "ov_fork_find",
-  "ov_expand",
+  "ov_experience_find",
   "memory_offer",
   "memory_diagnose",
 ] as const;
@@ -297,9 +296,11 @@ test("the memory fence lists no mutation tools and allows no mutation verbs", ()
 test("the memory fence shows copyable tool JSON and does not teach shell message send", () => {
   const fenced = instructionsForFence("openviking-memory");
   const section = memoryAgentSection(fenced);
-  expect(section).toContain('{"operationId": "find-1", "query": "<检索词>", "limit": 10}');
+  expect(section).toContain('ov_experience_find: {"operationId": "exp-1"');
+  expect(section).not.toContain("ov_fork_find");
+  expect(section).not.toContain("ov_expand");
   expect(section).toContain(
-    '{"operationId": "offer-1", "citationRefs": ["<ov_fork_find/ov_expand 返回的 citation id>"], "body": "<给 @task 的正文>"}',
+    '{"operationId": "offer-1", "citationRefs": ["<ov_experience_find 返回的 citation id>"], "body": "<给 @task 的正文>"}',
   );
   expect(section).toContain('{"target": "#<频道名>"}');
   expect(section).toContain('{"target": "#<频道名>", "content": "<正文>"}');

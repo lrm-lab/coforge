@@ -9,6 +9,8 @@ Agent HTTPS 接口和 OpenViking 工具运行。经验与证据文档统一由 M
 1. 人类题目同时发送给 `@task @memory`，分别触发两个 Agent。Memory 根据原始任务自主构造查询并开始检索，无需等待 Task 再次请求。两者执行顺序不作保证。
 2. Memory Agent 注册为 Workspace 的 Memory Agent。普通频道和线程更新按目标累计，5 条或首条等待 30 秒触发合并通知，即使未 @Memory 或只 @其他 Agent；自己的消息不计入。个人 @mention 仍立即通知。停止、离群或关闭 memory profile 后不再新增观察投递。Task 可继续 `@memory` 提出查询。
    收到通知后使用不带范围锚点的 `message_read`，从服务端已读位置分页读取正文，`hasNewer=true` 时继续。通知与 custody ACK 不推进已读位置；成功读取才推进。`message_check` 只消费投递集合，不能代替频道增量阅读。读完判断是否需要检索或发言。
+> 2026-10-23 更新：Memory Agent 的工具围栏已改为 `ov_experience_find`（skill_card 与 fork 守卫，条目自包含且带引用）取代 `ov_fork_find`；`ov_fork_find`/`ov_expand` 不再暴露给 Memory Agent，SDK 命令与服务端路由保留。下面第 3 条中关于 `ov_fork_find`/chainRef/`ov_expand` 的描述仅对保留的 SDK 路径成立。
+
 3. Memory 用 `ov_search_context` 做文档 embedding 召回及原生上下文组装，按需 `ov_read` 校验正文；用 `ov_fork_find` 检索冻结方法经验。后者只接受 query/limit，服务端固定命名空间 `viking://resources/causal/forks` 并复用词法 find；Agent 不再暴露 `ov_find`。Fork 返回 chainRef、候选及可展开关系，与 `ov_expand` 衔接；链绑定用户、已服务节点、权限及预算。Fork 是未经执行的反事实方法，不能当事实答案证据。
    `ov_search_context`、`ov_fork_find`、`ov_read`、`ov_expand` 没有每个触发消息的读取次数上限。单次最多10个候选，文档上下文默认1600 token（合法范围64..32000），每触发最多发布1个Offer，图链跳数和权限校验仍生效。
    Memory 根据原题、频道增量和未解决约束选择检索路径：实体/引文/事实用 `ov_search_context`；复杂多跳、搜索停滞、验证方法用抽象模式查询 `ov_fork_find`，沿已服务的 branch_steps/anchor 等关系展开。词法 Fork 搜索不把引号或日期范围当作严格过滤器。
