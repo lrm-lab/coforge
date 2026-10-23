@@ -130,6 +130,8 @@ model WorkspaceMemberPreference {
   /// Chat sidebar sections top to bottom: "pinned", "channels", "agents" and custom section ids.
   /// Empty = the default order. Written with the custom sections' own `sortOrder`.
   chatSectionOrder     String[]            @default([])
+  /// When the member closed the setup checklist in this Workspace; null while it shows.
+  setupChecklistDismissedAt DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 

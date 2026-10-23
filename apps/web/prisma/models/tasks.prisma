@@ -35,6 +35,8 @@ model Task {
   /// Serves an Agent's own Tasks (`task list --mine`) from its member rows, whatever else the
   /// Workspace holds.
   @@index([ownerMemberId, status])
+  /// Serves "has this member created a Task", e.g. the setup checklist's task step.
+  @@index([creatorMemberId])
   @@map("tasks")
 }
 

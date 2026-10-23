@@ -1,6 +1,6 @@
 # 5.2 侧栏「完成设置」清单
 
-展开侧栏（含手机抽屉）里、用户卡正上方的一张小卡片，带新成员依次完成最常用的设置。收缩的窄栏不显示。代码在 `apps/web/src/features/onboarding/`（界面、查询、关闭记忆）和 `apps/web/src/server/onboarding/`（`SetupChecklist`，只读已有的行，不存进度）。
+展开侧栏（含手机抽屉）里、用户卡正上方的一张小卡片，带新成员依次完成最常用的设置。收缩的窄栏不显示。代码在 `apps/web/src/features/onboarding/`（界面、查询、关闭）和 `apps/web/src/server/onboarding/`（`SetupChecklist`，只读已有的行，不存步骤进度，只存关闭）。
 
 ## 步骤与完成条件
 
@@ -25,7 +25,7 @@ GitHub 状态只读数据库快照（`connection.overview`），从不在加载�
 ## 显示与关闭
 
 - 加载中或加载失败时什么都不画，不显示编造的「0 / N」。
-- 右上角 ✕ 在本浏览器里对本人和该 Workspace 隐藏卡片，记在 `localStorage`（`coforge-setup-checklist:<用户>:<Workspace>`），不写数据库。存储被禁用时，只在当前页面生效。
+- 右上角 ✕ 对本人在该 Workspace 关闭清单，存在服务端的 `WorkspaceMemberPreference.setupChecklistDismissedAt`（按成员、按 Workspace；重复关闭保留第一次的时间），所以换设备、换浏览器也不会再出现。关闭后读取接口直接返回 `dismissed: true` 和空的步骤列表，不再查询各步骤，卡片也不再轮询。点击 ✕ 时界面先乐观隐藏，请求失败则恢复并提示。
 - 卡片的外观沿用 Untitled UI 侧栏的官方 featured card（带进度条的那张）：`bg-secondary` 圆角卡、`text-sm font-semibold` 标题、官方 `CloseButton` 压在右上角、官方 `ProgressBar`（进度文字在右侧）；步骤行在卡片里就地组合（React Aria 按钮加 `@untitledui/icons`）：官方的 Progress steps 是 PRO 组件，而 `ui/progress-steps.tsx` 只展示进度、不能点，这里每一行都要能点。进度条外包一层带名字的 `role="group"`。
 - 在用户眼前完成最后一步时，卡片变成带勾的「设置完成」，关掉后不再出现；打开页面时若已全部完成则什么都不显示。
 - 还有未完成的步骤时，每次切换页面、窗口重新获得焦点时都重新读取，可见的标签页里另外每 30 秒读一次，所以在这里或别的标签页做完的步骤很快就会打勾；全部完成后不再读取。

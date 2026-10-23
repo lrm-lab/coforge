@@ -33,26 +33,35 @@ export class SetupChecklist {
     workspaceId: string,
     userId: string,
   ): Promise<{
+    /** Whether the member closed the checklist in this Workspace; then no step is read. */
+    dismissed: boolean;
     steps: SetupStep[];
     /** The viewer's DM with their Workspace assistant, once it exists: where "say hi" goes. */
     assistantConversationId: string | null;
     /** Which GitHub flow the connect step starts. */
     githubStatus: GitHubSetupStatus;
   }> {
-    // Everything that does not depend on the role starts together with the role lookup.
-    const [membership, [assistant, github, task, computer]] = await Promise.all([
-      this.db.workspaceMembership.findUnique({
-        where: { workspaceId_userId: { workspaceId, userId } },
-        select: { role: true },
-      }),
-      Promise.all([
-        this.assistant(workspaceId, userId),
-        this.github(userId),
-        this.hasAgentTask(workspaceId, userId),
-        this.hasLocalComputer(userId),
-      ]),
-    ]);
+    const membership = await this.db.workspaceMembership.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: {
+        role: true,
+        preferences: { select: { setupChecklistDismissedAt: true } },
+      },
+    });
     if (!membership) throw new AppError("ACCESS_DENIED");
+    if (membership.preferences?.setupChecklistDismissedAt)
+      return {
+        dismissed: true,
+        steps: [],
+        assistantConversationId: null,
+        githubStatus: "disconnected",
+      };
+    const [assistant, github, task, computer] = await Promise.all([
+      this.assistant(workspaceId, userId),
+      this.github(userId),
+      this.hasAgentTask(workspaceId, userId),
+      this.hasLocalComputer(userId),
+    ]);
     const [agent, invite] = await Promise.all([
       roleCan(membership.role, "createAgents") ? this.hasOwnAgent(workspaceId, userId) : undefined,
       roleCan(membership.role, "manageMembers") ? this.hasTeammate(workspaceId) : undefined,
@@ -62,7 +71,34 @@ export class SetupChecklist {
     if (agent !== undefined) steps.push({ id: "agent", done: agent });
     steps.push({ id: "task", done: task }, { id: "computer", done: computer });
     if (invite !== undefined) steps.push({ id: "invite", done: invite });
-    return { steps, assistantConversationId: assistant.conversationId, githubStatus: github };
+    return {
+      dismissed: false,
+      steps,
+      assistantConversationId: assistant.conversationId,
+      githubStatus: github,
+    };
+  }
+
+  /** Closes the checklist for this member in this Workspace, on every device. Closing it again
+   * keeps the first time. */
+  async dismiss(workspaceId: string, userId: string): Promise<void> {
+    const where = { workspaceId_userId: { workspaceId, userId } };
+    const membership = await this.db.workspaceMembership.findUnique({
+      where,
+      select: { userId: true },
+    });
+    if (!membership) throw new AppError("ACCESS_DENIED");
+    const now = new Date();
+    await this.db.workspaceMemberPreference.upsert({
+      where,
+      create: { workspaceId, userId, setupChecklistDismissedAt: now },
+      update: {},
+    });
+    // The upsert may have found a row that never closed it; only a null becomes the time.
+    await this.db.workspaceMemberPreference.updateMany({
+      where: { workspaceId, userId, setupChecklistDismissedAt: null },
+      data: { setupChecklistDismissedAt: now },
+    });
   }
 
   /** The viewer's DM with their Workspace assistant and whether they have written in it. Looked up

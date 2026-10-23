@@ -246,3 +246,73 @@ test("a viewer who is not in the Workspace is refused", async () => {
     code: "ACCESS_DENIED",
   });
 });
+
+test("a dismissed checklist stays closed for that member in that Workspace only, whenever it is read", async () => {
+  const closer = await db.user.create({
+    data: { username: `closer-${suffix}`, displayName: "Closer" },
+  });
+  const bystander = await db.user.create({
+    data: { username: `bystander-${suffix}`, displayName: "Bystander" },
+  });
+  const second = await db.workspace.create({
+    data: {
+      name: "Second",
+      slug: `second-${suffix}`,
+      members: { create: [{ userId: closer.id }, { userId: bystander.id }] },
+    },
+  });
+  await db.workspaceMembership.createMany({
+    data: [
+      { workspaceId, userId: closer.id },
+      { workspaceId, userId: bystander.id },
+    ],
+  });
+  try {
+    expect((await checklist.read(workspaceId, closer.id)).dismissed).toBe(false);
+    await checklist.dismiss(workspaceId, closer.id);
+    expect(await checklist.read(workspaceId, closer.id)).toMatchObject({
+      dismissed: true,
+      steps: [],
+    });
+    expect((await checklist.read(workspaceId, bystander.id)).dismissed).toBe(false);
+    const elsewhere = await checklist.read(second.id, closer.id);
+    expect(elsewhere.dismissed).toBe(false);
+    expect(elsewhere.steps.length).toBeGreaterThan(0);
+
+    // Closing it again keeps the first time.
+    const stored = () =>
+      db.workspaceMemberPreference.findUniqueOrThrow({
+        where: { workspaceId_userId: { workspaceId, userId: closer.id } },
+      });
+    const first = (await stored()).setupChecklistDismissedAt;
+    expect(first).not.toBeNull();
+    await Bun.sleep(5);
+    await checklist.dismiss(workspaceId, closer.id);
+    expect((await stored()).setupChecklistDismissedAt).toEqual(first);
+  } finally {
+    await db.workspace.delete({ where: { id: second.id } });
+  }
+});
+
+test("dismissing keeps the member's other preferences", async () => {
+  const user = await db.user.create({ data: { username: `keeper-${suffix}`, displayName: "K" } });
+  await db.workspaceMembership.create({ data: { workspaceId, userId: user.id } });
+  await db.workspaceMemberPreference.create({
+    data: { workspaceId, userId: user.id, chatSectionOrder: ["pinned", "channels"] },
+  });
+  await checklist.dismiss(workspaceId, user.id);
+  const row = await db.workspaceMemberPreference.findUniqueOrThrow({
+    where: { workspaceId_userId: { workspaceId, userId: user.id } },
+  });
+  expect(row.chatSectionOrder).toEqual(["pinned", "channels"]);
+  expect(row.setupChecklistDismissedAt).not.toBeNull();
+});
+
+test("a viewer who is not in the Workspace cannot dismiss it", async () => {
+  const stranger = await db.user.create({
+    data: { username: `outsider-${suffix}`, displayName: "Outsider" },
+  });
+  await expect(checklist.dismiss(workspaceId, stranger.id)).rejects.toMatchObject({
+    code: "ACCESS_DENIED",
+  });
+});

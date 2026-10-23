@@ -4,6 +4,7 @@
   "onboarding_progress_label": "设置进度",
   "onboarding_progress_count": "{done} / {total}",
   "onboarding_dismiss": "关闭设置清单",
+  "onboarding_dismiss_failed": "没能关闭设置清单，请重试。",
   "onboarding_complete": "设置完成",
   "onboarding_step_assistant": "和通用助手打个招呼",
   "onboarding_step_github": "连接 GitHub",

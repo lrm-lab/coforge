@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
 import { CheckCircle } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
@@ -9,9 +9,8 @@ import { ProgressBar } from "#src/components/base/progress-indicators/progress-i
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
-import type { loadSetupChecklist } from "./setup-checklist.functions";
+import { dismissSetupChecklist, type loadSetupChecklist } from "./setup-checklist.functions";
 import { setupChecklistQuery } from "./setup-checklist-query";
-import { dismissSetupChecklist, useSetupChecklistDismissed } from "./setup-dismissal";
 import { firstIncompleteStep, type SetupStepId } from "./setup-steps";
 import { useSetupStepActions } from "./use-setup-step-actions";
 
@@ -29,7 +28,7 @@ const STEP_LABELS: Record<SetupStepId, () => string> = {
 /**
  * The "Finish setting up" card above the sidebar's user card. Renders nothing until its steps have
  * loaded (and when they fail to), so there is never a made-up 0-of-N state. Closing it hides it
- * for this person and Workspace in this browser. Finishing the last step in front of the person
+ * for this person in this Workspace, on every device. Finishing the last step in front of the person
  * shows "Setup complete" until they close it; arriving with every step done shows nothing.
  */
 export function SetupChecklistCard({
@@ -41,10 +40,26 @@ export function SetupChecklistCard({
   workspaceSlug: string;
   userId: string;
 }) {
-  const dismissed = useSetupChecklistDismissed(workspaceId, userId);
-  const { data: checklist, refetch } = useQuery({
-    ...setupChecklistQuery(workspaceId, userId),
-    enabled: !dismissed,
+  const toast = useAppToast();
+  const queryClient = useQueryClient();
+  const query = setupChecklistQuery(workspaceId, userId);
+  const { data: checklist, refetch } = useQuery(query);
+  const dismissed = checklist?.dismissed ?? false;
+  const close = useMutation({
+    mutationFn: () => dismissSetupChecklist(),
+    onMutate: async () => {
+      // A read still in flight must not bring the card back over the close.
+      await queryClient.cancelQueries({ queryKey: query.queryKey });
+      const previous = queryClient.getQueryData(query.queryKey);
+      queryClient.setQueryData(query.queryKey, (current) =>
+        current ? { ...current, dismissed: true, steps: [] } : current,
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      queryClient.setQueryData(query.queryKey, context?.previous);
+      toast.error(m.onboarding_dismiss_failed());
+    },
   });
   const allDone = checklist?.steps.every((step) => step.done);
   // A step is usually done on the page its row opens, so coming away from that page asks again.
@@ -65,7 +80,7 @@ export function SetupChecklistCard({
     <SetupChecklistPanel
       checklist={checklist}
       workspaceSlug={workspaceSlug}
-      onClose={() => dismissSetupChecklist(workspaceId, userId)}
+      onClose={() => close.mutate()}
     />
   );
 }

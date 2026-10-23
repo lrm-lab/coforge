@@ -21,7 +21,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 - `features/integrations/` — Settings → Integrations GitHub view and functions.
 - `features/landing/` — the public homepage.
 - `features/notifications/` — browser push lifecycle and in-page notifications.
-- `features/onboarding/` — the "Finish setting up" checklist card in the Workspace sidebar: its server function, query, steps' actions, and the browser-local dismissal.
+- `features/onboarding/` — the "Finish setting up" checklist card in the Workspace sidebar: its server function, query, steps' actions, and the dismissal read from the server.
 - `features/panel-tabs/` — each member's saved panel tab order.
 - `features/profiles/` — current-user profile read and update, and the one rule for a person's name (`person-name.ts`).
 - `features/projects/` — Projects directory, project detail, file browser, and project settings page.

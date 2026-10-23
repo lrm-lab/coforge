@@ -66,11 +66,11 @@ test("the setup checklist ticks a step, runs a step's action and stays closed on
     await browser("set", "viewport", "1440", "900");
     await browser("open", path);
     await waitFor(pageReady);
-    // The dismissal is per browser: forget one a previous run left.
-    await browser(
-      "eval",
-      `Object.keys(localStorage).filter((key) => key.startsWith("coforge-setup-checklist:")).forEach((key) => localStorage.removeItem(key))`,
-    );
+    // The dismissal is stored with the member: forget one a previous run left.
+    await db.workspaceMemberPreference.updateMany({
+      where: { workspaceId: workspace.id, userId: DEV_BROWSER_USER.id },
+      data: { setupChecklistDismissedAt: null },
+    });
     await browser("open", path);
     await waitFor(`${pageReady} && ${card} !== null`);
     const first = (await evaluate<{ now: number; max: number; rows: string[] }>(card))!;
@@ -121,13 +121,20 @@ test("the setup checklist ticks a step, runs a step's action and stays closed on
     await browser("press", "Escape");
     await waitFor(`!location.search.includes("setup=")`);
 
-    // Closing the card keeps it gone after a reload.
+    // Closing the card is stored with the member, so it stays gone after a reload.
     await browser("find", "role", "button", "click", "--name", "Dismiss the setup checklist");
     expect(await evaluate<null>(card)).toBeNull();
     await browser("open", path);
     await waitFor(pageReady);
     await Bun.sleep(1500);
     expect(await evaluate<null>(card)).toBeNull();
+    expect(
+      (
+        await db.workspaceMemberPreference.findUniqueOrThrow({
+          where: { workspaceId_userId: { workspaceId: workspace.id, userId: DEV_BROWSER_USER.id } },
+        })
+      ).setupChecklistDismissedAt,
+    ).not.toBeNull();
   } finally {
     await db.$disconnect();
   }
