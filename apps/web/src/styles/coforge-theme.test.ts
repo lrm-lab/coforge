@@ -10,8 +10,6 @@ import { expect, test } from "bun:test";
 const FLAT_ON_PURPOSE = new Map([
   ["--color-terminal", "a terminal block stays dark in both themes"],
   ["--color-terminal-fg", "a terminal block stays dark in both themes"],
-  ["--color-avatar-border-start", "the avatar frame gradient is the same in both themes"],
-  ["--color-avatar-border-end", "the avatar frame gradient is the same in both themes"],
   ["--color-avatar-1", "avatar placeholder tones carry their own contrast with white initials"],
   ["--color-avatar-2", "avatar placeholder tones carry their own contrast with white initials"],
   ["--color-avatar-3", "avatar placeholder tones carry their own contrast with white initials"],

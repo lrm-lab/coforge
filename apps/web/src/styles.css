@@ -160,12 +160,11 @@ html[data-drag-cursor] * {
     --avatar-size: 1.5rem;
   }
 
-  /* The "sm" step is 36 × 40px (a design decision, not a square). `--avatar-size` stays the taller
-     side so the corner radius and status dot scale from 40px. */
+  /* The "sm" step (the message avatar) is a 38 × 38px circle (its radius is set below). */
   [data-avatar].size-8 {
-    width: 2.25rem;
-    height: 2.5rem;
-    --avatar-size: 2.5rem;
+    width: 2.375rem;
+    height: 2.375rem;
+    --avatar-size: 2.375rem;
   }
 
   [data-avatar].size-10 {
@@ -192,18 +191,14 @@ html[data-drag-cursor] * {
     --avatar-size: 10rem;
   }
 
-  /* The profile picture sits in its own white frame, so it carries no violet ring of its own. */
-  [data-avatar].avatar-profile > :first-child::after {
-    display: none;
-  }
-
   [data-avatar][class] {
     border-radius: calc(var(--avatar-size) / 4);
   }
 
-  /* Two avatar components: the small round one ("xs", 24 × 24) and the message one ("sm", 36 × 40,
-     a rounded rectangle). Larger sizes are profile surfaces and keep the rounded square. */
-  [data-avatar].size-6 {
+  /* Two avatar components, both round: the small one ("xs", 24 × 24) and the message one ("sm",
+     38 × 38). Larger sizes are profile surfaces and keep the rounded square. */
+  [data-avatar].size-6,
+  [data-avatar].size-8 {
     border-radius: 9999px;
   }
 
@@ -212,77 +207,36 @@ html[data-drag-cursor] * {
     border-radius: calc(var(--avatar-size) / 4);
   }
 
-  /* The Direct messages row's avatar: the "sm" step scaled to 44 × 48px. Its radius and status dot
-     still follow `--avatar-size`. */
+  /* The Direct messages row's avatar: the "sm" step scaled to a 48 × 48px circle. Its status dot
+     still follows `--avatar-size`. */
   [data-avatar].avatar-dm {
-    width: 2.75rem;
+    width: 3rem;
     height: 3rem;
     --avatar-size: 3rem;
+    border-radius: 9999px;
   }
 
-  /* A channel row's collage avatar (`group-avatar.tsx`): a 44 × 48px rounded square with the
-     design spec's 1px violet frame (the frame gradient shows through the 1px padding); the member
-     tiles run edge to edge with no separation of their own (design spec: no inner borders). */
+  /* A channel row's group avatar (`group-avatar.tsx`): a 48 × 48px circle on a neutral fill. The
+     member circles are placed inside it by percentage (`collage-layout.ts`) and size their
+     initials from `--avatar-group-size`. */
   .avatar-group {
     position: relative;
     flex-shrink: 0;
-    width: 2.75rem;
-    height: 3rem;
-    border-radius: 0.75rem;
-    padding: 0.0625rem;
-    background: linear-gradient(
-      135deg,
-      var(--color-avatar-border-start) 0%,
-      var(--color-avatar-border-end) 100%
-    );
+    --avatar-group-size: 3rem;
+    width: var(--avatar-group-size);
+    height: var(--avatar-group-size);
+    border-radius: 9999px;
+    background: var(--color-bg-secondary);
   }
 
-  .avatar-group-grid {
-    display: grid;
-    width: 100%;
-    height: 100%;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-    gap: 0;
-    overflow: hidden;
-    border-radius: 0.6875rem;
-    background: transparent;
-  }
-
-  /* The collage at the "sm" message avatar's 36 × 40px (an Activity row), radius from its 40px
-     side as `[data-avatar][class]` does. */
+  /* The group avatar at the message avatar's 38 × 38px (an Activity row). */
   .avatar-group.avatar-group-sm {
-    width: 2.25rem;
-    height: 2.5rem;
-    border-radius: 0.625rem;
-  }
-
-  .avatar-group-sm > .avatar-group-grid {
-    border-radius: 0.5625rem;
+    --avatar-group-size: 2.375rem;
   }
 
   [data-avatar] > :first-child {
     position: relative;
     border-radius: inherit;
-  }
-
-  [data-avatar] > :first-child::after {
-    position: absolute;
-    inset: 0;
-    border: 0.09375rem solid transparent;
-    border-radius: inherit;
-    background: linear-gradient(
-        135deg,
-        var(--color-avatar-border-start) 0%,
-        var(--color-avatar-border-end) 100%
-      )
-      border-box;
-    content: "";
-    pointer-events: none;
-    mask:
-      linear-gradient(#fff 0 0) padding-box,
-      linear-gradient(#fff 0 0);
-    mask-composite: exclude;
   }
 
   /* Both the official member presence indicator and CoForge's Agent activity dot
@@ -294,6 +248,18 @@ html[data-drag-cursor] * {
     width: calc(var(--avatar-size) / 4);
     height: calc(var(--avatar-size) / 4);
     box-shadow: 0 0 0 calc(var(--avatar-size) * 0.046875) var(--color-bg-primary);
+  }
+
+  /* A round avatar's dot centre sits on the circle at 45°: that point is 0.1464 × the size from
+     the right and bottom edges, so the dot's own edge is that minus half its 1/4-size width. */
+  [data-avatar].size-6:not(.avatar-square) > span.ring-bg-primary,
+  [data-avatar].size-6:not(.avatar-square) > .avatar-status-dot,
+  [data-avatar].size-8 > span.ring-bg-primary,
+  [data-avatar].size-8 > .avatar-status-dot,
+  [data-avatar].avatar-dm > span.ring-bg-primary,
+  [data-avatar].avatar-dm > .avatar-status-dot {
+    right: calc(var(--avatar-size) * 0.0214);
+    bottom: calc(var(--avatar-size) * 0.0214);
   }
 }
 

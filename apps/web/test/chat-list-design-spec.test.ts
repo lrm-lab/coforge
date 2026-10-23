@@ -1,6 +1,6 @@
 /**
  * The chat list's design-spec values, pinned at the file level: the selected row's card fill and
- * outline, the collage avatar's 1px violet frame with no inner separations, and the pinned row's
+ * outline, the avatar sizes and shapes, and the pinned row's
  * darker title wiring. The conversation directory itself needs the app shell, so its classes are
  * asserted against the module's source, which never drifts silently — a rename shows up as a
  * failing literal here.
@@ -14,21 +14,25 @@ test("The theme carries the selected row's fill and outline values", async () =>
   expect(css).toContain("--color-sidebar-fg: #101319");
 });
 
-test("The collage avatar: 1px frame padding, no inner gaps or fill, radius adjusted to stay 12px outside", async () => {
+test("Chat list avatars: a 48px circle for a DM and a channel, 38px round for the message avatar", async () => {
   const cssText = await Bun.file(new URL("../src/styles.css", import.meta.url)).text();
-  const frame = cssText.slice(
-    cssText.indexOf(".avatar-group {"),
-    cssText.indexOf(".avatar-group-grid"),
-  );
-  expect(frame).toContain("padding: 0.0625rem");
-  expect(frame).toContain("border-radius: 0.75rem");
-  const grid = cssText.slice(
-    cssText.indexOf(".avatar-group-grid"),
-    cssText.indexOf("[data-avatar] > :first-child"),
-  );
-  expect(grid).toContain("gap: 0");
-  expect(grid).toContain("background: transparent");
-  expect(grid).toContain("border-radius: 0.6875rem");
+  const rule = (selector: string) => {
+    const start = cssText.indexOf(`${selector} {`);
+    expect(start).toBeGreaterThan(-1);
+    return cssText.slice(start, cssText.indexOf("}", start));
+  };
+  const dm = rule("[data-avatar].avatar-dm");
+  expect(dm).toContain("width: 3rem");
+  expect(dm).toContain("border-radius: 9999px");
+  expect(rule("[data-avatar].size-8")).toContain("width: 2.375rem");
+  const group = rule(".avatar-group");
+  expect(group).toContain("--avatar-group-size: 3rem");
+  expect(group).toContain("border-radius: 9999px");
+  expect(group).not.toContain("gradient");
+  expect(cssText).not.toContain("avatar-group-grid");
+  // A round avatar's status dot sits on the circle edge, not off its corner.
+  expect(cssText).toContain("[data-avatar].avatar-dm > .avatar-status-dot");
+  expect(cssText).toContain("right: calc(var(--avatar-size) * 0.0214)");
 });
 
 test("Row wiring: the selected card uses the spec fill/border and pinned rows use the sidebar foreground", async () => {

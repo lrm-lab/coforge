@@ -4,7 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AppInstallationData } from "#src/server/app-installation-data/app-installation-data.server";
 import { PrismaAppInstallationDataStore } from "#src/server/db/repositories/app-installation-data.repositories.server";
-import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
+import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
 
 /**
  * What an installed app may read, against local PostgreSQL with migrations applied: the filtering
@@ -141,7 +141,7 @@ test.skipIf(!db)(
             handle: "plain",
             display_name: "PLAIN",
             description: "plain helps",
-            avatar_url: `https://coforge.example${DEFAULT_AGENT_AVATAR_URL}`,
+            avatar_url: `https://coforge.example${defaultAgentAvatarUrl(plain.id)}`,
             created_at: plain.createdAt.toISOString(),
           },
         ]);

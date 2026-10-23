@@ -10,7 +10,7 @@ import {
 } from "@untitledui/icons";
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
 import { AgentAvatarDialog } from "#src/features/agents/agent-avatar-dialog";
-import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
+import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -177,7 +177,7 @@ export function AgentProfileTab({
           {onAvatarChange && (
             <AgentAvatarDialog
               name={profile.displayName}
-              avatarUrl={profile.avatarUrl ?? DEFAULT_AGENT_AVATAR_URL}
+              avatarUrl={profile.avatarUrl ?? defaultAgentAvatarUrl(profile.id)}
               open={avatarDialogOpen}
               onOpenChange={setAvatarDialogOpen}
               onUpload={onAvatarChange}

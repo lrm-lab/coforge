@@ -15,5 +15,14 @@ export function LiveAgentAvatar({
   deleted?: boolean;
 }) {
   const display = useLiveAgentDisplay(agentId);
-  return <AgentDisplayAvatar name={name} src={src} display={display} deleted={deleted} size="sm" />;
+  return (
+    <AgentDisplayAvatar
+      agentId={agentId}
+      name={name}
+      src={src}
+      display={display}
+      deleted={deleted}
+      size="sm"
+    />
+  );
 }

@@ -44,7 +44,6 @@
 | 设计稿 | 色值 | token | 状态 |
 | --- | --- | --- | --- |
 | 品牌主色 | `#5D36DC` | `bg-brand-solid`（`--color-brand-600`） | 一致 |
-| 头像边框起始色 | `#C5BAFE` | `--color-avatar-border-start` | 一致 |
 | 在线 / 掉线 | `#1BB618` / `#AFBCCB` | `--color-online` / `--color-offline` | 一致 |
 | 标题、正文 | `#101319` | `text-primary` | 已对齐 |
 | 预览行、tab 文字 | `#777D8D` | `text-tertiary`、`text-quaternary`（`#525252`、`#737373`） | 未采用：见下，对比度不达标 |
@@ -64,7 +63,7 @@
 
 ## 未读标记
 
-色板页把"未读消息"画成红色，但会话列表的设计稿（私聊、群聊行）把未读数字角标画成品牌紫底白字，以更具体的列表稿为准：未读数字角标和未读小圆点都用 `bg-brand-solid`（白字对比度约 6.9:1，达标）。全站只有 `components/ui/unread-marker.tsx` 的 `UnreadBadge`、`UnreadDot` 两个出处（侧栏、会话列表、线程摘要、记录列表）。未读会话行的底色和消息流里的未读分割线也用品牌紫（见[第 11 节](color-status-typography.md)）。消息行 hover 工具条上的「在线程中回复」图标不带未读圆点（task #267）：未读数留在线程预览行和该按钮的无障碍名称里。手机操作表的线程行仍可在行尾放 `UnreadDot`。
+色板页把"未读消息"画成红色，会话列表的设计稿最新版（智能体头像改为彩色后，为减少紫色）把未读数字角标画成近黑底白字：未读数字角标和未读小圆点都用 `bg-primary-solid`。全站只有 `components/ui/unread-marker.tsx` 的 `UnreadBadge`、`UnreadDot` 两个出处（侧栏、会话列表、线程摘要、记录列表）。未读会话行的底色和消息流里的未读分割线也用品牌紫（见[第 11 节](color-status-typography.md)）。消息行 hover 工具条上的「在线程中回复」图标不带未读圆点（task #267）：未读数留在线程预览行和该按钮的无障碍名称里。手机操作表的线程行仍可在行尾放 `UnreadDot`。
 
 ## 红色、绿色和文字灰没有采用（2026-10-09）
 

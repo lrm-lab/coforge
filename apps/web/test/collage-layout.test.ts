@@ -1,92 +1,75 @@
 import { expect, test } from "bun:test";
 
-import { collageLayout } from "#src/features/conversations/collage-layout";
+import { collageLayout, type CollageSlot } from "#src/features/conversations/collage-layout";
 
-/**
- * The channel avatar is a 6-column by 2-row grid. Each tile is a grid-line span (`[start, end)`),
- * and for every count the tiles must cover all 12 cells exactly once: no empty cell, no overlap.
- */
-const GRID_ROWS = 2;
-const GRID_COLUMNS = 6;
+const sizes = (slots: readonly CollageSlot[]) => slots.map((slot) => slot.size);
 
-function cellsOf(tiles: ReturnType<typeof collageLayout>): string[] {
-  const cells: string[] = [];
-  for (const { row, column } of tiles) {
-    for (let r = row[0]; r < row[1]; r++)
-      for (let c = column[0]; c < column[1]; c++) cells.push(`${r}:${c}`);
-  }
-  return cells.sort();
-}
-
-function expectFullCover(tiles: ReturnType<typeof collageLayout>) {
-  const all: string[] = [];
-  for (let r = 1; r <= GRID_ROWS; r++)
-    for (let c = 1; c <= GRID_COLUMNS; c++) all.push(`${r}:${c}`);
-  expect(cellsOf(tiles)).toEqual(all.sort());
-}
-
-test("no members means no tiles", () => {
+test("No members has no collage: the row shows the channel icon", () => {
   expect(collageLayout(0)).toEqual([]);
+  expect(collageLayout(-3)).toEqual([]);
 });
 
-test("one member fills the whole frame with that member's avatar", () => {
-  expect(collageLayout(1)).toEqual([{ row: [1, 3], column: [1, 7] }]);
+test("One member fills the circle", () => {
+  const [only] = collageLayout(1) as [CollageSlot];
+  expect(collageLayout(1)).toHaveLength(1);
+  expect([only.left, only.top, only.size, only.overflow]).toEqual([0, 0, 1, false]);
 });
 
-test("two members sit side by side, each half the width and the full height", () => {
-  expect(collageLayout(2)).toEqual([
-    { row: [1, 3], column: [1, 4] },
-    { row: [1, 3], column: [4, 7] },
-  ]);
+test("Two members sit diagonally, top-left under bottom-right, overlapping", () => {
+  const [first, second] = collageLayout(2) as [CollageSlot, CollageSlot];
+  expect(first.left).toBeLessThan(second.left);
+  expect(first.top).toBeLessThan(second.top);
+  expect(first.left + first.size).toBeGreaterThan(second.left);
+  expect(first.top + first.size).toBeGreaterThan(second.top);
+  expect(collageLayout(2).some((slot) => slot.overflow)).toBe(false);
 });
 
-test("three members: one full-width tile on top, two halves below", () => {
-  expect(collageLayout(3)).toEqual([
-    { row: [1, 2], column: [1, 7] },
-    { row: [2, 3], column: [1, 4] },
-    { row: [2, 3], column: [4, 7] },
-  ]);
+test("Three members cluster: two on top, one centred below", () => {
+  const [a, b, c] = collageLayout(3) as [CollageSlot, CollageSlot, CollageSlot];
+  expect(a.top).toBe(b.top);
+  expect(a.left).toBeLessThan(b.left);
+  expect(c.top).toBeGreaterThan(a.top);
+  expect(c.left + c.size / 2).toBeCloseTo(0.5, 5);
 });
 
-test("four members form a 2 by 2 grid", () => {
-  expect(collageLayout(4)).toEqual([
-    { row: [1, 2], column: [1, 4] },
-    { row: [1, 2], column: [4, 7] },
-    { row: [2, 3], column: [1, 4] },
-    { row: [2, 3], column: [4, 7] },
-  ]);
+test("Four members form an overlapping 2 by 2", () => {
+  const [a, b, c, d] = collageLayout(4) as [CollageSlot, CollageSlot, CollageSlot, CollageSlot];
+  expect(a.top).toBe(b.top);
+  expect(c.top).toBe(d.top);
+  expect(a.left).toBe(c.left);
+  expect(b.left).toBe(d.left);
+  expect(a.left + a.size).toBeGreaterThan(b.left);
+  expect(a.top + a.size).toBeGreaterThan(c.top);
+  expect(collageLayout(4).some((slot) => slot.overflow)).toBe(false);
 });
 
-test("five members: three thirds on top, two halves below", () => {
-  expect(collageLayout(5)).toEqual([
-    { row: [1, 2], column: [1, 3] },
-    { row: [1, 2], column: [3, 5] },
-    { row: [1, 2], column: [5, 7] },
-    { row: [2, 3], column: [1, 4] },
-    { row: [2, 3], column: [4, 7] },
-  ]);
-});
-
-test("six members form three over three", () => {
-  expect(collageLayout(6)).toEqual([
-    { row: [1, 2], column: [1, 3] },
-    { row: [1, 2], column: [3, 5] },
-    { row: [1, 2], column: [5, 7] },
-    { row: [2, 3], column: [1, 3] },
-    { row: [2, 3], column: [3, 5] },
-    { row: [2, 3], column: [5, 7] },
-  ]);
-});
-
-test("every count from one to six covers the grid exactly once with one tile per member", () => {
-  for (let count = 1; count <= 6; count++) {
-    const tiles = collageLayout(count);
-    expect(tiles).toHaveLength(count);
-    expectFullCover(tiles);
+test("Never more than four slots; the fourth is the overflow dots only above four members", () => {
+  for (const count of [5, 6, 10, 200]) {
+    const slots = collageLayout(count);
+    expect(slots).toHaveLength(4);
+    expect(slots.map((slot) => slot.overflow)).toEqual([false, false, false, true]);
+    expect(sizes(slots)).toEqual(sizes(collageLayout(4)));
+  }
+  for (const count of [1, 2, 3, 4]) {
+    expect(collageLayout(count)).toHaveLength(count);
   }
 });
 
-test("more than six members clamps to the six-member layout", () => {
-  expect(collageLayout(7)).toEqual(collageLayout(6));
-  expect(collageLayout(12)).toEqual(collageLayout(6));
+test("Every slot stays inside the circle's frame", () => {
+  for (const count of [1, 2, 3, 4, 5]) {
+    for (const slot of collageLayout(count)) {
+      const radius = slot.size / 2;
+      const dx = slot.left + radius - 0.5;
+      const dy = slot.top + radius - 0.5;
+      expect(Math.hypot(dx, dy) + radius).toBeLessThanOrEqual(0.5 + 1e-9);
+    }
+  }
+});
+
+test("Initials keep a readable floor at the small frame", () => {
+  for (const count of [1, 2, 3, 4, 5]) {
+    for (const slot of collageLayout(count)) {
+      expect(slot.css.fontSize.startsWith("max(0.625rem,")).toBe(true);
+    }
+  }
 });

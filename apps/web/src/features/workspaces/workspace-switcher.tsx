@@ -65,7 +65,7 @@ export function WorkspaceSwitcher({
             <WorkspaceIcon
               name={label}
               url={current?.iconUrl ?? null}
-              className="size-7 rounded-lg bg-sidebar-accent text-brand-secondary"
+              className="size-7 rounded-lg bg-quaternary text-secondary"
             />
             <span
               data-workspace-name

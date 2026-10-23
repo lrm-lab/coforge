@@ -7,8 +7,9 @@ import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
-/** The send buttons' icons stay white instead of the primary button's dimmed default. */
-const SEND_BUTTON_CLASS = "*:data-icon:text-white hover:*:data-icon:text-white";
+/** The send buttons are near-black (neutral-600 in dark mode, where near-black sinks into the background), not the primary button's brand violet, with white icons instead of the dimmed default. */
+const SEND_BUTTON_CLASS =
+  "bg-primary-solid hover:bg-primary-solid data-loading:bg-primary-solid dark:bg-secondary-solid dark:hover:bg-secondary-solid dark:data-loading:bg-secondary-solid *:data-icon:text-white hover:*:data-icon:text-white";
 
 /**
  * The composer's submit button. With `taskMode` it is split: a chevron beside it opens a menu

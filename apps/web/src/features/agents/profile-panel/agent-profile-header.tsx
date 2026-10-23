@@ -64,6 +64,7 @@ export function AgentProfileHeader({
         />
       )}
       <AgentDisplayAvatar
+        agentId={agent.id}
         name={agent.displayName}
         src={agent.avatarUrl}
         display={display}

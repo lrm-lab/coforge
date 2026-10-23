@@ -24,11 +24,6 @@
   --color-brand-900: #332073;
   --color-brand-950: #21134d;
 
-  /* Avatar frame from the current reference: top-left light violet to bottom-right
-     brand violet at 50% opacity. The same semantic values are used in both themes. */
-  --color-avatar-border-start: #c5bafe;
-  --color-avatar-border-end: rgb(93 54 220 / 50%);
-
   /* Tokens Untitled has no equivalent for. */
   --color-sidebar: #f8f7fe;
   --color-sidebar-fg: #101319;

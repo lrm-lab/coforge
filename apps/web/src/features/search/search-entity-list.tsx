@@ -195,6 +195,7 @@ function EntityMark({
       <>
         <span aria-hidden="true" className="shrink-0">
           <AgentDisplayAvatar
+            agentId={entity.id}
             name={entity.name}
             src={entity.avatarUrl}
             display={display}

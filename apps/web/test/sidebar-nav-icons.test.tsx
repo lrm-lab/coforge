@@ -1,7 +1,7 @@
 /**
  * Left-navigation icons follow the design spec: a resting icon draws in the
  * `--color-nav-icon` token with a 2px stroke (#777D8D in light, lightened in dark), while the current item
- * keeps the brand accent and the token stays out of non-nav icon slots.
+ * is neutral and the token stays out of non-nav icon slots.
  */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -33,14 +33,15 @@ test("Sidebar (expanded, and the mobile drawer): same token and 2px stroke on it
   expect(markup).toContain("stroke-[2px]");
 });
 
-test("The current item keeps the brand accent; the resting icon never uses the old caption gray", () => {
+test("The current item is a neutral dark gray, never the brand violet; the resting icon never uses the old caption gray", () => {
   const iconClasses = (
     renderToStaticMarkup(<SidebarRail {...railProps} />).match(/<svg class="([^"]+)"/g) ?? []
   ).map((hit) => hit.replace('<svg class="', "").replace('"', ""));
   expect(iconClasses).toHaveLength(2);
-  const current = iconClasses.find((cls) => cls.includes("text-brand-secondary"));
+  const current = iconClasses.find((cls) => cls.includes("text-primary"));
   const resting = iconClasses.find((cls) => cls.includes("text-nav-icon"));
   expect(current).toBeTruthy();
+  expect(current).not.toContain("text-brand-secondary");
   expect(resting).toBeTruthy();
   expect(current).toContain("stroke-[2.4]");
   expect(resting).toContain("stroke-[2.4]");

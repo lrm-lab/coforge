@@ -92,7 +92,7 @@ describe("ManageAgents", () => {
   };
 
   // Frank, 2026-10-22: a new Agent stores no picture of its own; it shows the platform default
-  // (`DEFAULT_AGENT_AVATAR_URL`) until its creator uploads one.
+  // (`defaultAgentAvatarUrl`) until its creator uploads one.
   test("a new Agent is created with no avatar object of its own", async () => {
     const { agentManagement, records } = fixture();
 

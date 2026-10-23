@@ -4,7 +4,7 @@ import { AppError } from "#src/lib/app-error";
 import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { WorkspaceMembers } from "#src/server/workspaces/members.server";
 import { withFakePagination } from "./helpers/fake-paginated";
-import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
+import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
 
 describe("WorkspaceMembers", () => {
   test("denies a User who is not a member before reading the directory", async () => {
@@ -182,7 +182,7 @@ describe("WorkspaceMembers", () => {
           name: "reviewer",
           displayName: "Ada Lovelace的周报助手",
           description: "Reviews changes",
-          avatarUrl: DEFAULT_AGENT_AVATAR_URL,
+          avatarUrl: defaultAgentAvatarUrl("detached-agent"),
           computerId: null,
           computerName: null,
           createdAt: new Date("2026-08-01T00:00:00.000Z"),
@@ -426,7 +426,7 @@ describe("WorkspaceMembers", () => {
           {
             id: "agent-1",
             displayName: "COBOL",
-            avatarUrl: DEFAULT_AGENT_AVATAR_URL,
+            avatarUrl: defaultAgentAvatarUrl("agent-1"),
           },
         ],
       });

@@ -4,7 +4,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
 import { workspaceMemberDirectory } from "#src/server/workspaces/member-directory-store.server";
 import { WorkspaceMembers } from "#src/server/workspaces/members.server";
-import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
+import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
 
 test("lists only the requested Workspace directory and denies outsiders", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -124,12 +124,12 @@ test("lists only the requested Workspace directory and denies outsiders", async 
                 {
                   id: assignedAgent.id,
                   displayName: "Assigned Agent",
-                  avatarUrl: DEFAULT_AGENT_AVATAR_URL,
+                  avatarUrl: defaultAgentAvatarUrl(assignedAgent.id),
                 },
                 {
                   id: unassignedAgent.id,
                   displayName: "Unassigned Agent",
-                  avatarUrl: DEFAULT_AGENT_AVATAR_URL,
+                  avatarUrl: defaultAgentAvatarUrl(unassignedAgent.id),
                 },
               ],
             },
@@ -154,7 +154,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
           name: "assigned",
           displayName: "Assigned Agent",
           description: "Runs on the owner workstation",
-          avatarUrl: DEFAULT_AGENT_AVATAR_URL,
+          avatarUrl: defaultAgentAvatarUrl(assignedAgent.id),
           computerId: computer.id,
           computerName: "Owner workstation",
           createdAt: assignedAgent.createdAt,
@@ -167,7 +167,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
           name: "unassigned",
           displayName: "Unassigned Agent",
           description: "Has no Computer",
-          avatarUrl: DEFAULT_AGENT_AVATAR_URL,
+          avatarUrl: defaultAgentAvatarUrl(unassignedAgent.id),
           computerId: null,
           computerName: null,
           createdAt: unassignedAgent.createdAt,

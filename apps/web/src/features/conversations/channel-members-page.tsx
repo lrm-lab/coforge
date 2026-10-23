@@ -355,6 +355,7 @@ const MemberRow = memo(function MemberRow({
           src={member.avatarUrl}
           trigger={
             <AgentDisplayAvatar
+              agentId={member.id}
               name={member.displayName}
               src={member.avatarUrl}
               display={display}

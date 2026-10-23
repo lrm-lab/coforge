@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { AppError } from "#src/lib/app-error";
 import { AgentAvatars, agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
-import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
+import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
 import type { FileStorage } from "#src/server/files/file-storage.server";
 
 const png = (byte: number) =>
@@ -187,11 +187,17 @@ test("an invalid image never reaches storage", async () => {
   expect(objects.size).toBe(0);
 });
 
-// Frank, 2026-10-22: an Agent without its own upload shows the platform default picture, which the
-// app ships (`public/agent-avatars/`), instead of initials; nothing is copied per Agent.
-test("an Agent without its own avatar shows the platform default picture", () => {
-  expect(DEFAULT_AGENT_AVATAR_URL).toStartWith("/agent-avatars/");
-  expect(agentAvatarUrl("workspace-1", "agent-1", null)).toBe(DEFAULT_AGENT_AVATAR_URL);
+// Frank, 2026-10-23: an Agent without its own upload shows one of the platform's pictures, chosen
+// by its id; the app ships them (`public/agent-avatars/`) and nothing is copied per Agent.
+test("an Agent without its own avatar shows a platform picture chosen by its id", () => {
+  const picked = agentAvatarUrl("workspace-1", "agent-1", null);
+  expect(picked).toStartWith("/agent-avatars/mascot-");
+  expect(agentAvatarUrl("workspace-2", "agent-1", null)).toBe(picked);
+  expect(defaultAgentAvatarUrl("agent-1")).toBe(picked);
+  const spread = new Set(
+    Array.from({ length: 200 }, (_, index) => defaultAgentAvatarUrl(`agent-${index}`)),
+  );
+  expect(spread.size).toBe(7);
   expect(
     agentAvatarUrl(
       "workspace-1",

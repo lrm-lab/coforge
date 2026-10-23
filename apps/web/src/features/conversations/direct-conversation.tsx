@@ -41,6 +41,7 @@ export function DirectConversationHeader({
     : undefined;
   const avatar = (
     <AgentDisplayAvatar
+      agentId={conversation.agent.id}
       name={conversation.agent.displayName}
       src={conversation.agent.avatarUrl}
       display={display}

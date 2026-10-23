@@ -35,12 +35,12 @@ test(
         expect(body).not.toContain("https://releases.coforge.cn");
         if (extension === "sh") expect(body.startsWith("#!/bin/sh")).toBe(true);
       }
-      // Every Agent without its own upload shows this picture; the image must ship it.
-      const picture = await fetch("http://127.0.0.1:3000/agent-avatars/mascot-01.webp", {
+      // Agents without their own upload show these pictures; the image must ship them.
+      const picture = await fetch("http://127.0.0.1:3000/agent-avatars/mascot-blue.svg", {
         signal: AbortSignal.timeout(1_000),
       });
       expect(picture.status).toBe(200);
-      expect(picture.headers.get("content-type")).toBe("image/webp");
+      expect(picture.headers.get("content-type")).toBe("image/svg+xml");
     } finally {
       server.process.kill();
       await server.process.exited;

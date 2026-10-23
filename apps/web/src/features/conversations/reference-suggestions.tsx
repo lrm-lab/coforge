@@ -189,6 +189,7 @@ function MentionRow({
     <>
       {mention.kind === "agent" ? (
         <AgentDisplayAvatar
+          agentId={mention.id}
           name={mention.label}
           src={mention.avatarUrl}
           display={display}

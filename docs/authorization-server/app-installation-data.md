@@ -31,7 +31,7 @@ Each projection names its fields; the repository query selects only those column
 - `agents`: public Agents only. A private Agent, a deleted (archived) Agent and a platform-owned
   Agent (`systemKind` set: the per-member assistants) are left out. The Workspace Memory Agent is an
   ordinary public Agent and is listed. `handle` is the Agent's unique `name` (what `@` mentions).
-  An Agent without its own upload has `avatar_url` set to the platform default picture, an
+  An Agent without its own upload has `avatar_url` set to one of the seven platform pictures, chosen by the Agent's id, as an
   absolute URL on the issuer's origin.
   No owner, role, runtime configuration, Computer, messages or Activity.
 - `channels`: the Workspace's public channels. Direct conversations, archived channels and a channel

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { agentAvatarUrl } from "#src/server/agents/agent-avatar.server";
 import { taskMember } from "#src/server/tasks/task-view.server";
-import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
+import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
 
 type Member = Parameters<typeof taskMember>[1];
 
@@ -58,7 +58,7 @@ describe("taskMember", () => {
       taskMember("workspace-1", agent({ avatarObjectKey: key, deletedAt: new Date() })),
     ).toMatchObject({ deleted: true, avatarUrl: agentAvatarUrl("workspace-1", "agent-1", key) });
     expect(taskMember("workspace-1", agent({ avatarObjectKey: null })).avatarUrl).toBe(
-      DEFAULT_AGENT_AVATAR_URL,
+      defaultAgentAvatarUrl("agent-1"),
     );
   });
 });

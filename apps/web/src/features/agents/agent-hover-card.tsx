@@ -24,7 +24,7 @@ import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-a
 import { runtimeProviderLabel } from "./runtime-provider-display";
 import type { ActivityEntry } from "./agent-activity";
 import { useAgentRecentActivity, useLiveAgentDisplay } from "./workspace-agents-realtime";
-import { DEFAULT_AGENT_AVATAR_URL } from "./agent-default-avatar";
+import { defaultAgentAvatarUrl } from "./agent-default-avatar";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -118,7 +118,7 @@ function AgentCard({
         <Avatar
           size="md"
           alt=""
-          src={data?.avatarUrl ?? src ?? DEFAULT_AGENT_AVATAR_URL}
+          src={data?.avatarUrl ?? src ?? defaultAgentAvatarUrl(agentId)}
           initials={avatarInitial(displayName)}
           contentClassName={avatarToneClassName(displayName)}
         />

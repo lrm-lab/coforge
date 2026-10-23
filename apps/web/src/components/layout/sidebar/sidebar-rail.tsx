@@ -37,14 +37,14 @@ function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
           <span
             className={cx(
               "relative flex size-10 items-center justify-center rounded-lg transition-colors duration-100 ease-linear",
-              current ? "bg-sidebar-accent" : "group-hover:bg-sidebar-accent",
+              current ? "bg-tertiary" : "group-hover:bg-sidebar-accent",
             )}
           >
             <Icon
               aria-hidden="true"
               className={cx(
                 "size-5 stroke-[2.4] transition-colors duration-100 ease-linear",
-                current ? "text-brand-secondary" : "text-nav-icon group-hover:text-secondary",
+                current ? "text-primary" : "text-nav-icon group-hover:text-secondary",
               )}
             />
             {badge ? <UnreadDot className="absolute top-1.5 right-1.5" /> : null}

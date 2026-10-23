@@ -164,7 +164,7 @@ These rules apply to `src/features/agents/`.
 - `agent-avatar-dialog.tsx` is the creator's change-avatar dialog, opened by
   clicking the avatar in the Profile tab: an upload with a preview, saved only on
   Save, and a restore-default action. Agent avatar components fall back to
-  `DEFAULT_AGENT_AVATAR_URL`, never initials, while an Agent's data is loading.
+  `defaultAgentAvatarUrl(agentId)`, never initials, while an Agent's data is loading.
 - `agent-visibility.ts` holds the `AgentVisibility` vocabulary outside any
   `.server.ts` file so browser validators can import it.
 - The environment editor edits only user-declared Agent environment overrides.

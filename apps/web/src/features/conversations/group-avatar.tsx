@@ -2,7 +2,7 @@ import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cx } from "#src/utils/cx";
 import { collageLayout } from "./collage-layout";
 
-/** One member a channel's collage shows: its photo, or its initial when it has none. */
+/** One member a channel's group avatar shows: its photo, or its initial when it has none. */
 export type GroupAvatarMember = {
   kind: "user" | "agent";
   id: string;
@@ -10,10 +10,14 @@ export type GroupAvatarMember = {
   avatarUrl: string | null;
 };
 
+const CIRCLE_CLASS = "absolute overflow-hidden rounded-full";
+/** The separator between overlapping circles; a lone member fills the frame and needs none. */
+const SEPARATOR_CLASS = "ring-2 ring-bg-primary";
+
 /**
- * A channel's collage avatar: up to six member avatars laid out by `collageLayout`, in the same
- * rounded frame as a direct message's avatar (`.avatar-group` in `styles.css` sets its size and
- * frame). Decorative: the row's label names the channel.
+ * A channel's group avatar: up to four overlapping member circles laid out by `collageLayout`
+ * inside a round frame (`.avatar-group` in `styles.css` sets its size and frame). Above four
+ * members the fourth circle is a "…". Decorative: the row's label names the channel.
  */
 export function GroupAvatar({
   members,
@@ -22,42 +26,52 @@ export function GroupAvatar({
   members: readonly GroupAvatarMember[];
   className?: string;
 }) {
-  const tiles = collageLayout(members.length);
   return (
     <span aria-hidden="true" className={cx("avatar-group", className)}>
-      <span className="avatar-group-grid">
-        {members.slice(0, tiles.length).map((member, index) => {
-          const tile = tiles[index]!;
+      {collageLayout(members.length).map((placed, index) => {
+        if (placed.overflow) {
           return (
             <span
-              key={member.id}
-              className="relative min-h-0 min-w-0 overflow-hidden"
-              style={{
-                gridRow: `${tile.row[0]} / ${tile.row[1]}`,
-                gridColumn: `${tile.column[0]} / ${tile.column[1]}`,
-              }}
-            >
-              {member.avatarUrl ? (
-                <img
-                  src={member.avatarUrl}
-                  alt=""
-                  loading="lazy"
-                  className="size-full object-cover"
-                />
-              ) : (
-                <span
-                  className={cx(
-                    "flex size-full items-center justify-center text-xs font-semibold",
-                    avatarToneClassName(member.name),
-                  )}
-                >
-                  {avatarInitial(member.name)}
-                </span>
+              key="overflow"
+              className={cx(
+                CIRCLE_CLASS,
+                SEPARATOR_CLASS,
+                "flex items-center justify-center bg-tertiary font-semibold text-tertiary",
               )}
+              style={placed.css}
+            >
+              …
             </span>
           );
-        })}
-      </span>
+        }
+        // A non-overflow slot exists only for a member at its index.
+        const member = members[index]!;
+        return (
+          <span
+            key={member.id}
+            className={cx(CIRCLE_CLASS, placed.size < 1 && SEPARATOR_CLASS)}
+            style={placed.css}
+          >
+            {member.avatarUrl ? (
+              <img
+                src={member.avatarUrl}
+                alt=""
+                loading="lazy"
+                className="size-full object-cover"
+              />
+            ) : (
+              <span
+                className={cx(
+                  "flex size-full items-center justify-center font-semibold",
+                  avatarToneClassName(member.name),
+                )}
+              >
+                {avatarInitial(member.name)}
+              </span>
+            )}
+          </span>
+        );
+      })}
     </span>
   );
 }

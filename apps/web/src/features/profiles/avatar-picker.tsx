@@ -60,7 +60,7 @@ export function AvatarPicker({
               ) : (
                 <Avatar
                   size="2xl"
-                  className="avatar-profile size-40"
+                  className="size-40"
                   alt={name}
                   initials={avatarInitial(name)}
                   contentClassName={avatarToneClassName(name)}

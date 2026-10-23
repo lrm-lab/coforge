@@ -24,7 +24,7 @@ import {
   chatSectionOrderQuery,
   chatSectionsQuery,
 } from "#src/features/conversations/chat-sections";
-import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
+import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
 
 /**
  * What the browser's copy of the Query cache holds is read back by later builds, so the shape of
@@ -158,7 +158,7 @@ const fixtures = [
           name: "helper",
           displayName: "Helper",
           deletedAt: null,
-          avatarUrl: DEFAULT_AGENT_AVATAR_URL,
+          avatarUrl: defaultAgentAvatarUrl("agent-1"),
         },
         dmWritable: true,
         messages: [message],

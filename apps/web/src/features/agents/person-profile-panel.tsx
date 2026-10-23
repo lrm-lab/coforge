@@ -542,5 +542,12 @@ function CreatedAgentRow({ agent }: { agent: MemberPersonProfile["createdAgents"
 /** A created Agent's face with its live status, read from the shell's one Agent subscription. */
 function CreatedAgentAvatar({ agent }: { agent: MemberPersonProfile["createdAgents"][number] }) {
   const display = useLiveAgentDisplay(agent.id);
-  return <AgentDisplayAvatar name={agent.displayName} src={agent.avatarUrl} display={display} />;
+  return (
+    <AgentDisplayAvatar
+      agentId={agent.id}
+      name={agent.displayName}
+      src={agent.avatarUrl}
+      display={display}
+    />
+  );
 }

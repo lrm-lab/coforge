@@ -54,7 +54,7 @@ export function MembersStrip({
       <div className="mt-3 flex flex-wrap items-center gap-2" aria-busy={members.isPending}>
         {members.isPending &&
           Array.from({ length: 3 }, (_, index) => (
-            <Skeleton key={index} className="h-10 w-9 rounded-[0.625rem]" />
+            <Skeleton key={index} className="size-[2.375rem] rounded-full" />
           ))}
         {members.isError && (
           <p role="alert" className="text-sm text-error-primary">
@@ -63,7 +63,7 @@ export function MembersStrip({
         )}
         {shown.map((entry) => (
           <Tooltip key={entry.key} title={entry.displayName}>
-            <TooltipTrigger className="shrink-0 rounded-[0.625rem]" onPress={onOpenMembers}>
+            <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
               <Avatar
                 size="sm"
                 alt=""
@@ -77,7 +77,7 @@ export function MembersStrip({
         ))}
         {more > 0 && (
           <Tooltip title={m.channel_settings_members_more({ count: more })}>
-            <TooltipTrigger className="shrink-0 rounded-[0.625rem]" onPress={onOpenMembers}>
+            <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
               <Avatar size="sm" alt="" initials={`+${more}`} />
               <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
             </TooltipTrigger>
@@ -86,8 +86,8 @@ export function MembersStrip({
         {canAdd && members.data && (
           <AvatarAddButton
             size="sm"
-            // The member avatars' 36 × 40 rounded rectangle (styles.css), not the official circle.
-            className="h-10 w-9 rounded-[0.625rem]"
+            // The member avatars' 38 × 38 circle (styles.css).
+            className="size-[2.375rem] rounded-full"
             title={m.channel_settings_add_members()}
             onPress={onAddMembers}
           />

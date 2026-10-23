@@ -3,7 +3,6 @@ import { getRouteApi, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { keepPreviousData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Activity,
   AtSign,
   BellOff01,
   Check,
@@ -22,14 +21,6 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { PageHeader } from "#src/components/layout/page-header";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import {
   markPublicChannelRead,
@@ -70,6 +61,7 @@ import {
 } from "./activity-inbox-queries";
 import { useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
+import { ActivityInboxEmpty, ActivityInboxLoadError } from "./activity-inbox-states";
 import { ActivityConversationPane } from "./activity-conversation-pane";
 import { activityChatLink, activityOpenTarget, openedItemKey } from "./activity-open-target";
 
@@ -629,8 +621,8 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
 
   return (
     // A hairline divides a row from the one above it, from the text column on: past the gutter,
-    // the 2.25rem icon and the 0.75rem gap.
-    <li className="group relative select-none [-webkit-touch-callout:none] before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-[calc(var(--page-gutter)+3rem)] before:border-t before:border-secondary first:before:hidden">
+    // the 2.375rem icon and the 0.75rem gap.
+    <li className="group relative select-none [-webkit-touch-callout:none] before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-[calc(var(--page-gutter)+3.125rem)] before:border-t before:border-secondary first:before:hidden">
       {/* The row is a React Aria link so the context menu (`MenuTrigger trigger="contextMenu"`)
           can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
           navigation. Opening a row reads it, like opening the conversation does. */}
@@ -820,65 +812,5 @@ function ActivityItemBadges({
         </Badge>
       )}
     </span>
-  );
-}
-
-function ActivityInboxEmpty({
-  filter,
-  onShowAll,
-}: {
-  filter: ActivityInboxFilter;
-  onShowAll: () => void;
-}) {
-  const title =
-    filter === "mentions"
-      ? m.activity_inbox_empty_mentions_title()
-      : filter === "unread"
-        ? m.activity_inbox_empty_unread_title()
-        : m.activity_inbox_empty_title();
-  const description =
-    filter === "mentions"
-      ? m.activity_inbox_empty_mentions_description()
-      : m.activity_inbox_empty_description();
-  return (
-    <div className="flex h-full items-center justify-center px-6">
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            {filter === "mentions" ? (
-              <AtSign aria-hidden="true" />
-            ) : (
-              <Activity aria-hidden="true" />
-            )}
-          </EmptyMedia>
-          <EmptyTitle>{title}</EmptyTitle>
-          <EmptyDescription>{description}</EmptyDescription>
-        </EmptyHeader>
-        {filter !== "all" && (
-          <EmptyContent>
-            <Button size="sm" color="secondary" onClick={onShowAll}>
-              {m.activity_inbox_show_all()}
-            </Button>
-          </EmptyContent>
-        )}
-      </Empty>
-    </div>
-  );
-}
-
-function ActivityInboxLoadError({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="flex h-full items-center justify-center px-6">
-      <Empty>
-        <EmptyHeader>
-          <EmptyTitle>{m.activity_inbox_load_error()}</EmptyTitle>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button size="sm" color="secondary" onClick={onRetry}>
-            {m.activity_inbox_retry()}
-          </Button>
-        </EmptyContent>
-      </Empty>
-    </div>
   );
 }

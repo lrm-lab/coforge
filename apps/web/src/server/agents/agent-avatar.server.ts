@@ -15,7 +15,7 @@ import { getPublicImageStorage } from "#src/server/files/public-image-storage.se
 import { validateImage } from "#src/server/files/image-upload.server";
 import { replaceStoredImage } from "#src/server/files/stored-image-replacement.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
-import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
+import { defaultAgentAvatarUrl } from "#src/features/agents/agent-default-avatar";
 import { agentVisibilityViewerForUser, assertAgentVisible } from "./agent-visibility.server";
 
 /**
@@ -36,7 +36,7 @@ export function agentAvatarUrl(
       PROFILE_IMAGE_STYLES.avatar,
       (key) => versionedImagePath(`/api/workspaces/${workspaceId}/agents/${agentId}/avatar`, key),
       publicUrl,
-    ) ?? DEFAULT_AGENT_AVATAR_URL
+    ) ?? defaultAgentAvatarUrl(agentId)
   );
 }
 

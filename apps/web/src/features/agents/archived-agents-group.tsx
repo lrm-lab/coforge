@@ -68,7 +68,13 @@ function ArchivedAgentRow({
 
   return (
     <li className="flex min-w-0 items-center gap-3 p-4 sm:px-5">
-      <AgentDisplayAvatar name={agent.displayName} src={agent.avatarUrl} deleted size="md" />
+      <AgentDisplayAvatar
+        agentId={agent.id}
+        name={agent.displayName}
+        src={agent.avatarUrl}
+        deleted
+        size="md"
+      />
       <div className="min-w-0">
         <Link
           to="/w/$workspaceSlug/agent/$agentId"

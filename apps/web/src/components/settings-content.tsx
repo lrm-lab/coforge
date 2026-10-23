@@ -467,7 +467,7 @@ function AccountSettings({
           <div className="relative -mt-12 shrink-0 rounded-[1.75rem] bg-primary p-1 shadow-lg">
             <Avatar
               size="2xl"
-              className="avatar-profile size-24"
+              className="size-24"
               src={headerAvatarSrc}
               alt={profile.name}
               initials={avatarInitial(profile.name)}

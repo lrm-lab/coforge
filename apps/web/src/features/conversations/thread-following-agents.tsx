@@ -53,6 +53,7 @@ function FollowingAgentRow({
   const identity = (
     <>
       <AgentDisplayAvatar
+        agentId={agent.id}
         name={agent.displayName}
         src={agent.avatarUrl}
         display={live?.display}
