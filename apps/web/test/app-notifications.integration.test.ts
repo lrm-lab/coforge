@@ -21,6 +21,7 @@ import { createAppRegistry } from "#src/server/apps/app-registry-composition.ser
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { fanOutAppNotificationEvents } from "#src/server/app-notifications/event-worker.server";
+import { flagOnFor, subscribeToMemberAdded } from "./helpers/app-notification-subscription";
 import { admitWorkspaceMember } from "#src/server/workspaces/member-admission.server";
 
 /**
@@ -52,12 +53,8 @@ beforeAll(async () => {
     JSON.stringify({
       $schema: "https://flagd.dev/schema/v0/flags.json",
       flags: {
-        "app-notifications": {
-          state: "ENABLED",
-          variants: { on: true, off: false },
-          defaultVariant: "off",
-          targeting: { if: [{ in: [{ var: "workspaceSlug" }, ON_SLUGS] }, "on", "off"] },
-        },
+        "app-notifications": flagOnFor(ON_SLUGS),
+        "app-data-permissions": flagOnFor(ON_SLUGS),
       },
     }),
   );
@@ -118,8 +115,9 @@ async function fixture(db: PrismaClient, { flag = "on" }: { flag?: "on" | "off" 
   };
 }
 
-/** Gives the app an enabled webhook: events fan out only to installations whose app has one. */
+/** Gives the app an enabled webhook, which events fan out to once it subscribes to them. */
 async function enableWebhook(db: PrismaClient, appId: string) {
+  await subscribeToMemberAdded(db, appId);
   await db.appWebhook.create({
     data: { appId, enabled: true, endpointUrl: "https://hooks.example/in", secretGeneration: 1 },
   });

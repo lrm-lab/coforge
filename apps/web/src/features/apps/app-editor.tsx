@@ -29,6 +29,7 @@ import {
 import { AppLogo } from "./app-logo";
 import { AppLogoField } from "./app-logo-field";
 import { InstallationCard } from "./app-editor-installation";
+import { NotificationsSection, useNotificationEvents } from "./app-editor-notifications";
 import { PermissionFields } from "./app-editor-permissions";
 import { SetupSection, type SetupErrors } from "./app-editor-setup";
 import { refusedSetupFields, setupDraftOf, setupInputOf, type SetupDraft } from "./app-setup-draft";
@@ -39,7 +40,8 @@ import type { AppSummary } from "./apps.functions";
 
 /**
  * Registers an app (`app` absent) or edits one, in one wide form: a section nav beside Profile,
- * Login with CoForge, Installation setup and App permissions (each where its flag is on: `declares`),
+ * Login with CoForge, Installation setup, App permissions and App notifications (each where its
+ * flag is on: `declares`),
  * and, when editing, the Danger zone. One Save sends the form, the declarations included, which a
  * registration writes with the app; approving a permissions update, regenerating the secret and
  * deleting act at once. A click outside never
@@ -76,9 +78,9 @@ export function AppEditor({ open, onClose, ...form }: AppEditorProps) {
 type AppEditorProps = {
   open: boolean;
   app?: AppSummary;
-  /** Which declarations this Workspace has the editor show: `app-data-permissions` and
-   * `app-installation-setup` on. */
-  declares: { permissions: boolean; setup: boolean };
+  /** Which declarations this Workspace has the editor show: `app-data-permissions`,
+   * `app-installation-setup` and `app-notifications` on. */
+  declares: { permissions: boolean; setup: boolean; notifications: boolean };
   /** A secret regenerated for this app, shown in the editor's notice strip. */
   issued: IssuedSecret | null;
   onClose: () => void;
@@ -129,6 +131,7 @@ function AppEditorForm({
     setShownRevision(permissions.revision);
     setGroups(permissions.declared);
   }
+  const notificationEvents = useNotificationEvents(permissions, groups);
   const setup = app?.setup;
   const [setupDraft, setSetupDraft] = useState<SetupDraft>(() =>
     setup ? setupDraftOf(setup) : EMPTY_SETUP_DRAFT,
@@ -142,6 +145,7 @@ function AppEditorForm({
     profile: `${idPrefix}profile`,
     login: `${idPrefix}login`,
     permissions: `${idPrefix}permissions`,
+    notifications: `${idPrefix}notifications`,
     setup: `${idPrefix}setup`,
     agentAccess: `${idPrefix}agent-access`,
     danger: `${idPrefix}danger`,
@@ -151,6 +155,9 @@ function AppEditorForm({
     { id: ids.login, title: m.apps_section_login() },
     ...(declares.setup ? [{ id: ids.setup, title: m.apps_section_setup() }] : []),
     ...(declares.permissions ? [{ id: ids.permissions, title: m.apps_section_permissions() }] : []),
+    ...(declares.notifications
+      ? [{ id: ids.notifications, title: m.apps_notifications_section() }]
+      : []),
     ...(editing ? [{ id: ids.agentAccess, title: m.apps_agent_access_title() }] : []),
     ...(editing ? [{ id: ids.danger, title: m.apps_section_danger() }] : []),
   ];
@@ -184,6 +191,7 @@ function AppEditorForm({
         await onSubmit({
           input,
           permissionGroups: declares.permissions ? groups : undefined,
+          notificationEvents: declares.notifications ? notificationEvents.submitted : undefined,
           setup: declares.setup ? setupInputOf(setupDraft) : undefined,
         });
       } catch (cause) {
@@ -349,8 +357,19 @@ function AppEditorForm({
                     await guard(() => onApprovePermissions(app, permissions.revision));
                 }}
                 installationShownAbove={declares.setup && installationId !== undefined}
+                eventsUnsaved={declares.notifications && notificationEvents.unsaved}
               />
             </EditorSection>
+          )}
+          {declares.notifications && (
+            <NotificationsSection
+              id={ids.notifications}
+              appKey={app?.key}
+              groups={groups}
+              events={notificationEvents.events}
+              isDisabled={saving}
+              onEventsChange={notificationEvents.setEvents}
+            />
           )}
           {app && (
             <EditorSection

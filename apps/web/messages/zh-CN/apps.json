@@ -222,7 +222,7 @@
   "apps_installation_installed": "已安装",
   "apps_installation_use": "为本工作区申请安装令牌时，请使用此 ID。",
   "apps_installation_shown_above": "本工作区的安装显示在“安装后配置”中。",
-  "apps_installation_pending_all": "批准更新将批准以下全部权限：",
+  "apps_installation_pending_all": "批准更新将批准以下全部内容：",
   "apps_installation_new_badge": "新增",
   "apps_permissions_register_hint": "这些权限初始为待批准：应用注册后，由所有者或管理员为本工作区批准。",
   "apps_detail_close": "关闭应用详情",

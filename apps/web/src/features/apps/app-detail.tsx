@@ -8,6 +8,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
 import { AgentAccessScope } from "./agent-access-field";
 import { InstallationCard } from "./app-editor-installation";
+import { AppWebhookDelivery } from "./app-webhook-delivery";
 import { InstallationApproval } from "./app-editor-permissions";
 import { SetupStatusCard } from "./app-editor-setup";
 import { APP_SCOPE_DESCRIPTIONS } from "./app-form";
@@ -36,7 +37,7 @@ export function AppDetail({
   open: boolean;
   /** The app as the list now holds it; kept while the dialog fades out. */
   app: AppSummary | undefined;
-  declares: { permissions: boolean; setup: boolean };
+  declares: { permissions: boolean; setup: boolean; notifications: boolean };
   /** An owner or admin: may continue setup, approve a pending update and see the installation ID. */
   canManage: boolean;
   onClose: () => void;
@@ -136,6 +137,9 @@ export function AppDetail({
                       onApprove={() => onApprovePermissions(app, permissions.revision)}
                     />
                   </section>
+                )}
+                {canManage && declares.notifications && (
+                  <AppWebhookDelivery appKey={app.key} status={app.webhookStatus} />
                 )}
                 {canManage && installationId !== undefined && (
                   <InstallationCard installationId={installationId} />

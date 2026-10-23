@@ -1,4 +1,4 @@
-import type { WebhookDisabledReason } from "#src/features/apps/app-webhook";
+import { webhookStatusOf, type WebhookDisabledReason } from "#src/features/apps/app-webhook";
 import type {
   AppWebhookStore,
   DeliveryAttempt,
@@ -75,6 +75,33 @@ export class PrismaAppWebhookStore implements AppWebhookStore {
       orderBy: { installationId: "asc" },
     });
     return rows.map(toStatus);
+  }
+
+  async statusesByAppKey(workspaceId: string) {
+    const rows = await this.db.appInstallation.findMany({
+      where: { workspaceId, app: { webhook: { enabled: true } } },
+      select: {
+        app: { select: { key: true, webhook: { select: { enabled: true, endpointUrl: true } } } },
+      },
+    });
+    return new Map(rows.map((row) => [row.app.key, webhookStatusOf(row.app.webhook)] as const));
+  }
+
+  async workspaceOf(workspaceId: string) {
+    return (
+      (await this.db.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { id: true, slug: true },
+      })) ?? undefined
+    );
+  }
+
+  async memberRole(workspaceId: string, userId: string) {
+    const member = await this.db.workspaceMembership.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { role: true },
+    });
+    return member?.role;
   }
 
   async installations(appId: string, workspaceId: string) {

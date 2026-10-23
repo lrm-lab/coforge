@@ -43,3 +43,11 @@ export type WebhookDisabledReason = (typeof WEBHOOK_DISABLED_REASONS)[number];
 
 /** How long the previous secret keeps signing after a rotation. */
 export const WEBHOOK_SECRET_OVERLAP_HOURS = 24;
+
+/** The webhook's state, from the server: `enabled` (switched on with an endpoint, delivering),
+ * `setup` (switched on, no endpoint yet, so nothing is delivered) or `off`. */
+export type WebhookStatus = "enabled" | "setup" | "off";
+
+export const webhookStatusOf = (
+  row: { enabled: boolean; endpointUrl: string | null } | null | undefined,
+): WebhookStatus => (!row?.enabled ? "off" : row.endpointUrl === null ? "setup" : "enabled");

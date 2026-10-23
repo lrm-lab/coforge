@@ -1,4 +1,5 @@
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
+import type { AppNotificationEventName } from "#src/features/apps/app-notification-events";
 import type { AppPermissionGroup } from "#src/features/apps/app-permissions";
 import type {
   AppPermissionsStore,
@@ -11,10 +12,17 @@ import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.se
 const INSTALLED = {
   id: true,
   approvedGroups: true,
+  approvedEvents: true,
   approvedRevision: true,
   approvedAt: true,
   app: {
-    select: { key: true, ownerWorkspaceId: true, permissionGroups: true, permissionRevision: true },
+    select: {
+      key: true,
+      ownerWorkspaceId: true,
+      permissionGroups: true,
+      permissionRevision: true,
+      notificationEvents: true,
+    },
   },
 } as const;
 
@@ -29,6 +37,7 @@ const INSTALLED_BY_ID = {
 type InstalledRow = {
   id: string;
   approvedGroups: string[];
+  approvedEvents: string[];
   approvedRevision: number;
   approvedAt: Date | null;
   app: {
@@ -36,11 +45,14 @@ type InstalledRow = {
     ownerWorkspaceId: string;
     permissionGroups: string[];
     permissionRevision: number;
+    notificationEvents: string[];
   };
 };
 
 /** A row as the module sees it: `apps_permission_groups_check` and
- * `app_installations_approved_groups_check` admit only the four groups. */
+ * `app_installations_approved_groups_check` admit only the four groups, and
+ * `apps_notification_events_check` and `app_installations_approved_events_check` only the catalog's
+ * events. */
 const installed = ({ app, ...installation }: InstalledRow): InstalledAppPermissions => ({
   key: app.key,
   installationId: installation.id,
@@ -50,6 +62,8 @@ const installed = ({ app, ...installation }: InstalledRow): InstalledAppPermissi
   approved: installation.approvedGroups as AppPermissionGroup[],
   approvedRevision: installation.approvedRevision,
   approvedAt: installation.approvedAt,
+  events: app.notificationEvents as AppNotificationEventName[],
+  approvedEvents: installation.approvedEvents as AppNotificationEventName[],
 });
 
 /** App permission rows: each write is one compare-and-set on the app's `permissionRevision`, and
@@ -100,6 +114,7 @@ export class PrismaAppPermissionsStore implements AppPermissionsStore {
     ownerWorkspaceId: string;
     key: string;
     groups: AppPermissionGroup[];
+    events: AppNotificationEventName[];
     revision: number;
   }) {
     return inTransaction(this.db, async (tx) => {
@@ -111,7 +126,11 @@ export class PrismaAppPermissionsStore implements AppPermissionsStore {
             ownerWorkspaceId: input.ownerWorkspaceId,
             permissionRevision: input.revision,
           },
-          data: { permissionGroups: input.groups, permissionRevision: { increment: 1 } },
+          data: {
+            permissionGroups: input.groups,
+            notificationEvents: input.events,
+            permissionRevision: { increment: 1 },
+          },
           select: { id: true },
         }));
       } catch (error) {
@@ -119,8 +138,9 @@ export class PrismaAppPermissionsStore implements AppPermissionsStore {
         if (hasErrorCode(error, "P2025")) return false;
         throw error;
       }
-      // Each approval keeps, in its order, only the groups still declared. One statement per row,
-      // so an approval committed meanwhile is re-read under the row lock and narrowed too.
+      // Each approval keeps, in its order, only the groups and events still declared. One
+      // statement per row, so an approval committed meanwhile is re-read under the row lock and
+      // narrowed too.
       await tx.$executeRaw`
         UPDATE "app_installations" AS installation
         SET "approvedGroups" = ARRAY(
@@ -128,9 +148,16 @@ export class PrismaAppPermissionsStore implements AppPermissionsStore {
           FROM unnest(installation."approvedGroups") WITH ORDINALITY AS approved(group_name, position)
           WHERE approved.group_name = ANY(${input.groups}::TEXT[])
           ORDER BY approved.position
+        ),
+        "approvedEvents" = ARRAY(
+          SELECT approved.event_name
+          FROM unnest(installation."approvedEvents") WITH ORDINALITY AS approved(event_name, position)
+          WHERE approved.event_name = ANY(${input.events}::TEXT[])
+          ORDER BY approved.position
         )
         WHERE installation."appId" = ${appId}::uuid
-          AND NOT (installation."approvedGroups" <@ ${input.groups}::TEXT[])`;
+          AND (NOT (installation."approvedGroups" <@ ${input.groups}::TEXT[])
+            OR NOT (installation."approvedEvents" <@ ${input.events}::TEXT[]))`;
       return true;
     });
   }
@@ -139,6 +166,7 @@ export class PrismaAppPermissionsStore implements AppPermissionsStore {
     workspaceId: string;
     key: string;
     groups: AppPermissionGroup[];
+    events: AppNotificationEventName[];
     revision: number;
     userId: string;
     at: Date;
@@ -150,6 +178,7 @@ export class PrismaAppPermissionsStore implements AppPermissionsStore {
       },
       data: {
         approvedGroups: input.groups,
+        approvedEvents: input.events,
         approvedRevision: input.revision,
         approvedAt: input.at,
         approvedByUserId: input.userId,

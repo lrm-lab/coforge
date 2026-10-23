@@ -6,6 +6,7 @@ import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Alert } from "#src/components/ui/alert";
 import { m } from "#src/paraglide/messages";
 import { isPermissionsChanged } from "./app-form";
+import { APP_NOTIFICATION_EVENT_LABELS } from "./app-notification-copy";
 import { APP_PERMISSION_GROUP_COPY } from "./app-permission-copy";
 import {
   APP_PERMISSION_GROUPS,
@@ -27,6 +28,7 @@ export function PermissionFields({
   onChange,
   onApprove,
   installationShownAbove,
+  eventsUnsaved = false,
 }: {
   /** The groups chosen in the form, saved or not. */
   groups: AppPermissionGroup[];
@@ -38,6 +40,8 @@ export function PermissionFields({
   onApprove: () => Promise<void>;
   /** The installation card is in the section above, so this one points to it. */
   installationShownAbove: boolean;
+  /** The events chosen in the form differ from the saved ones (the notifications section). */
+  eventsUnsaved?: boolean;
 }) {
   return (
     <>
@@ -72,7 +76,7 @@ export function PermissionFields({
       {permissions && (
         <InstallationApproval
           permissions={permissions}
-          unsaved={!samePermissionGroups(groups, permissions.declared)}
+          unsaved={!samePermissionGroups(groups, permissions.declared) || eventsUnsaved}
           isDisabled={isDisabled}
           canManage
           onApprove={onApprove}
@@ -107,6 +111,7 @@ export function InstallationApproval({
   const [refusedAt, setRefusedAt] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
   const pending = permissions.pending;
+  const pendingEvents = permissions.pendingEvents;
   const reloaded = refusedAt !== null && permissions.revision !== refusedAt;
   const problem = reloaded
     ? m.apps_permissions_changed()
@@ -144,25 +149,45 @@ export function InstallationApproval({
           )}
         </div>
       </div>
+      {permissions.events.length > 0 && (
+        <>
+          <div className="grid gap-1.5">
+            <p className="text-sm text-tertiary">
+              {m.apps_notifications_installation_subscriptions()}
+            </p>
+            <BadgeList
+              items={permissions.events}
+              label={(event) => APP_NOTIFICATION_EVENT_LABELS[event]()}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <p className="text-sm text-tertiary">{m.apps_notifications_installation_active()}</p>
+            <BadgeList
+              items={permissions.effectiveEvents}
+              label={(event) => APP_NOTIFICATION_EVENT_LABELS[event]()}
+            />
+          </div>
+        </>
+      )}
       {problem && <Alert color="warning" title={problem} />}
-      {pending.length > 0 && (
+      {(pending.length > 0 || pendingEvents.length > 0) && (
         <Alert
           color="warning"
           title={m.apps_installation_pending_title()}
           description={
             <>
-              {m.apps_installation_pending_description()}
+              {pending.length > 0 && m.apps_installation_pending_description()}
               <span className="mt-2 block">{m.apps_installation_pending_all()}</span>
-              <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                {permissions.declared.map((group) => (
-                  <li key={group}>
-                    <Badge size="sm" color={pending.includes(group) ? "warning" : "gray"}>
-                      {APP_PERMISSION_GROUP_COPY[group].label()}
-                      {pending.includes(group) && ` · ${m.apps_installation_new_badge()}`}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
+              <PendingBadges
+                items={permissions.declared}
+                pending={pending}
+                label={(group) => APP_PERMISSION_GROUP_COPY[group].label()}
+              />
+              <PendingBadges
+                items={permissions.events}
+                pending={pendingEvents}
+                label={(event) => APP_NOTIFICATION_EVENT_LABELS[event]()}
+              />
               {unsaved && <span className="mt-1 block">{m.apps_installation_unsaved()}</span>}
             </>
           }
@@ -184,5 +209,54 @@ export function InstallationApproval({
         />
       )}
     </div>
+  );
+}
+
+/** Badges for `items`, or "None yet" when there are none. */
+function BadgeList<Item extends string>({
+  items,
+  label,
+}: {
+  items: readonly Item[];
+  label: (item: Item) => string;
+}) {
+  if (items.length === 0) {
+    return (
+      <span className="text-sm text-secondary">{m.apps_notifications_installation_none()}</span>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <Badge key={item} size="sm" color="gray">
+          {label(item)}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+/** What an update asks for, each item a badge and the pending ones marked New. */
+function PendingBadges<Item extends string>({
+  items,
+  pending,
+  label,
+}: {
+  items: readonly Item[];
+  pending: readonly Item[];
+  label: (item: Item) => string;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <ul className="mt-1.5 flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <li key={item}>
+          <Badge size="sm" color={pending.includes(item) ? "warning" : "gray"}>
+            {label(item)}
+            {pending.includes(item) && ` · ${m.apps_installation_new_badge()}`}
+          </Badge>
+        </li>
+      ))}
+    </ul>
   );
 }

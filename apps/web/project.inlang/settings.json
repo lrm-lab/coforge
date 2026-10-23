@@ -20,6 +20,7 @@
       "./messages/{locale}/cloud-agents.json",
       "./messages/{locale}/records.json",
       "./messages/{locale}/apps.json",
+      "./messages/{locale}/app-notifications.json",
       "./messages/{locale}/authorization.json",
       "./messages/{locale}/onboarding.json"
     ]

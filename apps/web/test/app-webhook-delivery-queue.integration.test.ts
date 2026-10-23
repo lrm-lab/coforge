@@ -23,6 +23,7 @@ import {
   state,
   useWebhookDeliveryEnvironment,
 } from "./helpers/app-webhook-delivery-fixture";
+import { subscribeToMemberAdded } from "./helpers/app-notification-subscription";
 
 /** App notifications through pg-boss to a signed webhook. */
 useWebhookDeliveryEnvironment();
@@ -41,6 +42,7 @@ testWithDatabase(
     try {
       await withFixture(async (f) => {
         const boss = await startAppNotificationQueue(connectionString);
+        await subscribeToMemberAdded(db!, f.appId);
         const { signingSecret: secret } = await webhooks().save(f.actor, f.key, endpoint());
         state.script = [503, 204];
         const event = newAppNotificationEvent({

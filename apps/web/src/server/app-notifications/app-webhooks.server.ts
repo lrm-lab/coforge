@@ -1,16 +1,20 @@
 import { AppError } from "#src/lib/app-error";
+import { canManageApps } from "#src/features/workspaces/workspace-roles";
 import {
   APP_NOTIFICATIONS_OFF,
   APP_WEBHOOK_ENDPOINT_INVALID,
   APP_WEBHOOK_ENDPOINT_UNREACHABLE,
   APP_WEBHOOK_UNAVAILABLE,
   isWebhookEndpoint,
+  webhookStatusOf,
+  type WebhookStatus,
   WEBHOOK_SECRET_OVERLAP_HOURS,
 } from "#src/features/apps/app-webhook";
 import type { AppActor } from "#src/server/apps/app-registry.server";
 import type { OutboundEgress } from "#src/server/egress/outbound-egress.server";
-import type {
-  AppWebhookStore,
+import {
+  isEnabledWebhook,
+  type AppWebhookStore,
   InstallationWebhookStatus,
   WebhookAppRef,
 } from "./app-webhook-store";
@@ -18,6 +22,8 @@ import { deriveWebhookSecret, previousSecretValidUntil } from "./webhook-secret.
 
 /** What the editor shows of an app's webhook: never a secret. */
 export type AppWebhookView = {
+  /** Off, Setup (switched on, no endpoint) or Enabled (delivering). */
+  status: WebhookStatus;
   enabled: boolean;
   endpointUrl: string | null;
   revision: number;
@@ -71,8 +77,42 @@ export class AppWebhooks {
     return (await this.deps.flagOn(app.workspace)) ? this.view(app) : null;
   }
 
-  /** Enables the webhook at `endpointUrl`, or moves an enabled one there. The secret is in the
-   * answer only when this enabled it (a new generation). */
+  /** The webhook state of each of the actor's Workspace's apps that has one switched on, by key,
+   * for the app list's badge; apps absent are Off. `null` for a plain member and while the flag
+   * is off there: only owners and admins see it. */
+  async workspaceStatuses(actor: AppActor): Promise<Map<string, WebhookStatus> | null> {
+    const role = await this.store.memberRole(actor.workspaceId, actor.actorUserId);
+    if (!role || !canManageApps(role)) return null;
+    const workspace = await this.store.workspaceOf(actor.workspaceId);
+    if (!workspace || !(await this.deps.flagOn(workspace))) return null;
+    return this.store.statusesByAppKey(actor.workspaceId);
+  }
+
+  /** Switches the webhook on without an endpoint (Setup): nothing is delivered until
+   * `save`. The secret generation moves on now, so an earlier secret is never valid again, but the
+   * secret is shown by the first `save`, when the receiver is being configured. Enabling an
+   * enabled webhook changes nothing. */
+  async enable(actor: AppActor, key: string): Promise<AppWebhookChange> {
+    const app = await this.ownApp(actor, key);
+    await this.requireAvailable(app);
+    if (!(await this.store.find(app.appId))?.enabled) {
+      await this.store.change(app.appId, (current) => ({
+        next: {
+          enabled: true,
+          endpointUrl: null,
+          secretGeneration: current.secretGeneration + 1,
+          previousSecretGeneration: null,
+          previousSecretValidUntil: null,
+        },
+        result: undefined,
+      }));
+    }
+    return { webhook: await this.view(app) };
+  }
+
+  /** Saves `endpointUrl`: it enables a disabled webhook, finishes a Setup one, or moves an enabled
+   * one. The secret is in the answer only when the webhook had no endpoint before (the first
+   * one of this generation). */
   async save(actor: AppActor, key: string, endpointUrl: unknown): Promise<AppWebhookChange> {
     const app = await this.ownApp(actor, key);
     await this.requireAvailable(app);
@@ -82,7 +122,10 @@ export class AppWebhooks {
     await this.requirePublic(endpointUrl);
     const issued = await this.store.change(app.appId, (current) =>
       current.enabled
-        ? { next: { ...current, endpointUrl }, result: undefined }
+        ? {
+            next: { ...current, endpointUrl },
+            result: current.endpointUrl === null ? current.secretGeneration : undefined,
+          }
         : {
             next: {
               enabled: true,
@@ -104,7 +147,8 @@ export class AppWebhooks {
     await this.requireAvailable(app);
     const validUntil = new Date(this.now().getTime() + WEBHOOK_SECRET_OVERLAP_HOURS * 3_600_000);
     const issued = await this.store.change(app.appId, (current) => {
-      if (!current.enabled) throw new AppError("CONFLICT", { errorId: "app-webhook-disabled" });
+      if (!isEnabledWebhook(current))
+        throw new AppError("CONFLICT", { errorId: "app-webhook-disabled" });
       return {
         next: {
           ...current,
@@ -181,6 +225,7 @@ export class AppWebhooks {
     ]);
     const byInstallation = new Map(statuses.map((status) => [status.installationId, status]));
     return {
+      status: webhookStatusOf(row),
       enabled: row?.enabled ?? false,
       endpointUrl: row?.endpointUrl ?? null,
       revision: row?.revision ?? 0,

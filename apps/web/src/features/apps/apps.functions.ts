@@ -14,6 +14,7 @@ import {
 import type { AppPermissionsView } from "#src/server/app-permissions/app-permissions.server";
 import { createAppInstallationSetup } from "#src/server/app-installation-setup/app-installation-setup-composition.server";
 import type { AppSetupView } from "#src/server/app-installation-setup/app-installation-setup.server";
+import { createAppWebhooks } from "#src/server/app-notifications/app-webhooks-composition.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import type { AppActor, AppView } from "#src/server/apps/app-registry.server";
@@ -23,6 +24,8 @@ import {
   SETUP_URL_MAX_LENGTH,
   type AppSetupSummary,
 } from "./app-installation-setup";
+import type { WebhookStatus } from "./app-webhook";
+import { APP_NOTIFICATION_EVENT_NAMES } from "./app-notification-events";
 import { APP_PERMISSION_GROUPS, type AppPermissionsSummary } from "./app-permissions";
 import {
   APP_DESCRIPTION_MAX_LENGTH,
@@ -49,6 +52,9 @@ export type AppSummary = Omit<
 > & {
   logoUrl: string | null;
   createdAt: string;
+  /** The app's signed webhook state; present only for an owner or admin where
+   * `app-notifications` is on. */
+  webhookStatus?: WebhookStatus;
   permissions?: AppPermissionsSummary;
   setup?: AppSetupSummary;
 };
@@ -59,12 +65,18 @@ const permissionsSummary = ({
   revision,
   effective,
   pending,
+  events,
+  effectiveEvents,
+  pendingEvents,
 }: AppPermissionsView): AppPermissionsSummary => ({
   installationId,
   declared,
   revision,
   effective,
   pending,
+  events,
+  effectiveEvents,
+  pendingEvents,
 });
 
 const setupSummary = ({
@@ -123,8 +135,9 @@ const actorOf = ({ user, workspaceId }: WorkspaceUserContext): AppActor => ({
 });
 
 /** Which declarations the editor shows in this Workspace: where the `app-data-permissions` and
- * `app-installation-setup` flags are on. */
-export type AppDeclarations = { permissions: boolean; setup: boolean };
+ * `app-installation-setup` flags are on, and, with `app-data-permissions`, `app-notifications`
+ * (the App notifications section and the events in the permissions). */
+export type AppDeclarations = { permissions: boolean; setup: boolean; notifications: boolean };
 
 /** The apps installed in the Workspace (the ones it registered), and the declarations it shows. */
 export const loadWorkspaceApps = createServerFn({ method: "GET" })
@@ -137,18 +150,28 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
       createAppPermissions(context.db).workspacePermissions(actor),
       createAppInstallationSetup(context.db).workspaceSetups(actor),
     ]);
+    const notifications = permissions?.notifications ?? false;
+    const webhookStatuses = notifications
+      ? await createAppWebhooks(context.db).workspaceStatuses(actor)
+      : null;
     return {
-      apps: apps.map((app) => summary(app, permissions?.get(app.key), setups?.get(app.key))),
+      apps: apps.map((app) => ({
+        ...summary(app, permissions?.apps.get(app.key), setups?.get(app.key)),
+        ...(webhookStatuses && { webhookStatus: webhookStatuses.get(app.key) ?? "off" }),
+      })),
       declares: {
         permissions: permissions !== null,
         setup: setups !== null,
+        notifications,
       } satisfies AppDeclarations,
     };
   });
 
-/** The data groups and setup page an app declares, where the editor shows them. */
+/** The data groups, notification events and setup page an app declares, where the editor shows
+ * them. The events are declared with the groups and need them. */
 const declarations = {
   permissionGroups: z.array(z.string()).max(APP_PERMISSION_GROUPS.length).optional(),
+  notificationEvents: z.array(z.string()).max(APP_NOTIFICATION_EVENT_NAMES.length).optional(),
   setup: z
     .object({
       url: z.string().max(SETUP_URL_MAX_LENGTH).nullable(),
@@ -167,7 +190,7 @@ export const registerWorkspaceApp = createServerFn({ method: "POST" })
   .validator(keyInput.extend(fields).extend(declarations))
   .handler(async ({ data, context }) => {
     declareNoStore();
-    const { permissionGroups, setup, ...input } = data;
+    const { permissionGroups, notificationEvents, setup, ...input } = data;
     const {
       app,
       clientSecret,
@@ -175,6 +198,7 @@ export const registerWorkspaceApp = createServerFn({ method: "POST" })
       setup: declaredSetup,
     } = await createAppEditorSave(context.db).register(actorOf(context), input, {
       permissionGroups,
+      notificationEvents,
       setup,
     });
     return { app: summary(app, permissions, declaredSetup), clientSecret };
@@ -197,7 +221,12 @@ export const updateWorkspaceApp = createServerFn({ method: "POST" })
     const { app, permissions, setup } = await createAppEditorSave(context.db).save(
       actorOf(context),
       data.key,
-      { patch: data.patch, permissionGroups: data.permissionGroups, setup: data.setup },
+      {
+        patch: data.patch,
+        permissionGroups: data.permissionGroups,
+        notificationEvents: data.notificationEvents,
+        setup: data.setup,
+      },
     );
     return summary(app, permissions, setup);
   });

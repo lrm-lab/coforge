@@ -37,6 +37,10 @@ model App {
   permissionGroups String[]          @default([])
   /// Goes up by one whenever `permissionGroups` changes, so an approval names what it approved.
   permissionRevision Int             @default(0)
+  /// The notification event types the app subscribes to (`server/app-notifications/`), from the
+  /// catalog in `features/apps/app-notification-events.ts` (`apps_notification_events_check`).
+  /// Changing the set moves `permissionRevision` too, so an approval covers events with groups.
+  notificationEvents String[]        @default([])
   /// Where an owner or admin continues setting the app up after installing it (`server/app-installation-setup/`):
   /// https, or http on loopback, at most 2000 characters, canonical, no user info or fragment
   /// (`apps_setup_url_check`). Null: the app needs no setup.
@@ -74,6 +78,9 @@ model AppInstallation {
   /// (`app_installations_approved_groups_check`). The app reads only those it still declares; a
   /// group it stops declaring leaves this list too, so declaring it again needs a new approval.
   approvedGroups    String[]  @default([])
+  /// The notification events approved with `approvedGroups`, narrowed the same way when the app
+  /// stops subscribing (`app_installations_approved_events_check`).
+  approvedEvents    String[]  @default([])
   /// The app's `permissionRevision` that was approved; 0 before any approval.
   approvedRevision  Int       @default(0)
   approvedAt        DateTime?

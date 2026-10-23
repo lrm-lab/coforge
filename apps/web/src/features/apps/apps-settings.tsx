@@ -60,7 +60,11 @@ const settingsRoute = getRouteApi("/w/$workspaceSlug/settings");
 export function AppsSettings({ actorRole }: { actorRole: string }) {
   const canManage = canManageApps(actorRole);
   const [apps, setApps] = useState<AppSummary[]>();
-  const [declares, setDeclares] = useState<AppDeclarations>({ permissions: false, setup: false });
+  const [declares, setDeclares] = useState<AppDeclarations>({
+    permissions: false,
+    setup: false,
+    notifications: false,
+  });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const { appsTab: view = "installed", appsCategory: category = "all" } = settingsRoute.useSearch();
@@ -138,19 +142,28 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
     setEditorOpen(true);
   }
 
-  async function submit({ input, permissionGroups, setup }: AppEditorSubmission) {
+  async function submit({
+    input,
+    permissionGroups,
+    notificationEvents,
+    setup,
+  }: AppEditorSubmission) {
     if (editor?.mode === "edit") {
       // The key is the app's client ID: never part of a change.
       const { key: _key, ...patch } = input;
       const { key } = editor.app;
       await refreshingWhenStale(async () => {
-        const app = await update({ data: { key, patch, permissionGroups, setup } });
+        const app = await update({
+          data: { key, patch, permissionGroups, notificationEvents, setup },
+        });
         setEditorOpen(false);
         setApps((current) => current?.map((held) => (held.key === app.key ? app : held)));
       });
       return;
     }
-    const { app, clientSecret } = await register({ data: { ...input, permissionGroups, setup } });
+    const { app, clientSecret } = await register({
+      data: { ...input, permissionGroups, notificationEvents, setup },
+    });
     setEditorOpen(false);
     showList({ view: "mine" });
     setIssued({ key: app.key, appName: app.name, secret: clientSecret });

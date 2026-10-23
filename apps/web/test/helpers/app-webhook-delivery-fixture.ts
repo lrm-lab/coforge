@@ -6,6 +6,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "#src/generated/prisma/client";
 
+import { flagOnFor } from "./app-notification-subscription";
 import { newAppNotificationEvent } from "#src/server/app-notifications/app-notification-event";
 import { type AppNotificationDeliveryJob } from "#src/server/app-notifications/app-notification-jobs";
 import { stopAppNotificationQueue } from "#src/server/app-notifications/app-notification-queue.server";
@@ -90,12 +91,8 @@ export function useWebhookDeliveryEnvironment() {
       JSON.stringify({
         $schema: "https://flagd.dev/schema/v0/flags.json",
         flags: {
-          "app-notifications": {
-            state: "ENABLED",
-            variants: { on: true, off: false },
-            defaultVariant: "off",
-            targeting: { if: [{ in: [{ var: "workspaceSlug" }, ON_SLUGS] }, "on", "off"] },
-          },
+          "app-notifications": flagOnFor(ON_SLUGS),
+          "app-data-permissions": flagOnFor(ON_SLUGS),
         },
       }),
     );

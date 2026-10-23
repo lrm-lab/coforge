@@ -41,12 +41,15 @@ export function EditorSection({
   title,
   status,
   description,
+  badge,
   children,
 }: {
   id: string;
   title: string;
   status: string;
   description: string;
+  /** A second badge after the status, such as "Experimental". */
+  badge?: string;
   children: ReactNode;
 }) {
   return (
@@ -59,6 +62,11 @@ export function EditorSection({
           <Badge size="sm" color="gray">
             {status}
           </Badge>
+          {badge && (
+            <Badge size="sm" color="brand">
+              {badge}
+            </Badge>
+          )}
         </div>
         <p className="text-sm text-tertiary">{description}</p>
       </header>

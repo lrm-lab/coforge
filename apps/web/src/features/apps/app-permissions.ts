@@ -1,3 +1,5 @@
+import type { AppNotificationEventName } from "./app-notification-events";
+
 /**
  * The data an app may read where it is installed: what it declares, what an installation approved,
  * and what follows from the two. Pure and client-safe; `server/app-permissions/` enforces it.
@@ -51,4 +53,10 @@ export type AppPermissionsSummary = {
   revision: number;
   effective: AppPermissionGroup[];
   pending: AppPermissionGroup[];
+  /** The notification events the app subscribes to (declared with the groups, so one revision),
+   * those delivered to this installation, and those waiting for approval. All empty where
+   * `app-notifications` is off. */
+  events: AppNotificationEventName[];
+  effectiveEvents: AppNotificationEventName[];
+  pendingEvents: AppNotificationEventName[];
 };

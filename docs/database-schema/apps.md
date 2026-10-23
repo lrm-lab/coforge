@@ -34,6 +34,7 @@ The built-in Agent Apps (`system.reminder`, `system.cleaner`) are not rows. They
 | `secretRotatedAt` | TIMESTAMP(3) | Last rotation. |
 | `permissionGroups` | TEXT[] | The data the app declares it reads where it is installed: any of `workspace`, `agent`, `channel` and `computer`, each read-only, once each (`apps_permission_groups_check` only limits the values to those four; the application keeps them in that order); empty by default. Separate from `allowedScopes`. |
 | `permissionRevision` | INTEGER | 0 at first, one more each time `permissionGroups` changes (saving the same set leaves it). |
+| `notificationEvents` | TEXT[] | The notification events the app subscribes to, from the catalog in `features/apps/app-notification-events.ts` (`apps_notification_events_check`), in catalog order; empty by default. Declared with `permissionGroups` and bumps the same `permissionRevision`, so an approval covers both ([subscriptions](../app-notifications/subscriptions.md)). |
 | `setupUrl` | TEXT | The page an owner or admin continues setup on after installing; null when the app needs no setup. https, or http on `localhost`, `127.0.0.1` or `[::1]`; at most 2000 characters, canonical, no user info or fragment (`apps_setup_url_check` checks the length, the fragment and the scheme; the application checks the rest). |
 | `setupDescription` | TEXT | One line saying what the setup page is for; at most 500 characters (`apps_setup_description_check`); empty by default. |
 | `setupRevision` | INTEGER | 0 at first, one more each time `setupUrl` changes, setup turned on or off included; a change of `setupDescription` leaves it (`apps_setup_revision_check`). |
@@ -69,6 +70,11 @@ install elsewhere goes. A Workspace's delete removes its apps and installations.
 `20261023140000_app_installation_agent_access`): `installationId` (cascade) and `agentId` (cascade,
 so deleting an Agent removes its row), primary key both. The rows count only while the installation's
 `agentAccess` is `selected` and stay, unused, under `all`.
+
+`app_installations.approvedEvents` (TEXT[], empty by default; `app_installations_approved_events_check`
+limits the values to the catalog) holds the notification events approved with `approvedGroups`, at the
+same `approvedRevision`. A declaration that drops an event removes it from every installation's
+`approvedEvents` in the same transaction, as it does a group.
 
 ## Agent access scope
 
@@ -139,7 +145,7 @@ deliveries to one installation are going, which changes on every attempt and wou
 | --- | --- | --- |
 | `appId` | UUID | Primary key; the app. |
 | `enabled` | BOOLEAN | False by default. Disabling keeps the row, so `secretGeneration` only ever goes up. |
-| `endpointUrl` | TEXT | Set exactly while `enabled` (`app_webhooks_enabled_endpoint_check`). https only, at most 2000 characters, no fragment (`app_webhooks_endpoint_url_check`); the application also requires the canonical form and no user info, and resolves the host to public addresses only, at save and at every delivery. |
+| `endpointUrl` | TEXT | Set only while `enabled` (`app_webhooks_enabled_endpoint_check`); enabled without one is Setup, which delivers nothing (migration `20261023210000_app_webhook_setup`). https only, at most 2000 characters, no fragment (`app_webhooks_endpoint_url_check`); the application also requires the canonical form and no user info, and resolves the host to public addresses only, at save and at every delivery. |
 | `secretGeneration` | INTEGER | 0 before the first enable, at least 1 while enabled; one more at each enable and rotation (`app_webhooks_generation_check`). The signing secret is **derived** from it, never stored. |
 | `previousSecretGeneration`, `previousSecretValidUntil` | INTEGER, TIMESTAMP(3) | Both set or both null; set only while enabled, and below `secretGeneration` (`app_webhooks_previous_secret_check`). The generation before the last rotation, still signing until the time (24 hours after the rotation). |
 | `revision` | INTEGER | One more at every change (endpoint, enable, disable, rotation); at least 0. A delivery attempt writes its status only while the revision is the one it started with. |

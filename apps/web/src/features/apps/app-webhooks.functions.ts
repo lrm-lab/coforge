@@ -14,7 +14,11 @@ import type {
 } from "#src/server/app-notifications/app-webhooks.server";
 import type { AppActor } from "#src/server/apps/app-registry.server";
 import { APP_KEY_MAX_LENGTH } from "./app-registration";
-import { WEBHOOK_ENDPOINT_MAX_LENGTH, type WebhookDisabledReason } from "./app-webhook";
+import {
+  WEBHOOK_ENDPOINT_MAX_LENGTH,
+  type WebhookDisabledReason,
+  type WebhookStatus,
+} from "./app-webhook";
 
 /**
  * An app's signed webhook, for the editor's Webhook section (next slice). Thin wrappers over
@@ -38,6 +42,8 @@ export type WebhookStatusSummary = {
 };
 
 export type AppWebhookSummary = {
+  /** Off, Setup (switched on, no endpoint yet) or Enabled (delivering). */
+  status: WebhookStatus;
   enabled: boolean;
   endpointUrl: string | null;
   revision: number;
@@ -68,6 +74,7 @@ const statusSummary = (status: InstallationWebhookStatus): WebhookStatusSummary 
 });
 
 const summary = (view: AppWebhookView): AppWebhookSummary => ({
+  status: view.status,
   enabled: view.enabled,
   endpointUrl: view.endpointUrl,
   revision: view.revision,
@@ -104,8 +111,18 @@ export const loadAppWebhook = createServerFn({ method: "GET" })
     return view && summary(view);
   });
 
+/** Switches the webhook on without an endpoint (Setup); nothing is delivered until one is saved.
+ * Switching on an enabled one changes nothing. */
+export const enableAppWebhook = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(keyInput)
+  .handler(async ({ data, context }) => {
+    declareNoStore();
+    return changeSummary(await createAppWebhooks(context.db).enable(actorOf(context), data.key));
+  });
+
 /** Enables the webhook at the endpoint, or moves an enabled one there (every installation's
- * status starts over). The answer carries the signing secret, once, only when this enabled it. */
+ * status starts over). The answer carries the signing secret, once, only when the webhook had no endpoint before. */
 export const saveAppWebhookEndpoint = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(keyInput.extend({ endpointUrl: z.string().max(WEBHOOK_ENDPOINT_MAX_LENGTH) }))

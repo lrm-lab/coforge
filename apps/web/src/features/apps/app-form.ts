@@ -1,6 +1,7 @@
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { setupFieldOf, type AppSetupField, type AppSetupInput } from "./app-installation-setup";
+import type { AppNotificationEventName } from "./app-notification-events";
 import { APP_PERMISSIONS_CHANGED, type AppPermissionGroup } from "./app-permissions";
 import {
   appInputFieldOf,
@@ -46,6 +47,8 @@ export const SETUP_FIELD_PROBLEMS: Record<AppSetupField, () => string> = {
 export type AppEditorSubmission = {
   input: AppRegistrationInput;
   permissionGroups?: AppPermissionGroup[];
+  /** The notification events subscribed to, with the groups, where `app-notifications` is on. */
+  notificationEvents?: AppNotificationEventName[];
   setup?: AppSetupInput;
 };
 

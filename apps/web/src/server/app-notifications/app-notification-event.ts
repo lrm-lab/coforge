@@ -1,3 +1,4 @@
+import type { APP_NOTIFICATION_EMITTED_EVENTS } from "#src/features/apps/app-notification-events";
 import type { WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 
 /**
@@ -14,6 +15,13 @@ export type AppNotificationEventPayload = {
 };
 
 export type AppNotificationEventType = AppNotificationEventPayload["type"];
+
+/** Compile-time: the types recorded here are exactly `APP_NOTIFICATION_EMITTED_EVENTS`, which the
+ * editor offers, and so are in the catalog apps subscribe from. Adding an event to one without the
+ * other fails the build. */
+type EmittedEvent = (typeof APP_NOTIFICATION_EMITTED_EVENTS)[number];
+type Both<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+export const emittedEventsMatchCatalog: Both<AppNotificationEventType, EmittedEvent> = true;
 
 /**
  * One app notification event, the envelope of a Standard Webhooks message

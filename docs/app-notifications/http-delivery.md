@@ -6,9 +6,10 @@ endpoint](webhook-secret.md). The code is `apps/web/src/server/app-notifications
 (`webhook-delivery.server.ts`) over `apps/web/src/server/egress/`; tables:
 [app registry, webhooks](../database-schema/apps.md#webhooks).
 
-An app's owner or admin enables a webhook by saving an endpoint; one endpoint and one signing secret
+An app's owner or admin switches a webhook on (Setup: enabled, no endpoint, nothing delivered) and
+enables it by saving an endpoint; one endpoint and one signing secret
 per app, and the body carries `installation_id` to tell its installations apart. Server functions for
-the editor are in `features/apps/app-webhooks.functions.ts`: `loadAppWebhook` (the endpoint, revision
+the editor are in `features/apps/app-webhooks.functions.ts`: `enableAppWebhook` (Setup), `loadAppWebhook` (the endpoint, revision
 and per-installation status, for the caller's own Workspace only), `saveAppWebhookEndpoint`,
 `rotateAppWebhookSecret` and `disableAppWebhook`. A call that makes a secret returns it as
 `signingSecret`, once.
@@ -29,7 +30,8 @@ signed with the official `standardwebhooks` package (1.1.1, MIT):
 
 ## Who is notified
 
-Events fan out only to installations whose app has an enabled webhook (`subscribersOf`). An event
+Events fan out only to installations whose app has an enabled webhook and whose effective events
+include the event's type ([subscriptions](subscriptions.md)) (`subscribersOf`). An event
 that happens while an installation is stopped, or while the deployment has no signing key, is not
 delivered later: its job completes without sending.
 

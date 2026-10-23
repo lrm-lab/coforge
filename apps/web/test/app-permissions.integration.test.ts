@@ -226,7 +226,7 @@ test.skipIf(!db)(
     try {
       await permissions.declare(app.actor("owner"), app.key, ["workspace", "agent"]);
       const listed = await permissions.workspacePermissions(app.actor("member"));
-      expect(listed?.get(app.key)).toMatchObject({
+      expect(listed?.apps.get(app.key)).toMatchObject({
         declared: ["workspace", "agent"],
         approved: [],
         effective: [],

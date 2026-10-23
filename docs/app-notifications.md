@@ -2,7 +2,8 @@
 
 How CoForge tells the apps installed in a Workspace what happened in it: events are recorded in a
 durable outbox, fanned out to installations and delivered to each app's signed webhook
-([HTTP delivery](#http-delivery)). Subscriptions and the app-editor UI are later slices. The code is
+([HTTP delivery](#http-delivery)), to the events each installation is subscribed to
+([subscriptions](app-notifications/subscriptions.md)). The code is
 `apps/web/src/server/app-notifications/`; the design is the approved "App Notifications" proposal
 (phase 2), which chose [pg-boss](https://github.com/timgit/pg-boss) (MIT, Bun supported) on
 2026-10-21 for delivery. pg-boss is a PostgreSQL claim/lease job queue, so it is the exception Frank
@@ -19,8 +20,9 @@ delivery) and is not a generic job API.
    fields. pg-boss writes it as a job in the `app-notification-event` queue through its
    `fromPrisma(tx)` adapter, so the job joins the transaction.
 2. The event worker (`event-worker.server.ts`) asks `subscribersOf(event)` for the installations
-   to notify: those of the event's Workspace whose app has an enabled webhook, while the
-   `app-notifications` flag is on for it. It
+   to notify: those of the event's Workspace whose app has an enabled webhook and whose
+   [effective events](app-notifications/subscriptions.md#effective-events) include the event's
+   type, while the `app-notifications` and `app-data-permissions` flags are both on for it. It
    inserts one job per installation into `app-notification-delivery`, with the job id
    `UUIDv5(eventId:installationId)`.
 3. The delivery handler (`webhook-delivery.server.ts`) POSTs the event to the installation's app
@@ -91,6 +93,9 @@ on a 410 or when retries run out. Details are topic files:
 
 - [HTTP delivery](app-notifications/http-delivery.md): the request and its headers, who is
   notified, the outcome of an attempt, statuses and revisions, the outbound egress.
+- [Subscriptions and the editor](app-notifications/subscriptions.md): the event catalog and the
+  data group each event needs, how an app subscribes and an installation approves, the effective
+  events, and the App notifications section of the app editor.
 - [Webhook secret and endpoint](app-notifications/webhook-secret.md): the derived signing secret and
   its rotation, `COFORGE_APP_WEBHOOK_KEY` (and rotating it), the endpoint rules.
 

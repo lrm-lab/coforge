@@ -8,8 +8,9 @@ The signing secret, the key it comes from and the endpoint rules of an app's web
 `whsec_` and the base64 of HMAC-SHA256(`COFORGE_APP_WEBHOOK_KEY`,
 `coforge-app-webhook-v1:<appId>:<generation>`), 32 bytes (`deriveWebhookSecret`). The label keeps
 this use of the key apart from any other. It is derived, never stored, and returned in plaintext
-exactly once (`signingSecret`), by the call that made it: the first save that enables the webhook, a
-rotation, or enabling again after a disable (a new generation, so an old secret is never valid
+exactly once (`signingSecret`), by the call that made it: the first endpoint saved after the webhook was switched on (switching on moves to the new
+generation; the secret is shown once the receiver's endpoint is saved), a rotation, or enabling again
+after a disable (a new generation, so an old secret is never valid
 again). Rotation moves to the next generation; the previous one keeps signing for 24 hours, so both
 signatures are sent during the overlap and a receiver holding either verifies. Rotating again inside
 the overlap drops the older one. The overlap rule is in `webhook-secret.server.ts`

@@ -1,6 +1,6 @@
-import type { WebhookDisabledReason } from "#src/features/apps/app-webhook";
+import type { WebhookDisabledReason, WebhookStatus } from "#src/features/apps/app-webhook";
 
-/** An app's webhook row. `endpointUrl` is set exactly while `enabled`. */
+/** An app's webhook row. `endpointUrl` is set only while `enabled`; enabled without one is Setup. */
 export type WebhookRow = {
   appId: string;
   enabled: boolean;
@@ -11,7 +11,7 @@ export type WebhookRow = {
   revision: number;
 };
 
-/** An enabled webhook with the endpoint it is enabled at. */
+/** A webhook that is delivering: switched on, with the endpoint it is enabled at. */
 export type EnabledWebhookRow = WebhookRow & { enabled: true; endpointUrl: string };
 
 export const isEnabledWebhook = (row: WebhookRow | null | undefined): row is EnabledWebhookRow =>
@@ -71,6 +71,12 @@ export interface AppWebhookStore {
   find(appId: string): Promise<WebhookRow | undefined>;
   /** The delivery statuses of the app's installations in one Workspace. */
   statuses(appId: string, workspaceId: string): Promise<InstallationWebhookStatus[]>;
+  /** The webhook state of each app installed in the Workspace that has one switched on, by key. */
+  statusesByAppKey(workspaceId: string): Promise<Map<string, WebhookStatus>>;
+  /** A Workspace's id and slug. */
+  workspaceOf(workspaceId: string): Promise<{ id: string; slug: string } | undefined>;
+  /** The person's role in the Workspace. */
+  memberRole(workspaceId: string, userId: string): Promise<string | undefined>;
   /** The app's installations in one Workspace. */
   installations(
     appId: string,

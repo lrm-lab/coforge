@@ -15,10 +15,19 @@ export type AppEditorScope = {
 
 /** What a Save changes: the profile `patch`, and the data `permissionGroups` and `setup` page it
  * declares (as the declaring modules take them), when the editor shows them. */
-export type AppEditorChange = { patch: AppPatch; permissionGroups?: unknown; setup?: unknown };
+export type AppEditorChange = {
+  patch: AppPatch;
+  permissionGroups?: unknown;
+  /** The notification events subscribed to, declared with the groups (`app-notifications`). */
+  notificationEvents?: unknown;
+  setup?: unknown;
+};
 
 /** What a registration declares beyond the profile, as the declaring modules take them. */
-export type AppEditorDeclarations = Pick<AppEditorChange, "permissionGroups" | "setup">;
+export type AppEditorDeclarations = Pick<
+  AppEditorChange,
+  "permissionGroups" | "notificationEvents" | "setup"
+>;
 
 /** What the editor's Save answers with: the app and, while their flags are on, its data
  * permissions and setup in the actor's Workspace. */
@@ -50,7 +59,12 @@ export class AppEditorSave {
       const declared =
         change.permissionGroups === undefined
           ? undefined
-          : await permissions.declare(actor, key, change.permissionGroups);
+          : await permissions.declare(
+              actor,
+              key,
+              change.permissionGroups,
+              change.notificationEvents,
+            );
       const declaredSetup =
         change.setup === undefined ? undefined : await setup.declare(actor, key, change.setup);
       const app = await registry.updateApp(actor, key, change.patch);
@@ -78,7 +92,12 @@ export class AppEditorSave {
       const declared =
         declarations.permissionGroups === undefined
           ? undefined
-          : await permissions.declare(actor, app.key, declarations.permissionGroups);
+          : await permissions.declare(
+              actor,
+              app.key,
+              declarations.permissionGroups,
+              declarations.notificationEvents,
+            );
       const declaredSetup =
         declarations.setup === undefined
           ? undefined

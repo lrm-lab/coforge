@@ -15,6 +15,8 @@ export function createAppPermissions(db: DatabaseScope) {
     new PrismaAppPermissionsStore(db),
     (workspace) => isFeatureEnabled("app-data-permissions", workspace),
     (actor, key) => registry.requireOwnApp(actor, key),
+    undefined,
+    (workspace) => isFeatureEnabled("app-notifications", workspace),
   );
 }
 

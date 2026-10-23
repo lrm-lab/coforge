@@ -10,6 +10,7 @@ import { permissionGroupList } from "./app-permission-copy";
 import { APP_CATEGORY_LABELS } from "./app-list";
 import { AppLogo } from "./app-logo";
 import { SetupDirections, SetupStatusBadge } from "./setup-status-badge";
+import { WebhookStatusBadge } from "./webhook-status-badge";
 import type { AppsLayout } from "./apps-layout";
 import type { AppSummary } from "./apps.functions";
 
@@ -75,11 +76,13 @@ export function AppCard({
             {installationSetup && installationSetup.status !== "not_required" && (
               <SetupStatusBadge status={installationSetup.status} />
             )}
-            {app.permissions && app.permissions.pending.length > 0 && (
-              <Badge size="sm" color="warning">
-                {m.apps_card_pending()}
-              </Badge>
-            )}
+            {app.webhookStatus && <WebhookStatusBadge status={app.webhookStatus} />}
+            {app.permissions &&
+              (app.permissions.pending.length > 0 || app.permissions.pendingEvents.length > 0) && (
+                <Badge size="sm" color="warning">
+                  {m.apps_card_pending()}
+                </Badge>
+              )}
           </div>
           {app.permissions && app.permissions.effective.length > 0 && (
             <p className="text-sm text-tertiary">
